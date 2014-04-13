@@ -1,0 +1,6 @@
+*\.sw[p-z]
+*py~
+*~
+.*project
+__pycache__
+*.pyc
