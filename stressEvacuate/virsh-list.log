@@ -1,0 +1,8 @@
+virsh list 
+ Id    Name                           State
+----------------------------------------------------
+ 4     instance-0000000d              running
+ 5     instance-0000000f              running
+ 6     instance-00000010              running
+
+[root@compute-1 ~(keystone_admin)]# 

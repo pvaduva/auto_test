@@ -1,0 +1,50 @@
+#!/bin/bash
+NATIP=$1
+NATUSER=$2
+NATPASS=$3
+compute0=$4
+compute1=$5
+controller0=$6
+controller1=$7
+#Alter  tempest.conf  based on runtime parameters configured during: setupCgcsNetworking
+
+cd /etc/tempest
+cp -p tempest.conf tempest.conf.orig`date +%Y-%m-%d_%H%M%S`
+
+sed -i.bkp "s/127.0.0.1/192.168.204.2/g" tempest.conf
+sed -i.bkp "s/password = root/password = password/" tempest.conf
+sed -i.bkp "s/admin_password = password/admin_password = admin/" tempest.conf
+
+replace=`nova image-list |grep cirros | awk '{print $2}'| tail -n 1`
+sed -i.bkp "s/{\$IMAGE_ID}/$replace/" tempest.conf
+
+replace=`nova image-list |grep wrl5-avp | awk '{print $2}'| tail -n 1`
+sed -i.bkp "s/{\$IMAGE_ID_ALT}/$replace/" tempest.conf
+
+sed -i.bkp "s/flavor_ref_alt = 1/flavor_ref_alt = 2/" tempest.conf
+sed -i.bkp "s/image_ssh_user = root/image_ssh_user = cirros/" tempest.conf
+sed -i.bkp "s/image_ssh_password = password/image_ssh_password = cubwins:)/" tempest.conf
+sed -i.bkp "s/image_alt_ssh_password = password/image_alt_ssh_password = root/" tempest.conf
+
+replace=`neutron net-list |grep public-net0| awk '{print $2}'| tail -n 1`
+sed -i.bkp "s/{\$PUBLIC_NETWORK_ID}/$replace/" tempest.conf
+
+replace=`neutron router-list |grep public-router0| awk '{print $2}'| tail -n 1`
+sed -i.bkp "s/{\$PUBLIC_ROUTER_ID}/$replace/" tempest.conf
+
+sed -i.bkp "s/img_dir = \/home\/root\/images\//img_dir = \/root\/images\//" tempest.conf
+
+echo "
+[external_host]
+external_ip = $NATIP
+external_user = $NATUSER
+external_passwd = $NATPASS
+" >> tempest.conf
+
+echo "
+[Lab_info]
+controller_0_lab = $controller0
+controller_1_lab = $controller1
+compute_0_lab = $compute0
+compute_1_lab = $compute1
+" >> tempest.conf

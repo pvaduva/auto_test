@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the DPDK autotest suite app/test.
+
+Modification history
+====================
+05feb15, ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/cgcsLabSetup" timeout="">
+    <test_case  name="sanity/cgcs/cgcsLabSetup" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/postTest/vmCleanup.frag">
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+
+# CALL env
+TYPE \n
+SINK 1 SEC
+PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Con1 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Con2 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+SET CR }
+SET CL {
+
+
+TYPE \n\n\n
+WAIT 8 SEC {ignoreTimeout:True} login:
+
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} Password:
+
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} .*\s
+
+DELAY 1
+
+TYPE source /etc/nova/openrc
+TYPE \n
+WAIT 1 SEC
+SINK 2 SEC
+
+# import users public and private keys
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/id_rsa -d /root/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/id_rsa.pub -d /root/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/authorized_keys -d /root/.ssh/ -P 22
+
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrB -u root -p root -s ~/.ssh/id_rsa -d /root/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrB -u root -p root -s ~/.ssh/id_rsa.pub -d /root/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrB -u root -p root -s ~/.ssh/authorized_keys -d /root/.ssh/ -P 22
+SINK 1 SEC
+
+
+TYPE chmod -R 777 /root/bin/ \n
+WAIT 3 SEC
+
+
+
+
+
+TYPE nova keypair-add --pub_key ~/.ssh/id_rsa.pub controller-0
+TYPE \n
+WAIT 30 SEC .*\)\]#\s
+DELAY 5 SEC
+
+LOOKFOR
+LOOKFOR controller-[0-9].*[a-f0-9|/s]+
+TYPE nova keypair-list \n
+WAIT 30 SEC
+
+
+LOOKFOR
+PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+LOOKFOR external-net0
+LOOKFOR private-net0
+LOOKFOR public-net0
+LOOKFOR internal-net0
+
+TYPE neutron net-list \n
+WAIT 30 SEC
+LOOKFOR
+
+
+
+
+
+
+
+TYPE mkdir -p /root/images/ \n
+WAIT 6 SEC
+TYPE chmod -R 777 /root/images/ \n
+WAIT 7 SEC
+
+Con2 SINK 3 SEC
+# root should have alread loged in via loginCGCS.frag
+Con2 TYPE mkdir -p /root/images/ \n
+Con2 WAIT 8 SEC .*
+Con2 TYPE chmod -R 777 /root/images/ \n
+Con2 WAIT 9 SEC .*
+
+
+#### Create tempest.conf file
+# TODO: this file needs to be lab specifica based on info in the controller-0 target.in for a particularlab
+# It should contain designated VLANids as per: http://twiki.wrs.com/PBUeng/CGTelcoServerLabConn
+
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ${WASSP_TC_PATH}/../utils/create_tempestconf.sh -d /root/bin/ -P 22
+
+
+TYPE /root/bin/create_tempestconf.sh $env.NODE.target.Boot.NATIP $env.NODE.target.Boot.NATUSER $env.NODE.target.Boot.NATPASS $env.NODE.target.Boot.computeA $env.NODE.target.Boot.computeB $env.NODE.target.Boot.controllerA $env.NODE.target.Boot.controllerB\n
+WAIT 60 SEC
+TYPE cat /root/bin/create_tempestconf.sh \n
+WAIT 60 SEC
+
+
+
+
+SINK 1 SEC
+CALL ${WASSP_TC_PATH}/../utils/findLatestCgcsLoad2.sh > ${WASSP_TC_PATH}/cgcs_load.txt
+CALL cat ${WASSP_TC_PATH}/cgcs_load.txt
+
+SET CR }
+SET CL {
+CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_PATH}/cgcs_load.txt`\"$CR
+
+#############################################
+# Temporary workaroud:
+# SET LOAD /localdisk/loadbuild/jenkins/CGTS_1.0_Unified_Daily_Build/2014-01-04_01-32-25/
+#############################################
+# TODO:  the ssh/rsync user should be  leaned at runtime
+# Download the latest Cirros guest VM images to controller-0
+# TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/${LOAD_PATH}/layers/wr-cgcs/cgcs/extras.ND/scripts/ /root/images/ \n
+
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/${LOAD_PATH}/../latest_build/layers/wr-cgcs/cgcs/extras.ND/scripts/ /root/images/ \n
+WAIT 1000 SEC
+
+#####################################################################################
+# Create VM image and Start it
+#####################################################################################
+
+TYPE glance image-create --name cirros --is-public true --container-format bare --disk-format qcow2 --file /root/images/cirros-0.3.0-x86_64-disk.img --property hw_vif_model=e1000 \n
+WAIT 60 SEC
+DELAY 5 SEC
+
+LOOKFOR
+LOOKFOR
+TYPE glance image-list \n
+WAIT 60 SEC
+
+
+
+
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/loadbuild/jenkins/CGCS_1.0_Guest_Daily_Build/cgcs-guest.img /root/images/  \n
+WAIT 30 MIN
+
+# synch-up  controller-0 to controller-1
+TYPE rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/images controller-1:/root/ \n
+WAIT 30 SEC
+TYPE rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/bin controller-1:/root/ \n
+WAIT 30 SEC
+
+
+TYPE glance image-create --name wrl5-avp --is-public true --container-format bare --disk-format qcow2 --file /root/images/cgcs-guest.img --property hw_vif_model=avp \n
+WAIT 30 SEC
+DELAY 5 SEC
+
+TYPE glance image-create --name wrl5-virtio --is-public true --container-format bare --disk-format qcow2 --file /root/images/cgcs-guest.img --property hw_vif_model=virtio \n
+WAIT 30 SEC
+DELAY 5 SEC
+
+TYPE nova flavor-create wrl5.dpdk.big 100 4096 0 3\n
+WAIT 30 SEC
+DELAY 5 SEC
+
+TYPE nova flavor-create wrl5.dpdk.small 101 512 0 2\n
+WAIT 30 SEC
+DELAY 5 SEC
+
+
+
+
+
+
+
+
+
+
+
+
+TYPE nova list \n
+WAIT 10 SEC
+SAVEOUTPUT /tmp/nova-list.log
+# SAVEOUTPUT ${WASSP_TC_USER_WORKSPACE}/myFile
+
+
+## CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_PATH}/cgcs_load.txt`\"$CR
+## {"LOAD_PATH":"/localdisk/loadbuild/jenkins/CGTS_1.0_Unified_Daily_Build/2014-01-04_01-32-25/"}
+## CALL cat /tmp/nova-list.log|grep cirros-1 | awk 'BEGIN {FS = "=||\;" } {print $2}' > /tmp/cirrosip.txt
+
+CALL cat /tmp/nova-list.log|grep cirros-1 | awk 'BEGIN ${CL} FS = "=||;"${CR} ${CL} print $$2${CR}' > /tmp/cirrosip.txt
+CALLPARSER echo ${CL}\"CIRROS0IP\":\"`cat /tmp/cirrosip.txt`\"${CR}
+
+# CALL ssh cgcs@128.224.150.11 ping -c1 192.168.101.2
+# CALL ssh cgcs@128.224.150.11 ping -c1 192.168.201.2
+
+
+
+
+        PASS
+    </test_case>
+</test_module>
+</file>

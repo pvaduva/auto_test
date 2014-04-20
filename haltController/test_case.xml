@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the import Cirros VM test  suite app/test.
+
+Modification history
+====================
+05feb14,ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/haltController" timeout="">
+    <test_case  name="sanity/cgcs/haltController" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/postTest/vmCleanup.frag">
+
+TYPE exit \n
+SINK 1 SEC
+PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+Con1 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+Con2 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+Com1 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+Com2 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+
+SET LC {
+SET RC }
+
+TYPE \n\n\n
+WAIT 8 SEC {ignoreTimeout:True} login:
+
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} Password:
+
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} .*\s
+
+TYPE source /etc/nova/openrc
+TYPE \n
+WAIT 1 SEC {ignoreTimeout:True}
+
+SINK 1 SEC
+DELAY 1 SEC
+
+
+TYPE echo $$USER \n
+WAIT 1 SEC
+TYPE echo $$MAIL \n
+WAIT 1 SEC
+
+DELAY 10 SEC
+CALL env
+
+CALL python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ${WASSP_TC_PATH}/../utils/setupCgcsNetworkVars.sh -d /root/bin/ -P 22
+
+TYPE source /root/bin/setupCgcsNetworkVars.sh \n
+WAIT 60 SEC
+
+
+#####################################################################################
+# Swact to controller-0  so it becomes the active controller
+#####################################################################################
+
+TYPE crm resource move management_ip  controller-0\n
+WAIT 60 SEC
+DELAY 20 SEC
+
+TYPE crm resource unmove management_ip\n
+WAIT 60 SEC
+DELAY 20 SEC
+
+
+LOOKFOR
+LOOKFOR Active
+TYPE system host-show controller-0\n
+WAIT 60 SEC
+LOOKFOR
+
+LOOKFOR
+LOOKFOR Standby
+TYPE system host-show controller-1\n
+WAIT 60 SEC
+LOOKFOR
+
+
+
+####################################################################
+# Start Cirros Images before halting the active controller
+####################################################################
+
+LOOKFOR
+LOOKFOR building
+TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PRIVATENETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-0 \n
+WAIT 60 SEC
+
+LOOKFOR
+LOOKFOR building
+TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PUBLICNETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-1 \n
+WAIT 45 SEC
+
+LOOKFOR
+LOOKFOR building
+TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PUBLICNETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-2 \n
+WAIT 45 SEC
+
+LOOKFOR
+LOOKFOR building
+TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PUBLICNETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-3 \n
+WAIT 45 SEC
+DELAY 40 SEC
+
+LOOKFOR
+LOOKFOR cirros-0 .* ACTIVE
+LOOKFOR cirros-1 .* ACTIVE
+LOOKFOR cirros-2 .* ACTIVE
+LOOKFOR cirros-3 .* ACTIVE
+TYPE nova list \n
+WAIT 45 SEC
+#####################################################################################
+# End of block
+#####################################################################################
+
+LOOKFOR
+
+
+
+#####################################################################################
+# Check that services are up
+#####################################################################################
+SINK 2 SEC
+LOOKFOR nova-scheduler.* controller-[0-1].* internal.* enabled.* up
+LOOKFOR nova-conductor.* controller-[0-1].* internal.* enabled.* up
+LOOKFOR nova-consoleauth.* controller-[0-1].* internal.* enabled.* up
+LOOKFOR nova-compute.* compute-[0-1].* nova.* enabled.* up
+LOOKFOR nova-compute.* compute-[0-1].* nova.* enabled.* up
+LOOKFOR nova-cert.* controller-[0-1].* internal.* enabled.* up
+TYPE nova service-list \n
+WAIT 60 SEC
+LOOKFOR
+
+SINK 2 SEC
+
+LOOKFOR DHCP agent .* True
+LOOKFOR AVS agent[\s|]*compute-[0-1]+ [|\s:\-)|]* True
+LOOKFOR L3 agent[\s|]*compute-[0-1]+ [|\s:\-)|]* True
+TYPE neutron agent-list \n
+WAIT 60 SEC
+LOOKFOR
+
+
+
+
+
+
+#####################################################################################
+# Halt controller-0  test
+#####################################################################################
+
+
+TYPE halt -f\n
+WAIT 10 SEC {ignoreTimeout:True} System halted
+
+
+# Delay to allwo the rebooted compute to come back into service
+DELAY 60 SEC
+
+SINK 12 SEC
+Con2 SINK 12 SEC
+
+Con2 LOOKFOR
+Con2 LOOKFOR cirros-0 .* ACTIVE
+Con2 LOOKFOR cirros-1 .* ACTIVE
+Con2 LOOKFOR cirros-2 .* ACTIVE
+Con2 LOOKFOR cirros-3 .* ACTIVE
+Con2 TYPE nova list \n
+Con2 WAIT 53 SEC
+
+
+Con2 SINK 2 SEC
+Con2 LOOKFOR
+Con2 LOOKFOR nova-scheduler.* controller-[0-1].* internal.* enabled.* up
+Con2 LOOKFOR nova-conductor.* controller-[0-1].* internal.* enabled.* up
+Con2 LOOKFOR nova-consoleauth.* controller-[0-1].* internal.* enabled.* up
+Con2 LOOKFOR nova-compute.* compute-[0-1].* nova.* enabled.* up
+Con2 LOOKFOR nova-compute.* compute-[0-1].* nova.* enabled.* up
+Con2 LOOKFOR nova-cert.* controller-[0-1].* internal.* enabled.* up
+Con2 TYPE nova service-list \n
+Con2 WAIT 15 SEC
+
+
+Con2 SINK 2 SEC
+Con2 LOOKFOR
+Con2 LOOKFOR DHCP agent .* True
+Con2 LOOKFOR AVS agent[\s|]*compute-[0-1]+ [|\s:\-)|]* True
+Con2 LOOKFOR L3 agent[\s|]*compute-[0-1]+ [|\s:\-)|]* True
+Con2 TYPE neutron agent-list \n
+Con2 WAIT 5 SEC
+
+Con2 SINK 2 SEC
+Con2 LOOKFOR
+Con2 TYPE source /root/bin/setupCgcsNetworkVars.sh \n
+Con2 WAIT 60 SEC
+
+
+Con2 LOOKFOR
+Con2 LOOKFOR building
+Con2 TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PUBLICNETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-4 \n
+Con2 WAIT 48 SEC
+
+Con2 LOOKFOR
+Con2 LOOKFOR building
+Con2 TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PUBLICNETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-5 \n
+Con2 WAIT 49 SEC
+
+Con2 DELAY 30 SEC
+
+Con2 LOOKFOR
+Con2 LOOKFOR cirros-0 .* ACTIVE
+Con2 LOOKFOR cirros-1 .* ACTIVE
+Con2 LOOKFOR cirros-2 .* ACTIVE
+Con2 LOOKFOR cirros-3 .* ACTIVE
+Con2 LOOKFOR cirros-4 .* ACTIVE
+Con2 LOOKFOR cirros-5 .* ACTIVE
+Con2 TYPE nova list \n
+Con2 WAIT 55 SEC
+Con2 LOOKFOR
+
+
+
+#####################################################################################
+# End of block
+#####################################################################################
+
+#SET X [{'vm':'0'},{'vm':'1'},{'vm':'1'},{'vm':'2'},{'vm':'3'},{'vm':'4'},{'vm':'5'}]
+#SET X [dict(vm='0'), dict(vm='1')]
+#PASSIF compute-0
+#FOREACH ${X}
+#    TYPE nova show $ITEM_vm \n
+#    WAIT 30 SEC
+#    DELAY 3 SEC
+#ENDFOREACH
+
+
+#####################################################################################
+# Cleanup
+#####################################################################################
+
+SINK 3 SEC
+LOOKFOR
+CALL  /folk/vlm/commandline/vlmTool reboot -t $env.NODE.target.default.Target_ID
+WAIT 300 SEC login:
+DELAY 60
+
+
+TYPE \n\n\n
+WAIT 8 SEC {ignoreTimeout:True} login:
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} Password:
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} .*\s
+TYPE source /etc/nova/openrc
+TYPE \n
+WAIT 1 SEC {ignoreTimeout:True}
+SINK 1 SEC
+DELAY 1 SEC
+
+
+
+TYPE crm resource move management_ip  controller-0\n
+WAIT 60 SEC
+DELAY 30 SEC
+
+TYPE crm resource unmove management_ip\n
+WAIT 60 SEC
+DELAY 30 SEC
+
+
+LOOKFOR
+LOOKFOR Active
+TYPE system host-show controller-0\n
+WAIT 60 SEC
+LOOKFOR
+
+LOOKFOR
+LOOKFOR Standby
+TYPE system host-show controller-1\n
+WAIT 60 SEC
+LOOKFOR
+
+
+
+
+PASS
+    </test_case>
+</test_module>
+</file>

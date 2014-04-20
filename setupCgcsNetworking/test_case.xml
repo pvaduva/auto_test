@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the import Cirros VM test  suite app/test.
+
+Modification history
+====================
+24jan14,ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/setupCgcsNetworking" timeout="">
+    <test_case  name="sanity/cgcs/setupCgcsNetworking" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag">
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+
+PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Con1 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Con2 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+CALL env
+TYPE \n
+SINK 1 SEC
+WAIT 10 SEC .*
+
+TYPE \n\n\n
+WAIT 8 SEC {ignoreTimeout:True} login:
+
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} Password:
+
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} .*\s
+DELAY 1
+
+
+# import users public and private keys
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/id_rsa -d /root/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/id_rsa.pub -d /root/.ssh/ -P 22
+SINK 1 SEC
+
+TYPE source /etc/nova/openrc
+TYPE \n
+WAIT 10 SEC
+
+
+
+
+
+TYPE nova keypair-add --pub_key ~/.ssh/id_rsa.pub controller-0
+TYPE \n
+WAIT 30 SEC .*\)\]#\s
+DELAY 5 SEC
+
+LOOKFOR
+LOOKFOR controller-[0-9].*[a-f0-9|/s]+
+TYPE nova keypair-list \n
+WAIT 30 SEC
+
+
+LOOKFOR
+PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+LOOKFOR external-net0
+LOOKFOR private-net0
+LOOKFOR public-net0
+LOOKFOR internal-net0
+
+TYPE neutron net-list \n
+WAIT 30 SEC
+LOOKFOR
+
+PASS
+    </test_case>
+</test_module>
+</file>

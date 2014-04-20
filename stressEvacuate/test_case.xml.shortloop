@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the import Cirros VM test  suite app/test.
+
+Modification history
+====================
+17feb14,ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/stressEvacuate" timeout="">
+    <test_case  name="sanity/cgcs/stressEvacuate" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" >
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+
+SINK 1 SEC
+PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Con1 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Con2 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Com1 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Com2 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+
+SET CR }
+SET CL {
+SET dollar $
+
+TYPE \n\n\n
+WAIT 8 SEC {ignoreTimeout:True} login:
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} Password:
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} .*\s
+TYPE source /etc/nova/openrc
+TYPE \n
+WAIT 1 SEC {ignoreTimeout:True}
+
+
+SINK 1 SEC
+DELAY 1 SEC
+
+
+TYPE echo $$USER \n
+WAIT 1 SEC
+TYPE echo $$MAIL \n
+WAIT 1 SEC
+
+
+CALL env
+
+Com2 SINK 2 SEC
+
+
+
+
+#####################################################################################
+# End of block
+#####################################################################################
+TYPE i=7\n
+WAIT 60 SEC
+
+
+SET LC {
+SET RC }
+
+
+
+#####################################################################################
+LOOP 99
+#####################################################################################
+
+LOOKFOR
+
+
+
+#####################################################################################
+# Compute reboot test
+#####################################################################################
+
+
+
+
+TYPE wall rebooting compute-0 iteration $$i  \n
+WAIT 60 SEC
+TYPE let i=$$i+1 \n
+WAIT 60 SEC
+
+
+
+# Rebooting compute-0
+Com1 TYPE \n\n\n
+Com1 WAIT 2 SEC {ignoreTimeout:True} login:
+Com1 TYPE root\n
+Com1 WAIT 2 SEC {ignoreTimeout:True} Password:
+Com1 TYPE root\n
+Com1 WAIT 2 SEC {ignoreTimeout:True} .*\s
+
+
+# Delay to allwo the rebooted compute to come back into service
+SINK 2 SEC
+
+SINK 2 SEC
+
+
+
+Com2 TYPE \n\n\n
+Com2 WAIT 2 SEC {ignoreTimeout:True} login:
+Com2 TYPE root\n
+Com2 WAIT 2 SEC {ignoreTimeout:True} Password:
+Com2 TYPE root\n
+Com2 WAIT 2 SEC {ignoreTimeout:True} .*\s
+
+
+Com2 SINK 2 SEC
+Com2 LOOKFOR
+Com2 TYPE virsh list \n
+Com2 WAIT 30 SEC
+Com2 SAVEOUTPUT ${WASSP_TC_PATH}/virsh-list.log
+Com2 CALL cat ${WASSP_TC_PATH}/virsh-list.log
+CALLPARSER python3 ${WASSP_TC_PATH}/../utils/parse_virsh_list.py -v vminstance -d id -l ${WASSP_TC_PATH}/virsh-list.log
+
+
+Com2 PASSIF
+Com2 FAILIF
+Com2 LOOKFOR
+Com2 FAILIF vcpupin missing
+FOREACH ${vminstance}
+Com2      TYPE /root/check_vcpupin.sh $ITEM_id\n
+Com2     WAIT 3 SEC {ignoreTimeout:True}
+ENDFOREACH
+Com2 PASSIF
+Com2 LOOKFOR
+Com2 FAILIF
+
+
+ENDLOOP
+
+
+
+
+
+LOOKFOR
+
+PASS
+    </test_case>
+</test_module>
+</file>

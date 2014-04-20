@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the DPDK autotest suite app/test.
+
+Modification history
+====================
+12jan14,ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/verifyOpenStack" timeout="">
+    <test_case  name="sanity/cgcs/verifyOpenStack" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag">
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+    CALL env
+    TYPE \n
+    SINK 1 SEC
+    PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+    Con1 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+    Con2 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+
+    TYPE \n\n\n
+    WAIT 8 SEC {ignoreTimeout:True} login:
+
+    TYPE root\n
+    WAIT 1 SEC {ignoreTimeout:True} Password:
+
+    TYPE root\n
+    WAIT 1 SEC {ignoreTimeout:True} .*\s
+
+
+    TYPE source /etc/nova/openrc \n
+    WAIT 3 SEC
+
+
+SINK 2 SEC
+    
+LOOKFOR nova-scheduler.* controller-[0-1].* internal.* enabled.* up
+LOOKFOR nova-conductor.* controller-[0-1].* internal.* enabled.* up
+LOOKFOR nova-consoleauth.* controller-[0-1].* internal.* enabled.* up
+LOOKFOR nova-compute.* compute-[0-1].* nova.* enabled.* up
+LOOKFOR nova-compute.* compute-[0-1].* nova.* enabled.* up
+LOOKFOR nova-cert.* controller-[0-1].* internal.* enabled.* up
+TYPE nova service-list \n
+WAIT 5 SEC
+LOOKFOR
+
+SINK 2 SEC
+
+
+
+#LOOKFOR DHCP agent[\s|]*compute-[0-1]+ [|\s:\-)|]* True
+LOOKFOR DHCP agent .* True
+LOOKFOR AVS agent[\s|]*compute-[0-1]+ [|\s:\-)|]* True
+LOOKFOR L3 agent[\s|]*compute-[0-1]+ [|\s:\-)|]* True
+TYPE neutron agent-list \n
+WAIT 5 SEC
+LOOKFOR
+
+    	LOOKFOR controller-0 \| controller  \| unlocked       \| enabled     \| available
+        FAILIF controller-0 \| internal \| disabled \|
+        TYPE system host-list\n
+        WAIT 5 SEC
+
+        PASS
+    </test_case>
+</test_module>
+</file>

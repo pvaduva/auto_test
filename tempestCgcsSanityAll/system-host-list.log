@@ -1,0 +1,14 @@
+system host-list 
++----+--------------------------------------+-------------+----------------+-------------+--------------+
+| id | hostname                             | personality | administrative | operational | availability |
++----+--------------------------------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0                         | controller  | unlocked       | enabled     | available    |
+| 2  | compute-0                            | compute     | unlocked       | enabled     | available    |
+| 3  | compute-1                            | compute     | unlocked       | enabled     | available    |
+| 4  | controller-1                         | controller  | unlocked       | enabled     | available    |
+| 5  | test-ihost1660219370                 | compute     | locked         | disabled    | offline      |
+| 6  | test-ihost609196980                  | compute     | locked         | disabled    | offline      |
+| 7  | test-ihost835300451                  | compute     | locked         | disabled    | offline      |
+| 8  | 10c98584-ff36-4996-a4c7-76c11915a3e3 | compute     | locked         | disabled    | offline      |
++----+--------------------------------------+-------------+----------------+-------------+--------------+
+[root@controller-0 site-packages(keystone_admin)]# 

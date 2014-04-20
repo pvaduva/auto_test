@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the DPDK autotest suite app/test.
+
+Modification history
+====================
+11feb15, ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/tempestCgcsRegression" timeout="">
+    <test_case  name="sanity/cgcs/tempestCgcsRegression" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/postTest/vmCleanup.frag">
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+
+CALL env
+TYPE \n
+SINK 1 SEC
+PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Con1 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Con2 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Com1 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Com2 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+
+SET CR }
+SET CL {
+
+TYPE source /etc/nova/openrc\n
+WAIT 10 SEC
+SINK 3 SEC
+
+
+
+TYPE cat /root/bin/create_tempestconf.sh \n
+WAIT 60 SEC
+
+TYPE cat /etc/tempest/tempest.conf \n
+WAIT 60 SEC
+
+TYPE cd /usr/lib64/python2.7/site-packages\n
+WAIT 3 SEC
+
+TYPE echo "starting tempest cgcs_regression tests"\n
+WAIT 3 SEC {ignoreTimeout:True}
+TYPE date\n
+WAIT 3 SEC {ignoreTimeout:True}
+
+LOOKFOR
+FAILIF FAILED \([a-z]+
+TYPE nosetests --verbose --logging-level=DEBUG -a type=cgcs_regression  tempest/ \n
+WAIT 5000 SEC {ignoreTimeout:True}
+
+FAILIF
+LOOKFOR
+TYPE zip /root/tempest.log.zip /usr/lib64/python2.7/site-packages/tempest.log   \n
+WAIT 2000 SEC
+CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' root@$env.NODE.target.Boot.oamAddrA:/root/tempest.log.zip ${WASSP_TC_RUN_LOG}/
+
+
+
+SET CR }
+SET CL {
+# CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_PATH}/cgcs_load.txt`\"$CR
+
+
+PASS
+
+    </test_case>
+</test_module>
+</file>

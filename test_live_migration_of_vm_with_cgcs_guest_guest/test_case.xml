@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the DPDK autotest suite app/test.
+
+Modification history
+====================
+11feb15, ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/test_live_migration_of_vm_with_cgcs_guest_guest" timeout="">
+    <test_case  name="sanity/cgcs/test_live_migration_of_vm_with_cgcs_guest_guest" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag">
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+
+CALL env
+TYPE \n
+SINK 1 SEC
+PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Con1 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Con2 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Com1 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Com2 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+
+SET CR }
+SET CL {
+
+TYPE source /etc/nova/openrc\n
+WAIT 10 SEC
+SINK 3 SEC
+
+TYPE cd /usr/lib64/python2.7/site-packages\n
+WAIT 3 SEC
+
+LOOKFOR
+LOOKFOR Ran [0-9]*
+LOOKFOR OK
+FAILIF FAILED
+TYPE nosetests --logging-level=DEBUG  tempest/cli/windriver/test_compute_vm_basic_operations.py:ComputeVmBasicOperations.test_live_migration_of_vm_with_cgcs_guest_guest \n
+WAIT 200 SEC {ignoreTimeout:True}
+
+LOOKFOR
+FAILIF
+TYPE zip  /root/tempest.log.zip /usr/lib64/python2.7/site-packages/tempest.log \n
+WAIT 100 SEC
+
+CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' root@$env.NODE.target.Boot.oamAddrA:/root/tempest.log.zip ${WASSP_TC_RUN_LOG}/
+
+
+SET CR }
+SET CL {
+# CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_PATH}/cgcs_load.txt`\"$CR
+
+
+PASS
+
+    </test_case>
+</test_module>
+</file>

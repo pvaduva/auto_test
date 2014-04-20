@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+  If wee got here then boot install of CGCS lab Passed
+
+Modification history
+====================
+05feb25, ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/bootInstall" timeout="">
+    <test_case  name="sanity/cgcs/bootInstall" >
+
+CALL env
+
+# CALL cat /tmp/nova-list.log|grep cirros-1 | awk 'BEGIN ${CL} FS = "=||;"${CR} ${CL} print $$2${CR}' > /tmp/cirrosip.txt
+# CALLPARSER echo ${CL}\"CIRROS0IP\":\"`cat /tmp/cirrosip.txt`\"${CR}
+
+
+PASS
+    </test_case>
+</test_module>
+</file>

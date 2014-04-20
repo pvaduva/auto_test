@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the import Cirros VM test  suite app/test.
+
+Modification history
+====================
+29jan14,ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/stressCompute" timeout="">
+    <test_case  name="sanity/cgcs/stressCompute" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/postTest/vmCleanup.frag">
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+
+	# 1) login to the build server: yow-cgts1-lx and find the latest Cirros VM image
+	#    ssh -o UserKnowHostsFile=/dev/null -o StrictHostKeyChecking=no 128.224.145.95
+    #    The above should probably be done with a  CALL  to some script that will do this
+	# 2) copy the cirros image and cirros shell script on to controller-0 into /root/images
+    # 3) cirros-0.3.0-x86_64-disk.img  and  cirros*.sh
+	# 4) use  glance  utility to import the image
+    #    source /etc/nova/openrc ;  glance image-create --name cirros --is-public true --container-format bare --disk-format qcow2 --file /root/images/cirros-0.3.0-x86_64-disk.img --property hw_vif_model=e1000
+
+
+
+TYPE exit \n
+SINK 1 SEC
+PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+Con1 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+Con2 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+Com1 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+Com2 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+SET BUILDSDIR /localdisk/loadbuild/jenkins/CGTS_1.0_Unified_Daily_Build
+SET dollar $
+
+TYPE \n\n\n
+WAIT 8 SEC {ignoreTimeout:True} login:
+
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} Password:
+
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} .*\s
+
+TYPE source /etc/nova/openrc
+TYPE \n
+WAIT 1 SEC {ignoreTimeout:True}
+
+SINK 1 SEC
+DELAY 1 SEC
+
+
+TYPE echo $$USER \n
+WAIT 1 SEC
+TYPE echo $$MAIL \n
+WAIT 1 SEC
+
+DELAY 10 SEC
+CALL env
+
+
+#####################################################################################
+# This block will not be necessary once enforce execution order is available in WASSP
+#####################################################################################
+
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/id_rsa -d /root/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/id_rsa.pub -d /root/.ssh/ -P 22
+SINK 1 SEC
+
+TYPE chmod 600 /root/.ssh/id_rsa \n
+WAIT 5 SEC
+
+TYPE mkdir -p /root/images \n
+WAIT 3 SEC
+
+# TODO: move out the build server varialbe to topology or target.ini
+SET BUILDSERVER 128.224.145.95
+#TYPE  ssh -q -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no cwinnick@$BUILDSERVER ls -rtd $BUILDSDIR/*/ | tail -n1
+
+
+
+
+#####################################################################################
+# End of block
+#####################################################################################
+
+
+
+
+CALL python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ${WASSP_TC_PATH}/setupCgcsNetworkVars.sh -d /root/bin/ -P 22
+
+TYPE source /root/bin/setupCgcsNetworkVars.sh \n
+WAIT 60 SEC
+# CALL env
+
+# /tmp/neutron_vars.txt
+# CALL scp -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@$env.NODE.target.Boot.oamAddrA:/tmp/neutron_vars.txt ${WASSP_TC_PATH}/neutron_vars.txt
+
+CALL env
+
+# Start Cirros Image
+
+TYPE nova delete cirros-0 \n
+WAIT 60 SEC
+
+TYPE nova delete cirros-1 \n
+WAIT 60 SEC
+DELAY 21 SEC
+
+LOOKFOR
+
+TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PRIVATENETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-0 \n
+WAIT 60 SEC
+
+LOOKFOR
+
+DELAY 5 SEC
+TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PUBLICNETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-1 \n
+WAIT 30 SEC
+
+LOOKFOR
+
+DELAY 5 SEC
+TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PUBLICNETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-2 \n
+WAIT 30 SEC
+
+LOOKFOR
+
+DELAY 5 SEC
+TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PUBLICNETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-3 \n
+WAIT 30 SEC
+
+DELAY 60 SEC
+
+LOOKFOR
+LOOKFOR cirros-0 .* ACTIVE
+LOOKFOR cirros-1 .* ACTIVE
+LOOKFOR cirros-2 .* ACTIVE
+LOOKFOR cirros-3 .* ACTIVE
+TYPE nova list \n
+WAIT 30 SEC
+
+#####################################################################################
+# End of block
+#####################################################################################
+
+LOOKFOR
+
+SET LC {
+SET RC }
+
+#TYPE nova show cirros-0\n
+#WAIT 30 SEC
+#SAVEOUTPUT ${WASSP_TC_USER_WORKSPACE}/nova-show-cirros-0.log
+#CALL CIRROS0=`cat ${WASSP_TC_USER_WORKSPACE}/nova-show-cirros-0.log |grep "OS-EXT-SRV-ATTR:host" | awk $LC'print $$4'$RC`
+
+#TYPE nova list\n
+#WAIT 30 SEC
+#SAVEOUTPUT ${WASSP_TC_USER_WORKSPACE}/nova-list.log
+#CALL VMCOUNT=`cat ${WASSP_TC_USER_WORKSPACE}/nova-list.log |grep cirros | wc -l`
+#TYPE echo We have $$VMCOUNT VMs \n
+#WAIT 3 SEC
+
+#####################################################################################
+# Compute fail test
+#####################################################################################
+SINK 2 SEC
+LOOKFOR nova-scheduler.* controller-[0-1].* internal.* enabled.* up
+LOOKFOR nova-conductor.* controller-[0-1].* internal.* enabled.* up
+LOOKFOR nova-consoleauth.* controller-[0-1].* internal.* enabled.* up
+LOOKFOR nova-compute.* compute-[0-1].* nova.* enabled.* up
+LOOKFOR nova-compute.* compute-[0-1].* nova.* enabled.* up
+LOOKFOR nova-cert.* controller-[0-1].* internal.* enabled.* up
+TYPE nova service-list \n
+WAIT 60 SEC
+LOOKFOR
+
+SINK 2 SEC
+
+LOOKFOR DHCP agent .* True
+LOOKFOR AVS agent[\s|]*compute-[0-1]+ [|\s:\-)|]* True
+LOOKFOR L3 agent[\s|]*compute-[0-1]+ [|\s:\-)|]* True
+TYPE neutron agent-list \n
+WAIT 60 SEC
+LOOKFOR
+
+
+# Rebooting compute-0
+Com1 TYPE \n\n\n
+Com1 WAIT 2 SEC {ignoreTimeout:True} login:
+
+Com1 TYPE root\n
+Com1 WAIT 2 SEC {ignoreTimeout:True} Password:
+
+Com1 TYPE root\n
+Com1 WAIT 2 SEC {ignoreTimeout:True} .*\s
+
+Com1 TYPE reboot -f\n
+Com1 WAIT 10 SEC {ignoreTimeout:True} Restarting system
+Com1 WAIT 300 SEC login:\s
+
+
+# Delay to allwo the rebooted compute to come back into service
+DELAY 45 SEC
+
+
+LOOKFOR
+LOOKFOR cirros-0 .* ACTIVE
+LOOKFOR cirros-1 .* ACTIVE
+LOOKFOR cirros-2 .* ACTIVE
+LOOKFOR cirros-3 .* ACTIVE
+TYPE nova list \n
+WAIT 30 SEC
+
+
+LOOKFOR
+LOOKFOR nova-scheduler.* controller-[0-1].* internal.* enabled.* up
+LOOKFOR nova-conductor.* controller-[0-1].* internal.* enabled.* up
+LOOKFOR nova-consoleauth.* controller-[0-1].* internal.* enabled.* up
+LOOKFOR nova-compute.* compute-[0-1].* nova.* enabled.* up
+LOOKFOR nova-compute.* compute-[0-1].* nova.* enabled.* up
+LOOKFOR nova-cert.* controller-[0-1].* internal.* enabled.* up
+TYPE nova service-list \n
+WAIT 15 SEC
+
+
+SINK 2 SEC
+
+LOOKFOR
+LOOKFOR DHCP agent .* True
+LOOKFOR AVS agent[\s|]*compute-[0-1]+ [|\s:\-)|]* True
+LOOKFOR L3 agent[\s|]*compute-[0-1]+ [|\s:\-)|]* True
+TYPE neutron agent-list \n
+WAIT 15 SEC
+
+
+
+
+
+LOOKFOR
+
+TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PUBLICNETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-4 \n
+WAIT 30 SEC
+DELAY 1 SEC
+
+LOOKFOR
+
+TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PUBLICNETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-5 \n
+WAIT 30 SEC
+
+DELAY 60 SEC
+
+LOOKFOR
+LOOKFOR cirros-0 .* ACTIVE
+LOOKFOR cirros-1 .* ACTIVE
+LOOKFOR cirros-2 .* ACTIVE
+LOOKFOR cirros-3 .* ACTIVE
+LOOKFOR cirros-4 .* ACTIVE
+LOOKFOR cirros-5 .* ACTIVE
+TYPE nova list \n
+WAIT 30 SEC
+LOOKFOR
+
+#####################################################################################
+# End of block
+#####################################################################################
+
+#SET X [{'vm':'0'},{'vm':'1'},{'vm':'1'},{'vm':'2'},{'vm':'3'},{'vm':'4'},{'vm':'5'}]
+#SET X [dict(vm='0'), dict(vm='1')]
+#PASSIF compute-0
+#FOREACH ${X}
+#    TYPE nova show $ITEM_vm \n
+#    WAIT 30 SEC
+#    DELAY 3 SEC
+#ENDFOREACH
+
+
+#####################################################################################
+# Cleanup
+#####################################################################################
+
+
+PASS
+    </test_case>
+</test_module>
+</file>

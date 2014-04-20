@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the import Cirros VM test  suite app/test.
+
+Modification history
+====================
+26jan14,ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/importCirrosVM" timeout="">
+    <test_case  name="sanity/cgcs/importCirrosVM" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/postTest/vmCleanup.frag">
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+
+	# 1) login to the build server: yow-cgts1-lx and find the latest Cirros VM image
+	#    ssh -o UserKnowHostsFile=/dev/null -o StrictHostKeyChecking=no 128.224.145.95
+    #    The above should probably be done with a  CALL  to some script that will do this
+	# 2) copy the cirros image and cirros shell script on to controller-0 into /root/images
+    # 3) cirros-0.3.0-x86_64-disk.img  and  cirros*.sh
+
+
+CALL env
+TYPE \n
+SINK 1 SEC
+PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+Con1 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+Con2 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+SET BUILDSDIR /localdisk/loadbuild/jenkins/CGTS_1.0_Unified_Daily_Build
+
+TYPE \n\n\n
+WAIT 8 SEC {ignoreTimeout:True} login:
+
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} Password:
+
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} .*\s
+SINK 1 SEC
+DELAY 1
+
+
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/id_rsa -d /root/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/id_rsa.pub -d /root/.ssh/ -P 22
+SINK 1 SEC
+
+TYPE chmod 600 /root/.ssh/id_rsa 
+TYPE \n
+WAIT 3 SEC
+
+TYPE mkdir -p /root/images \n
+WAIT 3 SEC
+
+SINK 1 SEC
+CALL ${WASSP_TC_PATH}/../utils/findLatestCgcsLoad2.sh > ${WASSP_TC_PATH}/cgcs_load.txt
+#CALL echo -n "CGCS_PATH=" > ${WASSP_TC_PATH}/cgcs_load.txt
+#CALL ${WASSP_TC_PATH}/../utils/findLatestCgcsLoad.sh >> ${WASSP_TC_PATH}/cgcs_load.txt
+
+CALL cat ${WASSP_TC_PATH}/cgcs_load.txt
+
+CALL LOAD=`cat ${WASSP_TC_PATH}/cgcs_load.txt`
+
+SET CR }
+SET CL {
+CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_PATH}/cgcs_load.txt`\"$CR
+
+#############################################
+# Temporary workaroud:
+# SET LOAD /localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/2014-01-04_01-32-25/
+#############################################
+
+# Download the latest Cirros guest VM images to controller-0
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/${LOAD_PATH}/${cirrosVmPath} /root/images/ \n
+
+
+WAIT 600 SEC
+
+
+LOOKFOR
+LOOKFOR (.)*cirros.*\.img
+LOOKFOR (.)*cirros.*\.sh
+TYPE ls -l /root/images/* \n
+WAIT 5 SEC
+
+
+
+
+PASS
+    </test_case>
+</test_module>
+</file>

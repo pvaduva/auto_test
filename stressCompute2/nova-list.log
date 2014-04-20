@@ -1,0 +1,13 @@
+nova list 
++--------------------------------------+----------+--------+------------+-------------+----------------------------------------------------------------+
+| ID                                   | Name     | Status | Task State | Power State | Networks                                                       |
++--------------------------------------+----------+--------+------------+-------------+----------------------------------------------------------------+
+| 4449e0d0-2138-49fa-a257-aae544f62bff | cirros-0 | ACTIVE | -          | Running     | private-net0=192.168.201.5; internal-net0=10.10.0.2, 10.10.1.2 |
+| 9e0dc68b-b54d-436f-b1f2-e2a0491362d1 | cirros-1 | ACTIVE | -          | Running     | internal-net0=10.10.0.7, 10.10.1.7; public-net0=192.168.101.3  |
+| 87eefe8f-8eaf-487c-8ee4-887c6ac9c957 | cirros-2 | ACTIVE | -          | Running     | internal-net0=10.10.0.3, 10.10.1.3; public-net0=192.168.101.7  |
+| 933d836d-fe0b-46ce-b06a-dbba7fdc6b38 | cirros-3 | ACTIVE | -          | Running     | internal-net0=10.10.0.8, 10.10.1.8; public-net0=192.168.101.4  |
+| 401c1128-b62e-480b-84b6-14707bd59420 | cirros-4 | ACTIVE | -          | Running     | internal-net0=10.10.0.4, 10.10.1.4; public-net0=192.168.101.8  |
+| c1ffdbeb-6ba0-445b-bdb6-30621810c5bb | cirros-5 | ACTIVE | -          | Running     | internal-net0=10.10.0.9, 10.10.1.9; public-net0=192.168.101.5  |
+| 3fb93e2e-2925-4954-9efa-77c9b7d2bc68 | cirros-6 | ACTIVE | -          | Running     | internal-net0=10.10.0.5, 10.10.1.5; public-net0=192.168.101.9  |
++--------------------------------------+----------+--------+------------+-------------+----------------------------------------------------------------+
+[root@controller-0 ~(keystone_admin)]# 

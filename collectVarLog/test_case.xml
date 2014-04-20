@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the DPDK autotest suite app/test.
+
+Modification history
+====================
+13feb15, ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/collectVarLog" timeout="">
+    <test_case  name="sanity/cgcs/collectVarLog" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag">
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+
+CALL env
+TYPE \n
+SINK 1 SEC
+PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Con1 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+Con2 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+SET CR }
+SET CL {
+
+TYPE source /etc/nova/openrc\n
+WAIT 10 SEC
+SINK 3 SEC
+
+####################################################################################
+####################################################################################
+# TODO:  Collections of logs should be moved out to the postTest fragment as a last
+# step to be performed irregardless of PASS or FAIL  or it should be the last test case to run
+####################################################################################
+LOOKFOR
+SINK 2 SEC
+TYPE system host-list \n
+WAIT 30 SEC
+SAVEOUTPUT ${WASSP_TC_PATH}/system-host-list.log
+DELAY 3 SEC
+CALL cat ${WASSP_TC_PATH}/system-host-list.log
+LOOKFOR
+
+CALLPARSER python3 ${WASSP_TC_PATH}/../utils/parse_system_host_list.py -v HOST --wassp_dict_id node -l ${WASSP_TC_PATH}/system-host-list.log
+DELAY 3 SEC
+
+FOREACH ${HOST}
+TYPE ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node} zip -r  /root/${ITEM_node}.var.log.zip /var/log/ \n
+    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
+    TYPE root\n
+    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
+    SINK 3 SEC    
+ENDFOREACH
+
+FOREACH ${HOST}
+TYPE scp  -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node}:/root/${ITEM_node}.var.log.zip /root/ \n
+    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
+    TYPE root\n
+    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
+    SINK 3 SEC
+LOOKFOR
+ENDFOREACH
+
+TYPE zip  /root/tempest.log.zip /usr/lib64/python2.7/site-packages/tempest.log; date; echo zipping is done\n
+WAIT 100 SEC
+
+CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' root@$env.NODE.target.Boot.oamAddrA:/root/*.zip ${WASSP_TC_RUN_LOG}/
+
+
+
+####################################################################################
+####################################################################################
+
+PASS
+
+    </test_case>
+</test_module>
+</file>

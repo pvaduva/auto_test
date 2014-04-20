@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the import Cirros VM test  suite app/test.
+
+Modification history
+====================
+26jan14,ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/startCirrosVM" timeout="">
+    <test_case  name="sanity/cgcs/startCirrosVM" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/postTest/vmCleanup.frag">
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+
+	# 1) login to the build server: yow-cgts1-lx and find the latest Cirros VM image
+	#    ssh -o UserKnowHostsFile=/dev/null -o StrictHostKeyChecking=no 128.224.145.95
+    #    The above should probably be done with a  CALL  to some script that will do this
+	# 2) copy the cirros image and cirros shell script on to controller-0 into /root/images
+    # 3) cirros-0.3.0-x86_64-disk.img  and  cirros*.sh
+
+
+TYPE exit \n
+SINK 1 SEC
+PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+Con1 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+Con2 PROMPT (.*:~#\s) | (.*\]:\s) | (.*\)\]#\s) | (.*\]#\s)
+# SET BUILDSDIR /localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build
+SET dollar $
+
+TYPE \n\n\n
+WAIT 8 SEC {ignoreTimeout:True} login:
+
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} Password:
+
+TYPE root\n
+WAIT 1 SEC {ignoreTimeout:True} .*\s
+
+TYPE source /etc/nova/openrc
+TYPE \n
+WAIT 1 SEC {ignoreTimeout:True}
+
+SINK 1 SEC
+DELAY 1 SEC
+
+
+TYPE echo $$USER \n
+WAIT 1 SEC
+TYPE echo $$MAIL \n
+WAIT 1 SEC
+
+DELAY 10 SEC
+CALL env
+
+
+#####################################################################################
+# This block will not be necessary once enforce execution order is available in WASSP
+#####################################################################################
+
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/id_rsa -d /root/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/id_rsa.pub -d /root/.ssh/ -P 22
+SINK 1 SEC
+
+TYPE chmod 600 /root/.ssh/id_rsa \n
+WAIT 5 SEC
+
+TYPE mkdir -p /root/images \n
+WAIT 3 SEC
+
+
+SINK 1 SEC
+CALL ${WASSP_TC_PATH}/../utils/findLatestCgcsLoad2.sh > ${WASSP_TC_PATH}/cgcs_load.txt
+
+CALL cat ${WASSP_TC_PATH}/cgcs_load.txt
+
+CALL LOAD=`cat ${WASSP_TC_PATH}/cgcs_load.txt`
+
+SET CR }
+SET CL {
+CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_PATH}/cgcs_load.txt`\"$CR
+
+
+
+LOOKFOR
+LOOKFOR
+TYPE glance image-list \n
+WAIT 60 SEC
+
+
+TYPE source /root/bin/setupCgcsNetworkVars.sh \n
+WAIT 60 SEC
+
+
+# Start Cirros Image
+
+TYPE nova delete cirros-0 \n
+WAIT 60 SEC
+
+TYPE nova delete cirros-1 \n
+WAIT 60 SEC
+
+
+
+LOOKFOR
+LOOKFOR building
+TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PRIVATENETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-0 \n
+WAIT 60 SEC
+
+LOOKFOR
+LOOKFOR building
+TYPE nova boot --key_name=controller-0 --flavor=1 --nic net-id=$$PUBLICNETID --nic net-id=$$INTERNALNETID --image=cirros --user-data /root/images/cirros-init.sh cirros-1 \n
+WAIT 30 SEC
+
+DELAY 30 SEC
+
+LOOKFOR
+LOOKFOR cirros-0 .* ACTIVE
+LOOKFOR cirros-1 .* ACTIVE
+TYPE nova list \n
+WAIT 30 SEC
+LOOKFOR
+
+################################################################################
+### VM cleanup block
+################################################################################
+# Depricated, has been moved to vmCleanup.frag
+
+
+
+
+PASS
+    </test_case>
+</test_module>
+</file>

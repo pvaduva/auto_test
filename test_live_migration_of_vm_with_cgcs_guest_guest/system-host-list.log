@@ -1,0 +1,10 @@
+system host-list 
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 3  | compute-1    | compute     | unlocked       | enabled     | available    |
+| 4  | controller-1 | controller  | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[root@controller-0 site-packages(keystone_admin)]# 
