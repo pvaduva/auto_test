@@ -82,15 +82,15 @@ WAIT 3 SEC
 
 
 SINK 1 SEC
-CALL ${WASSP_TC_PATH}/../utils/findLatestCgcsLoad2.sh > ${WASSP_TC_PATH}/cgcs_load.txt
+CALL ${WASSP_TC_PATH}/../utils/findLatestCgcsLoad2.sh > ${WASSP_TC_RUN_LOG}/cgcs_load.log
 
-CALL cat ${WASSP_TC_PATH}/cgcs_load.txt
+CALL cat ${WASSP_TC_RUN_LOG}/cgcs_load.log
 
-CALL LOAD=`cat ${WASSP_TC_PATH}/cgcs_load.txt`
+CALL LOAD=`cat ${WASSP_TC_RUN_LOG}/cgcs_load.log`
 
 SET CR }
 SET CL {
-CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_PATH}/cgcs_load.txt`\"$CR
+CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_RUN_LOG}/cgcs_load.log`\"$CR
 
 
 

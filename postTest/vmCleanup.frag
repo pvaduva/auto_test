@@ -44,10 +44,10 @@ SINK 2 SEC
 LOOKFOR
 TYPE nova list \n
 WAIT 30 SEC
-SAVEOUTPUT ${WASSP_TC_PATH}/nova-list.log
-CALL cat ${WASSP_TC_PATH}/nova-list.log
+SAVEOUTPUT ${WASSP_TC_RUN_LOG}/nova-list.log
+CALL cat ${WASSP_TC_RUN_LOG}/nova-list.log
 
-CALLPARSER python3 ${WASSP_TC_PATH}/../utils/parse_uuid.py -f ${WASSP_TC_PATH}/nova-list.log
+CALLPARSER python3 ${WASSP_TC_PATH}/../utils/parse_uuid.py -f ${WASSP_TC_RUN_LOG}/nova-list.log
 FOREACH ${X}
     TYPE nova delete $ITEM_uuid \n
     WAIT 30 SEC {ignoreTimeout:True}
@@ -65,12 +65,12 @@ LOOKFOR
 SINK 2 SEC
 TYPE system host-list \n
 WAIT 30 SEC
-SAVEOUTPUT ${WASSP_TC_PATH}/system-host-list.log
+SAVEOUTPUT ${WASSP_TC_RUN_LOG}/system-host-list.log
 DELAY 3 SEC
-CALL cat ${WASSP_TC_PATH}/system-host-list.log
+CALL cat ${WASSP_TC_RUN_LOG}/system-host-list.log
 LOOKFOR
 
-CALLPARSER python3 ${WASSP_TC_PATH}/../utils/parse_system_host_list.py -v HOST --wassp_dict_id node -l ${WASSP_TC_PATH}/system-host-list.log
+CALLPARSER python3 ${WASSP_TC_PATH}/../utils/parse_system_host_list.py -v HOST --wassp_dict_id node -l ${WASSP_TC_RUN_LOG}/system-host-list.log
 DELAY 3 SEC
 
 

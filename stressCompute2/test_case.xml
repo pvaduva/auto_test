@@ -90,14 +90,14 @@ WAIT 3 SEC
 #TYPE  ssh -q -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no cwinnick@$BUILDSERVER ls -rtd $BUILDSDIR/*/ | tail -n1
 
 SINK 1 SEC
-CALL ${WASSP_TC_PATH}/../utils/findLatestCgcsLoad2.sh > ${WASSP_TC_PATH}/cgcs_load.txt
+CALL ${WASSP_TC_PATH}/../utils/findLatestCgcsLoad2.sh > ${WASSP_TC_RUN_LOG}/cgcs_load.log
 
 
-CALL cat ${WASSP_TC_PATH}/cgcs_load.txt
+CALL cat ${WASSP_TC_RUN_LOG}/cgcs_load.log
 
 SET CR }
 SET CL {
-CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_PATH}/cgcs_load.txt`\"$CR
+CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_RUN_LOG}/cgcs_load.log`\"$CR
 
 #############################################
 # Temporary workaroud:
@@ -132,8 +132,8 @@ TYPE source /root/bin/setupCgcsNetworkVars.sh \n
 WAIT 60 SEC
 # CALL env
 
-# /tmp/neutron_vars.txt
-# CALL scp -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@$env.NODE.target.Boot.oamAddrA:/tmp/neutron_vars.txt ${WASSP_TC_PATH}/neutron_vars.txt
+# /tmp/neutron_vars.log
+# CALL scp -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@$env.NODE.target.Boot.oamAddrA:/tmp/neutron_vars.log ${WASSP_TC_RUN_LOG}/neutron_vars.log
 
 CALL env
 

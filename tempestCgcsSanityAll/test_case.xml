@@ -41,6 +41,7 @@ TYPE source /etc/nova/openrc\n
 WAIT 10 SEC
 SINK 3 SEC
 
+# CALL /usr/bin/jenkins-cli -s http://128.224.140.236:8080/ cgcs_sanity_ip1-4 -s -v
 
 TYPE cat /root/bin/create_tempestconf.sh \n
 WAIT 60 SEC

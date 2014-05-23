@@ -101,12 +101,17 @@ TYPE mkdir -p /root/images/ \n
 WAIT 6 SEC
 TYPE chmod -R 777 /root/images/ \n
 WAIT 7 SEC
+TYPE chmod -R 777 /root/heat/ \n
+WAIT 7 SEC
+
 
 Con2 SINK 3 SEC
 # root should have alread loged in via loginCGCS.frag
 Con2 TYPE mkdir -p /root/images/ \n
 Con2 WAIT 8 SEC .*
 Con2 TYPE chmod -R 777 /root/images/ \n
+Con2 WAIT 9 SEC .*
+Con2 TYPE chmod -R 777 /root/heat/ \n
 Con2 WAIT 9 SEC .*
 
 
@@ -126,12 +131,12 @@ WAIT 60 SEC
 
 
 SINK 1 SEC
-CALL ${WASSP_TC_PATH}/../utils/findLatestCgcsLoad2.sh > ${WASSP_TC_PATH}/cgcs_load.txt
-CALL cat ${WASSP_TC_PATH}/cgcs_load.txt
+CALL ${WASSP_TC_PATH}/../utils/findLatestCgcsLoad2.sh > ${WASSP_TC_RUN_LOG}/cgcs_load.log
+CALL cat ${WASSP_TC_RUN_LOG}/cgcs_load.log
 
 SET CR }
 SET CL {
-CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_PATH}/cgcs_load.txt`\"$CR
+CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_RUN_LOG}/cgcs_load.log`\"$CR
 
 #############################################
 # Temporary workaroud:
@@ -143,6 +148,11 @@ CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_PATH}/cgcs_load.txt`\"$CR
 
 TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/${LOAD_PATH}/../latest_build/layers/wr-cgcs/cgcs/extras.ND/scripts/ /root/images/ \n
 WAIT 1000 SEC
+
+# Grab 3rd party guest images from: yow-cgts2-lx:/localdisk/designer/jenkins/images/precise-server-cloudimg-amd64-disk1.img
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/designer/jenkins/images/ /root/images/ \n
+WAIT 1000 SEC
+
 
 #####################################################################################
 # Create VM image and Start it
@@ -161,14 +171,23 @@ WAIT 60 SEC
 
 
 TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/loadbuild/jenkins/CGCS_1.0_Guest_Daily_Build/cgcs-guest.img /root/images/  \n
-WAIT 30 MIN
+WAIT 30 MIN {ignoreTimeout:True}
 
-# synch-up  controller-0 to controller-1
+# copy the default heat templates
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@128.224.145.95:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_build/export/public/heat_templates.tgz /root/heat/\n
+WAIT 30 MIN
+TYPE cd /root/heat\n
+WAIT 30 SEC
+TYPE tar -xvf heat_templates.tgz\n
+WAIT 30 SEC
+
+# synch-up  controller-1 to controller-0
 TYPE rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/images controller-1:/root/ \n
 WAIT 30 SEC
 TYPE rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/bin controller-1:/root/ \n
 WAIT 30 SEC
-
+TYPE rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/heat controller-1:/root/ \n
+WAIT 30 SEC
 
 TYPE glance image-create --name wrl5-avp --is-public true --container-format bare --disk-format qcow2 --file /root/images/cgcs-guest.img --property hw_vif_model=avp \n
 WAIT 30 SEC
@@ -186,13 +205,21 @@ TYPE nova flavor-create wrl5.dpdk.small 101 512 0 2\n
 WAIT 30 SEC
 DELAY 5 SEC
 
+TYPE nova flavor-create --dedicated-cpus True m1.small 2 2048 20 1\n
+WAIT 30 SEC
+DELAY 5 SEC
 
+TYPE nova flavor-create --dedicated-cpus True --guest-heartbeat True  wrl5.dpdk.small.heartbeat 200 512 0 2\n
+WAIT 30 SEC
+DELAY 5 SEC
 
+TYPE nova flavor-create --dedicated-cpus True --guest-heartbeat True  wrl5.dpdk.big.heartbeat 201 4096 0 3\n
+WAIT 30 SEC
+DELAY 5 SEC
 
-
-
-
-
+TYPE nova flavor-create --dedicated-cpus True --guest-heartbeat True  --platform-vcpu 0  wrl5.dpdk.big.heartbeat.pinToMgmtCore  233 4096 0 3\n
+WAIT 30 SEC
+DELAY 5 SEC
 
 
 
@@ -203,7 +230,7 @@ SAVEOUTPUT /tmp/nova-list.log
 # SAVEOUTPUT ${WASSP_TC_USER_WORKSPACE}/myFile
 
 
-## CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_PATH}/cgcs_load.txt`\"$CR
+## CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_PATH}/cgcs_load.log`\"$CR
 ## {"LOAD_PATH":"/localdisk/loadbuild/jenkins/CGTS_1.0_Unified_Daily_Build/2014-01-04_01-32-25/"}
 ## CALL cat /tmp/nova-list.log|grep cirros-1 | awk 'BEGIN {FS = "=||\;" } {print $2}' > /tmp/cirrosip.txt
 
