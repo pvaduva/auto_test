@@ -25,6 +25,10 @@ Modification history
         # Test Sanity CGCS app/test
         #######################################################
 
+SET JKPATH /localdisk/loadbuild/jenkins/
+SET LOADPATH CGCS_GG_14.06_Host/
+SET GUESTPATH CGCS_GG_14.06_Guest
+
 # CALL env
 TYPE \n
 SINK 1 SEC
@@ -131,7 +135,7 @@ WAIT 60 SEC
 
 
 SINK 1 SEC
-CALL ${WASSP_TC_PATH}/../utils/findLatestCgcsLoad2.sh > ${WASSP_TC_RUN_LOG}/cgcs_load.log
+CALL ${WASSP_TC_PATH}/../utils/findLatestCgcsLoad2.sh ${BUILDSERVER} > ${WASSP_TC_RUN_LOG}/cgcs_load.log
 CALL cat ${WASSP_TC_RUN_LOG}/cgcs_load.log
 
 SET CR }
@@ -146,12 +150,24 @@ CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_RUN_LOG}/cgcs_load.log`\"$CR
 # Download the latest Cirros guest VM images to controller-0
 # TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/${LOAD_PATH}/layers/wr-cgcs/cgcs/extras.ND/scripts/ /root/images/ \n
 
-TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/${LOAD_PATH}/../latest_build/layers/wr-cgcs/cgcs/extras.ND/scripts/ /root/images/ \n
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_build/layers/wr-cgcs/cgcs/extras.ND/scripts/ /root/images/ \n
+WAIT 1000 SEC
+
+# get the ubuntu cloud image.  This image is only available in Scott Little private dir
+# hard coding the cgts2 build server IP because the image only exists in scotts directory
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@128.224.145.117:/localdisk/designer/slittle1/precise-server-cloudimg-amd64-disk1.password_enabled.img /root/images/precise-server-cloudimg-amd64-disk1.img \n
 WAIT 1000 SEC
 
 # Grab 3rd party guest images from: yow-cgts2-lx:/localdisk/designer/jenkins/images/precise-server-cloudimg-amd64-disk1.img
-TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/designer/jenkins/images/ /root/images/ \n
-WAIT 1000 SEC
+# TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/designer/jenkins/images/ /root/images/ \n
+# WAIT 1000 SEC
+
+# Copy lab setup
+TYPE rsync -av -e 'ssh -o ConnectTimeout=20 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_build/layers/wr-cgcs/cgcs/extras.ND/lab/yow/cgcs-ironpass-1_4/* /root/ \n
+WAIT 20 SEC {ignoreTimeout:True}
+
+TYPE rsync -av -e 'ssh -o ConnectTimeout=20 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_build/layers/wr-cgcs/cgcs/extras.ND/lab/scripts/* /root/ \n
+WAIT 20 SEC {ignoreTimeout:True}
 
 
 #####################################################################################
@@ -174,11 +190,13 @@ TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o
 WAIT 30 MIN {ignoreTimeout:True}
 
 # copy the default heat templates
-TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@128.224.145.95:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_build/export/public/heat_templates.tgz /root/heat/\n
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@128.224.145.95:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_build/bitbake_build/tmp/deploy/cgcs_sdk/heat* /root/\n
 WAIT 30 MIN
-TYPE cd /root/heat\n
+
+TYPE tar -xvf heat*.tgz\n
 WAIT 30 SEC
-TYPE tar -xvf heat_templates.tgz\n
+
+TYPE cp -pR heat_templates heat\n
 WAIT 30 SEC
 
 # synch-up  controller-1 to controller-0
@@ -194,6 +212,11 @@ WAIT 30 SEC
 DELAY 5 SEC
 
 TYPE glance image-create --name wrl5-virtio --is-public true --container-format bare --disk-format qcow2 --file /root/images/cgcs-guest.img --property hw_vif_model=virtio \n
+WAIT 30 SEC
+DELAY 5 SEC
+
+# New as of June 12:
+TYPE glance image-create --name wrl5 --is-public true --container-format bare --disk-format qcow2 --file /root/images/cgcs-guest.img \n
 WAIT 30 SEC
 DELAY 5 SEC
 
@@ -221,7 +244,19 @@ TYPE nova flavor-create --dedicated-cpus True --guest-heartbeat True  --platform
 WAIT 30 SEC
 DELAY 5 SEC
 
+TYPE echo set tabstop=4 > /root/.vimrc\n
+TYPE echo set ignorecase >> /root/.vimrc\n
+TYPE echo syntax on >> /root/.vimrc\n
 
+TYPE echo set shiftwidth=4 >> /root/.vimrc\n
+TYPE echo set expandtab >> /root/.vimrc\n
+TYPE echo set mouse-=a >> /root/.vimrc\n
+WAIT 10 SEC {ignoreTimeout:True}
+
+
+TYPE system modify name=ip1-4\n
+TYPE system modify description="This system belongs to CGCS project"\n
+WAIT 10 SEC {ignoreTimeout:True}
 
 
 TYPE nova list \n

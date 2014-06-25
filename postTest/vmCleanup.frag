@@ -74,40 +74,38 @@ CALLPARSER python3 ${WASSP_TC_PATH}/../utils/parse_system_host_list.py -v HOST -
 DELAY 3 SEC
 
 
+#FOREACH ${HOST}
+#TYPE ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node} zip -r  /root/${ITEM_node}.var.log.zip /var/log/ \n
+#    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
+#    TYPE root\n
+#    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
+#    SINK 3 SEC    
+#ENDFOREACH
+
+#FOREACH ${HOST}
+#TYPE scp  -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node}:/root/${ITEM_node}.var.log.zip /root/ \n
+#    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
+#    TYPE root\n
+#    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
+#    SINK 3 SEC
+#LOOKFOR
+#ENDFOREACH
+
+#CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' root@$env.NODE.target.Boot.oamAddrA:/root/*.zip ${WASSP_TC_RUN_LOG}/
+
+#TYPE date > /tmp/date.txt\n
+#WAIT 3 SEC {ignoreTimeout:True}
+#TYPE zip --grow  /root/tempest.log.zip /tmp/date.txt\n
+#WAIT 3 SEC {ignoreTimeout:True}
+
+#TYPE zip --grow  /root/tempest.log.zip /usr/lib64/python2.7/site-packages/tempest.log \n
+#WAIT 100 SEC
+#CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' root@$env.NODE.target.Boot.oamAddrA:/root/*.zip ${WASSP_TC_RUN_LOG}/
 
 
-FOREACH ${HOST}
-TYPE ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node} zip -r  /root/${ITEM_node}.var.log.zip /var/log/ \n
-    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
-    TYPE root\n
-    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
-    SINK 3 SEC    
-ENDFOREACH
+#Con2 TYPE \n
+#Con2 WAIT 7 SEC {ignoreTimeout:True}
 
-FOREACH ${HOST}
-TYPE scp  -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node}:/root/${ITEM_node}.var.log.zip /root/ \n
-    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
-    TYPE root\n
-    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
-    SINK 3 SEC
-LOOKFOR
-ENDFOREACH
-
-CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' root@$env.NODE.target.Boot.oamAddrA:/root/*.zip ${WASSP_TC_RUN_LOG}/
-
-TYPE date > /tmp/date.txt\n
-WAIT 3 SEC {ignoreTimeout:True}
-TYPE zip --grow  /root/tempest.log.zip /tmp/date.txt\n
-WAIT 3 SEC {ignoreTimeout:True}
-
-TYPE zip --grow  /root/tempest.log.zip /usr/lib64/python2.7/site-packages/tempest.log \n
-WAIT 100 SEC
-CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' root@$env.NODE.target.Boot.oamAddrA:/root/*.zip ${WASSP_TC_RUN_LOG}/
-
-
-Con2 TYPE \n
-Con2 WAIT 7 SEC {ignoreTimeout:True}
-
-SINK 1 SEC
-CALL ${WASSP_TESTCASE_BASE}/utils/send_email.sh ${CONSOLE_LOG} ${WASSP_TC_NAME}
+#SINK 1 SEC
+#CALL ${WASSP_TESTCASE_BASE}/utils/send_email.sh ${CONSOLE_LOG} ${WASSP_TC_NAME}
 

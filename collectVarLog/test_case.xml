@@ -56,28 +56,24 @@ CALLPARSER python3 ${WASSP_TC_PATH}/../utils/parse_system_host_list.py -v HOST -
 DELAY 3 SEC
 
 FOREACH ${HOST}
-TYPE ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node} zip -r  /root/${ITEM_node}.var.log.zip /var/log/ \n
-    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
+# TYPE ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node} zip -r  /root/${ITEM_node}.var.log.zip /var/log/ \n
+TYPE ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node} /usr/local/sbin/collect \n
+    WAIT 30 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
     TYPE root\n
-    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
+    WAIT 30 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
     SINK 3 SEC    
 ENDFOREACH
 
 FOREACH ${HOST}
-TYPE scp  -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node}:/root/${ITEM_node}.var.log.zip /root/ \n
-    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
+TYPE scp  -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node}:/scratch/*.tgz /scratch/ \n
+    WAIT 30 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
     TYPE root\n
-    WAIT 100 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
+    WAIT 30 SEC {ignoreTimeout:True} (.*\)\]#\s)|(password:)
     SINK 3 SEC
 LOOKFOR
 ENDFOREACH
 
-TYPE zip  /root/tempest.log.zip /usr/lib64/python2.7/site-packages/tempest.log; date; echo zipping is done\n
-WAIT 100 SEC
-
-CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' root@$env.NODE.target.Boot.oamAddrA:/root/*.zip ${WASSP_TC_RUN_LOG}/
-
-
+CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' root@$env.NODE.target.Boot.oamAddrA:/scratch/*.tgz ${WASSP_TC_RUN_LOG}/
 
 ####################################################################################
 ####################################################################################
