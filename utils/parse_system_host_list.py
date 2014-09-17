@@ -47,7 +47,7 @@ f.close()
 holder=list()
 
 '''
-Find host of all the VMs
+Find names of all the hosts
 '''
 for l in lines:
     r = re.compile(lookfor)

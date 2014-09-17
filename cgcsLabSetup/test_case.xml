@@ -24,10 +24,18 @@ Modification history
         #######################################################
         # Test Sanity CGCS app/test
         #######################################################
+# BUILDSERVER is defined in the spreadsheet
 
 SET JKPATH /localdisk/loadbuild/jenkins/
-SET LOADPATH CGCS_GG_14.06_Host/
-SET GUESTPATH CGCS_GG_14.06_Guest
+# SET GUESTPATH CGCS_GG_14.06b_PCI_POC_Guest
+# SET LOADPATH CGCS_GG_14.06b_PCI_POC_Host/
+
+#SET GUESTPATH CGCS_1.0_Guest_Daily_Build_B
+#SET LOADPATH CGCS_GG_14.06_Host/
+#SET GUESTPATH CGCS_GG_14.06_Guest/
+
+SET GUESTPATH CGCS_1.0_Guest_Daily_Build
+SET LOADPATH CGCS_1.0_Unified_Daily_Build/
 
 # CALL env
 TYPE \n
@@ -37,6 +45,7 @@ Con1 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
 Con2 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
 SET CR }
 SET CL {
+
 
 
 TYPE \n\n\n
@@ -50,8 +59,19 @@ WAIT 1 SEC {ignoreTimeout:True} .*\s
 
 DELAY 1
 
+TYPE HISTTIMEFORMAT="%Y-%m-%d %T "\n
+WAIT 3 SEC {ignoreTimeout:True} 
+
+TYPE echo 'HISTTIMEFORMAT="%Y-%m-%d %T "' >> /etc/profile\n
+WAIT 3 SEC {ignoreTimeout:True} 
+
+TYPE sed -i.bkp "s/TMOUT=900/TMOUT=/g" /etc/profile\n
+WAIT 3 SEC {ignoreTimeout:True} 
+
+
 TYPE source /etc/nova/openrc
 TYPE \n
+
 WAIT 1 SEC
 SINK 2 SEC
 
@@ -70,11 +90,7 @@ TYPE chmod -R 777 /root/bin/ \n
 WAIT 3 SEC
 
 
-
-
-
-TYPE nova keypair-add --pub_key ~/.ssh/id_rsa.pub controller-0
-TYPE \n
+TYPE nova keypair-add --pub_key ~/.ssh/id_rsa.pub controller-0\n
 WAIT 30 SEC .*\)\]#\s
 DELAY 5 SEC
 
@@ -86,10 +102,11 @@ WAIT 30 SEC
 
 LOOKFOR
 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
-LOOKFOR external-net0
-LOOKFOR private-net0
-LOOKFOR public-net0
-LOOKFOR internal-net0
+# LOOKFOR external-net0
+# LOOKFOR private-net0
+# LOOKFOR public-net0
+# LOOKFOR internal-net0
+# LOOKFOR
 
 TYPE neutron net-list \n
 WAIT 30 SEC
@@ -97,26 +114,11 @@ LOOKFOR
 
 
 
-
-
-
-
 TYPE mkdir -p /root/images/ \n
 WAIT 6 SEC
-TYPE chmod -R 777 /root/images/ \n
-WAIT 7 SEC
-TYPE chmod -R 777 /root/heat/ \n
-WAIT 7 SEC
+TYPE mkdir -p /root/heat/ \n
+WAIT 6 SEC
 
-
-Con2 SINK 3 SEC
-# root should have alread loged in via loginCGCS.frag
-Con2 TYPE mkdir -p /root/images/ \n
-Con2 WAIT 8 SEC .*
-Con2 TYPE chmod -R 777 /root/images/ \n
-Con2 WAIT 9 SEC .*
-Con2 TYPE chmod -R 777 /root/heat/ \n
-Con2 WAIT 9 SEC .*
 
 
 #### Create tempest.conf file
@@ -150,7 +152,7 @@ CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_RUN_LOG}/cgcs_load.log`\"$CR
 # Download the latest Cirros guest VM images to controller-0
 # TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/${LOAD_PATH}/layers/wr-cgcs/cgcs/extras.ND/scripts/ /root/images/ \n
 
-TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_build/layers/wr-cgcs/cgcs/extras.ND/scripts/ /root/images/ \n
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/scripts/ /root/images/ \n
 WAIT 1000 SEC
 
 # get the ubuntu cloud image.  This image is only available in Scott Little private dir
@@ -162,13 +164,61 @@ WAIT 1000 SEC
 # TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/designer/jenkins/images/ /root/images/ \n
 # WAIT 1000 SEC
 
-# Copy lab setup
-TYPE rsync -av -e 'ssh -o ConnectTimeout=20 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_build/layers/wr-cgcs/cgcs/extras.ND/lab/yow/cgcs-ironpass-1_4/* /root/ \n
+# Copy lab setup config for specific lab - as defined by labsetup variable contained in the target ini file
+TYPE rsync -av -e 'ssh -o ConnectTimeout=20 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/lab/yow/$env.NODE.target.Boot.labsetup/* /root/ \n
 WAIT 20 SEC {ignoreTimeout:True}
 
-TYPE rsync -av -e 'ssh -o ConnectTimeout=20 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_build/layers/wr-cgcs/cgcs/extras.ND/lab/scripts/* /root/ \n
+TYPE rsync -av -e 'ssh -o ConnectTimeout=20 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/lab/scripts/* /root/ \n
 WAIT 20 SEC {ignoreTimeout:True}
 
+
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${GUESTPATH}/cgcs-guest.img /root/images/  \n
+WAIT 30 MIN {ignoreTimeout:True}
+
+# copy the default heat templates
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/bitbake_build/tmp/deploy/cgcs_sdk/* /root/\n
+WAIT 30 MIN
+
+Con1 TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/heat_templates/* /root/heat/ \n
+Con1 WAIT 30 SEC
+
+
+
+TYPE tar -xvf *heat*.tgz\n
+WAIT 30 SEC
+
+TYPE cp -pR wrs-heat*/* heat\n
+WAIT 30 SEC
+
+
+
+
+Con2 SINK 3 SEC
+# root should have alread loged in via loginCGCS.frag
+TYPE chmod -R 777 /root/images/ \n
+WAIT 9 SEC .*
+TYPE chmod -R 777 /root/heat/ \n
+WAIT 9 SEC .*
+
+
+
+
+TYPE cat /etc/build.info \n
+WAIT 4 SEC {ignoreTimeout:True}
+
+
+
+
+
+# synch-up  controller-1 to controller-0
+TYPE rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/images controller-1:/root/ \n
+WAIT 30 SEC
+TYPE rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/bin controller-1:/root/ \n
+WAIT 30 SEC
+TYPE rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/heat controller-1:/root/ \n
+WAIT 30 SEC
+TYPE rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/ controller-1:/root/ \n
+WAIT 30 SEC
 
 #####################################################################################
 # Create VM image and Start it
@@ -186,27 +236,6 @@ WAIT 60 SEC
 
 
 
-TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/loadbuild/jenkins/CGCS_1.0_Guest_Daily_Build/cgcs-guest.img /root/images/  \n
-WAIT 30 MIN {ignoreTimeout:True}
-
-# copy the default heat templates
-TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@128.224.145.95:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_build/bitbake_build/tmp/deploy/cgcs_sdk/heat* /root/\n
-WAIT 30 MIN
-
-TYPE tar -xvf heat*.tgz\n
-WAIT 30 SEC
-
-TYPE cp -pR heat_templates heat\n
-WAIT 30 SEC
-
-# synch-up  controller-1 to controller-0
-TYPE rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/images controller-1:/root/ \n
-WAIT 30 SEC
-TYPE rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/bin controller-1:/root/ \n
-WAIT 30 SEC
-TYPE rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/heat controller-1:/root/ \n
-WAIT 30 SEC
-
 TYPE glance image-create --name wrl5-avp --is-public true --container-format bare --disk-format qcow2 --file /root/images/cgcs-guest.img --property hw_vif_model=avp \n
 WAIT 30 SEC
 DELAY 5 SEC
@@ -215,8 +244,13 @@ TYPE glance image-create --name wrl5-virtio --is-public true --container-format 
 WAIT 30 SEC
 DELAY 5 SEC
 
-# New as of June 12:
+# New as of June 12 2014:
 TYPE glance image-create --name wrl5 --is-public true --container-format bare --disk-format qcow2 --file /root/images/cgcs-guest.img \n
+WAIT 30 SEC
+DELAY 5 SEC
+
+# New as of July 22 2014:
+TYPE glance image-create --name ubuntu-precise-amd64 --is-public true --container-format bare --disk-format qcow2 --file /root/images/precise-server-cloudimg-amd64-disk1.img \n
 WAIT 30 SEC
 DELAY 5 SEC
 
@@ -244,6 +278,13 @@ TYPE nova flavor-create --dedicated-cpus True --guest-heartbeat True  --platform
 WAIT 30 SEC
 DELAY 5 SEC
 
+TYPE nova flavor-create --dedicated-cpus True m1.tiny 1 512 1 1\n
+WAIT 99 SEC .*\]#\s
+
+
+
+
+
 TYPE echo set tabstop=4 > /root/.vimrc\n
 TYPE echo set ignorecase >> /root/.vimrc\n
 TYPE echo syntax on >> /root/.vimrc\n
@@ -254,7 +295,7 @@ TYPE echo set mouse-=a >> /root/.vimrc\n
 WAIT 10 SEC {ignoreTimeout:True}
 
 
-TYPE system modify name=ip1-4\n
+TYPE system modify name=$env.NODE.lab_setup\n
 TYPE system modify description="This system belongs to CGCS project"\n
 WAIT 10 SEC {ignoreTimeout:True}
 

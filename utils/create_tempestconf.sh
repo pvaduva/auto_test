@@ -26,10 +26,12 @@ sed -i.bkp "s/image_ssh_user = root/image_ssh_user = cirros/" tempest.conf
 sed -i.bkp "s/image_ssh_password = password/image_ssh_password = cubwins:)/" tempest.conf
 sed -i.bkp "s/image_alt_ssh_password = password/image_alt_ssh_password = root/" tempest.conf
 
-replace=`neutron net-list |grep public-net0| awk '{print $2}'| tail -n 1`
+#replace=`neutron net-list |grep public-net0| awk '{print $2}'| tail -n 1`
+replace=`neutron net-list |grep tenant1-net1| awk '{print $2}'| tail -n 1`
 sed -i.bkp "s/{\$PUBLIC_NETWORK_ID}/$replace/" tempest.conf
 
-replace=`neutron router-list |grep public-router0| awk '{print $2}'| tail -n 1`
+#replace=`neutron router-list |grep public-router0| awk '{print $2}'| tail -n 1`
+replace=`neutron router-list |grep tenant1-router| awk '{print $2}'| tail -n 1`
 sed -i.bkp "s/{\$PUBLIC_ROUTER_ID}/$replace/" tempest.conf
 
 sed -i.bkp "s/img_dir = \/home\/root\/images\//img_dir = \/root\/images\//" tempest.conf
@@ -48,3 +50,11 @@ controller_1_lab = $controller1
 compute_0_lab = $compute0
 compute_1_lab = $compute1
 " >> tempest.conf
+
+echo "
+[host_credentials]
+host_user = cgcsroot
+host_password = cgcsroot
+" >> tempest.conf
+
+

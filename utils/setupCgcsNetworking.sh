@@ -17,8 +17,8 @@ EXTERNALNETSUBNET=192.168.7.0/24
 EXTERNALGATEWAY=192.168.1.1
 
 vlanExternal=10-10
-vlanPhysnet0=600-615
-vlanPhysnet1=700-715
+vlanPhysnet0=600-631
+vlanPhysnet1=700-763
 
 PUBLICNETSUBNET=$1
 PRIVATENETSUBNET=$2
@@ -29,7 +29,8 @@ TAGGEDNETSUBNET=$6
 vlanExternal=$7
 vlanPhysnet0=$8
 vlanPhysnet1=$9
-
+poolstart=$10
+pullend=$11
 
 ADMINID=`keystone tenant-list | grep admin | awk '{print $2}'`
 PHYSNET0='physnet0'
@@ -47,7 +48,7 @@ PUBLICROUTER='public-router0'
 PRIVATEROUTER='private-router0'
 
 ### the issues is right here, looks like the wiki has changed 
-neutron providernet-create ${PHYSNET0} --type vlan --shared
+neutron providernet-create ${PHYSNET0} --type vlan
 neutron providernet-create ${PHYSNET1} --type vlan
 neutron providernet-range-create ${PHYSNET0} --name ${PHYSNET0}-a --range $vlanPhysnet0
 neutron providernet-range-create ${PHYSNET0} --name ${PHYSNET0}-b --range $vlanExternal
@@ -64,11 +65,12 @@ PRIVATENETID=`neutron net-list | grep ${PRIVATENET} | awk '{print $2}'`
 INTERNALNETID=`neutron net-list | grep ${INTERNALNET} | awk '{print $2}'`
 EXTERNALNETID=`neutron net-list | grep ${EXTERNALNET} | awk '{print $2}'`
 
-neutron subnet-create --tenant-id ${ADMINID} --name ${PUBLICSUBNET} ${PUBLICNET} $PUBLICNETSUBNET
+# to work around nat-box limitations: http://jira.wrs.com/browse/CGTS-570  setting explicit DHCP allocation-pool
+neutron subnet-create --tenant-id ${ADMINID} --name ${PUBLICSUBNET} --allocation-pool start=${poolstart},end=${pullend}  ${PUBLICNET} $PUBLICNETSUBNET
 neutron subnet-create --tenant-id ${ADMINID} --name ${PRIVATESUBNET} ${PRIVATENET} $PRIVATENETSUBNET
 neutron subnet-create --tenant-id ${ADMINID} --name ${INTERNALSUBNET} --no-gateway ${INTERNALNET} $INTERNALNETSUBNET
 neutron subnet-create --tenant-id ${ADMINID} --name ${TAGGEDSUBNET} --no-gateway --vlan-id 1 ${INTERNALNET} $TAGGEDNETSUBNET
-neutron subnet-create --tenant-id ${ADMINID} --name ${EXTERNALSUBNET} --gateway 192.168.1.1 --disable-dhcp ${EXTERNALNET} $EXTERNALNETSUBNET
+neutron subnet-create --tenant-id ${ADMINID} --name ${EXTERNALSUBNET} --gateway ${EXTERNALGATEWAY} --disable-dhcp ${EXTERNALNET} $EXTERNALNETSUBNET
 
 neutron router-create ${PUBLICROUTER}
 neutron router-create ${PRIVATEROUTER}
