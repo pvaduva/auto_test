@@ -78,7 +78,7 @@ WAIT 3 SEC {ignoreTimeout:True}
 TYPE echo 'export PROMPT_COMMAND="date; $$PROMPT_COMMAND"'  >> /etc/profile\n
 WAIT 3 SEC {ignoreTimeout:True}
 
-TYPE export PROMPT_COMMAND="date; $PROMPT_COMMAND"\n
+TYPE export PROMPT_COMMAND="date $PROMPT_COMMAND"\n
 WAIT 3 SEC {ignoreTimeout:True}
 
 
