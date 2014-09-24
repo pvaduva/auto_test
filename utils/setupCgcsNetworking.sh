@@ -20,17 +20,19 @@ vlanExternal=10-10
 vlanPhysnet0=600-631
 vlanPhysnet1=700-763
 
-PUBLICNETSUBNET=$1
-PRIVATENETSUBNET=$2
-EXTERNALNETSUBNET=$3
-INTERNALNETSUBNET=$4
-EXTERNALGATEWAY=$5
-TAGGEDNETSUBNET=$6
-vlanExternal=$7
-vlanPhysnet0=$8
-vlanPhysnet1=$9
-poolstart=$10
-pullend=$11
+PUBLICNETSUBNET=${1}
+PRIVATENETSUBNET=${2}
+EXTERNALNETSUBNET=${3}
+INTERNALNETSUBNET=${4}
+EXTERNALGATEWAY=${5}
+TAGGEDNETSUBNET=${6}
+vlanExternal=${7}
+vlanPhysnet0=${8}
+vlanPhysnet1=${9}
+POOLSTARTPUB=${10}
+POOLENDPUB=${11}
+POOLSTARTPRIV=${12}
+POOLENDPRIV=${13}
 
 ADMINID=`keystone tenant-list | grep admin | awk '{print $2}'`
 PHYSNET0='physnet0'
@@ -66,8 +68,13 @@ INTERNALNETID=`neutron net-list | grep ${INTERNALNET} | awk '{print $2}'`
 EXTERNALNETID=`neutron net-list | grep ${EXTERNALNET} | awk '{print $2}'`
 
 # to work around nat-box limitations: http://jira.wrs.com/browse/CGTS-570  setting explicit DHCP allocation-pool
-neutron subnet-create --tenant-id ${ADMINID} --name ${PUBLICSUBNET} --allocation-pool start=${poolstart},end=${pullend}  ${PUBLICNET} $PUBLICNETSUBNET
-neutron subnet-create --tenant-id ${ADMINID} --name ${PRIVATESUBNET} ${PRIVATENET} $PRIVATENETSUBNET
+echo "executing: neutron subnet-create --tenant-id ${ADMINID} --name ${PUBLICSUBNET} --allocation-pool start=${POOLSTARTPUB},end=${POOLENDPUB}  ${PUBLICNET} ${PUBLICNETSUBNET}"
+neutron subnet-create --tenant-id ${ADMINID} --name ${PUBLICSUBNET} --allocation-pool start=${POOLSTARTPUB},end=${POOLENDPUB}  ${PUBLICNET} ${PUBLICNETSUBNET}
+sleep 5
+echo "executing: neutron subnet-create --tenant-id ${ADMINID} --name ${PRIVATESUBNET} --allocation-pool start=${POOLSTARTPRIV},end=${POOLENDPRIV}  ${PRIVATENET} ${PRIVATENETSUBNET}"
+neutron subnet-create --tenant-id ${ADMINID} --name ${PRIVATESUBNET} --allocation-pool start=${POOLSTARTPRIV},end=${POOLENDPRIV}  ${PRIVATENET} ${PRIVATENETSUBNET}
+sleep 5
+
 neutron subnet-create --tenant-id ${ADMINID} --name ${INTERNALSUBNET} --no-gateway ${INTERNALNET} $INTERNALNETSUBNET
 neutron subnet-create --tenant-id ${ADMINID} --name ${TAGGEDSUBNET} --no-gateway --vlan-id 1 ${INTERNALNET} $TAGGEDNETSUBNET
 neutron subnet-create --tenant-id ${ADMINID} --name ${EXTERNALSUBNET} --gateway ${EXTERNALGATEWAY} --disable-dhcp ${EXTERNALNET} $EXTERNALNETSUBNET
