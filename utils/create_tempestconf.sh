@@ -1,4 +1,7 @@
 #!/bin/bash
+# invocation example:
+# /root/bin/create_tempestconf.sh 128.224.150.11 cgcs li69nux 100 200 100 200 tenant1-net1 tenant1-router
+
 NATIP=${1}
 NATUSER=${2}
 NATPASS=${3}
@@ -55,10 +58,10 @@ compute_0_lab = $compute0
 compute_1_lab = $compute1
 " >> tempest.conf
 
-#echo "
-#[host_credentials]
-#host_user = cgcsroot
-#host_password = cgcsroot
-#" >> tempest.conf
+echo "
+[host_credentials]
+host_user = wrsroot
+host_password = wrsroot
+" >> tempest.conf
 
 

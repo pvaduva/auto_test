@@ -277,7 +277,7 @@ TYPE nova flavor-create --dedicated-cpus True --guest-heartbeat True  wrl5.dpdk.
 WAIT 30 SEC
 DELAY 5 SEC
 
-TYPE nova flavor-create --dedicated-cpus True --guest-heartbeat True  --platform-vcpu 0  wrl5.dpdk.big.heartbeat.pinToMgmtCore  233 4096 0 3\n
+TYPE nova flavor-create --dedicated-cpus True --guest-heartbeat True  --shared-vcpu 0  wrl5.dpdk.big.heartbeat.pinToMgmtCore  233 4096 0 3\n
 WAIT 30 SEC
 DELAY 5 SEC
 
@@ -331,6 +331,11 @@ CALLPARSER echo ${CL}\"CIRROS0IP\":\"`cat /tmp/cirrosip.txt`\"${CR}
 
 
 
+TYPE rsync -avr  /root/ /home/wrsroot/ \n
+WAIT 30 SEC
+
+TYPE chown -R wrsroot.wrs /home/wrsroot/ \n
+WAIT 30 SEC
 
         PASS
     </test_case>
