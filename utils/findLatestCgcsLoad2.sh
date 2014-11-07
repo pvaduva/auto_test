@@ -7,6 +7,8 @@ BUILDSERVER=128.224.145.117
 BUILDSDIR=/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build
 #BUILDSDIR=/localdisk/loadbuild/jenkins/CGCS_GG_14.06_Host
 #BUILDSDIR=/localdisk/loadbuild/jenkins/CGCS_GG_14.03_Host
+#BUILDSDIR=/localdisk/loadbuild/jenkins/Titanium_Server_14.10_Host/
+#/localdisk/loadbuild/jenkins/Titanium_Server_14.10_Guest/
 
 if [ $1 ]; then
     BUILDSERVER=$1

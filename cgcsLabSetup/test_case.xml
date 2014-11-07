@@ -33,29 +33,36 @@ SET JKPATH /localdisk/loadbuild/jenkins/
 #SET GUESTPATH CGCS_1.0_Guest_Daily_Build_B
 #SET LOADPATH CGCS_GG_14.06_Host/
 #SET GUESTPATH CGCS_GG_14.06_Guest/
+#SET GUESTPATH Titanium_Server_14.10_Guest
+#SET LOADPATH Titanium_Server_14.10_Host/
 
 SET GUESTPATH CGCS_1.0_Guest_Daily_Build
 SET LOADPATH CGCS_1.0_Unified_Daily_Build/
 
+
+
 # CALL env
 TYPE \n
 SINK 1 SEC
-PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
-Con1 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
-Con2 PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 SET CR }
 SET CL {
 
 
 
-TYPE \n\n\n
-WAIT 8 SEC {ignoreTimeout:True} login:
+    TYPE \n
+    WAIT 2 SEC {ignoreTimeout:True} login:
 
-TYPE root\n
-WAIT 1 SEC {ignoreTimeout:True} Password:
+    TYPE ${WRSUSER}\n
+    WAIT 2 SEC {ignoreTimeout:True} Password:
 
-TYPE root\n
-WAIT 1 SEC {ignoreTimeout:True} .*\s
+    TYPE ${WRSPASS}\n
+    WAIT 2 SEC {ignoreTimeout:True}
+
+
+### TODO  change admin password from default
 
 DELAY 1
 
@@ -70,15 +77,10 @@ WAIT 3 SEC {ignoreTimeout:True}
 TYPE echo "export TMOUT=0" >> ~/.bashrc\n
 WAIT 3 SEC {ignoreTimeout:True} 
 
-TYPE sed -i.bkp "s/TMOUT=900/TMOUT=/g" >> /etc/profile\n
-WAIT 3 SEC {ignoreTimeout:True} 
-
 TYPE echo 'export PROMPT_COMMAND="date; $$PROMPT_COMMAND"'  >> ~/.bashrc\n
 WAIT 3 SEC {ignoreTimeout:True}
-TYPE echo 'export PROMPT_COMMAND="date; $$PROMPT_COMMAND"'  >> /etc/profile\n
-WAIT 3 SEC {ignoreTimeout:True}
 
-TYPE export PROMPT_COMMAND="date $PROMPT_COMMAND"\n
+TYPE source ~/.bashrc\n
 WAIT 3 SEC {ignoreTimeout:True}
 
 
@@ -90,22 +92,22 @@ WAIT 1 SEC
 SINK 2 SEC
 
 # import users public and private keys
-CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/id_rsa -d /root/.ssh/ -P 22
-CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/id_rsa.pub -d /root/.ssh/ -P 22
-CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ~/.ssh/authorized_keys -d /root/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u ${WRSUSER} -p ${WRSPASS} -s ~/.ssh/id_rsa -d ${WRSDIR}/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u ${WRSUSER} -p ${WRSPASS} -s ~/.ssh/id_rsa.pub -d ${WRSDIR}/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u ${WRSUSER} -p ${WRSPASS} -s ~/.ssh/authorized_keys -d ${WRSDIR}/.ssh/ -P 22
 
-CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrB -u root -p root -s ~/.ssh/id_rsa -d /root/.ssh/ -P 22
-CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrB -u root -p root -s ~/.ssh/id_rsa.pub -d /root/.ssh/ -P 22
-CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrB -u root -p root -s ~/.ssh/authorized_keys -d /root/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrB -u ${WRSUSER} -p ${WRSPASS} -s ~/.ssh/id_rsa -d ${WRSDIR}/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrB -u ${WRSUSER} -p ${WRSPASS} -s ~/.ssh/id_rsa.pub -d ${WRSDIR}/.ssh/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrB -u ${WRSUSER} -p ${WRSPASS} -s ~/.ssh/authorized_keys -d ${WRSDIR}/.ssh/ -P 22
 SINK 1 SEC
 
 
-TYPE chmod -R 777 /root/bin/ \n
+TYPE chmod -R 777 ${WRSDIR}/bin/ \n
 WAIT 3 SEC
 
 
 TYPE nova keypair-add --pub_key ~/.ssh/id_rsa.pub controller-0\n
-WAIT 30 SEC .*\)\]#\s
+WAIT 30 SEC
 DELAY 5 SEC
 
 LOOKFOR
@@ -115,7 +117,7 @@ WAIT 30 SEC
 
 
 LOOKFOR
-PROMPT (.*:~#\s)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)
+
 # LOOKFOR external-net0
 # LOOKFOR private-net0
 # LOOKFOR public-net0
@@ -128,9 +130,9 @@ LOOKFOR
 
 
 
-TYPE mkdir -p /root/images/ \n
+TYPE mkdir -p ${WRSDIR}/images/ \n
 WAIT 6 SEC
-TYPE mkdir -p /root/heat/ \n
+TYPE mkdir -p ${WRSDIR}/heat/ \n
 WAIT 6 SEC
 
 
@@ -149,36 +151,36 @@ CALLPARSER echo $CL\"LOAD_PATH\":\"`cat ${WASSP_TC_RUN_LOG}/cgcs_load.log`\"$CR
 #############################################
 # TODO:  the ssh/rsync user should be  leaned at runtime
 # Download the latest Cirros guest VM images to controller-0
-# TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/${LOAD_PATH}/layers/wr-cgcs/cgcs/extras.ND/scripts/ /root/images/ \n
+# TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/${LOAD_PATH}/layers/wr-cgcs/cgcs/extras.ND/scripts/ ~/images/ \n
 
-TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/scripts/ /root/images/ \n
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/scripts/ ${WRSDIR}/images/ \n
 WAIT 1000 SEC
 
 # get the ubuntu cloud image.  This image is only available in Scott Little private dir
 # hard coding the cgts2 build server IP because the image only exists in scotts directory
-TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@128.224.145.117:/localdisk/designer/slittle1/precise-server-cloudimg-amd64-disk1.password_enabled.img /root/images/precise-server-cloudimg-amd64-disk1.img \n
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@128.224.145.117:/localdisk/designer/slittle1/precise-server-cloudimg-amd64-disk1.password_enabled.img ${WRSDIR}/images/precise-server-cloudimg-amd64-disk1.img \n
 WAIT 1000 SEC
 
 # Grab 3rd party guest images from: yow-cgts2-lx:/localdisk/designer/jenkins/images/precise-server-cloudimg-amd64-disk1.img
-# TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/designer/jenkins/images/ /root/images/ \n
+# TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:/localdisk/designer/jenkins/images/ ~/images/ \n
 # WAIT 1000 SEC
 
 # Copy lab setup config for specific lab - as defined by labsetup variable contained in the target ini file
-TYPE rsync -av -e 'ssh -o ConnectTimeout=20 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/lab/yow/$env.NODE.target.Boot.labsetup/* /root/ \n
+TYPE rsync -av -e 'ssh -o ConnectTimeout=20 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/lab/yow/$env.NODE.target.Boot.labsetup/* ${WRSDIR}/ \n
 WAIT 20 SEC {ignoreTimeout:True}
 
-TYPE rsync -av -e 'ssh -o ConnectTimeout=20 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/lab/scripts/* /root/ \n
+TYPE rsync -av -e 'ssh -o ConnectTimeout=20 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/lab/scripts/* ${WRSDIR}/ \n
 WAIT 20 SEC {ignoreTimeout:True}
 
 
-TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${GUESTPATH}/cgcs-guest.img /root/images/  \n
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${GUESTPATH}/cgcs-guest.img ${WRSDIR}/images/  \n
 WAIT 30 MIN {ignoreTimeout:True}
 
 # copy the default heat templates
-TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/bitbake_build/tmp/deploy/cgcs_sdk/* /root/\n
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/bitbake_build/tmp/deploy/cgcs_sdk/* ${WRSDIR}/\n
 WAIT 30 MIN
 
-Con1 TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/heat_templates/* /root/heat/ \n
+Con1 TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' cwinnick@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/heat_templates/* ${WRSDIR}/heat/ \n
 Con1 WAIT 30 SEC
 
 
@@ -198,9 +200,9 @@ WAIT 30 SEC
 
 Con2 SINK 3 SEC
 # root should have alread loged in via loginCGCS.frag
-TYPE chmod -R 777 /root/images/ \n
+TYPE chmod -R 777 ${WRSDIR}/images/ \n
 WAIT 9 SEC .*
-TYPE chmod -R 777 /root/heat/ \n
+TYPE chmod -R 777 ${WRSDIR}/heat/ \n
 WAIT 9 SEC .*
 
 
@@ -214,20 +216,20 @@ WAIT 4 SEC {ignoreTimeout:True}
 
 
 # synch-up  controller-1 to controller-0
-TYPE rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/images controller-1:/root/ \n
+TYPE rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' ${WRSDIR}/images controller-1:${WRSDIR}/ \n
 WAIT 30 SEC
-TYPE rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/bin controller-1:/root/ \n
+TYPE rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' ${WRSDIR}/bin controller-1:${WRSDIR}/ \n
 WAIT 30 SEC
-TYPE rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/heat controller-1:/root/ \n
+TYPE rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' ${WRSDIR}/heat controller-1:${WRSDIR}/ \n
 WAIT 30 SEC
-TYPE rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' /root/ controller-1:/root/ \n
+TYPE rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' ${WRSDIR}/ controller-1:${WRSDIR}/ \n
 WAIT 30 SEC
 
 #####################################################################################
 # Create VM image and Start it
 #####################################################################################
 
-TYPE glance image-create --name cirros --is-public true --container-format bare --disk-format qcow2 --file /root/images/cirros-0.3.0-x86_64-disk.img --property hw_vif_model=e1000 \n
+TYPE glance image-create --name cirros --is-public true --container-format bare --disk-format qcow2 --file ~/images/cirros-0.3.0-x86_64-disk.img --property hw_vif_model=e1000 \n
 WAIT 60 SEC
 DELAY 5 SEC
 
@@ -239,21 +241,21 @@ WAIT 60 SEC
 
 
 
-TYPE glance image-create --name wrl5-avp --is-public true --container-format bare --disk-format qcow2 --file /root/images/cgcs-guest.img --property hw_vif_model=avp \n
+TYPE glance image-create --name wrl5-avp --is-public true --container-format bare --disk-format qcow2 --file ~/images/cgcs-guest.img --property hw_vif_model=avp \n
 WAIT 30 SEC
 DELAY 5 SEC
 
-TYPE glance image-create --name wrl5-virtio --is-public true --container-format bare --disk-format qcow2 --file /root/images/cgcs-guest.img --property hw_vif_model=virtio \n
+TYPE glance image-create --name wrl5-virtio --is-public true --container-format bare --disk-format qcow2 --file ~/images/cgcs-guest.img --property hw_vif_model=virtio \n
 WAIT 30 SEC
 DELAY 5 SEC
 
 # New as of June 12 2014:
-TYPE glance image-create --name wrl5 --is-public true --container-format bare --disk-format qcow2 --file /root/images/cgcs-guest.img \n
+TYPE glance image-create --name wrl5 --is-public true --container-format bare --disk-format qcow2 --file ~/images/cgcs-guest.img \n
 WAIT 30 SEC
 DELAY 5 SEC
 
 # New as of July 22 2014:
-TYPE glance image-create --name ubuntu-precise-amd64 --is-public true --container-format bare --disk-format qcow2 --file /root/images/precise-server-cloudimg-amd64-disk1.img \n
+TYPE glance image-create --name ubuntu-precise-amd64 --is-public true --container-format bare --disk-format qcow2 --file ~/images/precise-server-cloudimg-amd64-disk1.img \n
 WAIT 30 SEC
 DELAY 5 SEC
 
@@ -282,29 +284,29 @@ WAIT 30 SEC
 DELAY 5 SEC
 
 TYPE nova flavor-create --dedicated-cpus True m1.tiny 1 512 1 1\n
-WAIT 99 SEC .*\]#\s
+WAIT 99 SEC
 
 
 #### Create tempest.conf file
 # TODO: this file needs to be lab specifica based on info in the controller-0 target.in for a particularlab
 # It should contain designated VLANids as per: http://twiki.wrs.com/PBUeng/CGTelcoServerLabConn
 
-CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u root -p root -s ${WASSP_TC_PATH}/../utils/create_tempestconf.sh -d /root/bin/ -P 22
+CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u ${WRSUSER} -p ${WRSPASS} -s ${WASSP_TC_PATH}/../utils/create_tempestconf.sh -d ${WRSDIR}/bin/ -P 22
 
-TYPE /root/bin/create_tempestconf.sh $env.NODE.target.Boot.NATIP $env.NODE.target.Boot.NATUSER $env.NODE.target.Boot.NATPASS $env.NODE.target.Boot.computeA $env.NODE.target.Boot.computeB $env.NODE.target.Boot.controllerA $env.NODE.target.Boot.controllerB ${PUBLIC_NETWORK} ${PUBLIC_ROUTER}\n
+TYPE ~/bin/create_tempestconf.sh $env.NODE.target.Boot.NATIP $env.NODE.target.Boot.NATUSER $env.NODE.target.Boot.NATPASS $env.NODE.target.Boot.computeA $env.NODE.target.Boot.computeB $env.NODE.target.Boot.controllerA $env.NODE.target.Boot.controllerB ${PUBLIC_NETWORK} ${PUBLIC_ROUTER} admin ${WRSPASS} \n
 WAIT 60 SEC
-TYPE cat /root/bin/create_tempestconf.sh \n
+TYPE cat ~/bin/create_tempestconf.sh \n
 WAIT 60 SEC
 
 
 
-TYPE echo set tabstop=4 > /root/.vimrc\n
-TYPE echo set ignorecase >> /root/.vimrc\n
-TYPE echo syntax on >> /root/.vimrc\n
-
-TYPE echo set shiftwidth=4 >> /root/.vimrc\n
-TYPE echo set expandtab >> /root/.vimrc\n
-TYPE echo set mouse-=a >> /root/.vimrc\n
+TYPE echo set tabstop=4 > ~/.vimrc\n
+TYPE echo set ignorecase >> ~/.vimrc\n
+TYPE echo syntax on >> ~/.vimrc\n
+TYPE echo set hlsearch >> ~/.vimrc\n
+TYPE echo set shiftwidth=4 >> ~/.vimrc\n
+TYPE echo set expandtab >> ~/.vimrc\n
+TYPE echo set mouse-=a >> ~/.vimrc\n
 WAIT 10 SEC {ignoreTimeout:True}
 
 
@@ -327,12 +329,7 @@ CALL cat /tmp/nova-list.log|grep cirros-1 | awk 'BEGIN ${CL} FS = "=||;"${CR} ${
 CALLPARSER echo ${CL}\"CIRROS0IP\":\"`cat /tmp/cirrosip.txt`\"${CR}
 
 # CALL ssh cgcs@128.224.150.11 ping -c1 192.168.101.2
-# CALL ssh cgcs@128.224.150.11 ping -c1 192.168.201.2
 
-
-
-TYPE rsync -avr  /root/ /home/wrsroot/ \n
-WAIT 30 SEC
 
 TYPE chown -R wrsroot.wrs /home/wrsroot/ \n
 WAIT 30 SEC

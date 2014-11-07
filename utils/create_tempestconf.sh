@@ -11,6 +11,8 @@ controller0=${6}
 controller1=${7}
 PUBLIC_NETWORK=${8}
 PUBLIC_ROUTER=${9}
+ADMINPASS=${10}
+WRSPASS=${11}
 #Alter  tempest.conf  based on runtime parameters configured during: setupCgcsNetworking
 
 cd /etc/tempest
@@ -18,7 +20,7 @@ cp -p tempest.conf tempest.conf.orig`date +%Y-%m-%d_%H%M%S`
 
 sed -i.bkp "s/127.0.0.1/192.168.204.2/g" tempest.conf
 sed -i.bkp "s/password = root/password = password/" tempest.conf
-sed -i.bkp "s/admin_password = password/admin_password = admin/" tempest.conf
+sed -i.bkp "s/admin_password = password/admin_password = ${ADMINPASS}/" tempest.conf
 
 replace=`nova image-list |grep cirros | awk '{print $2}'| tail -n 1`
 sed -i.bkp "s/{\$IMAGE_ID}/$replace/" tempest.conf
@@ -41,7 +43,7 @@ replace=`neutron router-list |grep $PUBLIC_ROUTER| awk '{print $2}'| tail -n 1`
 #replace=`neutron router-list |grep tenant1-router| awk '{print $2}'| tail -n 1`
 sed -i.bkp "s/{\$PUBLIC_ROUTER_ID}/$replace/" tempest.conf
 
-sed -i.bkp "s/img_dir = \/home\/root\/images\//img_dir = \/root\/images\//" tempest.conf
+sed -i.bkp "s/img_dir = \/home\/root\/images\//img_dir = \/home\/wrsroot\/images\//" tempest.conf
 
 echo "
 [external_host]
@@ -61,7 +63,7 @@ compute_1_lab = $compute1
 echo "
 [host_credentials]
 host_user = wrsroot
-host_password = wrsroot
+host_password = ${WRSPASS}
 " >> tempest.conf
 
 

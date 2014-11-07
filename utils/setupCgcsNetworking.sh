@@ -7,8 +7,11 @@ source /etc/nova/openrc
 
 # 25jan14 ccw  Initial creation
 #
-# WASSP will execute the following:
-# TYPE /root/bin/setupCgcsNetworking.sh ${publicSubnet} ${privateSubnet}  ${externalSubnet} ${internalSubnet} ${externalGateway} ${taggedSubnet} ${vlanExternal} ${vlanPhysnet0} ${vlanPhysnet1}\n
+# WASSP will execute the following, ex:
+# ip1-4
+# ~/bin/setupCgcsNetworking.sh  "192.168.101.0/24"   "192.168.201.0/24"   "192.168.1.0/24" "10.10.0.0/24" "192.168.1.1" "10.10.1.0/24" "10-10" "600-631" "700-763" "192.168.101.2" "192.168.101.30" "192.168.201.2" "192.168.201.30"
+# hp380
+# ~/bin/setupCgcsNetworking.sh  "192.168.109.0/24"   "192.168.209.0/24"   "192.168.9.0/24" "10.10.0.0/24" "192.168.9.1" "10.10.1.0/24" "10-10" "472-535" "536-567" "192.168.109.2" "192.168.109.30" "192.168.209.2" "192.168.209.30"
 
 PUBLICNETSUBNET=192.168.107.0/24
 PRIVATENETSUBNET=192.168.207.0/24
