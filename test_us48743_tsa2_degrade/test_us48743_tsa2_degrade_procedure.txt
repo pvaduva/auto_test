@@ -1,0 +1,841 @@
+Script started on Thu Nov 20 17:58:47 2014
+controller-0:~$ system host-list
+You must provide a username via either --os-username or via env[OS_USERNAME]
+controller-0:~$ source /etc/openr     nova/openrc
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 5  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0  | minor    | 2014-11-20T15:47:57.581969 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ nova list
++--------------------------------------+------------+--------+------------+-------------+---------------------------------------------------------------+
+| ID                                   | Name       | Status | Task State | Power State | Networks                                                      |
++--------------------------------------+------------+--------+------------+-------------+---------------------------------------------------------------+
+| 1bff9ce8-258b-4995-a5ab-34634d0a6a8e | wrl5-avp-0 | ACTIVE | -          | Running     | public-net0=192.168.101.2; internal-net0=10.10.0.1, 10.10.1.1 |
++--------------------------------------+------------+--------+------------+-------------+---------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ nova show  1bff9ce8-258b-4995-a5ab-346 34d0a6a8e
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                      |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                     |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                       |
+| OS-EXT-SRV-ATTR:host                 | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000003                                                                                                          |
+| OS-EXT-STS:power_state               | 1                                                                                                                          |
+| OS-EXT-STS:task_state                | -                                                                                                                          |
+| OS-EXT-STS:vm_state                  | active                                                                                                                     |
+| OS-SRV-USG:launched_at               | 2014-11-20T14:59:21.827514                                                                                                 |
+| OS-SRV-USG:terminated_at             | -                                                                                                                          |
+| accessIPv4                           |                                                                                                                            |
+| accessIPv6                           |                                                                                                                            |
+| config_drive                         |                                                                                                                            |
+| created                              | 2014-11-19T17:10:34Z                                                                                                       |
+| extended                             | {"cpuset": 12, "numanode": 0}                                                                                              |
+| flavor                               | wrl5.dpdk.hb.small (103)                                                                                                   |
+| hostId                               | 89107285d34eb95fbe9e7cd17c5dc6dc7a3698485dd99e593ea79767                                                                   |
+| id                                   | 1bff9ce8-258b-4995-a5ab-34634d0a6a8e                                                                                       |
+| image                                | wrl5 (ef1bee57-0466-44ac-9431-8cea46ddac05)                                                                                |
+| internal-net0 network                | 10.10.0.1, 10.10.1.1                                                                                                       |
+| key_name                             | controller-0                                                                                                               |
+| metadata                             | {}                                                                                                                         |
+| name                                 | wrl5-avp-0                                                                                                                 |
+| nics                                 | {"nic1": {"vif_model": "avp", "port_id": "b39b71b4-577e-4b79-a239-d317c89b0e54", "network": "public-net0", "mtu": 1500}}   |
+|                                      | {"nic2": {"vif_model": "avp", "port_id": "91e68da4-c076-40a5-8b7f-eeb50b34d2fa", "network": "internal-net0", "mtu": 1500}} |
+| os-extended-volumes:volumes_attached | []                                                                                                                         |
+| pinned                               | True                                                                                                                       |
+| progress                             | 0                                                                                                                          |
+| public-net0 network                  | 192.168.101.2                                                                                                              |
+| server_group                         |                                                                                                                            |
+| status                               | ACTIVE                                                                                                                     |
+| tenant_id                            | eaecc25f26ea4299a5c84cf7ea2f59a5                                                                                           |
+| updated                              | 2014-11-20T17:49:04Z                                                                                                       |
+| user_id                              | a8a79853eb62422c88896baeb23cf265                                                                                           |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ instance is on compute-1
+sh: instance: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ fail one data link on compute-1 (compu te-1 is link aggregr ated)
+sh: syntax error near unexpected token `('
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 5  | compute-1    | compute     | unlocked       | enabled     | degraded     |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ compute-1 is degraded as expected
+sh: compute-1: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ compute-1 is degraded as expected[17Psystem host-listfail one data link on compute-1 (computte-1 is link aggregated)[Akeystone_admin)]$ [22Psystem host-list
+[K[A[wrsroot@controller-0 ~(keystone_admin)]$ system host-listfail one data link on compute-1 (computte-1 is link aggregated)[Akeystone_admin)]$ [14Pinstance is on compute-1
+[K[A[wrsroot@controller-0 ~(keystone_admin)]$ instance is on compute-1nova show  1bff9ce8-258b-4995-a5ab-346334d0a6a8e
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                      |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                     |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                       |
+| OS-EXT-SRV-ATTR:host                 | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000003                                                                                                          |
+| OS-EXT-STS:power_state               | 1                                                                                                                          |
+| OS-EXT-STS:task_state                | -                                                                                                                          |
+| OS-EXT-STS:vm_state                  | active                                                                                                                     |
+| OS-SRV-USG:launched_at               | 2014-11-20T14:59:21.827514                                                                                                 |
+| OS-SRV-USG:terminated_at             | -                                                                                                                          |
+| accessIPv4                           |                                                                                                                            |
+| accessIPv6                           |                                                                                                                            |
+| config_drive                         |                                                                                                                            |
+| created                              | 2014-11-19T17:10:34Z                                                                                                       |
+| extended                             | {"cpuset": 12, "numanode": 0}                                                                                              |
+| flavor                               | wrl5.dpdk.hb.small (103)                                                                                                   |
+| hostId                               | 89107285d34eb95fbe9e7cd17c5dc6dc7a3698485dd99e593ea79767                                                                   |
+| id                                   | 1bff9ce8-258b-4995-a5ab-34634d0a6a8e                                                                                       |
+| image                                | wrl5 (ef1bee57-0466-44ac-9431-8cea46ddac05)                                                                                |
+| internal-net0 network                | 10.10.0.1, 10.10.1.1                                                                                                       |
+| key_name                             | controller-0                                                                                                               |
+| metadata                             | {}                                                                                                                         |
+| name                                 | wrl5-avp-0                                                                                                                 |
+| nics                                 | {"nic1": {"vif_model": "avp", "port_id": "b39b71b4-577e-4b79-a239-d317c89b0e54", "network": "public-net0", "mtu": 1500}}   |
+|                                      | {"nic2": {"vif_model": "avp", "port_id": "91e68da4-c076-40a5-8b7f-eeb50b34d2fa", "network": "internal-net0", "mtu": 1500}} |
+| os-extended-volumes:volumes_attached | []                                                                                                                         |
+| pinned                               | True                                                                                                                       |
+| progress                             | 0                                                                                                                          |
+| public-net0 network                  | 192.168.101.2                                                                                                              |
+| server_group                         |                                                                                                                            |
+| status                               | ACTIVE                                                                                                                     |
+| tenant_id                            | eaecc25f26ea4299a5c84cf7ea2f59a5                                                                                           |
+| updated                              | 2014-11-20T17:49:04Z                                                                                                       |
+| user_id                              | a8a79853eb62422c88896baeb23cf265                                                                                           |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ instance is still on compute-1
+sh: instance: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ as expected
+Assembler messages:
+Error: can't open expected for reading: No such file or directory
+[wrsroot@controller-0 ~(keystone_admin)]$ restore data link on compute-1
+sh: restore: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 5  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ degrade is cleared on compute-1 as epx ected
+sh: degrade: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ fail other data link on compute-1
+sh: fail: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 5  | compute-1    | compute     | unlocked       | enabled     | degraded     |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ compute-1 is degraded as expected
+sh: compute-1: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ compute-1 is degraded as expected[17Psystem host-listfail other data link on compute-1degrade is cleared on compute-1 as epxeected[Aoot@controller-0 ~(keystone_admin)]$ [22Psystem host-list
+[K[A[wrsroot@controller-0 ~(keystone_admin)]$ system host-listrestore data link on compute-1[19Pas expectedinstance is still on compute-1nova show  1bff9ce8-258b-4995-a5ab-346334d0a6a8e
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                      |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                     |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                       |
+| OS-EXT-SRV-ATTR:host                 | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000003                                                                                                          |
+| OS-EXT-STS:power_state               | 1                                                                                                                          |
+| OS-EXT-STS:task_state                | -                                                                                                                          |
+| OS-EXT-STS:vm_state                  | active                                                                                                                     |
+| OS-SRV-USG:launched_at               | 2014-11-20T14:59:21.827514                                                                                                 |
+| OS-SRV-USG:terminated_at             | -                                                                                                                          |
+| accessIPv4                           |                                                                                                                            |
+| accessIPv6                           |                                                                                                                            |
+| config_drive                         |                                                                                                                            |
+| created                              | 2014-11-19T17:10:34Z                                                                                                       |
+| extended                             | {"cpuset": 12, "numanode": 0}                                                                                              |
+| flavor                               | wrl5.dpdk.hb.small (103)                                                                                                   |
+| hostId                               | 89107285d34eb95fbe9e7cd17c5dc6dc7a3698485dd99e593ea79767                                                                   |
+| id                                   | 1bff9ce8-258b-4995-a5ab-34634d0a6a8e                                                                                       |
+| image                                | wrl5 (ef1bee57-0466-44ac-9431-8cea46ddac05)                                                                                |
+| internal-net0 network                | 10.10.0.1, 10.10.1.1                                                                                                       |
+| key_name                             | controller-0                                                                                                               |
+| metadata                             | {}                                                                                                                         |
+| name                                 | wrl5-avp-0                                                                                                                 |
+| nics                                 | {"nic1": {"vif_model": "avp", "port_id": "b39b71b4-577e-4b79-a239-d317c89b0e54", "network": "public-net0", "mtu": 1500}}   |
+|                                      | {"nic2": {"vif_model": "avp", "port_id": "91e68da4-c076-40a5-8b7f-eeb50b34d2fa", "network": "internal-net0", "mtu": 1500}} |
+| os-extended-volumes:volumes_attached | []                                                                                                                         |
+| pinned                               | True                                                                                                                       |
+| progress                             | 0                                                                                                                          |
+| public-net0 network                  | 192.168.101.2                                                                                                              |
+| server_group                         |                                                                                                                            |
+| status                               | ACTIVE                                                                                                                     |
+| tenant_id                            | eaecc25f26ea4299a5c84cf7ea2f59a5                                                                                           |
+| updated                              | 2014-11-20T17:49:04Z                                                                                                       |
+| user_id                              | a8a79853eb62422c88896baeb23cf265                                                                                           |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ instance is still com   on compute-1
+sh: instance: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ restore         as expected
+Assembler messages:
+Error: can't open expected for reading: No such file or directory
+[wrsroot@controller-0 ~(keystone_admin)]$ restore data link on compute-1
+sh: restore: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 5  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ degrade on compute-1 is cleared as exp ected
+sh: degrade: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ degrade on compute-1 is cleared as expeected[Aoot@controller-0 ~(keystone_admin)]$ [22Psystem host-list
+[K[A[wrsroot@controller-0 ~(keystone_admin)]$ system host-listrestore data link on compute-1[19Pas expectedinstance is still on compute-1nova show  1bff9ce8-258b-4995-a5ab-346334d0a6a8e
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                      |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                     |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                       |
+| OS-EXT-SRV-ATTR:host                 | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000003                                                                                                          |
+| OS-EXT-STS:power_state               | 1                                                                                                                          |
+| OS-EXT-STS:task_state                | -                                                                                                                          |
+| OS-EXT-STS:vm_state                  | active                                                                                                                     |
+| OS-SRV-USG:launched_at               | 2014-11-20T14:59:21.827514                                                                                                 |
+| OS-SRV-USG:terminated_at             | -                                                                                                                          |
+| accessIPv4                           |                                                                                                                            |
+| accessIPv6                           |                                                                                                                            |
+| config_drive                         |                                                                                                                            |
+| created                              | 2014-11-19T17:10:34Z                                                                                                       |
+| extended                             | {"cpuset": 12, "numanode": 0}                                                                                              |
+| flavor                               | wrl5.dpdk.hb.small (103)                                                                                                   |
+| hostId                               | 89107285d34eb95fbe9e7cd17c5dc6dc7a3698485dd99e593ea79767                                                                   |
+| id                                   | 1bff9ce8-258b-4995-a5ab-34634d0a6a8e                                                                                       |
+| image                                | wrl5 (ef1bee57-0466-44ac-9431-8cea46ddac05)                                                                                |
+| internal-net0 network                | 10.10.0.1, 10.10.1.1                                                                                                       |
+| key_name                             | controller-0                                                                                                               |
+| metadata                             | {}                                                                                                                         |
+| name                                 | wrl5-avp-0                                                                                                                 |
+| nics                                 | {"nic1": {"vif_model": "avp", "port_id": "b39b71b4-577e-4b79-a239-d317c89b0e54", "network": "public-net0", "mtu": 1500}}   |
+|                                      | {"nic2": {"vif_model": "avp", "port_id": "91e68da4-c076-40a5-8b7f-eeb50b34d2fa", "network": "internal-net0", "mtu": 1500}} |
+| os-extended-volumes:volumes_attached | []                                                                                                                         |
+| pinned                               | True                                                                                                                       |
+| progress                             | 0                                                                                                                          |
+| public-net0 network                  | 192.168.101.2                                                                                                              |
+| server_group                         |                                                                                                                            |
+| status                               | ACTIVE                                                                                                                     |
+| tenant_id                            | eaecc25f26ea4299a5c84cf7ea2f59a5                                                                                           |
+| updated                              | 2014-11-20T17:49:04Z                                                                                                       |
+| user_id                              | a8a79853eb62422c88896baeb23cf265                                                                                           |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ instance is still on compute-1
+sh: instance: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ fail both data links on compute-1 whic h should cause live migrated to compute-0
+sh: fail: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ system - host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 5  | compute-1    | compute     | unlocked       | enabled     | degraded     |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID                            | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0                             | minor    | 2014-11-20T15:47:57.581969 |
+| f2a45ca9-d011-4aa8-a04d-81982d6f25a0 | 700.007  | Instance is live migrating.                                               | instance=1bff9ce8-258b-4995-a5ab-34634d0a6a8e | warning  | 2014-11-20T18:02:57.275946 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ nova list
++--------------------------------------+------------+-----------+------------+-------------+---------------------------------------------------------------+
+| ID                                   | Name       | Status    | Task State | Power State | Networks                                                      |
++--------------------------------------+------------+-----------+------------+-------------+---------------------------------------------------------------+
+| 1bff9ce8-258b-4995-a5ab-34634d0a6a8e | wrl5-avp-0 | MIGRATING | migrating  | Running     | public-net0=192.168.101.2; internal-net0=10.10.0.1, 10.10.1.1 |
++--------------------------------------+------------+-----------+------------+-------------+---------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ nova show  1bff9ce8-258b-4995-a5ab-346 34d0a6a8e
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                      |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                     |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                       |
+| OS-EXT-SRV-ATTR:host                 | compute-0                                                                                                                  |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | compute-0                                                                                                                  |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000003                                                                                                          |
+| OS-EXT-STS:power_state               | 1                                                                                                                          |
+| OS-EXT-STS:task_state                | migrating                                                                                                                  |
+| OS-EXT-STS:vm_state                  | active                                                                                                                     |
+| OS-SRV-USG:launched_at               | 2014-11-20T14:59:21.827514                                                                                                 |
+| OS-SRV-USG:terminated_at             | -                                                                                                                          |
+| accessIPv4                           |                                                                                                                            |
+| accessIPv6                           |                                                                                                                            |
+| config_drive                         |                                                                                                                            |
+| created                              | 2014-11-19T17:10:34Z                                                                                                       |
+| extended                             | {"cpuset": 12, "numanode": 0}                                                                                              |
+| flavor                               | wrl5.dpdk.hb.small (103)                                                                                                   |
+| hostId                               | 291b1183db7f548afa71704c5d3e7ca0201deb1287afc4b97be5347b                                                                   |
+| id                                   | 1bff9ce8-258b-4995-a5ab-34634d0a6a8e                                                                                       |
+| image                                | wrl5 (ef1bee57-0466-44ac-9431-8cea46ddac05)                                                                                |
+| internal-net0 network                | 10.10.0.1, 10.10.1.1                                                                                                       |
+| key_name                             | controller-0                                                                                                               |
+| metadata                             | {}                                                                                                                         |
+| name                                 | wrl5-avp-0                                                                                                                 |
+| nics                                 | {"nic1": {"vif_model": "avp", "port_id": "b39b71b4-577e-4b79-a239-d317c89b0e54", "network": "public-net0", "mtu": 1500}}   |
+|                                      | {"nic2": {"vif_model": "avp", "port_id": "91e68da4-c076-40a5-8b7f-eeb50b34d2fa", "network": "internal-net0", "mtu": 1500}} |
+| os-extended-volumes:volumes_attached | []                                                                                                                         |
+| pinned                               | True                                                                                                                       |
+| public-net0 network                  | 192.168.101.2                                                                                                              |
+| server_group                         |                                                                                                                            |
+| status                               | MIGRATING                                                                                                                  |
+| tenant_id                            | eaecc25f26ea4299a5c84cf7ea2f59a5                                                                                           |
+| updated                              | 2014-11-20T18:02:55Z                                                                                                       |
+| user_id                              | a8a79853eb62422c88896baeb23cf265                                                                                           |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system h alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID                            | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0                             | minor    | 2014-11-20T15:47:57.581969 |
+| 7ea80a5f-4cd9-4e97-baf9-1785d61834fb | 700.007  | Instance is live migrating.                                               | instance=1bff9ce8-258b-4995-a5ab-34634d0a6a8e | warning  | 2014-11-20T18:03:11.673972 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID                            | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0                             | minor    | 2014-11-20T15:47:57.581969 |
+| 7ea80a5f-4cd9-4e97-baf9-1785d61834fb | 700.007  | Instance is live migrating.                                               | instance=1bff9ce8-258b-4995-a5ab-34634d0a6a8e | warning  | 2014-11-20T18:03:11.673972 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID                            | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0                             | minor    | 2014-11-20T15:47:57.581969 |
+| 7ea80a5f-4cd9-4e97-baf9-1785d61834fb | 700.007  | Instance is live migrating.                                               | instance=1bff9ce8-258b-4995-a5ab-34634d0a6a8e | warning  | 2014-11-20T18:03:11.673972 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID                            | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0                             | minor    | 2014-11-20T15:47:57.581969 |
+| 7ea80a5f-4cd9-4e97-baf9-1785d61834fb | 700.007  | Instance is live migrating.                                               | instance=1bff9ce8-258b-4995-a5ab-34634d0a6a8e | warning  | 2014-11-20T18:03:11.673972 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0  | minor    | 2014-11-20T15:47:57.581969 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-listnova show  1bff9ce8-258b-4995-a5ab-346334d0a6a8e
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                      |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                     |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                       |
+| OS-EXT-SRV-ATTR:host                 | compute-0                                                                                                                  |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | compute-0                                                                                                                  |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000003                                                                                                          |
+| OS-EXT-STS:power_state               | 1                                                                                                                          |
+| OS-EXT-STS:task_state                | -                                                                                                                          |
+| OS-EXT-STS:vm_state                  | active                                                                                                                     |
+| OS-SRV-USG:launched_at               | 2014-11-20T14:59:21.827514                                                                                                 |
+| OS-SRV-USG:terminated_at             | -                                                                                                                          |
+| accessIPv4                           |                                                                                                                            |
+| accessIPv6                           |                                                                                                                            |
+| config_drive                         |                                                                                                                            |
+| created                              | 2014-11-19T17:10:34Z                                                                                                       |
+| extended                             | {"cpuset": 12, "numanode": 0}                                                                                              |
+| flavor                               | wrl5.dpdk.hb.small (103)                                                                                                   |
+| hostId                               | 291b1183db7f548afa71704c5d3e7ca0201deb1287afc4b97be5347b                                                                   |
+| id                                   | 1bff9ce8-258b-4995-a5ab-34634d0a6a8e                                                                                       |
+| image                                | wrl5 (ef1bee57-0466-44ac-9431-8cea46ddac05)                                                                                |
+| internal-net0 network                | 10.10.0.1, 10.10.1.1                                                                                                       |
+| key_name                             | controller-0                                                                                                               |
+| metadata                             | {}                                                                                                                         |
+| name                                 | wrl5-avp-0                                                                                                                 |
+| nics                                 | {"nic1": {"vif_model": "avp", "port_id": "b39b71b4-577e-4b79-a239-d317c89b0e54", "network": "public-net0", "mtu": 1500}}   |
+|                                      | {"nic2": {"vif_model": "avp", "port_id": "91e68da4-c076-40a5-8b7f-eeb50b34d2fa", "network": "internal-net0", "mtu": 1500}} |
+| os-extended-volumes:volumes_attached | []                                                                                                                         |
+| pinned                               | True                                                                                                                       |
+| progress                             | 0                                                                                                                          |
+| public-net0 network                  | 192.168.101.2                                                                                                              |
+| server_group                         |                                                                                                                            |
+| status                               | ACTIVE                                                                                                                     |
+| tenant_id                            | eaecc25f26ea4299a5c84cf7ea2f59a5                                                                                           |
+| updated                              | 2014-11-20T18:03:32Z                                                                                                       |
+| user_id                              | a8a79853eb62422c88896baeb23cf265                                                                                           |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ instance migrated to compute-0 as expe cted
+sh: instance: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0  | minor    | 2014-11-20T15:47:57.581969 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 5  | compute-1    | compute     | unlocked       | enabled     | degraded     |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ restore ports on compute-1
+sh: restore: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ restore ports on compute-1[10Psystem host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 5  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ degrade condition is cleared on comput e-1
+sh: degrade: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ fail one data link on compute-0
+sh: fail: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | degraded     |
+| 5  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ compute-0 goes in to   to degrade as expecte d
+sh: compute-0: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ compute-0 goes into degrade as expectedd[Awrsroot@controller-0 ~(keystone_admin)]$ [22Psystem host-list
+[K[A[wrsroot@controller-0 ~(keystone_admin)]$ system host-listfail one data link on compute-0degrade condition is cleared on computee-1[Asroot@controller-0 ~(keystone_admin)]$ [22Psystem host-lis
+[K[A[wrsroot@controller-0 ~(keystone_admin)]$ system host-listrestore ports on compute-1[10Psystem host-list[4ha[4llarm-listinstance migrated to compute-0 as expeccted[Aroot@controller-0 ~(keystone_admin)]$ nova show  1bff9ce8-258b-4995-a5ab-34634d0a6a8e[Acontroller-0 ~(keystone_admin)]$ [21Psystem alarm-list
+[K[A[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-listnova show  1bff9ce8-258b-4995-a5ab-346334d0a6a8e
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                      |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                     |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                       |
+| OS-EXT-SRV-ATTR:host                 | compute-0                                                                                                                  |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | compute-0                                                                                                                  |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000003                                                                                                          |
+| OS-EXT-STS:power_state               | 1                                                                                                                          |
+| OS-EXT-STS:task_state                | -                                                                                                                          |
+| OS-EXT-STS:vm_state                  | active                                                                                                                     |
+| OS-SRV-USG:launched_at               | 2014-11-20T14:59:21.827514                                                                                                 |
+| OS-SRV-USG:terminated_at             | -                                                                                                                          |
+| accessIPv4                           |                                                                                                                            |
+| accessIPv6                           |                                                                                                                            |
+| config_drive                         |                                                                                                                            |
+| created                              | 2014-11-19T17:10:34Z                                                                                                       |
+| extended                             | {"cpuset": 12, "numanode": 0}                                                                                              |
+| flavor                               | wrl5.dpdk.hb.small (103)                                                                                                   |
+| hostId                               | 291b1183db7f548afa71704c5d3e7ca0201deb1287afc4b97be5347b                                                                   |
+| id                                   | 1bff9ce8-258b-4995-a5ab-34634d0a6a8e                                                                                       |
+| image                                | wrl5 (ef1bee57-0466-44ac-9431-8cea46ddac05)                                                                                |
+| internal-net0 network                | 10.10.0.1, 10.10.1.1                                                                                                       |
+| key_name                             | controller-0                                                                                                               |
+| metadata                             | {}                                                                                                                         |
+| name                                 | wrl5-avp-0                                                                                                                 |
+| nics                                 | {"nic1": {"vif_model": "avp", "port_id": "b39b71b4-577e-4b79-a239-d317c89b0e54", "network": "public-net0", "mtu": 1500}}   |
+|                                      | {"nic2": {"vif_model": "avp", "port_id": "91e68da4-c076-40a5-8b7f-eeb50b34d2fa", "network": "internal-net0", "mtu": 1500}} |
+| os-extended-volumes:volumes_attached | []                                                                                                                         |
+| pinned                               | True                                                                                                                       |
+| progress                             | 0                                                                                                                          |
+| public-net0 network                  | 192.168.101.2                                                                                                              |
+| server_group                         |                                                                                                                            |
+| status                               | ACTIVE                                                                                                                     |
+| tenant_id                            | eaecc25f26ea4299a5c84cf7ea2f59a5                                                                                           |
+| updated                              | 2014-11-20T18:03:32Z                                                                                                       |
+| user_id                              | a8a79853eb62422c88896baeb23cf265                                                                                           |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ instance is still on compute-0 as expe cted
+sh: instance: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ restore data link on compute-0
+sh: restore: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm list
+usage: system [--version] [--debug] [-v] [-k] [--cert-file CERT_FILE]
+              [--key-file KEY_FILE] [--ca-file CA_FILE] [--timeout TIMEOUT]
+              [--os-username OS_USERNAME] [--os-password OS_PASSWORD]
+              [--os-tenant-id OS_TENANT_ID] [--os-tenant-name OS_TENANT_NAME]
+              [--os-auth-url OS_AUTH_URL] [--os-region-name OS_REGION_NAME]
+              [--os-auth-token OS_AUTH_TOKEN] [--system-url SYSTEM_URL]
+              [--system-api-version SYSTEM_API_VERSION]
+              [--os-service-type OS_SERVICE_TYPE]
+              [--os-endpoint-type OS_ENDPOINT_TYPE]
+              <subcommand> ...
+system: error: argument <subcommand>: invalid choice: 'alarm' (choose from 'modify', 'show', 'config-list', 'config-modify', 'dns-modify', 'dns-show', 'ntp-modify', 'ntp-show', 'oam-modify', 'oam-show', 'pm-modify', 'pm-show', 'controllerfs-modify', 'controllerfs-show', 'host-apply-cpuprofile', 'host-apply-ifprofile', 'host-apply-profile', 'host-apply-storprofile', 'host-delete', 'host-list', 'host-lock', 'host-patch-reboot', 'host-power-off', 'host-power-on', 'host-reboot', 'host-reinstall', 'host-reset', 'host-show', 'host-swact', 'host-unlock', 'host-update', 'host-cpu-list', 'host-cpu-modify', 'host-cpu-show', 'host-memory-list', 'host-memory-show', 'host-port-list', 'host-port-show', 'host-if-add', 'host-if-delete', 'host-if-list', 'host-if-modify', 'host-if-modify-ports', 'host-if-show', 'host-disk-list', 'host-disk-show', 'host-stor-add', 'host-stor-list', 'host-stor-show', 'cpuprofile-add', 'cpuprofile-delete', 'cpuprofile-list', 'cpuprofile-show', 'ifprofile-add', 'ifprofile-delete', 'ifprofile-list', 'ifprofile-show', 'storprofile-add', 'storprofile-delete', 'storprofile-list', 'storprofile-show', 'sda-list', 'sda-show', 'servicenode-list', 'servicenode-show', 'servicegroup-list', 'servicegroup-show', 'service-list', 'service-show', 'alarm-delete', 'alarm-list', 'alarm-show', 'snmp-comm-add', 'snmp-comm-delete', 'snmp-comm-list', 'snmp-comm-show', 'snmp-trapdest-add', 'snmp-trapdest-delete', 'snmp-trapdest-list', 'snmp-trapdest-show', 'help')
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm list[1P[4h-[4l
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0  | minor    | 2014-11-20T15:47:57.581969 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ degrade       system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 5  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system degrade condition is clera  ared as  expected
+usage: system [--version] [--debug] [-v] [-k] [--cert-file CERT_FILE]
+              [--key-file KEY_FILE] [--ca-file CA_FILE] [--timeout TIMEOUT]
+              [--os-username OS_USERNAME] [--os-password OS_PASSWORD]
+              [--os-tenant-id OS_TENANT_ID] [--os-tenant-name OS_TENANT_NAME]
+              [--os-auth-url OS_AUTH_URL] [--os-region-name OS_REGION_NAME]
+              [--os-auth-token OS_AUTH_TOKEN] [--system-url SYSTEM_URL]
+              [--system-api-version SYSTEM_API_VERSION]
+              [--os-service-type OS_SERVICE_TYPE]
+              [--os-endpoint-type OS_ENDPOINT_TYPE]
+              <subcommand> ...
+system: error: argument <subcommand>: invalid choice: 'degrade' (choose from 'modify', 'show', 'config-list', 'config-modify', 'dns-modify', 'dns-show', 'ntp-modify', 'ntp-show', 'oam-modify', 'oam-show', 'pm-modify', 'pm-show', 'controllerfs-modify', 'controllerfs-show', 'host-apply-cpuprofile', 'host-apply-ifprofile', 'host-apply-profile', 'host-apply-storprofile', 'host-delete', 'host-list', 'host-lock', 'host-patch-reboot', 'host-power-off', 'host-power-on', 'host-reboot', 'host-reinstall', 'host-reset', 'host-show', 'host-swact', 'host-unlock', 'host-update', 'host-cpu-list', 'host-cpu-modify', 'host-cpu-show', 'host-memory-list', 'host-memory-show', 'host-port-list', 'host-port-show', 'host-if-add', 'host-if-delete', 'host-if-list', 'host-if-modify', 'host-if-modify-ports', 'host-if-show', 'host-disk-list', 'host-disk-show', 'host-stor-add', 'host-stor-list', 'host-stor-show', 'cpuprofile-add', 'cpuprofile-delete', 'cpuprofile-list', 'cpuprofile-show', 'ifprofile-add', 'ifprofile-delete', 'ifprofile-list', 'ifprofile-show', 'storprofile-add', 'storprofile-delete', 'storprofile-list', 'storprofile-show', 'sda-list', 'sda-show', 'servicenode-list', 'servicenode-show', 'servicegroup-list', 'servicegroup-show', 'service-list', 'service-show', 'alarm-delete', 'alarm-list', 'alarm-show', 'snmp-comm-add', 'snmp-comm-delete', 'snmp-comm-list', 'snmp-comm-show', 'snmp-trapdest-add', 'snmp-trapdest-delete', 'snmp-trapdest-list', 'snmp-trapdest-show', 'help')
+[wrsroot@controller-0 ~(keystone_admin)]$ fail other data link on compute-0
+sh: fail: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | degraded     |
+| 5  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system goes into degrade as expected
+usage: system [--version] [--debug] [-v] [-k] [--cert-file CERT_FILE]
+              [--key-file KEY_FILE] [--ca-file CA_FILE] [--timeout TIMEOUT]
+              [--os-username OS_USERNAME] [--os-password OS_PASSWORD]
+              [--os-tenant-id OS_TENANT_ID] [--os-tenant-name OS_TENANT_NAME]
+              [--os-auth-url OS_AUTH_URL] [--os-region-name OS_REGION_NAME]
+              [--os-auth-token OS_AUTH_TOKEN] [--system-url SYSTEM_URL]
+              [--system-api-version SYSTEM_API_VERSION]
+              [--os-service-type OS_SERVICE_TYPE]
+              [--os-endpoint-type OS_ENDPOINT_TYPE]
+              <subcommand> ...
+system: error: argument <subcommand>: invalid choice: 'goes' (choose from 'modify', 'show', 'config-list', 'config-modify', 'dns-modify', 'dns-show', 'ntp-modify', 'ntp-show', 'oam-modify', 'oam-show', 'pm-modify', 'pm-show', 'controllerfs-modify', 'controllerfs-show', 'host-apply-cpuprofile', 'host-apply-ifprofile', 'host-apply-profile', 'host-apply-storprofile', 'host-delete', 'host-list', 'host-lock', 'host-patch-reboot', 'host-power-off', 'host-power-on', 'host-reboot', 'host-reinstall', 'host-reset', 'host-show', 'host-swact', 'host-unlock', 'host-update', 'host-cpu-list', 'host-cpu-modify', 'host-cpu-show', 'host-memory-list', 'host-memory-show', 'host-port-list', 'host-port-show', 'host-if-add', 'host-if-delete', 'host-if-list', 'host-if-modify', 'host-if-modify-ports', 'host-if-show', 'host-disk-list', 'host-disk-show', 'host-stor-add', 'host-stor-list', 'host-stor-show', 'cpuprofile-add', 'cpuprofile-delete', 'cpuprofile-list', 'cpuprofile-show', 'ifprofile-add', 'ifprofile-delete', 'ifprofile-list', 'ifprofile-show', 'storprofile-add', 'storprofile-delete', 'storprofile-list', 'storprofile-show', 'sda-list', 'sda-show', 'servicenode-list', 'servicenode-show', 'servicegroup-list', 'servicegroup-show', 'service-list', 'service-show', 'alarm-delete', 'alarm-list', 'alarm-show', 'snmp-comm-add', 'snmp-comm-delete', 'snmp-comm-list', 'snmp-comm-show', 'snmp-trapdest-add', 'snmp-trapdest-delete', 'snmp-trapdest-list', 'snmp-trapdest-show', 'help')
+[wrsroot@controller-0 ~(keystone_admin)]$ system goes into degrade as expectedhost-list[Kfail other data link on compute-0system degrade condition is cleared as  expected[Acontroller-0 ~(keystone_admin)]$ system host-list[K
+[K[A[wrsroot@controller-0 ~(keystone_admin)]$ system host-list[4ha[4llarm-list listrestore data link on compute-0instance is still on compute-0 as expeccted[Aroot@controller-0 ~(keystone_admin)]$ nova show  1bff9ce8-258b-4995-a5ab-34634d0a6a8e
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                      |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                     |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                       |
+| OS-EXT-SRV-ATTR:host                 | compute-0                                                                                                                  |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | compute-0                                                                                                                  |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000003                                                                                                          |
+| OS-EXT-STS:power_state               | 1                                                                                                                          |
+| OS-EXT-STS:task_state                | -                                                                                                                          |
+| OS-EXT-STS:vm_state                  | active                                                                                                                     |
+| OS-SRV-USG:launched_at               | 2014-11-20T14:59:21.827514                                                                                                 |
+| OS-SRV-USG:terminated_at             | -                                                                                                                          |
+| accessIPv4                           |                                                                                                                            |
+| accessIPv6                           |                                                                                                                            |
+| config_drive                         |                                                                                                                            |
+| created                              | 2014-11-19T17:10:34Z                                                                                                       |
+| extended                             | {"cpuset": 12, "numanode": 0}                                                                                              |
+| flavor                               | wrl5.dpdk.hb.small (103)                                                                                                   |
+| hostId                               | 291b1183db7f548afa71704c5d3e7ca0201deb1287afc4b97be5347b                                                                   |
+| id                                   | 1bff9ce8-258b-4995-a5ab-34634d0a6a8e                                                                                       |
+| image                                | wrl5 (ef1bee57-0466-44ac-9431-8cea46ddac05)                                                                                |
+| internal-net0 network                | 10.10.0.1, 10.10.1.1                                                                                                       |
+| key_name                             | controller-0                                                                                                               |
+| metadata                             | {}                                                                                                                         |
+| name                                 | wrl5-avp-0                                                                                                                 |
+| nics                                 | {"nic1": {"vif_model": "avp", "port_id": "b39b71b4-577e-4b79-a239-d317c89b0e54", "network": "public-net0", "mtu": 1500}}   |
+|                                      | {"nic2": {"vif_model": "avp", "port_id": "91e68da4-c076-40a5-8b7f-eeb50b34d2fa", "network": "internal-net0", "mtu": 1500}} |
+| os-extended-volumes:volumes_attached | []                                                                                                                         |
+| pinned                               | True                                                                                                                       |
+| progress                             | 0                                                                                                                          |
+| public-net0 network                  | 192.168.101.2                                                                                                              |
+| server_group                         |                                                                                                                            |
+| status                               | ACTIVE                                                                                                                     |
+| tenant_id                            | eaecc25f26ea4299a5c84cf7ea2f59a5                                                                                           |
+| updated                              | 2014-11-20T18:03:32Z                                                                                                       |
+| user_id                              | a8a79853eb62422c88896baeb23cf265                                                                                           |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ instance is still on compute-0 as expe cted
+sh: instance: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ clear data          restore data link on compute-0
+sh: restore: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 5  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ degrade is cleared on compute-0
+sh: degrade: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ fail both data links on compute-0
+sh: fail: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0  | minor    | 2014-11-20T15:47:57.581969 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | degraded     |
+| 5  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list[4ha[4llarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID                            | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0                             | minor    | 2014-11-20T15:47:57.581969 |
+| bf30d63a-0285-4a10-b160-471c3160f36e | 700.007  | Instance is live migrating.                                               | instance=1bff9ce8-258b-4995-a5ab-34634d0a6a8e | warning  | 2014-11-20T18:07:04.707096 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ instance is live migrating as expected [A[wrsroot@controller-0 ~(keystone_admin)]$ instance is live migrating as expecte[Kd
+sh: instance: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ instance is live migrating as expected [A[wrsroot@controller-0 ~(keystone_admin)]$ [21Psystem alarm-list
+[K[A[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID                            | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0                             | minor    | 2014-11-20T15:47:57.581969 |
+| bf30d63a-0285-4a10-b160-471c3160f36e | 700.007  | Instance is live migrating.                                               | instance=1bff9ce8-258b-4995-a5ab-34634d0a6a8e | warning  | 2014-11-20T18:07:04.707096 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ nova list
++--------------------------------------+------------+-----------+------------+-------------+---------------------------------------------------------------+
+| ID                                   | Name       | Status    | Task State | Power State | Networks                                                      |
++--------------------------------------+------------+-----------+------------+-------------+---------------------------------------------------------------+
+| 1bff9ce8-258b-4995-a5ab-34634d0a6a8e | wrl5-avp-0 | MIGRATING | migrating  | Running     | public-net0=192.168.101.2; internal-net0=10.10.0.1, 10.10.1.1 |
++--------------------------------------+------------+-----------+------------+-------------+---------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ nova show 1bff9ce8-258b-4995-a5ab-3463 4d0a6a8e
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                      |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                     |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                       |
+| OS-EXT-SRV-ATTR:host                 | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000003                                                                                                          |
+| OS-EXT-STS:power_state               | 1                                                                                                                          |
+| OS-EXT-STS:task_state                | migrating                                                                                                                  |
+| OS-EXT-STS:vm_state                  | active                                                                                                                     |
+| OS-SRV-USG:launched_at               | 2014-11-20T14:59:21.827514                                                                                                 |
+| OS-SRV-USG:terminated_at             | -                                                                                                                          |
+| accessIPv4                           |                                                                                                                            |
+| accessIPv6                           |                                                                                                                            |
+| config_drive                         |                                                                                                                            |
+| created                              | 2014-11-19T17:10:34Z                                                                                                       |
+| extended                             | {"cpuset": 12, "numanode": 0}                                                                                              |
+| flavor                               | wrl5.dpdk.hb.small (103)                                                                                                   |
+| hostId                               | 89107285d34eb95fbe9e7cd17c5dc6dc7a3698485dd99e593ea79767                                                                   |
+| id                                   | 1bff9ce8-258b-4995-a5ab-34634d0a6a8e                                                                                       |
+| image                                | wrl5 (ef1bee57-0466-44ac-9431-8cea46ddac05)                                                                                |
+| internal-net0 network                | 10.10.0.1, 10.10.1.1                                                                                                       |
+| key_name                             | controller-0                                                                                                               |
+| metadata                             | {}                                                                                                                         |
+| name                                 | wrl5-avp-0                                                                                                                 |
+| nics                                 | {"nic1": {"vif_model": "avp", "port_id": "b39b71b4-577e-4b79-a239-d317c89b0e54", "network": "public-net0", "mtu": 1500}}   |
+|                                      | {"nic2": {"vif_model": "avp", "port_id": "91e68da4-c076-40a5-8b7f-eeb50b34d2fa", "network": "internal-net0", "mtu": 1500}} |
+| os-extended-volumes:volumes_attached | []                                                                                                                         |
+| pinned                               | True                                                                                                                       |
+| public-net0 network                  | 192.168.101.2                                                                                                              |
+| server_group                         |                                                                                                                            |
+| status                               | MIGRATING                                                                                                                  |
+| tenant_id                            | eaecc25f26ea4299a5c84cf7ea2f59a5                                                                                           |
+| updated                              | 2014-11-20T18:07:03Z                                                                                                       |
+| user_id                              | a8a79853eb62422c88896baeb23cf265                                                                                           |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ nova    system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | degraded     |
+| 5  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID                            | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0                             | minor    | 2014-11-20T15:47:57.581969 |
+| 85abcc69-d8d8-479f-b398-4015053254a7 | 700.007  | Instance is live migrating.                                               | instance=1bff9ce8-258b-4995-a5ab-34634d0a6a8e | warning  | 2014-11-20T18:07:18.742262 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID                            | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0                             | minor    | 2014-11-20T15:47:57.581969 |
+| 85abcc69-d8d8-479f-b398-4015053254a7 | 700.007  | Instance is live migrating.                                               | instance=1bff9ce8-258b-4995-a5ab-34634d0a6a8e | warning  | 2014-11-20T18:07:18.742262 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID                            | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0                             | minor    | 2014-11-20T15:47:57.581969 |
+| 85abcc69-d8d8-479f-b398-4015053254a7 | 700.007  | Instance is live migrating.                                               | instance=1bff9ce8-258b-4995-a5ab-34634d0a6a8e | warning  | 2014-11-20T18:07:18.742262 |
++--------------------------------------+----------+---------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0  | minor    | 2014-11-20T15:47:57.581969 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0  | minor    | 2014-11-20T15:47:57.581969 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ no  system alarm-list[1Phost-listnova show 1bff9ce8-258b-4995-a5ab-346344d0a6a8e
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                      |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                     |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                       |
+| OS-EXT-SRV-ATTR:host                 | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000003                                                                                                          |
+| OS-EXT-STS:power_state               | 1                                                                                                                          |
+| OS-EXT-STS:task_state                | -                                                                                                                          |
+| OS-EXT-STS:vm_state                  | active                                                                                                                     |
+| OS-SRV-USG:launched_at               | 2014-11-20T14:59:21.827514                                                                                                 |
+| OS-SRV-USG:terminated_at             | -                                                                                                                          |
+| accessIPv4                           |                                                                                                                            |
+| accessIPv6                           |                                                                                                                            |
+| config_drive                         |                                                                                                                            |
+| created                              | 2014-11-19T17:10:34Z                                                                                                       |
+| extended                             | {"cpuset": 12, "numanode": 0}                                                                                              |
+| flavor                               | wrl5.dpdk.hb.small (103)                                                                                                   |
+| hostId                               | 89107285d34eb95fbe9e7cd17c5dc6dc7a3698485dd99e593ea79767                                                                   |
+| id                                   | 1bff9ce8-258b-4995-a5ab-34634d0a6a8e                                                                                       |
+| image                                | wrl5 (ef1bee57-0466-44ac-9431-8cea46ddac05)                                                                                |
+| internal-net0 network                | 10.10.0.1, 10.10.1.1                                                                                                       |
+| key_name                             | controller-0                                                                                                               |
+| metadata                             | {}                                                                                                                         |
+| name                                 | wrl5-avp-0                                                                                                                 |
+| nics                                 | {"nic1": {"vif_model": "avp", "port_id": "b39b71b4-577e-4b79-a239-d317c89b0e54", "network": "public-net0", "mtu": 1500}}   |
+|                                      | {"nic2": {"vif_model": "avp", "port_id": "91e68da4-c076-40a5-8b7f-eeb50b34d2fa", "network": "internal-net0", "mtu": 1500}} |
+| os-extended-volumes:volumes_attached | []                                                                                                                         |
+| pinned                               | True                                                                                                                       |
+| progress                             | 0                                                                                                                          |
+| public-net0 network                  | 192.168.101.2                                                                                                              |
+| server_group                         |                                                                                                                            |
+| status                               | ACTIVE                                                                                                                     |
+| tenant_id                            | eaecc25f26ea4299a5c84cf7ea2f59a5                                                                                           |
+| updated                              | 2014-11-20T18:07:42Z                                                                                                       |
+| user_id                              | a8a79853eb62422c88896baeb23cf265                                                                                           |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ node is live g migrated to compute-1 as  expected
+
+module.js:340
+    throw err;
+          ^
+Error: Cannot find module '/home/wrsroot/is'
+    at Function.Module._resolveFilename (module.js:338:15)
+    at Function.Module._load (module.js:280:25)
+    at Module.runMain (module.js:492:10)
+    at process.startup.processNextTick.process._tickCallback (node.js:244:9)
+[wrsroot@controller-0 ~(keystone_admin)]$ 
+[wrsroot@controller-0 ~(keystone_admin)]$ node is live migrated to compute-1 as eexpected
+
+module.js:340
+    throw err;
+          ^
+Error: Cannot find module '/home/wrsroot/is'
+    at Function.Module._resolveFilename (module.js:338:15)
+    at Function.Module._load (module.js:280:25)
+    at Module.runMain (module.js:492:10)
+    at process.startup.processNextTick.process._tickCallback (node.js:244:9)
+[wrsroot@controller-0 ~(keystone_admin)]$ restore data link  s on compute-0
+sh: restore: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 4  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 5  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system - alarm-list
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                               | Entity Instance ID | Severity | Time Stamp                 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+| cdc30efa-558d-4f63-992d-9d53e2803452 | 100.103  | Platform Memory Usage threshold exceeded; threshold: 80%, actual: 80.50%. | host=controller-0  | minor    | 2014-11-20T15:47:57.581969 |
++--------------------------------------+----------+---------------------------------------------------------------------------+--------------------+----------+----------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ sy  nova list
++--------------------------------------+------------+--------+------------+-------------+---------------------------------------------------------------+
+| ID                                   | Name       | Status | Task State | Power State | Networks                                                      |
++--------------------------------------+------------+--------+------------+-------------+---------------------------------------------------------------+
+| 1bff9ce8-258b-4995-a5ab-34634d0a6a8e | wrl5-avp-0 | ACTIVE | -          | Running     | public-net0=192.168.101.2; internal-net0=10.10.0.1, 10.10.1.1 |
++--------------------------------------+------------+--------+------------+-------------+---------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ nova show 1bff9ce8-258b-4995-a5ab-3463 4d0a6a8e
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                      |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                     |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                       |
+| OS-EXT-SRV-ATTR:host                 | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | compute-1                                                                                                                  |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000003                                                                                                          |
+| OS-EXT-STS:power_state               | 1                                                                                                                          |
+| OS-EXT-STS:task_state                | -                                                                                                                          |
+| OS-EXT-STS:vm_state                  | active                                                                                                                     |
+| OS-SRV-USG:launched_at               | 2014-11-20T14:59:21.827514                                                                                                 |
+| OS-SRV-USG:terminated_at             | -                                                                                                                          |
+| accessIPv4                           |                                                                                                                            |
+| accessIPv6                           |                                                                                                                            |
+| config_drive                         |                                                                                                                            |
+| created                              | 2014-11-19T17:10:34Z                                                                                                       |
+| extended                             | {"cpuset": 12, "numanode": 0}                                                                                              |
+| flavor                               | wrl5.dpdk.hb.small (103)                                                                                                   |
+| hostId                               | 89107285d34eb95fbe9e7cd17c5dc6dc7a3698485dd99e593ea79767                                                                   |
+| id                                   | 1bff9ce8-258b-4995-a5ab-34634d0a6a8e                                                                                       |
+| image                                | wrl5 (ef1bee57-0466-44ac-9431-8cea46ddac05)                                                                                |
+| internal-net0 network                | 10.10.0.1, 10.10.1.1                                                                                                       |
+| key_name                             | controller-0                                                                                                               |
+| metadata                             | {}                                                                                                                         |
+| name                                 | wrl5-avp-0                                                                                                                 |
+| nics                                 | {"nic1": {"vif_model": "avp", "port_id": "b39b71b4-577e-4b79-a239-d317c89b0e54", "network": "public-net0", "mtu": 1500}}   |
+|                                      | {"nic2": {"vif_model": "avp", "port_id": "91e68da4-c076-40a5-8b7f-eeb50b34d2fa", "network": "internal-net0", "mtu": 1500}} |
+| os-extended-volumes:volumes_attached | []                                                                                                                         |
+| pinned                               | True                                                                                                                       |
+| progress                             | 0                                                                                                                          |
+| public-net0 network                  | 192.168.101.2                                                                                                              |
+| server_group                         |                                                                                                                            |
+| status                               | ACTIVE                                                                                                                     |
+| tenant_id                            | eaecc25f26ea4299a5c84cf7ea2f59a5                                                                                           |
+| updated                              | 2014-11-20T18:07:42Z                                                                                                       |
+| user_id                              | a8a79853eb62422c88896baeb23cf265                                                                                           |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ alarm conditon  ions are cleared
+sh: alarm: command not found
+[wrsroot@controller-0 ~(keystone_admin)]$ test done
+[wrsroot@controller-0 ~(keystone_admin)]$ exit
+exit
+
+Script done on Thu Nov 20 18:09:10 2014
