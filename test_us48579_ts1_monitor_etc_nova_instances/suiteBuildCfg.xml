@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+ <!-- 
+ Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+--> 
+<!-- 
+     Suite build XPD autotest application app/test.
+
+Modification history
+====================
+05dec13,djy   Created
+20nov14,mhg   Duplicated for US48579
+-->
+
+<suite_build version="1.0">
+<environment>
+</environment>
+    <build_info type="default" version="2.0">
+        <command>
+        </command>
+   </build_info>
+</suite_build>
