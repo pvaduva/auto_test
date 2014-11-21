@@ -13,6 +13,7 @@ Copyright (c) 2013 Wind River Systems, Inc.
 Modification history
 ====================
 11feb15, ccw  Created
+21nov14, mhg  ported to testcase test_us48579_ts1_monitor_etc_nova_instances
 -->
 
 <file>
