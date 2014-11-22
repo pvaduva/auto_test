@@ -22,7 +22,8 @@ Compute-0 has instance
 Action: Unlock second compute
 
 Verify:
-•	evacuated instances are started on the freshly unlocked second compute.  <- Jira CGTS-999 raised
+•	evacuated instances are started on the freshly unlocked second compute.  <-
+Jira CGTS-1007 raised
 
 Action: restore one link on first compute
 
