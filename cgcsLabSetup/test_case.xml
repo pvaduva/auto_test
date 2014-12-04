@@ -25,19 +25,8 @@ Modification history
         # Test Sanity CGCS app/test
         #######################################################
 # BUILDSERVER is defined in the spreadsheet
-
-SET JKPATH /localdisk/loadbuild/jenkins/
-# SET GUESTPATH CGCS_GG_14.06b_PCI_POC_Guest
-# SET LOADPATH CGCS_GG_14.06b_PCI_POC_Host/
-
-#SET GUESTPATH CGCS_1.0_Guest_Daily_Build_B
-#SET LOADPATH CGCS_GG_14.06_Host/
-#SET GUESTPATH CGCS_GG_14.06_Guest/
-#SET GUESTPATH Titanium_Server_14.10_Guest
-#SET LOADPATH Titanium_Server_14.10_Host/
-
-SET GUESTPATH CGCS_1.0_Guest_Daily_Build
-SET LOADPATH CGCS_1.0_Unified_Daily_Build/
+# GUESTPATH is defined in the spreadsheet
+# LOADPATH is defined in the spreadsheet
 
 
 
