@@ -1,0 +1,21 @@
+TC1: Test config drive for wrl image
+----------------------------------------------------------------
+ 
+Setup: As admin
+* write something in my-user-data.txt and my-user-file.txt files
+* Boot VM using:
+nova boot --key_name=<keypair> --flavor=103 --nic net-id=<public-net0> or <tenant-mgmt-net,vif-model=avp --nic net-id=<internal-net0> or <tenant-net0>,vif-model=avp --config-drive true --user-data ./my-user-data.txt --file /tmp/foobar=./my-user-file.txt --image=ubuntu-precise-amd64 ubuntu
+* Go into VM
+* run blkid -t LABEL="config-2" -odevice command to find filesystem to mount
+* mount to /mnt/config, mkdir -p /mnt/config
+
+Verify:
+* run df, check /media/hdd mounted on instance (may be hdb, hdc...)
+* cat openstack/latest/user_data gives same output as my-user-data.txt
+* cat openstack/content/0000 gives same output as my-user-file.txt
+* cat /tmp/foobar gives same output as my-user-file.txt
+
+Repeat test as tenant user
+
+nova boot --key_name=keypair-tenant1 --flavor=103 --nic net-id=77949a8f-95b1-4001-9857-93949093b4a3,vif-model=avp --nic net-id=a5f94822-2cf5-4fda-967f-331b65e4b342,vif-model=avp --config-drive true --user-data ./my-user-data.txt --file /tmp/foobar=./my-user-file.txt --image=ubuntu-precise-amd64 ubuntu
+
