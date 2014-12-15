@@ -26,8 +26,7 @@ from random import randint
 
 # constants
 COMMUNITY_STRING = "test_community"
-#SNMP_IP = "10.10.10.2"
-SNMP_IP = "128.224.150.189"
+#SNMP_IP = "128.224.150.189"
 SNMP_PORT = 161
 
 MAX_ALRM_TBL_SIZE = 2000
@@ -76,7 +75,7 @@ def mibTextToPy(mib_path):
             mib_srcname = mib[1]
             mib_destname = mib[2]
             if not os.path.isfile(os.path.join(mib_path, mib_srcname)):
-                print "FAIL: Required MIB %s is missing from path %s" % \
+                print "FAILED: Required MIB %s is missing from path %s" % \
                       (mib_srcname, mib_path)
                 return 1
             print "::: Converting MIB to py :::" 
@@ -95,7 +94,7 @@ def mibTextToPy(mib_path):
             mibBuilder.loadModules(mib_destname)
             print mib_destname
     else:
-        print "FAIL: MIB directory %s is not present" % mib_path
+        print "FAILED: MIB directory %s is not present" % mib_path
         return 1
 
     return cmdGen 
@@ -174,6 +173,9 @@ def snmpGetBulk(community_string, snmp_ip, snmp_port, non_rep, max_rep, cmdGen, 
 
 if __name__ == "__main__":
 
+    # Get the floating ip from the command line
+    snmp_ip = sys.argv[1]
+
 #    debug.setLogger(debug.Debug('all'))
     cmdGen = mibTextToPy(MIB_PATH)
 
@@ -184,14 +186,23 @@ if __name__ == "__main__":
     instanceno = str(randint(1, MAX_ALRM_TBL_SIZE))
     for item in OID:
         oid = (OID[item] + "." + instanceno, )
-        snmpGet(COMMUNITY_STRING, SNMP_IP, SNMP_PORT, cmdGen, *oid) 
-    print "Test 1 Complete"
+        retVal = snmpGet(COMMUNITY_STRING, snmp_ip, SNMP_PORT, cmdGen, *oid) 
+        if retVal == 1:
+            print "Test 1 FAILED"
+            failFlag = True
+            break
+        else:
+            print "Test 1 PASSED"
         
     # Test #2: Perform an SNMP Walk over the entire tree starting at the root
     print ">>> Test 2: Perform SNMP Walk" 
     oid = (OID["wrsAlarmHistoryTable"], )
-    snmpGetNext(COMMUNITY_STRING, SNMP_IP, SNMP_PORT, cmdGen, *oid)
-    print "Test 2 Complete"
+    retVal = snmpGetNext(COMMUNITY_STRING, snmp_ip, SNMP_PORT, cmdGen, *oid)
+        if retVal == 1:
+            print "Test 2 FAILED"
+            failFlag = True
+        else:
+            print "Test 2 PASSED"
 
     # Test #3: Perform a SNMP Walk in one entry
     # We should get a collection of related information on each run, 
@@ -199,13 +210,27 @@ if __name__ == "__main__":
     print ">>> Test #3: Perform a SNMP Walk in one entry"
     for i in range(len(OID) - 1):
         oid = (OID["wrsAlarmHistoryEntry"] + "." + str(i), )
-        snmpGetNext(COMMUNITY_STRING, SNMP_IP, SNMP_PORT, cmdGen, *oid)
-    print "Test 3 Complete"
+        retVal = snmpGetNext(COMMUNITY_STRING, snmp_ip, SNMP_PORT, cmdGen, *oid)
+        if retVal == 1:
+            print "Test 3 FAILED"
+            failFlag = True
+            break
+        else:
+            print "Test 3 PASSED"
 
     # Test #4: Perform an SNMP Get Bulk command
     print ">>> Test #4: Perform an SNMP Get Bulk command"
     for i in range(len(OID) - 1):
         oid = (OID["wrsAlarmHistoryEntry"] + "." + str(i), )
-        snmpGetBulk(COMMUNITY_STRING, SNMP_IP, SNMP_PORT, NON_REP, MAX_REP, cmdGen, *oid)
-    print "Test 4 Complete"
+        retVal = snmpGetBulk(COMMUNITY_STRING, snmp_ip, SNMP_PORT, NON_REP, MAX_REP, cmdGen, *oid)
+        if retVal == 1:
+            print "Test 4 FAILED"
+            failFlag = True
+            break
+        else:
+            print "Test 4 PASSED"
 
+    if flagFail == True:
+        sys.exit(1)
+    else:
+        sys.exit(0)

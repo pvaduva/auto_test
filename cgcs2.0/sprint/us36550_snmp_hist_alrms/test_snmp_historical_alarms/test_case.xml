@@ -64,11 +64,12 @@ Con1SSH WAIT 3 SEC
 Con1SSH system snmp-comm-show test_community
 Con1SSH WAIT 3 SEC
 
-CALL python3 ${WASSP_TC_PATH}/../utils/getFile.py -i $env.NODE.target.Boot.oamAddrA -u ${WRSUSER} -p ${WRSPASS} -s /usr/share/snmp/mibs/wrsAlarmMib.mib.txt -d ${WASSP_TC_PATH}/mibs -P 22
+CALL python3 ${WASSP_TC_PATH}/../utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s /usr/share/snmp/mibs/wrsAlarmMib.mib.txt -d ${WASSP_TC_PATH}/mibs -P 22
 
-CALL python3 ${WASSP_TC_PATH}/../utils/getFile.py -i $env.NODE.target.Boot.oamAddrA -u ${WRSUSER} -p ${WRSPASS} -s /usr/share/snmp/mibs/wrsEnterpriseMib.mib.txt -d ${WASSP_TC_PATH}/mibs -P 22
+CALL python3 ${WASSP_TC_PATH}/../utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s /usr/share/snmp/mibs/wrsEnterpriseMib.mib.txt -d ${WASSP_TC_PATH}/mibs -P 22
 
-CALL test_snmp_historical_alarms.py
+#
+CALL test_snmp_historical_alarms.py $env.NODE.target.Boot.oamFloat
 FAILIF FAIL
 
 Con1SSH WAIT 300 SEC
