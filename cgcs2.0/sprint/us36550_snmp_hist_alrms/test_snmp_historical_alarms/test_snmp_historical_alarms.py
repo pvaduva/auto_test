@@ -121,7 +121,6 @@ def snmpGet(community_string, snmp_ip, snmp_port, cmdGen, oid):
             for name, val in varBinds:
                 print("%s = %s" % (name.prettyPrint(), val.prettyPrint()))
             return 0
-            print "Varbinds: %s" % varBinds
 
     return 1
 
@@ -169,7 +168,7 @@ def snmpGetBulk(community_string, snmp_ip, snmp_port, non_rep, max_rep, cmdGen, 
             for varBindTableRow in varBindTable:
                 for name, val in varBindTableRow:
                     print("%s = %s" % (name.prettyPrint(), val.prettyPrint()))
-            return 0
+            return 0, len(varBindTable) - 1
 
     return 1
 
@@ -183,19 +182,16 @@ if __name__ == "__main__":
 #    debug.setLogger(debug.Debug('all'))
     cmdGen = mibTextToPy(MIB_PATH)
 
-    # Test #1: Perform an SNMP Get
-    # Do individual snmpget requests to retrieve one alarm entry
-    # The value can be from 1 to 2000 inclusive
-    print ">>> Test 1: Perform SNMP Get"
-    instanceno = str(randint(1, MAX_ALRM_TBL_SIZE))
-    for item in OID:
-        oid = (OID[item] + "." + instanceno, )
-        retVal = snmpGet(COMMUNITY_STRING, snmp_ip, SNMP_PORT, cmdGen, *oid) 
+    # Test #1: Perform an SNMP Get Bulk command
+    print ">>> Test 1: Perform an SNMP Get Bulk command"
+    for i in range(len(OID) - 1):
+        oid = (OID["wrsAlarmHistoryEntry"] + "." + str(i), )
+        retVal, tableSize = snmpGetBulk(COMMUNITY_STRING, snmp_ip, SNMP_PORT, NON_REP, MAX_REP, cmdGen, *oid)
         if retVal == 1:
             print "Test 1 FAILED"
             failFlag = True
             break
-        
+
     # Test #2: Perform an SNMP Walk over the entire tree starting at the root
     print ">>> Test 2: Perform SNMP Walk" 
     oid = (OID["wrsAlarmHistoryTable"], )
@@ -204,29 +200,35 @@ if __name__ == "__main__":
         print "Test 2 FAILED"
         failFlag = True
 
-    # Test #3: Perform a SNMP Walk in one entry
-    # We should get a collection of related information on each run, 
-    # i.e. AlarmIDs only, AlarmState only, etc.
-    print ">>> Test #3: Perform a SNMP Walk in one entry"
-    for i in range(len(OID) - 1):
-        oid = (OID["wrsAlarmHistoryEntry"] + "." + str(i), )
-        retVal = snmpGetNext(COMMUNITY_STRING, snmp_ip, SNMP_PORT, cmdGen, *oid)
+    # Test #3: Perform an SNMP Get
+    # Do individual snmpget requests to retrieve one alarm entry
+    # The value can be from 1 to 2000 inclusive (potential)
+    print ">>> Test 3: Perform SNMP Get"
+    print "The size of the table is: %s" % tableSize
+    instanceno = str(randint(1,  tableSize))
+    for item in OID:
+        oid = (OID[item] + "." + instanceno, )
+        retVal = snmpGet(COMMUNITY_STRING, snmp_ip, SNMP_PORT, cmdGen, *oid) 
         if retVal == 1:
             print "Test 3 FAILED"
             failFlag = True
             break
 
-    # Test #4: Perform an SNMP Get Bulk command
-    print ">>> Test #4: Perform an SNMP Get Bulk command"
+    # Test #4: Perform a SNMP Walk in one entry
+    # We should get a collection of related information on each run, 
+    # i.e. AlarmIDs only, AlarmState only, etc.
+    print ">>> Test 4: Perform a SNMP Walk in one entry"
     for i in range(len(OID) - 1):
         oid = (OID["wrsAlarmHistoryEntry"] + "." + str(i), )
-        retVal = snmpGetBulk(COMMUNITY_STRING, snmp_ip, SNMP_PORT, NON_REP, MAX_REP, cmdGen, *oid)
+        retVal = snmpGetNext(COMMUNITY_STRING, snmp_ip, SNMP_PORT, cmdGen, *oid)
         if retVal == 1:
             print "Test 4 FAILED"
             failFlag = True
             break
 
     if failFlag == True:
+        print "Test suite FAILED"
         sys.exit(1)
     else:
+        print "Test suite PASSED"
         sys.exit(0)
