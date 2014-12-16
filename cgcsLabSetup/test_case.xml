@@ -299,7 +299,7 @@ TYPE echo set mouse-=a >> ~/.vimrc\n
 WAIT 10 SEC {ignoreTimeout:True}
 
 
-TYPE system modify name=$env.NODE.lab_setup\n
+TYPE system modify name=$env.NODE.target.Boot.labsetup\n
 TYPE system modify description="This system belongs to CGCS project"\n
 WAIT 10 SEC {ignoreTimeout:True}
 
