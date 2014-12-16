@@ -19,8 +19,8 @@ Modification history
 <environment>
 </environment>
 
-<test_module name="sanity/cgcs/${WASS_TC_NAME}" timeout="">
-    <test_case  name="sanity/cgcs/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag">
+<test_module name="sprint/us36550_snmp_hist_alrms/${WASS_TC_NAME}" timeout="">
+    <test_case  name="sprint/us36550_snmp_hist_alrms/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag">
 
 <!--SET noseTestName testcase_742
 INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag 
@@ -28,9 +28,6 @@ INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag
         #######################################################
         # Test Sanity CGCS app/test
         #######################################################
-
-SET WRUSER wrsroot
-SET WRSPASS li69nux
 
 CALL env
 LOOKFOR
@@ -64,13 +61,12 @@ Con1SSH WAIT 3 SEC
 Con1SSH system snmp-comm-show test_community
 Con1SSH WAIT 3 SEC
 
-CALL python3 ${WASSP_TC_PATH}/../utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s /usr/share/snmp/mibs/wrsAlarmMib.mib.txt -d ${WASSP_TC_PATH}/mibs -P 22
+#CALL python3 ${WASSP_TC_PATH}/../utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s ${WASSP_TC_PATH}/mibs -d /usr/share/snmp/mibs/wrsAlarmMib.mib.txt -P 22
 
-CALL python3 ${WASSP_TC_PATH}/../utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s /usr/share/snmp/mibs/wrsEnterpriseMib.mib.txt -d ${WASSP_TC_PATH}/mibs -P 22
+#CALL python3 ${WASSP_TC_PATH}/../utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s ${WASSP_TC_PATH}/mibs -d /usr/share/snmp/mibs/wrsEnterpriseMib.mib.txt -P 22
 
-#
 CALL test_snmp_historical_alarms.py $env.NODE.target.Boot.oamFloat
-FAILIF FAIL
+FAILIF FAILED
 
 Con1SSH WAIT 300 SEC
 

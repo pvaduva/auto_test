@@ -22,6 +22,7 @@ from pysnmp import debug
 import os
 import itertools
 import time
+import sys
 from random import randint
 
 # constants
@@ -191,18 +192,14 @@ if __name__ == "__main__":
             print "Test 1 FAILED"
             failFlag = True
             break
-        else:
-            print "Test 1 PASSED"
         
     # Test #2: Perform an SNMP Walk over the entire tree starting at the root
     print ">>> Test 2: Perform SNMP Walk" 
     oid = (OID["wrsAlarmHistoryTable"], )
     retVal = snmpGetNext(COMMUNITY_STRING, snmp_ip, SNMP_PORT, cmdGen, *oid)
-        if retVal == 1:
-            print "Test 2 FAILED"
-            failFlag = True
-        else:
-            print "Test 2 PASSED"
+    if retVal == 1:
+        print "Test 2 FAILED"
+        failFlag = True
 
     # Test #3: Perform a SNMP Walk in one entry
     # We should get a collection of related information on each run, 
@@ -215,8 +212,6 @@ if __name__ == "__main__":
             print "Test 3 FAILED"
             failFlag = True
             break
-        else:
-            print "Test 3 PASSED"
 
     # Test #4: Perform an SNMP Get Bulk command
     print ">>> Test #4: Perform an SNMP Get Bulk command"
@@ -227,10 +222,8 @@ if __name__ == "__main__":
             print "Test 4 FAILED"
             failFlag = True
             break
-        else:
-            print "Test 4 PASSED"
 
-    if flagFail == True:
+    if failFlag == True:
         sys.exit(1)
     else:
         sys.exit(0)
