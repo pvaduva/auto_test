@@ -19,8 +19,8 @@ Modification history
 <environment>
 </environment>
 
-<test_module name="sanity/cgcs/${WASSP_TC_NAME}" timeout="">
-    <test_case  name="sanity/cgcs/${WASSP_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag">
+<test_module name="sprint/us36550_snmp_hist_alrms/${WASS_TC_NAME}" timeout="">
+    <test_case  name="sprint/us36550_snmp_hist_alrms/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag">
 
 <!--SET noseTestName testcase_742
 INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag 
@@ -33,7 +33,6 @@ CALL env
 LOOKFOR
 TYPE \n
 SINK 1 SEC
-PROMPTTIMEOUT 300 SEC
 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1SSH PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
@@ -54,13 +53,24 @@ Con1SSH TYPE echo executing ${WASSP_TC_NAME}\n
 Con1SSH WAIT 100 SEC
 
 Con1SSH FAILIF FAILED
-Con1SSH TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=${testCaseId}\n
-Con1SSH WAIT ${noseTestTimeout} SEC (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 
+Con1SSH system snmp-comm-add -c test_community
+Con1SSH WAIT 3 SEC 
+Con1SSH system snmp-comm-list -c test_community
+Con1SSH WAIT 3 SEC
+Con1SSH system snmp-comm-show test_community
+Con1SSH WAIT 3 SEC
+
+#CALL python3 ${WASSP_TC_PATH}/../utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s ${WASSP_TC_PATH}/mibs -d /usr/share/snmp/mibs/wrsAlarmMib.mib.txt -P 22
+
+#CALL python3 ${WASSP_TC_PATH}/../utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s ${WASSP_TC_PATH}/mibs -d /usr/share/snmp/mibs/wrsEnterpriseMib.mib.txt -P 22
+
+CALL test_snmp_historical_alarms.py $env.NODE.target.Boot.oamFloat
+FAILIF FAILED
+
+Con1SSH WAIT 300 SEC
 
 PASS
-
-
     </test_case>
 </test_module>
 </file>
