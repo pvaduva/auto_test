@@ -120,7 +120,8 @@ def snmpGet(community_string, snmp_ip, snmp_port, cmdGen, oid):
         else:
             for name, val in varBinds:
                 print("%s = %s" % (name.prettyPrint(), val.prettyPrint()))
-                return 0
+            return 0
+            print "Varbinds: %s" % varBinds
 
     return 1
 
@@ -144,7 +145,7 @@ def snmpGetNext(community_string, snmp_ip, snmp_port, cmdGen, oid):
             for varBindTableRow in varBindTable:
                 for name, val in varBindTableRow:
                     print("%s = %s" % (name.prettyPrint(), val.prettyPrint()))
-                    return 0
+            return 0
 
     return 1
 
@@ -168,11 +169,13 @@ def snmpGetBulk(community_string, snmp_ip, snmp_port, non_rep, max_rep, cmdGen, 
             for varBindTableRow in varBindTable:
                 for name, val in varBindTableRow:
                     print("%s = %s" % (name.prettyPrint(), val.prettyPrint()))
-                    return 0
+            return 0
 
     return 1
 
 if __name__ == "__main__":
+
+    failFlag = False
 
     # Get the floating ip from the command line
     snmp_ip = sys.argv[1]
