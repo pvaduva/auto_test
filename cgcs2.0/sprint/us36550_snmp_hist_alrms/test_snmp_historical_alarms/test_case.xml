@@ -38,6 +38,8 @@ Con1SSH PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 
+SET COMMSTR test_community
+
 SET CR }
 SET CL {
 
@@ -52,21 +54,22 @@ Con1SSH WAIT 3 SEC
 Con1SSH TYPE echo executing ${WASSP_TC_NAME}\n
 Con1SSH WAIT 100 SEC
 
-Con1SSH FAILIF FAILED
+#Con1SSH FAILIF FAILED
 
-Con1SSH system snmp-comm-add -c test_community
-Con1SSH WAIT 3 SEC 
-Con1SSH system snmp-comm-list -c test_community
-Con1SSH WAIT 3 SEC
-Con1SSH system snmp-comm-show test_community
-Con1SSH WAIT 3 SEC
+Con1SSH TYPE system snmp-comm-add -c ${COMMSTR}\n 
+Con1SSH WAIT 100 SEC 
+Con1SSH TYPE system snmp-comm-list\n
+Con1SSH WAIT 100 SEC
+Con1SSH TYPE system snmp-comm-show -c ${COMMSTR}\n
+Con1SSH WAIT 100 SEC
+Con1SSH SINK 3 SEC
 
 #CALL python3 ${WASSP_TC_PATH}/../utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s ${WASSP_TC_PATH}/mibs -d /usr/share/snmp/mibs/wrsAlarmMib.mib.txt -P 22
 
 #CALL python3 ${WASSP_TC_PATH}/../utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s ${WASSP_TC_PATH}/mibs -d /usr/share/snmp/mibs/wrsEnterpriseMib.mib.txt -P 22
 
-CALL test_snmp_historical_alarms.py $env.NODE.target.Boot.oamFloat
-FAILIF FAILED
+CALL ${WASSP_TC_PATH}/test_snmp_historical_alarms.py $env.NODE.target.Boot.oamFloat ${COMMSTR}
+Con1SSH FAILIF FAILED
 
 Con1SSH WAIT 300 SEC
 
