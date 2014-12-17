@@ -33,7 +33,7 @@ CALL env
 LOOKFOR
 TYPE \n
 SINK 1 SEC
-PROMPTTIMEOUT 300 SEC
+PROMPTTIMEOUT 600 SEC
 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1SSH PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
