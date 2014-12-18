@@ -11,17 +11,20 @@
 
 set timeout 20
 
+# Set parameters to readible var names
 set host      [lindex $argv 0] 
 set username  [lindex $argv 1] 
 set password  [lindex $argv 2] 
 set interface [lindex $argv 3]
 set ifstatus  [lindex $argv 4]
 
+# Compose appropriate interface disable or enable command
 if $ifstate == "disable" {
    set status "shutdown"
 } else {
    set status "no shutdown"
 
+# Toggle the desired interface
 spawn ssh $username@$host
 
 expect "*?password:"
@@ -36,13 +39,13 @@ send "configure\r"
 expect "(config)#"
 send "interface\r"
 
-expect "fsdafs"
+expect "fill_in_when_i_have access_to_the_lab"
 send "$interface\r"
 
-expect "fdafdsa"
+expect "fill_in_when_i_have_access_to_the_lab"
 send "$status\r"
 
-expect "fdaf"
+expect "fill_in_when_i_have_access_to_the_lab"
 send "exit\r"
 
 

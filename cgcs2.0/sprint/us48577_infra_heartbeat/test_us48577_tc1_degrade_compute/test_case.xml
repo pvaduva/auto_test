@@ -40,6 +40,7 @@ Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 
 SET CR }
 SET CL {
+SET IF xe2
 
 Con1SSH TYPE source /etc/nova/openrc\n
 Con1SSH WAIT 100 SEC
@@ -52,34 +53,12 @@ Con1SSH WAIT 3 SEC
 Con1SSH TYPE echo executing ${WASSP_TC_NAME}\n
 Con1SSH WAIT 100 SEC
 
-# Check that we have the infra configuration on controller-0
-Con1SSH TYPE system host-if-list controller-0
-Con1SSH CONTINUEIF \| [a-z0-9-]{36} \| infra0(\s)*\| infra(\s)*\| ethernet \| \[u\'eth26\'\](\s)*\| [0-9]* \| None 
-Con1SSH WAIT 5 SEC
-
-# Check that we have the infra configuration on controller-1 
-Con1SSH TYPE system host-if-list controller-1 
-Con1SSH CONTINUEIF \| [a-z0-9-]{36} \| infra0(\s)*\| infra(\s)*\| ethernet \| \[u\'eth26\'\](\s)*\| [0-9]* \| None 
-Con1SSH WAIT 5 SEC
-
-# Check that we have the infra configuration on compute-0
-Con1SSH TYPE system host-if-list compute-0
-Con1SSH CONTINUEIF \| [a-z0-9-]{36} \| infra0(\s)*\| infra(\s)*\| ethernet \| \[u\'eth26\'\](\s)*\| [0-9]* \| None 
-Con1SSH WAIT 5 SEC
-
-# Check that we have the infra configuration on compute-1
-Con1SSH TYPE system host-if-list compute-1
-Con1SSH CONTINUEIF \| [a-z0-9-]{36} \| infra0(\s)*\| infra(\s)*\| ethernet \| \[u\'eth26\'\](\s)*\| [0-9]* \| None 
-Con1SSH WAIT 5 SEC
-
-# Check that we have the infra configuration on storage-0 
-Con1SSH TYPE system host-if-list storage-1 
-Con1SSH CONTINUEIF \| [a-z0-9-]{36} \| infra0(\s)*\| infra(\s)*\| ethernet \| \[u\'eth26\'\](\s)*\| [0-9]* \| None 
-Con1SSH WAIT 5 SEC
+# Test that we have the correct lab configuration
+Con1SSH INCLUDE ${WASSP_TC_PATH}/common/test_setup.frag
 
 # Disable the infra link on compute-0 by logging into the cisco router
 # LAG is enabled on xe2 and xe9 for compute-0
-CALL ./toggle.exp 128.224.150.181 admin windriver xe2 disable 
+Con1SSH TYPE ./toggle.exp $CISCO_IP $CISCO_USER $CISCO_PASSWD $IF disable 
 
 # Retrieve alarms and check that compute-0 is now degraded
 Con1SSH TYPE system host-list 
@@ -92,7 +71,7 @@ Con1SSH CONTINUEIF \| [0-9]*(\s)*\| compute-0(\s)*\| compute(\s)*\| unlocked(\s)
 Con1SSH WAIT 2 SEC
 
 # Re-enable infra link on compute-0 by logging into the cisco router
-CALL ./toggle.exp 128.224.150.181 admin windriver xe2 enable 
+Con1SSH TYPE ./toggle.exp $CISCO_IP $CISCO_USER $CISCO_PASSWD $IF enable 
 
 # Check that the infra link is eventually restored
 Con1SSH TYPE system host-list 
