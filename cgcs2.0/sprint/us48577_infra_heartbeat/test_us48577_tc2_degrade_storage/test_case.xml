@@ -57,22 +57,22 @@ Con1SSH WAIT 100 SEC
 Con1SSH INCLUDE ${WASSP_TC_PATH}/common/test_setup.frag
 
 # Disable the infra link on storage-0 by logging into the cisco router
-Con1SSH TYPE ./toggle.exp $CISCO_IP $CISCO_USER $CISCO_PASSWD $IF disable 
+Con1SSH TYPE ./toggle.exp $CISCO_IP $CISCO_USER $CISCO_PASSWD $IF disable\n 
 
 # Verify the storage node reboots 
 Con1SSH REPEATONFAIL 5
-Con1SSH     TYPE system host-list 
+Con1SSH     TYPE system host-list\n
 Con1SSH     LOOKFOR \| [0-9]*(\s)*\| storage-0(\s)*\| storage(\s)*\| [a-z ]*\| [a-z ]*\| offline(\s)*
 Con1SSH     WAIT 10 SEC
 Con1SSH     LOOKFOR
 Con1SSH ENDREPEAT
 
 # Re-enable infra link on storage-0 by logging into the cisco router
-Con1SSH TYPE ./toggle.exp $CISCO_IP $CISCO_USER $CISCO_PASSWD $IF enable 
+Con1SSH TYPE ./toggle.exp $CISCO_IP $CISCO_USER $CISCO_PASSWD $IF enable\n
 
 # Check that the infra link is eventually restored
 Con1SSH REPEATONFAIL 5
-Con1SSH     TYPE system host-list 
+Con1SSH     TYPE system host-list\n
 Con1SSH     LOOKFOR \| [0-9]*(\s)*\| storage-0(\s)*\| storage(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)* 
 Con1SSH     WAIT 10 SEC
 Con1SSH     LOOKFOR
