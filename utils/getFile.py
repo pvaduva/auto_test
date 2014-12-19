@@ -67,9 +67,4 @@ if __name__ == '__main__':
                            password=options.sshPassword,
                            port=options.sshPort)
 
-    try:
-        nodeSSH.makeDirRemote(options.destPath)
-    except Exception:
-        pass
-
     nodeSSH.getFile(options.srcPath, options.destPath)
