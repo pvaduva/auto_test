@@ -12,7 +12,7 @@ Copyright (c) 2013 Wind River Systems, Inc.
 
 Modification history
 ====================
-18dec14, mhg  ported to testcase test_us50349_ts1_add_infrastructure_network
+18dec14, mhg  ported / modified for test case test_us50349_ts1_add_infrastructure_network
 11feb15, ccw  Created
 
 -->
@@ -62,14 +62,17 @@ TYPE echo executing ${WASSP_TC_NAME}\n
 WAIT 100 SEC
 
 FAILIF FAILED
+PASSIF SKIPPED,
 TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=${testCaseId} \n
 WAIT ${noseTestTimeout} SEC (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 
 TYPE sudo reboot
+WAIT 10 SEC {ignoreTimeout:True} Password:
+TYPE ${WRSPASS}\n
 
 FAILIF
 # login
-WAIT 300 SEC {ignoreTimeout:True} login:
+WAIT 900 SEC {ignoreTimeout:True} login:
 TYPE ${WRSUSER}\n
 WAIT 10 SEC {ignoreTimeout:True} Password:
 TYPE ${WRSPASS}\n
