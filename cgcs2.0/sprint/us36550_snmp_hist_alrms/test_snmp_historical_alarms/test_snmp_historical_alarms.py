@@ -1,20 +1,26 @@
 #!/usr/bin/python2.7
+"""
+This script performs 3 SNMP operations: get, get next and get bulk.  The goal is to test the newly introduced
+historical alarms table.  In order to function, the test requires access to two MIB files: the WRS alarm MIB
+and the WRS Enterprise MIB.  It uses pysnmp to execute the SNMP commands.  pysnmp requires conversion of the
+MIBs from a text file to a py file.  This is done using smidump.  In order to run this test, the user will
+need to install the following packages on their test server, i.e. the system that invokes the test:
 
-'''
-Test server requirements:
-  * smitools
-  * pysnmp
-  * pyasn1
+  * smitools (this can be installed via the packaging manager, i.e. apt)
+  * pysnmp (this can be installed via easy install)
+  * pyasn1 (this is required by pysnmp and it should be pulled in automatically)
 
-System setup requirements:
-  * ssh to machine
-  * source /etc/nova/openrc
-  * system snmp-comm-add -c test_community
+The DUT (device under test) has the requirement that the SNMP community string has been created.  If you are
+running the test manually, you can do this via the following steps:
 
-System secondary requirements:
-  * scp mibs off target each test or keep a static local copy
-'''
+  * ssh to the DUT
+  * type "source /etc/nova/openrc"
+  * type "system snmp-comm-add -c test_community" 
 
+After that, you can run the script on the command line by typing:
+
+  ./test_snmp_historical_alarms.py <floatingIPAddr>
+"""
 # imports
 from pysnmp.entity.rfc3413.oneliner import cmdgen
 from pysnmp.smi import builder
@@ -23,11 +29,11 @@ import os
 import itertools
 import time
 import sys
+import logging
 from random import randint
 
 # constants
 COMMUNITY_STRING = "test_community"
-#SNMP_IP = "128.224.150.189"
 SNMP_PORT = 161
 
 MAX_ALRM_TBL_SIZE = 2000
@@ -61,14 +67,14 @@ def mibTextToPy(mib_path):
     """ Convert mibs to a format that pysnmp can actually use. 
     """
 
-    print "::: Setting MIB Path :::"
+    logging.info("Setting MIB Path")
     cmdGen = cmdgen.CommandGenerator() 
 
     mibBuilder = builder.MibBuilder()
     mibBuilder = cmdGen.snmpEngine.msgAndPduDsp.mibInstrumController.mibBuilder 
     mibSources = mibBuilder.getMibSources() + (builder.DirMibSource(mib_path), )
     mibBuilder.setMibSources(*mibSources)
-    print mibBuilder.getMibSources()
+    logging.info(mibBuilder.getMibSources())
 
     if os.path.isdir(mib_path):
         for mib in MIB_SRCLIST:
@@ -76,10 +82,10 @@ def mibTextToPy(mib_path):
             mib_srcname = mib[1]
             mib_destname = mib[2]
             if not os.path.isfile(os.path.join(mib_path, mib_srcname)):
-                print "FAILED: Required MIB %s is missing from path %s" % \
-                      (mib_srcname, mib_path)
+                logging.critical("FAILED: Required MIB %s is missing from \
+                                  path %s") % (mib_srcname, mib_path)
                 return 1
-            print "::: Converting MIB to py :::" 
+            logging.info("Converting MIB to py")
             if mib_preload: 
 		cmd = "smidump -k -p %s -f python %s | libsmi2pysnmp > %s" % \
 		       (os.path.join(mib_path, mib_preload),
@@ -89,13 +95,13 @@ def mibTextToPy(mib_path):
 		cmd = "smidump -k -f python %s | libsmi2pysnmp > %s" % \
 		       (os.path.join(mib_path, mib_srcname),
 			os.path.join(mib_path, mib_destname) + ".py")
-            print(cmd)
+            logging.info(cmd)
             os.system(cmd)
-            print "::: Loading MIB :::" 
+            logging.info("Loading MIB")
             mibBuilder.loadModules(mib_destname)
-            print mib_destname
+            logging.info(mib_destname)
     else:
-        print "FAILED: MIB directory %s is not present" % mib_path
+        logging.critical("FAILED: MIB directory %s is not present") % mib_path
         return 1
 
     return cmdGen 
@@ -111,15 +117,15 @@ def snmpGet(community_string, snmp_ip, snmp_port, cmdGen, oid):
         oid, lookupNames=True, lookupValues=True)
 
     if errorIndication:
-        print(errorIndication)
+        logging.error(errorIndication)
     else:
         if errorStatus:
-            print("%s at %s" % (errorStatus.prettyPrint(),
-                                errorIndex and varBinds[int(errorIndex)-1] 
-                                or '?'))
+            logging.error("%s at %s" % (errorStatus.prettyPrint(),
+                           errorIndex and varBinds[int(errorIndex)-1] 
+                           or '?'))
         else:
             for name, val in varBinds:
-                print("%s = %s" % (name.prettyPrint(), val.prettyPrint()))
+                logging.info("%s = %s" % (name.prettyPrint(), val.prettyPrint()))
             return 0
 
     return 1
@@ -134,16 +140,16 @@ def snmpGetNext(community_string, snmp_ip, snmp_port, cmdGen, oid):
         oid, lookupNames=True, lookupValues=True)
 
     if errorIndication:
-        print(errorIndication)
+        logging.error(errorIndication)
     else:
         if errorStatus:
-            print("%s at %s" % (errorStatus.prettyPrint(),
-                                errorIndex and varBinds[int(errorIndex)-1] 
-                                or '?'))
+            logging.error("%s at %s" % (errorStatus.prettyPrint(),
+                          errorIndex and varBinds[int(errorIndex)-1] 
+                          or '?'))
         else:
             for varBindTableRow in varBindTable:
                 for name, val in varBindTableRow:
-                    print("%s = %s" % (name.prettyPrint(), val.prettyPrint()))
+                    logging.info("%s = %s" % (name.prettyPrint(), val.prettyPrint()))
             return 0
 
     return 1
@@ -158,16 +164,16 @@ def snmpGetBulk(community_string, snmp_ip, snmp_port, non_rep, max_rep, cmdGen, 
         non_rep, max_rep, oid, lookupNames=True, lookupValues=True)
 
     if errorIndication:
-        print(errorIndication)
+        logging.error(errorIndication)
     else:
         if errorStatus:
-            print("%s at %s" % (errorStatus.prettyPrint(),
-                                errorIndex and varBinds[int(errorIndex)-1] 
-                                or '?'))
+            logging.error("%s at %s" % (errorStatus.prettyPrint(),
+                           errorIndex and varBinds[int(errorIndex)-1] 
+                           or '?'))
         else:
             for varBindTableRow in varBindTable:
                 for name, val in varBindTableRow:
-                    print("%s = %s" % (name.prettyPrint(), val.prettyPrint()))
+                    logging.info("%s = %s" % (name.prettyPrint(), val.prettyPrint()))
             return 0, len(varBindTable) - 1
 
     return 1
@@ -179,56 +185,60 @@ if __name__ == "__main__":
     # Get the floating ip from the command line
     snmp_ip = sys.argv[1]
 
+    # Set the logging level
+    logging.basicConfig(level=logging.DEBUG)
 #    debug.setLogger(debug.Debug('all'))
+
+    # Generate the python MIBs
     cmdGen = mibTextToPy(MIB_PATH)
 
     # Test #1: Perform an SNMP Get Bulk command
-    print ">>> Test 1: Perform an SNMP Get Bulk command"
+    logging.info("Test 1: Perform an SNMP Get Bulk command")
     for i in range(len(OID) - 1):
         oid = (OID["wrsAlarmHistoryEntry"] + "." + str(i), )
         retVal, tableSize = snmpGetBulk(COMMUNITY_STRING, snmp_ip, SNMP_PORT, NON_REP, MAX_REP, cmdGen, *oid)
         if retVal == 1:
-            print "Test 1 FAILED"
+            logging.error("Test 1 FAILED")
             failFlag = True
             break
 
     # Test #2: Perform an SNMP Walk over the entire tree starting at the root
-    print ">>> Test 2: Perform SNMP Walk" 
+    logging.info("Test 2: Perform SNMP Walk")
     oid = (OID["wrsAlarmHistoryTable"], )
     retVal = snmpGetNext(COMMUNITY_STRING, snmp_ip, SNMP_PORT, cmdGen, *oid)
     if retVal == 1:
-        print "Test 2 FAILED"
+        logging.error("Test 2 FAILED")
         failFlag = True
 
     # Test #3: Perform an SNMP Get
     # Do individual snmpget requests to retrieve one alarm entry
     # The value can be from 1 to 2000 inclusive (potential)
-    print ">>> Test 3: Perform SNMP Get"
-    print "The size of the table is: %s" % tableSize
+    logging.info("Test 3: Perform SNMP Get")
+    logging.debug("The size of the table is: %s" % str(tableSize))
     instanceno = str(randint(1,  tableSize))
     for item in OID:
         oid = (OID[item] + "." + instanceno, )
         retVal = snmpGet(COMMUNITY_STRING, snmp_ip, SNMP_PORT, cmdGen, *oid) 
         if retVal == 1:
-            print "Test 3 FAILED"
+            logging.error("Test 3 FAILED")
             failFlag = True
             break
 
     # Test #4: Perform a SNMP Walk in one entry
     # We should get a collection of related information on each run, 
     # i.e. AlarmIDs only, AlarmState only, etc.
-    print ">>> Test 4: Perform a SNMP Walk in one entry"
+    logging.info("Test 4: Perform a SNMP Walk in one entry")
     for i in range(len(OID) - 1):
         oid = (OID["wrsAlarmHistoryEntry"] + "." + str(i), )
         retVal = snmpGetNext(COMMUNITY_STRING, snmp_ip, SNMP_PORT, cmdGen, *oid)
         if retVal == 1:
-            print "Test 4 FAILED"
+            logging.error("Test 4 FAILED")
             failFlag = True
             break
 
     if failFlag == True:
-        print "Test suite FAILED"
+        logging.critical("Test suite FAILED")
         sys.exit(1)
     else:
-        print "Test suite PASSED"
+        logging.info("Test suite PASSED")
         sys.exit(0)
