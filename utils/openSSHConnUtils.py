@@ -175,7 +175,8 @@ class SshConn():
                                     repeatRetCode=[TIMEOUT_RETCODE_SCP])
 
     #-------------------------------------------------------------------------#
-    def getFile(self, dstLocalPath, srcRemotePath, timeout=True, rsync=False):
+    def getFile(self, dstLocalPath, srcRemotePath, timeout=True, rsync=False,
+                tar=False):
         ''' Copy file/folder from remote computer to local computer.
         'timeout' is in seconds; bool True indicates default should be used;
         None indicates no timeout.
