@@ -34,9 +34,9 @@ INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag
 CALL env
 
 SET SETTING_FILE 	/home/wrsroot/test_setting.cnf
-SET PORT_CONTROLLER ${portctrl}
-SET PORT_COMPUTER 	${portcmpt}
-SET PORT_STORAGE 	${portstrg}
+SET PORT_CONTROLLER ${port_controller}
+SET PORT_COMPUTER 	${port_compute}
+SET PORT_STORAGE 	${port_storage}
 
 LOOKFOR
 TYPE \n
