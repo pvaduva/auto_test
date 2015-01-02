@@ -34,9 +34,9 @@ INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag
 CALL env
 
 SET SETTING_FILE 	/home/wrsroot/test_setting.cnf
-SET PORT_CONTROLLER ${portctrl}
-SET PORT_COMPUTER 	${portcmpt}
-SET PORT_STORAGE 	${portstrg}
+SET PORT_CONTROLLER	${port_controller}
+SET PORT_COMPUTER 	${port_compute}
+SET PORT_STORAGE 	${port_storage}
 
 LOOKFOR
 TYPE \n
@@ -49,8 +49,13 @@ SET CR }
 SET CL {
 
 TYPE echo port_controller=${PORT_CONTROLLER} > ${SETTING_FILE}
+WAIT 3 SEC {ignoreTimeout:True}
+
 TYPE echo port_compute=${PORT_COMPUTER} >> ${SETTING_FILE}
+WAIT 3 SEC {ignoreTimeout:True}
+
 TYPE echo port_storage=${PORT_STORAGE} >> ${SETTING_FILE}
+WAIT 3 SEC {ignoreTimeout:True}
 
 TYPE source /etc/nova/openrc\n
 WAIT 100 SEC
@@ -73,8 +78,10 @@ TYPE ${WRSPASS}\n
 FAILIF
 # login
 WAIT 900 SEC {ignoreTimeout:True} login:
+
 TYPE ${WRSUSER}\n
 WAIT 10 SEC {ignoreTimeout:True} Password:
+
 TYPE ${WRSPASS}\n
 WAIT 10 SEC {ignoreTimeout:True}
 
@@ -85,11 +92,14 @@ SINK 3 SEC
 
 FAILIF
 FAILIF FAILED
+
 TYPE cd\n
 WAIT 3 SEC
-TYPE echo executing second phase of ${WASSP_TC_NAME}\n
-TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=us50349_ts2 \n
 
+TYPE echo executing second phase of ${WASSP_TC_NAME}\n
+WAIT 3 SEC
+
+TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=us50349_ts2 \n
 WAIT 100 SEC
 
 PASS
