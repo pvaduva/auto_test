@@ -40,9 +40,20 @@ Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 
 SET CR }
 SET CL {
-SET IF xe2
+SET IF $env.NODE.target.Infra.infraPortCompute0
 
+# Account for controller-0 not being primary
 Con1SSH TYPE source /etc/nova/openrc\n
+FAILIF No such file or directory
+REPEATONFAIL 1
+    FAIL
+    Con2SSH TYPE source /etc/nova/openrc\n
+    WAIT 100 SEC
+    Con2SSH TYPE system host-swact controller-1
+    WAIT 100 SEC 
+    Con1SSH TYPE source /etc/nova/openrc\n
+ENDREPEAT
+
 Con1SSH WAIT 100 SEC
 Con1SSH TYPE export TMOUT=0\n
 Con1SSH WAIT 100 SEC
@@ -57,7 +68,6 @@ Con1SSH WAIT 100 SEC
 Con1SSH INCLUDE ${WASSP_TC_PATH}/common/test_setup.frag
 
 # Disable the infra link on compute-0 by logging into the cisco router
-# LAG is enabled on xe2 and xe9 for compute-0
 Con1SSH TYPE ./toggle.exp $CISCO_IP $CISCO_USER $CISCO_PASSWD $IF disable\n
 
 # Retrieve alarms and check that compute-0 is now degraded
@@ -84,10 +94,13 @@ Con1SSH TYPE ./toggle.exp $CISCO_IP $CISCO_USER $CISCO_PASSWD $IF enable\n
 # Check that the infra link is eventually restored
 Con1SSH REPEATONFAIL 5
 Con1SSH     TYPE system host-list\n
-Con1SSH     LOOKFOR \| [0-9]*(\s)*\| compute-0(\s)*\| storage(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)*
+Con1SSH     LOOKFOR \| [0-9]*(\s)*\| compute-0(\s)*\| compute(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)*
 Con1SSH     WAIT 10 SEC
 Con1SSH     LOOKFOR
 Con1SSH ENDREPEAT
+
+# Dump alarms
+Con1SSH TYPE system alarm-list\n
 
 PASS
     </test_case>
