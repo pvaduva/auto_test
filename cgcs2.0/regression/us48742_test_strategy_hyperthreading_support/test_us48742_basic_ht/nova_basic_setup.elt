@@ -1,0 +1,473 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+
+#
+#
+;;;
+
+Basic HyperThreading Test
+
+Steps:
+1)  Connecting to controller
+2)  Become admin
+3)  Show version
+4)  Show system status
+5)  Validate that controllers and computes are present
+6)  Check that lab is not setup
+7)  Check that HT is enabled
+8)  Check for tenant credentials
+9)  Validate lab_setup script
+10)  Use lab_setup to configure compute nodes, interfaces, provider networks, tenant networks, images, flavors. Ready to boot VMs
+11)  Unlock computes
+12)  Display configuration
+13)  Look at neutron config
+14)  Show images in glance
+15)  Switch to tenant mode
+16)  Get volumes
+17)  Create nova server-group
+18)  Boot VM
+19)  Look at VM
+20)  Wait for VM to boot up
+21)  Check VMs are not in ERROR state
+22)  Show vm-topology VM1
+23)  Get topology on compute
+24)  Get topology on compute
+25)  Start another VM in the server group
+26)  Look at VM
+27)  Wait for VM to boot up
+28)  Check VMs are not in ERROR state
+29)  Show vm-topology VM2
+30)  Get topology on compute
+31)  Check that cpu sibling is being used
+32)  Check both VMs are in server-group
+33)  Clean up
+
+
+Limitations:
+	vcpu check only capable of checking vcpu=1 (other scripts can check more)
+
+;;;
+*NOFAIL
+*EXP_INFO
+
+$IP=10.10.10.3
+
+$user=wrsroot
+$pass=li69nux
+
+$compute_list=compute-0 compute-1
+$outside_guest_image_location=/home/$ME/VBox/cgcs-guest.img
+
+$lab_setup=yes
+
+$best_effort=true
+$best_effort=false
+
+$tenant_credentials=/home/wrsroot/openrc.tenant1
+
+>date +%F_%T
++$DATE=\n(2.+)
+
+
+@3
+; === connecting to controller
+
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $user@$IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$pass
+
+>export TMOUT=0
+
+; === become admin
+
+>source /etc/nova/openrc 
+
+; === show version
+
+>system show
+>cat /etc/build.info
+
+; === show system status
+
+>nova service-list
+
+; === validate that controllers and computes are present
+>system host-list
+<controller-0
+<controller-1
+<compute-\d
+<compute-\d
+# if computes are not present, stop the script
++$last_compute=(compute)
+?if $last_compute!=compute? [
+	;red --- Looks like all the nodes are not online, please fix
+	*TERM 5
+]
+
+; === check that lab is not setup
+>nova list
+<Networks
+#uuid
+-<\w+\w+-\w+\w+
+
+; === check that HT is enabled
+>vm-topology -s topology
+<compute-\d
++$ht_enabled0=\n\W+sibling_id\W+(\d+)
+<compute-\d
++$ht_enabled1=\n\W+sibling_id\W+(\d+)
+
+?if $ht_enabled0 == __NO_STRING_CAPTURED__ ? [
+
+	?if $ht_enabled1 == __NO_STRING_CAPTURED__ ? [
+		;red Hyperthreading not enabled on computes, skipping
+		*TERM 5
+	]
+
+]
+
+; === check for tenant credentials
+>stat -t $tenant_credentials
++$file_stat=\n.*($tenant_credentials|No such file)
+
+?if $file_stat != $tenant_credentials? [
+		;red Tenant Credentials file:$tenant_credentials missing, skipping
+		*TERM 5
+]
+
+?if $lab_setup == yes? [
+	; === validate lab_setup script
+	>ls lab_setup.sh
+	<\nlab_setup.sh
+	>ls lab_setup.conf
+	<\nlab_setup.conf
+
+	; === use lab_setup to configure compute nodes, interfaces, provider networks, tenant networks, images, flavors. Ready to boot VMs
+	@600
+	>time ./lab_setup.sh
+	#<Creating volume
+	#<Creating volume
+	#<Writing VM boot commands
+	<\nreal
+
+	@10
+	; === unlock computes
+	$host=compute-0
+	>system host-unlock $host
+	$host=compute-1
+	>system host-unlock $host
+
+	$i=0
+	$max=100
+	>system host-list | grep $host
+	+$avail=(online|offline|available|degraded)
+	[ $avail != available
+		>system host-list | grep $host
+		+$avail=(online|offline|available|degraded)
+		!sleep 10
+		+$i
+		?if $i > $max? %BREAK_UNLOCK_CONTROLLER
+	]
+	%BREAK_UNLOCK_CONTROLLER
+]
+>system host-list
+
+
+; === display configuration
+
+; === look at neutron config
+>neutron net-list
++$internal_net_uuid=([0-9a-f-]{36}) \| internal0
++$tenant1_net_uuid=([0-9a-f-]{36}) \| tenant1-net0
+
+>neutron subnet-list
+>neutron router-list
+
+; === show images in glance
+>glance image-list
+<[0-9a-f-]{36} \|
++$glance_image_name=((\w+|-)+)
+
+>nova flavor-list
+<VCPU_Model
++$flavor_uuid=([0-9a-f-]{36}) \| small 
+
+; === switch to tenant mode
+>source $tenant_credentials
+
+; === get volumes
+>nova volume-list
++$volume_uuid=([0-9a-f-]{36}) \|
+
+; === create nova server-group
+$ht_server_group_name=ht1
+>nova server-group-create help
+;red BUG: creates server-group named help CGTS-1056
+>nova server-group-delete help
+>nova server-group-list
++$bad_uuid=([0-9a-f-]{36}) \| help
+>nova server-group-delete $bad_uuid
+
+
+?if $best_effort == true? [
+	>nova server-group-create --policy affinity-hyperthread --metadata best_effort=1  --metadata group_size=2 $ht_server_group_name
+]::[
+	# no best effort
+	>nova server-group-create --policy affinity-hyperthread  --metadata group_size=2 $ht_server_group_name
+]
+>nova server-group-list
++$ht_server_group_uuid=([0-9a-f-]{36}) \| $ht_server_group_name
+
+
+; === boot VM
+#$VM=VM1_$DATE
+$VM=VM1
+$VM_first=$VM
+$network=1
+# boot single instance
+#>nova boot --key_name=keypair-tenant1 --flavor=$flavor_uuid --nic net-id=$tenant1_net_uuid,vif-model=avp,v4-fixed-ip=172.16.0.1 --nic net-id=$internal_net_uuid,vif-model=avp,v4-fixed-ip=10.0.0.1 --block_device_mapping vda=$volume_uuid:::0 --hint group=$ht_server_group_uuid   $VM
+
+# boot 2 instances with server-groups
+#>nova boot --key_name=keypair-tenant1 --flavor=$flavor_uuid --nic net-id=$tenant1_net_uuid,vif-model=avp,v4-fixed-ip=172.16.0.1 --nic net-id=$internal_net_uuid,vif-model=avp,v4-fixed-ip=10.0.0.1 --image=$glance_image_name  --hint group=$ht_server_group_uuid  --num-instances 2  $VM
+
+>nova boot --key_name=keypair-tenant1 --flavor=$flavor_uuid --nic net-id=$tenant1_net_uuid,vif-model=avp --nic net-id=$internal_net_uuid,vif-model=avp --image=$glance_image_name  --hint group=$ht_server_group_uuid  $VM
+
+; === look at VM 
+>nova list
++$vm_uuid=([0-9a-f-]{36}) \|
+
+; === wait for VM to boot up
+
+$i=0
+$max=50
+$vm_state=none
+[ $vm_state != ACTIVE
+	>nova list
+	<$VM
+	+$vm_state=(BUILD|ACTIVE|ERROR)
+
+	!sleep 5
+	+$i
+	?if $vm_state == ERROR ? %BREAK_VM_BOOT
+	?if $i > $max? %BREAK_VM_BOOT
+]
+%BREAK_VM_BOOT
+
+; === check VMs are not in ERROR state
+>nova list
+<Networks
+-<ERROR
+
+
+; === show vm-topology VM1
+# uses new vm-topology app
+@30
+>time vm-topology -s all | grep $vm_uuid
+<$VM
++$vm_compute=(compute-\d)
++$vm_compute_instance=(instance-\w+)
++$vm_compute_cpulist=\| ([0-9,-]+)\s+[SR].+?\|\s+yes
++$vm_compute_siblist=\| [0-9,-]+\s+([SR:0-9]+).*?\|\s+yes
+
+>
+; === get topology on compute
+
+# remove zero
+=$vm_compute_cpulist/^0,//
+=$vm_compute_cpulist/,/ /
+=$vm_compute_cpulist/-/ /
+
+$i=1
+; === get topology on compute
+[ $vm_cpu=$vm_compute_cpulist
+	>vm-topology -s topology-long | egrep  '$vm_compute|^\W+$vm_cpu '
+	<\n$vm_compute
+	+$core_tuple$i=(\d+\W+\d+\W+\d+)\W+\d+\W+ 0x
+	+$i
+]
+
+
+@5
+; === start another VM in the server group
+
+$VM=VM2
+$network=2
+
+>nova boot --key_name=keypair-tenant1 --flavor=$flavor_uuid --nic net-id=$tenant1_net_uuid,vif-model=avp --nic net-id=$internal_net_uuid,vif-model=avp --image=$glance_image_name  --hint group=$ht_server_group_uuid  $VM
+
+
+; === look at VM 
+>nova list
++$vm2_uuid=([0-9a-f-]{36}) \| $VM
+
+; === wait for VM to boot up
+
+$i=0
+$max=50
+$vm_state=none
+[ $vm_state != ACTIVE
+	>nova list
+	<$VM
+	+$vm_state=(BUILD|ACTIVE|ERROR)
+
+	!sleep 5
+	+$i
+	?if $vm_state == ERROR ? %BREAK_VM_BOOT2
+	?if $i > $max? %BREAK_VM_BOOT2
+]
+%BREAK_VM_BOOT2
+
+; === check VMs are not in ERROR state
+>nova list
+<Networks
+-<ERROR
+
+
+; === show vm-topology VM2
+@30
+>time vm-topology -s all | grep $vm2_uuid
+<$VM
++$vm2_compute=(compute-\d)
++$vm2_compute_instance=(instance-\w+)
++$vm2_compute_cpulist=\| ([0-9,-]+)\s+[SR].+?\|\s+yes
++$vm2_compute_siblist=\| [0-9,-]+\s+([SR:0-9]+).*?\|\s+yes
+>
+
+
+# remove zero
+=$vm2_compute_cpulist/^0,//
+=$vm2_compute_cpulist/,/ /
+=$vm2_compute_cpulist/-/ /
+
+$i=1
+; === get topology on compute
+[ $vm_cpu=$vm2_compute_cpulist
+	>vm-topology -s topology-long | egrep  '($vm2_compute|^\W+$vm_cpu )'
+	<\n$vm2_compute
+	+$core2_tuple$i=(\d+\W+\d+\W+\d+)\W+\d+\W+ 0x
+	+$i
+]
+
+>
+@5
+; === check that cpu sibling is being used
+
+;; Computes used: $vm_compute $vm2_compute
+*NOINFO
+$i=1
+[ $core_tuple$i != $blank
+	;; VM1: $core_tuple$i
+	+$i
+]
+$i=1
+[ $core2_tuple$i != $blank
+	;; VM2: $core2_tuple$i
+	+$i
+]
+*INFO
+
+
+#?if $core_socket == $core2_socket? [ :: *FAIL
+#	?if $core_num == $core2_num? [ :: *FAIL
+#		?if $core_sib  == $core2_sib? [
+#			;red --- Siblings not being utilized $VM_first:$core_sib   $VM:$core2_sib
+#			*FAIL
+#	] 
+#]
+
+$i=1
+[ $core_tuple$i != $blank
+	;; VM1: $core_tuple$i
+	$j=1
+	[ $core2_tuple$j != $blank
+		;; VM2: $core2_tuple$j
+		$core1=$core_tuple$i
+		$core2=$core2_tuple$j
+		# parse first 2 digits from tuple
+		$tup1=$core1
+		$tup2=$core2
+		=$tup1 - |
+		=$tup2 - |
+		=$tup1/(\d\s+\d+).+/\1/
+		=$tup2/(\d\s+\d+).+/\1/
+		#parse siblings
+		$sib1=$core1
+		$sib2=$core2
+		=$sib1/.+(\d)/\1/
+		=$sib2/.+(\d)/\1/
+		# increment sibling 1 for comparison
+		+$sib1
+		
+		?if $tup1 == $tup2? [
+			;purple Looking at: $tup1 $sib1	|	$tup2 $sib2
+			?if $sib1 != $sib2 ? [
+				;;red VM1: $core_tuple$i | VM2: $core2_tuple$j
+				*FAIL
+			]
+		]
+		+$j
+	]	
+	+$i
+]
+
+
+
+>
+; === Check both VMs are in server-group
+>nova server-group-list
+<$ht_server_group_name
+<$vm_uuid|$vm2_uuid
+<$vm_uuid|$vm2_uuid
+>vm-topology
+>
+
+
+*INTERACT
+; === clean up
+>nova delete $VM
+
+>nova delete $vm_uuid
+>nova delete $vm2_uuid
+>
+!sleep 1
+>nova list
+>nova server-group-delete $ht_server_group_uuid
+>
+
+#*TERM
+#vswitch - uses its own driver in userspace (no scheduling)
+#	Controlled with vconsole command
+#		vconsole
+#		AVS> port show info 0
+#		AVS> port unlock 0
+#		port show info all
+#
+#>port show info all	
+#$port_list=0 1 2 3 4 5 6 7 8 9 10
+#[ $port=$port_list
+#	>port lock $port
+#]
+#
+#
+#   echo "  Enter name space"
+#   NETNS=`ip netns | grep ${NETID}`
+#   echo "  NETNS=$NETNS"
+#
+#   ssh-keygen -f "$HOME/.ssh/known_hosts" -R ${IP}
+#   echo ip netns exec ${NETNS} ssh ${USER}@${IP} $@
+#   ip netns exec ${NETNS} ssh ${USER}@${IP} $@
+#
+#
+#virsh -c qemu+tcp://compute-1/system capabilities
+
+
