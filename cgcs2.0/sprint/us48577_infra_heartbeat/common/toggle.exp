@@ -45,7 +45,13 @@ send "$interface\r"
 expect "fill_in_when_i_have_access_to_the_lab"
 send "$status\r"
 
-expect "fill_in_when_i_have_access_to_the_lab"
+expect "Switch (config)#"
+send "exit\r"
+
+expect "Switch #"
+send "exit\r"
+
+expect "Switch >"
 send "exit\r"
 
 
