@@ -51,7 +51,7 @@ Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 SET CR }
 SET CL {
 
-CALL ${WASSP_TC_PATH}/nova_migrate_live_scale.elt IP=$env.NODE.target.default.targetIP dut_ip=$dut_ip dut_port=$dut_port *NOINTERACT $rt_log IP=$dut_ip 
+CALL ${WASSP_TC_PATH}/nova_migrate_live_scale.elt IP=$env.NODE.target.default.targetIP dut_ip=$dut_ip dut_port=$dut_port *NOINTERACT $rt_log 
 #CALL ${WASSP_TC_PATH}/nova_migrate_live_scale.elt IP=$dut_ip dut_port=$dut_port
 
 
