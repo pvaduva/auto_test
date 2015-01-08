@@ -131,7 +131,7 @@ Con1	TYPE echo executing second phase of ${WASSP_TC_NAME}\n
 Con1	WAIT 3 SEC {ignoreTimeout:True}
 
 Con1	TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=us50349_ts2 \n
-Con1	WAIT 1800 SEC (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con1	WAIT ${noseTestTimeout} SEC (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 
 PASS
 
