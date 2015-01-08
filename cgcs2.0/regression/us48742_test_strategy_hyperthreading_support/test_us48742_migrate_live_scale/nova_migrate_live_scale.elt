@@ -1,0 +1,489 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+
+#
+#	
+#	
+#
+#
+;;;
+
+HyperThreading Scaling Script
+
+Based on:
+us48742_tc13:manual_live-migration_a_guest_vm_to_another_compute_with_ht-siblings_resources_not-available
+Steps:
+	1) Configure compute nodes, interfaces, provider networks, tenant networks, images, flavors. Ready to boot VMs
+	2) Boot guest VMs inside server group with hypterthread-policy=affinity
+	3) Verify guest VMs successfully boot
+	4) Manually live-migration guest VMs to another compute ndoe
+	5) Verify that the guest VMs successfully migrate to other compute, and hypterthread-policy is being used
+	6) Verify physical cores (sibling pairs) for the larger of the two VMs are used/reserved, regardless of which VM is live migrated
+
+Script can also be used as a scaling test:
+	./nova_migrate_live_scale.elt IP=yow-cgcs-hp380-1 flavor1=big max_ht_groups=5
+
+Assumptions:
+	Lab is setup with lab_setup.sh with Tenants
+	Flavors small & medium.dpdk are already provisioned
+	
+
+;;;
+
+*NOFAIL
+*EXP_INFO
+
+$IP=10.10.10.2
+
+$user=wrsroot
+$pass=li69nux
+
+$tenant_credentials=/home/wrsroot/openrc.tenant1
+$tenant=$tenant_credentials
+# trim to just last part
+=$tenant;.*[.](\w+);\1;
+
+# expand quotas for scaling test
+$quota_instances=30
+$quota_vcpus=60
+$quota_port=60
+
+
+
+# flavors used by VM1 and VM2
+$flavor2=small
+$flavor1=medium.dpdk
+
+# second flavor and number of vcpus
+$flavor3=big
+$flavor3_vcpu=4
+
+$best_effort=true
+$best_effort=false
+
+# scale size + 1
+$max_ht_groups=6
+# name used for server group
+$ht_server_group_name=ht1_PV
+
+# VM names
+$guest1=VM1
+$guest2=VM2
+
+
+@3
+; === connect to controller
+
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $user@$IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$pass
+
+>export TMOUT=0
+
+; === become admin
+
+>source /etc/nova/openrc 
+
+; === show version
+
+>system show
+>cat /etc/build.info
+
+; === check that HT is enabled
+>vm-topology -s topology
+<compute-\d
++$ht_enabled0=\n\W+sibling_id\W+(\d+)
+<compute-\d
++$ht_enabled1=\n\W+sibling_id\W+(\d+)
+
+?if $ht_enabled0 == __NO_STRING_CAPTURED__ ? [
+
+	?if $ht_enabled1 == __NO_STRING_CAPTURED__ ? [
+		;red Hyperthreading not enabled on computes, skipping
+		*TERM 5
+	]
+
+]
+
+; === check for tenant credentials
+>stat -t $tenant_credentials
++$file_stat=\n.*($tenant_credentials|No such file)
+
+?if $file_stat != $tenant_credentials? [
+		;red Tenant Credentials file:$tenant_credentials missing, skipping
+		*TERM 5
+]
+
+
+
+---------------- start test ---------------------
+
+>system host-list
+
+
+; === display configuration
+
+; === look at neutron config
+>neutron net-list
++$internal_net_uuid=([0-9a-f-]{36}) \| internal0
++$tenant1_net_uuid=([0-9a-f-]{36}) \| tenant1-net0
+
+>neutron subnet-list
+>neutron router-list
+
+; === show images in glance
+>glance image-list
+<[0-9a-f-]{36} \|
++$glance_image_name=((\w+|-)+)
+
+; === create big flavor 
+
+>nova flavor-create $flavor3 5f0d748b-1c8b-4a70-8643-4d57e25ac137 512 0 $flavor3_vcpu
+
+
+>nova flavor-list
+<VCPU_Model
++$flavor1_uuid=([0-9a-f-]{36}|\d{3})\s* \| $flavor1 
++$flavor2_uuid=([0-9a-f-]{36}|\d{3})\s* \| $flavor2 
+
+; === Look at quotas for $tenant
+>nova quota-show --tenant $tenant
+<instances
++$tenant_quota_instances=(\d+)
+<cores
++$tenant_quota_vcpus=(\d+)
+
+>neutron quota-show --tenant-id $tenant
+<port
++$tenant_quota_port=(\d+)
+
+; === increase quotas for test
+>nova quota-update --instances $quota_instances $tenant
+>nova quota-update --cores $quota_vcpus $tenant
+>neutron quota-update --port $quota_port --tenant-id $tenant
+
+
+
+
+; === switch to tenant mode
+>source $tenant_credentials
+
+; === get volumes
+>nova volume-list
++$volume_uuid=([0-9a-f-]{36}) \|
+
+; === create nova server-group
+
+?if $best_effort == true? [
+	$i=1
+	[ $i < $max_ht_groups
+		>nova server-group-create --policy affinity-hyperthread --metadata best_effort=1  --metadata group_size=2 $ht_server_group_name$i
+		+$ht_server_group_uuid$i=([0-9a-f-]{36}) \| $ht_server_group_name$i
+		+$i
+	]
+]::[
+	# no best effort
+	$i=1
+	[ $i < $max_ht_groups
+		>nova server-group-create --policy affinity-hyperthread  --metadata group_size=2 $ht_server_group_name$i
+		+$ht_server_group_uuid$i=([0-9a-f-]{36}) \| $ht_server_group_name$i
+		+$i
+	]
+	
+]
+
+>nova server-group-list
+$i=1
+[ $i < $max_ht_groups
+	<$ht_server_group_uuid$i
+	+$i
+]
+
+
+; === boot first set of VMs
+
+$i=1
+[ $i < $max_ht_groups
+	>nova boot --key_name=keypair-tenant1 --flavor=$flavor1_uuid --nic net-id=$tenant1_net_uuid,vif-model=avp --nic net-id=$internal_net_uuid,vif-model=avp --image=$glance_image_name  --hint group=$ht_server_group_uuid$i  $guest1-$i
+	<status
+	#!sleep 5
+	; === start another VM in the server group
+	>nova boot --key_name=keypair-tenant1 --flavor=$flavor2_uuid --nic net-id=$tenant1_net_uuid,vif-model=avp --nic net-id=$internal_net_uuid,vif-model=avp --image=$glance_image_name  --hint group=$ht_server_group_uuid$i  $guest2-$i
+	<status
+	#!sleep 1
+	+$i
+]
+
+
+
+; === get VM uuids
+>nova list
+$i=1
+[ $i < $max_ht_groups
+	+$vm_uuid1_$i=([0-9a-f-]{36}) \| $guest1-$i
+	+$vm_uuid2_$i=([0-9a-f-]{36}) \| $guest2-$i
+	+$i
+]
+-$i
+$max_vms=$i
+
+
+; === wait for VM to boot up
+
+$i=0
+$max=50
+$vm_state=none
+[ $vm_state != ACTIVE
+	>nova list
+	<$guest2-$max_vms
+	+$vm_state=(BUILD|ACTIVE|ERROR)
+
+	!sleep 5
+	+$i
+	?if $i > $max? %BREAK_VM_BOOT
+	
+	?if $vm_state == ERROR? %BREAK_VM_BOOT
+]
+%BREAK_VM_BOOT
+
+; === check VMs are not in ERROR state
+>nova list
+<Networks
+-<ERROR
+
+
+; === show server-group
+>nova server-group-list
+$i=1
+[ $i < $max_ht_groups
+	<$vm_uuid1_$i|$vm_uuid2_$i
+	<$vm_uuid1_$i|$vm_uuid2_$i
+	+$i
+]
+
+
+# assign generic vars for next section
+$vm_uuid=$vm_uuid1_$max_vms
+$vm2_uuid=$vm_uuid2_$max_vms
+$VM1=$guest1-$max_vms
+$VM2=$guest2-$max_vms
+
+
+
+; === show vm-topology VM1
+# uses new vm-topology app
+@30
+>time vm-topology -s all | grep $vm_uuid
+<$VM1
++$vm_compute=(compute-\d)
++$vm_compute_instance=(instance-\w+)
++$vm_compute_cpulist=\| ([0-9,-]+)\s+[SR].+?\|\s+yes
++$vm_compute_siblist=\| [0-9,-]+\s+([SR:0-9]+).*?\|\s+yes
+
+>
+; === get topology on compute
+
+# remove zero
+=$vm_compute_cpulist/^0,//
+=$vm_compute_cpulist/,/ /
+=$vm_compute_cpulist/-/ /
+
+$i=1
+; === get topology on compute
+[ $vm_cpu=$vm_compute_cpulist
+	>vm-topology -s topology-long | egrep  '$vm_compute|^\W+$vm_cpu '
+	<\n$vm_compute
+	+$core_tuple$i=(\d+\W+\d+\W+\d+)\W+\d+\W+ 0x
+	+$i
+]
+
+; === show vm-topology VM2
+@30
+>time vm-topology -s all | grep $vm2_uuid
+<$VM2
++$vm2_compute=(compute-\d)
++$vm2_compute_instance=(instance-\w+)
++$vm2_compute_cpulist=\| ([0-9,-]+)\s+[SR].+?\|\s+yes
++$vm2_compute_siblist=\| [0-9,-]+\s+([SR:0-9]+).*?\|\s+yes
+>
+
+
+# remove zero
+=$vm2_compute_cpulist/^0,//
+=$vm2_compute_cpulist/,/ /
+=$vm2_compute_cpulist/-/ /
+
+$i=1
+; === get topology on compute
+[ $vm_cpu=$vm2_compute_cpulist
+	>vm-topology -s topology-long | egrep  '($vm2_compute|^\W+$vm_cpu )'
+	<\n$vm2_compute
+	+$core2_tuple$i=(\d+\W+\d+\W+\d+)\W+\d+\W+ 0x
+	+$i
+]
+@5
+
+
+; === save compute for later check
+$premigrate_vm_compute=$vm_compute
+$premigrate_vm2_compute=$vm2_compute
+>
+
+; === check that cpu sibling is being used
+
+*NOINFO
+$i=1
+[ $core_tuple$i != $blank
+	;; VM1: $core_tuple$i
+	+$i
+]
+$i=1
+[ $core2_tuple$i != $blank
+	;; VM2: $core2_tuple$i
+	+$i
+]
+*INFO
+
+; === Become Admin to migrate
+>source /etc/nova/openrc 
+
+*INTERACT
+
+
+
+; === live migrate VMs
+@10
+$i=1
+[ $i < $max_ht_groups
+	; === migrating VMs: $guest1-$i $guest2-$i
+	>nova live-migration $vm_uuid1_$i
+	>nova live-migration $vm_uuid2_$i
+	+$i
+]
+@5
+; === switch to tenant mode
+>source $tenant_credentials
+
+; === wait for VM to finish migrating
+
+$i=0
+$max=50
+$vm_state=none
+[ $vm_state != ACTIVE
+	>nova list
+	<$guest2-$max_vms
+	+$vm_state=(BUILD|ACTIVE|ERROR|MIGRATING)
+
+	!sleep 5
+	+$i
+	?if $i > $max? %BREAK_VM_MIGRATE
+	
+	?if $vm_state == ERROR? %BREAK_VM_MIGRATE
+]
+%BREAK_VM_MIGRATE
+
+
+; === check VMs are not in ERROR state
+>nova list
+<Networks
+-<ERROR
+
+
+
+
+; === show vm-topology VM1
+# uses new vm-topology app
+@30
+>time vm-topology -s all | grep $vm_uuid
+<$VM1
++$vm_compute=(compute-\d)
+
+
+; === show vm-topology VM2
+@30
+>time vm-topology -s all | grep $vm2_uuid
+<$VM2
++$vm2_compute=(compute-\d)
+
+
+; === verify VMs migrated
+?if $premigrate_vm_compute==$vm_compute ? ;red VM1 did not migrate
+
+?if $premigrate_vm2_compute==$vm2_compute ?;red VM2 did not migrate
+
+; === show vm-topology and check HT siblings
+# limitation, assumes only HT pairs of VMs
+# attempt2
+$i=1
+>vm-topology
+[ $i < $max_ht_groups
+	+$vm1_compute_cpulist=\| ([0-9,-]+)\s+[SR].+?\|\s+yes
+	+$vm1_compute_siblist=\| [0-9,-]+\s+([SR:0-9,]+).*?\|\s+yes
+	+$vm_name1=($guest1-\d+)
+	# consume table
+	<$vm1_compute_siblist
+	+$vm2_compute_cpulist=\| ([0-9,-]+)\s+[SR].+?\|\s+yes
+	+$vm2_compute_siblist=\| [0-9,-]+\s+([SR:0-9,]+).*?\|\s+yes
+	+$vm_name2=($guest2-\d+)
+	?if $vm2_compute_siblist, != S:$vm1_compute_cpulist ? [ :: ;purple Good Sibling $vm_name1 $vm1_compute_siblist
+		;red Bad Sibling $vm_name1 $vm1_compute_siblist
+		*FAIL
+	]
+	?if $vm1_compute_siblist, != S:$vm2_compute_cpulist ? [ :: ;purple Good Sibling $vm_name2 $vm2_compute_siblist
+		;red Bad Sibling $vm_name2 $vm2_compute_siblist
+		*FAIL
+	]
+	# consume table
+	<$vm2_compute_siblist
+	+$i
+]	
+>
+
+
+
+
+
+*INTERACT
+; === cleanup 
+@10
+; === switch to tenant mode
+>source $tenant_credentials
+
+$i=1
+[ $i < $max_ht_groups
+	>nova delete $vm_uuid1_$i
+	>nova delete $vm_uuid2_$i
+	
+	+$i
+]
+
+>
+!sleep 1
+>nova list
+; === delete nova server-groups
+$i=1
+[ $i < $max_ht_groups
+	>nova server-group-delete $ht_server_group_uuid$i
+	+$i
+]
+; === Become Admin to delete flavor
+>source /etc/nova/openrc 
+>nova flavor-delete $flavor3
+; === reset quotas for $tenant
+>nova quota-update --instances $tenant_quota_instances $tenant
+>nova quota-update --cores $tenant_quota_vcpus $tenant
+>neutron quota-update --port $tenant_quota_port --tenant-id $tenant
+
+>
+
+
