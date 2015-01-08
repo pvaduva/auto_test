@@ -28,8 +28,16 @@ if { $ifstatus == "disable" } {
 # Toggle the desired interface
 spawn ssh $username@$host
 
-expect "*?password:"
-send "$password\r"
+expect {
+    "Are you sure you want to continue connecting (yes/no)?" {
+    send "yes\r"
+    expect "*?password:" 
+    send "$password\r"
+    }
+    "*?password:" {
+    send "$password\r"
+    }
+}
 
 expect "Switch >"
 send "enable\r"
