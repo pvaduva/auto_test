@@ -55,5 +55,7 @@ Con1SSH CONTINUEIF \| istate(\s)* \| applied(\s)*\|
 Con1SSH WAIT 5 SEC
 Con1SSH CONTINUEIF 
 
+Con1SSH WAIT 5 SEC
+
 # Send a script to the controller that allows us to log an interface on the cisco router 
 CALL python3 ${WASSP_TESTCASE_BASE}/utils/sendFile.py -i $OAM_IP -u $CONT_USER -p $CONT_PASSWD -s ${WASSP_TC_PATH}/../common/toggle.exp -d /home/wrsroot -P 22
