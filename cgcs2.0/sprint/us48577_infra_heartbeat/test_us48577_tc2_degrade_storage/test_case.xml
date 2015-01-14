@@ -41,7 +41,7 @@ PROMPTTIMEOUT 10 SEC
 
 SET CR }
 SET CL {
-SET IF $env.NODE.target.Infra.infraPortStorage0
+SET IF $env.NODE.target.Infra.infraPortStorage1
 
 # Account for controller-0 not being primary
 Con1SSH TYPE source /etc/nova/openrc\n
@@ -73,16 +73,16 @@ Con1SSH TYPE ./toggle.exp $CISCO_IP $CISCO_USER $CISCO_PASSWD $IF disable\n
 Con1SSH WAIT 20 SEC
 
 # Retrieve alarms and check for infrastructure heartbeat alarm and
-# rebooting of storage-0 host 
+# rebooting of storage-1 host 
 Con1SSH TYPE system alarm-list\n
-Con1SSH LOOKFOR 200.009(\s)*\| .*\| host=storage-0
-Con1SSH LOOKFOR 200.004(\s)*\| .*\| host=storage-0
+Con1SSH LOOKFOR 200.009(\s)*\| .*\| host=storage-1
+Con1SSH LOOKFOR 200.004(\s)*\| .*\| host=storage-1
 Con1SSH WAIT 10 SEC
 Con1SSH LOOKFOR
 
-# Check that storage-0 goes to failed
+# Check that storage-1 goes to failed
 Con1SSH TYPE system host-list\n
-Con1SSH LOOKFOR \| [0-9]*(\s)*\| storage-0(\s)*\| storage(\s)*\| unlocked(\s)*\| disabled(\s)*\| failed(\s)*
+Con1SSH LOOKFOR \| [0-9]*(\s)*\| storage-1(\s)*\| storage(\s)*\| unlocked(\s)*\| disabled(\s)*\| failed(\s)*
 Con1SSH WAIT 2 SEC
 Con1SSH LOOKFOR
 
@@ -94,7 +94,7 @@ Con1SSH WAIT 20 SEC
 # becomes available
 Con1SSH REPEATONTIMEOUT 60 
      Con1SSH TYPE system host-list\n
-     Con1SSH LOOKFOR \| [0-9]*(\s)*\| storage-0(\s)*\| storage(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)*
+     Con1SSH LOOKFOR \| [0-9]*(\s)*\| storage-1(\s)*\| storage(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)*
      Con1SSH WAIT 10 SEC
      Con1SSH LOOKFOR
 Con1SSH ENDREPEAT

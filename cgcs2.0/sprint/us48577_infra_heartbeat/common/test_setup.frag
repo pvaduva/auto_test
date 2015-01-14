@@ -15,7 +15,8 @@ Con1SSH LOOKFOR \| controller-0 \| controller(\s)*\| unlocked(\s)*\| enabled(\s)
 Con1SSH LOOKFOR \| controller-1 \| controller(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)*\|
 Con1SSH LOOKFOR \| compute-0(\s)*\| compute(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)*\|
 Con1SSH LOOKFOR \| compute-1(\s)*\| compute(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)*\|
-#Con1SSH CONTINUEIF \| storage-0(\s)*\| storage(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)*\|
+Con1SSH CONTINUEIF \| storage-0(\s)*\| storage(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)*\|
+Con1SSH CONTINUEIF \| storage-1(\s)*\| storage(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)*\|
 Con1SSH WAIT 5 SEC
 Con1SSH LOOKFOR
 
@@ -44,10 +45,15 @@ Con1SSH WAIT 5 SEC
 Con1SSH CONTINUEIF 
 
 # Check that we have the infra configuration on storage-0
-#Con1SSH TYPE system host-if-list storage-0\n
-#Con1SSH CONTINUEIF \| [a-z0-9-]* \| infra0(\s)*\| infra(\s)*\| ethernet \| \[u\'eth[0-9]*\'\](\s)*\| [0-9]*(\s)*\| None
-#Con1SSH WAIT 5 SEC
-#Con1SSH CONTINUEIF
+Con1SSH TYPE system host-if-list storage-0\n
+Con1SSH CONTINUEIF \| [a-z0-9-]* \| [a-z0-9 ]*\| infra(\s)*\| ethernet \| \[u\'eth[0-9]*\'\](\s)*\| [0-9]*(\s)*\| None
+Con1SSH WAIT 5 SEC
+
+# Check that we have the infra configuration on storage-1
+Con1SSH TYPE system host-if-list storage-1\n
+Con1SSH CONTINUEIF \| [a-z0-9-]* \| [a-z0-9 ]*\| infra(\s)*\| ethernet \| \[u\'eth[0-9]*\'\](\s)*\| [0-9]*(\s)*\| None
+Con1SSH WAIT 5 SEC
+Con1SSH CONTINUEIF
 
 # Check that the infra network is configured
 Con1SSH TYPE system infra-show\n
