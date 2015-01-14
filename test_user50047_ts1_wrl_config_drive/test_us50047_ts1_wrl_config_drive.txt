@@ -218,3 +218,73 @@ root@wrl-admin:/media/hdd# cat openstack/latest/user_data
 User data
 root@wrl-admin:/media/hdd# 
 
+
+
+--------------
+With wrl image attached to cinder
+[wrsroot@controller-0 ~(keystone_admin)]$ glance image-list
++--------------------------------------+------------+-------------+------------------+-----------+--------+
+| ID                                   | Name       | Disk Format | Container Format | Size      | Status |
++--------------------------------------+------------+-------------+------------------+-----------+--------+
+| 6f2c3a80-e115-4689-84be-bed74ca52568 | cgcs-guest | raw         | bare             | 435159040 | active |
+| d52a937a-30cc-4250-bd1c-bf324d0e9252 | ubuntu     | qcow2       | bare             | 261423104 | active |
+| 70a23016-dd88-4c64-a8cf-fb448fa487a8 | wrl5       | qcow2       | bare             | 435159040 | active |
+| 70cd25df-6e93-43a3-8006-27b2bf25287a | wrl5-avp   | qcow2       | bare             | 435159040 | active |
++--------------------------------------+------------+-------------+------------------+-----------+--------+
+[wrsroot@controller-0 ~(keystone_tenant1)]$ cinder create --image-id 70cd25df-6e93-43a3-8006-27b2bf25287a --display-name=test_wrl 1
++---------------------+--------------------------------------+
+|       Property      |                Value                 |
++---------------------+--------------------------------------+
+|     attachments     |                  []                  |
+|  availability_zone  |                 nova                 |
+|       bootable      |                false                 |
+|      created_at     |      2015-01-14T17:40:25.092509      |
+| display_description |                 None                 |
+|     display_name    |               test_wrl               |
+|          id         | 2b10fb5f-6b4c-4c11-aeaa-584efa90fac5 |
+|       image_id      | 70cd25df-6e93-43a3-8006-27b2bf25287a |
+|       metadata      |                  {}                  |
+|         size        |                  1                   |
+|     snapshot_id     |                 None                 |
+|     source_volid    |                 None                 |
+|        status       |               creating               |
+|     volume_type     |                 None                 |
++---------------------+--------------------------------------+
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=147cdb6a-608e-4b57-8746-3b980772fd3d,vif-model=avp --nic net-id=549716c7-019c-4dc4-bc5c-a70a8695e473,vif-model=avp --config-drive true --user-data ./my-user-data.txt --file /tmp/foobar=./my-user-file.txt --block_device_mapping vda=2b10fb5f-6b4c-4c11-aeaa-584efa90fac5:::0 test-wrl
++--------------------------------------+-------------------------------------------------------------+
+| Property                             | Value                                                       |
++--------------------------------------+-------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                      |
+| OS-EXT-AZ:availability_zone          | nova                                                        |
+| OS-EXT-STS:power_state               | 0                                                           |
+| OS-EXT-STS:task_state                | scheduling                                                  |
+| OS-EXT-STS:vm_state                  | building                                                    |
+| OS-SRV-USG:launched_at               | -                                                           |
+| OS-SRV-USG:terminated_at             | -                                                           |
+| accessIPv4                           |                                                             |
+| accessIPv6                           |                                                             |
+| adminPass                            | F85DYKBNytaC                                                |
+| config_drive                         | True                                                        |
+| created                              | 2015-01-14T17:44:33Z                                        |
+| extended                             | {"cpuset": null, "numanode": null, "siblings_cpuset": null} |
+| flavor                               | wrl5.dpdk.small (101)                                       |
+| hostId                               |                                                             |
+| id                                   | f03af428-6cbd-47ae-b7d8-64835e069257                        |
+| image                                | Attempt to boot from volume - no image supplied             |
+| key_name                             | keypair-tenant1                                             |
+| metadata                             | {}                                                          |
+| name                                 | test-wrl                                                    |
+| nics                                 |                                                             |
+| os-extended-volumes:volumes_attached | [{"id": "2b10fb5f-6b4c-4c11-aeaa-584efa90fac5"}]            |
+| pinned                               | False                                                       |
+| progress                             | 0                                                           |
+| security_groups                      | default                                                     |
+| server_group                         |                                                             |
+| status                               | BUILD                                                       |
+| tenant_id                            | 54b74c2a5ac14b589511fc611d6d2652                            |
+| updated                              | 2015-01-14T17:44:37Z                                        |
+| user_id                              | aad3f01abc704ac7a53ae5faefddc6ed                            |
+| vcpus (min/cur/max)                  | [2, 2, 2]                                                   |
++--------------------------------------+-------------------------------------------------------------+
+
+*** see attached images for check that files were injected
