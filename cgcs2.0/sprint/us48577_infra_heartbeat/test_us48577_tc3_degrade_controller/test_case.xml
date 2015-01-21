@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the DPDK autotest suite app/test.
+
+Modification history
+====================
+11feb15, ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sprint/us48577_infra_heartbeat/${WASS_TC_NAME}" timeout="">
+    <test_case  name="sprint/us48577_infra_heartbeat/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag">
+
+<!--SET noseTestName testcase_742
+INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag 
+-->
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+
+CALL env
+LOOKFOR
+TYPE \n
+SINK 1 SEC
+PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con1SSH PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+
+SET CR }
+SET CL {
+SET IF xe8
+
+Con1SSH TYPE source /etc/nova/openrc\n
+Con1SSH WAIT 100 SEC
+Con1SSH TYPE export TMOUT=0\n
+Con1SSH WAIT 100 SEC
+Con1SSH SINK 3 SEC
+
+Con1SSH TYPE cd\n
+Con1SSH WAIT 3 SEC
+Con1SSH TYPE echo executing ${WASSP_TC_NAME}\n
+Con1SSH WAIT 100 SEC
+
+# Test that we have the correct lab configuration
+Con1SSH INCLUDE ${WASSP_TC_PATH}/common/test_setup.frag
+
+# Disable the infra link on controller-1 by logging into the cisco router
+Con1SSH TYPE ./toggle.exp $CISCO_IP $CISCO_USER $CISCO_PASSWD $IF disable\n 
+
+# Retrieve alarms and check that controller-1 is now degraded
+Con1SSH TYPE system host-list\n
+Con1SSH CONTINUEIF \| [0-9]*(\s)*\| controller-1(\s)*\| controller(\s)*\| unlocked(\s)*\| enabled(\s)*\| degraded(\s)*
+Con1SSH WAIT 2 SEC
+
+# Re-enable infra link on controller-1 by logging into the cisco router
+Con1SSH TYPE ./toggle.exp $CISCO_IP $CISCO_USER $CISCO_PASSWD $IF enable\n
+
+# Check that the infra link is eventually restored
+Con1SSH TYPE system host-list\n
+Con1SSH CONTINUEIF \| [0-9]*(\s)*\| controller-1(\s)*\| controller(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)*
+Con1SSH WAIT 20 SEC
+
+PASS
+    </test_case>
+</test_module>
+</file>

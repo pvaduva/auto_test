@@ -1,0 +1,48 @@
+2 controller
+2 compute scenario
+both computes have data link aggregation
+
+Compute-0 has instance
+
+    Action: lock second compute, wait or lock to complete and then fail both data links
+
+    Verify:
+•	wait for up to 10 seconds for degrade
+•	wait up to 3 minutes for instances migration to fail and be forcefully evacuated. (no compute to evacuate to)
+•	first compute is auto-reset
+•	check for applicable alarm
+
+    wait for first compute to go from unlocked-disabled-failed to unlocked-enabled-degraded (10 minute timeout)
+
+    Verify:
+•	no instances running on first compute.
+•	first compute is unlocked-enabled-degraded
+•	no instances running on locked second compute
+
+Action: Unlock second compute
+
+Verify:
+•	evacuated instances are started on the freshly unlocked second compute.  <-
+Jira CGTS-1007 raised
+
+Action: restore one link on first compute
+
+Verify:
+•	first compute host remains degraded
+•	no instances are running on first compute
+•	all instances are still running on second compute
+•	applicable alarm is raised (may be major only now though)
+
+Action: restore first compute second link
+
+Verify:
+•	first compute degrade clears within 35 seconds
+•	applicable alarm clears
+
+Action: Lock second compute
+
+Verify:
+•	Lock succeeds after live migration (up to 5 minute timeout)
+•	all instances are live migrated back to first compute
+
+

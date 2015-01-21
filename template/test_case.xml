@@ -19,8 +19,8 @@ Modification history
 <environment>
 </environment>
 
-<test_module name="sanity/cgcs/${WASS_TC_NAME}" timeout="">
-    <test_case  name="sanity/cgcs/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag">
+<test_module name="sanity/cgcs/${WASSP_TC_NAME}" timeout="">
+    <test_case  name="sanity/cgcs/${WASSP_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag">
 
 <!--SET noseTestName testcase_742
 INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag 
@@ -33,6 +33,7 @@ CALL env
 LOOKFOR
 TYPE \n
 SINK 1 SEC
+PROMPTTIMEOUT 300 SEC
 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1SSH PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)

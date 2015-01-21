@@ -1,0 +1,113 @@
+Running as Tenant
+
+[wrsroot@controller-0 ~(keystone_tenant1)]$ cat my-user-data.txt
+User data
+
+Thu Dec 11 20:46:55 UTC 2014
+[wrsroot@controller-0 ~(keystone_tenant1)]$ cat my-user-file.txt
+user file
+
+Thu Dec 11 20:47:20 UTC 2014
+[wrsroot@controller-0 ~(keystone_tenant1)]$ neutron net-list
++--------------------------------------+------------------+-------------------------------------------------------+
+| id                                   | name             | subnets                                               |
++--------------------------------------+------------------+-------------------------------------------------------+
+| b958b4c1-e0ba-432c-a7fd-3cb8b86b450a | external-net0    | cd17305d-db6d-4a03-871e-9d8c01ac8e62 192.168.9.0/24   |
+| 77949a8f-95b1-4001-9857-93949093b4a3 | tenant1-mgmt-net | d6c52c5e-14fa-4066-b414-3ec99482083e 192.168.109.0/24 |
+| b1144854-909a-4981-9201-a3deb7d9b74f | tenant1-net1     | 62037dca-0c36-4430-b431-e5e9e7d12a73 172.16.1.0/24    |
+| 9fe9dcf9-ae92-41fd-a02b-cb77e6fc0296 | internal0-net0   | cc0785a5-8fa5-44f0-8c34-880835e0be19 10.2.2.0/24      |
+|                                      |                  | f2ec167e-c64c-47bf-88d3-02c0af949f88 10.1.1.0/24      |
+|                                      |                  | b5538348-26cd-4bab-b7df-b411e05434ed 10.0.0.0/24      |
+| e474db8d-14d8-430c-b96f-9a0b23fa0f6c | tenant1-net2     | 93c74e9b-d50f-4f22-b69d-7d1b0879dbbf 172.16.2.0/24    |
+| a5f94822-2cf5-4fda-967f-331b65e4b342 | tenant1-net0     | 52b98b45-79b5-426d-9d0c-4ed6b0d6c1a5 172.16.0.0/24    |
++--------------------------------------+------------------+-------------------------------------------------------+
+
+Thu Dec 11 20:47:55 UTC 2014
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova boot --key_name=keypair-tenant1 --flavor=103 --nic net-id=77949a8f-95b1-4001-9857-93949093b4a3,vif-model=avp --nic net-id=a5f94822-2cf5-4fda-967f-331b65e4b342,vif-model=avp --config-drive true --user-data ./my-user-data.txt --file /tmp/foobar=./my-user-file.txt --image=ubuntu-precise-amd64 ubuntu
++--------------------------------------+-------------------------------------------------------------+
+| Property                             | Value                                                       |
++--------------------------------------+-------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                      |
+| OS-EXT-AZ:availability_zone          | nova                                                        |
+| OS-EXT-STS:power_state               | 0                                                           |
+| OS-EXT-STS:task_state                | scheduling                                                  |
+| OS-EXT-STS:vm_state                  | building                                                    |
+| OS-SRV-USG:launched_at               | -                                                           |
+| OS-SRV-USG:terminated_at             | -                                                           |
+| accessIPv4                           |                                                             |
+| accessIPv6                           |                                                             |
+| adminPass                            | q6cBMcMvyfvY                                                |
+| config_drive                         | True                                                        |
+| created                              | 2014-12-11T20:48:02Z                                        |
+| extended                             | {"cpuset": null, "numanode": null, "siblings_cpuset": null} |
+| flavor                               | new_flavour (103)                                           |
+| hostId                               |                                                             |
+| id                                   | dc4566f4-88ae-49b4-a439-502314db6413                        |
+| image                                | ubuntu-precise-amd64 (06dc7e74-bfde-4371-8fa0-60cfb9e3417f) |
+| key_name                             | keypair-tenant1                                             |
+| metadata                             | {}                                                          |
+| name                                 | ubuntu                                                      |
+| nics                                 |                                                             |
+| os-extended-volumes:volumes_attached | []                                                          |
+| pinned                               | False                                                       |
+| progress                             | 0                                                           |
+| security_groups                      | default                                                     |
+| server_group                         |                                                             |
+| status                               | BUILD                                                       |
+| tenant_id                            | c1c53ede406a449c8e5d0b0c4825751f                            |
+| updated                              | 2014-12-11T20:48:03Z                                        |
+| user_id                              | 98aefa2509f048899a5b5641bd87953c                            |
+| vcpus (min/cur/max)                  | [2, 2, 2]                                                   |
++--------------------------------------+-------------------------------------------------------------+
+
+*** unsure how to log into ubuntu VM from natbox took screen shots off the horizon GUI instead. ***
+
+Running as Admin
+
+[wrsroot@controller-0 ~(keystone_admin)]$ nova boot --key_name=controller-0 --flavor=103 --nic net-id=9fe9dcf9-ae92-41fd-a02b-cb77e6fc0296,vifmodel=avp --nic net-id=b958b4c1-e0ba-432c-a7fd-3cb8b86b450a,vif-model=avp --config-drive true --user-data ./my-user-data.txt --file /tmp/fooba=./my-user-file.txt --image=ubuntu-precise-amd64 ubuntu
++--------------------------------------+-------------------------------------------------------------+
+| Property                             | Value                                                       |
++--------------------------------------+-------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                      |
+| OS-EXT-AZ:availability_zone          | nova                                                        |
+| OS-EXT-SRV-ATTR:host                 | -                                                           |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | -                                                           |
+| OS-EXT-SRV-ATTR:instance_name        | instance-0000004c                                           |
+| OS-EXT-STS:power_state               | 0                                                           |
+| OS-EXT-STS:task_state                | scheduling                                                  |
+| OS-EXT-STS:vm_state                  | building                                                    |
+| OS-SRV-USG:launched_at               | -                                                           |
+| OS-SRV-USG:terminated_at             | -                                                           |
+| accessIPv4                           |                                                             |
+| accessIPv6                           |                                                             |
+| adminPass                            | 24pMrdoSq6io                                                |
+| config_drive                         | True                                                        |
+| created                              | 2014-12-12T14:50:35Z                                        |
+| extended                             | {"cpuset": null, "numanode": null, "siblings_cpuset": null} |
+| flavor                               | new_flavour (103)                                           |
+| hostId                               |                                                             |
+| id                                   | 6429774b-81e9-4528-9e03-a2396d7730e0                        |
+| image                                | ubuntu-precise-amd64 (06dc7e74-bfde-4371-8fa0-60cfb9e3417f) |
+| key_name                             | controller-0                                                |
+| metadata                             | {}                                                          |
+| name                                 | ubuntu                                                      |
+| nics                                 |                                                             |
+| os-extended-volumes:volumes_attached | []                                                          |
+| pinned                               | False                                                       |
+| progress                             | 0                                                           |
+| security_groups                      | default                                                     |
+| server_group                         |                                                             |
+| status                               | BUILD                                                       |
+| tenant_id                            | 617469a668ec4a05af765d0490ca3ee5                            |
+| updated                              | 2014-12-12T14:50:35Z                                        |
+| user_id                              | c75bd63f6d1041ff9b100647f0ab1c8c                            |
+| vcpus (min/cur/max)                  | [2, 2, 2]                                                   |
++--------------------------------------+-------------------------------------------------------------+
+Fri Dec 12 14:50:35 UTC 2014
+[wrsroot@controller-0 ~(keystone_admin)]$ cat my-user-data.txt 
+User data
+Fri Dec 12 14:51:46 UTC 2014
+[wrsroot@controller-0 ~(keystone_admin)]$ cat my-user-file.txt 
+user file
+
+*** unsure how to log into ubuntu VM from natbox took screen shots off the horizon GUI instead. ***
