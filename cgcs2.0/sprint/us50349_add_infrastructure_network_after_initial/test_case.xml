@@ -22,7 +22,7 @@ Modification history
 </environment>
 
 <test_module name="sanity/cgcs/${WASS_TC_NAME}" timeout="">
-    <test_case  name="sanity/cgcs/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag">
+    <test_case  name="sanity/cgcs/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag">
 
 <!--SET noseTestName testcase_742
 INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag 
@@ -34,63 +34,104 @@ INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag
 CALL env
 
 SET SETTING_FILE 	/home/wrsroot/test_setting.cnf
-SET PORT_CONTROLLER ${portctrl}
-SET PORT_COMPUTER 	${portcmpt}
-SET PORT_STORAGE 	${portstrg}
+SET PORT_CONTROLLER	${port_controller}
+SET PORT_COMPUTER 	${port_compute}
+SET PORT_STORAGE 	${port_storage}
 
 LOOKFOR
 TYPE \n
 SINK 1 SEC
+PROMPTTIMEOUT 600 SEC
 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con1SSH PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+
 
 SET CR }
 SET CL {
 
-TYPE echo port_controller=${PORT_CONTROLLER} > ${SETTING_FILE}
-TYPE echo port_compute=${PORT_COMPUTER} >> ${SETTING_FILE}
-TYPE echo port_storage=${PORT_STORAGE} >> ${SETTING_FILE}
+Con1SSH	TYPE echo port_controller=${PORT_CONTROLLER} > ${SETTING_FILE} \n
+Con1SSH	WAIT 3 SEC {ignoreTimeout:True}
 
-TYPE source /etc/nova/openrc\n
-WAIT 100 SEC
-SINK 3 SEC
+Con1SSH	TYPE echo port_compute=${PORT_COMPUTER} >> ${SETTING_FILE} \n
+Con1SSH	WAIT 3 SEC {ignoreTimeout:True}
 
-TYPE cd\n
-WAIT 3 SEC
-TYPE echo executing ${WASSP_TC_NAME}\n
-WAIT 100 SEC
+Con1SSH	TYPE echo port_storage=${PORT_STORAGE} >> ${SETTING_FILE} \n
+Con1SSH	WAIT 3 SEC {ignoreTimeout:True}
 
-FAILIF FAILED
-PASSIF SKIPPED,
-TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=${testCaseId} \n
-WAIT ${noseTestTimeout} SEC (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con1SSH	TYPE echo host_user=${WRSUSER} >> ${SETTING_FILE} \n
+Con1SSH	WAIT 3 SEC {ignoreTimeout:True}
 
-TYPE sudo reboot
-WAIT 10 SEC {ignoreTimeout:True} Password:
-TYPE ${WRSPASS}\n
+Con1SSH	TYPE echo host_password=${WRSPASS} >> ${SETTING_FILE} \n
+Con1SSH	WAIT 3 SEC {ignoreTimeout:True}
 
-FAILIF
+Con1SSH	TYPE source /etc/nova/openrc\n
+Con1SSH	WAIT 100 SEC
+Con1SSH	SINK 3 SEC
+
+Con1SSH	TYPE cd\n
+Con1SSH	WAIT 3 SEC
+Con1SSH	TYPE echo executing ${WASSP_TC_NAME}\n
+Con1SSH	WAIT 100 SEC
+
+Con1SSH	FAILIF FAILED
+Con1SSH	PASSIF SKIPPED,
+Con1SSH	TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=${testCaseId} \n
+Con1SSH	WAIT ${noseTestTimeout} SEC (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+
+Con1	TYPE exit\n\n
+Con1	SINK 3 SEC
+
+Con2	TYPE exit\n\n
+Con2	SINK 3 SEC
+
+Con1SSH	TYPE sudo reboot \n
+Con1SSH	WAIT 10 SEC {ignoreTimeout:True} Password:
+
+Con1SSH	TYPE ${WRSPASS}\n
+Con1SSH	TYPE exit\n
+
 # login
-WAIT 900 SEC {ignoreTimeout:True} login:
-TYPE ${WRSUSER}\n
-WAIT 10 SEC {ignoreTimeout:True} Password:
-TYPE ${WRSPASS}\n
-WAIT 10 SEC {ignoreTimeout:True}
+
+Con1	WAIT 300 SEC {ignoreTimeout:True}
+Con1	SINK 30 SEC
+
+Con1	WAIT 2700 SEC {ignoreTimeout:True} login:
+
+Con1	TYPE ${WRSUSER}\n
+Con1	WAIT 10 SEC {ignoreTimeout:True} Password:
+
+Con1	TYPE ${WRSPASS}\n
+Con1	WAIT 10 SEC {ignoreTimeout:True}
 
 # 
-TYPE source /etc/nova/openrc\n
-WAIT 100 SEC
-SINK 3 SEC
+Con1	FAILIF
+Con1	FAILIF .keyring/.CREDENTIAL: No such file or directory
 
-FAILIF
-FAILIF FAILED
-TYPE cd\n
-WAIT 3 SEC
-TYPE echo executing second phase of ${WASSP_TC_NAME}\n
-TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=us50349_ts2 \n
+Con1	REPEATONFAIL 300
+	
+	Con1	SINK 5 SEC
 
-WAIT 100 SEC
+	Con1	TYPE source /etc/nova/openrc\n
+
+	Con1	WAIT 5 SEC {ignoreTimeout:True}
+
+Con1	ENDREPEAT
+
+Con1	FAILIF
+Con1	FAILIF FAILED
+
+Con1	PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+
+Con1	TYPE cd\n
+Con1	WAIT 3 SEC {ignoreTimeout:True}
+
+Con1	TYPE echo executing second phase of ${WASSP_TC_NAME}\n
+Con1	WAIT 3 SEC {ignoreTimeout:True}
+
+Con1	TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=us50349_ts2 \n
+Con1	WAIT ${noseTestTimeout} SEC (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 
 PASS
 

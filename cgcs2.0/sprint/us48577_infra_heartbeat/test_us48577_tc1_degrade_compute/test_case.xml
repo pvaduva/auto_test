@@ -20,7 +20,7 @@ Modification history
 </environment>
 
 <test_module name="sprint/us48577_infra_heartbeat/${WASS_TC_NAME}" timeout="">
-    <test_case  name="sprint/us48577_infra_heartbeat/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag">
+    <test_case  name="sprint/us48577_infra_heartbeat/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="">
 
 <!--SET noseTestName testcase_742
 INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag 
@@ -37,57 +37,67 @@ PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1SSH PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+PROMPTTIMEOUT 10 SEC
 
 SET CR }
 SET CL {
-SET IF xe2
+SET IF $env.NODE.target.Infra.infraPortCompute0
+
+# Account for controller-0 not being primary
+Con2 TYPE source /etc/nova/openrc\n
+Con2 WAITNOPROMPT 15 SEC {ignoreTimeout:True}
+Con2 TYPE system host-swact controller-1\n
+Con2 WAITNOPROMPT 60 SEC {ignoreTimeout:True}
 
 Con1SSH TYPE source /etc/nova/openrc\n
-Con1SSH WAIT 100 SEC
+Con1SSH WAIT 60 SEC
+
 Con1SSH TYPE export TMOUT=0\n
 Con1SSH WAIT 100 SEC
 Con1SSH SINK 3 SEC
-
 Con1SSH TYPE cd\n
 Con1SSH WAIT 3 SEC
 Con1SSH TYPE echo executing ${WASSP_TC_NAME}\n
 Con1SSH WAIT 100 SEC
 
 # Test that we have the correct lab configuration
-Con1SSH INCLUDE ${WASSP_TC_PATH}/common/test_setup.frag
+INCLUDE ${WASSP_TC_PATH}/../common/test_setup.frag
 
 # Disable the infra link on compute-0 by logging into the cisco router
-# LAG is enabled on xe2 and xe9 for compute-0
 Con1SSH TYPE ./toggle.exp $CISCO_IP $CISCO_USER $CISCO_PASSWD $IF disable\n
+Con1SSH WAIT 20 SEC
 
-# Retrieve alarms and check that compute-0 is now degraded
+# Retrieve alarms and check for infrastructure heartbeat alarm and
+# rebooting of compute-0 host 
+Con1SSH TYPE system alarm-list\n
+Con1SSH LOOKFOR 200.009(\s)*\| .*\| host=compute-0
+Con1SSH LOOKFOR 200.004(\s)*\| .*\| host=compute-0
+Con1SSH WAIT 10 SEC
+Con1SSH LOOKFOR
+
+# Check that compute-0 goes to failed
 Con1SSH TYPE system host-list\n
-Con1SSH CONTINUEIF \| [0-9]*(\s)*\| compute-0(\s)*\| compute(\s)*\| unlocked(\s)*\| enabled(\s)*\| degraded(\s)*
+Con1SSH LOOKFOR \| [0-9]*(\s)*\| compute-0(\s)*\| compute(\s)*\| unlocked(\s)*\| disabled(\s)*\| failed(\s)*
 Con1SSH WAIT 2 SEC
-
-# Check that compute-0 goes from degraded to failed in a few seconds
-Con1SSH TYPE system host-list\n
-Con1SSH CONTINUEIF \| [0-9]*(\s)*\| compute-0(\s)*\| compute(\s)*\| unlocked(\s)*\| disabled(\s)*\| failed(\s)*
-Con1SSH WAIT 2 SEC
-
-# Check that compute-0 reboots
-Con1SSH REPEATONFAIL 5
-Con1SSH     TYPE system host-list\n
-Con1SSH     LOOKFOR \| [0-9]*(\s)*\| compute-0(\s)*\| compute(\s)*\| [a-z ]*\| [a-z ]*\| offline(\s)*
-Con1SSH     WAIT 10 SEC
-Con1SSH     LOOKFOR
-Con1SSH ENDREPEAT
+Con1SSH LOOKFOR
 
 # Re-enable infra link on compute-0 by logging into the cisco router
 Con1SSH TYPE ./toggle.exp $CISCO_IP $CISCO_USER $CISCO_PASSWD $IF enable\n
+Con1SSH WAIT 20 SEC
 
-# Check that the infra link is eventually restored
-Con1SSH REPEATONFAIL 5
-Con1SSH     TYPE system host-list\n
-Con1SSH     LOOKFOR \| [0-9]*(\s)*\| compute-0(\s)*\| storage(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)*
-Con1SSH     WAIT 10 SEC
-Con1SSH     LOOKFOR
+# Check that the infra link is eventually restored and the node
+# becomes available
+Con1SSH REPEATONTIMEOUT 60 
+     Con1SSH TYPE system host-list\n
+     Con1SSH LOOKFOR \| [0-9]*(\s)*\| compute-0(\s)*\| compute(\s)*\| unlocked(\s)*\| enabled(\s)*\| available(\s)*
+     Con1SSH WAIT 10 SEC
+     Con1SSH LOOKFOR
 Con1SSH ENDREPEAT
+
+# Dump alarms and ensure we are alarm free
+Con1SSH TYPE system alarm-list\n
+Con1SSH LOOKFOR (\+-+)+\+*([^\n]*\n+)(\+-+)+\+
+Con1SSH WAIT 10 SEC
 
 PASS
     </test_case>

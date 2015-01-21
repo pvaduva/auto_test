@@ -19,16 +19,25 @@ set interface [lindex $argv 3]
 set ifstatus  [lindex $argv 4]
 
 # Compose appropriate interface disable or enable command
-if $ifstate == "disable" {
+if { $ifstatus == "disable" } {
    set status "shutdown"
 } else {
    set status "no shutdown"
+}
 
 # Toggle the desired interface
 spawn ssh $username@$host
 
-expect "*?password:"
-send "$password\r"
+expect {
+    "Are you sure you want to continue connecting (yes/no)?" {
+    send "yes\r"
+    expect "*?password:" 
+    send "$password\r"
+    }
+    "*?password:" {
+    send "$password\r"
+    }
+}
 
 expect "Switch >"
 send "enable\r"
@@ -37,15 +46,19 @@ expect "Switch #"
 send "configure\r"
 
 expect "(config)#"
-send "interface\r"
+send "interface $interface\r"
 
-expect "fill_in_when_i_have access_to_the_lab"
-send "$interface\r"
-
-expect "fill_in_when_i_have_access_to_the_lab"
+expect "Switch (config-if $interface)#"
 send "$status\r"
 
-expect "fill_in_when_i_have_access_to_the_lab"
+expect "Switch (config-if $interface)#"
 send "exit\r"
 
+expect "Switch (config)#"
+send "exit\r"
 
+expect "Switch #"
+send "exit\r"
+
+expect "Switch >"
+send "exit\r"
