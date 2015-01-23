@@ -1,0 +1,248 @@
+#!/usr/bin/env expect-lite
+
+;;;
+
+Config-Drive Test Script
+
+REQUIRES: expect-lite 4.8.0 or greater
+This expect script can be invoked via the following:
+./wrl_config_drive.elt <host> <username> <password> <NAT host> <NAT user> <NAT pass>
+where:
+host = IP address of the controller, e.g. 10.10.10.2
+username = username on the controller, e.g. wrsroot
+password = password on the controller, e.g. li69nux
+NAT host = IP address of the NATBox, e.g. 128.224.150.11
+NAT user = username on the NATBox, e.g. cgcs
+NAT pass = password on the NATBox, e.g. li69nux
+;;;
+
+
+
+*EXP_INFO
+*NOFAIL
+
+# Varibles that will become constants from script options
+$NAT_IP=128.224.150.11
+$NAT_USER=cgcs
+$NAT_PASS=li69nux
+$HOST_USER=wrsroot
+$HOST_PASS=li69nux
+$HOST_IP=10.10.10.2
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>source /etc/nova/openrc
+>system show
+>cat /etc/build.info
+
+; === Change quotas for cinder
+$TENANT=`keystone tenant-list | grep tenant1 | awk '{print $2}'`
+>cinder quota-show $TENANT
+>cinder quota-update --volumes 4 $TENANT
+>cinder quota-show $TENANT
+
+@20
+; === writing user file and data to be injected
+>echo user data > my-user-data.txt
+>echo user file > my-user-file.txt
+
+; === get the necessary image and network uuids
+>source ./openrc.tenant1
+$IMAGE=`glance image-list | grep wrl5-avp | awk '{print $2}'`
+$TENANT_MGMT=`neutron net-list | grep tenant1-mgmt-net | awk '{print $2}'`
+$TENANT_NET=`neutron net-list | grep tenant1-net0 | awk '{print $2}'`
+$VOL_NAME=vol-wrl5-config
+$VM_NAME=test-wrl-config
+$VM=root
+
+; === verify we can connect to NATBox
+>ping -c4 $NAT_IP
+<icmp
++$ping_result=(Destination Host Unreachable|ttl=|__NO_STRING_CAPTURED__)
+
+?if $ping_result == Destination Host Unreachable ? [
+    ; === NATBOX $NAT_IP not responding
+    *TERM 1
+]
+
+?if $ping_result == __NO_STRING_CAPTURED__ ? [
+    ; === NATBOX $NAT_IP not responding
+    *TERM 1
+]
+; === create WRL cinder volume
+>cinder create --image-id $IMAGE --display-name=$VOL_NAME 1
+
+; === wait for cinder volume $VOL_NAME to become available
+
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >cinder show $VOL_NAME 2>/dev/null | awk '{ if ($2 == "status") {print $4} }'
+    +$result=\n(available|creating|downloading)
+    ?if $i > $MAX ? ; === cinder volume $VOL_NAME did not become available
+    ?if $i > $MAX ? %BREAK_CINDER_CREATE
+    ?if $result == error ? ; === cinder volume $VOL_NAME is in error state
+    ?if $result == error ? %BREAK_CINDER_CREATE
+    !sleep 5
+    >
+]
+
+$CINDER_ID=`cinder list | grep $VOL_NAME | awk '{print $2}'`
+
+; === attach WRL VM to cinder volume
+>nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --config-drive true --user-data ./my-user-data.txt --file /tmp/foobar=./my-user-file.txt --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
+
+; === wait for WRL VM to go available
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != ACTIVE
+    +$i
+    >nova show $VM_NAME 2>/dev/null | awk '{ if ($2 == "status") {print $4} }'
+    +$result=\n(ACTIVE|BUILD)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not become ACTIVE
+    ?if $i > $MAX ? %BREAK_VM_CREATE
+    ?if $result == ERROR ? ; === VM $VM_NAME is in ERROR state
+    ?if $result == ERROR ? %BREAK_VM_CREATE
+    !sleep 5
+    >
+]
+
+!sleep 10
+>nova show $VM_NAME | grep 'tenant1-mgmt-net network' | awk '{print $5}'
++$VM_IP=\n(.*)
+
+; === ssh into WRL VM via NATBox
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$NAT_PASS
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $VM@$VM_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$VM
+
+; === verify existence of files and expected output
+>cat /media/hdd/openstack/latest/meta_data.json
+-<No such file
+>cat /media/hdd/openstack/latest/user_data
+-<No such file
+<user data
+>cat /media/hdd/openstack/content/0000
+-<No such file
+<user file
+>exit
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>source ./openrc.tenant1
+
+; === reboot WRL VM
+>nova reboot $VM_NAME
+$i=0
+$MAX=18
+$result=none
+# while loop
+[ $result != ACTIVE
+    +$i
+    >nova show $VM_NAME 2>/dev/null | awk '{ if ($2 == "status") {print $4} }'
+    +$result=\n(ACTIVE|REBOOT)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not become ACTIVE after REBOOT
+    ?if $i > $MAX ? %BREAK_VM_REBOOT
+    ?if $result == ERROR ? ; === VM $VM_NAME is in ERROR state after REBOOT
+    ?if $result == ERROR ? %BREAK_VM_REBOOT
+    !sleep 10
+    >
+]
+
+!sleep 10
+>nova show $VM_NAME | grep 'tenant1-mgmt-net network' | awk '{print $5}'
++$VM_IP=\n(.*)
+
+; === ssh back into WRL VM
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$NAT_PASS
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $VM@$VM_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$VM
+
+; === verify files still exist
+>cat /media/hdd/openstack/latest/meta_data.json
+-<No such file
+>cat /media/hdd/openstack/latest/user_data
+-<No such file
+<user data
+>cat /media/hdd/openstack/content/0000
+-<No such file
+<user file
+>exit
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>source ./openrc.tenant1
+
+?if 1 < 0 ? [
+    %BREAK_VM_CREATE
+    %BREAK_VM_REBOOT
+    *FAIL
+]
+
+; === delete WRL VM
+>nova delete $VM_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >nova list 2>/dev/null | grep $VM_NAME | awk '{print $4}'
+    +$result=\n($VM_NAME)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not delete
+    ?if $i > $MAX ? %BREAK_VM_DELETE
+    !sleep 5
+    >
+]
+?if 1 < 0 ? [
+    %BREAK_VM_DELETE
+    %BREAK_CINDER_CREATE
+    *FAIL
+]
+
+; === delete WRL cinder volume
+>cinder delete $VOL_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >cinder list 2>/dev/null | grep $VOL_NAME | awk '{print $6}'
+    +$result=\n($VOL_NAME)
+    ?if $i > $MAX ? ; === cinder volume $VOL_NAME did not delete
+    ?if $i > $MAX ? %BREAK_CINDER_DELETE
+    !sleep 5
+    >
+]
+?if 1 < 0 ? [
+    %BREAK_CINDER_DELETE
+    *FAIL
+]
+>source /etc/nova/openrc
+>cinder quota-update --volumes 3 $TENANT
+>cinder quota-show $TENANT
+; === end of test
