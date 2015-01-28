@@ -12,15 +12,9 @@ TC3 Create a flavour with max memory and launch a vm, perform vm maintenance
 
 TC4 Create a flavour with maximum cpu and launch a vm, perform vm maintenance
 
+
 In each case, the following tests are performed:
-    1   check instance show in:
-            nova list
-            nova show <instance-name>
-            ping            ??
-            ssh             ??
-    1   create snapshot     (cinder)
-    2   pause instance      (nova)
-    3   suspend instance    (nova)
+the exstra specs of the flavor is set to True/False randomly
 ;;;
 
 
@@ -32,9 +26,9 @@ In each case, the following tests are performed:
 
 >echo "Start test TASK80733 of us52193"
 
-$HOST_IP=10.10.10.3
-$HOST_USER=wrsroot
-$HOST_PASSWD=li69nux
+#$HOST_IP=10.10.10.3
+#$HOST_USER=wrsroot
+#$HOST_PASSWD=li69nux
 
 #>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 >ssh -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
