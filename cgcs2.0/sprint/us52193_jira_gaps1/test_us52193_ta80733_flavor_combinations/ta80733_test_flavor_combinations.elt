@@ -1,0 +1,125 @@
+#!/usr/bin/env expect-lite
+
+;;;
+
+Create various flavors using different number of CPUs and different size of Memoryies.
+
+TC1 Create a flavour with minimum cpu and launch a vm, perform vm maintenance
+
+TC2 Create a flavour with min memory and launch a vm, perform vm maintenance.
+
+TC3 Create a flavour with max memory and launch a vm, perform vm maintenance
+
+TC4 Create a flavour with maximum cpu and launch a vm, perform vm maintenance
+
+In each case, the following tests are performed:
+    1   check instance show in:
+            nova list
+            nova show <instance-name>
+            ping            ??
+            ssh             ??
+    1   create snapshot     (cinder)
+    2   pause instance      (nova)
+    3   suspend instance    (nova)
+;;;
+
+
+*EXP_INFO
+*NOFAIL
+
+; record starting time 
+>date
+
+>echo "Start test TASK80733 of us52193"
+
+$HOST_IP=10.10.10.3
+$HOST_USER=wrsroot
+$HOST_PASSWD=li69nux
+
+#>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+>ssh -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+<ssword:
+>>$HOST_PASSWD
+
+>export TMOUT=0
+
+@3
+>source /etc/nova/openrc
+
+; settings 
+
+; get keypair
+>nova keypair-list | grep '^|' | cut -d\| -f2 | tail -n1 | awk '{print $1}' | tr -d " "
++$KEYPAIR=\n(.*)
+
+; get public netid
+
+# there's something wrong, expect-lite will append a trailling space to the variable
+#>neutron net-list | grep -i 'public' | head -n1 | cut -d\| -f2 | awk '{print $1}' | tr -d " "
+#+$PUB_NET0=\n(.*) 
+#>echo $PUB_NET0 | awk '{print $1}'
+#+$PUB_NET=\n(.*)
+
+# this way, no trailling space 
+>neutron net-list 
++$PUB_NET=([a-f0-9-]{32,36})\s+\| public
+#?if $PUB_NET0 == __NO_STRING_CAPTURED__ ? [
+    #; red no public network
+    #; add a public network
+#]
+
+; get internal netid
+# same issue as above
+#>neutron net-list | grep -i 'internal' | head -n1 | cut -d\|  -f2 | awk '{print $1}' | tr -d " "
+#+$INT_NET=\n(.*)
+>neutron net-list 
++$INT_NET=([a-f0-9-]{32,36})\s+\| internal
+
+; get image
+>nova image-list | grep ACTIVE | head -n1 | awk '{print $2}' | tr -d " "
++$IMAGE=\n(.*)
+?if $IMAGE == __NO_STRING_CAPTURED__ ? [
+    *TERM
+]
+
+# 
+$MINMEM=128
+;  create flavor with minimum memory and minimum number of cpus
+$VMNM=ta80733_vm_1
+$FLVNM=flv_ta80733_1_mincpu_minmem
+~fun_create_instance.inc FLVNM=$FLVNM FLVID=auto FLVRAM=$MINMEM FLVDISK=0 FLVCPU=1 VMNM=$VMNM
+
+#*TERM
+
+;  create flavor with maximum memory (1/2 of the total memory) and minimum number of cpus
+; get size of memory
+#@60 this is not working
+@60
+>vm-topology -s computes
++$FREEMEM=\|\s*compute-[0-9]*\s*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|\s*([0-9]+)\s*
+=$FREEMEM / 2
+
+$VMNM=ta80733_vm_2
+$FLVNM=flv_ta80733_2_mincpu_maxmem
+~fun_create_instance.inc FLVNM=$FLVNM FLVID=auto FLVRAM=$FREEMEM FLVDISK=0 FLVCPU=1 VMNM=$VMNM
+
+
+;  create flavor with minimum memory and maximum number of cpus
+; get size of memory
+@60
+>vm-topology -s computes
++$NCPUS=\|\s*compute-[0-9]*\s*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|\s*([0-9]+)\s*\|
+=$NCPUS - 3
+? $NCPUS < 1 ? $NCPUS = 1
+
+$VMNM=ta80733_vm_3
+$FLVNM=flv_ta80733_3_maxcpu_minmem
+~fun_create_instance.inc FLVNM=$FLVNM FLVID=auto FLVRAM=$MINMEM FLVDISK=0 FLVCPU=$NCPUS VMNM=$VMNM
+
+
+;  create flavor with maximum memory and maximum number of CPUs
+; get the number of CPUs on the compute
+$VMNM=ta80733_vm_4
+$FLVNM=flv_ta80733_4_maxcpu_maxmem
+~fun_create_instance.inc FLVNM=$FLVNM FLVID=auto FLVRAM=$FREEMEM FLVDISK=0 FLVCPU=$NCPUS VMNM=$VMNM
+
