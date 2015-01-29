@@ -1,0 +1,109 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+
+#
+#
+;;;
+	test_610_7_combo_test_cli_lock_compute
+	
+	Combines the following test cases (saving 0 locks):
+	.	test_478_reject_delete_unlock_compute_node
+	.	test_610_5_reject_trying_to_swact_compute
+	.	
+	.	
+	
+NOTE: uses floating IP address of controller
+
+runtime = 0m4s
+
+;;;
+
+
+Steps:
+1)  Connecting to controller
+2)  Source env
+3)  Set up sudo root access (to make it easier later in the interact session)
+4)  Show version
+5)  Get active and standby controller
+6)  Validate computes are unlocked
+7)  Reject request to delete unlocked compute node - test_478_reject_delete_unlock_compute_node
+8)  Reject request to swact compute - test_610_5_reject_trying_to_swact_compute
+
+
+
+#############################
+# beginning of expect-lite code for test_610_6
+
+
+
+*NOFAIL
+*EXP_INFO
+
+$IP=10.10.10.2
+$user=wrsroot
+$pass=li69nux
+
+; === connecting to controller
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $user@$IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$pass
+
+>export TMOUT=0
+
+; === source env
+>source /etc/nova/openrc
+
+
+; === set up sudo root access (to make it easier later in the interact session)
+>echo "$pass" | sudo -S id
+<root
+
+; === show version
+
+>system show
+>cat /etc/build.info
+
+; === get active and standby controller
+>system sda-list
++$act_controller=controller-services.*(controller-\d).*active
++$stby_controller=controller-services.*(controller-\d).*standby
+
+; === validate computes are unlocked
+>system host-list
++$victim_host=(compute-\d)
+<compute-\d
+<unlocked
+<compute-\d
+<unlocked
+
+
+; === Reject request to delete unlocked compute node - test_478_reject_delete_unlock_compute_node
+
+>system host-delete $victim_host
+<Unable to complete the action.*unlocked
+
+; === Reject request to swact compute - test_610_5_reject_trying_to_swact_compute
+
+>system host-swact $victim_host
+<Operation Rejected
+
+>
+
+
+
+*INTERACT 
+
+
+; pau
+
+

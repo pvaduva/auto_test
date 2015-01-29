@@ -1,0 +1,633 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+
+#
+#
+;;;
+
+#### NEED to test in HW lab ###
+
+	test_1667_1_combo_test_alarm_lock_compute.elt
+	
+	Combines the following test cases (saving 4 locks):
+	.	test_1667_the_alarm_raised_when_vm_evaculated
+	.	test_819_reject_changing_interf_mtu_to_val_smaller_than_prov_mtu
+	.	test_1668_the_alarm_raised_when_vm_evaculated
+	.	test_1670_the_alarm_raised_when_vm_evaculated
+	.	test_1709_compute_resource_maintance_and_local_alarm
+	.	test_1705_hierarchical_suppression_of_alarm_for_locked_compute
+	.	test_554_1_reject_vm_migration_if_insufficient_resources
+	.	
+	
+Assumptions: requires at last 2 computes
+	No VMs running prior to test (or very few), none in ERROR state
+	
+
+NOTE: uses floating IP address of controller
+
+runtime = 11m27s
+;;;
+
+NOTE: script can be run inside nosetest, or off host e.g.
+./test_1667_1_combo_test_alarm_lock_compute.elt IP=yow-cgcs-ironpass-1
+
+Steps:
+1)  Connecting to controller
+2)  Source env
+3)  Set up sudo root access (to make it easier later in the interact session)
+4)  Show version
+5)  Get active and standby controller
+6)  Validate computes are unlocked
+7)  Prep for - test_1667_the_alarm_raised_when_vm_evaculated
+8)  Get available VPCPUs
+9)  Create test flavor
+10)  Look at neutron config
+11)  Show images in glance
+12)  Get tenant uuids
+13)  Look at quotas for $tenant
+14)  Increase quotas for test
+15)  Switch to tenant mode
+16)  Boot set of VMs
+17)  Wait for VM to boot up
+18)  Check for any VMs in error state
+19)  Drain VMs in ERROR state (not needed for test)
+20)  Become Admin
+21)  Get host for VM
+22)  Reject migration - test_554_1_reject_vm_migration_if_insufficient_resources
+23)  Start load on standby compute (to raise alarm)
+24)  Wait for alarm
+25)  Check alarms for 100.101 High CPU load (part of TC 1705)
+26)  Lock compute - test_1667_the_alarm_raised_when_vm_evaculated & test_554_1_reject_vm_migration_if_insufficient_resources
+27)  Wait for compute to be locked
+28)  Check that alarm is suppresed - test_1705_hierarchical_suppression_of_alarm_for_locked_compute
+29)  Remove load from first compute
+30)  Check that VM has raised an alarm
+31)  Switch to tenant mode
+32)  Check VM is in ERROR state
+33)  Get active VM
+34)  Delete active VM
+35)  Wait for ERRORed VM to recover
+36)  Become Admin
+37)  Check alarm 700.001 to clear (part of TC 1667)
+38)  Check alarm has cleared
+39)  Test locked compute - test_819_reject_changing_interf_mtu_to_val_smaller_than_prov_mtu
+40)  Reject changing interface MTU size to values smaller
+41)  Attempt to set compute to smaller MTU than providernet MTU
+42)  Check that change in MTU is rejected
+43)  Check that MTU was NOT changed
+44)  Verify locked compute alarm - test_1709_compute_resource_maintance_and_local_alarm
+45)  Check alarm 200.001
+46)  Become Admin
+47)  Verify that alarm raised when VM evacuated - test_1668_the_alarm_raised_when_vm_evaculated
+48)  Unlock first compute
+49)  Reboot second compute forcing a migration
+50)  Set up sudo root access (to make it easier later in the interact session)
+51)  Verify test_1670_the_alarm_raised_when_vm_evaculated
+52)  Wait for alarm
+53)  Check alarms 700.001 (part of TC 1668)
+54)  Wait for compute1 to be unlocked
+55)  Wait for alarm to clear
+56)  Check alarms (part of TC 1667)
+57)  Check alarm has cleared
+58)  Finish test and wait for compute2 to be unlocked
+59)  Clean up
+60)  Switch to tenant mode
+61)  Become Admin
+62)  Reset quotas for $tenant
+63)  Show system host list
+
+
+
+
+#############################
+# beginning of expect-lite code for test_610_6
+
+
+
+*NOFAIL
+*EXP_INFO
+
+$IP=10.10.10.2
+$user=wrsroot
+$pass=li69nux
+
+$tenant_credentials=/home/wrsroot/openrc.tenant1
+$tenant=$tenant_credentials
+# trim to just last part
+=$tenant;.*[.](\w+);\1;
+
+$test_flavor=big
+$test_flavor_uuid=5f0d748b-1c8b-4a70-8643-4d57e25ac137
+
+# VM names
+$guest1=VM1
+$guest2=VM2
+
+# expand quotas for scaling test
+$quota_instances=40
+$quota_vcpus=80
+$quota_port=60
+
+
+
+
+; === connecting to controller
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $user@$IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$pass
+
+>export TMOUT=0
+
+; === source env
+>source /etc/nova/openrc
+
+
+; === set up sudo root access (to make it easier later in the interact session)
+>echo "$pass" | sudo -S id
+<root
+
+; === show version
+
+>system show
+>cat /etc/build.info
+
+; === get active and standby controller
+>system sda-list
++$act_controller=controller-services.*(controller-\d).*active
++$stby_controller=controller-services.*(controller-\d).*standby
+
+; === validate computes are unlocked
+>system host-list
++$victim_host1=(compute-\d).{45,60}available
+<compute-\d
+<unlocked
++$victim_host2=(compute-\d).{45,60}available
+<compute-\d
+<unlocked
+
+
+; === prep for - test_1667_the_alarm_raised_when_vm_evaculated
+
+; === get available VPCPUs
+#  servers | pcpus | U:vcpus
+>vm-topology | grep count: | awk  '{print $15,$17,$19}'
++$total_vcpus=\n\d+ (\d+)
+
+$vcpu_size=0
+=$vcpu_size+$total_vcpus/2
+?if $vcpu_size >= 6? [
+	;purple == adjusting for max vcpu size of 8
+	$vcpu_size=8
+	#=$total_vcpus / $vcpu_size
+	# controls the number of VMs booted
+	$total_vcpus=4
+]
+
+; === create test flavor 
+>nova flavor-create $test_flavor $test_flavor_uuid 512 0 $vcpu_size
+
+; === look at neutron config
+>neutron net-list
++$internal_net_uuid=([0-9a-f-]{36}) \| internal0
++$tenant1_net_uuid=([0-9a-f-]{36}) \| tenant1-net0
+
+>neutron subnet-list
+>neutron router-list
+
+; === show images in glance
+>glance image-list
+<[0-9a-f-]{36} \|
++$glance_image_name=((\w+|-)+)
+
+
+; === get tenant uuids
+>keystone tenant-list
+<name
++$tenant_uuid=([0-9a-f-]{32}|\d{3})\s* \| $tenant 
+
+
+; === Look at quotas for $tenant
+>nova quota-show --tenant $tenant_uuid
+<instances
++$tenant_quota_instances=(\d+)
+<cores
++$tenant_quota_vcpus=(\d+)
+
+>neutron quota-show --tenant-id $tenant_uuid
+<port
++$tenant_quota_port=(\d+)
+
+; === increase quotas for test
+>nova quota-update --instances $quota_instances $tenant_uuid
+>nova quota-update --cores $quota_vcpus $tenant_uuid
+# must use tenant uuid when updating neutron quotas
+>neutron quota-update --port $quota_port --tenant-id $tenant_uuid
+
+
+
+
+
+; === switch to tenant mode
+>source $tenant_credentials
+
+
+; === boot set of VMs
+@10
+$i=1
+[ $i <=  $total_vcpus
+	>nova boot --key_name=keypair-tenant1 --flavor=$test_flavor_uuid --nic net-id=$tenant1_net_uuid,vif-model=avp --nic net-id=$internal_net_uuid,vif-model=avp --image=$glance_image_name   $guest1-$i
+	<status
+	+$i
+]
+-$i
+$max_vms=$i
+
+; === wait for VM to boot up
+
+$i=0
+$max=50
+$vm_state=none
+[ $vm_state != ACTIVE
+	>nova list
+	<$guest1-$max_vms
+	+$vm_state=(BUILD|ACTIVE|ERROR)
+
+	!sleep 5
+	+$i
+	?if $i > $max? %BREAK_VM_BOOT
+	
+	?if $vm_state == ERROR? %BREAK_VM_BOOT
+]
+%BREAK_VM_BOOT
+
+; === check for any VMs in error state
+>nova list
++$vm_state=(ERROR)
+
+?if $vm_state == ERROR? [
+	; === drain VMs in ERROR state (not needed for test)
+	[ $vm_state == ERROR
+		>nova list
+		+$vm_state=$guest1-\d+\s+\| (ERROR)
+		+$vm_in_error=($guest1-\d+)\s+\| ERROR
+		?if $vm_in_error != __NO_STRING_CAPTURED__? >nova delete $vm_in_error
+		>
+	]
+]
+>
+
+>nova list
+$i=1
+[ $i <= $max_vms
+	+$vm_uuid1_$i=([0-9a-f-]{36}) \| $guest1-$i
+	+$i
+]
+
+
+; === Become Admin
+>source /etc/nova/openrc 
+
+; === get host for VM
+>nova show $vm_uuid1_1
+<:host
++$vm_host=(compute-\d)
+
+*INTERACT
+
+
+; === reject migration - test_554_1_reject_vm_migration_if_insufficient_resources
+?if $vm_host == $victim_host1? $vm_host=$victim_host2 :: $vm_host=$victim_host1
+>nova live-migration  $vm_uuid1_2 $vm_host
+<ERROR
+#<ERROR.* Live migration.*failed
+
+
+-----------------------
+
+; === start load on standby compute (to raise alarm)
+@5
+*FORK load
+# log into active controller
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $user@$IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$pass
+
+>export TMOUT=0
+
+>ssh -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no  $user@$vm_host
+<Password:
+>>$pass
+>for f in $(seq 5); do $(/bin/dd if=/dev/zero of=/dev/null &) ; done
+>
+>
+
+-----------------------
+*FORK default
+>system alarm-list
+; === wait for alarm 
+$alarm=100.101
+@10
+$i=0
+$max=20
+; === check alarms for 100.101 High CPU load (part of TC 1705)
+$vm_alarm=none
+[ $vm_alarm != $alarm
+	>system alarm-list
+	+$vm_alarm=($alarm)
+	!sleep 5
+	? $i > $max ? %BREAK2
+	+$i
+]
+%BREAK2
+
+; === lock compute - test_1667_the_alarm_raised_when_vm_evaculated & test_554_1_reject_vm_migration_if_insufficient_resources
+>system host-lock $vm_host
+>system host-list
+<$vm_host
+<unlocked
+
+>system host-lock $vm_host --force
+
+; === wait for compute to be locked
+$compute_state=none
+[ $compute_state != locked 
+	>system host-list
+	+$compute_state=$vm_host\s+\| compute\s+\| (locked|unlocked)
+	+$i
+	!sleep 5
+]
+>
+
+; === check that alarm is suppresed - test_1705_hierarchical_suppression_of_alarm_for_locked_compute
+>system alarm-list
+<Time Stamp
+# check that other alarm is not showing (suppressed)
+-<100.101 .{100,120}compute-\d
+
+-----------------------
+
+*FORK load
+; === remove load from first compute
+>killall dd
+>
+-----------------------
+
+
+*FORK default
+; === check that VM has raised an alarm
+>system alarm-list
+<700.001
+
+; === switch to tenant mode
+>source $tenant_credentials
+
+; === check VM is in ERROR state
+>nova list
+<Networks
+<ERROR
+
+; === get active VM
+>nova list
++$active_vm=(\w+-\d+)\s+\| ACTIVE
++$error_vm=(\w+-\d+)\s+\| ERROR
+
+; === delete active VM
+>nova delete $active_vm	
+>
+
+; === wait for ERRORed VM to recover
+$i=0
+$max=25
+$vm_state=none
+[ $vm_state != ACTIVE
+	>nova list
+	<$error_vm
+	+$vm_state=(BUILD|ACTIVE|ERROR)
+
+	!sleep 5
+	+$i
+	?if $i > $max? %BREAK_VM_RECOVER
+	
+]
+%BREAK_VM_RECOVER
+>
+
+
+;red Nova evacuate VM does not recover, after other VMs are terminated to make room	BUG:CGTS-1170
+
+#;purple -------------- work around for CGTS-1170
+#Kill Errored VM, and start a new one to complete test
+#>nova list
+#+$error_vm=(\w+-\d+)\s+\| ERROR
+#>nova delete $error_vm	
+#$i=1
+#>nova boot --key_name=keypair-tenant1 --flavor=$test_flavor_uuid --nic net-id=$tenant1_net_uuid,vif-model=avp --nic net-id=$internal_net_uuid,vif-model=avp --image=$glance_image_name   $guest1-$i
+#>
+#;purple -------------- end of work around
+
+
+
+
+; === Become Admin
+>source /etc/nova/openrc 
+
+
+@10
+$i=0
+$max=25
+; === check alarm 700.001 to clear (part of TC 1667)
+$vm_alarm=none
+[ $vm_alarm != __NO_STRING_CAPTURED__
+	>system alarm-list
+	+$vm_alarm=(700.001)
+	!sleep 5
+	? $i > $max ? %BREAK
+	+$i
+]
+%BREAK
+
+
+; === check alarm has cleared
+>system alarm-list
+<Time Stamp
+-<700.001
+
+
+
+; === Test locked compute - test_819_reject_changing_interf_mtu_to_val_smaller_than_prov_mtu
+
+; === Reject changing interface MTU size to values smaller
+
+# locked compute $victim_host1
+>system host-if-list $vm_host
++$data_mtu=(\d+)\s+\| \w+-data0
++$data_prov_name=\d+\s+\| (\w+-data0)
+>system host-if-list $vm_host | grep $data_prov_name | awk '{print $4}'
++$data_name=\n(\w+)
+
+>neutron providernet-list
++$providernet_uuid=([0-9a-f-]{36}) \| \w+-data0
+
+>neutron providernet-show $providernet_uuid
+<mtu
++$providernet_mtu=(\d+)
+
+; === attempt to set compute to smaller MTU than providernet MTU
+$small_mtu=$providernet_mtu
+=$small_mtu - 10
+
+; === check that change in MTU is rejected
+>system host-if-modify -m $small_mtu $vm_host $data_name
+<The provider network MTU.*exceeds the interface MTU
+
+; === check that MTU was NOT changed
+>system host-if-list $vm_host
+<$data_mtu\s+\| \w+-data0
+
+
+; === Verify locked compute alarm - test_1709_compute_resource_maintance_and_local_alarm
+; === check alarm 200.001
+>system alarm-list
+<Time Stamp
+<200.001
+
+
+*FORK default
+; === Become Admin
+>source /etc/nova/openrc 
+
+
+; === Verify that alarm raised when VM evacuated - test_1668_the_alarm_raised_when_vm_evaculated
+
+; === unlock first compute
+>system host-unlock $vm_host
+>
+
+
+; === reboot second compute forcing a migration
+*FORK $victim_host2
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $user@$IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$pass
+
+>export TMOUT=0
+>
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $user@$victim_host2
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$pass
+; === set up sudo root access (to make it easier later in the interact session)
+>echo "$pass" | sudo -S id
+<root
+>sudo reboot -f
+>>exit
+>>
+
+*FORK default
+
+; === verify test_1670_the_alarm_raised_when_vm_evaculated
+# check for allarm 700.001
+; === wait for alarm 
+@10
+$i=0
+$max=20
+; === check alarms 700.001 (part of TC 1668)
+$vm_alarm=none
+[ $vm_alarm != 700.001
+	>system alarm-list
+	+$vm_alarm=(700.001)
+	!sleep 5
+	? $i > $max ? %BREAK3
+	+$i
+]
+%BREAK3
+
+
+; === wait for compute1 to be unlocked
+$compute_state=none
+[ $compute_state != unlocked 
+	>system host-list
+	+$compute_state=$vm_host\s+\| compute\s+\| (locked|unlocked)\s+\| (enabled|disabled)
+	+$i
+	!sleep 5
+]
+>
+
+
+; === wait for alarm to clear
+@10
+$i=0
+$max=45
+; === check alarms (part of TC 1667)
+$vm_alarm=none
+[ $vm_alarm != __NO_STRING_CAPTURED__
+	>system alarm-list
+	+$vm_alarm=(700.001)
+	!sleep 5
+	? $i > $max ? %BREAK4
+	+$i
+]
+%BREAK4
+
+; === check alarm has cleared
+>system alarm-list
+<Time Stamp
+-<700.001
+
+; === Finish test and wait for compute2 to be unlocked
+$compute_state=none
+[ $compute_state != unlocked 
+	>system host-list
+	+$compute_state=$victim_host2\s+\| compute\s+\| (locked|unlocked)\s+\| (enabled)
+	+$i
+	!sleep 5
+]
+>
+
+
+
+
+
+*INTERACT 
+
+; === clean up
+
+; === switch to tenant mode
+>source $tenant_credentials
+
+$i=1
+[ $i <= $total_vcpus
+	>nova delete $guest1-$i	
+	+$i
+]
+
+
+; === Become Admin
+>source /etc/nova/openrc 
+>nova flavor-delete $test_flavor
+
+; === reset quotas for $tenant
+>nova quota-update --instances $tenant_quota_instances $tenant_uuid
+>nova quota-update --cores $tenant_quota_vcpus $tenant_uuid
+>neutron quota-update --port $tenant_quota_port --tenant-id $tenant_uuid
+
+; === show system host list
+>system host-list
+>
+
+; pau
+
+
