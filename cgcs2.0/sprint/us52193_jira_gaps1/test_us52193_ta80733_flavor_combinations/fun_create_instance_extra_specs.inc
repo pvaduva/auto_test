@@ -7,6 +7,7 @@
 #$FLVRAM1=128
 #$FLVDISK1=0
 #$FLVCPU1=1
+#$ESPECTYPE=0-1
 
 >echo "$FLVNM $FLVID $FLVRAM $FLVDISK $FLVCPU"
 
@@ -16,30 +17,15 @@
 #+$FLVUUID=\|\s*([a-f0-9-]{32,36})\s*\|\s*$FLVNM\s*\|
 ~fun_create_flavor.inc FLVNM=$FLVNM FLVRAM=$FLVRAM FLVDISK=$FLVDISK FLVCPU=$FLVCPU
 
-#; get extra specs
-#~fun_get_extra_specs.inc FLVID=$FLVUUID
-#>shuf -i 2000-66000 -n 1
-#+$RD=\n([0-9]+)
-#?if $RD > 4300 ? [
-#    $DDTD_CPUS=True
-#]::[
-#    $DDTD_CPUS=False
-#]
-
-#>shuf -i 2000-66000 -n 1
-#+$RD=\n([0-9]+)
-#?if $RD > 4300 ? [
-#    $GST_HREARTBEAT=True
-#]::[
-#    $GST_HREARTBEAT=False
-#]
-
 ; set the extra specs to flavor $FLVUUID
->nova flavor-key $FLVUUID set dedicated:cpus=$DDTD_CPUS guest:heartbeat=$GST_HREARTBEAT
+?if $ESPECTYPE == 0 ? [
+    >nova flavor-key $FLVUUID set dedicated:cpus=True guest:heartbeat=True processor:node=0 wrs:min_vcpus=1
+]::[
+    >nova flavor-key $FLVUUID set dedicated:cpus=True guest:heartbeat=True shared:vcpu=0 wrs:min_vcpus=1
+]
 >nova flavor-show $FLVUUID
 
 ; create service instance
-#$VMNM=ta80733_vm_1
 ~fun_del_vm.inc $VMNM
 >nova boot --key_name=$KEYPAIR --flavor=$FLVNM --nic net-id=$PUB_NET,vif-model=avp --nic net-id=$INT_NET,vif-model=e1000 --image=$IMAGE $VMNM
 +$UUID=\|\s*id\s*\|\s*([a-f0-9-]{32,36})\s*\|
@@ -54,7 +40,7 @@
 >nova flavor-delete $FLVUUID
 
 ; again?
->nova flavor-delete $FLVUUID
+#>nova flavor-delete $FLVUUID
 
 ; done
 

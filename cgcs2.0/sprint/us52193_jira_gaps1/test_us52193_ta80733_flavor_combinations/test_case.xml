@@ -20,7 +20,8 @@ Modification history
 </environment>
 
 <test_module name="sanity/cgcs/${WASS_TC_NAME}" timeout="">
-    <test_case  name="sanity/cgcs/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag">
+    <test_case  name="sanity/cgcs/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" >
+    <!-- test_case  name="sanity/cgcs/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag"-->
 
         #######################################################
         # Test Sanity CGCS app/test
@@ -49,12 +50,12 @@ Con1SSH TYPE echo executing ${WASSP_TC_NAME}\n
 Con1SSH WAIT 100 SEC
 
 Con1SSH FAILIF FAIL
+Con1SSH PASSIF Result: PASS
 
-Con1SSH CALL ${WASSP_TC_PATH}/ta80733_test_flavor_combinations.elt HOST_IP=${HOST_IP} HOST_USER=${HOST_USER} HOST_PASSWD=${HOST_PASSWD}
-
-Con1SSH WAIT ${noseTestTimeout} SEC (.*:\~#\s)|(.*:\~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con1SSH CALL ${WASSP_TC_PATH}/ta80733_test_flavor_combinations.elt HOST_IP=${HOST_IP} HOST_USER=${HOST_USER} HOST_PASSWD=${HOST_PASSWD} *NOINTERACT
 
 PASS
     </test_case>
 </test_module>
 </file>
+

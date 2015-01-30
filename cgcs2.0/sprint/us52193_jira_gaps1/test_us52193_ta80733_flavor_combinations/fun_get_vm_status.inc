@@ -8,11 +8,12 @@
 # for test only
 $VMUUID=6ba5350b-aa2e-47a0-84ae-d59e1da4175a
 >nova show $VMUUID
-+$HOSTNAME=\|\s*[A-Za-z0-9-]+:hypervisor_hostname\s*\|\s*([A-Za-z0-9-]+)\s*\|
-+$POWER=\|\s*[A-Za-z0-9-]+:power_state\s*\|\s*([A-Za-z0-9-]+)\s*\|
-+$TASK=\|\s*[A-Za-z0-9-]+:task_state\s*\|\s*([A-Za-z0-9-]+)\s*\|
-+$VM_STATE=\|\s*[A-Za-z0-9-]+:vm_state\s*\|\s*([A-Za-z0-9-]+)\s*\|
-+$STATUS=\|\s*status\s*\|\s*([A-Za-z0-9-]+)\s*\|
++$HOSTNAME=\|\s*[A-Za-z0-9-]+:hypervisor_hostname\s*\|\s*([A-Za-z0-9_-]+)\s*\|
++$POWER=\|\s*[A-Za-z0-9-]+:power_state\s*\|\s*([A-Za-z0-9_-]+)\s*\|
++$TASK_STATE=\|\s*[A-Za-z0-9-]+:task_state\s*\|\s*([A-Za-z0-9_-]+)\s*\|
++$TASK=\|\s*[A-Za-z0-9-]+:task_state\s*\|\s*([A-Za-z0-9_-]+)\s*\|
++$VM_STATE=\|\s*[A-Za-z0-9-]+:vm_state\s*\|\s*([A-Za-z0-9_-]+)\s*\|
++$STATUS=\|\s*status\s*\|\s*([A-Za-z0-9_-]+)\s*\|
 
 
 ;;;

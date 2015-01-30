@@ -26,13 +26,10 @@ the exstra specs of the flavor is set to True/False randomly
 
 >echo "Start test TASK80733 of us52193"
 
-#$HOST_IP=10.10.10.3
-#$HOST_USER=wrsroot
-#$HOST_PASSWD=li69nux
-
 #>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 >ssh -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
-<ssword:
+#<ssword:
+<assword|SYSTEM:|WARNING:
 >>$HOST_PASSWD
 
 >export TMOUT=0
@@ -43,8 +40,11 @@ the exstra specs of the flavor is set to True/False randomly
 ; settings 
 
 ; get keypair
->nova keypair-list | grep '^|' | cut -d\| -f2 | tail -n1 | awk '{print $1}' | tr -d " "
-+$KEYPAIR=\n(.*)
+>nova keypair-list
++$KEYPAIR=\|\s*([a-z0-9-]+)\s*\|\s*[a-z0-9:]+\s*\|
+?if $KEYPAIR == __NO_STRING_CAPTURED__ ? [
+    *TERM
+]
 
 ; get public netid
 
@@ -56,46 +56,63 @@ the exstra specs of the flavor is set to True/False randomly
 
 # this way, no trailling space 
 >neutron net-list 
-+$PUB_NET=([a-f0-9-]{32,36})\s+\| public
-#?if $PUB_NET0 == __NO_STRING_CAPTURED__ ? [
-    #; red no public network
-    #; add a public network
-#]
+#+$PUB_NET=([a-z0-9-]{32,36})\s+\|\s*public|([a-z0-9-]{32,36})\s+\|\s*external
++$PUB_NET=([a-z0-9-]{32,36})\s*\|\s*external
+?if $PUB_NET == __NO_STRING_CAPTURED__ ? [
+    *TERM
+]
 
 ; get internal netid
-# same issue as above
-#>neutron net-list | grep -i 'internal' | head -n1 | cut -d\|  -f2 | awk '{print $1}' | tr -d " "
-#+$INT_NET=\n(.*)
 >neutron net-list 
-+$INT_NET=([a-f0-9-]{32,36})\s+\| internal
++$INT_NET=([a-z0-9-]{32,36})\s*\|\s*internal
+?if $INT_NET == __NO_STRING_CAPTURED__ ? [
+    *TERM
+]
 
 ; get image
->nova image-list | grep ACTIVE | head -n1 | awk '{print $2}' | tr -d " "
-+$IMAGE=\n(.*)
+>nova image-list
++$IMAGE=([a-z0-9-]{32,36})\s*\|\s*cgcs
 ?if $IMAGE == __NO_STRING_CAPTURED__ ? [
     *TERM
 ]
 
 # 
 $MINMEM=128
-;  create flavor with minimum memory and minimum number of cpus
+
+;  create flavor with minimum memory and minimum number of cpus, with 0 type of extra specs
 $VMNM=ta80733_vm_1
 $FLVNM=flv_ta80733_1_mincpu_minmem
 ~fun_create_instance.inc FLVNM=$FLVNM FLVID=auto FLVRAM=$MINMEM FLVDISK=0 FLVCPU=1 VMNM=$VMNM
 
-#*TERM
+;  create flavor with minimum memory and minimum number of cpus, with 1 type of extra specs
+$VMNM=ta80733_vm_2
+$FLVNM=flv_ta80733_2_mincpu_minmem
+~fun_create_instance.inc FLVNM=$FLVNM FLVID=auto FLVRAM=$MINMEM FLVDISK=0 FLVCPU=1 VMNM=$VMNM
 
 ;  create flavor with maximum memory (1/2 of the total memory) and minimum number of cpus
 ; get size of memory
-#@60 this is not working
 @60
 >vm-topology -s computes
-+$FREEMEM=\|\s*compute-[0-9]*\s*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|\s*([0-9]+)\s*
-=$FREEMEM / 2
++$FREEMEM1=\|\s*compute-[0-9]*\s*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|\s*[^\|]*\s*\|\s*[^\|]*\s*\|\s*([0-9]+)\s*
++$FREEMEM2=\|\s*compute-[0-9]*\s*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|\s*[^\|]*\s*\|\s*[^\|]*\s*\|\s*([0-9]+)\s*
+=$FREEMEM1
 
-$VMNM=ta80733_vm_2
-$FLVNM=flv_ta80733_2_mincpu_maxmem
-~fun_create_instance.inc FLVNM=$FLVNM FLVID=auto FLVRAM=$FREEMEM FLVDISK=0 FLVCPU=1 VMNM=$VMNM
+$FREEMEM=$FREEMEM1
+; 1G less memory
+=$FREEMEM - 1000
+?if $FREEMEM < 128 ? [
+    $FREEMEM=128
+]
+
+#?if $FREEMEM2 < $FREEMEM1 ?[
+#    $FREEMEM=$$FREEMEM2
+#]
+
+$VMNM=ta80733_vm_3
+$FLVNM=flv_ta80733_3_mincpu_maxmem
+$DDTD_CPUS=True
+$GST_HREARTBEAT=False
+~fun_create_instance.inc FLVNM=$FLVNM FLVID=auto FLVRAM=$FREEMEM FLVDISK=0 FLVCPU=1 VMNM=$VMNM DDTD_CPUS=$DDTD_CPUS GST_HREARTBEAT=$GST_HREARTBEAT
 
 
 ;  create flavor with minimum memory and maximum number of cpus
@@ -103,17 +120,24 @@ $FLVNM=flv_ta80733_2_mincpu_maxmem
 @60
 >vm-topology -s computes
 +$NCPUS=\|\s*compute-[0-9]*\s*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|\s*([0-9]+)\s*\|
+=$NCPUS / 2 
 =$NCPUS - 3
-? $NCPUS < 1 ? $NCPUS = 1
+? $NCPUS < 1 ? $NCPUS=1
 
-$VMNM=ta80733_vm_3
-$FLVNM=flv_ta80733_3_maxcpu_minmem
-~fun_create_instance.inc FLVNM=$FLVNM FLVID=auto FLVRAM=$MINMEM FLVDISK=0 FLVCPU=$NCPUS VMNM=$VMNM
+$VMNM=ta80733_vm_4
+$FLVNM=flv_ta80733_4_maxcpu_minmem
+$DDTD_CPUS=False
+$GST_HREARTBEAT=True
+~fun_create_instance.inc FLVNM=$FLVNM FLVID=auto FLVRAM=$MINMEM FLVDISK=0 FLVCPU=$NCPUS VMNM=$VMNM DDTD_CPUS=$DDTD_CPUS GST_HREARTBEAT=$GST_HREARTBEAT
 
 
 ;  create flavor with maximum memory and maximum number of CPUs
 ; get the number of CPUs on the compute
-$VMNM=ta80733_vm_4
-$FLVNM=flv_ta80733_4_maxcpu_maxmem
-~fun_create_instance.inc FLVNM=$FLVNM FLVID=auto FLVRAM=$FREEMEM FLVDISK=0 FLVCPU=$NCPUS VMNM=$VMNM
+$VMNM=ta80733_vm_5
+$FLVNM=flv_ta80733_5_maxcpu_maxmem
+$DDTD_CPUS=False
+$GST_HREARTBEAT=False
+
+~fun_create_instance.inc FLVNM=$FLVNM FLVID=auto FLVRAM=$FREEMEM FLVDISK=0 FLVCPU=$NCPUS VMNM=$VMNM DDTD_CPUS=$DDTD_CPUS GST_HREARTBEAT=$GST_HREARTBEAT
+
 

@@ -12,7 +12,10 @@ $cnt=0
     =$cnt + 1
     ~fun_get_vm_status.inc VMUUID=$VMUUID
     ?if $VM_STATE == $VMSTATE ? [
-        ?if $STATUS == $STATUS ?%READY
+        ?if $STATUS == $STATUS ? [
+            #?if $TASK_STATE != resize_migrating?%READY
+            ?if $TASK_STATE == - ?%READY
+        ]
     ]
     !sleep 3
 ]
