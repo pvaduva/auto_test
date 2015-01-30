@@ -1,0 +1,41 @@
+#!/usr/bin/env expect-lite
+
+;;;
+
+Create a backup of the running system
+
+;;;
+
+
+*EXP_INFO
+*NOFAIL
+
+#HOST_IP=${HOST_IP} HOST_USER=${HOST_USER} HOST_PASSWD=${HOST_PASSWD}
+$HOST_IP=10.10.10.3
+$HOST_USER=wrsroot
+$HOST_PASSWD=li69nux
+$BACK_PATH=bkup
+
+>mkdir -p bkup
+
+>echo "Start test TASK80733 of us52193 - create backup of the running system"
+
+>ssh -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+<assword|SYSTEM:|WARNING:
+>>$HOST_PASSWD
+
+>export TMOUT=0
+
+@3
+>source /etc/nova/openrc
+
+
+>echo $BKUP_SYSTEM $BKUP_IMAGES
+
+; exute the system backup
+~fun_backup_system_data.inc HOST_IP=$HOST_IP HOST_USER=$HOST_USER HOST_PASSWD=$HOST_PASSWD BACK_PATH=$BACK_PATH
+
+
+#; backup cinder volumes if any of them exists
+~fun_backup_cinder_volume.inc HOST_IP=$HOST_IP HOST_USER=$HOST_USER HOST_PASSWD=$HOST_PASSWD BACK_PATH=$BACK_PATH
+
