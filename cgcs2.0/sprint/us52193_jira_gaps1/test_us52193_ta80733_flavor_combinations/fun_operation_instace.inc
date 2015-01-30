@@ -46,7 +46,6 @@
 ; A4 migrate server/vm $VMUUID
 ; A4 step1, migrate the server
 
-#>nova migrate $VMUUID ; sleep 2 ; nova resize-confirm $VMUUID
 >nova migrate $VMUUID
 ~fun_wait_vm_to_states.inc VMUUID=$VMUUID VMSTATE=resized STATUS=VERIFY_RESIZE
 
