@@ -1,0 +1,380 @@
+#!/usr/bin/env expect-lite
+
+;;;
+
+VM Snapshot Test Script
+
+Steps:
+1)  Change quotas for cinder
+2)  Get the necessary image and network uuids
+3)  Verify we can connect to NATBox
+4)  NATBOX $NAT_IP not responding
+5)  NATBOX $NAT_IP not responding
+6)  Create WRL cinder volume
+7)  Wait for cinder volume vol-wrl5-orig to become available
+8)  Attach WRL VM to cinder volume
+9)  Wait for WRL VM to go available
+10)  Ssh into WRL VM via NATBox
+11)  Write current date to a file date.txt
+12)  Delete WRL VM
+13)  Create snapshot of cinder volume
+14)  Wait for snapshot $SNAP_NAME to become available
+15)  Wait for cinder volume $SNAP_VOL to become available
+16)  Delete snapshot of cinder volume $VOL_NAME
+17)  Delete WRL cinder volume
+18)  Attach snapshot of original VM to snapshot cinder volume
+19)  Wait for VM to go available
+20)  Ssh into WRL VM via NATBox
+21)  Verify date in date.txt is the same
+22)  Delete snapshot VM
+23)  Delete snapshot of cinder volume
+
+REQUIRES: expect-lite 4.8.0 or greater
+This expect script can be invoked via the following:
+./wrl_config_drive.elt <host> <username> <password> <NAT host> <NAT user> <NAT pass>
+where:
+host = IP address of the controller, e.g. 10.10.10.2
+username = username on the controller, e.g. wrsroot
+password = password on the controller, e.g. li69nux
+NAT host = IP address of the NATBox, e.g. 128.224.150.11
+NAT user = username on the NATBox, e.g. cgcs
+NAT pass = password on the NATBox, e.g. li69nux
+;;;
+
+
+
+*EXP_INFO
+*NOFAIL
+
+# Varibles that will become constants from script options
+$NAT_IP=128.224.150.11
+$NAT_USER=cgcs
+$NAT_PASS=li69nux
+$HOST_USER=wrsroot
+$HOST_PASS=li69nux
+$HOST_IP=10.10.10.2
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>source /etc/nova/openrc
+>system show
+>cat /etc/build.info
+
+; === Change quotas for cinder
+>keystone tenant-list
++$TENANT=([0-9a-f]{32}) \| .*tenant1
+>cinder quota-show $TENANT
+>cinder quota-update --volumes 20 $TENANT
+>cinder quota-show $TENANT
+
+@20
+
+; === get the necessary image and network uuids
+>source ./openrc.tenant1
+>glance image-list
++$IMAGE=([0-9a-f-]{36}) \| .*wrl5-avp
+>neutron net-list
++$TENANT_MGMT=([0-9a-f-]{36}) \| .*tenant1-mgmt-net
++$TENANT_NET=([0-9a-f-]{36}) \| .*tenant1-net0
+$VOL_NAME=vol-wrl5-orig
+$VM_NAME=original
+$VM=root
+$SNAP_NAME=snapshot-of-cinder
+$SNAP_VOL=vol-wrl5-snap
+$SNAP_VM=snapshot
+
+; === verify we can connect to NATBox
+>ping -c4 $NAT_IP
+<icmp
++$ping_result=(Destination Host Unreachable|ttl=|__NO_STRING_CAPTURED__)
+
+?if $ping_result == Destination Host Unreachable ? [
+    ; === NATBOX $NAT_IP not responding
+    *TERM 1
+]
+
+?if $ping_result == __NO_STRING_CAPTURED__ ? [
+    ; === NATBOX $NAT_IP not responding
+    *TERM 1
+]
+; === create WRL cinder volume
+>cinder create --image-id $IMAGE --display-name=$VOL_NAME 1
+
+; === wait for cinder volume vol-wrl5-orig to become available
+
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >cinder show $VOL_NAME
+    +$result=(available|creating|downloading|error)
+    ?if $i > $MAX ? ; === cinder volume $VOL_NAME did not become available
+    ?if $i > $MAX ? %BREAK_CINDER_CREATE
+    ?if $result == error ? ; === cinder volume $VOL_NAME is in error state
+    ?if $result == error ? %BREAK_CINDER_CREATE
+    !sleep 5
+    >
+]
+
+>cinder list
++$CINDER_ID=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME
+
+; === attach WRL VM to cinder volume
+>nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
+
+; === wait for WRL VM to go available
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != ACTIVE
+    +$i
+    >nova show $VM_NAME
+    +$result=(ACTIVE|BUILD|ERROR)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not become ACTIVE
+    ?if $i > $MAX ? %BREAK_VM_CREATE
+    ?if $result == ERROR ? ; === VM $VM_NAME is in ERROR state
+    ?if $result == ERROR ? %BREAK_VM_CREATE
+    !sleep 5
+    >
+]
+
+!sleep 10
+>nova show $VM_NAME
++$VM_IP=tenant1-mgmt-net network.*\| ([0-9.]*)
+
+; === ssh into WRL VM via NATBox
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$NAT_PASS
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $VM@$VM_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$VM
+
+; === write current date to a file date.txt
+>date > date.txt
+>cat date.txt
++$DATE=\n(\w+.*\d)
+>sync date.txt
+>exit
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>source ./openrc.tenant1
+
+?if 1 < 0 ? [
+    %BREAK_VM_CREATE
+    *FAIL
+]
+
+; === delete WRL VM
+>nova delete $VM_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >nova list
+    +$result=($VM_NAME)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not delete
+    ?if $i > $MAX ? %BREAK_VM_DELETE
+    !sleep 5
+    >
+]
+
+; === create snapshot of cinder volume
+>nova volume-snapshot-create --display-name $SNAP_NAME $CINDER_ID
+
+; === wait for snapshot $SNAP_NAME to become available
+
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >nova volume-snapshot-show $SNAP_NAME
+    +$result=(available|creating|downloading|error)
+    ?if $i > $MAX ? ; === cinder volume $SNAP_NAME did not become available
+    ?if $i > $MAX ? %BREAK_SNAP_CREATE
+    ?if $result == error ? ; === cinder volume $VOL_NAME is in error state
+    ?if $result == error ? %BREAK_SNAP_CREATE
+    !sleep 5
+    >
+]
+
+>nova volume-snapshot-list
++$SNAP_ID=([0-9a-f-]{36}) \| (.*) \| .*$SNAP_NAME
+>cinder create --snapshot-id $SNAP_ID --display-name $SNAP_VOL 1
+
+; === wait for cinder volume $SNAP_VOL to become available
+
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >cinder show $SNAP_VOL
+    +$result=(available|creating|error)
+    ?if $i > $MAX ? ; === cinder volume $SNAP_VOL did not become available
+    ?if $i > $MAX ? %BREAK_SNAP_CINDER_CREATE
+    ?if $result == error ? ; === cinder volume $SNAP_VOL is in error state
+    ?if $result == error ? %BREAK_SNAP_CINDER_CREATE
+    !sleep 5
+    >
+]
+
+>cinder list
++$SNAP_CINDER_ID=([0-9a-f-]{36}) \| (.*) \| .*$SNAP_VOL
+
+?if 1 < 0 ? [
+    %BREAK_SNAP_CREATE
+    %BREAK_SNAP_CINDER_CREATE
+    *FAIL
+]
+
+; === delete snapshot of cinder volume $VOL_NAME
+>nova volume-snapshot-delete $SNAP_ID
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >nova volume-snapshot-list
+    +$result=($SNAP_ID)
+    ?if $i > $MAX ? ; === snapshot $SNAP_ID did not delete
+    ?if $i > $MAX ? %BREAK_SNAP_DELETE
+    !sleep 5
+    >
+]
+
+?if 1 < 0 ? [
+    %BREAK_SNAP_DELETE
+    %BREAK_CINDER_CREATE
+    *FAIL
+]
+
+; === delete WRL cinder volume
+>cinder delete $VOL_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >cinder list
+    +$result=($VOL_NAME)
+    ?if $i > $MAX ? ; === cinder volume $VOL_NAME did not delete
+    ?if $i > $MAX ? %BREAK_CINDER_DELETE
+    !sleep 5
+    >
+]
+?if 1 < 0 ? [
+    %BREAK_CINDER_DELETE
+    *FAIL
+]
+
+; === attach snapshot of original VM to snapshot cinder volume
+>nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$SNAP_CINDER_ID:::0 $SNAP_VM
+
+; === wait for VM to go available
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != ACTIVE
+    +$i
+    >nova show $SNAP_VM
+    +$result=(ACTIVE|BUILD|ERROR)
+    ?if $i > $MAX ? ; === VM $SNAP_VM did not become ACTIVE
+    ?if $i > $MAX ? %BREAK_SNAP_VM_CREATE
+    ?if $result == ERROR ? ; === VM $SNAP_VM is in ERROR state
+    ?if $result == ERROR ? %BREAK_SNAP_VM_CREATE
+    !sleep 5
+    >
+]
+
+!sleep 10
+>nova show $SNAP_VM
++$VM_IP=tenant1-mgmt-net network.*\| ([0-9.]*)
+
+; === ssh into WRL VM via NATBox
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$NAT_PASS
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $VM@$VM_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$VM
+@5
+; === Verify date in date.txt is the same
+>cat date.txt
+-<No such file
+<<$DATE
+
+>exit
+
+@20
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>source ./openrc.tenant1
+
+?if 1 < 0 ? [
+    %BREAK_SNAP_VM_CREATE
+    *FAIL
+]
+
+; === delete snapshot VM
+>nova delete $SNAP_VM
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >nova list
+    +$result=($SNAP_VM)
+    ?if $i > $MAX ? ; === VM $SNAP_VM did not delete
+    ?if $i > $MAX ? %BREAK_SNAP_VM_DELETE
+    !sleep 5
+    >
+]
+
+
+; === delete snapshot of cinder volume
+>cinder delete $SNAP_CINDER_ID
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >cinder list
+    +$result=($SNAP_CINDER_ID)
+    ?if $i > $MAX ? ; === VM $SNAP_CINDER_ID did not delete
+    ?if $i > $MAX ? %BREAK_SNAP_CINDER_DELETE
+    !sleep 5
+    >
+]
+?if 1 < 0 ? [
+    %BREAK_SNAP_VM_DELETE
+    %BREAK_SNAP_CINDER_DELETE
+    *FAIL
+]
+; === END OF TEST

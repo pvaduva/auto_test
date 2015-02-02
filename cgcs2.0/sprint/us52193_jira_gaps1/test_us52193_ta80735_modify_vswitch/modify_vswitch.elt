@@ -1,0 +1,504 @@
+#!/usr/bin/env expect-lite
+
+;;;
+
+Modify VSwitch Script
+
+Steps:
+1)  Verify we can connect to NATBox
+2)  Change quotas for cinder
+3)  Get the necessary image and network uuids
+4)  Create 1st WRL cinder volume
+5)  Wait for cinder volume vol-wrl5-one to become available
+6)  Create 2nd WRL cinder volume
+7)  Wait for cinder volume vol-wrl5-two to become available
+8)  Lock compute-0
+9)  Lock compute-1
+10)  Wait for compute-0 become locked
+11)  Save the current compute-0 cpu profile
+12)  Modify compute-0 VSwitch cpus so that they are on different processors
+13)  Wait for compute-1 become locked
+14)  Save the current compute-1 cpu profile
+15)  Modify compute-1 VSwitch cpus so that there are multiple on the same processor
+16)  Unlock compute-0
+17)  Wait for compute-0 become available
+18)  Attach 1st WRL VM to cinder volume
+19)  Ssh into 1st WRL VM via NATBox
+20)  Write current date to a file date.txt
+21)  Unlock compute-1
+22)  Wait for compute-1 become available
+23)  Attach 2nd WRL VM to cinder volume
+24)  Wait for 2nd WRL VM to go available
+25)  Ssh into 2nd WRL VM via NATBox
+26)  Write and read current date to a file date.txt
+27)  Delete WRL VMs
+28)  Delete WRL cinder volumes
+29)  Return to original VSwitch values
+30)  Lock compute-0
+31)  Wait for compute-0 become locked
+32)  Return compute-0 VSwitch cpus to original values
+33)  Lock compute-1
+34)  Wait for compute-1 become locked
+35)  Return compute-1 VSwitch cpus to original values
+36)  Unlock host compute-0 and compute-1
+37)  Wait for compute-0 become available
+38)  Wait for compute-1 become available
+
+REQUIRES: expect-lite 4.8.0 or greater
+This expect script can be invoked via the following:
+./wrl_config_drive.elt <host> <username> <password> <NAT host> <NAT user> <NAT pass>
+where:
+host = IP address of the controller, e.g. 10.10.10.2
+username = username on the controller, e.g. wrsroot
+password = password on the controller, e.g. li69nux
+NAT host = IP address of the NATBox, e.g. 128.224.150.11
+NAT user = username on the NATBox, e.g. cgcs
+NAT pass = password on the NATBox, e.g. li69nux
+;;;
+
+
+*EXP_INFO
+*NOFAIL
+
+# Varibles that will become constants from script options
+$NAT_IP=128.224.150.11
+$NAT_USER=cgcs
+$NAT_PASS=li69nux
+$HOST_USER=wrsroot
+$HOST_PASS=li69nux
+$HOST_IP=10.10.10.2
+
+@20
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>source /etc/nova/openrc
+>system show
+>cat /etc/build.info
+
+; === verify we can connect to NATBox
+>ping -c4 $NAT_IP
+<icmp
++$ping_result=(Destination Host Unreachable|ttl=|__NO_STRING_CAPTURED__)
+
+?if $ping_result == Destination Host Unreachable ? [
+    ; === NATBOX $NAT_IP not responding
+    *TERM 1
+]
+
+?if $ping_result == __NO_STRING_CAPTURED__ ? [
+    ; === NATBOX $NAT_IP not responding
+    *TERM 1
+]
+
+; === Change quotas for cinder
+>keystone tenant-list
++$TENANT=([0-9a-f]{32}) \| .*tenant1
+>cinder quota-show $TENANT
+>cinder quota-update --volumes 20 $TENANT
+>cinder quota-show $TENANT
+; === get the necessary image and network uuids
+>source ./openrc.tenant1
+>glance image-list
++$IMAGE=([0-9a-f-]{36}) \| .*wrl5-avp
+>neutron net-list
++$TENANT_MGMT=([0-9a-f-]{36}) \| .*tenant1-mgmt-net
++$TENANT_NET=([0-9a-f-]{36}) \| .*tenant1-net0
+$VOL_NAME1=vol-wrl5-one
+$VOL_NAME2=vol-wrl5-two
+$VM_NAME1=vm1
+$VM_NAME2=vm2
+
+; === create 1st WRL cinder volume
+>cinder create --image-id $IMAGE --display-name=$VOL_NAME1 1
+
+; === wait for cinder volume vol-wrl5-one to become available
+
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >cinder show $VOL_NAME1
+    +$result=(available|creating|downloading|error)
+    ?if $i > $MAX ? ; === cinder volume $VOL_NAME1 did not become available
+    ?if $i > $MAX ? %BREAK_CINDER_CREATE
+    ?if $result == error ? ; === cinder volume $VOL_NAME1 is in error state
+    ?if $result == error ? %BREAK_CINDER_CREATE
+    !sleep 5
+    >
+]
+
+>cinder list
++$CINDER_ID1=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME1
+
+
+; === create 2nd WRL cinder volume
+>cinder create --image-id $IMAGE --display-name=$VOL_NAME2 1
+
+; === wait for cinder volume vol-wrl5-two to become available
+
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >cinder show $VOL_NAME2
+    +$result=(available|creating|downloading|error)
+    ?if $i > $MAX ? ; === cinder volume $VOL_NAME2 did not become available
+    ?if $i > $MAX ? %BREAK_CINDER_CREATE
+    ?if $result == error ? ; === cinder volume $VOL_NAME2 is in error state
+    ?if $result == error ? %BREAK_CINDER_CREATE
+    !sleep 5
+    >
+]
+
+>cinder list
++$CINDER_ID2=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME2
+
+>source /etc/nova/openrc
+; === Lock compute-0
+>system host-list
++$COMP0_ID=([0-9]).* \| compute-0
+>system host-lock $COMP0_ID
+
+; === Lock compute-1
+>system host-list
++$COMP1_ID=([0-9]).* \| compute-1
+>system host-lock $COMP1_ID
+
+; === wait for compute-0 become locked
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != locked
+    +$i
+    >system host-list
+    +$result=$COMP0_ID .* \| (unlocked|locked)
+    ?if $i > $MAX ? ; === $COMP0_ID did not lock
+    ?if $i > $MAX ? %fail_to_lock
+    !sleep 5
+    >
+]
+
+; === Save the current compute-0 cpu profile
+$COMP0_CPU=comp0_cpu_profile
+>system cpuprofile-add $COMP0_CPU $COMP0_ID
++$SKIP=(Property)
+?if $SKIP == __NO_STRING_CAPTURED__ ? %SKIP
+
+; === Modify compute-0 VSwitch cpus so that they are on different processors
+>system host-cpu-modify $COMP0_ID -f vswitch -p0 1 -p1 1
++$SKIP=(There is no processor|There must be at least one unused core for VMs.)
+?if $SKIP == There is no processor ? %SKIP
+?if $SKIP == There must be at least one unused core for VMs. ? %SKIP
+
+; === wait for compute-1 become locked
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != locked
+    +$i
+    >system host-list
+    +$result=$COMP1_ID .* \| (unlocked|locked)
+    ?if $i > $MAX ? ; === $COMP1_ID did not lock
+    ?if $i > $MAX ? %fail_to_lock
+    !sleep 5
+    >
+]
+
+; === Save the current compute-1 cpu profile
+$COMP1_CPU=comp1_cpu_profile
+>system cpuprofile-add $COMP1_CPU $COMP1_ID
++$SKIP=(Property)
+?if $SKIP == __NO_STRING_CAPTURED__ ? %SKIP
+
+; === Modify compute-1 VSwitch cpus so that there are multiple on the same processor
+>system host-cpu-modify $COMP1_ID -f vswitch -p0 4
++$SKIP=(There is no processor|There must be at least one unused core for VMs.)
+?if $SKIP == There is no processor ? %SKIP
+?if $SKIP == There must be at least one unused core for VMs. ? %SKIP
+
+?if 1 < 0 ? [
+    %SKIP
+    $i=0
+    $MAX=60
+    $result=none
+    >system cpuprofile-delete $COMP0_CPU $COMP1_CPU
+    >system host-unlock $COMP0_ID
+    >system host-unlock $COMP1_ID
+    # while loop
+    [ $result != available
+        +$i
+        >system host-list
+        +$result=$COMP0_ID .* \| (available|intest|failed|online|offline)
+        ?if $i > $MAX ? ; === $COMP0_ID did not become available
+        !sleep 10
+        >
+    ]
+    $result=none
+    [ $result != available
+        +$i
+        >system host-list
+        +$result=$COMP1_ID .* \| (available|intest|failed|online|offline)
+        ?if $i > $MAX ? ; === $COMP1_ID did not become available
+        !sleep 10
+        >
+    ; === $SKIP
+    *TERM 1
+]
+
+; === Unlock compute-0
+>system host-unlock $COMP0_ID
+
+; === wait for compute-0 become available
+$i=0
+$MAX=60
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >system host-list
+    +$result=$COMP0_ID .* \| (available|intest|failed|online|offline)
+    ?if $i > $MAX ? ; === $COMP0_ID did not become available
+    ?if $i > $MAX ? %fail_to_boot
+    !sleep 10
+    >
+]
+
+>source ./openrc.tenant1
+; === attach 1st WRL VM to cinder volume
+>nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID1:::0 $VM_NAME1
+
+; === wait for 1st WRL VM to go available
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != ACTIVE
+    +$i
+    >nova show $VM_NAME1
+    +$result=(ACTIVE|BUILD|ERROR)
+    ?if $i > $MAX ? ; === VM $VM_NAME1 did not become ACTIVE
+    ?if $i > $MAX ? %BREAK_VM_CREATE
+    ?if $result == ERROR ? ; === VM $VM_NAME1 is in ERROR state
+    ?if $result == ERROR ? %BREAK_VM_CREATE
+    !sleep 5
+    >
+]
+
+!sleep 10
+>nova show $VM_NAME1
++$VM_IP1=tenant1-mgmt-net network.*\| ([0-9.]*)
+
+; === ssh into 1st WRL VM via NATBox
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$NAT_PASS
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $VM@$VM_IP1
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$VM
+
+; === write current date to a file date.txt
+>date > date.txt
+>cat date.txt
+-<No such file
+
+>source etc/nove/openrc
+; === Unlock compute-1
+>system host-unlock $COMP1_ID
+
+; === wait for compute-1 become available
+$MAX=60
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >system host-list
+    +$result=$COMP1_ID .* \| (available|intest|failed|online|offline)
+    ?if $i > $MAX ? ; === $COMP1_ID did not become available
+    ?if $i > $MAX ? %fail_to_boot
+    !sleep 10
+    >
+]
+
+>source ./openrc.tenant1
+; === attach 2nd WRL VM to cinder volume
+>nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID2:::0 $VM_NAME2
+
+; === wait for 2nd WRL VM to go available
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != ACTIVE
+    +$i
+    >nova show $VM_NAME2
+    +$result=(ACTIVE|BUILD|ERROR)
+    ?if $i > $MAX ? ; === VM $VM_NAME2 did not become ACTIVE
+    ?if $i > $MAX ? %BREAK_VM_CREATE
+    ?if $result == ERROR ? ; === VM $VM_NAME2 is in ERROR state
+    ?if $result == ERROR ? %BREAK_VM_CREATE
+    !sleep 5
+    >
+]
+
+!sleep 10
+>nova show $VM_NAME2
++$VM_IP1=tenant1-mgmt-net network.*\| ([0-9.]*)
+
+; === ssh into 2nd WRL VM via NATBox
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$NAT_PASS
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $VM@$VM_IP2
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$VM
+
+; === write and read current date to a file date.txt
+>date > date.txt
+>cat date.txt
+-<No such file
+
+?if 1 < 0 ? [
+    %BREAK_VM_CREATE
+    %fail_to_boot
+    *FAIL
+]
+
+; === delete WRL VMs
+>nova delete $VM_NAME1 $VM_NAME2
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >nova list
+    +$result=($VM_NAME1|$VM_NAME2)
+    ?if $i > $MAX ? ; === VM did not delete
+    !sleep 5
+    >
+]
+
+?if 1 < 0 ? [
+    %BREAK_CINDER_CREATE
+    *FAIL
+]
+
+; === delete WRL cinder volumes
+>cinder delete $VOL_NAME1 $VOL_NAME2
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >cinder list
+    +$result=($VOL_NAME1|$VOL_NAME2)
+    ?if $i > $MAX ? ; === cinder volume did not delete
+    !sleep 5
+    >
+]
+
+>source etc/nove/openrc
+
+; === Return to original VSwitch values
+; === Lock compute-0
+>system host-lock $COMP0_ID
+
+; === wait for compute-0 become locked
+$i=0
+$MAX=12
+$result=none
+
+# while loop
+[ $result != locked
+    +$i
+    >system host-list
+    +$result=$COMP0_ID .* \| (unlocked|locked)
+    ?if $i > $MAX ? ; === $COMP0_ID did not lock
+    ?if $i > $MAX ? %fail_to_lock
+    !sleep 5
+    >
+]
+
+; === Return compute-0 VSwitch cpus to original values
+
+>system host-apply-cpuprofile $COMP0_CPU
+-<(one unused core for VMs.|There is no processor)
+
+; === Lock compute-1
+>system host-lock $COMP1_ID
+
+; === wait for compute-1 become locked
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != locked
+    +$i
+    >system host-list
+    +$result=$COMP1_ID .* \| (unlocked|locked)
+    ?if $i > $MAX ? ; === $COMP1_ID did not lock
+    ?if $i > $MAX ? %fail_to_lock
+    !sleep 5
+    >
+]
+
+; === Return compute-1 VSwitch cpus to original values
+
+>system host-apply-cpuprofile $COMP1_CPU
+-<(one unused core for VMs.|There is no processor)
+
+; === Unlock host compute-0 and compute-1
+>system host-unlock $COMP0_ID
+>system host-unlock $COMP1_ID
+
+; === wait for compute-0 become available
+$i=0
+$MAX=60
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >system host-list
+    +$result=$COMP0_ID .* \| (available|intest|failed|online|offline)
+    ?if $i > $MAX ? ; === $COMP0_ID did not become available
+    ?if $i > $MAX ? %fail_to_boot2
+    !sleep 10
+    >
+]
+
+; === wait for compute-1 become available
+$MAX=60
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >system host-list
+    +$result=$COMP1_ID .* \| (available|intest|failed|online|offline)
+    ?if $i > $MAX ? ; === compute-1 did not become available
+    ?if $i > $MAX ? %fail_to_boot2
+    !sleep 10
+    >
+]
+
+?if 1 < 0 ? [
+    %fail_to_boot2
+    %fail_to_lock
+    *FAIL
+]
+
+; === END OF TEST

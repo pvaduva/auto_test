@@ -40,7 +40,7 @@ $HOST_IP=10.10.10.2
 ; === Change quotas for cinder
 $TENANT=`keystone tenant-list | grep tenant1 | awk '{print $2}'`
 >cinder quota-show $TENANT
->cinder quota-update --volumes 4 $TENANT
+>cinder quota-update --volumes 20 $TENANT
 >cinder quota-show $TENANT
 
 @20
@@ -95,7 +95,7 @@ $result=none
 $CINDER_ID=`cinder list | grep $VOL_NAME | awk '{print $2}'`
 
 ; === attach WRL VM to cinder volume
->nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --config-drive true --user-data ./my-user-data.txt --file /tmp/foobar=./my-user-file.txt --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
+>nova boot --key_name=keypair-tenant1 --flavor=101 --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --config-drive true --user-data ./my-user-data.txt --file /tmp/foobar=./my-user-file.txt --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
 
 ; === wait for WRL VM to go available
 $i=0
