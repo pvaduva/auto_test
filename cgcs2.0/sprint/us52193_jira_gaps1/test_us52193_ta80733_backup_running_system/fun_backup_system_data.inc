@@ -43,6 +43,7 @@ $BKNM_IMG=$BKNM
 ; now exit from the remote host
 >exit
 >^C
+> date | true
 <.*
 
 ; scp the logs from the remote host to $BACK_PATH

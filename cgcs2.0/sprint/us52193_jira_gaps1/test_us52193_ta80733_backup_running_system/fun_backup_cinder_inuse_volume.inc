@@ -19,6 +19,7 @@
 ; Create a volume snapshot
 #>cinder snapshot-create --force True --display-name nvmsnapshot-$VOL_ID $VOL_ID
 >cinder snapshot-create --force True $VOL_ID
++$SNP_ID=\|\s*id\s*\|\s*([a-z0-9-]{32,36})\s*\|
 
 ; Now there's a volume available for $VOL_ID
 
@@ -27,24 +28,42 @@ $cnt=0
 [ $cnt < $max
     =$cnt + 1
     >cinder snapshot-list --all-tenants
-    +$STATUS=\|\s*[a-z0-9-]{32,36}\s*\|\s*$VOL_ID\s*\|\s*([a-z]+)\s*\|
-    ?if $STATUS == available ?%READY
+    #+$STATUS=\|\s*[a-z0-9-]{32,36}\s*\|\s*$VOL_ID\s*\|\s*([a-z]+)\s*\|
+    +$STATUS=\|\s*$SNP_ID\s*\|\s*$VOL_ID\s*\|\s*([a-z]+)\s*\|
+    ?if $STATUS == available ?%SNP_READY
 
     ; snapshot is not ready: $VOL_ID, wait and try again
     !sleep 6
 ]
+
 ?if $STATUS != available ? [
     ; cannot create snapshot, done
     %ALLDONE
 ]
 
-%Rckup file of the volume
+%SNP_READY
+
+>cinder snapshot-export $SNP_ID
+
+$cnt=0
+[ $cnt < $max
+    !sleep 6
+
+    >cinder snapshot-list --all-tenants
+    +$STATUS=\|\s*$SNP_ID\s*\|\s*$VOL_ID\s*\|\s*([a-zA-Z0-9_-]+)\s*\|
+    ?if $STATUS == available ?%EXPORT_READY
+]
+
+%EXPORT_READY
+
+%backup file of the volume
 >cd /opt/backups ; ls volume-$VOL_ID*
 +$BK_FNM=\n(.*)
 
 ; scp the log file $BK_FNM from the remote host to $BACK_PATH
 >exit
 >^C
+> date | true
 <.*
 
 @1000

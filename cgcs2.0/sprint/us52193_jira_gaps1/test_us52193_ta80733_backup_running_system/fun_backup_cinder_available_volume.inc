@@ -25,6 +25,7 @@
 ; scp the log file $BK_FNM from the remote host to $BACK_PATH
 >exit
 >^C
+>  date | true
 <.*
 
 @1000
