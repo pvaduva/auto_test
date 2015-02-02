@@ -1,0 +1,386 @@
+#!/usr/bin/env expect-lite
+
+;;;
+
+VM Snapshot Test Script
+
+Steps:
+
+
+REQUIRES: expect-lite 4.8.0 or greater
+This expect script can be invoked via the following:
+./wrl_config_drive.elt <host> <username> <password> <NAT host> <NAT user> <NAT pass>
+where:
+host = IP address of the controller, e.g. 10.10.10.2
+username = username on the controller, e.g. wrsroot
+password = password on the controller, e.g. li69nux
+NAT host = IP address of the NATBox, e.g. 128.224.150.11
+NAT user = username on the NATBox, e.g. cgcs
+NAT pass = password on the NATBox, e.g. li69nux
+;;;
+
+
+
+*EXP_INFO
+*NOFAIL
+
+# Varibles that will become constants from script options
+$NAT_IP=128.224.150.11
+$NAT_USER=cgcs
+$NAT_PASS=li69nux
+$HOST_USER=wrsroot
+$HOST_PASS=li69nux
+$HOST_IP=10.10.10.2
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>source /etc/nova/openrc
+>system show
+>cat /etc/build.info
+
+@20
+; === Change quotas for cinder
+>keystone tenant-list
++$TENANT=([0-9a-f]{32}) \| .*tenant1
+>cinder quota-show $TENANT
+>cinder quota-update --volumes 20 $TENANT
+>cinder quota-show $TENANT
+tenant1.*\|.*[0-9]*\|.*([0-9]*)
+
+; === create a new tenant1 network
+$NET_NAME=new_net
+>neutron providernet-range-list
+>neutron providernet-range-list | grep tenant1
++$PROVIDER_NET=\n\| ([A-Za-z0-9-]*)
++$SEGMENT_ID=tenant1.*\| [ ]*([0-9]*) \|
+>neutron net-create --tenant-id +$TENANT --provider:network_type=vlan --provider:physical_network=$PROVIDER_NET --provider:segmentation_id=$SEGMENT_ID $NET_NAME
+
+; === get the necessary image and network uuids
+>source ./openrc.tenant1
+>glance image-list
++$IMAGE=([0-9a-f-]{36}) \| .*wrl5-avp
+>neutron net-list
++$TENANT_MGMT=([0-9a-f-]{36}) \| .*tenant1-mgmt-net
++$TENANT_NET=([0-9a-f-]{36}) \| .*$NET_NAME
+$VOL_NAME=vol-wrl5-one
+$VM_NAME=VM1
+$VM=root
+$SUBNET_NAME=unmanaged_net
+$SUBNET_IP=172.16.255.0/24
+$ROUTER_NAME=to_attach
+
+; === verify we can connect to NATBox
+>ping -c4 $NAT_IP
+<icmp
++$ping_result=(Destination Host Unreachable|ttl=|__NO_STRING_CAPTURED__)
+
+?if $ping_result == Destination Host Unreachable ? [
+    ; === NATBOX $NAT_IP not responding
+    *TERM 1
+]
+
+?if $ping_result == __NO_STRING_CAPTURED__ ? [
+    ; === NATBOX $NAT_IP not responding
+    *TERM 1
+]
+
+; === Attempt to create unmanaged subnet with DHCP, expect failure
+>neutron subnet-create --name $SUBNET_NAME --ip-version 4 --unmanaged $TENANT_NET $SUBNET_IP
+<Invalid input for operation
+
+; === Attempt to create unmanaged subnet with DNS name servers defined, expect failure
+
+>system dns-show
++$DNS=nameservers .*\| ([0-9.]*)
+>neutron subnet-create --name $SUBNET_NAME --dns-nameserver $DNS --ip-version 4 --unmanaged --disable-dhcp $TENANT_NET $SUBNET_IP
+<Invalid input for operation
+
+; === Attempt to create unmanaged subnet with host route, expect failure
+>neutron subnet-create --name $SUBNET_NAME --host-route destination=192.168.101.0/24,nexthop=172.16.255.1 --ip-version 4 --unmanaged --disable-dhcp $TENANT_NET $SUBNET_IP
+<Invalid input for operation
+
+; === Attempt to create unmanaged subnet with VLAN tagging, expect success
+>neutron subnet-create --name $SUBNET_NAME --vlan-id $SEGMENT_ID --ip-version 4 --unmanaged --disable-dhcp $TENANT_NET $SUBNET_IP
+<Created a new subnet
+>neutron subnet-list
++$SUBNET_ID=([0-9a-f-]{36}) \| $SUBNET_NAME
+
+; === Attempt to create unmanaged subnet without DHCP, expect success
+>neutron subnet-create --name $SUBNET_NAME --ip-version 4 --unmanaged --disable-dhcp $TENANT_NET $SUBNET_IP
+<Created a new subnet
+
+>neutron subnet-list
++$SUBNET_ID=([0-9a-f-]{36}) \| $SUBNET_NAME
+
+; === create WRL cinder volume
+>cinder create --image-id $IMAGE --display-name=$VOL_NAME 1
+
+; === wait for cinder volume vol-wrl5-one to become available
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >cinder show $VOL_NAME
+    +$result=(available|creating|downloading|error)
+    ?if $i > $MAX ? ; === cinder volume $VOL_NAME did not become available
+    ?if $i > $MAX ? %BREAK_CINDER_CREATE
+    ?if $result == error ? ; === cinder volume $VOL_NAME is in error state
+    ?if $result == error ? %BREAK_CINDER_CREATE
+    !sleep 5
+    >
+]
+
+>cinder list
++$CINDER_ID=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME
+
+; === attach WRL VM to cinder volume
+>nova boot --key_name=keypair-tenant1 --flavor=101 --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
+
+; === wait for WRL VM to go available, without explictly defined subnet
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != ACTIVE
+    +$i
+    >nova show $VM_NAME
+    +$result=(ACTIVE|BUILD|ERROR)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not become ACTIVE
+    ?if $i > $MAX ? %BREAK_VM_CREATE
+    ?if $result == ERROR ? ; === VM $VM_NAME is in ERROR state
+    ?if $result == ERROR ? %BREAK_VM_CREATE
+    !sleep 5
+    >
+]
+
+!sleep 10
+>nova list
+>nova list | grep $VM_NAME
+<ACTIVE
+<No subnet
+
+; === delete WRL VM
+>nova delete $VM_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >nova list
+    +$result=($VM_NAME)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not delete
+    ?if $i > $MAX ? %BREAK_VM_DELETE
+    !sleep 5
+    >
+]
+
+; === attach WRL VM to cinder volume
+>nova boot --key_name=keypair-tenant1 --flavor=101 --nic net-id=$TENANT_NET,v4-fixed-ip=172.16.255.3,vif-model=avp --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
+
+; === wait for WRL VM to go available, with explictly defined subnet
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != ACTIVE
+    +$i
+    >nova show $VM_NAME
+    +$result=(ACTIVE|BUILD|ERROR)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not become ACTIVE
+    ?if $i > $MAX ? %BREAK_VM_CREATE
+    ?if $result == ERROR ? ; === VM $VM_NAME is in ERROR state
+    ?if $result == ERROR ? %BREAK_VM_CREATE
+    !sleep 5
+    >
+]
+
+!sleep 10
+>nova list
+>nova list | grep $VM_NAME
+<ACTIVE
+<172.16.255.3
+
+; === delete WRL VM
+>nova delete $VM_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >nova list
+    +$result=($VM_NAME)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not delete
+    ?if $i > $MAX ? %BREAK_VM_DELETE
+    !sleep 5
+    >
+]
+
+; === attach WRL VM to cinder volume
+>nova boot --key_name=keypair-tenant1 --flavor=101 --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
+
+; === wait for WRL VM to go available, without explictly defined subnet
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != ACTIVE
+    +$i
+    >nova show $VM_NAME
+    +$result=(ACTIVE|BUILD|ERROR)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not become ACTIVE
+    ?if $i > $MAX ? %BREAK_VM_CREATE
+    ?if $result == ERROR ? ; === VM $VM_NAME is in ERROR state
+    ?if $result == ERROR ? %BREAK_VM_CREATE
+    !sleep 5
+    >
+]
+
+!sleep 10
+>nova list
+>nova list | grep $VM_NAME
+<ACTIVE
+<No subnet
+
+; === delete WRL VM
+>nova delete $VM_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >nova list
+    +$result=($VM_NAME)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not delete
+    ?if $i > $MAX ? %BREAK_VM_DELETE
+    !sleep 5
+    >
+]
+
+; === Delete subnet
+>neutron subnet-delete $SUBNET_ID
+<Deleted router
+
+; === Create router and attach to new subnet
+>neutron router-create $ROUTER_NAME
++$ROUTER_ID=\| id .*\| ([0-9a-f-]{36})
+>neutron subnet-create --name $SUBNET_NAME --gateway 172.16.255.2 --ip-version 4 --unmanaged --disable-dhcp $TENANT_NET $SUBNET_IP
+<Created a new subnet
++$SUBNET_ID=\| id .*\| ([0-9a-f-]{36})
+>neutron router-interface-add $ROUTER_ID $SUBNET_ID
+<Added interface
+
+; === Verify router attached by attempting to delete subnet, expected to fail
+>neutron subnet-delete $SUBNET_ID
+<Unable to complete operation on subnet
+
+; === wait for WRL VM to go available, go into VM and verify meta-data accessible
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != ACTIVE
+    +$i
+    >nova show $VM_NAME
+    +$result=(ACTIVE|BUILD|ERROR)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not become ACTIVE
+    ?if $i > $MAX ? %BREAK_VM_CREATE
+    ?if $result == ERROR ? ; === VM $VM_NAME is in ERROR state
+    ?if $result == ERROR ? %BREAK_VM_CREATE
+    !sleep 5
+    >
+]
+
+!sleep 10
+>nova show $VM_NAME
++$VM_IP=tenant1-mgmt-net network.*\| ([0-9.]*)
+
+; === ssh into WRL VM via NATBox
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$NAT_PASS
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $VM@$VM_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$VM
+
+; === get instance-id of VM
+>wget http://169.254.169.254/latest/meta-data/instance-id
+<HTTP request sent
+>cat instance-id
+-<No such file
+>exit
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>source ./openrc.tenant1
+
+?if 1 < 0 ? [
+    %BREAK_VM_CREATE
+    *FAIL
+]
+
+; === delete WRL VM
+>nova delete $VM_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >nova list
+    +$result=($VM_NAME)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not delete
+    ?if $i > $MAX ? %BREAK_VM_DELETE
+    !sleep 5
+    >
+]
+
+?if 1 < 0 ? [
+    %BREAK_VM_DELETE
+    %BREAK_CINDER_CREATE
+    *FAIL
+]
+
+; === delete WRL cinder volume
+>cinder delete $VOL_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >cinder list
+    +$result=($VOL_NAME)
+    ?if $i > $MAX ? ; === cinder volume $VOL_NAME did not delete
+    ?if $i > $MAX ? %BREAK_CINDER_DELETE
+    !sleep 5
+    >
+]
+?if 1 < 0 ? [
+    %BREAK_VM_DELETE
+    %BREAK_CINDER_DELETE
+    *FAIL
+]
+
+; === Delete created networks
+>neutron router-interface-delete $ROUTER_ID $SUBNET_ID
+<Removed interface
+>neutron router-delete $ROUTER_ID
+<Deleted router
+>neutron subnet-delete $SUBNET_ID
+<Deleted subnet
+>neutron net-delete $TENANT-NET
+<Deleted network
+
+; === END OF TEST
