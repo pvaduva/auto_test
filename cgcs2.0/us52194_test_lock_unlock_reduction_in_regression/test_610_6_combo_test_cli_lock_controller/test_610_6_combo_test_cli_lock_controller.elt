@@ -1,0 +1,234 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+
+#
+#
+;;;
+	test_610_6_combo_test_cli_lock_controller
+	
+	Combines the following test cases (saving 3 locks):
+	.	test_610_4_reject_trying_to_swact_to_locked_mate
+	.	test_469_rejected_attempt_to_lock_active_controller
+	.	test_484_reject_lock_last_unlocked_controller
+	.	test_1704_hierarchical_suppression_of_alarm_locked_controller
+
+
+	
+NOTE: uses floating IP address of controller
+
+runtime = 4m2s
+;;;
+
+
+
+NOTE: script can be run inside nosetest, or off host e.g.
+./test_610_6_combo_test_cli_lock_controller.elt IP=yow-cgcs-ironpass-1
+
+Steps
+1)  Connecting to controller
+2)  Source env
+3)  Set up sudo root access (to make it easier later in the interact session)
+4)  Show version
+5)  Get active and standby controller
+6)  Start load on standby controller (to raise alarm)
+7)  Wait for alarm on standby controller
+8)  Check alarms (part of TC 1704)
+9)  Check alarm suppression true
+10)  Lock standby controller
+11)  Wait for lock
+12)  Validate standby controller is locked
+13)  Attempt to lock active controller - test_469_rejected_attempt_to_lock_active_controller
+14)  Validate active controller remains unlocked - test_484_reject_lock_last_unlocked_controller
+15)  Attempt to swact from active controller - test_610_4_reject_trying_to_swact_to_locked_mate
+16)  Validate system alarm for locked controller -  test_1704_hierarchical_suppression_of_alarm_locked_controller
+17)  Verify that entity-instance-field and suppression set to True not shown (part of TC 1704)
+18)  Remove load from standby controller
+19)  Unlock standby controller
+20)  Wait for unlock
+21)  Wait for standby controller to finish unlock
+22)  Validate standby controller is unlocked
+
+
+#############################
+# beginning of expect-lite code for test_610_6
+
+
+
+*NOFAIL
+*EXP_INFO
+
+$IP=10.10.10.2
+$user=wrsroot
+$pass=li69nux
+
+; === connecting to controller
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $user@$IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$pass
+
+>export TMOUT=0
+
+; === source env
+>source /etc/nova/openrc
+
+
+; === set up sudo root access (to make it easier later in the interact session)
+>echo "$pass" | sudo -S id
+<root
+
+; === show version
+
+>system show
+>cat /etc/build.info
+>cat /etc/motd | grep -i SYSTEM
++$system=(vbox|ironpass|hp)
+
+
+; === get active and standby controller
+>system sda-list
++$act_controller=controller-services.*(controller-\d).*active
++$stby_controller=controller-services.*(controller-\d).*standby
+
+
+; === start load on standby controller (to raise alarm)
+@5
+*FORK load
+# log into active controller
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $user@$IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$pass
+
+>export TMOUT=0
+
+>ssh -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no  $user@$stby_controller 
+<Password:
+>>$pass
+>for f in $(seq 5); do $(/bin/dd if=/dev/zero of=/dev/null &) ; done
+>
+?if $system != vbox? >for f in $(seq 50); do $(/bin/dd if=/dev/zero of=/dev/null &) ; done
+>
+#?if $system != vbox? >for f in $(seq 50); do $(/bin/dd if=/dev/zero of=/dev/null &) ; done
+#>
+#?if $system != vbox? >for f in $(seq 50); do $(/bin/dd if=/dev/zero of=/dev/null &) ; done
+#>
+
+*FORK default
+; === wait for alarm on standby controller
+@10
+$i=0
+$max=50
+; === check alarms (part of TC 1704)
+$cpu_usage_alarm_uuid=__NO_STRING_CAPTURED__
+[ $cpu_usage_alarm_uuid == __NO_STRING_CAPTURED__
+	>system alarm-list
+	+$cpu_usage_alarm_uuid=([0-9a-f-]{36}) \| 100.101 .+$stby_controller
+	!sleep 2
+	? $i > $max ? %BREAK
+	+$i
+
+]
+%BREAK
+
+; === check alarm suppression true
+@5
+>system alarm-show $cpu_usage_alarm_uuid
+<suppression
+<True
+<timestamp
+
+; === lock standby controller
+>system host-lock $stby_controller
+>
+; === wait for lock
+!sleep 5
+
+
+; === validate standby controller is locked
+>system host-list
+<$stby_controller
+< locked
+
+; === attempt to lock active controller - test_469_rejected_attempt_to_lock_active_controller
+>system host-lock $act_controller
+<Operation Rejected
+>
+
+; === validate active controller remains unlocked - test_484_reject_lock_last_unlocked_controller
+>system host-list
+<$act_controller
+<unlocked
+
+
+; === attempt to swact from active controller - test_610_4_reject_trying_to_swact_to_locked_mate
+>system host-swact $act_controller
+<Operation Rejected
+>
+
+; === Validate system alarm for locked controller -  test_1704_hierarchical_suppression_of_alarm_locked_controller
+@10
+>system alarm-list
++$alarm_uuid=([0-9a-f-]{36}) \| 200.001
+# check that other alarm is not showing (suppressed)
+-<100.101 .{100,120}$stby_controller
+<200.001
+#Host was administratively locked to take it out-of-service
+<$stby_controller
+<warning
+
+; === Verify that entity-instance-field and suppression set to True not shown (part of TC 1704)
+>system alarm-list
+<Time Stamp
+-<100.101 .{100,130}$stby_controller
+
+
+*FORK load
+; === remove load from standby controller
+>killall dd
+>
+
+*FORK default
+; === unlock standby controller
+>system host-unlock $stby_controller
+
+; === wait for unlock
+!sleep 5
+>
+
+; === wait for standby controller to finish unlock
+$i=0
+$max=150
+>system sda-list
++$stby_controller_state=controller-services.*$stby_controller.*(disabled|standby|initial)
+[ $stby_controller_state != standby
+	>system sda-list
+	+$stby_controller_state=controller-services.*$stby_controller.*(disabled|go-standby|standby|initial)
+	!sleep 5
+	? $i > $max ? %BREAK1
+	+$i
+]
+%BREAK1
+
+*INTERACT 
+
+# wait for status to be updated
+; sleeping...
+!sleep 10
+; === validate standby controller is unlocked
+>system host-list
+<$stby_controller
+<unlocked
+
+; pau
+
+
