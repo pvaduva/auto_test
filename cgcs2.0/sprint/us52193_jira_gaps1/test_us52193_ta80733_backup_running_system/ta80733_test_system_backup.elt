@@ -11,10 +11,6 @@ Create a backup of the running system
 *NOFAIL
 
 #HOST_IP=${HOST_IP} HOST_USER=${HOST_USER} HOST_PASSWD=${HOST_PASSWD}
-$HOST_IP=10.10.10.3
-$HOST_USER=wrsroot
-$HOST_PASSWD=li69nux
-$BACK_PATH=bkup
 
 >mkdir -p bkup
 

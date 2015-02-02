@@ -17,7 +17,8 @@
 ; done with backup in-use cinder volumes
 
 ; Create a volume snapshot
->cinder snapshot-create --force True --display-name vmsnapshot-$VOL_ID $VOL_ID
+#>cinder snapshot-create --force True --display-name nvmsnapshot-$VOL_ID $VOL_ID
+>cinder snapshot-create --force True $VOL_ID
 
 ; Now there's a volume available for $VOL_ID
 
@@ -26,9 +27,15 @@ $cnt=0
 [ $cnt < $max
     =$cnt + 1
     >cinder snapshot-list --all-tenants
-    +$STATUS=\|\s*[a-z0-9-]{32,36}\s*\|\s* $VOL_ID \s*\|\s*([a-z]+)\s*\|
+    +$STATUS=\|\s*[a-z0-9-]{32,36}\s*\|\s*$VOL_ID\s*\|\s*([a-z]+)\s*\|
     ?if $STATUS == available ?%READY
-    !sleep 3
+
+    ; snapshot is not ready: $VOL_ID, wait and try again
+    !sleep 6
+]
+?if $STATUS != available ? [
+    ; cannot create snapshot, done
+    %ALLDONE
 ]
 
 %Rckup file of the volume
@@ -40,7 +47,7 @@ $cnt=0
 >^C
 <.*
 
-@500
+@1000
 >scp -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP:/opt/backups/$BK_FNM $BACK_PATH/
 <assword:|$$BK_FNM
 >>$HOST_PASSWD
@@ -63,6 +70,5 @@ $cnt=0
 @3
 >source /etc/nova/openrc
 
-EADY
-
+%ALLDONE
 

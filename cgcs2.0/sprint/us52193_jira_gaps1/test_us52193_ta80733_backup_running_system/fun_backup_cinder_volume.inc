@@ -18,7 +18,7 @@ Create a backup of the Cinder Volume, including:
 ; phase1 backup 'available cinder volumes'
 
 $AVAILABLES=~/availabe.list
-@10
+@20
 >cinder list --all-tenants | tail -n+3 | grep 'available' | cut -d\| -f2 | awk '{print $1}' > $AVAILABLES
 
 >wc -l $AVAILABLES
@@ -44,7 +44,7 @@ $CURLN=1
 >rm -rf $AVAILABLES
 
 $INUSES=~/inuse.list
-@10
+@20
 >cinder list --all-tenants | tail -n+3 | grep 'in-use' | cut -d\| -f2 | awk '{print $1}' > $INUSES
 
 >wc -l $INUSES

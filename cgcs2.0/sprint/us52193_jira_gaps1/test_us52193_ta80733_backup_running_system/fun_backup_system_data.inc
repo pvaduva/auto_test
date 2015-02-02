@@ -26,12 +26,11 @@ $BKNM_IMG=$BKNM
 >>$HOST_PASSWD
 
 ; exute the system backup
-@500
+@1500
 >sudo config_controller --backup $BKNM
-# no passwd needed?
-#<assword|Performing backup
-#>>$HOST_PASSWD
-<Backup complete
+<assword|Performing backup
+>>$HOST_PASSWD
+<Backup complete|100%
 
 ; check if $BKNM_SYS generated
 >cd /opt/backups; ls $BKNM_SYS
@@ -47,12 +46,12 @@ $BKNM_IMG=$BKNM
 <.*
 
 ; scp the logs from the remote host to $BACK_PATH
-@60
+@300
 >scp -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP:/opt/backups/$BKNM_SYS $BACK_PATH/
 <assword:|$BKNM_SYS
 >>$HOST_PASSWD
 
-@60
+@300
 >scp -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP:/opt/backups/$BKNM_IMG $BACK_PATH/
 <assword:|$BKNM_IMG
 >>$HOST_PASSWD
@@ -70,7 +69,7 @@ $BKNM_IMG=$BKNM
 
 ; change to admin
 >export TMOUT=0
-@3
+@20
 >source /etc/nova/openrc
 
 ; done with backup of System Data
