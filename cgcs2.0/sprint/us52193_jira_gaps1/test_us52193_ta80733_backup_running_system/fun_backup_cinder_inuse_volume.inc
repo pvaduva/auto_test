@@ -47,6 +47,7 @@ $cnt=0
 
 $cnt=0
 [ $cnt < $max
+    =$cnt + 1
     !sleep 6
 
     >cinder snapshot-list --all-tenants
