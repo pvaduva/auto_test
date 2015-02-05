@@ -47,7 +47,6 @@ $HOST_IP=10.10.10.2
 >cinder quota-show $TENANT
 >cinder quota-update --volumes 20 $TENANT
 >cinder quota-show $TENANT
-tenant1.*\|.*[0-9]*\|.*([0-9]*)
 
 ; === create a new tenant1 network
 $NET_NAME=new_net
@@ -55,7 +54,8 @@ $NET_NAME=new_net
 >neutron providernet-range-list | grep tenant1
 +$PROVIDER_NET=\n\| ([A-Za-z0-9-]*)
 +$SEGMENT_ID=tenant1.*\| [ ]*([0-9]*) \|
->neutron net-create --tenant-id +$TENANT --provider:network_type=vlan --provider:physical_network=$PROVIDER_NET --provider:segmentation_id=$SEGMENT_ID $NET_NAME
+
+>neutron net-create --tenant-id $TENANT --provider:network_type=vlan --provider:physical_network=$PROVIDER_NET --provider:segmentation_id=$SEGMENT_ID $NET_NAME
 
 ; === get the necessary image and network uuids
 >source ./openrc.tenant1
@@ -92,8 +92,10 @@ $ROUTER_NAME=to_attach
 
 ; === Attempt to create unmanaged subnet with DNS name servers defined, expect failure
 
+>source /etc/nova/openrc
 >system dns-show
 +$DNS=nameservers .*\| ([0-9.]*)
+>source ./openrc.tenant1
 >neutron subnet-create --name $SUBNET_NAME --dns-nameserver $DNS --ip-version 4 --unmanaged --disable-dhcp $TENANT_NET $SUBNET_IP
 <Invalid input for operation
 
@@ -106,6 +108,9 @@ $ROUTER_NAME=to_attach
 <Created a new subnet
 >neutron subnet-list
 +$SUBNET_ID=([0-9a-f-]{36}) \| $SUBNET_NAME
+>neutron subnet-delete $SUBNET_ID
+
+!sleep 5
 
 ; === Attempt to create unmanaged subnet without DHCP, expect success
 >neutron subnet-create --name $SUBNET_NAME --ip-version 4 --unmanaged --disable-dhcp $TENANT_NET $SUBNET_IP
@@ -224,7 +229,7 @@ $result=none
 ; === attach WRL VM to cinder volume
 >nova boot --key_name=keypair-tenant1 --flavor=101 --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
 
-; === wait for WRL VM to go available, without explictly defined subnet
+; === wait for WRL VM to go available, without explictly defined subnet, with 2 networks
 $i=0
 $MAX=12
 $result=none
@@ -265,7 +270,7 @@ $result=none
 
 ; === Delete subnet
 >neutron subnet-delete $SUBNET_ID
-<Deleted router
+<Deleted subnet
 
 ; === Create router and attach to new subnet
 >neutron router-create $ROUTER_NAME
@@ -279,6 +284,9 @@ $result=none
 ; === Verify router attached by attempting to delete subnet, expected to fail
 >neutron subnet-delete $SUBNET_ID
 <Unable to complete operation on subnet
+
+; === attach WRL VM to cinder volume
+>nova boot --key_name=keypair-tenant1 --flavor=101 --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
 
 ; === wait for WRL VM to go available, go into VM and verify meta-data accessible
 $i=0
@@ -297,7 +305,7 @@ $result=none
     >
 ]
 
-!sleep 10
+!sleep 20
 >nova show $VM_NAME
 +$VM_IP=tenant1-mgmt-net network.*\| ([0-9.]*)
 
@@ -380,7 +388,7 @@ $result=none
 <Deleted router
 >neutron subnet-delete $SUBNET_ID
 <Deleted subnet
->neutron net-delete $TENANT-NET
+>neutron net-delete $TENANT_NET
 <Deleted network
 
 ; === END OF TEST
