@@ -22,7 +22,7 @@ Modification history
 
 <test_module name="test_us49035_ts2_vcpu_scale_up_down/${WASS_TC_NAME}" timeout="">
     <!--test_case  name="sanity/cgcs/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag"-->
-    <test_case  name="test_us49035_ts2_vcpu_scale_up_down/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" >
+    <test_case  name="test_us49035_ts1_vcpu_scale_up_down/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="">
 
 <!--SET noseTestName testcase_742
 INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag 
@@ -32,27 +32,20 @@ INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag
         #######################################################
 		
 CALL env
-
-SET SETTING_FILE 	/home/wrsroot/test_setting.cnf
-SET PORT_CONTROLLER	${port_controller}
-SET PORT_COMPUTER 	${port_compute}
-SET PORT_STORAGE 	${port_storage}
-
 LOOKFOR
 TYPE \n
 SINK 1 SEC
-PROMPTTIMEOUT 600 SEC
 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1SSH PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
-
+PROMPTTIMEOUT 10 SEC
 
 SET CR }
 SET CL {
 
 # generic expect-lite call 
-CALL ${WASSP_TC_PATH}/${WASSP_TC_NAME}.elt HOST_IP=$env.NODE.target.default.targetIP *NOINTERACT $rt_log 
+CALL ${WASSP_TC_PATH}/${WASSP_TC_NAME}.elt HOST_IP=$env.NODE.target.default.targetIP *NOINTERACT
 
 
 
