@@ -1,0 +1,980 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#       '>' send to remote host, implies "wait for prompt"
+#       '<' _MUST_ be received from the remote host, or this config script will fail
+#       # are comment lines, and have no effect
+#       ; are printable (in stdout) comments, and have no other effect
+#       @ change the expect timeout value
+#       ! Embedded Expect commands
+# For more info see: expect-lite.html
+
+#
+#       
+#       
+#
+#
+;;;
+
+US49035-VM Scale Up/Down Script
+
+
+Script can also be used as a scaling test:
+        ./nova_migrate_live_scale.elt IP=yow-cgcs-hp380-1 flavor1=big max_ht_groups=5
+
+Assumptions:
+        Lab is setup with lab_setup.sh with Tenants
+        heat template available in the switch
+
+Steps:
+1)  Connecting to controller
+2)  Become admin
+3)  Show version
+4)  Show system status
+5)  Validate that controllers and computes are present
+      
+
+;;;
+
+
+
+*NOFAIL
+*EXP_INFO
+
+# Variables defined to be used as contants
+$HOST_IP=128.224.150.199
+$HOST_USER=wrsroot
+$PASS=li69nux
+$NAT_IP=128.224.150.11
+$NAT_USER=cgcs
+$VM_USER=root
+
+$tenant_credentials=/home/wrsroot/openrc.tenant1
+$tenant=$tenant_credentials
+# trim to just last part
+=$tenant;.*[.](\w+);\1;
+
+$lab_setup=yes
+
+>date +%F_%T
++$DATE=\n(2.+)
+
+@2
+
+; === connecting to controller
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$PASS
+>export TMOUT=0
+
+; === become admin
+>source /etc/nova/openrc
+
+; === show version
+>system show
+>cat /etc/build.info
+
+; === show system status
+>nova service-list
+
+; === validate that controllers and computes are present
+>system host-list
+<controller-0
+<controller-1
+<compute-\d
+<compute-\d
+# if computes are not present, stop the script
++$last_compute=(compute)
+?if $last_compute!=compute? [
+        ;red --- Looks like all the nodes are not online, please fix
+        *TERM 5
+]
+
+; === Do valid lab_Setup
+?if $lab_setup == yes? [
+        ; === validate lab_setup script
+        >ls lab_setup.sh
+        <\nlab_setup.sh
+        >ls lab_setup.conf
+        <\nlab_setup.conf
+
+        ; === use lab_setup to configure compute nodes, interfaces, provider networks, tenant networks, images, flavors. Ready to boot VMs
+        @600
+        >time ./lab_setup.sh
+        #<Creating volume
+        #<Creating volume
+        #<Writing VM boot commands
+        <\nreal
+
+        @10
+        ; === unlock computes
+        $host=compute-0
+        >system host-unlock $host
+        $host=compute-1
+        >system host-unlock $host
+
+        $i=0
+        $max=100
+        >system host-list | grep $host
+        +$avail=(online|offline|available|degraded)
+        [ $avail != available
+                >system host-list | grep $host
+                +$avail=(online|offline|available|degraded)
+                !sleep 10
+                +$i
+                ?if $i > $max? %BREAK_UNLOCK_CONTROLLER
+        ]
+        %BREAK_UNLOCK_CONTROLLER
+]
+>system host-list
+
+; === Create necessary flavors and set minimum vcpu value
+$flavor1_min_cpu=1
+$flavor2_min_cpu=2
+$flavor1_max_cpu=4
+$flavor2_max_cpu=5
+$flavor1=vcpu4-$flavor1_min_cpu
+$flavor2=vcpu5-$flavor2_min_cpu
+
+
+#Create flavor1
+>nova flavor-create --dedicated-cpus True $flavor1 5f0d748b-1c8b-4a70-1985-4d57e25ac137 512 0 $flavor1_max_cpu
+>echo $?
+<\n0
+#Create flavor2
+>nova flavor-create --dedicated-cpus True $flavor2 db9b37f5-cba5-1985-a264-a6c1375a4ff7 512 0 $flavor2_max_cpu
+>echo $?
+<\n0
+; === flavor created
+>nova flavor-list | grep $flavor1
+>nova flavor-list | grep $flavor2
+
+#Set min vcpu value
+; === set minimum value for the cpu created
+>nova flavor-key $flavor1 set wrs:min_vcpus=$flavor1_min_cpu 
+>nova flavor-list --extra-specs | grep $flavor1
++$result=min.*vcpus.*(\d+)
+; === Minimum CPU value set for $flavor1 is $result
+
+>nova flavor-key $flavor2 set wrs:min_vcpus=$flavor2_min_cpu
+>nova flavor-list --extra-specs | grep $flavor2
++$result=min.*vcpus.*(\d+)
+; === Minimum CPU value set for $flavor2 is $result
+                                                                 
+; === get tenant uuids
+>keystone tenant-list
+<name
++$tenant_uuid=([0-9a-f-]{32,36})\s* \| $tenant
+
+
+; === get tenant id
+>keystone user-list
+>keystone user-list | grep $tenant
++$tenant_user_id=([0-9a-f-]{32,36})\s* \|\s+$tenant
+
+# expand quotas for tenants
+$quota_instances=30
+$quota_vcpus=60
+$quota_port=60
+$quota_volumes=30
+
+; === increase quotas for test
+>nova quota-update --instances $quota_instances $tenant_uuid
+>nova quota-update --cores $quota_vcpus $tenant_uuid
+>nova quota-show --tenant $tenant_uuid
+# must use tenant uuid when updating neutron quotas
+>neutron quota-update --port $quota_port --tenant-id $tenant_uuid
+>cinder quota-update --volumes $quota_volumes $tenant_uuid
+>cinder quota-show $tenant_uuid
+
+; === switch to tenant mode
+>source $tenant_credentials
+
+; === copy heat template to /home/wrsroot/ 
+>find . -iname VMAutoScaling.yaml
++$result=(\n.*/hot/scenarios/VMAutoScaling.yaml)
+>cp $result .
+; === change the cool down period to 20 secs from 60 secs
+>sed -i "s/Cooldown: '60'/Cooldown: '20'/g" VMAutoScaling.yaml
+>sed -i "s/period: '60'/period: '70'/g" VMAutoScaling.yaml
+
+$i=1
+$MAX=10
+[ $i<=$MAX
+      $vm$i=guest$i
+      +$i
+]
+
+############# live migrate instanceas and do scale up/down ##########
+; === become tenant again
+>source /home/wrsroot/openrc.tenant1
+; === create multiple heat stack
+$i=1
+$heat_stack_limit=1
+$change_flavor=$heat_stack_limit
+=$change_flavor / 2
+$flavor=$flavor1
+[ $i<=$heat_stack_limit
+	>heat stack-create -f VMAutoScaling.yaml -P TenantUserId=$tenant_user_id -P PrivateNetName=tenant1-mgmt-net -P InstanceName=$vm$i -P FlavorName=$flavor -P ImageName=cgcs-guest -P CustomMeterName=vote -P KeyName=keypair-tenant1 STACK$i
+	? $i == $change_flavor ? $flavor=$flavor2
+	+$i
+]
+
+
+; === wait and check if heat stack create_complete
+!sleep 30
+$i=1
+[ $i<=$heat_stack_limit
+	>heat stack-show STACK$i
+	<stack_status
+	-<CREATE_FAILED
+	<CREATE_COMPLETE
+	+$i
+]
+
+; === get ID of each instance
+>nova list
+$i=1
+[ $i<=$heat_stack_limit
+	>nova list | grep $vm$i
+	+$resource_id_vm$i=([0-9a-f-]{32,36})\s* \|\s+$vm$i
+	+$i	
+]
+
+; === check the VMs in good state
+$i=1
+[ $i<=$heat_stack_limit
+	>nova list
+	<$vm$i
+	-<ERROR
+	<ACTIVE
+	+$i
+]
+
+; === show vm-topology on VMs and save pre-migrate compute state
+$i=1
+[ $i<=$heat_stack_limit
+	@30
+	>time vm-topology -s all | grep $resource_id_vm$i
+	<$vm$i
+	+$premigrate_compute_vm$i=(compute-\d)
+	+$i
+]
+
+; === Become Admin to migrate
+>source /etc/nova/openrc
+
+; === live migrate guest1
+$i=1
+[ $i<=$heat_stack_limit
+	>nova live-migration $resource_id_vm$i
+	!sleep 10
+	+$i
+]
+
+; === switch to tenant mode
+>source /home/wrsroot/openrc.tenant1
+>nova list
+
+; === wait for guest1 to finish migrating
+
+$i=0
+$max=50
+$vm_state=none
+[ $vm_state != ACTIVE
+        >nova list
+        <$vm1
+        +$vm_state=(BUILD|ACTIVE|ERROR|MIGRATING)
+        !sleep 2
+        +$i
+        ?if $vm_state == ERROR? %BREAK_VM_MIGRATE1
+        ?if $i > $max? %BREAK_VM_MIGRATE1
+]
+%BREAK_VM_MIGRATE1
+
+; === check the VMs in good state
+$i=1
+[ $i<=$heat_stack_limit
+	>nova list
+	<$vm$i
+	-<ERROR
+	<ACTIVE
+	+$i
+]
+
+; === show vm-topology on VMs and save after migration compute state
+
+$i=1
+[ $i<=$heat_stack_limit
+	@30
+	>time vm-topology -s all | grep $resource_id_vm$i
+	<$vm$i
+	+$after_migration_compute_vm$i=(compute-\d)
+	+$i
+]
+
+; === Verify VMs migrated
+?$premigrate_compute_vm1 == $after_migration_compute_vm1 ? ;red === guest1 did not live migrate
+
+
+# Scale up/down via CLI
+
+; === Do scale up/down sequentially
+
+$i=1
+[ $i<=$heat_stack_limit
+	; === execute scale down for $vm$i
+	# scale down guest1 to minimum value
+	; === save the current state of $vm$i cpu
+	@10
+	>vm-topology -s servers
+	<$vm$i
+	+$min_cpu=(\d+),\d+,\d+
+	+$cur_cpu=\d+,(\d+),\d+
+	+$max_cpu=\d+,\d+,(\d+)
+
+	;=== scale down $vm$i cpu to the minimum value:$min_cpu
+
+	$actual_cur_cpu=$cur_cpu
+	[ $min_cpu < $actual_cur_cpu
+		@10
+		>nova scale $vm$i cpu down
+		>echo $?
+		<\n0
+		-$actual_cur_cpu
+	]
+
+	; === check if $vm$i current cpu value reached minimum cpu value:$min_cpu
+	>nova show $vm$i
+	<(min/cur/max)
+	+$min_cpu=(\d+),\s*\d+,\s*\d+
+	+$cur_cpu=\d+,\s*(\d+),\s*\d+
+	+$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+	?if $cur_cpu!=$min_cpu? [
+ 	       ;red === $vm$i expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+	]
+
+	; === $vm$i scale down should fail beyond minimum limit: $min_cpu
+	>vm-topology -s servers
+	>nova scale $vm$i cpu down
+	@25
+	>echo $?
+	<\n1
+	+$i
+	; === scale down of vm$i completed
+]
+; === scale down of all VMs completed
+
+# scale up all VMs to max value
+$i=1
+[ $i<=$heat_stack_limit
+	; === save the current state of $vm$i cpu
+	>vm-topology -s servers
+	<$vm$i
+	+$min_cpu=(\d+),\d+,\d+
+	+$cur_cpu=\d+,(\d+),\d+
+	+$max_cpu=\d+,\d+,(\d+)
+
+	;=== scale up cpu to the maximum value:$max_cpu
+	$actual_cur_cpu=$cur_cpu
+	[ $actual_cur_cpu < $max_cpu
+	@10
+	>nova scale $vm$i cpu up
+	>echo $?
+	<\n0
+	+$actual_cur_cpu
+	]
+
+	; === check if $vm$i current cpu value reached max cpu value:$max_cpu
+	>nova show $vm$i
+	<(min/cur/max)
+	+$min_cpu=(\d+),\s*\d+,\s*\d+
+	+$cur_cpu=\d+,\s*(\d+),\s*\d+
+	+$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+	?if $cur_cpu!=$max_cpu? [
+	        ;red === $vm$i expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+	]
+
+	; === $vm$i scale up should fail beyond max limit: $max_cpu
+	>vm-topology -s servers
+	>nova scale $vm$i cpu up
+	@25
+	>echo $?
+	<\n1
+	+$i
+	; === scale down of vm$i completed
+]
+; === Scale up of all Vms completed
+
+############# Cold migrate instanceas and do scale up/down ##########
+
+; === check the VMs in good state
+$i=1
+[ $i<=$heat_stack_limit
+	>nova list
+	<$vm$i
+	-<ERROR
+	<ACTIVE
+	+$i
+]
+
+; === show vm-topology on VMs and save pre-migrate compute state
+
+$i=1
+[ $i<=$heat_stack_limit
+	@30
+	>time vm-topology -s all | grep $resource_id_vm$i
+	<$vm$i
+	+$premigrate_compute_vm$i=(compute-\d)
+	+$i
+]
+
+; === Become Admin to migrate
+>source /etc/nova/openrc
+
+; === live migrate Vms
+$i=1
+[ $i<=$heat_stack_limit
+	>nova migrate $resource_id_vm$i
+	+$i
+]
+>nova migrate $resource_id_vm1
+; === switch to tenant mode
+>source /home/wrsroot/openrc.tenant1
+>nova list
+; === wait for guest1 to VERIFY_RESIZE
+
+$i=0
+$max=50
+$vm_state=none
+[ $vm_state != VERIFY_RESIZE
+        >nova list
+        <$vm1
+        +$vm_state=(VERIFY_RESIZE|ACTIVE|ERROR|RESIZE)
+        !sleep 2
+        +$i
+        ?if $vm_state == ACTIVE? %BREAK_VM_RESIZE1
+        ?if $vm_state == ERROR? %BREAK_VM_RESIZE1
+        ?if $i > $max? %BREAK_VM_RESIZE1
+]
+%BREAK_VM_RESIZE1
+
+; === check the VMs in VERIFY_RESIZE state
+$i=1
+[ $i<=$heat_stack_limit
+	@10
+	>nova list | grep $vm$i
+	-<ERROR
+	-<ACTIVE
+	<VERIFY_RESIZE
+	+$i
+]
+
+
+; === confirm resize 
+$i=1
+[ $i<=$heat_stack_limit
+	>nova resize-confirm $resource_id_vm$i
+	>echo $?
+	<\n0
+	+$i
+]
+
+; === wait for guest1 to finish migrating
+
+$i=0
+$max=50
+$vm_state=none
+[ $vm_state != ACTIVE
+        >nova list
+        <$vm1
+        +$vm_state=(BUILD|ACTIVE|ERROR|MIGRATING)
+        !sleep 2
+        +$i
+        ?if $vm_state == ERROR? %BREAK_VM_COLD_MIGRATE1
+        ?if $i > $max? %BREAK_VM_COLD_MIGRATE1
+]
+%BREAK_VM_COLD_MIGRATE1
+
+; === check the VMs in good state
+$i=1
+[ $i<=$heat_stack_limit
+	>nova list
+	<$vm$i
+	-<ERROR
+	<ACTIVE
+	+$i
+]
+
+; === show vm-topology on VMs and save after migration compute state
+
+$i=1
+[ $i<=$heat_stack_limit
+	@30
+	>time vm-topology -s all | grep $resource_id_vm$i
+	<$vm$i
+	+$after_migration_compute_vm$i=(compute-\d)
+	+$i
+]
+
+; === Verify VMs migrated
+?$premigrate_compute_vm1==$after_migration_compute_vm1 ? ;red === guest1 did not migrate
+
+; === Do scale up/down sequentially
+
+$i=1
+[ $i<=$heat_stack_limit
+	; === execute scale down for $vm$i
+	# scale down guest1 to minimum value
+	; === save the current state of $vm$i cpu
+	@5
+	>vm-topology -s servers
+	<$vm$i
+	+$min_cpu=(\d+),\d+,\d+
+	+$cur_cpu=\d+,(\d+),\d+
+	+$max_cpu=\d+,\d+,(\d+)
+
+	;=== scale down $vm$i cpu to the minimum value:$min_cpu
+
+	$actual_cur_cpu=$cur_cpu
+	[ $min_cpu < $actual_cur_cpu
+		@10
+		>nova scale $vm$i cpu down
+		>echo $?
+		<\n0
+		-$actual_cur_cpu
+	]
+
+	; === check if $vm$i current cpu value reached minimum cpu value:$min_cpu
+	>nova show $vm$i
+	<(min/cur/max)
+	+$min_cpu=(\d+),\s*\d+,\s*\d+
+	+$cur_cpu=\d+,\s*(\d+),\s*\d+
+	+$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+	?if $cur_cpu!=$min_cpu? [
+ 	       ;red === $vm$i expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+	]
+
+	; === $vm$i scale down should fail beyond minimum limit: $min_cpu
+	>vm-topology -s servers
+	>nova scale $vm$i cpu down
+	@25
+	>echo $?
+	<\n1
+	+$i
+	; === scale down of vm$i completed
+]
+; === scale down of all VMs completed
+
+# scale up all VMs to max value
+$i=1
+[ $i<=$heat_stack_limit
+	; === save the current state of $vm$i cpu
+	>vm-topology -s servers
+	<$vm$i
+	+$min_cpu=(\d+),\d+,\d+
+	+$cur_cpu=\d+,(\d+),\d+
+	+$max_cpu=\d+,\d+,(\d+)
+
+	;=== scale up cpu to the maximum value:$max_cpu
+	$actual_cur_cpu=$cur_cpu
+	[ $actual_cur_cpu < $max_cpu
+	@10
+	>nova scale $vm$i cpu up
+	>echo $?
+	<\n0
+	+$actual_cur_cpu
+	]
+
+	; === check if $vm$i current cpu value reached max cpu value:$max_cpu
+	>nova show $vm$i
+	<(min/cur/max)
+	+$min_cpu=(\d+),\s*\d+,\s*\d+
+	+$cur_cpu=\d+,\s*(\d+),\s*\d+
+	+$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+	?if $cur_cpu!=$max_cpu? [
+	        ;red === $vm$i expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+	]
+
+	; === $vm$i scale up should fail beyond max limit: $max_cpu
+	>vm-topology -s servers
+	>nova scale $vm$i cpu up
+	@25
+	>echo $?
+	<\n1
+	+$i
+	; === scale up of vm$i completed
+]
+; === Scale up of all Vms completed
+
+# complete cold migration vm scale up/down
+
+# Do scale up down after pause/unpause of instance guest1
+; === pause guest1 
+>nova pause $resource_id_vm1
+; === check guest1 PAUSED
+>nova list | grep $vm1
+@15
+<$vm1
+-<ERROR
+<PAUSED
+
+; === unpause guest1 
+>nova unpause $resource_id_vm1
+; === check guest1 UNPAUSED
+>nova list | grep $vm1
+@15
+<$vm1
+-<ERROR
+<ACTIVE
+
+#Scale down guest1 via heat
+$value=2
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"display_name":"$vm1"}'
+>ceilometer resource-show -r $resource_id_vm1
+!sleep 30
+>ceilometer alarm-list
+<STACK1.*Low.*|
+<alarm
+
+
+; === going in a loop to check $vm1 reached minimum cpu vale 
+$i=0
+$max=20 
+>nova show $vm1
+<$vm1
++$min_cpu=(\d+),\s*\d+,\s*\d+
++$cur_cpu=\d+,\s*(\d+),\s*\d+
++$max_cpu=\d+,\s*\d+,\s*(\d+)
+[ $cur_cpu != $min_cpu
+	   >nova show $vm1
+           <$vm1
+           +$cur_cpu=\d+,\s*(\d+),\s*\d+
+           !sleep 30
+	   ; === auto scaling down
+           +$i
+           ?if $cur_cpu == $min_cpu? %BREAK_REACHED_MIN_CPU3
+]
+%BREAK_REACHED_MIN_CPU3
+
+; === check if $vm1 current cpu value reached minimum cpu value:$min_cpu
+>nova show $vm1
+<(min/cur/max)
++$min_cpu=(\d+),\s*\d+,\s*\d+
++$cur_cpu=\d+,\s*(\d+),\s*\d+
++$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+?if $cur_cpu!=$min_cpu? [
+        ;red === $vm1 cpu value did not reached minimum value $min_cpu
+]
+
+#scale up guest1 via heat 
+$value=90
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"display_name":"$vm1"}'
+>ceilometer resource-show -r $resource_id_vm1
+!sleep 30
+>ceilometer alarm-list
+<STACK1.*High.*|
+<alarm
+; === going in a loop to check $vm1 reached maximum cpu vale 
+$i=0
+$max=10 
+>nova show $vm1
+<$vm1
++$min_cpu=(\d+),\s*\d+,\s*\d+
++$cur_cpu=\d+,\s*(\d+),\s*\d+
++$max_cpu=\d+,\s*\d+,\s*(\d+)
+[ $cur_cpu != $max_cpu
+	   >nova show $vm1
+           <$vm1
+           +$cur_cpu=\d+,\s*(\d+),\s*\d+
+           !sleep 30
+	   ; === auto scaling up
+           +$i
+           ?if $cur_cpu == $max_cpu? %BREAK_REACHED_MAX_CPU3
+]
+%BREAK_REACHED_MAX_CPU3
+
+; === check if $vm1 current cpu value reached maximum cpu value:$max_cpu
+>nova show $vm1
+<(min/cur/max)
++$min_cpu=(\d+),\s*\d+,\s*\d+
++$cur_cpu=\d+,\s*(\d+),\s*\d+
++$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+?if $cur_cpu!=$max_cpu? [
+        ;red === $vm1 cpu value did not reached maximum value $max_cpu
+]
+
+
+#complete guest1 scale up/down via heat
+
+# complete pause/unpause 
+
+# Do scale up/down after SUSPEND/RESUME of instance guest1
+; === suspend guest1 
+>nova suspend $resource_id_vm1
+
+; === wait for guest1 to SUSPEND
+
+$i=0
+$max=50
+$vm_state=none
+[ $vm_state != SUSPENDED
+        >nova list
+        <$vm1
+        +$vm_state=(ACTIVE|ERROR|SUSPENDED)
+        !sleep 2
+        +$i
+        ?if $vm_state == ERROR? %BREAK_VM_SUSPENDED
+        ?if $i > $max? %BREAK_VM_SUSPENDED
+]
+%BREAK_VM_SUSPENDED
+>nova list
+
+; === resume guest1 
+>nova resume $resource_id_vm1
+; === check guest1 RESUMED
+; === wait for guest1 to become ACTIVE
+
+$i=0
+$max=50
+$vm_state=none
+[ $vm_state != ACTIVE
+        >nova list
+        <$vm1
+        +$vm_state=(ACTIVE|ERROR|SUSPENDED)
+        !sleep 2
+        +$i
+        ?if $vm_state == ERROR? %BREAK_VM_RESUMED
+        ?if $i > $max? %BREAK_VM_RESUMED
+]
+%BREAK_VM_RESUMED
+
+>nova list
+
+; === check the VMs in good state
+$i=1
+[ $i<=$heat_stack_limit
+	>nova list
+	<$vm$i
+	-<ERROR
+	<ACTIVE
+	+$i
+]
+
+; === Do scale up/down sequentially
+@10
+$i=1
+[ $i<=$heat_stack_limit
+	; === execute scale down for $vm$i
+	# scale down guest1 to minimum value
+	; === save the current state of $vm$i cpu
+	@5
+	>vm-topology -s servers
+	<$vm$i
+	+$min_cpu=(\d+),\d+,\d+
+	+$cur_cpu=\d+,(\d+),\d+
+	+$max_cpu=\d+,\d+,(\d+)
+
+	;=== scale down $vm$i cpu to the minimum value:$min_cpu
+
+	$actual_cur_cpu=$cur_cpu
+	[ $min_cpu < $actual_cur_cpu
+		@10
+		>nova scale $vm$i cpu down
+		>echo $?
+		<\n0
+		-$actual_cur_cpu
+	]
+
+	; === check if $vm$i current cpu value reached minimum cpu value:$min_cpu
+	>nova show $vm$i
+	<(min/cur/max)
+	+$min_cpu=(\d+),\s*\d+,\s*\d+
+	+$cur_cpu=\d+,\s*(\d+),\s*\d+
+	+$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+	?if $cur_cpu!=$min_cpu? [
+ 	       ;red === $vm$i expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+	]
+	+$i
+]
+; === scale down of all VMs completed
+
+# scale up all VMs to max value
+$i=1
+[ $i<=$heat_stack_limit
+	; === save the current state of $vm$i cpu
+	>vm-topology -s servers
+	<$vm$i
+	+$min_cpu=(\d+),\d+,\d+
+	+$cur_cpu=\d+,(\d+),\d+
+	+$max_cpu=\d+,\d+,(\d+)
+
+	;=== scale up cpu to the maximum value:$max_cpu
+	$actual_cur_cpu=$cur_cpu
+	[ $actual_cur_cpu < $max_cpu
+	@10
+	>nova scale $vm$i cpu up
+	>echo $?
+	<\n0
+	+$actual_cur_cpu
+	]
+
+	; === check if $vm$i current cpu value reached max cpu value:$max_cpu
+	>nova show $vm$i
+	<(min/cur/max)
+	+$min_cpu=(\d+),\s*\d+,\s*\d+
+	+$cur_cpu=\d+,\s*(\d+),\s*\d+
+	+$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+	?if $cur_cpu!=$max_cpu? [
+	        ;red === $vm$i expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+	]
+	; === scale up of vm$i completed
+	+$i
+]
+; === Scale up of all Vms completed
+
+#### complete SUSPEND/RESUME
+
+# DO scale up/down after guest1 reboot
+; === reboot guest1 
+>nova reboot $resource_id_vm1
+; === check guest1 rebooting
+>nova list | grep $vm1
+@15
+<$vm1
+-<ERROR
+<REBOOT
+
+; === wait for guest1 to finish rebooting
+
+$i=0
+$max=100
+$vm_state=none
+[ $vm_state != ACTIVE
+        >nova list | grep $vm1
+        <$vm1
+        +$vm_state=(ACTIVE|ERROR|REBOOT)
+        !sleep 2
+        +$i
+        ?if $vm_state == ERROR? %BREAK_VM_REBOOT
+        ?if $i > $max? %BREAK_VM_REBOOT
+]
+%BREAK_VM_REBOOT
+>nova list
+
+#Scale down guest1 via heat
+$value=2
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"display_name":"$vm1"}'
+>ceilometer resource-show -r $resource_id_vm1
+!sleep 30
+>ceilometer alarm-list
+<STACK1.*Low.*|
+<alarm
+
+
+; === going in a loop to check $vm1 reached minimum cpu vale 
+$i=0
+$max=20 
+>nova show $vm1
+<$vm1
++$min_cpu=(\d+),\s*\d+,\s*\d+
++$cur_cpu=\d+,\s*(\d+),\s*\d+
++$max_cpu=\d+,\s*\d+,\s*(\d+)
+[ $cur_cpu != $min_cpu
+	   >nova show $vm1
+           <$vm1
+           +$cur_cpu=\d+,\s*(\d+),\s*\d+
+           !sleep 30
+	   ; === auto scaling down
+           +$i
+           ?if $cur_cpu == $min_cpu? %BREAK_REACHED_MIN_CPU5
+]
+%BREAK_REACHED_MIN_CPU5
+
+; === check if $vm1 current cpu value reached minimum cpu value:$min_cpu
+>nova show $vm1
+<(min/cur/max)
++$min_cpu=(\d+),\s*\d+,\s*\d+
++$cur_cpu=\d+,\s*(\d+),\s*\d+
++$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+?if $cur_cpu!=$min_cpu? [
+        ;red === $vm1 cpu value did not reached minimum value $min_cpu
+]
+
+#scale up guest1 via heat 
+$value=90
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"display_name":"$vm1"}'
+>ceilometer resource-show -r $resource_id_vm1
+!sleep 30
+>ceilometer alarm-list
+<STACK1.*High.*|
+<alarm
+; === going in a loop to check $vm1 reached maximum cpu vale 
+$i=0
+$max=10 
+>nova show $vm1
+<$vm1
++$min_cpu=(\d+),\s*\d+,\s*\d+
++$cur_cpu=\d+,\s*(\d+),\s*\d+
++$max_cpu=\d+,\s*\d+,\s*(\d+)
+[ $cur_cpu != $max_cpu
+	   >nova show $vm1
+           <$vm1
+           +$cur_cpu=\d+,\s*(\d+),\s*\d+
+           !sleep 30
+	   ; === auto scaling up
+           +$i
+           ?if $cur_cpu == $max_cpu? %BREAK_REACHED_MAX_CPU5
+]
+%BREAK_REACHED_MAX_CPU5
+
+; === check if $vm1 current cpu value reached maximum cpu value:$max_cpu
+>nova show $vm1
+<(min/cur/max)
++$min_cpu=(\d+),\s*\d+,\s*\d+
++$cur_cpu=\d+,\s*(\d+),\s*\d+
++$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+?if $cur_cpu!=$max_cpu? [
+        ;red === $vm1 cpu value did not reached maximum value $max_cpu
+]
+
+#complete guest1 scale up/down via heat
+
+### complete scale up/down after VM reboot
+
+
+################## Clean up #############################################
+; === become admin to clean up
+>source /etc/nova/openrc
+;cleanup all setup created for this testcase
+; === delete the stack created
+
+; === delete the flavor created 
+>nova flavor-list
+>nova flavor-delete $flavor1
+>nova flavor-delete $flavor2
+>nova flavor-list
+-<$flavor1
+-<$flavor2
+; === become tenant to clean up stack
+>source $tenant_credentials
+; === delete heat stack created
+>heat stack-delete STACK1
+!sleep 45
+>heat stack-list
+-<STACK1
+
+
+

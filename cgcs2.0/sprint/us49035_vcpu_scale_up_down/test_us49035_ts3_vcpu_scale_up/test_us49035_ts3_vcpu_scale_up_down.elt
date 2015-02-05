@@ -1,0 +1,496 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#       '>' send to remote host, implies "wait for prompt"
+#       '<' _MUST_ be received from the remote host, or this config script will fail
+#       # are comment lines, and have no effect
+#       ; are printable (in stdout) comments, and have no other effect
+#       @ change the expect timeout value
+#       ! Embedded Expect commands
+# For more info see: expect-lite.html
+
+#
+#       
+#       
+#
+#
+;;;
+
+VM Scale Up/Down Script
+
+
+Script can also be used as a scaling test:
+        ./nova_migrate_live_scale.elt IP=yow-cgcs-hp380-1 flavor1=big max_ht_groups=5
+
+Assumptions:
+        Lab is setup with lab_setup.sh with Tenants
+        heat template available in the switch
+
+Steps:
+1)  Connecting to controller
+2)  Become admin
+3)  Show version
+4)  Show system status
+5)  Validate that controllers and computes are present
+      
+
+;;;
+
+
+
+*NOFAIL
+*EXP_INFO
+
+# Variables defined to be used as contants
+$HOST_IP=128.224.150.199
+$HOST_USER=wrsroot
+$PASS=li69nux
+$NAT_IP=128.224.150.11
+$NAT_USER=cgcs
+$VM_USER=root
+
+$tenant_credentials=/home/wrsroot/openrc.tenant1
+$tenant=$tenant_credentials
+# trim to just last part
+=$tenant;.*[.](\w+);\1;
+
+$lab_setup=yes
+
+>date +%F_%T
++$DATE=\n(2.+)
+
+@2
+
+; === connecting to controller
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$PASS
+>export TMOUT=0
+
+; === become admin
+>source /etc/nova/openrc
+
+; === show version
+>system show
+>cat /etc/build.info
+
+; === show system status
+>nova service-list
+
+; === validate that controllers and computes are present
+>system host-list
+<controller-0
+<controller-1
+<compute-\d
+<compute-\d
+# if computes are not present, stop the script
++$last_compute=(compute)
+?if $last_compute!=compute? [
+        ;red --- Looks like all the nodes are not online, please fix
+        *TERM 5
+]
+
+; === Do valid lab_Setup
+?if $lab_setup == yes? [
+        ; === validate lab_setup script
+        >ls lab_setup.sh
+        <\nlab_setup.sh
+        >ls lab_setup.conf
+        <\nlab_setup.conf
+
+        ; === use lab_setup to configure compute nodes, interfaces, provider networks, tenant networks, images, flavors. Ready to boot VMs
+        @600
+        >time ./lab_setup.sh
+        #<Creating volume
+        #<Creating volume
+        #<Writing VM boot commands
+        <\nreal
+
+        @10
+        ; === unlock computes
+        $host=compute-0
+        >system host-unlock $host
+        $host=compute-1
+        >system host-unlock $host
+
+        $i=0
+        $max=100
+        >system host-list | grep $host
+        +$avail=(online|offline|available|degraded)
+        [ $avail != available
+                >system host-list | grep $host
+                +$avail=(online|offline|available|degraded)
+                !sleep 10
+                +$i
+                ?if $i > $max? %BREAK_UNLOCK_CONTROLLER
+        ]
+        %BREAK_UNLOCK_CONTROLLER
+]
+>system host-list
+
+; === Create necessary flavors and set minimum vcpu value
+$flavor1_min_cpu=1
+$flavor2_min_cpu=2
+$flavor1_max_cpu=4
+$flavor2_max_cpu=5
+$flavor1=vcpu4-$flavor1_min_cpu
+$flavor2=vcpu5-$flavor2_min_cpu
+
+
+#Create flavor1
+>nova flavor-create --dedicated-cpus True $flavor1 5f0d748b-1c8b-4a70-1985-4d57e25ac137 512 0 $flavor1_max_cpu
+>echo $?
+<\n0
+#Create flavor2
+>nova flavor-create --dedicated-cpus True $flavor2 db9b37f5-cba5-1985-a264-a6c1375a4ff7 512 0 $flavor2_max_cpu
+>echo $?
+<\n0
+; === flavor created
+>nova flavor-list | grep $flavor1
+>nova flavor-list | grep $flavor2
+
+#Set min vcpu value
+; === set minimum value for the cpu created
+>nova flavor-key $flavor1 set wrs:min_vcpus=$flavor1_min_cpu processor:node=0
+>nova flavor-list --extra-specs | grep $flavor1
++$result=min.*vcpus.*(\d+)
+; === Minimum CPU value set for $flavor1 is $result
+
+>nova flavor-key $flavor2 set wrs:min_vcpus=$flavor2_min_cpu
+>nova flavor-list --extra-specs | grep $flavor2
++$result=min.*vcpus.*(\d+)
+; === Minimum CPU value set for $flavor2 is $result
+                                                                 
+; === get tenant uuids
+>keystone tenant-list
+<name
++$tenant_uuid=([0-9a-f-]{32,36})\s* \| $tenant
+
+
+; === get tenant id
+>keystone user-list
+>keystone user-list | grep $tenant
++$tenant_user_id=([0-9a-f-]{32,36})\s* \|\s+$tenant
+
+# expand quotas for tenants
+$quota_instances=30
+$quota_vcpus=60
+$quota_port=60
+$quota_volumes=30
+
+; === increase quotas for test
+>nova quota-update --instances $quota_instances $tenant_uuid
+>nova quota-update --cores $quota_vcpus $tenant_uuid
+>nova quota-show --tenant $tenant_uuid
+# must use tenant uuid when updating neutron quotas
+>neutron quota-update --port $quota_port --tenant-id $tenant_uuid
+>cinder quota-update --volumes $quota_volumes $tenant_uuid
+>cinder quota-show $tenant_uuid
+
+; === switch to tenant mode
+>source $tenant_credentials
+
+
+# CGTS-804 - Validate that if the guest image is not valid in glance then the Heat Stack will not instantiate
+; === CGTS-804 - Validate that if the guest image is not valid in glance then the Heat Stack will not instantiate
+>heat stack-create -f VMAutoScaling.yaml -P TenantUserId=$tenant_user_id -P PrivateNetName=tenant1-mgmt-net -P InstanceName=invalid-guest -P FlavorName=$flavor1 -P ImageName=non-cgcs-guest -P CustomMeterName=vote -P KeyName=keypair-tenant1 INVALIDSTACK
+<ERROR
+>echo $?
+<1
+
+
+#CGTS-907 scale up down via boot from cinder
+; === switch to tenant mode
+>source $tenant_credentials
+
+; === copy heat template to /home/wrsroot/ 
+>find . -iname BootFromCinder.yaml
++$result=(\n.*/hot/scenarios/BootFromCinder.yaml)
+>cp $result .
+
+
+; === get tenant_net1 id
+>neutron net-list
++$tenant1_mgmt_net_id=([0-9a-f-]{32,40})\s+\|\s+tenant1-mgmt-net
++$tenant1_net0_id=([0-9a-f-]{32,40})\s+\| tenant1-net0
+
+; === get cgcs-guest image id
+>glance image-list
++$cgcs_guest_id=([0-9a-z-]{32,40})\s+\|\s+cgcs-guest
+
+; === create heat stack from cinder volume
+#>heat stack-create -f BootFromCinder.yaml -P INTERNAL_NET_ID=tenant1-net1 -P PRIVATE_NET_ID=tenant1-mgmt-net -P FLAVOR_NAME=$flavor1 -P GLANCE_IMAGE_ID=cgcs-guest -P KEY_NAME=keypair-tenant1 CINDERSTACK
+>heat stack-create -f BootFromCinder.yaml -P INTERNAL_NET_ID=$tenant1_net0_id -P PRIVATE_NET_ID=$tenant1_mgmt_net_id -P FLAVOR_NAME=$flavor2 -P GLANCE_IMAGE_ID=$cgcs_guest_id -P KEY_NAME=keypair-tenant1 CINDERSTACK
+
+; === check if CINDERSTACK create complete
+!sleep 45
+@60
+>heat stack-list | grep CINDERSTACK
+-<CREATE_FAILED
+<CREATE_COMPLETE
+
+; === Do scale up/down 
+
+; === execute scale down for VM-from-cinder-volume
+# scale down VM-from-cinder-volume to minimum value
+; === save the current state of VM-from-cinder-volume cpu
+@5
+>vm-topology -s servers
+<VM-from-cinder-volume
++$min_cpu=(\d+),\d+,\d+
++$cur_cpu=\d+,(\d+),\d+
++$max_cpu=\d+,\d+,(\d+)
+# scale down VM-from-cinder-volume to min value
+; === scale down VM-from-cinder-volume cpu to the minimum value:$min_cpu
+$actual_cur_cpu=$cur_cpu
+[ $min_cpu < $actual_cur_cpu
+	@10
+	>nova scale VM-from-cinder-volume cpu down
+	>echo $?
+	<\n0
+	-$actual_cur_cpu
+]
+
+; === check if VM-from-cinder-volume current cpu value reached minimum cpu value:$min_cpu
+>nova show VM-from-cinder-volume
+<(min/cur/max)
++$min_cpu=(\d+),\s*\d+,\s*\d+
++$cur_cpu=\d+,\s*(\d+),\s*\d+
++$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+?if $cur_cpu!=$min_cpu? [
+       ;red === VM-from-cinder-volume expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+]
+
+; === VM-from-cinder-volume scale down should fail beyond minimum limit: $min_cpu
+>vm-topology -s servers
+>nova scale VM-from-cinder-volume cpu down
+@25
+>echo $?
+<\n1
+
+; === scale down of VM-from-cinder-volume completed
+
+
+# scale up VM-from-cinder-volume to max value
+; === scale up VM-from-cinder-volume cpu to the maximum value:$max_cpu
+; === save the current state of VM-from-cinder-volume cpu
+>vm-topology -s servers
+<VM-from-cinder-volume
++$min_cpu=(\d+),\d+,\d+
++$cur_cpu=\d+,(\d+),\d+
++$max_cpu=\d+,\d+,(\d+)
+
+; === scale up cpu to the maximum value:$max_cpu
+$actual_cur_cpu=$cur_cpu
+[ $actual_cur_cpu < $max_cpu
+@10
+>nova scale VM-from-cinder-volume cpu up
+>echo $?
+<\n0
++$actual_cur_cpu
+]
+
+; === check if VM-from-cinder-volume current cpu value reached max cpu value:$max_cpu
+>nova show VM-from-cinder-volume
+<(min/cur/max)
++$min_cpu=(\d+),\s*\d+,\s*\d+
++$cur_cpu=\d+,\s*(\d+),\s*\d+
++$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+?if $cur_cpu!=$max_cpu? [
+        ;red === VM-from-cinder-volume expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+]
+
+; === VM-from-cinder-volume scale up should fail beyond max limit: $max_cpu
+>vm-topology -s servers
+>nova scale VM-from-cinder-volume cpu up
+@25
+>echo $?
+<\n1
+; === scale up of VM-from-cinder-volume completed
+
+#scale up down via boot from cinder complete
+
+# Do scale up down after swacting active controller
+; === identify active controller
+>system sda-list | grep controller-services
++$act_controller=controller-services.*(controller-\d).*active
+
+; === get floating IP
+>/sbin/ip addr | grep secondary | grep eth0
++$float_ip=inet ([0-9.]+)/
+
+; === become admin
+>source /etc/nova/openrc
+; === identify active controller
+>system sda-list | grep controller-services
++$act_controller=controller-services.*(controller-\d).*active
+
+; === swact controllers
+>system host-swact $act_controller
+>
+@30
+>ping -c 30 -W 30 $float_ip
+<icmp_req=\d+ ttl=64
+<Destination Host Unreachable
+<icmp_req=\d+ ttl=64
+>>^C
+>
+@5
+?if $act_controller==controller-0? $act_controller=controller-1 :: $act_controller=controller-0
+; === log into other controller and swact back
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$act_controller
+<assword|SYSTEM:
+>>$PASS
+>export TMOUT=0
+
+; === switch to tenant mode
+!sleep 30
+>source $tenant_credentials
+
+; === Do scale up/down 
+; === execute scale down for VM-from-cinder-volume
+# scale down VM-from-cinder-volume to minimum value
+; === save the current state of VM-from-cinder-volume cpu
+!sleep 30
+@50
+>vm-topology -s servers
+<VM-from-cinder-volume
++$min_cpu=(\d+),\d+,\d+
++$cur_cpu=\d+,(\d+),\d+
++$max_cpu=\d+,\d+,(\d+)
+# scale down VM-from-cinder-volume to max value
+; === scale down VM-from-cinder-volume cpu to the minimum value:$min_cpu
+$actual_cur_cpu=$cur_cpu
+[ $min_cpu < $actual_cur_cpu
+	@10
+	>nova scale VM-from-cinder-volume cpu down
+	>echo $?
+	<\n0
+	-$actual_cur_cpu
+]
+
+; === check if VM-from-cinder-volume current cpu value reached minimum cpu value:$min_cpu
+>nova show VM-from-cinder-volume
+<(min/cur/max)
++$min_cpu=(\d+),\s*\d+,\s*\d+
++$cur_cpu=\d+,\s*(\d+),\s*\d+
++$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+?if $cur_cpu!=$min_cpu? [
+       ;red === VM-from-cinder-volume expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+]
+
+; === VM-from-cinder-volume scale down should fail beyond minimum limit: $min_cpu
+>vm-topology -s servers
+>nova scale VM-from-cinder-volume cpu down
+@25
+>echo $?
+<\n1
+
+; === scale down of VM-from-cinder-volume completed
+
+
+# scale up VM-from-cinder-volume to max value
+; === scale up VM-from-cinder-volume cpu to the maximum value:$max_cpu
+; === save the current state of VM-from-cinder-volume cpu
+>vm-topology -s servers
+<VM-from-cinder-volume
++$min_cpu=(\d+),\d+,\d+
++$cur_cpu=\d+,(\d+),\d+
++$max_cpu=\d+,\d+,(\d+)
+
+;=== scale up cpu to the maximum value:$max_cpu
+$actual_cur_cpu=$cur_cpu
+[ $actual_cur_cpu < $max_cpu
+@50
+>nova scale VM-from-cinder-volume cpu up
+>echo $?
+<\n0
++$actual_cur_cpu
+]
+
+; === check if VM-from-cinder-volume current cpu value reached max cpu value:$max_cpu
+>nova show VM-from-cinder-volume
+<(min/cur/max)
++$min_cpu=(\d+),\s*\d+,\s*\d+
++$cur_cpu=\d+,\s*(\d+),\s*\d+
++$max_cpu=\d+,\s*\d+,\s*(\d+)
+
+?if $cur_cpu!=$max_cpu? [
+        ;red === VM-from-cinder-volume expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+]
+
+; === VM-from-cinder-volume scale up should fail beyond max limit: $max_cpu
+>vm-topology -s servers
+>nova scale VM-from-cinder-volume cpu up
+@25
+>echo $?
+<\n1
+; === scale up of VM-from-cinder-volume completed
+
+# scale up down via boot from cinder complete
+
+#CGTS-813 delete heat stack created by previous active controller
+>heat stack-delete CINDERSTACK
+!sleep 45
+@60
+>heat stack-list
+-<CINDERSTACK
+
+# Swact back to prev active controller
+; === identify active controller
+>system sda-list | grep controller-services
++$act_controller=controller-services.*(controller-\d).*active
+
+; === get floating IP
+>/sbin/ip addr | grep secondary | grep eth0
++$float_ip=inet ([0-9.]+)/
+
+; === become admin
+>source /etc/nova/openrc
+; === identify active controller
+>system sda-list | grep controller-services
++$act_controller=controller-services.*(controller-\d).*active
+
+; === swact controllers
+>system host-swact $act_controller
+>
+@30
+>ping -c 30 -W 30 $float_ip
+<icmp_req=\d+ ttl=64
+<Destination Host Unreachable
+<icmp_req=\d+ ttl=64
+>>^C
+>
+@5
+?if $act_controller==controller-0? $act_controller=controller-1 :: $act_controller=controller-0
+; === log into other controller and swact back
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$act_controller
+<assword|SYSTEM:
+>>$PASS
+>export TMOUT=0
+
+; === swact completed
+
+!sleep 45
+### swact completed
+################## Clean up #############################################
+; === become admin to clean up
+>source /etc/nova/openrc
+;cleanup all setup created for this testcase
+; === delete the stack created
+
+; === delete the flavor created 
+>nova flavor-list
+>nova flavor-delete $flavor1
+>nova flavor-delete $flavor2
+>nova flavor-list
+-<$flavor1
+-<$flavor2
+
+
+
