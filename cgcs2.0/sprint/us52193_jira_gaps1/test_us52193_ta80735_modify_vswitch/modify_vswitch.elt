@@ -490,6 +490,8 @@ $result=none
     *FAIL
 ]
 
+>system cpuprofile-delete $COMP0_CPU $COMP1_CPU
+?if 1 == 1 ? %end
 
 ?if 1 < 0 ? [
     %SKIP
@@ -519,5 +521,7 @@ $result=none
     ; === $SKIP
     *TERM 1
 ]
+
+%end
 
 ; === END OF TEST
