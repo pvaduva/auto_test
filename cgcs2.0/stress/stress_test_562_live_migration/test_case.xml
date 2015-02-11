@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the Hyperthread autotest suite app/test.
+
+Modification history
+====================
+7jan2014 cmiller - created
+
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="stress/stress_test_562_live_migration/${WASS_TC_NAME}" timeout="">
+    <!--test_case  name="sanity/cgcs/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag"-->
+    <test_case  name="stress/stress_test_562_live_migration/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" >
+
+<!--SET noseTestName testcase_742
+INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag 
+-->
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+		
+CALL env
+
+
+LOOKFOR
+TYPE \n
+SINK 1 SEC
+PROMPTTIMEOUT 600 SEC
+PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con1SSH PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+
+
+SET CR }
+SET CL {
+
+# generic expect-lite call 
+#CALL ${WASSP_TC_PATH}/${testCaseId}.elt IP=$env.NODE.target.default.targetIP *NOINTERACT $rt_log 
+CALL ${WASSP_TC_PATH}/${WASSP_TC_NAME}.elt IP=$env.NODE.target.default.targetIP *NOINTERACT $rt_log 
+
+
+
+PASS
+
+    </test_case>
+</test_module>
+</file>
