@@ -1,3 +1,8 @@
+
+
+PASS
+# not used for now
+
 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
@@ -5,15 +10,15 @@ Com1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Com2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 
 TYPE \n
-WAIT 1 SEC  {ignoreTimeout:True} login:
+WAIT 5 SEC  {ignoreTimeout:True} login:
 TYPE ${WRSUSER}\n
-WAIT 1 SEC {ignoreTimeout:True} assword: 
+WAIT 5 SEC {ignoreTimeout:True} assword: 
 TYPE ${WRSPASS}\n
-WAIT 1 SEC {ignoreTimeout:True} .*\s 
+WAIT 5 SEC {ignoreTimeout:True} .*\s 
 TYPE source /etc/nova/openrc\n
-WAIT 1 SEC {ignoreTimeout:True} .*\s 
+WAIT 5 SEC {ignoreTimeout:True} .*\s 
 TYPE export TMOUT=0\n
-WAIT 1 SEC {ignoreTimeout:True} .*\s 
+WAIT 5 SEC {ignoreTimeout:True} .*\s 
 
 
 

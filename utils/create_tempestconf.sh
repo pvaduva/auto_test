@@ -19,6 +19,7 @@ cd /etc/tempest
 cp -p tempest.conf tempest.conf.orig`date +%Y-%m-%d_%H%M%S`
 
 sed -i.bkp "s/127.0.0.1/192.168.204.2/g" tempest.conf
+sed -i.bkp "s/8081\/keystone\/main/5000/g" tempest.conf
 sed -i.bkp "s/password = root/password = password/" tempest.conf
 sed -i.bkp "s/admin_password = password/admin_password = ${ADMINPASS}/" tempest.conf
 

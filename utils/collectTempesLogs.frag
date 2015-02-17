@@ -14,4 +14,3 @@ SET CL {
 
 CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' wrsroot@$env.NODE.target.Boot.oamAddrA:tempest.log ${WASSP_TC_RUN_LOG}/
 CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' wrsroot@$env.NODE.target.Boot.oamAddrA:nosetests.xml ${WASSP_TC_RUN_LOG}/
-CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' wrsroot@$env.NODE.target.Boot.oamAddrA:console.log ${WASSP_TC_RUN_LOG}/

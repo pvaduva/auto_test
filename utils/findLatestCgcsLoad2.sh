@@ -24,7 +24,7 @@ fi
 
 
 
-ssh -q -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no cwinnick@$BUILDSERVER ls -l $BUILDSDIR/*|grep "latest_build "| awk '{print $11}'
+ssh -q -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no `whoami`@$BUILDSERVER ls -l $BUILDSDIR/*|grep "latest_build "| awk '{print $11}'
 
-#ssh -q -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no cwinnick@$BUILDSERVER ls -l $BUILDSDIR/*|grep latest_build | awk '{print $11}'
-#ssh -q -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no cwinnick@$BUILDSERVER ls -rtd $BUILDSDIR/*/ | tail -n1
+#ssh -q -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no `whoami`@$BUILDSERVER ls -l $BUILDSDIR/*|grep latest_build | awk '{print $11}'
+#ssh -q -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no `whoami`@$BUILDSERVER ls -rtd $BUILDSDIR/*/ | tail -n1

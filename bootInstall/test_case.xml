@@ -20,15 +20,16 @@ Modification history
 </environment>
 
 <test_module name="sanity/cgcs/bootInstall" timeout="">
-    <test_case  name="sanity/cgcs/bootInstall" >
+    <test_case  name="sanity/cgcs/bootInstall" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag">
+SINK 1 SEC
+PROMPT (.*:~#\s)(.*:~\$)|(.*\)\]#\s)|(.*\)\]\$\s)|(wrsroot#)
+Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\)\]#\s)|(.*\)\]\$\s)|(wrsroot#)
 
 CALL env
 
-# CALL cat /tmp/nova-list.log|grep cirros-1 | awk 'BEGIN ${CL} FS = "=||;"${CR} ${CL} print $$2${CR}' > /tmp/cirrosip.txt
-# CALLPARSER echo ${CL}\"CIRROS0IP\":\"`cat /tmp/cirrosip.txt`\"${CR}
-
-
+DELAY 10 SEC
 PASS
+
     </test_case>
 </test_module>
 </file>

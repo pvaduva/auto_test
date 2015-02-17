@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+  If wee got here then boot install of CGCS lab Passed
+
+Modification history
+====================
+05feb25, ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/junoTempestFix" timeout="">
+    <test_case  name="sanity/cgcs/junoTempestFix" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag">
+SINK 1 SEC
+PROMPT (.*:~#\s)(.*:~\$)|(.*\)\]#\s)|(.*\)\]\$\s)|(wrsroot#)
+Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\)\]#\s)|(.*\)\]\$\s)|(wrsroot#)
+
+CALL env
+
+# CALL cat /tmp/nova-list.log|grep cirros-1 | awk 'BEGIN ${CL} FS = "=||;"${CR} ${CL} print $$2${CR}' > /tmp/cirrosip.txt
+# CALLPARSER echo ${CL}\"CIRROS0IP\":\"`cat /tmp/cirrosip.txt`\"${CR}
+
+#################################################################################
+### Workaround to get controllers out from degraded state
+TYPE echo ${WRSPASS} | sudo -S ls -l /root\n
+WAIT 30 SEC {ignoreTimeout:True}
+
+TYPE echo li69nux | sudo -S mv /etc/pmon.d/rmon.conf /etc\n
+WAIT 30 SEC {ignoreTimeout:True}
+
+TYPE echo li69nux | sudo -S cat /var/volatile/run/pmond.pid|sudo xargs kill -9\n
+WAIT 30 SEC {ignoreTimeout:True}
+
+
+Con2 TYPE echo ${WRSPASS} | sudo -S ls -l /root\n
+Con2 WAIT 30 SEC {ignoreTimeout:True}
+
+Con2 TYPE echo li69nux | sudo -S mv /etc/pmon.d/rmon.conf /etc\n
+Con2 WAIT 30 SEC {ignoreTimeout:True}
+
+Con2 TYPE echo li69nux | sudo -S cat /var/volatile/run/pmond.pid|sudo xargs kill -9\n
+Con2 WAIT 30 SEC {ignoreTimeout:True}
+#################################################################################
+
+
+TYPE echo ${WRSPASS} | sudo -S sed -i.bkp "s/TMOUT=900/TMOUT=/g" /etc/profile\n
+WAIT 30 SEC {ignoreTimeout:True}
+
+TYPE http://128.224.144.158/files/Havana/tempest_havana.tgz\n
+WAIT 30 SEC {ignoreTimeout:True}
+
+TYPE cd /tmp/\n
+WAIT 30 SEC {ignoreTimeout:True}
+
+TYPE wget http://128.224.144.158:/files/juno-tempest-combined.patch\n
+WAIT 30 SEC {ignoreTimeout:True}
+
+TYPE wget http://128.224.144.158/files/Havana/tempest_havana.tgz\n
+WAIT 30 SEC {ignoreTimeout:True}
+
+TYPE cd /usr/lib64/python2.7/site-packages/tempest\n
+WAIT 30 SEC {ignoreTimeout:True}
+
+TYPE echo ${WRSPASS} | sudo -S patch -p0 &lt; /tmp/juno-tempest-combined.patch\n
+WAIT 30 SEC {ignoreTimeout:True}
+
+TYPE echo ${WRSPASS} | sudo -S mount -t nfs -o vers=3  128.224.144.158:/localdisk/designer/cmiller/wrlinux-x/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/cgcstest/cgcstest/cgcstest /usr/lib64/python2.7/site-packages/cgcstest\n
+WAIT 30 SEC {ignoreTimeout:True}
+
+
+DELAY 100 SEC
+PASS
+
+
+
+    Con1 TYPE system host-disk-list $env.NODE.node\n
+    Con1 WAIT 30 SEC
+    SAVEOUTPUT /tmp/host-disk-list.log
+    # call the parser to find all uuids of disk drives OTHER THAN /dev/sda
+    CALLPARSER python3 ${WASSP_TESTCASE_BASE}/utils/parse_system_host_list.py -v DRIVE --wassp_dict_id drive_uuid -l /tmp/host-disk-list.log  -f '([\s|])*([-a-z0-9]*).*/dev/sd[b-z].*'
+    FOREACH ${DRIVE}
+        Con1 TYPE system host-stor-add $env.NODE.node osd ${ITEM_drive_uuid}\n
+        Con1 WAIT 60 SEC
+    ENDFOREACH
+
+
+    </test_case>
+</test_module>
+</file>

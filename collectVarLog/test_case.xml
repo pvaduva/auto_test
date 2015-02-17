@@ -75,7 +75,7 @@ FOREACH ${HOST}
 Con1SSH TYPE scp  -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node}:/scratch/*.tgz . \n
     Con1SSH WAIT 15 SEC {ignoreTimeout:True} Password:
     Con1SSH TYPE $env.NODE.target.Connect.ssh_pass\n
-    Con1SSH WAIT 30 SEC
+    Con1SSH WAIT 200 SEC
 ENDFOREACH
 
 CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' wrsroot@$env.NODE.target.Boot.oamAddrA:*.tgz ${WASSP_TC_RUN_LOG}/
