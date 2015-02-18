@@ -67,7 +67,7 @@ $NAT_PASS=li69nux
 $HOST_USER=wrsroot
 $HOST_PASS=li69nux
 $HOST_IP=10.10.10.2
-
+$VM=root
 @20
 
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
@@ -112,54 +112,6 @@ $VOL_NAME2=vol-wrl5-two
 $VM_NAME1=vm1
 $VM_NAME2=vm2
 
-; === create 1st WRL cinder volume
->cinder create --image-id $IMAGE --display-name=$VOL_NAME1 1
-
-; === wait for cinder volume vol-wrl5-one to become available
-
-$i=0
-$MAX=12
-$result=none
-# while loop
-[ $result != available
-    +$i
-    >cinder show $VOL_NAME1
-    +$result=(available|creating|downloading|error)
-    ?if $i > $MAX ? ; === cinder volume $VOL_NAME1 did not become available
-    ?if $i > $MAX ? %BREAK_CINDER_CREATE
-    ?if $result == error ? ; === cinder volume $VOL_NAME1 is in error state
-    ?if $result == error ? %BREAK_CINDER_CREATE
-    !sleep 5
-    >
-]
-
->cinder list
-+$CINDER_ID1=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME1
-
-
-; === create 2nd WRL cinder volume
->cinder create --image-id $IMAGE --display-name=$VOL_NAME2 1
-
-; === wait for cinder volume vol-wrl5-two to become available
-
-$i=0
-$MAX=12
-$result=none
-# while loop
-[ $result != available
-    +$i
-    >cinder show $VOL_NAME2
-    +$result=(available|creating|downloading|error)
-    ?if $i > $MAX ? ; === cinder volume $VOL_NAME2 did not become available
-    ?if $i > $MAX ? %BREAK_CINDER_CREATE
-    ?if $result == error ? ; === cinder volume $VOL_NAME2 is in error state
-    ?if $result == error ? %BREAK_CINDER_CREATE
-    !sleep 5
-    >
-]
-
->cinder list
-+$CINDER_ID2=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME2
 
 >source /etc/nova/openrc
 ; === Lock compute-0
@@ -226,35 +178,6 @@ $COMP1_CPU=comp1_cpu_profile
 ?if $SKIP == There is no processor ? %SKIP
 ?if $SKIP == There must be at least one unused core for VMs. ? %SKIP
 
-?if 1 < 0 ? [
-    %SKIP
-    $i=0
-    $MAX=60
-    $result=none
-    >system cpuprofile-delete $COMP0_CPU $COMP1_CPU
-    >system host-unlock $COMP0_ID
-    >system host-unlock $COMP1_ID
-    # while loop
-    [ $result != available
-        +$i
-        >system host-list
-        +$result=$COMP0_ID .* \| (available|intest|failed|online|offline)
-        ?if $i > $MAX ? ; === $COMP0_ID did not become available
-        !sleep 10
-        >
-    ]
-    $result=none
-    [ $result != available
-        +$i
-        >system host-list
-        +$result=$COMP1_ID .* \| (available|intest|failed|online|offline)
-        ?if $i > $MAX ? ; === $COMP1_ID did not become available
-        !sleep 10
-        >
-    ; === $SKIP
-    *TERM 1
-]
-
 ; === Unlock compute-0
 >system host-unlock $COMP0_ID
 
@@ -266,7 +189,7 @@ $result=none
 [ $result != available
     +$i
     >system host-list
-    +$result=$COMP0_ID .* \| (available|intest|failed|online|offline)
+    +$result=$COMP0_ID .* \| (available|intest|online|offline)
     ?if $i > $MAX ? ; === $COMP0_ID did not become available
     ?if $i > $MAX ? %fail_to_boot
     !sleep 10
@@ -274,6 +197,31 @@ $result=none
 ]
 
 >source ./openrc.tenant1
+
+; === create 1st WRL cinder volume
+>cinder create --image-id $IMAGE --display-name=$VOL_NAME1 1
+
+; === wait for cinder volume vol-wrl5-one to become available
+
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >cinder show $VOL_NAME1
+    +$result=(available|creating|downloading|error)
+    ?if $i > $MAX ? ; === cinder volume $VOL_NAME1 did not become available
+    ?if $i > $MAX ? %BREAK_CINDER_CREATE
+    ?if $result == error ? ; === cinder volume $VOL_NAME1 is in error state
+    ?if $result == error ? %BREAK_CINDER_CREATE
+    !sleep 5
+    >
+]
+
+>cinder list
++$CINDER_ID1=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME1
+
 ; === attach 1st WRL VM to cinder volume
 >nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID1:::0 $VM_NAME1
 
@@ -294,7 +242,7 @@ $result=none
     >
 ]
 
-!sleep 10
+!sleep 20
 >nova show $VM_NAME1
 +$VM_IP1=tenant1-mgmt-net network.*\| ([0-9.]*)
 
@@ -312,8 +260,15 @@ $result=none
 >date > date.txt
 >cat date.txt
 -<No such file
+>exit
 
->source etc/nove/openrc
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+
+>source /etc/nova/openrc
 ; === Unlock compute-1
 >system host-unlock $COMP1_ID
 
@@ -324,7 +279,7 @@ $result=none
 [ $result != available
     +$i
     >system host-list
-    +$result=$COMP1_ID .* \| (available|intest|failed|online|offline)
+    +$result=$COMP1_ID .* \| (available|intest|online|offline)
     ?if $i > $MAX ? ; === $COMP1_ID did not become available
     ?if $i > $MAX ? %fail_to_boot
     !sleep 10
@@ -332,6 +287,31 @@ $result=none
 ]
 
 >source ./openrc.tenant1
+
+; === create 2nd WRL cinder volume
+>cinder create --image-id $IMAGE --display-name=$VOL_NAME2 1
+
+; === wait for cinder volume vol-wrl5-two to become available
+
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >cinder show $VOL_NAME2
+    +$result=(available|creating|downloading|error)
+    ?if $i > $MAX ? ; === cinder volume $VOL_NAME2 did not become available
+    ?if $i > $MAX ? %BREAK_CINDER_CREATE
+    ?if $result == error ? ; === cinder volume $VOL_NAME2 is in error state
+    ?if $result == error ? %BREAK_CINDER_CREATE
+    !sleep 5
+    >
+]
+
+>cinder list
++$CINDER_ID2=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME2
+
 ; === attach 2nd WRL VM to cinder volume
 >nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID2:::0 $VM_NAME2
 
@@ -352,9 +332,9 @@ $result=none
     >
 ]
 
-!sleep 10
+!sleep 20
 >nova show $VM_NAME2
-+$VM_IP1=tenant1-mgmt-net network.*\| ([0-9.]*)
++$VM_IP2=tenant1-mgmt-net network.*\| ([0-9.]*)
 
 ; === ssh into 2nd WRL VM via NATBox
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
@@ -370,6 +350,15 @@ $result=none
 >date > date.txt
 >cat date.txt
 -<No such file
+
+>exit
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>source ./openrc.tenant1
 
 ?if 1 < 0 ? [
     %BREAK_VM_CREATE
@@ -412,7 +401,7 @@ $result=none
     >
 ]
 
->source etc/nove/openrc
+>source /etc/nova/openrc
 
 ; === Return to original VSwitch values
 ; === Lock compute-0
@@ -436,7 +425,7 @@ $result=none
 
 ; === Return compute-0 VSwitch cpus to original values
 
->system host-apply-cpuprofile $COMP0_CPU
+>system host-apply-cpuprofile $COMP0_ID $COMP0_CPU
 -<(one unused core for VMs.|There is no processor)
 
 ; === Lock compute-1
@@ -459,7 +448,7 @@ $result=none
 
 ; === Return compute-1 VSwitch cpus to original values
 
->system host-apply-cpuprofile $COMP1_CPU
+>system host-apply-cpuprofile $COMP1_ID $COMP1_CPU
 -<(one unused core for VMs.|There is no processor)
 
 ; === Unlock host compute-0 and compute-1
@@ -474,7 +463,7 @@ $result=none
 [ $result != available
     +$i
     >system host-list
-    +$result=$COMP0_ID .* \| (available|intest|failed|online|offline)
+    +$result=$COMP0_ID .* \| (available|intest|online|offline)
     ?if $i > $MAX ? ; === $COMP0_ID did not become available
     ?if $i > $MAX ? %fail_to_boot2
     !sleep 10
@@ -488,7 +477,7 @@ $result=none
 [ $result != available
     +$i
     >system host-list
-    +$result=$COMP1_ID .* \| (available|intest|failed|online|offline)
+    +$result=$COMP1_ID .* \| (available|intest|online|offline)
     ?if $i > $MAX ? ; === compute-1 did not become available
     ?if $i > $MAX ? %fail_to_boot2
     !sleep 10
@@ -500,5 +489,39 @@ $result=none
     %fail_to_lock
     *FAIL
 ]
+
+>system cpuprofile-delete $COMP0_CPU $COMP1_CPU
+?if 1 == 1 ? %end
+
+?if 1 < 0 ? [
+    %SKIP
+    $i=0
+    $MAX=60
+    $result=none
+    >system cpuprofile-delete $COMP0_CPU $COMP1_CPU
+    >system host-unlock $COMP0_ID
+    >system host-unlock $COMP1_ID
+    # while loop
+    [ $result != available
+        +$i
+        >system host-list
+        +$result=$COMP0_ID .* \| (available|intest|online|offline)
+        ?if $i > $MAX ? ; === $COMP0_ID did not become available
+        !sleep 10
+        >
+    ]
+    $result=none
+    [ $result != available
+        +$i
+        >system host-list
+        +$result=$COMP1_ID .* \| (available|intest|online|offline)
+        ?if $i > $MAX ? ; === $COMP1_ID did not become available
+        !sleep 10
+        >
+    ; === $SKIP
+    *TERM 1
+]
+
+%end
 
 ; === END OF TEST

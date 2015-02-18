@@ -1,0 +1,454 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+
+#*~fail.inc
+#
+#	
+#	
+#
+#
+;;;
+
+Test 562 Stress live migration
+
+Based on:
+Validation
+	Using a 'one liner' script sniff out all VMs running on previously identified compute and live-migrate all VMs using:  nova  live-migration <instance id>  cli command
+	Observer all VMs live-migrate onto remaining compute nodes in the system
+	Note the outage time
+	Repeat the steps 1-3  10 times
+
+Expected Result:
+	All VMs successfully live-migrate
+	There is minimum (or no) interrupt to ping tests
+	All VMs remain in Active/Running state
+	Horizon GUI  is available within 30 seconds
+	There are no stale NFS on the VMs - use mount cmd to verify that the rootfs is r/w
+	Migrated VMs continue routing traffic after live migration is completed
+	There is no impact to other VMs
+
+
+Assumptions:
+	Lab is setup with lab_setup.sh with Tenants
+	Flavors small & medium.dpdk are already provisioned
+	
+
+;;;
+
+Steps:
+1)  Connect to controller
+2)  Become admin
+3)  Show version
+4)  Check for tenant credentials
+5)  Display configuration
+6)  Look at neutron config
+7)  Show images in glance
+8)  Create big flavor
+9)  Get tenant uuids
+10)  Look at quotas for $tenant
+11)  Increase quotas for test
+12)  Switch to tenant mode
+13)  Get volumes
+14)  Check for running VMs
+15)  Boot VMs
+16)  Wait for VM to boot up
+17)  Check VMs are not in ERROR state
+18)  Get VM mananagement IP
+19)  Start stress loop
+20)  Stress loop count: $count
+21)  Become admin
+22)  Live migrate VMs
+23)  Migrating VMs: $guest1_$i
+24)  Switch to tenant mode
+25)  Wait for VM to finish migrating
+26)  Check VMs are not in ERROR state
+27)  Become admin
+28)  Set up sudo root access (to make it easier later in the interact session)
+29)  Ping VM
+30)  Connect to VM
+31)  Inside VM, check filesystem and ping
+32)  Stress done
+33)  Cleanup
+34)  Switch to tenant mode
+35)  Become Admin to delete flavor
+36)  Reset quotas for $tenant
+
+
+*NOFAIL
+*EXP_INFO
+
+$IP=10.10.10.2
+
+# support custom ports
+?if $PORT != $blank ? $ssh_opts= -p $PORT 
+
+$user=wrsroot
+$pass=li69nux
+
+$tenant_credentials=/home/wrsroot/openrc.tenant1
+$tenant=$tenant_credentials
+# trim to just last part
+=$tenant;.*[.](\w+);\1;
+
+# expand quotas for scaling test
+$quota_instances=30
+$quota_vcpus=60
+$quota_port=60
+
+
+
+# flavors used by VM1 and VM2
+$flavor2=small
+$flavor1=medium.dpdk
+$flavor1=big
+
+# second flavor and number of vcpus
+$flavor3=big
+$flavor3_vcpu=1
+
+$best_effort=true
+$best_effort=false
+
+$max_vms=1
+
+# number of times to stress
+$max_stress=10
+
+# VM names
+$guest1=VM1
+$guest2=VM2
+
+
+@3
+; === connect to controller
+
+
+>ssh -X $ssh_opts -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $user@$IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:|WARNING:
+>>$pass
+<SYSTEM:
++$system_type=(vbox|yow-cgcs-ironpass-\d+|yow-cgcs-hp380-\d+)
+
+>export TMOUT=0
+
+; === become admin
+
+>source /etc/nova/openrc 
+
+; === show version
+
+>system show
+>cat /etc/build.info
+
+
+; === check for tenant credentials
+>stat -t $tenant_credentials
++$file_stat=\n.*($tenant_credentials|No such file)
+
+?if $file_stat != $tenant_credentials? [
+		;red Tenant Credentials file:$tenant_credentials missing, skipping
+		*TERM 5
+]
+
+
+---------------- start test ---------------------
+
+>system host-list
+
+
+; === display configuration
+
+; === look at neutron config
+# prep for getting to VM
+>neutron net-list
++$internal_net_uuid=([0-9a-f-]{36}) \| internal0
++$tenant1_net_uuid=([0-9a-f-]{36}) \| tenant1-net0
++$tenant1_mgmt_net_uuid=([0-9a-f-]{36}) \| tenant1-mgmt-net
+
+>neutron dhcp-agent-list-hosting-net $tenant1_mgmt_net_uuid
++$vm_netns_host=(compute-\d+)
+
+>neutron subnet-list
+>neutron router-list
+
+; === show images in glance
+>glance image-list
+<[0-9a-f-]{36} \|
++$glance_image_name=((\w+|-)+)
+
+; === create big flavor 
+
+>nova flavor-create $flavor3 5f0d748b-1c8b-4a70-8643-4d57e25ac137 512 1 $flavor3_vcpu
+
+
+>nova flavor-list
+<VCPU_Model
++$flavor1_uuid=([0-9a-f-]{36}|\d{3})\s* \| $flavor1 
++$flavor2_uuid=([0-9a-f-]{36}|\d{3})\s* \| $flavor2 
+
+; === get tenant uuids
+>keystone tenant-list
+<name
++$tenant_uuid=([0-9a-f-]{32}|\d{3})\s* \| $tenant 
+
+; === Look at quotas for $tenant
+>nova quota-show --tenant $tenant_uuid
+<instances
++$tenant_quota_instances=(\d+)
+<cores
++$tenant_quota_vcpus=(\d+)
+
+>neutron quota-show --tenant-id $tenant_uuid
+<port
++$tenant_quota_port=(\d+)
+
+?if $system_type != vbox ? [
+	; === increase quotas for test
+	>nova quota-update --instances $quota_instances $tenant_uuid
+	>nova quota-update --cores $quota_vcpus $tenant_uuid
+	# must use tenant uuid when updating neutron quotas
+	>neutron quota-update --port $quota_port --tenant-id $tenant_uuid
+]
+
+
+
+; === switch to tenant mode
+>source $tenant_credentials
+
+; === get volumes
+>nova volume-list
++$volume_uuid=([0-9a-f-]{36}) \|
+
+
+$i=1
+; === check for running VMs
+# use existing VM rather than starting one.
+>nova list
++$vm_uuid_$i=([0-9a-f-]{36}) \| 
+
+
+?if $vm_uuid_$i == __NO_STRING_CAPTURED__ ?[
+	; === boot VMs
+	
+	>nova boot --key_name=keypair-tenant1 --flavor=$flavor1_uuid --nic net-id=$tenant1_mgmt_net_uuid,vif-model=virtio --nic net-id=$tenant1_net_uuid,vif-model=virtio --image=$glance_image_name  $guest1-$i
+	!sleep 3
+	>nova list
+	+$vm_uuid_$i=([0-9a-f-]{36}) \| $guest1-$i
+	
+	#+$vm_name=$guest1_$i
+	$guest1_$i=$guest1-$i
+	$use_existing_vm=no
+]::[
+	$use_existing_vm=yes
+	>nova list
+	+$guest1_$i=$vm_uuid_$i \| ([a-zA-Z0-9_-]+)
+
+]
+# only 1 VM for now
+$max_vms=$i
+
+; === wait for VM to boot up
+
+$i=0
+$max=50
+$vm_state=none
+[ $vm_state != ACTIVE
+	>nova list
+	<$guest1_$max_vms
+	+$vm_state=(BUILD|ACTIVE|ERROR)
+
+	!sleep 5
+	+$i
+	?if $i > $max? %BREAK_VM_BOOT
+	
+	?if $vm_state == ERROR? %BREAK_VM_BOOT
+]
+%BREAK_VM_BOOT
+
+; === check VMs are not in ERROR state
+>nova list
+<Networks
+-<ERROR
+
+; === get VM mananagement IP
+>nova list --all-tenants
+<$guest1_$max_vms
++$vm_ip=tenant1-mgmt-net=([0-9.]{7,15})
+
+; === start stress loop
+
+$count=0
+[ $count < $max_stress
+	; === stress loop count: $count
+	
+	; === become admin
+	>source /etc/nova/openrc 
+
+	>nova show $vm_uuid_$max_vms
+	<OS-EXT-SRV-ATTR:host
+	+$vm_compute_host1=(compute-\d+)
+
+	; === live migrate VMs
+	@10
+	$i=1
+	[ $i <= $max_vms
+		; === migrating VMs: $guest1_$i 
+		>nova live-migration $vm_uuid_$i
+		+$i
+	]
+	@5
+	; === switch to tenant mode
+	>source $tenant_credentials
+
+	; === wait for VM to finish migrating
+
+	$i=0
+	$max=50
+	$vm_state=none
+	[ $vm_state != ACTIVE
+		>nova list
+		<$guest1_$max_vms
+		+$vm_state=(BUILD|ACTIVE|ERROR|MIGRATING)
+
+		!sleep 5
+		+$i
+		?if $i > $max? %BREAK_VM_MIGRATE
+
+		?if $vm_state == ERROR? %BREAK_VM_MIGRATE
+	]
+	%BREAK_VM_MIGRATE
+
+
+	; === check VMs are not in ERROR state
+	>nova list
+	<Networks
+	-<ERROR
+
+	; === become admin
+	>source /etc/nova/openrc 
+
+	>nova show $vm_uuid_$max_vms
+	<OS-EXT-SRV-ATTR:host
+	+$vm_compute_host2=(compute-\d+)
+
+	?if $vm_compute_host2 == $vm_compute_host1 ? [
+		;red VM:$guest1_$max_vms did not Migrate
+		*FAIL
+		#*INTERACT
+		# bail early
+		?if true == true? %CLEANUP
+	]::[
+		; --- backdoor to log into VM
+		@10
+		>ssh -o StrictHostKeyChecking=no $vm_netns_host
+		<ssword:|WARNING:
+		>>$pass
+		; === set up sudo root access (to make it easier later in the interact session)
+		>echo "$pass" | sudo -S id
+		<root
+		>sudo su
+		>ip netns list
+		+$ns=\n(.*$tenant1_mgmt_net_uuid)
+		; === ping VM
+		>ip netns exec $ns ping -c 2 $vm_ip
+		+$ping_result=(2 received|0 received)
+		?if $ping_result == 2 received ? [
+			; waiting for sshd service...
+			#!sleep 5
+			; === connect to VM
+			*/.*: /
+			$i=0
+			$response=refused
+			[ $response != ssword
+				>ip netns exec $ns ssh -o StrictHostKeyChecking=no root@$vm_ip
+				+$response=(ssword|refused|Warning)
+				!sleep 2
+				+$i
+				; --- retry $i
+			]
+			#<ssword:
+			>>root
+			; === inside VM, check filesystem and ping
+			@5
+			>root
+			>
+			>mount | grep root
+			</ type \w+ \(rw
+			>ip route
+			<default via
+			+$vm_default_gw=([0-9.]{7,15})
+			>ping -c 2 $vm_default_gw
+			<(2|1) received
+			>exit
+			# clear custom prompt
+			*//
+		]::[
+			;red VM:$vm_ip not responding
+			*FAIL
+			>exit
+			>exit
+			>
+			# bail early
+			?if true == true? %CLEANUP
+			
+		]
+		# exit from compute
+		>exit
+		>exit
+		# back on controller
+		>hostname
+		<\ncontroller-\d
+		>
+		### Check Ixia Data (if running)
+		>
+	]
+	+$count
+]
+# end of max_stress
+
+
+
+; === stress done
+
+*INTERACT
+
+%CLEANUP
+; === cleanup 
+@10
+; === switch to tenant mode
+>source $tenant_credentials
+
+?if $use_existing_vm==no ? [
+	$i=1
+	[ $i <= $max_vms
+		>nova delete $vm_uuid_$i
+		+$i
+	]
+]
+
+>
+!sleep 1
+>nova list
+
+; === Become Admin to delete flavor
+>source /etc/nova/openrc 
+>nova flavor-delete $flavor3
+
+?if $system_type != vbox ? [
+	; === reset quotas for $tenant
+	>nova quota-update --instances $tenant_quota_instances $tenant_uuid
+	>nova quota-update --cores $tenant_quota_vcpus $tenant_uuid
+	>neutron quota-update --port $tenant_quota_port --tenant-id $tenant_uuid
+]
+>
+
+

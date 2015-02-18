@@ -20,9 +20,9 @@ Modification history
 <environment>
 </environment>
 
-<test_module name="sprint/test_us49035_ts3_vcpu_scale_up_down/${WASS_TC_NAME}" timeout="">
+<test_module name="stress/stress_test_562_live_migration/${WASS_TC_NAME}" timeout="">
     <!--test_case  name="sanity/cgcs/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag"-->
-    <test_case  name="sprint/test_us49035_ts3_vcpu_scale_up_down/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="">
+    <test_case  name="stress/stress_test_562_live_migration/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" >
 
 <!--SET noseTestName testcase_742
 INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag 
@@ -32,20 +32,25 @@ INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag
         #######################################################
 		
 CALL env
+
+
 LOOKFOR
 TYPE \n
 SINK 1 SEC
+PROMPTTIMEOUT 600 SEC
 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1SSH PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
-PROMPTTIMEOUT 10 SEC
+
 
 SET CR }
 SET CL {
 
 # generic expect-lite call 
-CALL ${WASSP_TC_PATH}/${WASSP_TC_NAME}.elt HOST_IP=$env.NODE.target.default.targetIP *NOINTERACT
+#CALL ${WASSP_TC_PATH}/${testCaseId}.elt IP=$env.NODE.target.default.targetIP *NOINTERACT $rt_log 
+CALL ${WASSP_TC_PATH}/${WASSP_TC_NAME}.elt IP=$env.NODE.target.default.targetIP *NOINTERACT $rt_log 
+
 
 
 PASS

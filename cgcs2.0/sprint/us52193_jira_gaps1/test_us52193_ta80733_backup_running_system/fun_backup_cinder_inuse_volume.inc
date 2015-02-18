@@ -17,7 +17,6 @@
 ; done with backup in-use cinder volumes
 
 ; Create a volume snapshot
-#>cinder snapshot-create --force True --display-name nvmsnapshot-$VOL_ID $VOL_ID
 >cinder snapshot-create --force True $VOL_ID
 +$SNP_ID=\|\s*id\s*\|\s*([a-z0-9-]{32,36})\s*\|
 
@@ -80,15 +79,18 @@ $cnt=0
 <assword|SYSTEM:|WARNING:
 >>$HOST_PASSWD
 
-; clear up the backup files on the remote host
->sudo rm -rf /opt/backups/$BK_FNM
-<assword|SYSTEM:|WARNING:
->>$HOST_PASSWD
-
 ; change to admin
 >export TMOUT=0
 @3
 >source /etc/nova/openrc
+
+; remove the shapshot created
+>cinder snapshot-delete $SNP_ID
+
+; clear up the backup files on the remote host
+>sudo rm -rf /opt/backups/$BK_FNM
+<assword|SYSTEM:|WARNING:
+>>$HOST_PASSWD
 
 %ALLDONE
 
