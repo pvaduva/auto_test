@@ -1,0 +1,259 @@
+#!/usr/bin/env expect-lite
+
+;;;
+
+Controller and Compute Services Script
+
+Steps:
+
+
+REQUIRES: expect-lite 4.8.0 or greater
+This expect script can be invoked via the following:
+./vm_scheduling_ceilometer.elt <host> <username> <password>
+where:
+host = IP address of the controller, e.g. 10.10.10.2
+username = username on the controller, e.g. wrsroot
+password = password on the controller, e.g. li69nux
+;;;
+
+
+*EXP_INFO
+*NOFAIL
+
+# Varibles that will become constants from script options
+$HOST_USER=wrsroot
+$HOST_PASS=li69nux
+$HOST_IP=10.10.10.2
+$QUANTA_IP=none
+$VM=root
+@20
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>source /etc/nova/openrc
+>system show
+>cat /etc/build.info
+
+@20
+
+; === check ntp server has a FQDN configured
+>system ntp-show
++$FQDN=(\.ntp)
+?if $FQDN != .ntp ? ; === skipping delete dns server, no FQDN defined
+?if $FQDN != .ntp ? %no_fqdn
+
+>system dns-show
+>system dns-modify nameservers=
+<At least  one DNS server must be used
+
+%no_fqdn
+
+; === verify drbd not in sync alarm exists
+>sudo su
+<ssword
+>>$HOST_PASS
+>source /etc/nova/openrc
+
+; === check status of drbd
+>drbdadm status
++$DRBD=(drbd-c[a-zA-Z]*)
+>system sda-list
+-<degraded
+
+; === unsync drbd
+>drbdadm invalidate $DRBD
+
+; === wait until alarm appears
+$i=0
+$MAX=24
+$result=none
+# while loop
+[ $result != $DRBD
+    +$i
+    >system alarm-list
+    +$result=($DRBD)
+    ?if $i > $MAX ? ; === alarm did not clear
+    ?if $i > $MAX ? %fail_to_appear
+    !sleep 5
+]
+; === verify status changed
+>drbdadm status
+<Inconsistent
+>system sda-list
+<degraded
+
+?if 1 < 0 ? [
+    %fail_to_appear
+    *FAIL
+]
+
+; === bring up drbd
+>drbdadm up $DRBD
+
+; === wait until alarm cleared
+$i=0
+$MAX=60
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >drbdadm status
+    +$result=(Inconsistent)
+    ?if $i > $MAX ? ; === did not sync
+    ?if $i > $MAX ? %fail_to_sync
+    !sleep 10
+]
+
+!sleep 20
+; === verify drbd synced
+>system alarm-list
+-<$DRBD
+>system sda-list
+-<degraded
+
+?if 1 < 0 ? [
+    %fail_to_sync
+    *FAIL
+]
+
+; === fill /var/log and verify compute can still boot
+$i=0
+$result=none
+# while loop
+[ $result != No space
+    +$i
+    >cp images/cgcs-guest.img /var/log/cgcs-guest$i.img
+    +$result=(No space)
+]
+; === check /var/log filled
+>df
+>exit
+
+@45
+; === connect to compute-0 and change goenabled exit status to 1, thus forcing failure
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no compute-0
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>sudo su
+<ssword:
+>>$HOST_PASS
+>sed -i 's/exit 0/exit 1/g' /etc/goenabled.d/sysinv_goenabled_check.sh
+>exit
+>exit
+
+>source /etc/nova/openrc
+
+; === Lock compute-0
+>system host-list
++$COMP0_ID=([0-9]).* \| compute-0
+>system host-lock $COMP0_ID
+
+; === wait for compute-0 become locked
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != locked
+    +$i
+    >system host-list
+    +$result=$COMP0_ID .* \| (unlocked|locked)
+    ?if $i > $MAX ? ; === $COMP0_ID did not lock
+    ?if $i > $MAX ? %fail_to_lock
+    !sleep 5
+]
+
+; === unlock compute-0
+>system host-unlock $COMP0_ID
+
+; === make sure compute-0 does not go available
+$i=0
+$result=none
+# while loop
+[ $i != 45
+    +$i
+    >system host-list
+    +$result=$COMP0_ID .* \| (available|intest|online|failed)
+    ?if $result == available ? ; === compute-0 went available
+    ?if $result == available ? %booted
+    !sleep 10
+]
+
+; === lock compute-0 again
+>system host-lock $COMP0_ID
+
+$i=0
+$MAX=60
+$result=none
+# while loop
+[ $result != online
+    +$i
+    >system host-list
+    +$result=$COMP0_ID .* \| (online|failed|offline)
+    ?if $i > $MAX ? ; === $COMP0_ID did not lock
+    ?if $i > $MAX ? %fail_to_go_online
+    !sleep 10
+]
+
+
+?if 1 < 0 ? [
+    %fail_to_lock
+    %booted
+    *FAIL
+]
+
+; === connect to compute-0 and change goenabled exit status to 0, thus allowing compute to go enabled
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no compute-0
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>sudo su
+<ssword:
+>>$HOST_PASS
+>sed -i 's/exit 1/exit 0/g' /etc/goenabled.d/sysinv_goenabled_check.sh
+>exit
+>exit
+
+; === unlock compute-0 expect to go available
+?if 1 < 0 ? [
+    %fail_go_online
+    *FAIL
+]
+
+>system host-unlock $COMP0_ID
+; === wait for compute-0 become available
+$i=0
+$MAX=60
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >system host-list
+    +$result=$COMP0_ID .* \| (available|intest|online|offline)
+    ?if $i > $MAX ? ; === compute-0 did not become available
+    ?if $i > $MAX ? %fail_to_boot
+    !sleep 10
+]
+
+?if 1 < 0 ? [
+    %fail_to_boot
+    *FAIL
+]
+
+>cat /proc/sys/kernel/panic 
++$PANIC=\n([0-9])
+?if $PANIC < 1 ? *FAIL
+
+
+>sudo su
+<ssword:
+>>$HOST_PASS
+>rm /var/log/cgcs-guest*
+>df
+
+; === END OF TEST

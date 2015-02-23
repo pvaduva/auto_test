@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the DPDK autotest suite app/test.
+
+Modification history
+====================
+11feb15, ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sprint/test_us54056_controller_compute_services/${WASS_TC_NAME}" timeout="">
+    <test_case  name="sprint/test_us54056_controller_compute_services/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="">
+
+<!--SET noseTestName testcase_742
+INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag 
+-->
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+
+CALL env
+LOOKFOR
+TYPE \n
+SINK 1 SEC
+PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con1SSH PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+PROMPTTIMEOUT 10 SEC
+
+SET CR }
+SET CL {
+
+CALL ${WASSP_TC_PATH}/controller_compute_services.elt HOST_IP=$env.NODE.target.Boot.oamFloat HOST_USER=$env.NODE.target.Connect.ssh_user HOST_PASS=$env.NODE.target.Connect.ssh_pass
+
+PASS
+    </test_case>
+</test_module>
+</file>

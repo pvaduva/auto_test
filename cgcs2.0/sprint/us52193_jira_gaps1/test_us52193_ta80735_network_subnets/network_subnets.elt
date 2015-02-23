@@ -5,11 +5,40 @@
 VM Snapshot Test Script
 
 Steps:
-
+1)  Change quotas for cinder
+2)  Create a new tenant1 network
+3)  Get the necessary image and network uuids
+4)  Verify we can connect to NATBox
+7)  Attempt to create unmanaged subnet with DHCP, expect failure
+8)  Attempt to create unmanaged subnet with DNS name servers defined, expect failure
+9)  Attempt to create unmanaged subnet with host route, expect failure
+10)  Attempt to create unmanaged subnet with VLAN tagging, expect success
+11)  Attempt to create unmanaged subnet without DHCP, expect success
+12)  Create WRL cinder volume
+13)  Wait for cinder volume vol-wrl5-one to become available
+14)  Attach WRL VM to cinder volume
+15)  Wait for WRL VM to go available, without explictly defined subnet
+16)  Delete WRL VM
+17)  Attach WRL VM to cinder volume
+18)  Wait for WRL VM to go available, with explictly defined subnet
+19)  Delete WRL VM
+20)  Attach WRL VM to cinder volume
+21)  Wait for WRL VM to go available, without explictly defined subnet, with 2 networks
+22)  Delete WRL VM
+23)  Delete subnet
+24)  Create router and attach to new subnet
+25)  Verify router attached by attempting to delete subnet, expected to fail
+26)  Attach WRL VM to cinder volume
+27)  Wait for WRL VM to go available, go into VM and verify meta-data accessible
+28)  Ssh into WRL VM via NATBox
+29)  Get instance-id of VM
+30)  Delete WRL VM
+31)  Delete WRL cinder volume
+32)  Delete created networks
 
 REQUIRES: expect-lite 4.8.0 or greater
 This expect script can be invoked via the following:
-./wrl_config_drive.elt <host> <username> <password> <NAT host> <NAT user> <NAT pass>
+./network_subnets.elt <host> <username> <password> <NAT host> <NAT user> <NAT pass>
 where:
 host = IP address of the controller, e.g. 10.10.10.2
 username = username on the controller, e.g. wrsroot

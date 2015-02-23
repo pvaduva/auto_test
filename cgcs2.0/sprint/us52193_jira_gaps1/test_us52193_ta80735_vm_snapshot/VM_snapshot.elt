@@ -31,7 +31,7 @@ Steps:
 
 REQUIRES: expect-lite 4.8.0 or greater
 This expect script can be invoked via the following:
-./wrl_config_drive.elt <host> <username> <password> <NAT host> <NAT user> <NAT pass>
+./VM_snapshot.elt <host> <username> <password> <NAT host> <NAT user> <NAT pass>
 where:
 host = IP address of the controller, e.g. 10.10.10.2
 username = username on the controller, e.g. wrsroot
