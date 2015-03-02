@@ -1,0 +1,396 @@
+Covers:
+Kill Nova / Neutron / SysInv / Mtc process while performing various tests such as locks, unlocks and reboots
+Disable all computes such that no instances can be migrated
+Lock all the computes
+Lock force a compute (no-instances)
+
+
+<--- Kill Nova / Neutron / SysInv / Mtc process and perform locks, unlocks and reboots --->
+
+Mon Mar  2 16:57:35 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ ps -ef | grep nova
+postgres  47301  84114  0 17:26 ?        00:00:00 postgres: admin nova 192.168.204.3(55684) idle                                     
+wrsroot   48023 179293  0 17:27 pts/0    00:00:00 grep nova
+root      84666      1  0 16:57 ?        00:00:03 python /usr/bin/nova-consoleauth --config-file=/etc/nova/nova.conf
+nova      84693      1  0 16:57 ?        00:00:08 python /usr/bin/nova-conductor --config-file=/etc/nova/nova.conf
+nova      84707      1  0 16:57 ?        00:00:03 python /usr/bin/nova-scheduler --config-file=/etc/nova/nova.conf
+nova      84714      1  0 16:57 ?        00:00:03 python /usr/bin/nova-cert --config-file=/etc/nova/nova.conf
+postgres  86260  84114  0 16:57 ?        00:00:01 postgres: admin nova 192.168.204.3(54322) idle                                     
+postgres  86337  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54323) idle                                     
+postgres  86349  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54324) idle                                     
+postgres  86378  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54326) idle                                     
+root      86659      1  1 16:57 ?        00:00:19 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      86676      1  0 16:57 ?        00:00:01 python /usr/bin/nova-novncproxy --config-file=/etc/nova/nova.conf --web /usr/share/novnc/
+root      87685  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87686  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87687  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87688  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87689  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87690  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87691  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87692  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87693  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87694  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87695  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87696  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87697  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87698  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87699  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87701  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87784  86659  0 16:57 ?        00:00:05 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87785  86659  0 16:57 ?        00:00:06 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87786  86659  0 16:57 ?        00:00:04 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87787  86659  0 16:57 ?        00:00:06 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87788  86659  0 16:57 ?        00:00:06 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87789  86659  0 16:57 ?        00:00:04 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87790  86659  0 16:57 ?        00:00:05 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87791  86659  0 16:57 ?        00:00:06 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87792  86659  0 16:57 ?        00:00:04 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87793  86659  0 16:57 ?        00:00:05 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87794  86659  0 16:57 ?        00:00:06 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87795  86659  0 16:57 ?        00:00:06 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87796  86659  0 16:57 ?        00:00:05 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87797  86659  0 16:57 ?        00:00:05 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87798  86659  0 16:57 ?        00:00:05 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87799  86659  0 16:57 ?        00:00:06 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87802  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87803  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87804  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87805  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87806  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87807  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87808  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87809  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87810  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87811  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87812  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87813  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87814  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87815  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87816  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+root      87817  86659  0 16:57 ?        00:00:00 python /usr/bin/nova-api --config-file=/etc/nova/nova.conf
+postgres  88149  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54378) idle                                     
+postgres  88205  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54384) idle                                     
+postgres  88211  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54389) idle                                     
+postgres  88287  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54395) idle                                     
+postgres  88326  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54399) idle                                     
+postgres  88327  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54400) idle                                     
+postgres  88332  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54414) idle                                     
+postgres  88453  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54416) idle                                     
+postgres  88459  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54417) idle                                     
+postgres  88518  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54433) idle                                     
+postgres  88890  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54444) idle                                     
+postgres  89154  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54450) idle                                     
+postgres  89357  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54457) idle                                     
+postgres  90752  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54491) idle                                     
+postgres  91221  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54501) idle                                     
+postgres  91329  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54505) idle                                     
+postgres  92166  84114  0 16:57 ?        00:00:00 postgres: admin nova 192.168.204.3(54533) idle                                     
+postgres 111481  84114  0 17:00 ?        00:00:00 postgres: admin nova 192.168.204.3(55075) idle                                     
+postgres 126097  84114  0 17:02 ?        00:00:00 postgres: admin nova 192.168.204.3(55504) idle                                     
+postgres 150239  84114  0 17:06 ?        00:00:00 postgres: admin nova 192.168.204.3(57003) idle
+
+Mon Mar  2 17:54:27 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ sudo kill -9 84693
+Password: 
+Mon Mar  2 17:55:41 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ sudo kill -9 84707
+Mon Mar  2 17:55:52 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ sudo kill -9 86659
+Mon Mar  2 17:56:00 UTC 2015
+
+Mon Mar  2 17:56:03 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ ps -ef | grep neutron
+wrsroot    6010 179293  0 17:56 pts/0    00:00:00 grep neutron
+root      84760      1  1 16:57 ?        00:00:58 python /usr/bin/neutron-server --config-file=/etc/neutron/neutron.conf --config-file=/etc/neutron/plugin.ini
+postgres  88329  84114  0 16:57 ?        00:00:04 postgres: admin neutron 192.168.204.3(54403) idle                                  
+postgres 109921  84114  0 17:00 ?        00:00:04 postgres: admin neutron 192.168.204.3(55034) idle                                  
+Mon Mar  2 17:56:27 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ sudo kill -9 88329
+Mon Mar  2 17:56:39 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ ps -ef | grep sysinv 
+postgres   8699  84114  0 17:56 ?        00:00:00 postgres: admin sysinv 192.168.204.3(51891) idle                                   
+wrsroot    8968 179293  0 17:56 pts/0    00:00:00 grep sysinv
+root      19881      1  0 Mar01 ?        00:00:10 python /usr/bin/sysinv-agent
+root      84625      1  2 16:57 ?        00:01:14 python /usr/bin/sysinv-api --config-file=/etc/sysinv/sysinv.conf
+root      85717      1  0 16:57 ?        00:00:23 python /usr/bin/sysinv-conductor --config-file=/etc/sysinv/sysinv.conf
+Mon Mar  2 17:56:48 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ sudo kill -9 84625
+Mon Mar  2 17:56:59 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ ps -ef | grep mtc
+root       3034      1  0 Mar01 ?        00:00:09 /usr/local/bin/mtclogd -l
+wrsroot   11504 179293  0 17:57 pts/0    00:00:00 grep mtc
+root      30015      1  0 Mar01 ?        00:00:47 /usr/local/bin/mtcClient -l
+root      86313      1  0 16:57 ?        00:00:03 /usr/local/bin/mtcAgent -a -l
+Mon Mar  2 17:57:09 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ sudo kill -9 86313
+
+Mon Mar  2 17:57:23 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-lock compute-0
++-----------------+--------------------------------------+
+| Property        | Value                                |
++-----------------+--------------------------------------+
+| action          | none                                 |
+| administrative  | unlocked                             |
+| availability    | available                            |
+| bm_ip           | None                                 |
+| bm_mac          | None                                 |
+| bm_type         | None                                 |
+| bm_username     | None                                 |
+| capabilities    | {}                                   |
+| created_at      | 2015-03-01T20:59:44.530560+00:00     |
+| cstatus         |                                      |
+| hostname        | compute-0                            |
+| iconfig_applied | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| iconfig_fini    | None                                 |
+| iconfig_target  | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| id              | 5                                    |
+| invprovision    | provisioned                          |
+| location        | {}                                   |
+| mgmt_ip         | 192.168.204.89                       |
+| mgmt_mac        | 00:1e:67:66:7d:78                    |
+| operational     | enabled                              |
+| personality     | compute                              |
+| reserved        | False                                |
+| serialid        | None                                 |
+| task            | Locking                              |
+| updated_at      | 2015-03-02T17:57:12.828024+00:00     |
+| uptime          | 69502                                |
+| uuid            | 5472a5c1-e391-4517-813a-0a9b17eead8b |
++-----------------+--------------------------------------+
+Mon Mar  2 17:57:36 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-lock compute-1
++-----------------+--------------------------------------+
+| Property        | Value                                |
++-----------------+--------------------------------------+
+| action          | none                                 |
+| administrative  | unlocked                             |
+| availability    | available                            |
+| bm_ip           | None                                 |
+| bm_mac          | None                                 |
+| bm_type         | None                                 |
+| bm_username     | None                                 |
+| capabilities    | {}                                   |
+| created_at      | 2015-03-01T21:03:55.533518+00:00     |
+| cstatus         |                                      |
+| hostname        | compute-1                            |
+| iconfig_applied | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| iconfig_fini    | None                                 |
+| iconfig_target  | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| id              | 6                                    |
+| invprovision    | provisioned                          |
+| location        | {}                                   |
+| mgmt_ip         | 192.168.204.117                      |
+| mgmt_mac        | 00:1e:67:57:03:5e                    |
+| operational     | enabled                              |
+| personality     | compute                              |
+| reserved        | False                                |
+| serialid        | None                                 |
+| task            | Locking                              |
+| updated_at      | 2015-03-02T17:57:40.238990+00:00     |
+| uptime          | 72206                                |
+| uuid            | d67d8725-e9b0-4553-a1d0-c9db1b613dea |
++-----------------+--------------------------------------+
+Mon Mar  2 17:57:44 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-lock --force compute-2
++-----------------+--------------------------------------+
+| Property        | Value                                |
++-----------------+--------------------------------------+
+| action          | none                                 |
+| administrative  | unlocked                             |
+| availability    | available                            |
+| bm_ip           | None                                 |
+| bm_mac          | None                                 |
+| bm_type         | None                                 |
+| bm_username     | None                                 |
+| capabilities    | {}                                   |
+| created_at      | 2015-03-01T21:08:08.327468+00:00     |
+| cstatus         |                                      |
+| hostname        | compute-2                            |
+| iconfig_applied | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| iconfig_fini    | None                                 |
+| iconfig_target  | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| id              | 7                                    |
+| invprovision    | provisioned                          |
+| location        | {}                                   |
+| mgmt_ip         | 192.168.204.111                      |
+| mgmt_mac        | 00:1e:67:56:fe:4a                    |
+| operational     | enabled                              |
+| personality     | compute                              |
+| reserved        | False                                |
+| serialid        | None                                 |
+| task            | Force Locking                        |
+| updated_at      | 2015-03-02T17:57:41.910638+00:00     |
+| uptime          | 71645                                |
+| uuid            | d5c41d4d-c909-421e-b3c9-35d78aff3246 |
++-----------------+--------------------------------------+
+
+Mon Mar  2 17:59:21 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 3  | storage-0    | storage     | unlocked       | enabled     | available    |
+| 4  | storage-1    | storage     | unlocked       | enabled     | available    |
+| 5  | compute-0    | compute     | locked         | disabled    | online       |
+| 6  | compute-1    | compute     | locked         | disabled    | online       |
+| 7  | compute-2    | compute     | locked         | disabled    | online       |
++----+--------------+-------------+----------------+-------------+--------------+
+
+Mon Mar  2 18:00:27 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-unlock compute-0
++-----------------+--------------------------------------+
+| Property        | Value                                |
++-----------------+--------------------------------------+
+| action          | none                                 |
+| administrative  | locked                               |
+| availability    | online                               |
+| bm_ip           | None                                 |
+| bm_mac          | None                                 |
+| bm_type         | None                                 |
+| bm_username     | None                                 |
+| capabilities    | {}                                   |
+| created_at      | 2015-03-01T20:59:44.530560+00:00     |
+| cstatus         |                                      |
+| hostname        | compute-0                            |
+| iconfig_applied | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| iconfig_fini    | None                                 |
+| iconfig_target  | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| id              | 5                                    |
+| invprovision    | provisioned                          |
+| location        | {}                                   |
+| mgmt_ip         | 192.168.204.89                       |
+| mgmt_mac        | 00:1e:67:66:7d:78                    |
+| operational     | disabled                             |
+| personality     | compute                              |
+| reserved        | False                                |
+| serialid        | None                                 |
+| task            | Unlocking                            |
+| updated_at      | 2015-03-02T18:03:22.127449+00:00     |
+| uptime          | 69872                                |
+| uuid            | 5472a5c1-e391-4517-813a-0a9b17eead8b |
++-----------------+--------------------------------------+
+Mon Mar  2 18:05:37 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-unlock compute-1
++-----------------+--------------------------------------+
+| Property        | Value                                |
++-----------------+--------------------------------------+
+| action          | none                                 |
+| administrative  | locked                               |
+| availability    | online                               |
+| bm_ip           | None                                 |
+| bm_mac          | None                                 |
+| bm_type         | None                                 |
+| bm_username     | None                                 |
+| capabilities    | {}                                   |
+| created_at      | 2015-03-01T21:03:55.533518+00:00     |
+| cstatus         |                                      |
+| hostname        | compute-1                            |
+| iconfig_applied | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| iconfig_fini    | None                                 |
+| iconfig_target  | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| id              | 6                                    |
+| invprovision    | provisioned                          |
+| location        | {}                                   |
+| mgmt_ip         | 192.168.204.117                      |
+| mgmt_mac        | 00:1e:67:57:03:5e                    |
+| operational     | disabled                             |
+| personality     | compute                              |
+| reserved        | False                                |
+| serialid        | None                                 |
+| task            | Unlocking                            |
+| updated_at      | 2015-03-02T18:03:22.144837+00:00     |
+| uptime          | 72556                                |
+| uuid            | d67d8725-e9b0-4553-a1d0-c9db1b613dea |
++-----------------+--------------------------------------+
+Mon Mar  2 18:05:47 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-unlock compute-2
++-----------------+--------------------------------------+
+| Property        | Value                                |
++-----------------+--------------------------------------+
+| action          | none                                 |
+| administrative  | locked                               |
+| availability    | online                               |
+| bm_ip           | None                                 |
+| bm_mac          | None                                 |
+| bm_type         | None                                 |
+| bm_username     | None                                 |
+| capabilities    | {}                                   |
+| created_at      | 2015-03-01T21:08:08.327468+00:00     |
+| cstatus         |                                      |
+| hostname        | compute-2                            |
+| iconfig_applied | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| iconfig_fini    | None                                 |
+| iconfig_target  | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| id              | 7                                    |
+| invprovision    | provisioned                          |
+| location        | {}                                   |
+| mgmt_ip         | 192.168.204.111                      |
+| mgmt_mac        | 00:1e:67:56:fe:4a                    |
+| operational     | disabled                             |
+| personality     | compute                              |
+| reserved        | False                                |
+| serialid        | None                                 |
+| task            | Unlocking                            |
+| updated_at      | 2015-03-02T18:03:22.160871+00:00     |
+| uptime          | 71995                                |
+| uuid            | d5c41d4d-c909-421e-b3c9-35d78aff3246 |
++-----------------+--------------------------------------+
+Mon Mar  2 18:05:51 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 3  | storage-0    | storage     | unlocked       | enabled     | available    |
+| 4  | storage-1    | storage     | unlocked       | enabled     | available    |
+| 5  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 6  | compute-1    | compute     | unlocked       | enabled     | available    |
+| 7  | compute-2    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+
+
+<--- Kill VIM processes --->
+
+Mon Mar  2 18:44:48 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ ps -ef | grep vim
+root      87593      1  0 16:57 ?        00:00:02 python /usr/bin/nfv-vim-webserver -c /etc/nfv/vim/config.ini
+root      87609      1  0 16:57 ?        00:00:02 python /usr/bin/nfv-vim-api -c /etc/nfv/vim/config.ini
+root     101742      1  5 18:44 ?        00:00:01 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101774 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101775 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101776 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101831 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101832 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101833 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101836 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+wrsroot  104336 179293  0 18:44 pts/0    00:00:00 grep vim
+Mon Mar  2 18:44:12 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ sudo kill -9 87167
+Password:
+Mon Mar  2 18:44:56 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ sudo kill -9 87593
+Mon Mar  2 18:45:26 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ sudo kill -9 87609
+Mon Mar  2 18:45:32 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ ps -ef | grep vim
+root     101742      1  4 18:44 ?        00:00:02 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101774 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101775 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101776 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101831 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101832 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101833 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     101836 101742  0 18:44 ?        00:00:00 python /usr/bin/nfv-vim -c /etc/nfv/vim/config.ini
+root     105853      1  1 18:45 ?        00:00:00 python /usr/bin/nfv-vim-webserver -c /etc/nfv/vim/config.ini
+root     108763      1  8 18:45 ?        00:00:00 python /usr/bin/nfv-vim-api -c /etc/nfv/vim/config.ini
+wrsroot  109093 179293  0 18:45 pts/0    00:00:00 grep vim
+Mon Mar  2 18:45:35 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++------+----------+-------------+--------------------+----------+------------+
+| UUID | Alarm ID | Reason Text | Entity Instance ID | Severity | Time Stamp |
++------+----------+-------------+--------------------+----------+------------+
++------+----------+-------------+--------------------+----------+------------+

@@ -1,0 +1,170 @@
+Covers:
+Add a controller
+Delete a controller
+Delete a compute after personality is set
+Delete a compute after compute enabled
+Reinstall a host (compute)
+
+### Nodes do not come online after being readded CGTS-1290 opened to track this defect
+
+<--- Delete and readd a compute node --->
+
+Mon Mar  2 18:54:47 UTC 2015
+controller-1:~$ source /etc/nova/openrc 
+Mon Mar  2 18:56:55 UTC 2015
+[wrsroot@controller-1 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 3  | storage-0    | storage     | unlocked       | enabled     | available    |
+| 4  | storage-1    | storage     | unlocked       | enabled     | available    |
+| 5  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 6  | compute-1    | compute     | unlocked       | enabled     | available    |
+| 7  | compute-2    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+Mon Mar  2 19:15:07 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-lock compute-0
++-----------------+--------------------------------------+
+| Property        | Value                                |
++-----------------+--------------------------------------+
+| action          | none                                 |
+| administrative  | unlocked                             |
+| availability    | available                            |
+| bm_ip           | None                                 |
+| bm_mac          | None                                 |
+| bm_type         | None                                 |
+| bm_username     | None                                 |
+| capabilities    | {}                                   |
+| created_at      | 2015-03-01T20:59:44.530560+00:00     |
+| cstatus         |                                      |
+| hostname        | compute-0                            |
+| iconfig_applied | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| iconfig_fini    | None                                 |
+| iconfig_target  | 6fe6cdbe-61aa-426a-b9f4-05d950411438 |
+| id              | 5                                    |
+| invprovision    | provisioned                          |
+| location        | {}                                   |
+| mgmt_ip         | 192.168.204.89                       |
+| mgmt_mac        | 00:1e:67:66:7d:78                    |
+| operational     | enabled                              |
+| personality     | compute                              |
+| reserved        | False                                |
+| serialid        | None                                 |
+| task            | Locking                              |
+| updated_at      | 2015-03-02T19:16:31.648547+00:00     |
+| uptime          | 2295                                 |
+| uuid            | 5472a5c1-e391-4517-813a-0a9b17eead8b |
++-----------------+--------------------------------------+
+Mon Mar  2 19:17:03 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-delete compute-0
+Deleted host compute-0
+Mon Mar  2 19:17:56 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 3  | storage-0    | storage     | unlocked       | enabled     | available    |
+| 4  | storage-1    | storage     | unlocked       | enabled     | available    |
+| 6  | compute-1    | compute     | unlocked       | enabled     | available    |
+| 7  | compute-2    | compute     | unlocked       | enabled     | available    |
+| 8  | None         | None        | locked         | disabled    | offline      |
++----+--------------+-------------+----------------+-------------+--------------+
+Mon Mar  2 19:22:35 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-update 8 hostname=compute-0 personality=compute
++-----------------+--------------------------------------+
+| Property        | Value                                |
++-----------------+--------------------------------------+
+| action          | none                                 |
+| administrative  | locked                               |
+| availability    | offline                              |
+| bm_ip           | None                                 |
+| bm_mac          | None                                 |
+| bm_type         | None                                 |
+| bm_username     | None                                 |
+| capabilities    | {}                                   |
+| created_at      | 2015-03-02T19:18:51.818441+00:00     |
+| cstatus         | None                                 |
+| hostname        | compute-0                            |
+| iconfig_applied | None                                 |
+| iconfig_fini    | None                                 |
+| iconfig_target  | None                                 |
+| id              | 8                                    |
+| invprovision    | None                                 |
+| location        | {}                                   |
+| mgmt_ip         | 192.168.204.89                       |
+| mgmt_mac        | 00:1e:67:66:7d:78                    |
+| operational     | disabled                             |
+| personality     | compute                              |
+| reserved        | False                                |
+| serialid        | None                                 |
+| task            | None                                 |
+| updated_at      | None                                 |
+| uptime          | 0                                    |
+| uuid            | cab7e5e3-defb-4b1d-bc98-669603c9f4cc |
++-----------------+--------------------------------------+
+Mon Mar  2 19:22:40 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 3  | storage-0    | storage     | unlocked       | enabled     | available    |
+| 4  | storage-1    | storage     | unlocked       | enabled     | available    |
+| 6  | compute-1    | compute     | unlocked       | enabled     | available    |
+| 7  | compute-2    | compute     | unlocked       | enabled     | available    |
+| 8  | compute-0    | compute     | locked         | disabled    | offline      |
++----+--------------+-------------+----------------+-------------+--------------+
+Mon Mar  2 20:03:13 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-unlock compute-0
++-----------------+--------------------------------------+
+| Property        | Value                                |
++-----------------+--------------------------------------+
+| action          | none                                 |
+| administrative  | locked                               |
+| availability    | online                               |
+| bm_ip           | None                                 |
+| bm_mac          | None                                 |
+| bm_type         | None                                 |
+| bm_username     | None                                 |
+| capabilities    | {}                                   |
+| created_at      | 2015-03-02T19:45:28.818914+00:00     |
+| cstatus         | None                                 |
+| hostname        | compute-0                            |
+| iconfig_applied | None                                 |
+| iconfig_fini    | None                                 |
+| iconfig_target  | None                                 |
+| id              | 9                                    |
+| invprovision    | unprovisioned                        |
+| location        | {}                                   |
+| mgmt_ip         | 192.168.204.89                       |
+| mgmt_mac        | 00:1e:67:66:7d:78                    |
+| operational     | disabled                             |
+| personality     | compute                              |
+| reserved        | False                                |
+| serialid        | None                                 |
+| task            | Unlocking                            |
+| updated_at      | 2015-03-02T20:02:32.012905+00:00     |
+| uptime          | 299                                  |
+| uuid            | 3c9c44f2-94a0-4da2-8f69-19a8302b7a71 |
++-----------------+--------------------------------------+
+Mon Mar  2 20:11:34 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 3  | storage-0    | storage     | unlocked       | enabled     | available    |
+| 4  | storage-1    | storage     | unlocked       | enabled     | available    |
+| 6  | compute-1    | compute     | unlocked       | enabled     | available    |
+| 7  | compute-2    | compute     | unlocked       | enabled     | available    |
+| 9  | compute-0    | compute     | unlocked       | disabled    | failed       |
++----+--------------+-------------+----------------+-------------+--------------+
+
+
+### Nodes do not come online after being readded CGTS-1290 opened to track this defect
