@@ -1,0 +1,251 @@
+Covers:
+Fail an instance (admin and tenant instances), verify alarm raised
+
+<--- Launch an admin and a tenant VM, verify alarm raised when VM fails --->
+
+Mon Mar  2 18:19:21 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ glance image-list
++--------------------------------------+----------------------+-------------+------------------+-----------+--------+
+| ID                                   | Name                 | Disk Format | Container Format | Size      | Status |
++--------------------------------------+----------------------+-------------+------------------+-----------+--------+
+| 5fd4ed98-fa7d-412d-beb3-4ccb26f92188 | cgcs-guest           | raw         | bare             | 671088640 | active |
+| 2d81676a-8dfd-4948-be7d-eb954e95616f | cirros               | qcow2       | bare             | 9761280   | active |
+| 2bd5c7e2-0055-4948-885a-4ba4aacf1646 | ubuntu-precise-amd64 | qcow2       | bare             | 261423104 | active |
+| 644fab45-b5c2-49eb-93e3-2fa18ebbcbfb | wrl5                 | qcow2       | bare             | 671088640 | active |
+| a266cd4d-8a9a-413c-a926-465ae1d9a8e9 | wrl5-avp             | qcow2       | bare             | 671088640 | active |
+| 7c10d7cd-7812-4402-8db3-c4532453ca8c | wrl5-virtio          | qcow2       | bare             | 671088640 | active |
++--------------------------------------+----------------------+-------------+------------------+-----------+--------+
+Mon Mar  2 18:21:16 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ cinder create --image-id 5fd4ed98-fa7d-412d-beb3-4ccb26f92188 --display-name=admin_volume 1
++---------------------+--------------------------------------+
+|       Property      |                Value                 |
++---------------------+--------------------------------------+
+|     attachments     |                  []                  |
+|  availability_zone  |                 nova                 |
+|       bootable      |                false                 |
+|      created_at     |      2015-03-02T18:22:44.214623      |
+| display_description |                 None                 |
+|     display_name    |             admin_volume             |
+|      encrypted      |                False                 |
+|          id         | 277fdb5d-22d2-4298-93b4-af1a2ba186c4 |
+|       image_id      | 5fd4ed98-fa7d-412d-beb3-4ccb26f92188 |
+|       metadata      |                  {}                  |
+|         size        |                  1                   |
+|     snapshot_id     |                 None                 |
+|     source_volid    |                 None                 |
+|        status       |               creating               |
+|     volume_type     |                 None                 |
++---------------------+--------------------------------------+
+Mon Mar  2 18:22:44 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ cinder list
++--------------------------------------+-----------+--------------+------+-------------+----------+-------------+
+|                  ID                  |   Status  | Display Name | Size | Volume Type | Bootable | Attached to |
++--------------------------------------+-----------+--------------+------+-------------+----------+-------------+
+| 277fdb5d-22d2-4298-93b4-af1a2ba186c4 | available | admin_volume |  1   |     None    |   true   |             |
++--------------------------------------+-----------+--------------+------+-------------+----------+-------------+
+Mon Mar  2 18:24:50 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ neutron net-list
++--------------------------------------+------------------+-------------------------------------------------------+
+| id                                   | name             | subnets                                               |
++--------------------------------------+------------------+-------------------------------------------------------+
+| 9b70d32d-dd56-4b42-8da6-47a412f45f4f | external-net0    | 20f00586-1ca2-4898-a979-e46f82f034d2 192.168.4.0/24   |
+| 7f513aed-9c1e-4454-b8d2-42a6b11338b2 | tenant1-mgmt-net | 01a17b95-4966-4b00-a198-f14342aacd84 192.168.104.0/24 |
+| 1d938bb2-70f6-43aa-aa8d-ee84da3a66b6 | tenant2-mgmt-net | 3d077d26-5249-46d6-85b6-1663e55a4d8a 192.168.204.0/24 |
+| 27cf3673-4d27-4602-9ed3-529b2761378f | tenant1-net2     | 0b9c7b34-7ff3-4479-aba6-8ea7b1fe0389 172.16.2.0/24    |
+| 75f2886f-9006-4574-a221-8ebf6e932bea | tenant2-net6     | 5ca5020d-90ad-4238-a962-da54050b3fa9 172.18.6.0/24    |
+| 2e0f306e-466c-4ea6-9689-70f9c531b72c | tenant1-net5     | 305818c8-051a-4bef-8488-8c02bcda9bc4 172.16.5.0/24    |
+| d77797ed-fdfa-4e5e-a7db-845d797aae08 | tenant1-net6     | 115b6eeb-9fd0-46a2-a607-ddfdaf30e00f 172.16.6.0/24    |
+| 96767b3d-0ec5-4333-8487-e8c095944208 | tenant2-net5     | 0a0c6e81-7665-44ae-93ec-c0578dd3abcd 172.18.5.0/24    |
+| 107256f4-5380-447d-8b6c-d292214e7971 | tenant1-net8     | 1b088e52-847c-4ab3-9c38-3cd616cb19a3 172.16.8.0/24    |
+| 9052b5d4-17e7-400f-8796-bddbc5d53d29 | tenant1-net7     | a4f49209-c835-42d9-8234-daad417c463a 172.16.7.0/24    |
+| be92302c-6362-4d76-bc59-1675c0c7e497 | tenant1-net1     | 86209802-2fdc-4f0f-a898-010a4f5a499d 172.16.1.0/24    |
+| 82ecf9a1-d5a9-4ee0-856a-d2c5335a802a | tenant2-net2     | 757e8fcc-fb70-4cac-a76f-b108cb5e5afe 172.18.2.0/24    |
+| 6fe36af9-f602-4474-b174-7ae3f1448321 | internal0-net1   | 4fe1bd07-dc23-41c6-a9d1-0336f2b5ffd4 10.7.3.0/24      |
+|                                      |                  | b2b48eb0-f816-4330-8ee8-dacd415657e8 10.6.2.0/24      |
+|                                      |                  | 8b2b7e2c-acd6-4e92-81da-c333d3303040 10.5.1.0/24      |
+|                                      |                  | 763780cb-63c7-4940-9a48-c3ea91a02aef 10.4.0.0/24      |
+| 35c039d3-1e9c-4ca2-b51a-7e2b34514637 | tenant1-net9     | 07959f5b-2fc6-4e81-9412-c6e34cce4ee5 172.16.9.0/24    |
+| 8a704f25-624e-4c1c-9150-c10d61ec243d | tenant2-net7     | 917ce91f-c756-4c30-8639-191b2af77f86 172.18.7.0/24    |
+| 83767cb8-7dc5-4d78-bbb7-24bd228f3742 | tenant1-net4     | 972a8e4f-619b-4cbd-82e6-90215b31b453 172.16.4.0/24    |
+| e2c3ce80-4db7-4c1c-b230-549614d9fdf3 | tenant2-net1     | 0ce4e506-9b58-46f0-aa36-c6fea3f14b78 172.18.1.0/24    |
+| 63d80b09-4fc9-4580-9857-b81839597c0c | tenant2-net3     | 790fa3a7-5705-4cc1-be27-3c8f5148d1b1 172.18.3.0/24    |
+| dd108e84-efa8-4a0b-8ebf-d9b9982daa03 | tenant2-net0     | dc1494b2-37fe-474e-b548-7b2a2d31234d 172.18.0.0/24    |
+| 7193de89-43ab-42e4-8907-f5a3abc4ca89 | internal0-net0   | a7c891dc-50f4-440a-98ec-544b9500cb50 10.3.3.0/24      |
+|                                      |                  | 9671c893-0ce2-4cbb-a696-0efb1eca73ce 10.2.2.0/24      |
+|                                      |                  | 4e8dc5ab-54e4-425b-a556-08b0262f3407 10.1.1.0/24      |
+|                                      |                  | 88a83c60-6392-4a27-b3b7-79bb4ab281c8 10.0.0.0/24      |
+| 8fb129a1-0945-42a9-b111-60bb490d30f1 | internal0-net2   | 4ea0372d-3b56-4cb8-982b-1f1e00991886 10.9.1.0/24      |
+|                                      |                  | e9387a5b-6549-4387-8ddf-67da64952209 10.8.0.0/24      |
+| 415c56a6-21a1-4e81-a7a5-fa5ac5d822fe | tenant2-net4     | 7103e33f-d781-456f-b459-b04271425ea8 172.18.4.0/24    |
+| 92532b56-f1dc-4127-ac6b-3c174e4458f1 | tenant1-net3     | 69af8408-b2d1-46b3-805c-07ee46bfd978 172.16.3.0/24    |
+| 3aa3241c-becd-4c12-b5ca-3feded8d3027 | tenant1-net0     | 96438a0c-f926-4957-9a1b-a4242cc44f5c 172.16.0.0/24    |
+| 2a5e4c32-cd98-42bc-a07e-bd592d64e5ec | tenant2-net8     | 439eed7a-7278-4bcd-a631-cd4e5fd001a2 172.18.8.0/24    |
+| d4f3a76f-6702-4330-b3e2-ce3757ed099c | tenant2-net9     | 3b096a65-b898-4865-80ef-27150b25d605 172.18.9.0/24    |
++--------------------------------------+------------------+-------------------------------------------------------+
+Mon Mar  2 18:28:17 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova boot --key_name=controller-0  --flavor=101 --nic net-id=9b70d32d-dd56-4b42-8da6-47a412f45f4f,vif-model=avp --nic net-id=7193de89-43ab-42e4-8907-f5a3abc4ca89,vif-model=avp --block_device_mapping vda=277fdb5d-22d2-4298-93b4-af1a2ba186c4:::0 admin_vm
++--------------------------------------+----------------------------------------------------+
+| Property                             | Value                                              |
++--------------------------------------+----------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                             |
+| OS-EXT-AZ:availability_zone          | nova                                               |
+| OS-EXT-SRV-ATTR:host                 | -                                                  |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | -                                                  |
+| OS-EXT-SRV-ATTR:instance_name        | instance-00000001                                  |
+| OS-EXT-STS:power_state               | 0                                                  |
+| OS-EXT-STS:task_state                | scheduling                                         |
+| OS-EXT-STS:vm_state                  | building                                           |
+| OS-SRV-USG:launched_at               | -                                                  |
+| OS-SRV-USG:terminated_at             | -                                                  |
+| accessIPv4                           |                                                    |
+| accessIPv6                           |                                                    |
+| adminPass                            | yQtLY47RtxKK                                       |
+| config_drive                         |                                                    |
+| created                              | 2015-03-02T18:28:22Z                               |
+| flavor                               | wrl5.dpdk.small (101)                              |
+| hostId                               |                                                    |
+| id                                   | 31ed2c01-4d4e-4a3a-a1cd-ad0f026711e8               |
+| image                                | Attempt to boot from volume - no image supplied    |
+| key_name                             | controller-0                                       |
+| metadata                             | {}                                                 |
+| name                                 | admin_vm                                           |
+| nics                                 |                                                    |
+| os-extended-volumes:volumes_attached | [{"id": "277fdb5d-22d2-4298-93b4-af1a2ba186c4"}]   |
+| progress                             | 0                                                  |
+| security_groups                      | default                                            |
+| server_group                         |                                                    |
+| status                               | BUILD                                              |
+| tenant_id                            | 5494146503394ca08dfaa600561323ce                   |
+| topology                             | node:0,   512MB, pgsize:4K, vcpus:0,1, unallocated |
+| updated                              | 2015-03-02T18:28:23Z                               |
+| user_id                              | 33c1973d1ed84bdd9622179e4da39fbe                   |
+| vcpus (min/cur/max)                  | [2, 2, 2]                                          |
++--------------------------------------+----------------------------------------------------+
+Mon Mar  2 18:28:23 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ source ./openrc.tenant1
+Mon Mar  2 18:31:31 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ cinder list
++--------------------------------------+-----------+----------------------+------+-------------+----------+-------------+
+|                  ID                  |   Status  |     Display Name     | Size | Volume Type | Bootable | Attached to |
++--------------------------------------+-----------+----------------------+------+-------------+----------+-------------+
+| 1b72c521-e5df-419d-82de-e2ed5e8dbaac | available | vol-tenant1-virtio2  |  1   |     None    |   true   |             |
+| 2f2c4d05-c3c5-47a2-ad1d-642b7fad04dd | available | vol-tenant1-virtio3  |  1   |     None    |   true   |             |
+| 2f5c1f6c-800a-46da-906d-9f45ec6d56b4 | available |   vol-tenant1-avp4   |  1   |     None    |   true   |             |
+| 45d2f1e7-f558-4278-8a50-fe50458ce691 | available |   vol-tenant1-avp1   |  1   |     None    |   true   |             |
+| 7dc78f64-c901-47d4-b2c6-2b3ae22d385a | available | vol-tenant1-vswitch2 |  1   |     None    |   true   |             |
+| 9c7313cb-d6d6-4d75-8b4f-8d19d79afcc7 | available | vol-tenant1-virtio1  |  1   |     None    |   true   |             |
+| acfa1d13-eb48-40a7-9b12-ac151b3dd311 | available |   vol-tenant1-avp3   |  1   |     None    |   true   |             |
+| b9677306-9b4f-407d-9281-d6a2fcc013f1 | available | vol-tenant1-vswitch1 |  1   |     None    |   true   |             |
+| d7eb9f6f-8fb4-422d-bfe4-9ff83468223f | available | vol-tenant1-virtio4  |  1   |     None    |   true   |             |
+| d80819a8-d7f0-4d5f-879a-f76d8eac78c6 | available |   vol-tenant1-avp2   |  1   |     None    |   true   |             |
++--------------------------------------+-----------+----------------------+------+-------------+----------+-------------+
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova boot --key_name=keypair-tenant1  --flavor=101 --nic net-id=7f513aed-9c1e-4454-b8d2-42a6b11338b2,vif-model=avp --nic net-id=3aa3241c-becd-4c12-b5ca-3feded8d3027,vif-model=avp --block_device_mapping vda=45d2f1e7-f558-4278-8a50-fe50458ce691:::0 tenant1_vm
++--------------------------------------+----------------------------------------------------+
+| Property                             | Value                                              |
++--------------------------------------+----------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                             |
+| OS-EXT-AZ:availability_zone          | nova                                               |
+| OS-EXT-STS:power_state               | 0                                                  |
+| OS-EXT-STS:task_state                | scheduling                                         |
+| OS-EXT-STS:vm_state                  | building                                           |
+| OS-SRV-USG:launched_at               | -                                                  |
+| OS-SRV-USG:terminated_at             | -                                                  |
+| accessIPv4                           |                                                    |
+| accessIPv6                           |                                                    |
+| adminPass                            | WJmvZ3rx8Nzv                                       |
+| config_drive                         |                                                    |
+| created                              | 2015-03-02T18:35:23Z                               |
+| flavor                               | wrl5.dpdk.small (101)                              |
+| hostId                               |                                                    |
+| id                                   | bce4ff13-43fe-40ed-a69a-c6a04115df2a               |
+| image                                | Attempt to boot from volume - no image supplied    |
+| key_name                             | keypair-tenant1                                    |
+| metadata                             | {}                                                 |
+| name                                 | tenant1_vm                                         |
+| nics                                 |                                                    |
+| os-extended-volumes:volumes_attached | [{"id": "45d2f1e7-f558-4278-8a50-fe50458ce691"}]   |
+| progress                             | 0                                                  |
+| security_groups                      | default                                            |
+| server_group                         |                                                    |
+| status                               | BUILD                                              |
+| tenant_id                            | 063e12696c0a4a20b1cddedb4f160544                   |
+| topology                             | node:0,   512MB, pgsize:4K, vcpus:0,1, unallocated |
+| updated                              | 2015-03-02T18:35:24Z                               |
+| user_id                              | b7caa8d4aae044f29a2a29ab12a0bea5                   |
+| vcpus (min/cur/max)                  | [2, 2, 2]                                          |
++--------------------------------------+----------------------------------------------------+
+
+<--- Issued sudo reboot on all computes to fail instances --->
+
+Mon Mar  2 18:35:24 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ source /etc/nova/openrc 
+Mon Mar  2 18:37:24 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++--------------------------------------+----------+--------------------------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| UUID                                 | Alarm ID | Reason Text                                                                                | Entity Instance ID                            | Severity | Time Stamp                 |
++--------------------------------------+----------+--------------------------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+| 800d9166-a0ac-4bb3-a77f-cbd8fe565412 | 200.006  | Host is degraded due the loss of the following processes: pmond                            | host=compute-0                                | major    | 2015-03-02T18:36:59.131710 |
+| 97a4cf4c-b1e8-4dc6-b22a-14aeb1b9503c | 200.009  | Host is experiencing a persistent critical 'Infrastructure Network' communication failure. | host=compute-0                                | critical | 2015-03-02T18:37:06.518656 |
+| efd03db6-5a00-47ba-8440-04ad23c8ec21 | 200.005  | Host is experiencing a persistent critical 'Management Network' communication failure.     | host=compute-0                                | critical | 2015-03-02T18:37:06.338474 |
+| 244aafdc-2a44-445e-96ef-8dc3041b45cd | 200.005  | Host is experiencing a persistent critical 'Management Network' communication failure.     | host=compute-1                                | critical | 2015-03-02T18:36:54.226386 |
+| 65be4e44-6b1f-4c25-89b8-adae354eaff6 | 200.009  | Host is experiencing a persistent critical 'Infrastructure Network' communication failure. | host=compute-1                                | critical | 2015-03-02T18:36:54.406684 |
+| 9b0ceded-a5db-45a1-b63f-0d41bfbd6a51 | 200.006  | Host is degraded due the loss of the following processes: pmond                            | host=compute-1                                | major    | 2015-03-02T18:36:48.559746 |
+| 0accf95f-6c56-4a3c-9f1a-963ca72d4371 | 200.006  | Host is degraded due the loss of the following processes: pmond                            | host=compute-2                                | major    | 2015-03-02T18:36:34.844642 |
+| 6c746d93-ac17-4ad6-a99a-1df9102c5a0c | 200.005  | Host is experiencing a persistent critical 'Management Network' communication failure.     | host=compute-2                                | critical | 2015-03-02T18:36:41.512107 |
+| f0503816-8a32-4b8f-b5ca-59432933c3f0 | 200.009  | Host is experiencing a persistent critical 'Infrastructure Network' communication failure. | host=compute-2                                | critical | 2015-03-02T18:36:41.692637 |
+| 75b4df03-7e90-4036-84dd-fd5b0d3b0c0c | 700.001  | Instance has failed.                                                                       | instance=31ed2c01-4d4e-4a3a-a1cd-ad0f026711e8 | critical | 2015-03-02T18:37:03.390694 |
+| d203467f-c59e-4a8d-9196-2bc334b86628 | 700.001  | Instance has failed.                                                                       | instance=bce4ff13-43fe-40ed-a69a-c6a04115df2a | critical | 2015-03-02T18:37:03.516388 |
+| 6862e8ec-d8bd-4407-9dd6-50e8ebea26bb | 300.004  | No enabled compute host with connectivity to provider network.                             | service=networking.providernet=group0-data0   | major    | 2015-03-02T18:37:11.955959 |
+| fbc41931-c982-4d96-ad41-80ae886d5e05 | 300.004  | No enabled compute host with connectivity to provider network.                             | service=networking.providernet=group0-data1   | major    | 2015-03-02T18:37:11.963834 |
++--------------------------------------+----------+--------------------------------------------------------------------------------------------+-----------------------------------------------+----------+----------------------------+
+Mon Mar  2 18:37:29 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-show 75b4df03-7e90-4036-84dd-fd5b0d3b0c0c
++----------------------------+--------------------------------------------------------------+
+| Property                   | Value                                                        |
++----------------------------+--------------------------------------------------------------+
+| alarm_id                   | 700.001                                                      |
+| alarm_state                | set                                                          |
+| alarm_type                 | processing-error                                             |
+| display_entity_instance_id | instance=31ed2c01-4d4e-4a3a-a1cd-ad0f026711e8                |
+| entity_instance_id         | instance=31ed2c01-4d4e-4a3a-a1cd-ad0f026711e8                |
+| entity_type_id             | instance                                                     |
+| probable_cause             | software-error                                               |
+| proposed_repair_action     | The system will attempt recovery; no repair action required. |
+| reason_text                | Instance has failed.                                         |
+| service_affecting          | True                                                         |
+| severity                   | critical                                                     |
+| suppression                | True                                                         |
+| timestamp                  | 2015-03-02T18:37:03.390694+00:00                             |
+| uuid                       | 75b4df03-7e90-4036-84dd-fd5b0d3b0c0c                         |
++----------------------------+--------------------------------------------------------------+
+Mon Mar  2 18:37:57 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-show d203467f-c59e-4a8d-9196-2bc334b86628
++----------------------------+--------------------------------------------------------------+
+| Property                   | Value                                                        |
++----------------------------+--------------------------------------------------------------+
+| alarm_id                   | 700.001                                                      |
+| alarm_state                | set                                                          |
+| alarm_type                 | processing-error                                             |
+| display_entity_instance_id | instance=bce4ff13-43fe-40ed-a69a-c6a04115df2a                |
+| entity_instance_id         | instance=bce4ff13-43fe-40ed-a69a-c6a04115df2a                |
+| entity_type_id             | instance                                                     |
+| probable_cause             | software-error                                               |
+| proposed_repair_action     | The system will attempt recovery; no repair action required. |
+| reason_text                | Instance has failed.                                         |
+| service_affecting          | True                                                         |
+| severity                   | critical                                                     |
+| suppression                | True                                                         |
+| timestamp                  | 2015-03-02T18:37:03.516388+00:00                             |
+| uuid                       | d203467f-c59e-4a8d-9196-2bc334b86628                         |
++----------------------------+--------------------------------------------------------------+
+
+Mon Mar  2 18:38:11 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova delete 31ed2c01-4d4e-4a3a-a1cd-ad0f026711e8 bce4ff13-43fe-40ed-a69a-c6a04115df2a
+Request to delete server 31ed2c01-4d4e-4a3a-a1cd-ad0f026711e8 has been accepted.
+Request to delete server bce4ff13-43fe-40ed-a69a-c6a04115df2a has been accepted.
+Mon Mar  2 18:42:57 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
++------+----------+-------------+--------------------+----------+------------+
+| UUID | Alarm ID | Reason Text | Entity Instance ID | Severity | Time Stamp |
++------+----------+-------------+--------------------+----------+------------+
++------+----------+-------------+--------------------+----------+------------+
