@@ -6,7 +6,22 @@ vim kill processes Script
 
 Steps:
 
-
+1)  Kill vim process
+2)  Kill vim-webserver process
+3)  Kill vim-api process
+4)  Kill nova-api process
+5)  Kill neutron-server process
+6)  Kill mtcAgent process
+7)  Kill sysinv-api process
+8)  Verify processes restarted by attempting to lock, reboot, and unlock a compute
+9)  Lock compute
+10)  Wait for compute become locked
+11)  Reboot compute
+12)  Wait for compute go offline due to reboot
+13)  Wait for compute go online after reboot
+14)  Unlock compute
+15)  Wait for compute become available
+16)  END OF TEST
 
 REQUIRES: expect-lite 4.8.0 or greater
 This expect script can be invoked via the following:
