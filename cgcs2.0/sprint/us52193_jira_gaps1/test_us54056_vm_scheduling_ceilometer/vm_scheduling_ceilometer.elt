@@ -176,7 +176,7 @@ $INSTANCE_NUM=0
 >system host-if-delete $COMP1_ID data1
 <Deleted interface
 >system help host-if-add
->system host-if-add -a balanced -x layer3+4 -m 1800 -n data $COMP1_ID new_data ethernet $PROVIDER_NET eth3
+>system host-if-add -m 1800 -n data $COMP1_ID new_data ethernet $PROVIDER_NET eth3
 ; === check all values are correct
 <ifname
 <new_data
@@ -190,10 +190,6 @@ $INSTANCE_NUM=0
 <$PROVIDER_NET
 <imtu
 <1800
-<aemode
-<balanced
-<txhashpolicy
-<layer3\+4
 
 ; === reapply compute-1 original if profile and verify applied
 >system host-apply-ifprofile $COMP1_ID compute-1-if
@@ -437,7 +433,7 @@ $result=none
 [ $NUM_COMP > $LOCK_COMP
     +$LOCK_COMP
     $i=0
-    $MAX=60
+    $MAX=100
     $result=none
     # while loop
     [ $result != available
