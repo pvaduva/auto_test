@@ -152,12 +152,12 @@ $flavor2=vcpu5-$flavor2_min_cpu
 
 #Set min vcpu value
 ; === set minimum value for the cpu created
->nova flavor-key $flavor1 set wrs:min_vcpus=$flavor1_min_cpu 
+>nova flavor-key $flavor1 set hw:wrs:min_vcpus=$flavor1_min_cpu 
 >nova flavor-list --extra-specs | grep $flavor1
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor1 is $result
 
->nova flavor-key $flavor2 set wrs:min_vcpus=$flavor2_min_cpu
+>nova flavor-key $flavor2 set hw:wrs:min_vcpus=$flavor2_min_cpu
 >nova flavor-list --extra-specs | grep $flavor2
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor2 is $result

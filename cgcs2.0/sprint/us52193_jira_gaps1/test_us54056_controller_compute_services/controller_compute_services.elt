@@ -6,6 +6,26 @@ Controller and Compute Services Script
 
 Steps:
 
+1)  Check ntp server has a FQDN configured
+2)  Verify drbd not in sync alarm exists
+3)  Check status of drbd
+4)  Unsync drbd
+5)  Wait until alarm appears
+6)  Verify status changed
+7)  Bring up drbd
+8)  Wait until alarm cleared
+9)  Verify drbd synced
+10)  Fill /var/log and verify compute can still boot
+11)  Check /var/log filled
+12)  Connect to compute-0 and change goenabled exit status to 1, thus forcing failure
+13)  Lock compute-0
+14)  Wait for compute-0 become locked
+15)  Unlock compute-0
+16)  Make sure compute-0 does not go available
+17)  Lock compute-0 again
+18)  Connect to compute-0 and change goenabled exit status to 0, thus allowing compute to go enabled
+19)  Unlock compute-0 expect to go available
+20)  Wait for compute-0 become available
 
 REQUIRES: expect-lite 4.8.0 or greater
 This expect script can be invoked via the following:
@@ -58,8 +78,8 @@ $VM=root
 >source /etc/nova/openrc
 
 ; === check status of drbd
->drbdadm status
-+$DRBD=(drbd-c[a-zA-Z]*)
+>drbdadm dump all
++$DRBD=(drbd-platform)
 >system sda-list
 -<degraded
 
@@ -80,7 +100,7 @@ $result=none
     !sleep 5
 ]
 ; === verify status changed
->drbdadm status
+>drbdadm dstate all
 <Inconsistent
 >system sda-list
 <degraded
@@ -100,7 +120,7 @@ $result=none
 # while loop
 [ $result != __NO_STRING_CAPTURED__
     +$i
-    >drbdadm status
+    >drbdadm dstate all
     +$result=(Inconsistent)
     ?if $i > $MAX ? ; === did not sync
     ?if $i > $MAX ? %fail_to_sync
@@ -134,7 +154,7 @@ $result=none
 
 @45
 ; === connect to compute-0 and change goenabled exit status to 1, thus forcing failure
->ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no compute-0
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no wrsroot@compute-0
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
 <ssword:
 >>$HOST_PASS
@@ -174,7 +194,7 @@ $result=none
 $i=0
 $result=none
 # while loop
-[ $i != 45
+[ $i != 75
     +$i
     >system host-list
     +$result=$COMP0_ID .* \| (available|intest|online|failed)
@@ -187,7 +207,7 @@ $result=none
 >system host-lock $COMP0_ID
 
 $i=0
-$MAX=60
+$MAX=12
 $result=none
 # while loop
 [ $result != online
@@ -207,7 +227,7 @@ $result=none
 ]
 
 ; === connect to compute-0 and change goenabled exit status to 0, thus allowing compute to go enabled
->ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no compute-0
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no wrsroot@compute-0
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
 <ssword:
 >>$HOST_PASS
@@ -228,7 +248,7 @@ $result=none
 >system host-unlock $COMP0_ID
 ; === wait for compute-0 become available
 $i=0
-$MAX=60
+$MAX=75
 $result=none
 # while loop
 [ $result != available
