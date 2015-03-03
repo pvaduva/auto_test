@@ -16,24 +16,13 @@
 #
 ;;;
 
-VM Scale Up/Down Script
-
+US49035- VM Scale Up/Down Script
 
 Script can also be used as a scaling test:
-        ./nova_migrate_live_scale.elt IP=yow-cgcs-hp380-1 flavor1=big max_ht_groups=5
-
+        ./ HOST_IP=t_us49035_ts1_vcpu_scale_up_down.elt env.NODE.target.default.targetIP
 Assumptions:
         Lab is setup with lab_setup.sh with Tenants
         heat template available in the switch
-
-Steps:
-1)  Connecting to controller
-2)  Become admin
-3)  Show version
-4)  Show system status
-5)  Validate that controllers and computes are present
-      
-
 ;;;
 
 
