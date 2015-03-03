@@ -1,0 +1,73 @@
+#!/usr/bin/env expect-lite
+
+;;;
+    automated test script for 'huge pages' support
+;;;
+
+*EXP_INFO
+#*NOFAIL
+
+
+#HOST_IP=${HOST_IP} HOST_USER=${HOST_USER} HOST_PASSWD=${HOST_PASSWD} 
+#$HOST_IP=128.224.150.189
+$HOST_IP=10.10.10.3
+$HOST_USER=wrsroot
+$HOST_PASSWD=li69nux
+
+>ssh -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+<assword|SYSTEM:|WARNING:
+>>$HOST_PASSWD
+
+>export TMOUT=0
+
+@3
+>source /etc/nova/openrc
+
+; start test hugepages
+
+>date
+
+$CPT_LIST=~/.computes.list
+
+@20
+>system host-list | grep compute | awk '{print $4}' > $CPT_LIST
+
+>wc -l $CPT_LIST
++$TOTAL=\n([0-9]+)
+?if $TOTAL <= 0 ? [
+    ; no available compute nodes to test
+    %ALL_DONE
+]
+
+>echo $(($TOTAL * 2 / 3))
++$NUM_TO_TEST=\n([0-9]+)
+?if $NUM_TO_TEST < 5 ? [
+    $NUM_TO_TEST=$TOTAL
+]
+
+>echo will test $NUM_TO_TEST compute nodes
+
+$CUR=1
+[ $CUR <= $NUM_TO_TEST
+
+    #>shuf -i 0-$TOTAL | head -n1
+    #+$CPTNO=\n([0-9]+)
+    #>tail -n+$CPTNO $CPT_LIST | head -n1
+    >tail -n+$CUR $CPT_LIST | head -n1
+    +$CPTNM=\n([a-zA-Z0-9-]+)
+
+    ?if $CPTNM == __NO_STRING_CAPTURED__ ?%ALL_DONE
+
+    =$CUR + 1 
+
+    ; test on compute node: $CPTNM
+    ~fun_test_hugepage_on_compute.inc HOST_IP=$HOST_IP HOST_USER=$HOST_USER HOST_PASSWD=$HOST_PASSWD CPTNAME=$CPTNM
+]
+
+%ALL_DONE
+
+; cleanup
+> rm -f $CPT_LIST
+
+
+
