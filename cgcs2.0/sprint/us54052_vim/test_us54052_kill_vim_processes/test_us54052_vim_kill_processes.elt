@@ -23,7 +23,7 @@ Steps:
 15)  Wait for compute become available
 16)  END OF TEST
 
-REQUIRES: expect-lite 4.8.0 or greater
+REQUIRES: expect-lite 4.6 or greater
 This expect script can be invoked via the following:
 ./test_us54052_vim_kill_processes.elt <host> <username> <password>
 where:
@@ -118,8 +118,11 @@ $result=none
     +$i
     >system host-list
     +$result=$comp_id .* \| (unlocked|locked)
-    ?if $i > $MAX ? ; === compute did not lock
-    ?if $i > $MAX ? %fail_to_lock
+    ?if $i > $MAX ? [ 
+        ; === compute did not lock
+        *FAIL
+        $result=lock
+    ]
     !sleep 5
 ]
 
@@ -134,8 +137,11 @@ $result=none
     +$i
     >system host-list
     +$result=$comp_id .* \| (online|offline)
-    ?if $i > $MAX ? ; === compute did not go offline
-    ?if $i > $MAX ? %fail_to_reboot
+    ?if $i > $MAX ? [ 
+        ; === compute did not go offline
+        *FAIL
+        $result=offline
+    ]
     !sleep 5
 ]
 
@@ -148,15 +154,14 @@ $result=none
     +$i
     >system host-list
     +$result=$comp_id .* \| (online|offline)
-    ?if $i > $MAX ? ; === compute did not go online
-    ?if $i > $MAX ? %fail_to_reboot
+    ?if $i > $MAX ? [ 
+        ; === compute did not go online
+        *FAIL
+        $result=online
+    ]
     !sleep 10
 ]
 
-?if 1 < 0 ? [
-    %fail_to_reboot
-    *FAIL
-]
 
 ; === unlock compute
 >system host-unlock $comp_id
@@ -169,13 +174,12 @@ $result=none
     +$i
     >system host-list
     +$result=$comp_id .* \| (available|intest|online|offline)
-    ?if $i > $MAX ? ; === compute did not become available
-    ?if $i > $MAX ? %fail_to_boot
+    ?if $i > $MAX ? [ 
+        ; === compute did not become available
+        *FAIL
+        $result=available
+    ]
     !sleep 10
 ]
 
-?if 1 < 0 ? [
-    %fail_to_boot
-    *FAIL
-]
 ; === END OF TEST
