@@ -1,0 +1,166 @@
+#!/usr/bin/env expect-lite
+
+;;;
+
+vim kill processes Script
+
+Steps:
+
+
+
+REQUIRES: expect-lite 4.8.0 or greater
+This expect script can be invoked via the following:
+./test_us54052_vim_kill_processes.elt <host> <username> <password>
+where:
+host = IP address of the controller, e.g. 10.10.10.2
+username = username on the controller, e.g. wrsroot
+password = password on the controller, e.g. li69nux
+;;;
+
+
+*EXP_INFO
+*NOFAIL
+
+# Varibles that will become constants from script options
+$HOST_USER=wrsroot
+$HOST_PASS=li69nux
+$HOST_IP=10.10.10.2
+$VM=root
+@20
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>source /etc/nova/openrc
+>system show
+>cat /etc/build.info
+
+>sudo su
+<assword
+>>$HOST_PASS
+
+; === kill vim process
+>ps -ef | grep "vim -c"
+<root
++$pid=[ ]*([0-9]*)[ ]*1 .*nfv-vim
+>kill -9 $pid
+
+; === kill vim-webserver process
+>ps -ef | grep "vim-webserver"
+<root
++$pid=[ ]*([0-9]*)[ ]*1 .*nfv-vim
+>kill -9 $pid
+
+; === kill vim-api process
+>ps -ef | grep "vim-api"
+<root
++$pid=[ ]*([0-9]*)[ ]*1 .*nfv-vim
+>kill -9 $pid
+
+; === kill nova-api process
+>ps -ef | grep "nova-api"
+<root
++$pid=[ ]*([0-9]*)[ ]*1 .*/bin/nova-api
+>kill -9 $pid
+
+; === kill neutron-server process
+>ps -ef | grep "neutron"
+<root
++$pid=[ ]*([0-9]*)[ ]*1 .*neutron-server
+>kill -9 $pid
+
+; === kill mtcAgent process
+>ps -ef | grep "mtc"
+<root
++$pid=[ ]*([0-9]*)[ ]*1 .*mtcAgent
+>kill -9 $pid
+
+; === kill sysinv-api process
+>ps -ef | grep "sysinv-api"
+<root
++$pid=[ ]*([0-9]*)[ ]*1 .*/bin/sysinv-api
+>kill -9 $pid
+
+>exit
+!sleep 10
+
+; === verify processes restarted by attempting to lock, reboot, and unlock a compute
+; === lock compute
+>source /etc/nova/openrc
+>system host-list
+>system host-list | grep compute
++$comp_id=([0-9]*)[ ]*\| compute
+
+>system host-lock $comp_id
+; === wait for compute become locked
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != locked
+    +$i
+    >system host-list
+    +$result=$comp_id .* \| (unlocked|locked)
+    ?if $i > $MAX ? ; === compute did not lock
+    ?if $i > $MAX ? %fail_to_lock
+    !sleep 5
+]
+
+; === reboot compute
+>system host-reboot $comp_id
+; === wait for compute go offline due to reboot
+$i=0
+$MAX=24
+$result=none
+# while loop
+[ $result != offline
+    +$i
+    >system host-list
+    +$result=$comp_id .* \| (online|offline)
+    ?if $i > $MAX ? ; === compute did not go offline
+    ?if $i > $MAX ? %fail_to_reboot
+    !sleep 5
+]
+
+; === wait for compute go online after reboot
+$i=0
+$MAX=60
+$result=none
+# while loop
+[ $result != online
+    +$i
+    >system host-list
+    +$result=$comp_id .* \| (online|offline)
+    ?if $i > $MAX ? ; === compute did not go online
+    ?if $i > $MAX ? %fail_to_reboot
+    !sleep 10
+]
+
+?if 1 < 0 ? [
+    %fail_to_reboot
+    *FAIL
+]
+
+; === unlock compute
+>system host-unlock $comp_id
+; === wait for compute become available
+$i=0
+$MAX=60
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >system host-list
+    +$result=$comp_id .* \| (available|intest|online|offline)
+    ?if $i > $MAX ? ; === compute did not become available
+    ?if $i > $MAX ? %fail_to_boot
+    !sleep 10
+]
+
+?if 1 < 0 ? [
+    %fail_to_boot
+    *FAIL
+]
+; === END OF TEST
