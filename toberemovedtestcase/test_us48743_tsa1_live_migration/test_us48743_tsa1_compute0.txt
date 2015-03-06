@@ -1,0 +1,108 @@
+Script started on Wed Nov 19 19:21:41 2014
+compute-0:~$ vshell port-list | more
++--------------------------------------+----+-----------+-----------+-----------
+--+------------+------+-------------------+-------------------------------------
+-+----------------+
+| uuid                                 | id | type      | socket-id | admin-stat
+e | link-state | mtu  | mac-address       | network-uuid                        
+ | network-name   |
++--------------------------------------+----+-----------+-----------+-----------
+--+------------+------+-------------------+-------------------------------------
+-+----------------+
+| ebfdf6d4-7809-4daf-bba2-8cd78e43f5a2 | 0  | physical  | n/a       | up        
+  | up         | 1518 | 08:00:27:09:54:94 |                                     
+ |                |
+| 51236f40-2ce0-4585-9e42-4ba352230d6f | 1  | physical  | n/a       | up        
+  | up         | 1522 | 08:00:27:41:2a:73 |                                     
+ |                |
+| 57424667-4cfb-46ee-a2cc-62c978499d98 | 2  | avp-host  | n/a       | up        
+  | up         | 1522 | fa:16:3e:7d:2d:60 | 22266514-2cf8-4646-8d20-ab9fe84aa568
+ | net-22266514   |
+| 719b9a5e-b4a6-443f-8645-89027f52147d | 3  | avp-host  | n/a       | up        
+  | up         | 1522 | fa:16:3e:7f:b9:5f | 0ed50a78-5906-4db9-bf95-9aa2d8436ee5
+ | net-0ed50a78   |
+| 6344c8bc-e82a-48a9-ada2-96c8562093fe | 4  | avp-host  | n/a       | up        
+  | up         | 1522 | fa:16:3e:1d:7b:53 | f2e66bfb-e62e-4273-8d56-f229a0bc449a
+ | net-f2e66bfb   |
+[7m--More--[27m[Kcompute-0:~$ vshell port-show ebfdf6d4-7809-4daf-bba2-8cd78e43f5a2
++--------------+--------------------------------------+
+| Property     | Value                                |
++--------------+--------------------------------------+
+| admin-state  | up                                   |
+| id           | 0                                    |
+| link-state   | up                                   |
+| mac-address  | 08:00:27:09:54:94                    |
+| network-name |                                      |
+| network-uuid |                                      |
+| socket-id    | -1                                   |
+| type         | physical                             |
+| uuid         | ebfdf6d4-7809-4daf-bba2-8cd78e43f5a2 |
++--------------+--------------------------------------+
+compute-0:~$ sudo vconsole
+Password: 
+AVS> port lock 0
+done
+AVS> quit
+Exiting...
+compute-0:~$ sudo vconsole
+AVS> port unlock 0
+done
+AVS> quit
+Exiting...
+compute-0:~$ vshell port           sudo vconsolevshell port-show ebfdf6d4-7809-4daf-bba2-8cd78e43f5a2compute-0:~$ vshell port-list | more[Kshow ebfdf6d4-7809-4daf-bba2-8cd78e43f5a2
++--------------+--------------------------------------+
+| Property     | Value                                |
++--------------+--------------------------------------+
+| admin-state  | up                                   |
+| id           | 0                                    |
+| link-state   | up                                   |
+| mac-address  | 08:00:27:09:54:94                    |
+| network-name |                                      |
+| network-uuid |                                      |
+| socket-id    | -1                                   |
+| type         | physical                             |
+| uuid         | ebfdf6d4-7809-4daf-bba2-8cd78e43f5a2 |
++--------------+--------------------------------------+
+compute-0:~$ sudo vconsole
+AVS> port lock 0
+done
+AVS> quit
+Exiting...
+compute-0:~$ sudo vconsolevshell port-show ebfdf6d4-7809-4daf-bba2-8cd78e43f5a2
++--------------+--------------------------------------+
+| Property     | Value                                |
++--------------+--------------------------------------+
+| admin-state  | down                                 |
+| id           | 0                                    |
+| link-state   | down                                 |
+| mac-address  | 08:00:27:09:54:94                    |
+| network-name |                                      |
+| network-uuid |                                      |
+| socket-id    | -1                                   |
+| type         | physical                             |
+| uuid         | ebfdf6d4-7809-4daf-bba2-8cd78e43f5a2 |
++--------------+--------------------------------------+
+compute-0:~$ vshell port-show ebfdf6d4-7809-4daf-bba2-8cd78e43f5a2compute-0:~$ sudo vconsole[K
+AVS> port l[0Kunlock 0
+done
+AVS> d[0Kquit
+Exiting...
+compute-0:~$ sudo vconsolevshell port-show ebfdf6d4-7809-4daf-bba2-8cd78e43f5a2
++--------------+--------------------------------------+
+| Property     | Value                                |
++--------------+--------------------------------------+
+| admin-state  | up                                   |
+| id           | 0                                    |
+| link-state   | up                                   |
+| mac-address  | 08:00:27:09:54:94                    |
+| network-name |                                      |
+| network-uuid |                                      |
+| socket-id    | -1                                   |
+| type         | physical                             |
+| uuid         | ebfdf6d4-7809-4daf-bba2-8cd78e43f5a2 |
++--------------+--------------------------------------+
+compute-0:~$ 
+compute-0:~$ exit
+exit
+
+Script done on Wed Nov 19 19:45:20 2014

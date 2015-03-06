@@ -1,0 +1,62 @@
+Hi guys,
+
+I just wanted to pass along the instructions to do data link aggregation on hp380:
+
+system host-if-list compute-0 -> note the ethernet interfaces associated with group0_data0 (eth4) and group0_data1 (eth6)
+
+system host-lock compute-0
+
+system host-if-delete compute-0 data0
+system host-if-delete compute-0 data1
+
+export COMPUTE=compute-0
+DATA0PCIADDR=`system host-port-list ${COMPUTE} | grep eth4 |awk '{print $8}'`
+DATA1PCIADDR=`system host-port-list ${COMPUTE} | grep eth6 |awk '{print $8}'`
+DATA0PORTUUID=`system host-port-list ${COMPUTE} | grep ${DATA0PCIADDR} | awk '{print $2}'`
+DATA1PORTUUID=`system host-port-list ${COMPUTE} | grep ${DATA1PCIADDR} | awk '{print $2}'`
+
+system host-if-add –m 1500 –a balanced –x layer2 ${COMPUTE} ae0 ae “group0_data0,group0_data1” ${DATA0PORTUUID} ${DATA1PORTUUID}
+
+system host-unlock compute-0
+
+To reverse the configuration:
+
+system host-lock compute-0
+
+system host-if-delete compute-0 data0
+system host-if-delete compute-0 data1
+
+system host-if-add -m 1500 ${COMPUTE} data0 ethernet group0_data0 ${DATA0PORTUUID}
+system host-if-add -m 1500 ${COMPUTE} data1 ethernet group0_data0 ${DATA1PORTUUID}
+
+system host-unlock compute-0
+
+Same process would be applied to compute-1.
+
+To bring down the data ports via the Cisco Routers:
+
+Data Link Faults: http://twiki.wrs.com/PBUeng/CGTelcoServerLabConn
+
+hp380 lab: yow-cgcs-quanta-2    128.224.151.108 admin windriver
+
+enable
+configure
+interface <IFNAME>
+shutdown
+…
+no shutdown
+exit
+
+where IFNAME is something like “xe37”
+
+For the computes on the HP380 lab the IFNAME values are:
+
+xe37  compute-0: data0
+xe38  compute-0: data1
+xe39  compute-1: data0
+xe40  compute-1: data1
+
+
+Maria
+
+

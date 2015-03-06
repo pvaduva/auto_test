@@ -1,0 +1,290 @@
+Running as Tenant
+
+[wrsroot@controller-0 ~(keystone_tenant1)]$ cat my-user-data.txt
+User data
+
+Thu Dec 11 20:22:04 UTC 2014
+[wrsroot@controller-0 ~(keystone_tenant1)]$ cat my-user-file.txt
+user file
+
+Thu Dec 11 20:22:05 UTC 2014
+[wrsroot@controller-0 ~(keystone_tenant1)]$ neutron net-list
++--------------------------------------+------------------+-------------------------------------------------------+
+| id                                   | name             | subnets                                               |
++--------------------------------------+------------------+-------------------------------------------------------+
+| b958b4c1-e0ba-432c-a7fd-3cb8b86b450a | external-net0    | cd17305d-db6d-4a03-871e-9d8c01ac8e62 192.168.9.0/24   |
+| 77949a8f-95b1-4001-9857-93949093b4a3 | tenant1-mgmt-net | d6c52c5e-14fa-4066-b414-3ec99482083e 192.168.109.0/24 |
+| b1144854-909a-4981-9201-a3deb7d9b74f | tenant1-net1     | 62037dca-0c36-4430-b431-e5e9e7d12a73 172.16.1.0/24    |
+| 9fe9dcf9-ae92-41fd-a02b-cb77e6fc0296 | internal0-net0   | cc0785a5-8fa5-44f0-8c34-880835e0be19 10.2.2.0/24      |
+|                                      |                  | f2ec167e-c64c-47bf-88d3-02c0af949f88 10.1.1.0/24      |
+|                                      |                  | b5538348-26cd-4bab-b7df-b411e05434ed 10.0.0.0/24      |
+| e474db8d-14d8-430c-b96f-9a0b23fa0f6c | tenant1-net2     | 93c74e9b-d50f-4f22-b69d-7d1b0879dbbf 172.16.2.0/24    |
+| a5f94822-2cf5-4fda-967f-331b65e4b342 | tenant1-net0     | 52b98b45-79b5-426d-9d0c-4ed6b0d6c1a5 172.16.0.0/24    |
++--------------------------------------+------------------+-------------------------------------------------------+
+
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova boot --key_name=keypair-tenant1 --flavor=101 --nic net-id=77949a8f-95b1-4001-9857-93949093b4a3,vif-mocf5-4fda-967f-331b65e4b342,vif-model=avp --config-drive true --user-data ./my-user-data.txt --file /tmp/foobar=./my-user-file.txt --image=wrl5 wrl5-avp-0
++--------------------------------------+-------------------------------------------------------------+
+| Property                             | Value                                                       |
++--------------------------------------+-------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                      |
+| OS-EXT-AZ:availability_zone          | nova                                                        |
+| OS-EXT-STS:power_state               | 0                                                           |
+| OS-EXT-STS:task_state                | scheduling                                                  |
+| OS-EXT-STS:vm_state                  | building                                                    |
+| OS-SRV-USG:launched_at               | -                                                           |
+| OS-SRV-USG:terminated_at             | -                                                           |
+| accessIPv4                           |                                                             |
+| accessIPv6                           |                                                             |
+| adminPass                            | fLPoKsk42DW7                                                |
+| config_drive                         | True                                                        |
+| created                              | 2014-12-11T20:26:28Z                                        |
+| extended                             | {"cpuset": null, "numanode": null, "siblings_cpuset": null} |
+| flavor                               | wrl5.dpdk.small (101)                                       |
+| hostId                               |                                                             |
+| id                                   | 67dd4770-bbd2-405a-8140-c97196469f28                        |
+| image                                | wrl5 (9917f87a-4d19-4dae-be62-ca77f0fbe647)                 |
+| key_name                             | keypair-tenant1                                             |
+| metadata                             | {}                                                          |
+| name                                 | wrl5-avp-0                                                  |
+| nics                                 |                                                             |
+| os-extended-volumes:volumes_attached | []                                                          |
+| pinned                               | False                                                       |
+| progress                             | 0                                                           |
+| security_groups                      | default                                                     |
+| server_group                         |                                                             |
+| status                               | BUILD                                                       |
+| tenant_id                            | c1c53ede406a449c8e5d0b0c4825751f                            |
+| updated                              | 2014-12-11T20:26:29Z                                        |
+| user_id                              | 98aefa2509f048899a5b5641bd87953c                            |
+| vcpus (min/cur/max)                  | [2, 2, 2]                                                   |
++--------------------------------------+-------------------------------------------------------------+
+
+Thu Dec 11 20:28:36 UTC 2014
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova list
++--------------------------------------+------------+--------+------------+-------------+-----------------------------------------------------------+
+| ID                                   | Name       | Status | Task State | Power State | Networks                                                  |
++--------------------------------------+------------+--------+------------+-------------+-----------------------------------------------------------+
+| 67dd4770-bbd2-405a-8140-c97196469f28 | wrl5-avp-0 | ACTIVE | -          | Running     | tenant1-mgmt-net=192.168.109.18; tenant1-net0=172.16.0.80 |
++--------------------------------------+------------+--------+------------+-------------+-----------------------------------------------------------+
+
+Thu Dec 11 20:28:39 UTC 2014
+[wrsroot@controller-0 ~(keystone_tenant1)]$ ssh cgcs@128.224.150.11
+cgcs@128.224.150.11's password: 
+Linux yow-cgtnat 3.2.0-4-amd64 #1 SMP Debian 3.2.51-1 x86_64
+yow-cgtnat
+
+NAT firewall to the iron Pass machines
+bc: 21741
+ip:128.224.150.11/23
+
+Have fun!
+Last login: Thu Dec 11 15:28:05 2014 from 128.224.150.199
+
+cgcs@yow-cgtnat:~$ ssh root@192.168.109.18
+Password: 
+
+
+WARNING: Unauthorized access to this system is forbidden and will be
+prosecuted by law. By accessing this system, you agree that your
+actions may be monitored if unauthorized usage is suspected.
+
+root@wrl5-avp-0:~# df
+Filesystem     1K-blocks   Used Available Use% Mounted on
+rootfs            395075 315316     58563  85% /
+/dev/vda1         395075 315316     58563  85% /
+none              251156    144    251012   1% /dev
+/dev/hdd             428    428         0 100% /media/hdd
+tmpfs             251156    364    250792   1% /var/volatile
+tmpfs             251156      0    251156   0% /media/ram
+
+root@wrl5-avp-0:~# cd /media/hdd
+root@wrl5-avp-0:/media/hdd# cat openstack/latest/meta_data.json 
+{"files": [{"path": "/tmp/foobar", "content_path": "/content/0000"}], "admin_pass": "fLPoKsk42DW7", "random_seed": "9LkQk1+wdPtNHK4sMMe++W0Fpp98PVBdJ2e+gYVRcVN+dROuPTn7mBJcKnpIcQgOgl8ITi1Jj7NPOYg75Rocyy1kKSpz2eKLMPsRTdEY4ovtAK8SEsKEpNDEUFrD/NUaCWOqHZgbzQufYRv1jBvAG3v0w9VZ9LIx83+eDf9oCVxEfioanl7t1JOb678i7ZemLiwQSFtJ6Zb8vYS3sZpkmsu2Hfa99TdauhOuJXP+aC6cKDK/jRYU1hKvzIyRTl9h2ZNCi/Unl+65Tx1S8BP2wGTV+CNmFg0qW2U0sbwWBlOb9tBh74EPDQol96Ft2fLYKjB4Jf8wTq4BKQuZyP3R8K8ZOycXfsELR9gGyzEYlURkUZd7SIhx3ygzA2mL54eTS9Zoqfeji0+f2GDB1pwCk9VWRB9P9jpAQI8jAvwgIg6V1h0nBPy10s84TJUnuif1AexGEwYxbS3cyZNfFhbnuqG3UG4C26enMYxTwERLMgUivkckM1/LbX7b+EAZQTFZNF6yILP8jYFnBOkNByRE8GXoXhhlMeTNojXO+xo/QiAW1ItFcf//7mScSCSNxPcFWLz/RsypSOPTyMxSKXPKxbQn8ffvu4q1sf5ruwmvaC8GDbthDUqEc9Ex3Gryt/3Z3zIX0Bp/bKC/ytjXZQ++Wmn/7OBlsJQoElVNHBOevHg=", "uuid": "67dd4770-bbd2-405a-8140-c97196469f28", "availability_zone": "nova", "hostname": "wrl5-avp-0.novalocal", "launch_index": 0, "public_keys": {"keypair-tenant1": "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA04RZGgn+dO5MKavXDid0IxmE4ZCf1VB+HwKVUqgSW24ETCOLJRQgWUTnBz3uYSeBhN4VhgIGWWDVYR5y18ugG2dal3SiwcaEMAEu8fjO1m2uo9kISPV4xdxPLwQdHpRwkpGR+Q97IFbU6d/o5aEn8fUhyzzlaywBbVqe4/ub2qMsl3URvZjjD1ylq0HfSRKfzjqkKvdmI79Yu7R9FYEVoLeANZVvh033WksDTXHHbUpfMRaA8uP8+TZ447tnfy1gWIFPbP5FBULTYP89GyZfclNI4StHBEqOhxY8l0RBxYvA0LrhcFkMuDN6aAtiRqOoETydca8qQyBMLrgvThff0w== cwinnick@yow-14mqyk1-lx\n"}, "name": "wrl5-avp-0"}
+
+root@wrl5-avp-0:/media/hdd# cat openstack/content/0000
+user file
+root@wrl5-avp-0:/media/hdd# cat openstack/latest/user_data 
+User data
+
+Running as admin
+
+[wrsroot@controller-0 ~(keystone_admin)]$ neutron net-list
++--------------------------------------+------------------+-------------------------------------------------------+
+| id                                   | name             | subnets                                               |
++--------------------------------------+------------------+-------------------------------------------------------+
+| b958b4c1-e0ba-432c-a7fd-3cb8b86b450a | external-net0    | cd17305d-db6d-4a03-871e-9d8c01ac8e62 192.168.9.0/24   |
+| 77949a8f-95b1-4001-9857-93949093b4a3 | tenant1-mgmt-net | d6c52c5e-14fa-4066-b414-3ec99482083e 192.168.109.0/24 |
+| 743d37cc-9c5e-4529-87fb-a25e3db5275f | tenant2-mgmt-net | 6fb83786-54ac-4223-9596-981966746125 192.168.209.0/24 |
+| b1144854-909a-4981-9201-a3deb7d9b74f | tenant1-net1     | 62037dca-0c36-4430-b431-e5e9e7d12a73 172.16.1.0/24    |
+| 9fe9dcf9-ae92-41fd-a02b-cb77e6fc0296 | internal0-net0   | cc0785a5-8fa5-44f0-8c34-880835e0be19 10.2.2.0/24      |
+|                                      |                  | f2ec167e-c64c-47bf-88d3-02c0af949f88 10.1.1.0/24      |
+|                                      |                  | b5538348-26cd-4bab-b7df-b411e05434ed 10.0.0.0/24      |
+| 2bd1a86f-ec3b-4956-810d-188c4e500c57 | tenant2-net1     | 96606436-45d8-4268-bc83-452e131bb990 172.18.1.0/24    |
+| e98d1cdf-3ecf-40f2-8295-d90b9c5c7eb6 | tenant2-net2     | fff08398-42a0-4cb8-8773-8e87a27a1239 172.18.2.0/24    |
+| e474db8d-14d8-430c-b96f-9a0b23fa0f6c | tenant1-net2     | 93c74e9b-d50f-4f22-b69d-7d1b0879dbbf 172.16.2.0/24    |
+| 2e4cc349-558c-4e87-b57b-0334e73672c9 | tenant2-net0     | 265dbfa3-7b8f-4336-860a-ecbf11951c6a 172.18.0.0/24    |
+| a5f94822-2cf5-4fda-967f-331b65e4b342 | tenant1-net0     | 52b98b45-79b5-426d-9d0c-4ed6b0d6c1a5 172.16.0.0/24    |
++--------------------------------------+------------------+-------------------------------------------------------+
+
+Fri Dec 12 14:50:35 UTC 2014
+[wrsroot@controller-0 ~(keystone_admin)]$ cat my-user-data.txt 
+User data
+Fri Dec 12 14:51:46 UTC 2014
+[wrsroot@controller-0 ~(keystone_admin)]$ cat my-user-file.txt 
+user file
+
+Fri Dec 12 15:02:05 UTC 2014
+[wrsroot@controller-0 ~(keystone_admin)]$ nova boot --key_name=controller-0 --flavor=101 --nic net-id=9fe9dcf9-ae92-41fd-a02b-cb77e6fc0296,vifmodel=avp --nic net-id=77949a8f-95b1-4001-9857-93949093b4a3,vif-model=avp --config-drive true --user-data ./my-user-data.txt --file /tmp/fooba=./my-user-file.txt --image=wrl5 wrl-admin
++--------------------------------------+-------------------------------------------------------------+
+| Property                             | Value                                                       |
++--------------------------------------+-------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                      |
+| OS-EXT-AZ:availability_zone          | nova                                                        |
+| OS-EXT-SRV-ATTR:host                 | -                                                           |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | -                                                           |
+| OS-EXT-SRV-ATTR:instance_name        | instance-0000004e                                           |
+| OS-EXT-STS:power_state               | 0                                                           |
+| OS-EXT-STS:task_state                | scheduling                                                  |
+| OS-EXT-STS:vm_state                  | building                                                    |
+| OS-SRV-USG:launched_at               | -                                                           |
+| OS-SRV-USG:terminated_at             | -                                                           |
+| accessIPv4                           |                                                             |
+| accessIPv6                           |                                                             |
+| adminPass                            | oScdDosa2EPo                                                |
+| config_drive                         | True                                                        |
+| created                              | 2014-12-12T15:02:35Z                                        |
+| extended                             | {"cpuset": null, "numanode": null, "siblings_cpuset": null} |
+| flavor                               | wrl5.dpdk.small (101)                                       |
+| hostId                               |                                                             |
+| id                                   | b682b71f-5be9-4455-8f91-f2104b27c355                        |
+| image                                | wrl5 (9917f87a-4d19-4dae-be62-ca77f0fbe647)                 |
+| key_name                             | controller-0                                                |
+| metadata                             | {}                                                          |
+| name                                 | wrl-admin                                                   |
+| nics                                 |                                                             |
+| os-extended-volumes:volumes_attached | []                                                          |
+| pinned                               | False                                                       |
+| progress                             | 0                                                           |
+| security_groups                      | default                                                     |
+| server_group                         |                                                             |
+| status                               | BUILD                                                       |
+| tenant_id                            | 617469a668ec4a05af765d0490ca3ee5                            |
+| updated                              | 2014-12-12T15:02:35Z                                        |
+| user_id                              | c75bd63f6d1041ff9b100647f0ab1c8c                            |
+| vcpus (min/cur/max)                  | [2, 2, 2]                                                   |
++--------------------------------------+-------------------------------------------------------------+
+
+[wrsroot@controller-0 ~(keystone_admin)]$ nova list
++--------------------------------------+-----------+--------+------------+-------------+---------------------------------------------------------------------------------+
+| ID                                   | Name      | Status | Task State | Power State | Networks                                                                        |
++--------------------------------------+-----------+--------+------------+-------------+---------------------------------------------------------------------------------+
+| b682b71f-5be9-4455-8f91-f2104b27c355 | wrl-admin | ACTIVE | -          | Running     | internal0-net0=10.0.0.35, 10.1.1.35, 10.2.2.35; tenant1-mgmt-net=192.168.109.28 |
++--------------------------------------+-----------+--------+------------+-------------+---------------------------------------------------------------------------------+
+Fri Dec 12 15:03:40 UTC 2014
+[wrsroot@controller-0 ~(keystone_admin)]$ ssh cgcs@128.224.150.11
+cgcs@128.224.150.11's password: 
+Linux yow-cgtnat 3.2.0-4-amd64 #1 SMP Debian 3.2.51-1 x86_64
+yow-cgtnat
+
+NAT firewall to the iron Pass machines
+bc: 21741
+ip:128.224.150.11/23
+
+Have fun!
+Last login: Fri Dec 12 09:59:18 2014 from 128.224.150.199
+cgcs@yow-cgtnat:~$ ssh root@192.168.109.28
+Password: 
+
+
+WARNING: Unauthorized access to this system is forbidden and will be
+prosecuted by law. By accessing this system, you agree that your
+actions may be monitored if unauthorized usage is suspected.
+
+root@wrl-admin:~# df
+Filesystem     1K-blocks   Used Available Use% Mounted on
+rootfs            395075 315314     58565  85% /
+/dev/vda1         395075 315314     58565  85% /
+none              251156    144    251012   1% /dev
+/dev/hdd             428    428         0 100% /media/hdd
+tmpfs             251156    356    250800   1% /var/volatile
+tmpfs             251156      0    251156   0% /media/ram
+root@wrl-admin:~# cd /media/hdd
+root@wrl-admin:/media/hdd# cat openstack/latest/meta_data.json 
+{"files": [{"path": "/tmp/foobar", "content_path": "/content/0000"}], "admin_pass": "oScdDosa2EPo", "random_seed": "wnRBIU3kfnNyg+PQsR9EWIUmVR3+MiIdpGj8+eVWPPFyFEYsxEgHGIivSzn2k5wQhKELw3G4oe5cmtKkMC8v2crnr3049uzAjc/OMioGeVt++nYgysDV2uM7CTJ+dutCRCTAdZInIUjdqwF+WzfLAO2HoFKEX/DJWL2ZRowRA3rS9ef34k0Lp1eV/gg4IZdp4rmgS8zRW3DOKXZUfJ53vGhPAvplGa4M/ELxlLyeXsL2ZB7iPACUKk3P2vPow6jI6CAZueiBrsuHBZtppPbuWeaYuD38X0nNfMrkJfNWUf8A48WzhHag7XCKWuISekqEboMFrt4HNlF0TQewEDo9+oXSySBPoSDOqY0qHAlTkC5yG7A7i8tqXuE8y4yiXfqFbEadPqFRWlZtcYitYoRfkwomovL89+1DqRifNhlcdLAo8qNKDtgYialtWVUjhzC8ccNZjM8XvlOnf5T00WZTUAvxLQ51lAk9PMUJIYMG9wBbXNIL4EyrsPiTnBM1cp0vP3e4gOoEv0qDmt/sR3tf7xl1G9TQpR1LSN4lTWNHZNUBEOTJ3QsHSD+APfNi5g9BQPxWsnvUgDv6hUD+4PdY3R1bognBt5tBy4Ku2LV7d8SnTpAra8wmrLr085FYoC20rBrR7xJjf8iSC2BztE/syBhBLV5hfFjqt0ORucZHDCM=", "uuid": "b682b71f-5be9-4455-8f91-f2104b27c355", "availability_zone": "nova", "hostname": "wrl-admin.novalocal", "launch_index": 0, "public_keys": {"controller-0": "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA04RZGgn+dO5MKavXDid0IxmE4ZCf1VB+HwKVUqgSW24ETCOLJRQgWUTnBz3uYSeBhN4VhgIGWWDVYR5y18ugG2dal3SiwcaEMAEu8fjO1m2uo9kISPV4xdxPLwQdHpRwkpGR+Q97IFbU6d/o5aEn8fUhyzzlaywBbVqe4/ub2qMsl3URvZjjD1ylq0HfSRKfzjqkKvdmI79Yu7R9FYEVoLeANZVvh033WksDTXHHbUpfMRaA8uP8+TZ447tnfy1gWIFPbP5FBULTYP89GyZfclNI4StHBEqOhxY8l0RBxYvA0LrhcFkMuDN6aAtiRqOoETydca8qQyBMLrgvThff0w== cwinnick@yow-14mqyk1-lx\n"}, "name": "wrl-admin"}root@wrl-admin:/media/hdd# 
+
+root@wrl-admin:/media/hdd# cat openstack/content/0000
+user file
+root@wrl-admin:/media/hdd# cat openstack/latest/user_data 
+User data
+root@wrl-admin:/media/hdd# 
+
+
+
+--------------
+With wrl image attached to cinder
+[wrsroot@controller-0 ~(keystone_admin)]$ glance image-list
++--------------------------------------+------------+-------------+------------------+-----------+--------+
+| ID                                   | Name       | Disk Format | Container Format | Size      | Status |
++--------------------------------------+------------+-------------+------------------+-----------+--------+
+| 6f2c3a80-e115-4689-84be-bed74ca52568 | cgcs-guest | raw         | bare             | 435159040 | active |
+| d52a937a-30cc-4250-bd1c-bf324d0e9252 | ubuntu     | qcow2       | bare             | 261423104 | active |
+| 70a23016-dd88-4c64-a8cf-fb448fa487a8 | wrl5       | qcow2       | bare             | 435159040 | active |
+| 70cd25df-6e93-43a3-8006-27b2bf25287a | wrl5-avp   | qcow2       | bare             | 435159040 | active |
++--------------------------------------+------------+-------------+------------------+-----------+--------+
+[wrsroot@controller-0 ~(keystone_tenant1)]$ cinder create --image-id 70cd25df-6e93-43a3-8006-27b2bf25287a --display-name=test_wrl 1
++---------------------+--------------------------------------+
+|       Property      |                Value                 |
++---------------------+--------------------------------------+
+|     attachments     |                  []                  |
+|  availability_zone  |                 nova                 |
+|       bootable      |                false                 |
+|      created_at     |      2015-01-14T17:40:25.092509      |
+| display_description |                 None                 |
+|     display_name    |               test_wrl               |
+|          id         | 2b10fb5f-6b4c-4c11-aeaa-584efa90fac5 |
+|       image_id      | 70cd25df-6e93-43a3-8006-27b2bf25287a |
+|       metadata      |                  {}                  |
+|         size        |                  1                   |
+|     snapshot_id     |                 None                 |
+|     source_volid    |                 None                 |
+|        status       |               creating               |
+|     volume_type     |                 None                 |
++---------------------+--------------------------------------+
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=147cdb6a-608e-4b57-8746-3b980772fd3d,vif-model=avp --nic net-id=549716c7-019c-4dc4-bc5c-a70a8695e473,vif-model=avp --config-drive true --user-data ./my-user-data.txt --file /tmp/foobar=./my-user-file.txt --block_device_mapping vda=2b10fb5f-6b4c-4c11-aeaa-584efa90fac5:::0 test-wrl
++--------------------------------------+-------------------------------------------------------------+
+| Property                             | Value                                                       |
++--------------------------------------+-------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                      |
+| OS-EXT-AZ:availability_zone          | nova                                                        |
+| OS-EXT-STS:power_state               | 0                                                           |
+| OS-EXT-STS:task_state                | scheduling                                                  |
+| OS-EXT-STS:vm_state                  | building                                                    |
+| OS-SRV-USG:launched_at               | -                                                           |
+| OS-SRV-USG:terminated_at             | -                                                           |
+| accessIPv4                           |                                                             |
+| accessIPv6                           |                                                             |
+| adminPass                            | F85DYKBNytaC                                                |
+| config_drive                         | True                                                        |
+| created                              | 2015-01-14T17:44:33Z                                        |
+| extended                             | {"cpuset": null, "numanode": null, "siblings_cpuset": null} |
+| flavor                               | wrl5.dpdk.small (101)                                       |
+| hostId                               |                                                             |
+| id                                   | f03af428-6cbd-47ae-b7d8-64835e069257                        |
+| image                                | Attempt to boot from volume - no image supplied             |
+| key_name                             | keypair-tenant1                                             |
+| metadata                             | {}                                                          |
+| name                                 | test-wrl                                                    |
+| nics                                 |                                                             |
+| os-extended-volumes:volumes_attached | [{"id": "2b10fb5f-6b4c-4c11-aeaa-584efa90fac5"}]            |
+| pinned                               | False                                                       |
+| progress                             | 0                                                           |
+| security_groups                      | default                                                     |
+| server_group                         |                                                             |
+| status                               | BUILD                                                       |
+| tenant_id                            | 54b74c2a5ac14b589511fc611d6d2652                            |
+| updated                              | 2015-01-14T17:44:37Z                                        |
+| user_id                              | aad3f01abc704ac7a53ae5faefddc6ed                            |
+| vcpus (min/cur/max)                  | [2, 2, 2]                                                   |
++--------------------------------------+-------------------------------------------------------------+
+
+*** see attached images for check that files were injected
