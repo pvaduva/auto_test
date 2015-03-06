@@ -46,7 +46,7 @@ Con1SSH TYPE echo executing ${WASSP_TC_NAME}\n
 Con1SSH WAIT 100 SEC
 
 Con1SSH FAILIF FAILED
-Con1SSH TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=${testCaseId}\n
+Con1SSH TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose ${NOSE_OPTS} --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=${testCaseId}\n
 Con1SSH WAIT ${noseTestTimeout} SEC (.*:\~#\s)|(.*:\~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 
 
