@@ -265,42 +265,58 @@ DELAY 5 SEC
 # New as of July 22 2014:
 TYPE glance image-create --name ubuntu-precise-amd64 --is-public true --container-format bare --disk-format qcow2 --file ~/images/precise-server-cloudimg-amd64-disk1.img \n
 WAIT 300 SEC
-DELAY 5 SEC
 
 TYPE nova flavor-create wrl5.dpdk.big 100 4096 0 3\n
 WAIT 30 SEC
-DELAY 5 SEC
 
 TYPE nova flavor-create wrl5.dpdk.small 101 512 0 2\n
 WAIT 30 SEC
-DELAY 5 SEC
 
 TYPE nova flavor-create --dedicated-cpus True m1.small 2 2048 20 1\n
 WAIT 30 SEC
-DELAY 5 SEC
-
-################################################################################
-# 2015 Feb. 17
-# Workaround: Creating flavour with the same name as above since pinning has not been ported to Kilo yet
-TYPE nova flavor-create m1.small 2 2048 20 1\n
-WAIT 30 SEC
-DELAY 5 SEC
-################################################################################
 
 TYPE nova flavor-create --dedicated-cpus True --guest-heartbeat True  wrl5.dpdk.small.heartbeat 200 512 0 2\n
 WAIT 30 SEC
-DELAY 5 SEC
 
 TYPE nova flavor-create --dedicated-cpus True --guest-heartbeat True  wrl5.dpdk.big.heartbeat 201 4096 0 3\n
 WAIT 30 SEC
-DELAY 5 SEC
 
 TYPE nova flavor-create --dedicated-cpus True --guest-heartbeat True  --shared-vcpu 0  wrl5.dpdk.big.heartbeat.pinToMgmtCore  233 4096 0 3\n
 WAIT 30 SEC
-DELAY 5 SEC
 
 TYPE nova flavor-create --dedicated-cpus True m1.tiny 1 512 1 1\n
 WAIT 99 SEC
+
+
+####  New way to create flavors in R2
+####  commands above will fail silently in R2 but will be backwards compatible with R1
+TYPE nova flavor-create m1.small 2 2048 20 1\n
+WAIT 30 SEC
+TYPE nova flavor-key m1.small set hw:cpu_policy=dedicated hw:mem_page_size=2048
+WAIT 30 SEC
+
+TYPE nova flavor-create  wrl5.dpdk.small.heartbeat 200 512 0 2\n
+WAIT 30 SEC
+TYPE nova flavor-key wrl5.dpdk.small.heartbeat set hw:cpu_policy=dedicated hw:mem_page_size=2048
+WAIT 30 SEC
+
+TYPE nova flavor-create  wrl5.dpdk.big.heartbeat 201 4096 0 3\n
+WAIT 30 SEC
+TYPE nova flavor-key wrl5.dpdk.big.heartbeat set hw:cpu_policy=dedicated hw:mem_page_size=2048
+WAIT 30 SEC
+
+TYPE nova flavor-create  wrl5.dpdk.big.heartbeat.pinToMgmtCore  233 4096 0 3\n
+WAIT 30 SEC
+TYPE nova flavor-key wrl5.dpdk.big.heartbeat.pinToMgmtCore set hw:cpu_policy=dedicated hw:mem_page_size=2048
+WAIT 30 SEC
+
+TYPE nova flavor-create  m1.tiny 1 512 1 1\n
+WAIT 30 SEC
+TYPE nova flavor-key m1.tiny set hw:cpu_policy=dedicated hw:mem_page_size=2048
+WAIT 30 SEC
+
+
+###
 
 
 #### Create tempest.conf file
