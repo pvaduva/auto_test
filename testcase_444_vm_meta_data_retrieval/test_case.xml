@@ -50,7 +50,7 @@ TYPE echo executing ${WASSP_TC_NAME}\n
 WAIT 100 SEC
 
 FAILIF FAILED
-TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=${testCaseId} \n
+TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose ${NOSE_OPTS} --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=${testCaseId} \n
 WAIT ${noseTestTimeout} SEC (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 
 

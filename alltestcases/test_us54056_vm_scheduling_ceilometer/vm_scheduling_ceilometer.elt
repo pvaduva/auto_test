@@ -1,0 +1,458 @@
+#!/usr/bin/env expect-lite
+
+;;;
+
+VM Scheduling and Ceilometer Script
+
+Steps:
+1)  Change quotas for cinder
+2)  Get the necessary image and network uuids
+3)  Find compute-0 id
+4)  Get cpus used for VMs on compute-0
+5)  Get max VMs launchable on compute-0 based on free cpus
+6)  Show all cpus
+7)  Get memory for compute-0
+8)  Show all processors for compute-0
+9)  Get total number of computes
+10)  Lock all computes except compute-0
+11)  Find compute-1 id
+12)  Get provider-network
+13)  Save the current ifprofile of compute-1
+14)  Delete current data1 and add it again with all available options
+15)  Check all values are correct
+16)  Reapply compute-1 original if profile and verify applied
+17)  Launch a VM and verify ceilometer meter is listed
+18)  Create WRL cinder volume
+19)  Wait for cinder volume vol-wrl5-0 to become available
+20)  Create a security group for VM
+21)  Attach WRL VM to cinder volume
+22)  Wait for WRL VM to go available
+23)  Wait until ceilometer meter for VM appears
+24)  Fill remaining cpus of compute-0
+25)  Create WRL cinder volume
+26)  Wait for cinder volume vol-wrl5-$INSTANCE_NUM to become available
+27)  Attach WRL VM to cinder volume
+28)  Wait for WRL VM to go available
+29)  Attempt to launch 1 more VM verify VM fails and is in ERROR state
+30)  Create WRL cinder volume
+31)  Wait for cinder volume vol-wrl5-$INSTANCE_NUM to become available
+32)  Attach WRL VM to cinder volume
+33)  Wait for WRL VM to go into ERROR state
+34)  Delete all launched VMs and cinder volumes
+35)  Wait for VM wrl5-$INSTANCE_NUM to delete
+36)  Wait for cinder volume vol-wrl5-$INSTANCE_NUM to delete
+37)  Unlock all computes except compute-0
+38)  END OF TEST
+
+REQUIRES: expect-lite 4.8.0 or greater
+This expect script can be invoked via the following:
+./vm_scheduling_ceilometer.elt <host> <username> <password>
+where:
+host = IP address of the controller, e.g. 10.10.10.2
+username = username on the controller, e.g. wrsroot
+password = password on the controller, e.g. li69nux
+quanta_ip = IP of quanta router that compute data ports use, e.g. 128.224.150.181
+;;;
+
+
+*EXP_INFO
+*NOFAIL
+
+# Varibles that will become constants from script options
+$HOST_USER=wrsroot
+$HOST_PASS=li69nux
+$HOST_IP=10.10.10.2
+$QUANTA_IP=none
+$VM=root
+@20
+
+>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:
+>>$HOST_PASS
+>export TMOUT=0
+>source /etc/nova/openrc
+>system show
+>cat /etc/build.info
+
+@20
+
+; === Change quotas for cinder
+>keystone tenant-list
++$TENANT=([0-9a-f]{32}) \| .*tenant1
+>cinder quota-show $TENANT
+>cinder quota-update --volumes 20 $TENANT
+>cinder quota-show $TENANT
+
+; === get the necessary image and network uuids
+>source ./openrc.tenant1
+>glance image-list
++$IMAGE=([0-9a-f-]{36}) \| .*cgcs-guest
+>neutron net-list
++$TENANT_MGMT=([0-9a-f-]{36}) \| .*tenant1-mgmt-net
++$TENANT_NET=([0-9a-f-]{36}) \| .*tenant1-net0
+$VOL_NAME=vol-wrl5-
+$VM_NAME=wrl5-
+$INSTANCE_NUM=0
+
+>source /etc/nova/openrc
+; === Find compute-0 id
+>system host-list
++$COMP0_ID=([0-9]).* \| compute-0
+
+; === Get cpus used for VMs on compute-0
+>system host-cpu-list $COMP0_ID
+
+; === Get max VMs launchable on compute-0 based on free cpus
+>system host-cpu-list $COMP0_ID | grep VMs | wc -l
++$FOR_VMS=\n([0-9]+)
++$FOR_VMS
+=$FOR_VMS / 2
+-$FOR_VMS
+
+; === show all cpus
+>system host-cpu-list $COMP0_ID | wc -l
++$CORES=\n([0-9]+)
+=$CORES - 4
+
+[ $CORES > 0
+    -$CORES
+    >system host-cpu-show $COMP0_ID $CORES
+]
+
+; === Get memory for compute-0
+>system host-memory-list $COMP0_ID
+
+; === Show all processors for compute-0
+>system host-memory-list $COMP0_ID | wc -l
++$PROCESSORS=\n([0-9]+)
+=$PROCESSORS - 4
+
+[ $PROCESSORS > 0
+    -$PROCESSORS
+    >system host-memory-show $COMP0_ID $PROCESSORS
+]
+
+; === Get total number of computes
+>system host-list | grep compute | wc -l
++$NUM_COMP=\n([0-9]+)
+=$LOCK_COMP + $NUM_COMP + $COMP0_ID - 1
+=$NUM_COMP + $COMP0_ID - 1
+
+; === Lock all computes except compute-0
+[ $LOCK_COMP > $COMP0_ID
+    >system host-lock $LOCK_COMP
+    -$LOCK_COMP
+]
+
+[ $NUM_COMP > $LOCK_COMP
+    +$LOCK_COMP
+    $i=0
+    $MAX=12
+    $result=none
+    # while loop
+    [ $result != locked
+        +$i
+        >system host-list
+        +$result=$LOCK_COMP .* \| (unlocked|locked)
+        ?if $i > $MAX ? ; === Compute $LOCK_COMP did not lock
+        ?if $i > $MAX ? %fail_to_lock
+        !sleep 5
+    ]
+]
+
+; === Find compute-1 id
+>system host-list
++$COMP1_ID=([0-9]).* \| compute-1
+
+; === get provider-network
+>neutron providernet-list
++$PROVIDER_NET=[0-9a-f-]{36} \| ([a-z0-9-]*data1)
+
+; === save the current ifprofile of compute-1
+>system ifprofile-add compute-1-if $COMP1_ID
+
+; === delete current data1 and add it again with all available options
+>system host-if-delete $COMP1_ID data1
+<Deleted interface
+>system help host-if-add
+>system host-if-add -a balanced -x layer3+4 -m 1800 -n data $COMP1_ID new_data ethernet $PROVIDER_NET eth3
+; === check all values are correct
+<ifname
+<new_data
+<networktype
+<data
+<iftype
+<ethernet
+<ports
+<eth3
+<providernetworks
+<$PROVIDER_NET
+<imtu
+<1800
+<aemode
+<balanced
+<txhashpolicy
+<layer3\+4
+
+; === reapply compute-1 original if profile and verify applied
+>system host-apply-ifprofile $COMP1_ID compute-1-if
+<data1
+>system ifprofile-delete compute-1-if
+
+; === Launch a VM and verify ceilometer meter is listed
+>source ./openrc.tenant1
+
+; === create WRL cinder volume
+>cinder create --image-id $IMAGE --display-name=$VOL_NAME$INSTANCE_NUM 1
+
+; === wait for cinder volume vol-wrl5-0 to become available
+
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >cinder show $VOL_NAME$INSTANCE_NUM
+    +$result=(available|creating|downloading|error)
+    ?if $i > $MAX ? ; === cinder volume vol-wrl5-0 did not become available in 60s
+    ?if $i > $MAX ? %BREAK_CINDER_CREATE
+    ?if $result == error ? ; === cinder volume vol-wrl5-0 is in error state
+    ?if $result == error ? %BREAK_CINDER_CREATE
+    !sleep 5
+    >
+]
+
+>cinder list
++$CINDER_ID=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME$INSTANCE_NUM
+
+;=== create a security group for VM
+>nova secgroup-create test_sec_group Test_Group
+<test
+>nova secgroup-add-rule test icmp -1 -1 0.0.0.0/0
+<0.0.0.0/0
+
+; === attach WRL VM to cinder volume
+>nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --security-groups test_sec_group --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME$INSTANCE_NUM
+
+; === wait for WRL VM to go available
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != ACTIVE
+    +$i
+    >nova show $VM_NAME$INSTANCE_NUM
+    +$result=(ACTIVE|BUILD|ERROR)
+    ?if $i > $MAX ? ; === VM wrl5-0 did not become ACTIVE in 60s
+    ?if $i > $MAX ? %BREAK_VM_CREATE
+    ?if $result == ERROR ? ; === VM wrl5-0 is in ERROR state
+    ?if $result == ERROR ? %BREAK_VM_CREATE
+    !sleep 5
+    >
+]
+
+>nova list
++$VM_UUID=([0-9a-f-]{36}) \| $VM_NAME$INSTANCE_NUM
+
+>nova show $VM_UUID
+<test_sec_group
+
+; === wait until ceilometer meter for VM appears
+$i=0
+$MAX=24
+$result=none
+# while loop
+[ $result != $VM_UUID
+    +$i
+    >ceilometer sample-list -m cpu_util -l 5
+    +$result=($VM_UUID)
+    !sleep 5
+    ?if $i > $MAX ? ; === ceilometer meter for VM wrl5-0 did not appear in 60s
+    ?if $i > $MAX ? %fail_to_appear
+    >
+]
+
+?if 1 < 0 ? [
+    %fail_to_appear
+    *FAIL
+]
+
++$INSTANCE_NUM
+
+; === fill remaining cpus of compute-0
+[ $FOR_VMS > $INSTANCE_NUM
+    ; === create WRL cinder volume
+    >cinder create --image-id $IMAGE --display-name=$VOL_NAME$INSTANCE_NUM 1
+
+    ; === wait for cinder volume vol-wrl5-$INSTANCE_NUM to become available
+
+    $i=0
+    $MAX=12
+    $result=none
+    # while loop
+    [ $result != available
+        +$i
+        >cinder show $VOL_NAME$INSTANCE_NUM
+        +$result=(available|creating|downloading|error)
+        ?if $i > $MAX ? ; === cinder volume vol-wrl5-$INSTANCE_NUM did not become available in 60s
+        ?if $i > $MAX ? %BREAK_CINDER_CREATE
+        ?if $result == error ? ; === cinder volume vol-wrl5-$INSTANCE_NUM is in error state
+        ?if $result == error ? %BREAK_CINDER_CREATE
+        !sleep 5
+        >
+    ]
+
+    >cinder list
+    +$CINDER_ID=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME$INSTANCE_NUM
+
+    ; === attach WRL VM to cinder volume
+    >nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME$INSTANCE_NUM
+
+    ; === wait for WRL VM to go available
+    $i=0
+    $MAX=12
+    $result=none
+    # while loop
+    [ $result != ACTIVE
+        +$i
+        >nova show $VM_NAME$INSTANCE_NUM
+        +$result=(ACTIVE|BUILD|ERROR)
+        ?if $i > $MAX ? ; === VM wrl5-$INSTANCE_NUM did not become ACTIVE in 60s
+        ?if $i > $MAX ? %BREAK_VM_CREATE
+        ?if $result == ERROR ? ; === VM wrl5-$INSTANCE_NUM is in ERROR state
+        ?if $result == ERROR ? %BREAK_VM_CREATE
+        !sleep 5
+        >
+    ]
+
+    +$INSTANCE_NUM
+]
+
+; === attempt to launch 1 more VM verify VM fails and is in ERROR state
+; === create WRL cinder volume
+>cinder create --image-id $IMAGE --display-name=$VOL_NAME$INSTANCE_NUM 1
+
+; === wait for cinder volume vol-wrl5-$INSTANCE_NUM to become available
+
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >cinder show $VOL_NAME$INSTANCE_NUM
+    +$result=(available|creating|downloading|error)
+    ?if $i > $MAX ? ; === cinder volume vol-wrl5-$INSTANCE_NUM did not become available in 60s
+    ?if $i > $MAX ? %BREAK_CINDER_CREATE
+    ?if $result == error ? ; === cinder volume vol-wrl5-$INSTANCE_NUM is in error state
+    ?if $result == error ? %BREAK_CINDER_CREATE
+    !sleep 5
+    >
+]
+
+>cinder list
++$CINDER_ID=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME$INSTANCE_NUM
+
+; === attach WRL VM to cinder volume
+>nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME$INSTANCE_NUM
+
+; === wait for WRL VM to go into ERROR state
+$i=0
+$MAX=6
+$result=none
+# while loop
+[ $result != ERROR
+    +$i
+    >nova show $VM_NAME$INSTANCE_NUM
+    +$result=(ACTIVE|BUILD|ERROR)
+    ?if $i > $MAX ? ; === VM wrl5-$INSTANCE_NUM did not become ERROR in 30s
+    ?if $i > $MAX ? %BREAK_VM_CREATE
+    ?if $result == ACTIVE ? ; === VM wrl5-$INSTANCE_NUM launched and is active
+    ?if $result == ACTIVE ? %BREAK_VM_CREATE
+    !sleep 5
+    >
+]
+
+?if 1 < 0 ? [
+    %BREAK_VM_CREATE
+    %BREAK_CINDER_CREATE
+    *FAIL
+]
++$INSTANCE_NUM
+
+; === Delete all launched VMs and cinder volumes
+[ $INSTANCE_NUM > 0
+    -$INSTANCE_NUM
+
+    ; === wait for VM wrl5-$INSTANCE_NUM to delete
+    >nova delete $VM_NAME$INSTANCE_NUM
+    $i=0
+    $MAX=12
+    $result=none
+    # while loop
+    [ $result != __NO_STRING_CAPTURED__
+        +$i
+        >nova list
+        +$result=($VM_NAME$INSTANCE_NUM)
+        ?if $i > $MAX ? ; === VM wrl5-$INSTANCE_NUM did not delete in 60s
+        ?if $i > $MAX ? %BREAK_VM_DELETE
+        !sleep 5
+        >
+    ]
+
+    ; === wait for cinder volume vol-wrl5-$INSTANCE_NUM to delete
+    >cinder delete $VOL_NAME$INSTANCE_NUM
+    $i=0
+    $MAX=12
+    $result=none
+    # while loop
+    [ $result != __NO_STRING_CAPTURED__
+        +$i
+        >cinder list
+        +$result=($VOL_NAME$INSTANCE_NUM)
+        ?if $i > $MAX ? ; === cinder volume vol-wrl5-$INSTANCE_NUM did not become available in 60s
+        ?if $i > $MAX ? %BREAK_CINDER_DELETE
+        !sleep 5
+        >
+    ]
+    ?if 1 < 0 ? [
+       %BREAK_VM_DELETE
+       %BREAK_CINDER_DELETE
+       %fail_to_lock
+       *FAIL
+    ]
+]
+
+>nova secgroup-delete test_sec_group
+
+>source /etc/nova/openrc
+; === Unlock all computes except compute-0
+[ $LOCK_COMP > $COMP0_ID
+    >system host-unlock $LOCK_COMP
+    -$LOCK_COMP
+]
+
+[ $NUM_COMP > $LOCK_COMP
+    +$LOCK_COMP
+    $i=0
+    $MAX=60
+    $result=none
+    # while loop
+    [ $result != available
+        +$i
+        >system host-list
+        +$result=$LOCK_COMP .* \| (available|intest|online|offline)
+        ?if $i > $MAX ? ; === Compute $LOCK_COMP did not unlock
+        ?if $i > $MAX ? %fail_to_unlock
+        !sleep 10
+    ]
+]
+
+?if 1 < 0 ? [
+    %fail_to_unlock
+    *FAIL
+]
+
+; === END OF TEST

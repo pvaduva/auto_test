@@ -59,7 +59,7 @@ WAIT 3 SEC {ignoreTimeout:True}
 
 LOOKFOR
 FAILIF FAILED \([a-z]+
-TYPE nosetests --verbose --logging-level=DEBUG -a type=cgcs_sanity  tempest/ \n
+TYPE nosetests --verbose ${NOSE_OPTS} --logging-level=DEBUG -a type=cgcs_sanity  tempest/ \n
 WAIT 5000 SEC {ignoreTimeout:True}
 
 FAILIF
