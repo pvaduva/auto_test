@@ -1,0 +1,124 @@
+TC7:  Resize VM with hw:cpu_policy=shared
+TC8:  Resize VM with hw:cpu_policy=dedicated
+TC9:  Pause/Resume VM with hw:cpu_policy=dedicated 
+TC9:  Pause/Resume VM with hw:cpu_policy=shared
+
+--- Resize VMs ---
+
+Tue Mar 10 16:39:12 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova resize 3d7e1110-505e-4b16-ba07-cc4966a025c4 shared.medium
+Tue Mar 10 16:41:45 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova resize-confirm 3d7e1110-505e-4b16-ba07-cc4966a025c4
+Tue Mar 10 16:44:03 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova show 3d7e1110-505e-4b16-ba07-cc4966a025c4
++--------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                         |
++--------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                        |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                          |
+| OS-EXT-SRV-ATTR:host                 | compute-1                                                                                                                     |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | compute-1                                                                                                                     |
+| OS-EXT-SRV-ATTR:instance_name        | instance-0000002b                                                                                                             |
+| OS-EXT-STS:power_state               | 1                                                                                                                             |
+| OS-EXT-STS:task_state                | -                                                                                                                             |
+| OS-EXT-STS:vm_state                  | active                                                                                                                        |
+| OS-SRV-USG:launched_at               | 2015-03-10T16:42:56.000000                                                                                                    |
+| OS-SRV-USG:terminated_at             | -                                                                                                                             |
+| accessIPv4                           |                                                                                                                               |
+| accessIPv6                           |                                                                                                                               |
+| config_drive                         |                                                                                                                               |
+| created                              | 2015-03-10T15:02:31Z                                                                                                          |
+| flavor                               | shared.medium (e7edf100-23f9-4302-96d6-538c80fa9baf)                                                                          |
+| hostId                               | cc04f8c74f20386ec3e2d01ab736fe0cfc5f98804bdb765ebb49d67a                                                                      |
+| id                                   | 3d7e1110-505e-4b16-ba07-cc4966a025c4                                                                                          |
+| image                                | Attempt to boot from volume - no image supplied                                                                               |
+| key_name                             | -                                                                                                                             |
+| metadata                             | {}                                                                                                                            |
+| name                                 | dedicated                                                                                                                     |
+| nics                                 | {"nic1": {"vif_model": "avp", "port_id": "14dbf4fc-6e9a-4106-90cf-feb13faf960c", "network": "tenant1-mgmt-net", "mtu": 1500}} |
+|                                      | {"nic2": {"vif_model": "avp", "port_id": "870b8101-0f38-44b6-858b-d734a3ec6657", "network": "tenant1-net0", "mtu": 1500}}     |
+| os-extended-volumes:volumes_attached | [{"id": "d02d2556-1339-4ea2-9394-1d17066be69d"}]                                                                              |
+| progress                             | 0                                                                                                                             |
+| server_group                         |                                                                                                                               |
+| status                               | ACTIVE                                                                                                                        |
+| tenant1-mgmt-net network             | 192.168.109.45                                                                                                                |
+| tenant1-net0 network                 | 172.16.0.54                                                                                                                   |
+| tenant_id                            | 8b727a94cb82487b890edc045ddbd845                                                                                              |
+| topology                             | node:0,  2048MB, pgsize:2M, vcpus:0,1                                                                                         |
+| updated                              | 2015-03-10T16:43:27Z                                                                                                          |
+| user_id                              | 5c6f05f6a58947888116660ef4bb5224                                                                                              |
+| vcpus (min/cur/max)                  | [2, 2, 2]                                                                                                                     |
++--------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+
+
+Tue Mar 10 16:43:26 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova resize 7a58c532-05b6-4a6e-a515-b02356e5530f dedicated.medium
+Tue Mar 10 16:44:12 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova resize-confirm 7a58c532-05b6-4a6e-a515-b02356e5530f
+Tue Mar 10 16:44:50 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova show 7a58c532-05b6-4a6e-a515-b02356e5530f
++--------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                         |
++--------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                        |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                          |
+| OS-EXT-SRV-ATTR:host                 | compute-1                                                                                                                     |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | compute-1                                                                                                                     |
+| OS-EXT-SRV-ATTR:instance_name        | instance-0000002a                                                                                                             |
+| OS-EXT-STS:power_state               | 1                                                                                                                             |
+| OS-EXT-STS:task_state                | -                                                                                                                             |
+| OS-EXT-STS:vm_state                  | active                                                                                                                        |
+| OS-SRV-USG:launched_at               | 2015-03-10T16:44:29.000000                                                                                                    |
+| OS-SRV-USG:terminated_at             | -                                                                                                                             |
+| accessIPv4                           |                                                                                                                               |
+| accessIPv6                           |                                                                                                                               |
+| config_drive                         |                                                                                                                               |
+| created                              | 2015-03-10T15:00:59Z                                                                                                          |
+| flavor                               | dedicated.medium (7632b4a1-b98f-44f0-aa27-349124f3cb92)                                                                       |
+| hostId                               | cc04f8c74f20386ec3e2d01ab736fe0cfc5f98804bdb765ebb49d67a                                                                      |
+| id                                   | 7a58c532-05b6-4a6e-a515-b02356e5530f                                                                                          |
+| image                                | Attempt to boot from volume - no image supplied                                                                               |
+| key_name                             | -                                                                                                                             |
+| metadata                             | {}                                                                                                                            |
+| name                                 | shared                                                                                                                        |
+| nics                                 | {"nic1": {"vif_model": "avp", "port_id": "59714648-0de2-494d-939e-cec0f8f7d994", "network": "tenant1-mgmt-net", "mtu": 1500}} |
+|                                      | {"nic2": {"vif_model": "avp", "port_id": "0c0f11e8-6b85-4dcf-9495-ec6ebc8d31d7", "network": "tenant1-net0", "mtu": 1500}}     |
+| os-extended-volumes:volumes_attached | [{"id": "82e0b853-b9d9-44f5-85f8-1449fdaf4e28"}]                                                                              |
+| progress                             | 0                                                                                                                             |
+| server_group                         |                                                                                                                               |
+| status                               | ACTIVE                                                                                                                        |
+| tenant1-mgmt-net network             | 192.168.109.44                                                                                                                |
+| tenant1-net0 network                 | 172.16.0.53                                                                                                                   |
+| tenant_id                            | 8b727a94cb82487b890edc045ddbd845                                                                                              |
+| topology                             | node:0,  2048MB, pgsize:2M, 1s,1c,2t, vcpus:0,1, pcpus:3,4, siblings:{0,1}                                                    |
+| updated                              | 2015-03-10T16:44:55Z                                                                                                          |
+| user_id                              | 5c6f05f6a58947888116660ef4bb5224                                                                                              |
+| vcpus (min/cur/max)                  | [2, 2, 2]                                                                                                                     |
++--------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+
+
+--- attempt to pause/unpause VM instances ---
+
+Tue Mar 10 16:45:53 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova pause 3d7e1110-505e-4b16-ba07-cc4966a025c4
+Tue Mar 10 16:47:35 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova pause 7a58c532-05b6-4a6e-a515-b02356e5530f
+Tue Mar 10 16:47:50 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova list --all-tenants 
++--------------------------------------+-----------+--------+------------+-------------+-----------------------------------------------------------+
+| ID                                   | Name      | Status | Task State | Power State | Networks                                                  |
++--------------------------------------+-----------+--------+------------+-------------+-----------------------------------------------------------+
+| 3d7e1110-505e-4b16-ba07-cc4966a025c4 | dedicated | PAUSED | -          | Paused      | tenant1-mgmt-net=192.168.109.45; tenant1-net0=172.16.0.54 |
+| 7a58c532-05b6-4a6e-a515-b02356e5530f | shared    | PAUSED | -          | Paused      | tenant1-mgmt-net=192.168.109.44; tenant1-net0=172.16.0.53 |
++--------------------------------------+-----------+--------+------------+-------------+-----------------------------------------------------------+
+Tue Mar 10 16:47:58 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova unpause 3d7e1110-505e-4b16-ba07-cc4966a025c4
+Tue Mar 10 16:48:21 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova unpause 7a58c532-05b6-4a6e-a515-b02356e5530f
+Tue Mar 10 16:48:26 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova list --all-tenants 
++--------------------------------------+-----------+--------+------------+-------------+-----------------------------------------------------------+
+| ID                                   | Name      | Status | Task State | Power State | Networks                                                  |
++--------------------------------------+-----------+--------+------------+-------------+-----------------------------------------------------------+
+| 3d7e1110-505e-4b16-ba07-cc4966a025c4 | dedicated | ACTIVE | -          | Running     | tenant1-mgmt-net=192.168.109.45; tenant1-net0=172.16.0.54 |
+| 7a58c532-05b6-4a6e-a515-b02356e5530f | shared    | ACTIVE | -          | Running     | tenant1-mgmt-net=192.168.109.44; tenant1-net0=172.16.0.53 |
++--------------------------------------+-----------+--------+------------+-------------+-----------------------------------------------------------+
+
