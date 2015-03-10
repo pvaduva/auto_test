@@ -128,5 +128,6 @@ if __name__ == "__main__":
     hosts = get_request(ip, id, "ihosts")
     #pp.pprint(hosts)
     host_dict = extract_hostinfo(hosts)
+    print(host_dict)
 
     exit(0)

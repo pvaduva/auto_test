@@ -1,0 +1,1728 @@
+WASSP_WORKSPACE_HOME=/home/jjia/wassp-repos/Workspace
+WASSP_USER_CONFIG_FILE=/home/jjia/.wassp/wasspuserconfig.ini
+GNOME_KEYRING_PID=2285
+WASSP_TESTRUN_WC_FILE=/home/jjia/wassp-repos/Logs/hp380/CGCS_2Cont_2Comp/test_us49035_ts3_vcpu_scale_up_down/testRunWorkingCopy.xml
+USER=jjia
+LANGUAGE=en_CA:en
+WASSP_VSB_BASE=/home/jjia/wassp-repos/Workspace/vsb
+PUBLIC_ROUTER=tenant1-router
+noseTestTimeout=1000
+WASSP_TC_NAME=test_us49035_ts3_vcpu_scale_up_down
+WASSP_TC_USER_LOG=/home/jjia/wassp-repos/Logs/hp380/CGCS_2Cont_2Comp/test_us49035_ts3_vcpu_scale_up_down/user
+HOST_IP=128.224.252.2
+XDG_SEAT=seat0
+WASSP_NEST_BASE=/home/jjia/wassp-repos/wassp-nest
+TEXTDOMAIN=im-config
+SSH_AGENT_PID=2375
+COMPIZ_CONFIG_PROFILE=ubuntu
+SESSION=ubuntu
+LD_LIBRARY_PATH=/home/jjia/wassp-repos/.venv_wassp/lib:
+SHLVL=3
+WRSPASS=li69nux
+QT4_IM_MODULE=xim
+HOME=/home/jjia
+WASSP_PRODUCT_NAME=cgcs
+WASSP_TC_RUN_LOG=/home/jjia/wassp-repos/Logs/hp380/CGCS_2Cont_2Comp/test_us49035_ts3_vcpu_scale_up_down/
+DESKTOP_SESSION=ubuntu
+wrift_synchronisation_tag=B0E1R0
+XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+GTK_MODULES=overlay-scrollbar:unity-gtk-module
+WASSP_WIND_HOME=/WindRiver
+_wr_htee_execDir=/home/jjia/wassp-repos/wassp/host/htee
+PS1=(.venv_wassp) 
+WASSP_CONFIG_BASE=/home/jjia/wassp-repos/systems
+INSTANCE=
+WASSP_DATA_BASE=/home/jjia/wassp-repos/wassp-data
+WASSP_TESTMATRIX_BASE=/home/jjia/wassp-repos/testmatrices
+testCaseId=us49035_ts3
+DBUS_SESSION_BUS_ADDRESS=unix:abstract=/tmp/dbus-aqf20KfIDP
+LOADPATH=${LP}
+COLORTERM=gnome-terminal
+WASSP_LOGS_HOME=/home/jjia/wassp-repos/Logs
+UBUNTU_MENUPROXY=1
+GNOME_KEYRING_CONTROL=/run/user/19059/keyring-YEpf6D
+WASSP_LOGGING_OPTIONS=all
+WRSUSER=wrsroot
+QT_QPA_PLATFORMTHEME=appmenu-qt5
+MANDATORY_PATH=/usr/share/gconf/ubuntu.mandatory.path
+IM_CONFIG_PHASE=1
+SESSIONTYPE=gnome-session
+BUILDSDIR=/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build
+WASSP_TC_PATH=/home/jjia/wassp-repos/testcases/cgcs/cgcs2.0/sprint/us49035_vcpu_scale_up_down/test_us49035_ts3_vcpu_scale_up_down
+WASSP_TARGET_LOGS={'Con1SSH': ['/home/jjia/wassp-repos/Logs/hp380/CGCS_2Cont_2Comp/test_us49035_ts3_vcpu_scale_up_down/target_21768.Con1SSH_B0E1R0_20150205_160602.log'], 'SHELL': ['/home/jjia/wassp-repos/Logs/hp380/CGCS_2Cont_2Comp/test_us49035_ts3_vcpu_scale_up_down/target_host:localshell.SHELL_B0E1R0_20150205_160602.log'], 'Con2': ['/home/jjia/wassp-repos/Logs/hp380/CGCS_2Cont_2Comp/test_us49035_ts3_vcpu_scale_up_down/target_21769.Con2_B0E1R0_20150205_160602.log'], 'Con1': ['/home/jjia/wassp-repos/Logs/hp380/CGCS_2Cont_2Comp/test_us49035_ts3_vcpu_scale_up_down/target_21768.Con1_B0E1R0_20150205_160602.log'], 'Com2': ['/home/jjia/wassp-repos/Logs/hp380/CGCS_2Cont_2Comp/test_us49035_ts3_vcpu_scale_up_down/target_21771.Com2_B0E1R0_20150205_160602.log'], 'Com1': ['/home/jjia/wassp-repos/Logs/hp380/CGCS_2Cont_2Comp/test_us49035_ts3_vcpu_scale_up_down/target_21770.Com1_B0E1R0_20150205_160602.log']}
+GTK_IM_MODULE=ibus
+LOGNAME=jjia
+wrift_htee_data_file=/tmp/tmpmk7q8s.tmp
+WINDOWID=98566155
+_=/home/jjia/wassp-repos/.venv_wassp/bin/python3
+DEFAULTS_PATH=/usr/share/gconf/ubuntu.default.path
+WASSP_RUNTIMECONFIGS_BASE=/home/jjia/wassp-repos/runtimeconfigs/cgcs
+WASSP_SYSTEMS_RUNTIMECONFIGS_BASE=/home/jjia/wassp-repos/systems/cgcs/runtimeconfigs/cgcs2.0/sprint/us49035_vcpu_scale_up_down
+TERM=xterm
+XDG_SESSION_ID=c3
+WASSP_LOCAL_CONFIG_DIR=/home/jjia/.wassp
+GNOME_DESKTOP_SESSION_ID=this-is-deprecated
+WASSP_TESTCASE_BASE=/home/jjia/wassp-repos/testcases/cgcs
+WASSP_TARGET_CONTROL_FILES_DIR=/home/jjia/wassp-repos/wassp-data/Data
+PATH=/home/jjia/wassp-repos/.venv_wassp/bin:/home/jjia/wassp-repos/wassp-nest/tools/bin:/home/jjia/wassp-repos/wassp/host/tools/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
+GDM_LANG=en_CA
+SELINUX_INIT=YES
+SESSION_MANAGER=local/yow-jjia-lx:@/tmp/.ICE-unix/2445,unix/yow-jjia-lx:/tmp/.ICE-unix/2445
+XDG_MENU_PREFIX=gnome-
+XDG_RUNTIME_DIR=/run/user/19059
+XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session0
+WASSP_CONSOLELOGS_BASE=/home/jjia/wassp-repos/Logs/consolelogs
+DISPLAY=:0
+COMPIZ_BIN_PATH=/usr/bin/
+WASSP_SYSTEMS_BASE=/home/jjia/wassp-repos/systems/cgcs
+BUILDSERVER=${BS}
+WASSP_BASE=/home/jjia/wassp-repos/wassp/host
+LANG=en_CA.UTF-8
+XDG_CURRENT_DESKTOP=Unity
+XAUTHORITY=/folk/jjia/.Xauthority
+XMODIFIERS=@im=ibus
+WASSP_TESTRUN_FILE=/home/jjia/wassp-repos/Logs/hp380/CGCS_2Cont_2Comp/test_us49035_ts3_vcpu_scale_up_down/testRun.xml
+XDG_GREETER_DATA_DIR=/var/lib/lightdm-data/jjia
+SSH_AUTH_SOCK=/run/user/19059/keyring-YEpf6D/ssh
+SSH_AGENT_LAUNCHER=upstart
+CGCS_TEST_DIR=/home/jjia/wassp-repos
+SHELL=/bin/bash
+GDMSESSION=ubuntu
+WASSP_CONFIG_DIR=/home/jjia/wassp-repos/systems/cgcs/platforms/cgcs2.0/sprint/us49035_vcpu_scale_up_down
+WASSP_TESTMATRIX_DIR=/home/jjia/wassp-repos/testmatrices/cgcs/cgcs2.0/sprint/us49035_vcpu_scale_up_down
+CGCS_BUILD=2015-01-18_22-05-32-scale_up_down
+WASSP_PYTHON_HOME=/home/jjia/wassp-repos/.venv_wassp/bin/python3
+UPSTART_SESSION=unix:abstract=/com/ubuntu/upstart-session/19059/2297
+GPG_AGENT_INFO=/run/user/19059/keyring-YEpf6D/gpg:0:1
+TEXTDOMAINDIR=/usr/share/locale/
+VIRTUAL_ENV=/home/jjia/wassp-repos/.venv_wassp
+QT_IM_MODULE=ibus
+XDG_VTNR=7
+PWD=/home/jjia/wassp-repos/testcases/cgcs/cgcs2.0/sprint/us49035_vcpu_scale_up_down/test_us49035_ts3_vcpu_scale_up_down
+WASSP_TDK_BASE=/home/jjia/wassp-repos/target
+WASSP_SYSTEMS_TOPOLOGIES_BASE=/home/jjia/wassp-repos/systems/cgcs/topologies/cgcs2.0/sprint/us49035_vcpu_scale_up_down
+XDG_CONFIG_DIRS=/etc/xdg/xdg-ubuntu:/usr/share/upstart/xdg:/etc/xdg
+CLUTTER_IM_MODULE=xim
+XDG_DATA_DIRS=/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/
+WASSP_SYSTEMS_PLATFORMS_BASE=/home/jjia/wassp-repos/systems/cgcs/platforms/cgcs2.0/sprint/us49035_vcpu_scale_up_down
+WRSDIR=/home/wrsroot
+WASSP_TC_USER_WORKSPACE=/home/jjia/wassp-repos/Workspace/hp380/CGCS_2Cont_2Comp/test_us49035_ts3_vcpu_scale_up_down/user
+WASSP_RUNTIMECONFIGS_DIR=/home/jjia/wassp-repos/runtimeconfigs/cgcs/cgcs2.0/sprint/us49035_vcpu_scale_up_down
+GUESTPATH=${GP}
+DBREPORT_SWITCH=True
+PUBLIC_NETWORK=tenant1-net1
+WASSP_FEATURE_DIR=cgcs2.0/sprint/us49035_vcpu_scale_up_down
+WASSP_SYSTEMS_HOME=/home/jjia/wassp-repos/systems
+VTE_VERSION=3409
+WASSP_HOME=/home/jjia/wassp-repos
+WRSPASSORIG=wrsroot
+JOB=dbus
+WASSP_TESTCASE_DIR=/home/jjia/wassp-repos/testcases/cgcs/cgcs2.0/sprint/us49035_vcpu_scale_up_down
+hteeCleanWorkDir=True
+WASSP_TC_RUN_WORKSPACE=/home/jjia/wassp-repos/Workspace/hp380/CGCS_2Cont_2Comp/test_us49035_ts3_vcpu_scale_up_down/
+Const: HOST_IP = 128.224.150.199
+[0;32m
+expect-lite directive: *NOINTERACT [0m
+[0;33mWarning: Remote Host=none, using Localhost[0m
+spawn bash
+ 
+
+jjia@yow-jjia-lx:~/wassp-repos/testcases/cgcs/cgcs2.0/sprint/us49035_vcpu_scale_up_down/test_us49035_ts3_vcpu_scale_up_down$  
+jjia@yow-jjia-lx:~/wassp-repos/testcases/cgcs/cgcs2.0/sprint/us49035_vcpu_scale_up_down/test_us49035_ts3_vcpu_scale_up_down$ 
+jjia@yow-jjia-lx:~/wassp-repos/testcases/cgcs/cgcs2.0/sprint/us49035_vcpu_scale_up_down/test_us49035_ts3_vcpu_scale_up_down$ 
+jjia@yow-jjia-lx:~/wassp-repos/testcases/cgcs/cgcs2.0/sprint/us49035_vcpu_scale_up_down/test_us49035_ts3_vcpu_scale_up_down$ PS1=[0;32m
+expect-lite directive: *NOFAIL [0m
+[0;32m
+expect-lite directive: *EXP_INFO [0m
+"[\u@\h:\w]\$ "
+[jjia@yow-jjia-lx:~/wassp-repos/testcases/cgcs/cgcs2.0/sprint/us49035_vcpu_scale_up_down/test_us49035_ts3_vcpu_scale_up_down]$ 
+[jjia@yow-jjia-lx:~/wassp-repos/testcases/cgcs/cgcs2.0/sprint/us49035_vcpu_scale_up_down/test_us49035_ts3_vcpu_scale_up_down]$ date +%F_%T
+2015-02-05_11:06:40
+[jjia@yow-jjia-lx:~/wassp-repos/testcases/cgcs/cgcs2.0/sprint/us49035_vcpu_scale_up_down/test_us49035_ts3_vcpu_scale_up_down]$ [0;32m
+Assigned Var:DATE=2015-02-05_11:06:40 
+[0m
+[0;32m
+
+Setting Expect Timeout to: 2 
+
+[0m
+[0;32mINFO: CONST FOUND: HOST_IP = 128.224.150.199[0m
+[1;34m
+ === connecting to controller
+[0m
+ssh -X -o UserKnownHostsFIle=/dev/null -o Stric tHostKeyChecking=no wrsroot@128.224.150.199
+ssh: /home/jjia/wassp-repos/.venv_wassp/lib/libcrypto.so.1.0.0: no version information available (required by ssh)
+ssh: /home/jjia/wassp-repos/.venv_wassp/lib/libcrypto.so.1.0.0: no version information available (required by ssh)
+Warning: Permanently added '128.224.150.199' (ECDSA) to the list of known hosts.
+Wind River Linux 5.0.1.0
+------------------------------------------------------------------------
+W A R N I N G *** W A R N I N G *** W A R N I N G *** W A R N I N G *** 
+------------------------------------------------------------------------
+THIS IS A PRIVATE COMPUTER SYSTEM.
+This computer system including all related equipment, network devices
+(specifically including Internet access), are provided only for authorized use.
+All computer systems may be monitored for all lawful purposes, including to
+ensure that their use is authorized, for management of the system, to
+facilitate protection against unauthorized access, and to verify security
+procedures, survivability and operational security. Monitoring includes active
+attacks by authorized personnel and their entities to test or verify the
+security of the system. During monitoring, information may be examined,
+recorded, copied and used for authorized purposes. All information including
+personal information, placed on or sent over this system may be monitored. Uses
+of this system, authorized or unauthorized, constitutes consent to monitoring
+of this system. Unauthorized use may subject you to criminal prosecution.
+Evidence of any such unauthorized use collected during monitoring may be used
+for administrative, criminal or other adverse action. Use of this system
+constitutes consent to monitoring for these purposes.
+
+Password: [0;32m<ssword:[0m
+
+Warning: No xauth data; using fake authentication data for X11 forwarding.
+X11 forwarding request failed on channel 0
+Last login: Thu Feb  5 16:05:54 2015 from 128.224.144.162
+[H[2J
+WARNING: Unauthorized access to this system is forbidden and will be
+prosecuted by law. By accessing this system, you agree that your
+actions may be monitored if unauthorized usage is suspected.
+
+
+====================================================================
+         SYSTEM: yow-cgcs-hp380-1_4
+====================================================================
+
+Thu Feb  5 16:06:28 UTC 2015
+controller-0:~$ export TMOUT=0
+Thu Feb  5 16:06:28 UTC 2015
+controller-0:~$ [1;34m
+ === become admin
+[0m
+source /etc/nova/openrc
+Thu Feb  5 16:06:28 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [1;34m
+ === show version
+[0m
+system show
++------------------+-------------------------------------------+
+| Property         | Value                                     |
++------------------+-------------------------------------------+
+| name             | yow-cgcs-hp380-1_4                        |
+| description      | yow-cgcs-hp380-1_4: setup by lab_setup.sh |
+| location         | None                                      |
+| contact          | None                                      |
+| software_version | 14.10 3.4.103-ovp-ga2-rt120-r5_standard   |
+| uuid             | 447008ec-d4cb-443e-abfc-abc15fa7bc05      |
+| created_at       | 2015-02-04T02:28:21.217852+00:00          |
+| updated_at       | 2015-02-05T15:51:53.979723+00:00          |
++------------------+-------------------------------------------+
+Thu Feb  5 16:06:29 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ cat /etc/build.info
+###
+### Wind River Titanium Server
+###     Release 14.10
+###
+###     Wind River Systems, Inc.
+###
+
+SW_VERSION="14.10"
+BUILD_TARGET="Host Installer"
+BUILD_TYPE="Formal"
+BUILD_ID="2015-01-18_21-04-50"
+
+JOB="CGCS_1.0_Unified_Daily_Build"
+BUILD_BY="jenkins"
+BUILD_NUMBER="471"
+BUILD_HOST="yow-cgts2-lx"
+BUILD_DATE="2015-01-18 21:04:53 -0500"
+Thu Feb  5 16:06:29 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [1;34m
+ === show system status
+[0m
+nova service-list
++------------------+--------------+----------+---------+------------+-------+----------------------------+-----------------+
+| Binary           | Host         | Zone     | Status  | Maint Mode | State | Updated_at                 | Disabled Reason |
++------------------+--------------+----------+---------+------------+-------+----------------------------+-----------------+
+| nova-conductor   | controller-1 | internal | enabled | disabled   | down  | 2015-02-05T04:16:39.168025 | -               |
+| nova-scheduler   | controller-1 | internal | enabled | disabled   | down  | 2015-02-05T04:16:39.203819 | -               |
+| nova-consoleauth | controller-1 | internal | enabled | disabled   | down  | 2015-02-05T04:16:39.271516 | -               |
+| nova-cert        | controller-1 | internal | enabled | disabled   | down  | 2015-02-05T04:16:39.301624 | -               |
+| nova-scheduler   | controller-0 | internal | enabled | disabled   | up    | 2015-02-05T16:06:21.166580 | -               |
+| nova-consoleauth | controller-0 | internal | enabled | disabled   | up    | 2015-02-05T16:06:23.040497 | -               |
+| nova-cert        | controller-0 | internal | enabled | disabled   | up    | 2015-02-05T16:06:23.054522 | -               |
+| nova-compute     | compute-0    | nova     | enabled | disabled   | up    | 2015-02-05T16:06:30.088415 | -               |
+| nova-compute     | compute-1    | nova     | enabled | disabled   | up    | 2015-02-05T16:06:30.536086 | -               |
+| nova-conductor   | controller-0 | internal | enabled | disabled   | up    | 2015-02-05T16:06:30.571323 | -               |
++------------------+--------------+----------+---------+------------+-------+----------------------------+-----------------+
+Thu Feb  5 16:06:30 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [1;34m
+ === validate that controllers and computes are present
+[0m
+system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 3  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 4  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[0;32m<controller-0[0m
+[0;32m<controller-1[0m
+[0;32m<compute-0[0m
+[0;32m<compute-1[0m
+Thu Feb  5 16:06:31 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m
+Assigned Var:last_compute=compute
+[0m
+[0;32m
+If: expr { "compute" != "compute" } |then   [|result=FALSE
+[0m
+[1;34m
+ === Do valid lab_Setup
+[0m
+[0;32m
+If: expr { "yes" == "yes" } |then   [|result=TRUE
+[0m
+[1;34m
+ === validate lab_setup script
+[0m
+ls lab_setup.sh
+lab_setup.sh
+Thu Feb  5 16:06:31 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m<
+lab_setup.sh[0m
+ls lab_setup.conf
+lab_setup.conf
+Thu Feb  5 16:06:31 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m<
+lab_setup.conf[0m
+[1;34m
+ === use lab_setup to configure compute nodes, interfaces, provider networks, tenant networks, images, flavors. Ready to boot VMs
+[0m
+[0;32m
+
+Setting Expect Timeout to: 600 
+
+[0m
+time ./lab_setup.sh
+Checking for required files
+Setting system name
++------------------+-------------------------------------------+
+| Property         | Value                                     |
++------------------+-------------------------------------------+
+| name             | yow-cgcs-hp380-1_4                        |
+| description      | yow-cgcs-hp380-1_4: setup by lab_setup.sh |
+| location         | None                                      |
+| contact          | None                                      |
+| software_version | 14.10 3.4.103-ovp-ga2-rt120-r5_standard   |
+| uuid             | 447008ec-d4cb-443e-abfc-abc15fa7bc05      |
+| created_at       | 2015-02-04T02:28:21.217852+00:00          |
+| updated_at       | 2015-02-05T15:51:53.979723+00:00          |
++------------------+-------------------------------------------+
+Adding tenants
+Adding tenant credentials
+Adding tenant quotas
++---------------------+-------+
+| Field               | Value |
++---------------------+-------+
+| floatingip          | 50    |
+| network             | 5     |
+| port                | 19    |
+| router              | 10    |
+| security_group      | 10    |
+| security_group_rule | 100   |
+| subnet              | 5     |
++---------------------+-------+
+ERROR (BadRequest): Quota value 6 for cores are greater than already used and reserved 7 (HTTP 400) (Request-ID: req-309e5bf5-2fd7-485d-b3d0-c3ff5231c7a1)
+
+real	0m12.614s
+user	0m7.546s
+sys	0m1.646s
+[0;32m<
+real[0m
+[0;32m
+
+Setting Expect Timeout to: 10 
+
+[0m
+Thu Feb  5 16:06:44 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [1;34m
+ === unlock computes
+[0m
+system host-unlock compute-0
+Avoiding 'unlock' action on already 'unlocked' host compute-0
+Thu Feb  5 16:06:45 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-unlock compute-1
+Avoiding 'unlock' action on already 'unlocked' host compute-1
+Thu Feb  5 16:06:46 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list | grep compute-1
+| 4  | compute-1    | compute     | unlocked       | enabled     | available    |
+Thu Feb  5 16:06:47 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m
+Assigned Var:avail=available
+[0m
+[0;32m
+While: expr { "available" != "available" } |result=FALSE
+[0m
+system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 3  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 4  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+Thu Feb  5 16:06:48 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [1;34m
+ === Create necessary flavors and set minimum vcpu value
+[0m
+nova flavor-create --dedicated-cpus True vcpu4-1 5f0d748b-1c8b-4a70-1985-4d57e25ac137 512 0 4
++--------------------------------------+---------+-----------+------+-----------+------+-------+-------------+-----------+------------+
+| ID                                   | Name    | Memory_MB | Disk | Ephemeral | Swap | VCPUs | RXTX_Factor | Is_Public | VCPU_Model |
++--------------------------------------+---------+-----------+------+-----------+------+-------+-------------+-----------+------------+
+| 5f0d748b-1c8b-4a70-1985-4d57e25ac137 | vcpu4-1 | 512       | 0    | 0         |      | 4     | 1.0         | True      | -          |
++--------------------------------------+---------+-----------+------+-----------+------+-------+-------------+-----------+------------+
+Thu Feb  5 16:06:49 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ echo $?
+0
+Thu Feb  5 16:06:49 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m<
+0[0m
+nova flavor-create --dedicated-cpus True vcpu5-2 db9b37f5-cba5-1985-a264-a6c1375a4ff7 512 0 5
++--------------------------------------+---------+-----------+------+-----------+------+-------+-------------+-----------+------------+
+| ID                                   | Name    | Memory_MB | Disk | Ephemeral | Swap | VCPUs | RXTX_Factor | Is_Public | VCPU_Model |
++--------------------------------------+---------+-----------+------+-----------+------+-------+-------------+-----------+------------+
+| db9b37f5-cba5-1985-a264-a6c1375a4ff7 | vcpu5-2 | 512       | 0    | 0         |      | 5     | 1.0         | True      | -          |
++--------------------------------------+---------+-----------+------+-----------+------+-------+-------------+-----------+------------+
+Thu Feb  5 16:06:50 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ echo $?
+0
+Thu Feb  5 16:06:50 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m<
+0[0m
+[1;34m
+ === flavor created
+[0m
+nova flavor-list | grep vcpu4-1
+| 5f0d748b-1c8b-4a70-1985-4d57e25ac137 | vcpu4-1                               | 512       | 0    | 0         |      | 4     | 1.0         | True      | -           |
+Thu Feb  5 16:06:51 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova flavor-list | grep vcpu5-2
+| db9b37f5-cba5-1985-a264-a6c1375a4ff7 | vcpu5-2                               | 512       | 0    | 0         |      | 5     | 1.0         | True      | -           |
+Thu Feb  5 16:06:52 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [1;34m
+ === set minimum value for the cpu created
+[0m
+nova flavor-key vcpu4-1 set wrs:min_vcpus=1 processor:node=0
+Thu Feb  5 16:06:53 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova flavor-list --extra-specs | grep vcpu4-1
+| 5f0d748b-1c8b-4a70-1985-4d57e25ac137 | vcpu4-1                               | 512       | 0    | 0         |      | 4     | 1.0         | True      | -           | {u'dedicated:cpus': u'True', u'guest:heartbeat': u'False', u'processor:node': u'0', u'wrs:min_vcpus': u'1'} |
+Thu Feb  5 16:06:55 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m
+Assigned Var:result=1
+[0m
+[1;34m
+ === Minimum CPU value set for vcpu4-1 is 1
+[0m
+nova flavor-key vcpu5-2 set wrs:min_vcpus=2
+Thu Feb  5 16:06:56 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova flavor-list --extra-specs | grep vcpu5-2
+| db9b37f5-cba5-1985-a264-a6c1375a4ff7 | vcpu5-2                               | 512       | 0    | 0         |      | 5     | 1.0         | True      | -           | {u'dedicated:cpus': u'True', u'guest:heartbeat': u'False', u'wrs:min_vcpus': u'2'}                          |
+Thu Feb  5 16:06:57 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m
+Assigned Var:result=2
+[0m
+[1;34m
+ === Minimum CPU value set for vcpu5-2 is 2
+[0m
+[1;34m
+ === get tenant uuids
+[0m
+keystone tenant-list
++----------------------------------+----------+---------+
+|                id                |   name   | enabled |
++----------------------------------+----------+---------+
+| 1e17286a61104702bc2a3b6ef5467af9 |  admin   |   True  |
+| a318972360584e319782fcc2282c8bee | services |   True  |
+| a4e3a58f85e344c9b238f99045ee9e4e | tenant1  |   True  |
+| e2a088214fe747c59a24256d3e02eb7f | tenant2  |   True  |
++----------------------------------+----------+---------+
+[0;32m<name[0m
+Thu Feb  5 16:06:57 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m
+Assigned Var:tenant_uuid=a4e3a58f85e344c9b238f99045ee9e4e
+[0m
+[1;34m
+ === get tenant id
+[0m
+keystone user-list
++----------------------------------+------------+---------+----------------------+
+|                id                |    name    | enabled |        email         |
++----------------------------------+------------+---------+----------------------+
+| 5889d8c0e6274cb3923e9aac43d216c3 |   admin    |   True  |   admin@localhost    |
+| db6f987048614bfeaa580cdd9f9baa7e | ceilometer |   True  | ceilometer@localhost |
+| 4ed222a140204e6fa5a5f17af72f1877 |   cinder   |   True  |   cinder@localhost   |
+| c992eed28b814f998e67dbc4322ee138 |   glance   |   True  |   glance@localhost   |
+| 92b10c41dcae4a6280ab675c657a1e4a |    heat    |   True  |    heat@localhost    |
+| b2e344598b624f12ab516d300556f71a |  neutron   |   True  |  neutron@localhost   |
+| 6425a7a5c9b54761a81aaa71a18de55e |    nova    |   True  |    nova@localhost    |
+| c550b3e687544b4c9a90380754ac659f |  patching  |   True  |  patching@localhost  |
+| 1a105c6520364f29b40e8a01a8ae2ff3 | power_mgmt |   True  | power_mgmt@localhost |
+| bd504f2f6f254d5f9d075cd079926ada |   sysinv   |   True  |   sysinv@localhost   |
+| 49be897e674a4456af937371ecfa936d |  tenant1   |   True  | tenant1@noreply.com  |
+| 52389e4935fc49f39699d21cd188dc09 |  tenant2   |   True  | tenant2@noreply.com  |
++----------------------------------+------------+---------+----------------------+
+Thu Feb  5 16:06:58 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ keystone user-list | grep tenant1
+| 49be897e674a4456af937371ecfa936d |  tenant1   |   True  | tenant1@noreply.com  |
+Thu Feb  5 16:06:59 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m
+Assigned Var:tenant_user_id=49be897e674a4456af937371ecfa936d
+[0m
+[1;34m
+ === increase quotas for test
+[0m
+nova quota-update --instances 30 a4e3a58f85e344c9b238f99045ee9e4e
+Thu Feb  5 16:07:00 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova quota-update --cores 60 a4e3a58f85e344c9b238f99045ee9e4e
+Thu Feb  5 16:07:01 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova quota-show --tenant a4e3a58f85e344c9b238f99045ee9e4e
++-----------------------------+-------+
+| Quota                       | Limit |
++-----------------------------+-------+
+| instances                   | 30    |
+| cores                       | 60    |
+| ram                         | 51200 |
+| floating_ips                | 3     |
+| fixed_ips                   | -1    |
+| metadata_items              | 128   |
+| injected_files              | 5     |
+| injected_file_content_bytes | 10240 |
+| injected_file_path_bytes    | 255   |
+| key_pairs                   | 100   |
+| security_groups             | 10    |
+| security_group_rules        | 20    |
++-----------------------------+-------+
+Thu Feb  5 16:07:02 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ neutron quota-update --port 60 --tenant-id a4e3a58f85e344c9b238f99045ee9e4e
++---------------------+-------+
+| Field               | Value |
++---------------------+-------+
+| floatingip          | 50    |
+| network             | 5     |
+| port                | 60    |
+| router              | 10    |
+| security_group      | 10    |
+| security_group_rule | 100   |
+| subnet              | 5     |
++---------------------+-------+
+Thu Feb  5 16:07:02 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ cinder quota-update --volumes 30 a4e3a58f85e344c9b238f99045ee9e4e
+Thu Feb  5 16:07:03 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ cinder quota-show a4e3a58f85e344c9b238f99045ee9e4e
++-----------+-------+
+|  Property | Value |
++-----------+-------+
+| gigabytes |  1000 |
+| snapshots |   3   |
+|  volumes  |   30  |
++-----------+-------+
+Thu Feb  5 16:07:04 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [1;34m
+ === switch to tenant mode
+[0m
+source /home/wrsroot/openrc.tenant1
+Thu Feb  5 16:07:04 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [1;34m
+ === CGTS-804 - Validate that if the guest image is not valid in glance then the Heat Stack will not instantiate
+[0m
+heat stack-create -f VMAutoScaling.yaml -P TenantUserId=49be897e674a4456af937371ecfa936d -P PrivateNetName=tenant1-mgmt-net -P Ins tanceName=invalid-guest -P FlavorName=vcpu4-1 -P ImageName=non-cgcs-guest -P CustomMeterName=vote -P KeyName=keypair-tenant1 INVALIDSTACK
+ERROR: Resource: Server "Srv". Exception: The Image (non-cgcs-guest) could not be found.
+[0;32m<ERROR[0m
+Thu Feb  5 16:07:05 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ echo $?
+1
+Thu Feb  5 16:07:05 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m<echo $?
+1[0m
+[1;34m
+ === switch to tenant mode
+[0m
+source /home/wrsroot/openrc.tenant1
+Thu Feb  5 16:07:05 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [1;34m
+ === copy heat template to /home/wrsroot/ 
+[0m
+find . -iname BootFromCinder.yaml
+./wrs-heat-templates-1.1.0/hot/scenarios/BootFromCinder.yaml
+./BootFromCinder.yaml
+./heat/product/hot/scenarios/BootFromCinder.yaml
+./heat/hot/scenarios/BootFromCinder.yaml
+./heat/wrs-heat-templates-1.1.0/hot/scenarios/BootFromCinder.yaml
+Thu Feb  5 16:07:05 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:result= ./wrs-heat-templates-1.1.0/hot/scenarios/BootFromCinder.yaml
+[0m
+cp  ./wrs-heat-templates-1.1.0/hot/scenarios/BootFromCinder.yaml .
+Thu Feb  5 16:07:05 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [1;34m
+ === get tenant_net1 id
+[0m
+neutron net-list
++--------------------------------------+------------------+-------------------------------------------------------+
+| id                                   | name             | subnets                                               |
++--------------------------------------+------------------+-------------------------------------------------------+
+| 696ddf44-3c13-4547-a30b-f13a75f87329 | external-net0    | c73e053c-a71e-4210-a2fe-34713325f157 192.168.9.0/24   |
+| a05c050d-c06e-44f3-92fa-6ca127d2b76c | tenant1-mgmt-net | 27e01832-9f8f-4819-adee-e565cae97989 192.168.109.0/24 |
+| 5e9e91c8-0679-4e18-83c0-138dcd65dbec | tenant1-net0     | 81ac643d-75ef-4f97-8b94-f3dc16d491c1 172.16.0.0/24    |
+| efe36124-fef0-49d4-a87c-d259e5c23f2e | tenant1-net2     | 3d38857e-1e43-45f1-ac7f-46ca0e01d07a 172.16.2.0/24    |
+| 5a4674f1-a538-4aaf-94ab-713ef6d0e6ed | internal0-net0   | 35a2f506-5b48-426c-8c5f-352346b55431 10.2.2.0/24      |
+|                                      |                  | 3b3b1dae-bee5-416a-bf3b-511ac9e4d62e 10.1.1.0/24      |
+|                                      |                  | af2b8695-835b-44ba-9251-7e547973098b 10.0.0.0/24      |
+| 180b0bc2-bef2-48a0-a06b-3be6bea31c98 | tenant1-net1     | 683f7c02-00e5-422b-b6c6-45a7453301d2 172.16.1.0/24    |
++--------------------------------------+------------------+-------------------------------------------------------+
+Thu Feb  5 16:07:06 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:tenant1_mgmt_net_id=a05c050d-c06e-44f3-92fa-6ca127d2b76c
+[0m
+[0;32m
+Assigned Var:tenant1_net0_id=5e9e91c8-0679-4e18-83c0-138dcd65dbec
+[0m
+[1;34m
+ === get cgcs-guest image id
+[0m
+glance image-list
++--------------------------------------+----------------------+-------------+------------------+-----------+--------+
+| ID                                   | Name                 | Disk Format | Container Format | Size      | Status |
++--------------------------------------+----------------------+-------------+------------------+-----------+--------+
+| 7aeabc04-8b05-44fa-bfe6-07d6dfbfc6ea | cgcs-guest           | raw         | bare             | 435159040 | active |
+| 1f1cb01b-bb9d-439e-bf08-d7f2cce32470 | cirros               | qcow2       | bare             | 9761280   | active |
+| db6e74d7-74a0-41cc-8c49-12ca253a54e1 | ubuntu-precise-amd64 | qcow2       | bare             | 261423104 | active |
+| aaa24441-461c-402f-8969-b3928ef51142 | wrl5                 | qcow2       | bare             | 435159040 | active |
+| 7e1efe21-1a46-4fda-a71e-483ac9d7c35f | wrl5-avp             | qcow2       | bare             | 435159040 | active |
+| 71d94f86-2dec-4589-9ce6-cb2e44693d59 | wrl5-virtio          | qcow2       | bare             | 435159040 | active |
++--------------------------------------+----------------------+-------------+------------------+-----------+--------+
+Thu Feb  5 16:07:07 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:cgcs_guest_id=7aeabc04-8b05-44fa-bfe6-07d6dfbfc6ea
+[0m
+[1;34m
+ === create heat stack from cinder volume
+[0m
+[1;34m
+ === check if CINDERSTACK create complete
+[0m
+heat stack-create -f BootFromCinder.yaml -P INTERNAL_NET_ID=5e9e91c8-0679-4e18-83c0-138dcd65dbec -P PRIVATE_NET_ID=a05c050d-c06e-4 4f3-92fa-6ca127d2b76c -P FLAVOR_NAME=vcpu5-2 -P GLANCE_IMAGE_ID=7aeabc04-8b05-44fa-bfe6-07d6dfbfc6ea -P KEY_NAME=keypair-tenant1 CINDERSTACK
++--------------------------------------+-------------+--------------------+----------------------+
+| id                                   | stack_name  | stack_status       | creation_time        |
++--------------------------------------+-------------+--------------------+----------------------+
+| 4defd84c-18f4-4c57-aa58-1424e4f1d55a | CINDERSTACK | CREATE_IN_PROGRESS | 2015-02-05T16:07:08Z |
++--------------------------------------+-------------+--------------------+----------------------+
+Thu Feb  5 16:07:09 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+
+Setting Expect Timeout to: 60 
+
+[0m
+heat stack-list | grep CINDERSTACK
+| 4defd84c-18f4-4c57-aa58-1424e4f1d55a | CINDERSTACK | CREATE_COMPLETE | 2015-02-05T16:07:08Z |
+[0;32m<CREATE_COMPLETE[0m
+[1;34m
+ === Do scale up/down 
+[0m
+[1;34m
+ === execute scale down for VM-from-cinder-volume
+[0m
+[1;34m
+ === save the current state of VM-from-cinder-volume cpu
+[0m
+Thu Feb  5 16:07:53 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+
+Setting Expect Timeout to: 5 
+
+[0m
+vm-topology -s servers
+libnuma: Warning: Cannot parse sysfs meminfo (3)
+vm-topology: 2015-02-05T16:07:54.183295  options: show:['servers']
+
+SERVERS (nova view):  Legend: cpulist = [cpu_id[i], ...], S = siblings, R = reserved
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant  | ID                                   | instance_name     | name                  | host      | vm_state | task_state | power_state | server_group | flavor  | pinned | shared_vcpu | vcpus | memory | numanode | cpulist | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant1 | 6145f1cf-2159-4a04-bf62-1026d18f20cd | instance-00000074 | VM-from-cinder-volume | compute-1 | active   | None       | Running     | -            | vcpu5-2 | pinned |        None | 2,5,5 |    512 |        0 | 3-7     |    yes     |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+[0;32m<VM-from-cinder-volume[0m
+Thu Feb  5 16:07:55 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:min_cpu=2
+[0m
+[0;32m
+Assigned Var:cur_cpu=5
+[0m
+[0;32m
+Assigned Var:max_cpu=5
+[0m
+[1;34m
+ === scale down VM-from-cinder-volume cpu to the minimum value:2
+[0m
+[0;32m
+While: expr { "2" < "5" } |result=TRUE
+[0m
+[0;32m
+
+Setting Expect Timeout to: 10 
+
+[0m
+nova scale VM-from-cinder-volume cpu down
+[0;33mWarning:Prompt Timed Out![0m
+echo $?
+Thu Feb  5 16:08:07 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ echo $?
+0
+[0;32m<
+0[0m
+[0;32m
+While: expr { "2" < "4" } |result=TRUE
+[0m
+Thu Feb  5 16:08:07 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+
+Setting Expect Timeout to: 10 
+
+[0m
+nova scale VM-from-cinder-volume cpu down
+Thu Feb  5 16:08:11 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ echo $?
+0
+Thu Feb  5 16:08:11 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m<
+0[0m
+[0;32m
+While: expr { "2" < "3" } |result=TRUE
+[0m
+[0;32m
+
+Setting Expect Timeout to: 10 
+
+[0m
+nova scale VM-from-cinder-volume cpu down
+Thu Feb  5 16:08:14 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ echo $?
+0
+Thu Feb  5 16:08:14 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m<
+0[0m
+[0;32m
+While: expr { "2" < "2" } |result=FALSE
+[0m
+[1;34m
+ === check if VM-from-cinder-volume current cpu value reached minimum cpu value:2
+[0m
+nova show VM-from-cinder-volume
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                            |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                           |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                             |
+| OS-EXT-STS:power_state               | 1                                                                                                                                |
+| OS-EXT-STS:task_state                | -                                                                                                                                |
+| OS-EXT-STS:vm_state                  | active                                                                                                                           |
+| OS-SRV-USG:launched_at               | 2015-02-05T16:07:39.359925                                                                                                       |
+| OS-SRV-USG:terminated_at             | -                                                                                                                                |
+| accessIPv4                           |                                                                                                                                  |
+| accessIPv6                           |                                                                                                                                  |
+| config_drive                         |                                                                                                                                  |
+| created                              | 2015-02-05T16:07:28Z                                                                                                             |
+| extended                             | {"cpuset": 24, "numanode": 0, "siblings_cpuset": null}                                                                           |
+| flavor                               | vcpu5-2 (db9b37f5-cba5-1985-a264-a6c1375a4ff7)                                                                                   |
+| hostId                               | 1ea8da9884e6179694739654aaa506b2817ea351d58559c80c37d716                                                                         |
+| id                                   | 6145f1cf-2159-4a04-bf62-1026d18f20cd                                                                                             |
+| image                                | Attempt to boot from volume - no image supplied                                                                                  |
+| key_name                             | keypair-tenant1                                                                                                                  |
+| metadata                             | {}                                                                                                                               |
+| name                                 | VM-from-cinder-volume                                                                                                            |
+| nics                                 | {"nic1": {"vif_model": "virtio", "port_id": "6ddba526-cfab-40eb-b557-656bf8812f0e", "network": "tenant1-mgmt-net", "mtu": 1500}} |
+|                                      | {"nic2": {"vif_model": "virtio", "port_id": "0c4b470e-45b9-41d1-9dd3-90380a7a8a8f", "network": "tenant1-net0", "mtu": 1500}}     |
+| os-extended-volumes:volumes_attached | [{"id": "4ae74f2e-1670-4a41-af1d-fff89e943262"}]                                                                                 |
+| pinned                               | True                                                                                                                             |
+| progress                             | 0                                                                                                                                |
+| server_group                         |                                                                                                                                  |
+| status                               | ACTIVE                                                                                                                           |
+| tenant1-mgmt-net network             | 192.168.109.23                                                                                                                   |
+| tenant1-net0 network                 | 172.16.0.39                                                                                                                      |
+| tenant_id                            | a4e3a58f85e344c9b238f99045ee9e4e                                                                                                 |
+| updated                              | 2015-02-05T16:08:13Z                                                                                                             |
+| user_id                              | 49be897e674a4456af937371ecfa936d                                                                                                 |
+| vcpus (min/cur/max)                  | [2, 2, 5]                                                                                                                        |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+[0;32m<min/cur/max[0m
+Thu Feb  5 16:08:16 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:min_cpu=2
+[0m
+[0;32m
+Assigned Var:cur_cpu=2
+[0m
+[0;32m
+Assigned Var:max_cpu=5
+[0m
+[0;32m
+If: expr { "2" != "2" } |then   [|result=FALSE
+[0m
+[1;34m
+ === VM-from-cinder-volume scale down should fail beyond minimum limit: 2
+[0m
+vm-topology -s servers
+libnuma: Warning: Cannot parse sysfs meminfo (3)
+vm-topology: 2015-02-05T16:08:16.864854  options: show:['servers']
+
+SERVERS (nova view):  Legend: cpulist = [cpu_id[i], ...], S = siblings, R = reserved
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant  | ID                                   | instance_name     | name                  | host      | vm_state | task_state | power_state | server_group | flavor  | pinned | shared_vcpu | vcpus | memory | numanode | cpulist | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant1 | 6145f1cf-2159-4a04-bf62-1026d18f20cd | instance-00000074 | VM-from-cinder-volume | compute-1 | active   | None       | Running     | -            | vcpu5-2 | pinned |        None | 2,2,5 |    512 |        0 | 3-4     |    yes     |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+Thu Feb  5 16:08:18 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova scale VM-from-cinder-volume cpu down
+ERROR (BadRequest): When scaling, cannot scale beyond limits! (HTTP 400) (Request-ID: req-ea5955e4-fc90-4b50-8a67-7ead0562920a)
+Thu Feb  5 16:08:19 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+
+Setting Expect Timeout to: 25 
+
+[0m
+echo $?
+1
+Thu Feb  5 16:08:19 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m<
+1[0m
+[1;34m
+ === scale down of VM-from-cinder-volume completed
+[0m
+[1;34m
+ === scale up VM-from-cinder-volume cpu to the maximum value:5
+[0m
+[1;34m
+ === save the current state of VM-from-cinder-volume cpu
+[0m
+vm-topology -s servers
+libnuma: Warning: Cannot parse sysfs meminfo (3)
+vm-topology: 2015-02-05T16:08:20.176852  options: show:['servers']
+
+SERVERS (nova view):  Legend: cpulist = [cpu_id[i], ...], S = siblings, R = reserved
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant  | ID                                   | instance_name     | name                  | host      | vm_state | task_state | power_state | server_group | flavor  | pinned | shared_vcpu | vcpus | memory | numanode | cpulist | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant1 | 6145f1cf-2159-4a04-bf62-1026d18f20cd | instance-00000074 | VM-from-cinder-volume | compute-1 | active   | None       | Running     | -            | vcpu5-2 | pinned |        None | 2,2,5 |    512 |        0 | 3-4     |    yes     |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+[0;32m<VM-from-cinder-volume[0m
+Thu Feb  5 16:08:21 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:min_cpu=2
+[0m
+[0;32m
+Assigned Var:cur_cpu=2
+[0m
+[0;32m
+Assigned Var:max_cpu=5
+[0m
+[1;34m
+ === scale up cpu to the maximum value:5
+[0m
+[0;32m
+While: expr { "2" < "5" } |result=TRUE
+[0m
+[0;32m
+
+Setting Expect Timeout to: 10 
+
+[0m
+nova scale VM-from-cinder-volume cpu up
+Thu Feb  5 16:08:24 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ echo $?
+0
+Thu Feb  5 16:08:24 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m<
+0[0m
+[0;32m
+While: expr { "3" < "5" } |result=TRUE
+[0m
+[0;32m
+
+Setting Expect Timeout to: 10 
+
+[0m
+nova scale VM-from-cinder-volume cpu up
+Thu Feb  5 16:08:28 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ echo $?
+0
+Thu Feb  5 16:08:28 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m<
+0[0m
+[0;32m
+While: expr { "4" < "5" } |result=TRUE
+[0m
+[0;32m
+
+Setting Expect Timeout to: 10 
+
+[0m
+nova scale VM-from-cinder-volume cpu up
+Thu Feb  5 16:08:31 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ echo $?
+0
+Thu Feb  5 16:08:31 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m<
+0[0m
+[0;32m
+While: expr { "5" < "5" } |result=FALSE
+[0m
+[1;34m
+ === check if VM-from-cinder-volume current cpu value reached max cpu value:5
+[0m
+nova show VM-from-cinder-volume
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                            |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                           |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                             |
+| OS-EXT-STS:power_state               | 1                                                                                                                                |
+| OS-EXT-STS:task_state                | -                                                                                                                                |
+| OS-EXT-STS:vm_state                  | active                                                                                                                           |
+| OS-SRV-USG:launched_at               | 2015-02-05T16:07:39.359925                                                                                                       |
+| OS-SRV-USG:terminated_at             | -                                                                                                                                |
+| accessIPv4                           |                                                                                                                                  |
+| accessIPv6                           |                                                                                                                                  |
+| config_drive                         |                                                                                                                                  |
+| created                              | 2015-02-05T16:07:28Z                                                                                                             |
+| extended                             | {"cpuset": 248, "numanode": 0, "siblings_cpuset": null}                                                                          |
+| flavor                               | vcpu5-2 (db9b37f5-cba5-1985-a264-a6c1375a4ff7)                                                                                   |
+| hostId                               | 1ea8da9884e6179694739654aaa506b2817ea351d58559c80c37d716                                                                         |
+| id                                   | 6145f1cf-2159-4a04-bf62-1026d18f20cd                                                                                             |
+| image                                | Attempt to boot from volume - no image supplied                                                                                  |
+| key_name                             | keypair-tenant1                                                                                                                  |
+| metadata                             | {}                                                                                                                               |
+| name                                 | VM-from-cinder-volume                                                                                                            |
+| nics                                 | {"nic1": {"vif_model": "virtio", "port_id": "6ddba526-cfab-40eb-b557-656bf8812f0e", "network": "tenant1-mgmt-net", "mtu": 1500}} |
+|                                      | {"nic2": {"vif_model": "virtio", "port_id": "0c4b470e-45b9-41d1-9dd3-90380a7a8a8f", "network": "tenant1-net0", "mtu": 1500}}     |
+| os-extended-volumes:volumes_attached | [{"id": "4ae74f2e-1670-4a41-af1d-fff89e943262"}]                                                                                 |
+| pinned                               | True                                                                                                                             |
+| progress                             | 0                                                                                                                                |
+| server_group                         |                                                                                                                                  |
+| status                               | ACTIVE                                                                                                                           |
+| tenant1-mgmt-net network             | 192.168.109.23                                                                                                                   |
+| tenant1-net0 network                 | 172.16.0.39                                                                                                                      |
+| tenant_id                            | a4e3a58f85e344c9b238f99045ee9e4e                                                                                                 |
+| updated                              | 2015-02-05T16:08:30Z                                                                                                             |
+| user_id                              | 49be897e674a4456af937371ecfa936d                                                                                                 |
+| vcpus (min/cur/max)                  | [2, 5, 5]                                                                                                                        |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+[0;32m<min/cur/max[0m
+Thu Feb  5 16:08:33 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:min_cpu=2
+[0m
+[0;32m
+Assigned Var:cur_cpu=5
+[0m
+[0;32m
+Assigned Var:max_cpu=5
+[0m
+[0;32m
+If: expr { "5" != "5" } |then   [|result=FALSE
+[0m
+[1;34m
+ === VM-from-cinder-volume scale up should fail beyond max limit: 5
+[0m
+vm-topology -s servers
+libnuma: Warning: Cannot parse sysfs meminfo (3)
+vm-topology: 2015-02-05T16:08:33.676920  options: show:['servers']
+
+SERVERS (nova view):  Legend: cpulist = [cpu_id[i], ...], S = siblings, R = reserved
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant  | ID                                   | instance_name     | name                  | host      | vm_state | task_state | power_state | server_group | flavor  | pinned | shared_vcpu | vcpus | memory | numanode | cpulist | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant1 | 6145f1cf-2159-4a04-bf62-1026d18f20cd | instance-00000074 | VM-from-cinder-volume | compute-1 | active   | None       | Running     | -            | vcpu5-2 | pinned |        None | 2,5,5 |    512 |        0 | 3-7     |    yes     |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+Thu Feb  5 16:08:34 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova scale VM-from-cinder-volume cpu up
+ERROR (BadRequest): When scaling, cannot scale beyond limits! (HTTP 400) (Request-ID: req-e236464e-dd54-4b40-a872-599b22b45433)
+Thu Feb  5 16:08:36 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+
+Setting Expect Timeout to: 25 
+
+[0m
+echo $?
+1
+Thu Feb  5 16:08:36 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m<
+1[0m
+[1;34m
+ === scale up of VM-from-cinder-volume completed
+[0m
+[1;34m
+ === identify active controller
+[0m
+system sda-list | grep controller-services
+| 0114d496-613a-4057-af74-e63d818d6a20 | controller-services | controller-1 | standby |        |
+| abcaaf8a-ae11-4d25-82a4-11934a1310f5 | controller-services | controller-0 | active  |        |
+Thu Feb  5 16:08:37 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:act_controller=controller-0
+[0m
+[1;34m
+ === get floating IP
+[0m
+/sbin/ip addr | grep secondary | grep eth0
+    inet 128.224.150.189/23 brd 128.224.151.255 scope global secondary eth0
+Thu Feb  5 16:08:37 UTC 2015
+[wrsroot@controller-0 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:float_ip=128.224.150.189
+[0m
+[1;34m
+ === become admin
+[0m
+source /etc/nova/openrc
+Thu Feb  5 16:08:37 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [1;34m
+ === identify active controller
+[0m
+system sda-list | grep controller-services
+| 0114d496-613a-4057-af74-e63d818d6a20 | controller-services | controller-1 | standby |        |
+| abcaaf8a-ae11-4d25-82a4-11934a1310f5 | controller-services | controller-0 | active  |        |
+Thu Feb  5 16:08:38 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m
+Assigned Var:act_controller=controller-0
+[0m
+[1;34m
+ === swact controllers
+[0m
+system host-swact controller-0
++-----------------+--------------------------------------+
+| Property        | Value                                |
++-----------------+--------------------------------------+
+| action          | none                                 |
+| administrative  | unlocked                             |
+| availability    | available                            |
+| bm_ip           |                                      |
+| bm_mac          | None                                 |
+| bm_type         | None                                 |
+| bm_username     | None                                 |
+| capabilities    | {}                                   |
+| created_at      | 2015-02-04T02:28:21.228385+00:00     |
+| cstatus         | None                                 |
+| hostname        | controller-0                         |
+| iconfig_applied | None                                 |
+| iconfig_fini    | None                                 |
+| iconfig_target  | None                                 |
+| id              | 1                                    |
+| invprovision    | provisioned                          |
+| location        | {}                                   |
+| mgmt_ip         | 192.168.204.3                        |
+| mgmt_mac        | 2c:44:fd:83:b9:11                    |
+| operational     | enabled                              |
+| personality     | controller                           |
+| reserved        | False                                |
+| serialid        | None                                 |
+| task            |                                      |
+| updated_at      | 2015-02-05T16:07:52.798001+00:00     |
+| uptime          | 136215                               |
+| uuid            | 4bcab185-ac6b-438f-a897-d434d12703ca |
++-----------------+--------------------------------------+
+Thu Feb  5 16:08:39 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ 
+Thu Feb  5 16:08:39 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m
+
+Setting Expect Timeout to: 30 
+
+[0m
+ping -c 30 -W 30 128.224.150.189
+PING 128.224.150.189 (128.224.150.189) 56(84) bytes of data.
+64 bytes from 128.224.150.189: icmp_req=1 ttl=64 time=0.068 ms
+[0;32m<icmp_req=1 ttl=64[0m
+64 bytes from 128.224.150.189: icmp_req=2 ttl=64 time=0.050 ms
+64 bytes from 128.224.150.189: icmp_req=3 ttl=64 time=0.055 ms
+64 bytes from 128.224.150.189: icmp_req=4 ttl=64 time=0.054 ms
+64 bytes from 128.224.150.189: icmp_req=5 ttl=64 time=0.047 ms
+64 bytes from 128.224.150.189: icmp_req=6 ttl=64 time=0.054 ms
+64 bytes from 128.224.150.189: icmp_req=7 ttl=64 time=0.052 ms
+64 bytes from 128.224.150.189: icmp_req=8 ttl=64 time=0.052 ms
+64 bytes from 128.224.150.189: icmp_req=9 ttl=64 time=0.053 ms
+From 128.224.150.199 icmp_seq=10 Destination Host Unreachable
+From 128.224.150.199 icmp_seq=11 Destination Host Unreachable
+From 128.224.150.199 icmp_seq=12 Destination Host Unreachable
+From 128.224.150.199 icmp_seq=13 Destination Host Unreachable
+[0;32m<Destination Host Unreachable[0m
+From 128.224.150.199 icmp_seq=14 Destination Host Unreachable
+From 128.224.150.199 icmp_seq=15 Destination Host Unreachable
+From 128.224.150.199 icmp_seq=16 Destination Host Unreachable
+From 128.224.150.199 icmp_seq=17 Destination Host Unreachable
+From 128.224.150.199 icmp_seq=18 Destination Host Unreachable
+From 128.224.150.199 icmp_seq=19 Destination Host Unreachable
+From 128.224.150.199 icmp_seq=20 Destination Host Unreachable
+From 128.224.150.199 icmp_seq=21 Destination Host Unreachable
+From 128.224.150.199 icmp_seq=22 Destination Host Unreachable
+64 bytes from 128.224.150.189: icmp_req=23 ttl=64 time=1954 ms
+64 bytes from 128.224.150.189: icmp_req=24 ttl=64 time=954 ms
+[0;32m<icmp_req=23 ttl=64[0m
+sending ^C
+
+^C
+--- 128.224.150.189 ping statistics ---
+24 packets transmitted, 11 received, +13 errors, 54% packet loss, time 22997ms
+rtt min/avg/max/mdev = 0.047/264.478/1954.046/600.029 ms, pipe 4
+Thu Feb  5 16:09:03 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m
+
+Setting Expect Timeout to: 5 
+
+[0m
+[0;32m
+If: expr { "controller-0" == "controller-0" } |then   $act_controller=controller-1|else $act_controller=controller-0|result=TRUE
+[0m
+
+Thu Feb  5 16:09:03 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [1;34m
+ === log into other controller and swact back
+[0m
+ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no wrsroot@controller-1
+Warning: Permanently added 'controller-1,192.168.204.4' (ECDSA) to the list of known hosts.
+Wind River Linux 5.0.1.0
+------------------------------------------------------------------------
+W A R N I N G *** W A R N I N G *** W A R N I N G *** W A R N I N G *** 
+------------------------------------------------------------------------
+THIS IS A PRIVATE COMPUTER SYSTEM.
+This computer system including all related equipment, network devices
+(specifically including Internet access), are provided only for authorized use.
+All computer systems may be monitored for all lawful purposes, including to
+ensure that their use is authorized, for management of the system, to
+facilitate protection against unauthorized access, and to verify security
+procedures, survivability and operational security. Monitoring includes active
+attacks by authorized personnel and their entities to test or verify the
+security of the system. During monitoring, information may be examined,
+recorded, copied and used for authorized purposes. All information including
+personal information, placed on or sent over this system may be monitored. Uses
+of this system, authorized or unauthorized, constitutes consent to monitoring
+of this system. Unauthorized use may subject you to criminal prosecution.
+Evidence of any such unauthorized use collected during monitoring may be used
+for administrative, criminal or other adverse action. Use of this system
+constitutes consent to monitoring for these purposes.
+
+Last login: Thu Feb  5 14:29:58 2015
+[H[2J
+WARNING: Unauthorized access to this system is forbidden and will be
+prosecuted by law. By accessing this system, you agree that your
+actions may be monitored if unauthorized usage is suspected.
+
+
+====================================================================
+         SYSTEM: yow-cgcs-hp380-1_4
+====================================================================
+
+[0;32m<SYSTEM:[0m
+li69nux
+Thu Feb  5 16:09:04 UTC 2015
+controller-1:~$ li69nux
+-sh: li69nux: command not found
+Thu Feb  5 16:09:04 UTC 2015
+controller-1:~$ export TMOUT=0
+Thu Feb  5 16:09:04 UTC 2015
+controller-1:~$ [1;34m
+ === switch to tenant mode
+[0m
+[1;34m
+ === Do scale up/down 
+[0m
+[1;34m
+ === execute scale down for VM-from-cinder-volume
+[0m
+[1;34m
+ === save the current state of VM-from-cinder-volume cpu
+[0m
+source /home/wrsroot/openrc.tenant1
+Thu Feb  5 16:09:35 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m
+
+Setting Expect Timeout to: 50 
+
+[0m
+vm-topology -s servers
+libnuma: Warning: Cannot parse sysfs meminfo (3)
+vm-topology: 2015-02-05T16:10:05.399893  options: show:['servers']
+
+SERVERS (nova view):  Legend: cpulist = [cpu_id[i], ...], S = siblings, R = reserved
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant  | ID                                   | instance_name     | name                  | host      | vm_state | task_state | power_state | server_group | flavor  | pinned | shared_vcpu | vcpus | memory | numanode | cpulist | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant1 | 6145f1cf-2159-4a04-bf62-1026d18f20cd | instance-00000074 | VM-from-cinder-volume | compute-1 | active   | None       | Running     | -            | vcpu5-2 | pinned |        None | 2,5,5 |    512 |        0 | 3-7     |    yes     |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+[0;32m<VM-from-cinder-volume[0m
+Thu Feb  5 16:10:06 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:min_cpu=2
+[0m
+[0;32m
+Assigned Var:cur_cpu=5
+[0m
+[0;32m
+Assigned Var:max_cpu=5
+[0m
+[1;34m
+ === scale down VM-from-cinder-volume cpu to the minimum value:2
+[0m
+[0;32m
+While: expr { "2" < "5" } |result=TRUE
+[0m
+[0;32m
+
+Setting Expect Timeout to: 10 
+
+[0m
+nova scale VM-from-cinder-volume cpu down
+Thu Feb  5 16:10:09 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ echo $?
+0
+Thu Feb  5 16:10:09 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m<
+0[0m
+[0;32m
+While: expr { "2" < "4" } |result=TRUE
+[0m
+[0;32m
+
+Setting Expect Timeout to: 10 
+
+[0m
+nova scale VM-from-cinder-volume cpu down
+Thu Feb  5 16:10:13 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ echo $?
+0
+Thu Feb  5 16:10:13 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m<
+0[0m
+[0;32m
+While: expr { "2" < "3" } |result=TRUE
+[0m
+[0;32m
+
+Setting Expect Timeout to: 10 
+
+[0m
+nova scale VM-from-cinder-volume cpu down
+Thu Feb  5 16:10:16 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ echo $?
+0
+Thu Feb  5 16:10:16 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m<
+0[0m
+[0;32m
+While: expr { "2" < "2" } |result=FALSE
+[0m
+[1;34m
+ === check if VM-from-cinder-volume current cpu value reached minimum cpu value:2
+[0m
+nova show VM-from-cinder-volume
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                            |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                           |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                             |
+| OS-EXT-STS:power_state               | 1                                                                                                                                |
+| OS-EXT-STS:task_state                | -                                                                                                                                |
+| OS-EXT-STS:vm_state                  | active                                                                                                                           |
+| OS-SRV-USG:launched_at               | 2015-02-05T16:07:39.359925                                                                                                       |
+| OS-SRV-USG:terminated_at             | -                                                                                                                                |
+| accessIPv4                           |                                                                                                                                  |
+| accessIPv6                           |                                                                                                                                  |
+| config_drive                         |                                                                                                                                  |
+| created                              | 2015-02-05T16:07:28Z                                                                                                             |
+| extended                             | {"cpuset": 24, "numanode": 0, "siblings_cpuset": null}                                                                           |
+| flavor                               | vcpu5-2 (db9b37f5-cba5-1985-a264-a6c1375a4ff7)                                                                                   |
+| hostId                               | 1ea8da9884e6179694739654aaa506b2817ea351d58559c80c37d716                                                                         |
+| id                                   | 6145f1cf-2159-4a04-bf62-1026d18f20cd                                                                                             |
+| image                                | Attempt to boot from volume - no image supplied                                                                                  |
+| key_name                             | keypair-tenant1                                                                                                                  |
+| metadata                             | {}                                                                                                                               |
+| name                                 | VM-from-cinder-volume                                                                                                            |
+| nics                                 | {"nic1": {"vif_model": "virtio", "port_id": "6ddba526-cfab-40eb-b557-656bf8812f0e", "network": "tenant1-mgmt-net", "mtu": 1500}} |
+|                                      | {"nic2": {"vif_model": "virtio", "port_id": "0c4b470e-45b9-41d1-9dd3-90380a7a8a8f", "network": "tenant1-net0", "mtu": 1500}}     |
+| os-extended-volumes:volumes_attached | [{"id": "4ae74f2e-1670-4a41-af1d-fff89e943262"}]                                                                                 |
+| pinned                               | True                                                                                                                             |
+| progress                             | 0                                                                                                                                |
+| server_group                         |                                                                                                                                  |
+| status                               | ACTIVE                                                                                                                           |
+| tenant1-mgmt-net network             | 192.168.109.23                                                                                                                   |
+| tenant1-net0 network                 | 172.16.0.39                                                                                                                      |
+| tenant_id                            | a4e3a58f85e344c9b238f99045ee9e4e                                                                                                 |
+| updated                              | 2015-02-05T16:10:15Z                                                                                                             |
+| user_id                              | 49be897e674a4456af937371ecfa936d                                                                                                 |
+| vcpus (min/cur/max)                  | [2, 2, 5]                                                                                                                        |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+[0;32m<min/cur/max[0m
+Thu Feb  5 16:10:17 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:min_cpu=2
+[0m
+[0;32m
+Assigned Var:cur_cpu=2
+[0m
+[0;32m
+Assigned Var:max_cpu=5
+[0m
+[0;32m
+If: expr { "2" != "2" } |then   [|result=FALSE
+[0m
+[1;34m
+ === VM-from-cinder-volume scale down should fail beyond minimum limit: 2
+[0m
+vm-topology -s servers
+libnuma: Warning: Cannot parse sysfs meminfo (3)
+vm-topology: 2015-02-05T16:10:17.694068  options: show:['servers']
+
+SERVERS (nova view):  Legend: cpulist = [cpu_id[i], ...], S = siblings, R = reserved
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant  | ID                                   | instance_name     | name                  | host      | vm_state | task_state | power_state | server_group | flavor  | pinned | shared_vcpu | vcpus | memory | numanode | cpulist | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant1 | 6145f1cf-2159-4a04-bf62-1026d18f20cd | instance-00000074 | VM-from-cinder-volume | compute-1 | active   | None       | Running     | -            | vcpu5-2 | pinned |        None | 2,2,5 |    512 |        0 | 3-4     |    yes     |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+Thu Feb  5 16:10:18 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ nova scale VM-from-cinder-volume cpu down
+ERROR (BadRequest): When scaling, cannot scale beyond limits! (HTTP 400) (Request-ID: req-36dc291a-611d-4791-ab68-603ac67b9953)
+Thu Feb  5 16:10:19 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m
+
+Setting Expect Timeout to: 25 
+
+[0m
+echo $?
+1
+Thu Feb  5 16:10:19 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m<
+1[0m
+[1;34m
+ === scale down of VM-from-cinder-volume completed
+[0m
+[1;34m
+ === scale up VM-from-cinder-volume cpu to the maximum value:5
+[0m
+[1;34m
+ === save the current state of VM-from-cinder-volume cpu
+[0m
+vm-topology -s servers
+libnuma: Warning: Cannot parse sysfs meminfo (3)
+vm-topology: 2015-02-05T16:10:20.204516  options: show:['servers']
+
+SERVERS (nova view):  Legend: cpulist = [cpu_id[i], ...], S = siblings, R = reserved
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant  | ID                                   | instance_name     | name                  | host      | vm_state | task_state | power_state | server_group | flavor  | pinned | shared_vcpu | vcpus | memory | numanode | cpulist | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant1 | 6145f1cf-2159-4a04-bf62-1026d18f20cd | instance-00000074 | VM-from-cinder-volume | compute-1 | active   | None       | Running     | -            | vcpu5-2 | pinned |        None | 2,2,5 |    512 |        0 | 3-4     |    yes     |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+[0;32m<VM-from-cinder-volume[0m
+Thu Feb  5 16:10:20 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:min_cpu=2
+[0m
+[0;32m
+Assigned Var:cur_cpu=2
+[0m
+[0;32m
+Assigned Var:max_cpu=5
+[0m
+[1;34m
+=== scale up cpu to the maximum value:5
+[0m
+[0;32m
+While: expr { "2" < "5" } |result=TRUE
+[0m
+[0;32m
+
+Setting Expect Timeout to: 50 
+
+[0m
+nova scale VM-from-cinder-volume cpu up
+Thu Feb  5 16:10:23 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ echo $?
+0
+Thu Feb  5 16:10:23 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m<
+0[0m
+[0;32m
+While: expr { "3" < "5" } |result=TRUE
+[0m
+[0;32m
+
+Setting Expect Timeout to: 50 
+
+[0m
+nova scale VM-from-cinder-volume cpu up
+Thu Feb  5 16:10:25 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ echo $?
+0
+Thu Feb  5 16:10:25 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m<
+0[0m
+[0;32m
+While: expr { "4" < "5" } |result=TRUE
+[0m
+[0;32m
+
+Setting Expect Timeout to: 50 
+
+[0m
+nova scale VM-from-cinder-volume cpu up
+Thu Feb  5 16:10:28 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ echo $?
+0
+Thu Feb  5 16:10:28 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m<
+0[0m
+[0;32m
+While: expr { "5" < "5" } |result=FALSE
+[0m
+[1;34m
+ === check if VM-from-cinder-volume current cpu value reached max cpu value:5
+[0m
+nova show VM-from-cinder-volume
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+| Property                             | Value                                                                                                                            |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                                                                                                           |
+| OS-EXT-AZ:availability_zone          | nova                                                                                                                             |
+| OS-EXT-STS:power_state               | 1                                                                                                                                |
+| OS-EXT-STS:task_state                | -                                                                                                                                |
+| OS-EXT-STS:vm_state                  | active                                                                                                                           |
+| OS-SRV-USG:launched_at               | 2015-02-05T16:07:39.359925                                                                                                       |
+| OS-SRV-USG:terminated_at             | -                                                                                                                                |
+| accessIPv4                           |                                                                                                                                  |
+| accessIPv6                           |                                                                                                                                  |
+| config_drive                         |                                                                                                                                  |
+| created                              | 2015-02-05T16:07:28Z                                                                                                             |
+| extended                             | {"cpuset": 248, "numanode": 0, "siblings_cpuset": null}                                                                          |
+| flavor                               | vcpu5-2 (db9b37f5-cba5-1985-a264-a6c1375a4ff7)                                                                                   |
+| hostId                               | 1ea8da9884e6179694739654aaa506b2817ea351d58559c80c37d716                                                                         |
+| id                                   | 6145f1cf-2159-4a04-bf62-1026d18f20cd                                                                                             |
+| image                                | Attempt to boot from volume - no image supplied                                                                                  |
+| key_name                             | keypair-tenant1                                                                                                                  |
+| metadata                             | {}                                                                                                                               |
+| name                                 | VM-from-cinder-volume                                                                                                            |
+| nics                                 | {"nic1": {"vif_model": "virtio", "port_id": "6ddba526-cfab-40eb-b557-656bf8812f0e", "network": "tenant1-mgmt-net", "mtu": 1500}} |
+|                                      | {"nic2": {"vif_model": "virtio", "port_id": "0c4b470e-45b9-41d1-9dd3-90380a7a8a8f", "network": "tenant1-net0", "mtu": 1500}}     |
+| os-extended-volumes:volumes_attached | [{"id": "4ae74f2e-1670-4a41-af1d-fff89e943262"}]                                                                                 |
+| pinned                               | True                                                                                                                             |
+| progress                             | 0                                                                                                                                |
+| server_group                         |                                                                                                                                  |
+| status                               | ACTIVE                                                                                                                           |
+| tenant1-mgmt-net network             | 192.168.109.23                                                                                                                   |
+| tenant1-net0 network                 | 172.16.0.39                                                                                                                      |
+| tenant_id                            | a4e3a58f85e344c9b238f99045ee9e4e                                                                                                 |
+| updated                              | 2015-02-05T16:10:27Z                                                                                                             |
+| user_id                              | 49be897e674a4456af937371ecfa936d                                                                                                 |
+| vcpus (min/cur/max)                  | [2, 5, 5]                                                                                                                        |
++--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+[0;32m<min/cur/max[0m
+Thu Feb  5 16:10:29 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:min_cpu=2
+[0m
+[0;32m
+Assigned Var:cur_cpu=5
+[0m
+[0;32m
+Assigned Var:max_cpu=5
+[0m
+[0;32m
+If: expr { "5" != "5" } |then   [|result=FALSE
+[0m
+[1;34m
+ === VM-from-cinder-volume scale up should fail beyond max limit: 5
+[0m
+vm-topology -s servers
+libnuma: Warning: Cannot parse sysfs meminfo (3)
+vm-topology: 2015-02-05T16:10:29.719118  options: show:['servers']
+
+SERVERS (nova view):  Legend: cpulist = [cpu_id[i], ...], S = siblings, R = reserved
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant  | ID                                   | instance_name     | name                  | host      | vm_state | task_state | power_state | server_group | flavor  | pinned | shared_vcpu | vcpus | memory | numanode | cpulist | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+| tenant1 | 6145f1cf-2159-4a04-bf62-1026d18f20cd | instance-00000074 | VM-from-cinder-volume | compute-1 | active   | None       | Running     | -            | vcpu5-2 | pinned |        None | 2,5,5 |    512 |        0 | 3-7     |    yes     |
++---------+--------------------------------------+-------------------+-----------------------+-----------+----------+------------+-------------+--------------+---------+--------+-------------+-------+--------+----------+---------+------------+
+Thu Feb  5 16:10:30 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ nova scale VM-from-cinder-volume cpu up
+ERROR (BadRequest): When scaling, cannot scale beyond limits! (HTTP 400) (Request-ID: req-26f387a2-9907-4239-861c-3192d2292dc3)
+Thu Feb  5 16:10:31 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m
+
+Setting Expect Timeout to: 25 
+
+[0m
+echo $?
+1
+Thu Feb  5 16:10:31 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m<
+1[0m
+[1;34m
+ === scale up of VM-from-cinder-volume completed
+[0m
+heat stack-delete CINDERSTACK
++--------------------------------------+-------------+-----------------+----------------------+
+| id                                   | stack_name  | stack_status    | creation_time        |
++--------------------------------------+-------------+-----------------+----------------------+
+| 4defd84c-18f4-4c57-aa58-1424e4f1d55a | CINDERSTACK | CREATE_COMPLETE | 2015-02-05T16:07:08Z |
++--------------------------------------+-------------+-----------------+----------------------+
+Thu Feb  5 16:10:31 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m
+
+Setting Expect Timeout to: 60 
+
+[0m
+heat stack-list
++----+------------+--------------+---------------+
+| id | stack_name | stack_status | creation_time |
++----+------------+--------------+---------------+
++----+------------+--------------+---------------+
+Thu Feb  5 16:11:16 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [1;34m
+ === identify active controller
+[0m
+system sda-list | grep controller-services
+| 939f4bf5-038f-4b16-a164-59a3af542764 | controller-services | controller-0 | standby |        |
+| ed92d1b4-f6e6-432e-ace2-189b60f033be | controller-services | controller-1 | active  |        |
+Thu Feb  5 16:11:17 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:act_controller=controller-1
+[0m
+[1;34m
+ === get floating IP
+[0m
+/sbin/ip addr | grep secondary | grep eth0
+    inet 128.224.150.189/23 brd 128.224.151.255 scope global secondary eth0
+Thu Feb  5 16:11:17 UTC 2015
+[wrsroot@controller-1 ~(keystone_tenant1)]$ [0;32m
+Assigned Var:float_ip=128.224.150.189
+[0m
+[1;34m
+ === become admin
+[0m
+source /etc/nova/openrc
+Thu Feb  5 16:11:17 UTC 2015
+[wrsroot@controller-1 ~(keystone_admin)]$ [1;34m
+ === identify active controller
+[0m
+system sda-list | grep controller-services
+| 939f4bf5-038f-4b16-a164-59a3af542764 | controller-services | controller-0 | standby |        |
+| ed92d1b4-f6e6-432e-ace2-189b60f033be | controller-services | controller-1 | active  |        |
+Thu Feb  5 16:11:18 UTC 2015
+[wrsroot@controller-1 ~(keystone_admin)]$ [0;32m
+Assigned Var:act_controller=controller-1
+[0m
+[1;34m
+ === swact controllers
+[0m
+system host-swact controller-1
++-----------------+--------------------------------------+
+| Property        | Value                                |
++-----------------+--------------------------------------+
+| action          | none                                 |
+| administrative  | unlocked                             |
+| availability    | available                            |
+| bm_ip           | None                                 |
+| bm_mac          | None                                 |
+| bm_type         | None                                 |
+| bm_username     | None                                 |
+| capabilities    | {}                                   |
+| created_at      | 2015-02-04T02:37:52.738378+00:00     |
+| cstatus         |                                      |
+| hostname        | controller-1                         |
+| iconfig_applied | 7f81ccb1-3ee7-4f55-91ad-7489dc761be4 |
+| iconfig_fini    | None                                 |
+| iconfig_target  | 7f81ccb1-3ee7-4f55-91ad-7489dc761be4 |
+| id              | 2                                    |
+| invprovision    | provisioned                          |
+| location        | {}                                   |
+| mgmt_ip         | 192.168.204.4                        |
+| mgmt_mac        | 2c:44:fd:83:b6:ed                    |
+| operational     | enabled                              |
+| personality     | controller                           |
+| reserved        | False                                |
+| serialid        | None                                 |
+| task            |                                      |
+| updated_at      | 2015-02-05T16:09:23.411581+00:00     |
+| uptime          | 132630                               |
+| uuid            | e9abfb3a-8e2a-4233-a6db-0bc87cecc57f |
++-----------------+--------------------------------------+
+Thu Feb  5 16:11:18 UTC 2015
+[wrsroot@controller-1 ~(keystone_admin)]$ 
+Thu Feb  5 16:11:18 UTC 2015
+[wrsroot@controller-1 ~(keystone_admin)]$ [0;32m
+
+Setting Expect Timeout to: 30 
+
+[0m
+ping -c 30 -W 30 128.224.150.189
+PING 128.224.150.189 (128.224.150.189) 56(84) bytes of data.
+64 bytes from 128.224.150.189: icmp_req=1 ttl=64 time=0.028 ms
+[0;32m<icmp_req=1 ttl=64[0m
+64 bytes from 128.224.150.189: icmp_req=2 ttl=64 time=0.021 ms
+64 bytes from 128.224.150.189: icmp_req=3 ttl=64 time=0.024 ms
+64 bytes from 128.224.150.189: icmp_req=4 ttl=64 time=0.024 ms
+64 bytes from 128.224.150.189: icmp_req=5 ttl=64 time=0.020 ms
+64 bytes from 128.224.150.189: icmp_req=6 ttl=64 time=0.024 ms
+64 bytes from 128.224.150.189: icmp_req=7 ttl=64 time=0.023 ms
+64 bytes from 128.224.150.189: icmp_req=8 ttl=64 time=0.023 ms
+64 bytes from 128.224.150.189: icmp_req=9 ttl=64 time=0.023 ms
+64 bytes from 128.224.150.189: icmp_req=10 ttl=64 time=0.038 ms
+From 128.224.150.129 icmp_seq=11 Destination Host Unreachable
+From 128.224.150.129 icmp_seq=12 Destination Host Unreachable
+From 128.224.150.129 icmp_seq=13 Destination Host Unreachable
+[0;32m<Destination Host Unreachable[0m
+From 128.224.150.129 icmp_seq=14 Destination Host Unreachable
+From 128.224.150.129 icmp_seq=15 Destination Host Unreachable
+From 128.224.150.129 icmp_seq=16 Destination Host Unreachable
+From 128.224.150.129 icmp_seq=17 Destination Host Unreachable
+From 128.224.150.129 icmp_seq=18 Destination Host Unreachable
+From 128.224.150.129 icmp_seq=19 Destination Host Unreachable
+From 128.224.150.129 icmp_seq=20 Destination Host Unreachable
+From 128.224.150.129 icmp_seq=21 Destination Host Unreachable
+From 128.224.150.129 icmp_seq=22 Destination Host Unreachable
+From 128.224.150.129 icmp_seq=23 Destination Host Unreachable
+From 128.224.150.129 icmp_seq=24 Destination Host Unreachable
+From 128.224.150.129 icmp_seq=25 Destination Host Unreachable
+64 bytes from 128.224.150.189: icmp_req=26 ttl=64 time=0.267 ms
+[0;32m<icmp_req=26 ttl=64[0m
+sending ^C
+
+^C
+--- 128.224.150.189 ping statistics ---
+26 packets transmitted, 11 received, +15 errors, 57% packet loss, time 24999ms
+rtt min/avg/max/mdev = 0.020/0.046/0.267/0.070 ms, pipe 3
+Thu Feb  5 16:11:43 UTC 2015
+[wrsroot@controller-1 ~(keystone_admin)]$ [0;32m
+
+Setting Expect Timeout to: 5 
+
+[0m
+[0;32m
+If: expr { "controller-1" == "controller-0" } |then   $act_controller=controller-1|else $act_controller=controller-0|result=FALSE
+[0m
+
+Thu Feb  5 16:11:43 UTC 2015
+[wrsroot@controller-1 ~(keystone_admin)]$ [1;34m
+ === log into other controller and swact back
+[0m
+ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no wrsroot@controller-0
+Warning: Permanently added 'controller-0,192.168.204.3' (ECDSA) to the list of known hosts.
+Wind River Linux 5.0.1.0
+------------------------------------------------------------------------
+W A R N I N G *** W A R N I N G *** W A R N I N G *** W A R N I N G *** 
+------------------------------------------------------------------------
+THIS IS A PRIVATE COMPUTER SYSTEM.
+This computer system including all related equipment, network devices
+(specifically including Internet access), are provided only for authorized use.
+All computer systems may be monitored for all lawful purposes, including to
+ensure that their use is authorized, for management of the system, to
+facilitate protection against unauthorized access, and to verify security
+procedures, survivability and operational security. Monitoring includes active
+attacks by authorized personnel and their entities to test or verify the
+security of the system. During monitoring, information may be examined,
+recorded, copied and used for authorized purposes. All information including
+personal information, placed on or sent over this system may be monitored. Uses
+of this system, authorized or unauthorized, constitutes consent to monitoring
+of this system. Unauthorized use may subject you to criminal prosecution.
+Evidence of any such unauthorized use collected during monitoring may be used
+for administrative, criminal or other adverse action. Use of this system
+constitutes consent to monitoring for these purposes.
+
+Last login: Thu Feb  5 16:06:28 2015 from 128.224.144.162
+[H[2J
+WARNING: Unauthorized access to this system is forbidden and will be
+prosecuted by law. By accessing this system, you agree that your
+actions may be monitored if unauthorized usage is suspected.
+
+
+====================================================================
+         SYSTEM: yow-cgcs-hp380-1_4
+====================================================================
+
+[0;32m<SYSTEM:[0m
+li69nux
+Thu Feb  5 16:11:44 UTC 2015
+controller-0:~$ li69nux
+-sh: li69nux: command not found
+Thu Feb  5 16:11:44 UTC 2015
+controller-0:~$ [1;34m
+ === swact completed
+[0m
+export TMOUT=0
+Thu Feb  5 16:11:44 UTC 2015
+controller-0:~$ [1;34m
+ === become admin to clean up
+[0m
+[1;34m
+cleanup all setup created for this testcase
+[0m
+[1;34m
+ === delete the stack created
+[0m
+source /etc/nova/openrc
+Thu Feb  5 16:12:30 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [1;34m
+ === delete the flavor created 
+[0m
+nova flavor-list
++--------------------------------------+---------------------------------------+-----------+------+-----------+------+-------+-------------+-----------+-------------+
+| ID                                   | Name                                  | Memory_MB | Disk | Ephemeral | Swap | VCPUs | RXTX_Factor | Is_Public | VCPU_Model  |
++--------------------------------------+---------------------------------------+-----------+------+-----------+------+-------+-------------+-----------+-------------+
+| 1                                    | m1.tiny                               | 512       | 1    | 0         |      | 1     | 1.0         | True      | -           |
+| 100                                  | wrl5.dpdk.big                         | 4096      | 0    | 0         |      | 3     | 1.0         | True      | -           |
+| 101                                  | wrl5.dpdk.small                       | 512       | 0    | 0         |      | 2     | 1.0         | True      | -           |
+| 2                                    | m1.small                              | 2048      | 20   | 0         |      | 1     | 1.0         | True      | -           |
+| 200                                  | wrl5.dpdk.small.heartbeat             | 512       | 0    | 0         |      | 2     | 1.0         | True      | -           |
+| 201                                  | wrl5.dpdk.big.heartbeat               | 4096      | 0    | 0         |      | 3     | 1.0         | True      | -           |
+| 233                                  | wrl5.dpdk.big.heartbeat.pinToMgmtCore | 4096      | 0    | 0         |      | 3     | 1.0         | True      | -           |
+| 28aa6811-d4b8-41f5-994c-db017e81511d | small                                 | 512       | 1    | 0         |      | 1     | 1.0         | True      | -           |
+| 41a0c6b2-5ce1-4ff2-9d73-2a6201847cc0 | medium.dpdk                           | 512       | 1    | 0         |      | 2     | 1.0         | True      | SandyBridge |
+| 5f0d748b-1c8b-4a70-1985-4d57e25ac137 | vcpu4-1                               | 512       | 0    | 0         |      | 4     | 1.0         | True      | -           |
+| d3b37dcf-227b-419d-9385-7623f08b65fd | test_flavor_1431620018                | 1024      | 0    | 0         |      | 1     | 1.0         | True      | -           |
+| db9b37f5-cba5-1985-a264-a6c1375a4ff7 | vcpu5-2                               | 512       | 0    | 0         |      | 5     | 1.0         | True      | -           |
+| f345d0a0-54be-4ab6-a9db-ddcff6524bcb | small.float                           | 512       | 1    | 0         |      | 1     | 1.0         | True      | -           |
++--------------------------------------+---------------------------------------+-----------+------+-----------+------+-------+-------------+-----------+-------------+
+Thu Feb  5 16:12:31 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova flavor-delete vcpu4-1
++--------------------------------------+---------+-----------+------+-----------+------+-------+-------------+-----------+------------+
+| ID                                   | Name    | Memory_MB | Disk | Ephemeral | Swap | VCPUs | RXTX_Factor | Is_Public | VCPU_Model |
++--------------------------------------+---------+-----------+------+-----------+------+-------+-------------+-----------+------------+
+| 5f0d748b-1c8b-4a70-1985-4d57e25ac137 | vcpu4-1 | 512       | 0    | 0         |      | 4     | 1.0         | True      | -          |
++--------------------------------------+---------+-----------+------+-----------+------+-------+-------------+-----------+------------+
+Thu Feb  5 16:12:32 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova flavor-delete vcpu5-2
++--------------------------------------+---------+-----------+------+-----------+------+-------+-------------+-----------+------------+
+| ID                                   | Name    | Memory_MB | Disk | Ephemeral | Swap | VCPUs | RXTX_Factor | Is_Public | VCPU_Model |
++--------------------------------------+---------+-----------+------+-----------+------+-------+-------------+-----------+------------+
+| db9b37f5-cba5-1985-a264-a6c1375a4ff7 | vcpu5-2 | 512       | 0    | 0         |      | 5     | 1.0         | True      | -          |
++--------------------------------------+---------+-----------+------+-----------+------+-------+-------------+-----------+------------+
+Thu Feb  5 16:12:33 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ nova flavor-list
++--------------------------------------+---------------------------------------+-----------+------+-----------+------+-------+-------------+-----------+-------------+
+| ID                                   | Name                                  | Memory_MB | Disk | Ephemeral | Swap | VCPUs | RXTX_Factor | Is_Public | VCPU_Model  |
++--------------------------------------+---------------------------------------+-----------+------+-----------+------+-------+-------------+-----------+-------------+
+| 1                                    | m1.tiny                               | 512       | 1    | 0         |      | 1     | 1.0         | True      | -           |
+| 100                                  | wrl5.dpdk.big                         | 4096      | 0    | 0         |      | 3     | 1.0         | True      | -           |
+| 101                                  | wrl5.dpdk.small                       | 512       | 0    | 0         |      | 2     | 1.0         | True      | -           |
+| 2                                    | m1.small                              | 2048      | 20   | 0         |      | 1     | 1.0         | True      | -           |
+| 200                                  | wrl5.dpdk.small.heartbeat             | 512       | 0    | 0         |      | 2     | 1.0         | True      | -           |
+| 201                                  | wrl5.dpdk.big.heartbeat               | 4096      | 0    | 0         |      | 3     | 1.0         | True      | -           |
+| 233                                  | wrl5.dpdk.big.heartbeat.pinToMgmtCore | 4096      | 0    | 0         |      | 3     | 1.0         | True      | -           |
+| 28aa6811-d4b8-41f5-994c-db017e81511d | small                                 | 512       | 1    | 0         |      | 1     | 1.0         | True      | -           |
+| 41a0c6b2-5ce1-4ff2-9d73-2a6201847cc0 | medium.dpdk                           | 512       | 1    | 0         |      | 2     | 1.0         | True      | SandyBridge |
+| d3b37dcf-227b-419d-9385-7623f08b65fd | test_flavor_1431620018                | 1024      | 0    | 0         |      | 1     | 1.0         | True      | -           |
+| f345d0a0-54be-4ab6-a9db-ddcff6524bcb | small.float                           | 512       | 1    | 0         |      | 1     | 1.0         | True      | -           |
++--------------------------------------+---------------------------------------+-----------+------+-----------+------+-------+-------------+-----------+-------------+
+Thu Feb  5 16:12:34 UTC 2015
+[wrsroot@controller-0 ~(keystone_admin)]$ [0;32m
+
+##Overall Result: PASS 
+
+[0m
