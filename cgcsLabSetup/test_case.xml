@@ -292,27 +292,27 @@ WAIT 99 SEC
 ####  commands above will fail silently in R2 but will be backwards compatible with R1
 TYPE nova flavor-create m1.small 2 2048 20 1\n
 WAIT 30 SEC
-TYPE nova flavor-key m1.small set hw:cpu_policy=dedicated hw:mem_page_size=2048
+TYPE nova flavor-key m1.small set hw:cpu_policy=dedicated hw:mem_page_size=2048\n
 WAIT 30 SEC
 
 TYPE nova flavor-create  wrl5.dpdk.small.heartbeat 200 512 0 2\n
 WAIT 30 SEC
-TYPE nova flavor-key wrl5.dpdk.small.heartbeat set hw:cpu_policy=dedicated hw:mem_page_size=2048
+TYPE nova flavor-key wrl5.dpdk.small.heartbeat set hw:cpu_policy=dedicated hw:mem_page_size=2048\n
 WAIT 30 SEC
 
 TYPE nova flavor-create  wrl5.dpdk.big.heartbeat 201 4096 0 3\n
 WAIT 30 SEC
-TYPE nova flavor-key wrl5.dpdk.big.heartbeat set hw:cpu_policy=dedicated hw:mem_page_size=2048
+TYPE nova flavor-key wrl5.dpdk.big.heartbeat set hw:cpu_policy=dedicated hw:mem_page_size=2048\n
 WAIT 30 SEC
 
 TYPE nova flavor-create  wrl5.dpdk.big.heartbeat.pinToMgmtCore  233 4096 0 3\n
 WAIT 30 SEC
-TYPE nova flavor-key wrl5.dpdk.big.heartbeat.pinToMgmtCore set hw:cpu_policy=dedicated hw:mem_page_size=2048
+TYPE nova flavor-key wrl5.dpdk.big.heartbeat.pinToMgmtCore set hw:cpu_policy=dedicated hw:mem_page_size=2048\n
 WAIT 30 SEC
 
 TYPE nova flavor-create  m1.tiny 1 512 1 1\n
 WAIT 30 SEC
-TYPE nova flavor-key m1.tiny set hw:cpu_policy=dedicated hw:mem_page_size=2048
+TYPE nova flavor-key m1.tiny set hw:cpu_policy=dedicated hw:mem_page_size=2048\n
 WAIT 30 SEC
 
 
