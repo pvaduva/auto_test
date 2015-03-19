@@ -266,6 +266,10 @@ DELAY 5 SEC
 TYPE glance image-create --name ubuntu-precise-amd64 --is-public true --container-format bare --disk-format qcow2 --file ~/images/precise-server-cloudimg-amd64-disk1.img \n
 WAIT 300 SEC
 
+# for backwrard compatibility:
+TYPE glance image-create --name cgcs-guest --is-public true --container-format bare --disk-format raw --file ~/images/cgcs-guest.img \n
+WAIT 30 SEC
+
 TYPE nova flavor-create wrl5.dpdk.big 100 4096 0 3\n
 WAIT 30 SEC
 
