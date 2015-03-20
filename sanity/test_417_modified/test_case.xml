@@ -54,6 +54,7 @@ Con1SSH WAIT 100 SEC
 
 Con1 FAILIF FAILED
 Con1 TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose ${NOSE_OPTS} --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=${testCaseId}\n
+Con1 TYPE \n
 Con1 WAIT ${noseTestTimeout} SEC (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
 
 
