@@ -1,0 +1,58 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	system test log into VM
+#
+#
+#	Options:
+#		vm_name=<desired vm name>
+
+#
+
+;;;
+
+# common include path
+$inc_path=common
+
+# fail script
+*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+
+
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+; === get first active existing VM
+>nova list --all-tenants
++$vm_name=(\S+)\s+\| ACTIVE
+
+? $vm_name == __NO_STRING_CAPTURED__ ? *FAIL
+
+
+? $vm_name != __NO_STRING_CAPTURED__ ? [
+	@10
+	~$inc_path/ssh_to_vm.inc vm_name=$vm_name
+	@5
+	>ip route | grep default
+	+$default_route=via (\S+)
+	; === ping default router
+	>ping -c 2 $default_route
+	; === look at size of VM disk
+	>df -h
+	>
+]
+
+>
+*INTERACT
+
