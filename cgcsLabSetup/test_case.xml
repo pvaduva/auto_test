@@ -322,6 +322,9 @@ WAIT 30 SEC
 TYPE nova flavor-key wrl5.dpdk.small set hw:cpu_policy=dedicated hw:mem_page_size=2048\n
 WAIT 30 SEC
 
+TYPE nova flavor-key wrl5.dpdk.big set hw:cpu_policy=dedicated hw:mem_page_size=2048\n
+WAIT 30 SEC
+
 ###
 
 
