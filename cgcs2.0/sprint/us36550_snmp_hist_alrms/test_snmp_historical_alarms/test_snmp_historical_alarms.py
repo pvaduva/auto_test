@@ -56,7 +56,7 @@ OID = {"wrsAlarmHistoryIndex": "1.3.6.1.4.1.731.1.1.1.1.2.1.1",
        "wrsAlarmHistoryEntry": "1.3.6.1.4.1.731.1.1.1.1.2.1",
        "wrsAlarmHistoryTable": "1.3.6.1.4.1.731.1.1.1.1.2"}
 
-MIB_PATH = "/tmp"
+MIB_PATH = "/tmp/mibs"
 MIB_SRC = ["wrsEnterpriseReg.mib.txt", "wrsAlarmMib.mib.txt"]
 
 # MIB to preload, MIB source file, MIB output file

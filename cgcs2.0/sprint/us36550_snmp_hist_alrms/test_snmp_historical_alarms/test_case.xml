@@ -67,9 +67,11 @@ Con1SSH WAIT 10 SEC
 Con1SSH TYPE system snmp-comm-show -c $COMMSTR\n 
 Con1SSH WAIT 10 SEC
 
-CALL python3 ${WASSP_HOME}/testcases/cgcs/utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s ${WASSP_TC_PATH}/mibs -d /usr/share/snmp/mibs/wrsAlarmMib.mib.txt -P 22
+#CALL python3 ${WASSP_HOME}/testcases/cgcs/utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s ${WASSP_TC_PATH}/mibs -d /usr/share/snmp/mibs/wrsAlarmMib.mib.txt -P 22
+CALL python3 ${WASSP_HOME}/testcases/cgcs/utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s /tmp/mibs -d /usr/share/snmp/mibs/wrsAlarmMib.mib.txt -P 22
 
-CALL python3 ${WASSP_HOME}/testcases/cgcs/utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s ${WASSP_TC_PATH}/mibs -d /usr/share/snmp/mibs/wrsEnterpriseReg.mib.txt -P 22
+#CALL python3 ${WASSP_HOME}/testcases/cgcs/utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s ${WASSP_TC_PATH}/mibs -d /usr/share/snmp/mibs/wrsEnterpriseReg.mib.txt -P 22
+CALL python3 ${WASSP_HOME}/testcases/cgcs/utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s /tmp/mibs -d /usr/share/snmp/mibs/wrsEnterpriseReg.mib.txt -P 22
 
 CALL python3 ${WASSP_TC_PATH}/test_snmp_historical_alarms.py $env.NODE.target.Boot.oamFloat
 
