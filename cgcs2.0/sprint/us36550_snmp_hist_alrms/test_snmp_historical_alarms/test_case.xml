@@ -71,7 +71,7 @@ CALL python3 ${WASSP_HOME}/testcases/cgcs/utils/getFile.py -i $env.NODE.target.B
 
 CALL python3 ${WASSP_HOME}/testcases/cgcs/utils/getFile.py -i $env.NODE.target.Boot.oamFloat -u ${WRSUSER} -p ${WRSPASS} -s ${WASSP_TC_PATH}/mibs -d /usr/share/snmp/mibs/wrsEnterpriseReg.mib.txt -P 22
 
-CALL ${WASSP_TC_PATH}/test_snmp_historical_alarms.py $env.NODE.target.Boot.oamFloat
+CALL python3 ${WASSP_TC_PATH}/test_snmp_historical_alarms.py $env.NODE.target.Boot.oamFloat
 
 PASS
     </test_case>
