@@ -19,7 +19,7 @@ Create a backup of the Cinder Volume, including:
 
 $AVAILABLES=~/availabe.list
 @20
->cinder list --all-tenants | tail -n+3 | grep 'available' | cut -d\| -f2 | awk '{print $1}' > $AVAILABLES
+>cinder list --all-tenants | tail -n+3 | grep 'available' | cut -d\| -f2 | awk '{print $1}' | shuf > $AVAILABLES
 
 >wc -l $AVAILABLES
 +$TOTAL=\n([0-9]+)
@@ -28,9 +28,17 @@ $AVAILABLES=~/availabe.list
     %PHASE1_DONE
 ]
 
+; total $TOTAL cinder volumes in 'available' status
+#; only the first 2 will be backup
+
+?if $TOTAL > 2 ? [
+    $TOTAL=2
+] 
+
 $CURLN=1
 
 [ $CURLN <= $TOTAL
+    ; cmd: tail -n+$CURLN $AVAILABLES | head -n1
     >tail -n+$CURLN $AVAILABLES | head -n1
     +$CV_ID=([a-z0-9-]{32,36})
     ?if $CV_ID == __NO_STRING_CAPTURED__ ?%PHASE1_DONE
@@ -45,7 +53,7 @@ $CURLN=1
 
 $INUSES=~/inuse.list
 @20
->cinder list --all-tenants | tail -n+3 | grep 'in-use' | cut -d\| -f2 | awk '{print $1}' > $INUSES
+>cinder list --all-tenants | tail -n+3 | grep 'in-use' | cut -d\| -f2 | awk '{print $1}' | shuf > $INUSES
 
 >wc -l $INUSES
 +$TOTAL=\n([0-9]+)
@@ -55,8 +63,17 @@ $INUSES=~/inuse.list
 ]
 
 ; phase2 backup 'in-use cinder volumes'
+; total $TOTAL 'in-use' cinder volumes
+
+#; only the first 2 will be backup
+
+?if $TOTAL > 2 ? [
+    $TOTAL=2
+] 
+
 $CURLN=1
 [ $CURLN <= $TOTAL
+    ; cmd: tail -n+$CURLN $INUSES | head -n1
     >tail -n+$CURLN $INUSES | head -n1
     +$CV_ID=([a-z0-9-]{32,36})
     ?if $CV_ID == __NO_STRING_CAPTURED__ ?%PHASE2_DONE

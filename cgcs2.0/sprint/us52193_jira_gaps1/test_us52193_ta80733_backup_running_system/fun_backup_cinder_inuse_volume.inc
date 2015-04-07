@@ -26,6 +26,8 @@ $max=120
 $cnt=0
 [ $cnt < $max
     =$cnt + 1
+    ; try $cnt times 
+
     >cinder snapshot-list --all-tenants
     #+$STATUS=\|\s*[a-z0-9-]{32,36}\s*\|\s*$VOL_ID\s*\|\s*([a-z]+)\s*\|
     +$STATUS=\|\s*$SNP_ID\s*\|\s*$VOL_ID\s*\|\s*([a-z]+)\s*\|

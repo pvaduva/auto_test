@@ -10,14 +10,19 @@ $max=120
 $cnt=0
 [ $cnt < $max
     =$cnt + 1
+    ; wait for status to be $STATUS: $cnt
+
     @10
-    >cinder list --all-tenants
-    +$CUR_STATUS=\|\s* $VOL_ID \s*\|\s*([a-z]+)\s*\|
+    ; cmd: cinder show $VOL_ID
+    >cinder show $VOL_ID
+    +$CUR_STATUS=\|[\s\t]*status[\s\t]*\|[\s\t]*([a-z]+)[\s\t]*\|
     ?if $CUR_STATUS == $STATUS ?%DONE
     ! sleep 3
 ]
 
 ?if $cnt >= $max ? [
+    ; time out to wait for status to be $STATUS, tried $cnt times
+
     *FAIL
 ]
 

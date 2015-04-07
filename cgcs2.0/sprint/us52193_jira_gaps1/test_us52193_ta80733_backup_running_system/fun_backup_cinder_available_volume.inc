@@ -13,6 +13,7 @@
 ;;;
 
 ; export the cinder volume $VOL_ID
+; cmd: cinder export $VOL_ID
 >cinder export $VOL_ID
 
 ; wait the volume is ready

@@ -40,6 +40,6 @@ Create a backup of the running system
 ~fun_backup_system_data.inc HOST_IP=$HOST_IP HOST_USER=$HOST_USER HOST_PASSWD=$HOST_PASSWD BACK_PATH=$BKUP_DIR
 
 
-#; backup cinder volumes if any of them exists
+; backup cinder volumes if any of them exists
 ~fun_backup_cinder_volume.inc HOST_IP=$HOST_IP HOST_USER=$HOST_USER HOST_PASSWD=$HOST_PASSWD BACK_PATH=$BKUP_DIR
 
