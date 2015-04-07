@@ -1,0 +1,125 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	sample system test with VM and Ixia traffic
+#
+#	Uses existing VM
+#
+# Options:
+#		IP=<name|ip of controller>
+#		config_file=<name of Ixia config file>
+#
+#
+
+;;;
+
+*NOFAIL
+*EXP_INFO
+
+# Test server info
+$test_server_IP=yow-cgcs-test
+$ts_user=svc-cgcsauto
+$ts_pass=)OKM0okm
+
+
+# common include path
+$inc_path=common
+
+# fail script
+#*~$inc_path/fail_show.inc
+
+
+$config_file=hp380_pv.ixncfg
+$config_file=hp380_L2_only_2_str.ixncfg
+
+$IP=10.10.10.2
+
+; === connecting to cgcs test server
+
+@10
+>ssh -X $ssh_opts $ts_user@$test_server_IP
+-<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+<ssword:|Last login
+>>$ts_pass
+
+>export TMOUT=0
+
+
+*FORK CLI
+
+; === log onto controller
+~$inc_path/ssh_controller.inc IP=$IP PORT=$PORT
+
+; === check for running VMs
+# use existing VM rather than starting one.
+>nova list --all-tenants | grep tenant1
++$vm_uuid=([0-9a-f-]{36}) \| 
+
+?if $vm_uuid == __NO_STRING_CAPTURED__ ? [
+	;red NO VMs running
+	*FAIL
+	*TERM
+]
+
+*FORK default
+
+; === cd to Ixia directory
+>cd ixia
+
+; === show configs
+>ls *.ixncfg
+
+; === setup ixia env
+>source ixia_env.sh
+
+; === show help
+>tclsh ixia_load_config.tcl -h
+>tclsh ixia_start_stop_traffic.tcl -h
+>tclsh ixia_show_stats.tcl -h
+>
+
+; === NOTE: Ixia is slow...
+
+@60
+; === load config
+
+>tclsh ixia_load_config.tcl config=$config_file
+
+; === start traffic
+>tclsh ixia_start_stop_traffic.tcl traffic=start
+
+
+; === look at stats
+>tclsh ixia_show_stats.tcl stats=show
+<Traffic Item
+<Rx Frames
++$rx_frames1=: (\d+)
+<Loss %
+# no rx frames
+<: 100
+
+; === stop traffic
+>tclsh ixia_start_stop_traffic.tcl traffic=stop
+
+!sleep 10
+
+; === check stats that traffic has stopped
+>tclsh ixia_show_stats.tcl stats=show
+<Traffic Item
+<Tx Frame Rate
+<: 0
+
+
+
+>
+*INTERACT
+

@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python3
 """
 This script performs 3 SNMP operations: get, get next and get bulk.  The goal is to test the newly introduced
 historical alarms table.  In order to function, the test requires access to two MIB files: the WRS alarm MIB
@@ -56,7 +56,7 @@ OID = {"wrsAlarmHistoryIndex": "1.3.6.1.4.1.731.1.1.1.1.2.1.1",
        "wrsAlarmHistoryEntry": "1.3.6.1.4.1.731.1.1.1.1.2.1",
        "wrsAlarmHistoryTable": "1.3.6.1.4.1.731.1.1.1.1.2"}
 
-MIB_PATH = "mibs"
+MIB_PATH = "/tmp/mibs"
 MIB_SRC = ["wrsEnterpriseReg.mib.txt", "wrsAlarmMib.mib.txt"]
 
 # MIB to preload, MIB source file, MIB output file
@@ -87,14 +87,14 @@ def mibTextToPy(mib_path):
                 return 1
             logging.info("Converting MIB to py")
             if mib_preload: 
-		cmd = "smidump -k -p %s -f python %s | libsmi2pysnmp > %s" % \
-		       (os.path.join(mib_path, mib_preload),
-			os.path.join(mib_path, mib_srcname),
-			os.path.join(mib_path, mib_destname) + ".py")
+                cmd = "smidump -k -p %s -f python %s | libsmi2pysnmp > %s" % \
+                      (os.path.join(mib_path, mib_preload),
+                       os.path.join(mib_path, mib_srcname),
+                       os.path.join(mib_path, mib_destname) + ".py")
             else:
-		cmd = "smidump -k -f python %s | libsmi2pysnmp > %s" % \
-		       (os.path.join(mib_path, mib_srcname),
-			os.path.join(mib_path, mib_destname) + ".py")
+                cmd = "smidump -k -f python %s | libsmi2pysnmp > %s" % \
+                      (os.path.join(mib_path, mib_srcname),
+                       os.path.join(mib_path, mib_destname) + ".py")
             logging.info(cmd)
             os.system(cmd)
             logging.info("Loading MIB")

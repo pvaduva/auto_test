@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the DPDK autotest suite app/test.
+
+Modification history
+====================
+11feb15, ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/${WASS_TC_NAME}" timeout="">
+    <test_case  name="sanity/cgcs/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag">
+
+<!--SET noseTestName testcase_742
+INCLUDE ${WASSP_TESTCASE_DIR}/../utils/bla.frag 
+-->
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+
+CALL env
+LOOKFOR
+TYPE \n
+SINK 1 SEC
+PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con1SSH PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con1 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+Con2 PROMPT (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+
+SET CR }
+SET CL {
+
+Con1SSH TYPE source /etc/nova/openrc\n
+Con1SSH WAIT 100 SEC
+Con1SSH TYPE export TMOUT=0\n
+Con1SSH WAIT 100 SEC
+Con1SSH SINK 3 SEC
+
+Con1SSH TYPE cd\n
+Con1SSH WAIT 3 SEC
+Con1SSH TYPE echo executing ${WASSP_TC_NAME}\n
+Con1SSH WAIT 100 SEC
+
+# Clear any existing FAILIF statements
+Con1SSH FAILIF
+Con1SSH FAILIF FAILED 
+Con1SSH TYPE /usr/bin/nosetests -w. -w /usr/lib64/python2.7/site-packages/cgcstest --verbose ${NOSE_OPTS} --nocapture --with-id --with-xunit --logging-level=DEBUG -a type=${testCaseId}\n
+Con1SSH WAIT ${noseTestTimeout} SEC (.*:~#\s)(.*:~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+
+
+PASS
+
+
+    </test_case>
+</test_module>
+</file>

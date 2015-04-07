@@ -1,0 +1,40 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	system test node reboot
+#
+#	Options:
+#		node=<desired node name to reboot>
+
+;;;
+
+*NOFAIL
+*EXP_INFO
+
+# common include path
+$inc_path=common
+
+# fail script
+*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+#default node to reboot
+$node=compute-1
+
+
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+; === reboot node
+~$inc_path/reboot_node.inc node=$node
+*INTERACT

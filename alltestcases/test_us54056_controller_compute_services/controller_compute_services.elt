@@ -28,9 +28,9 @@ $QUANTA_IP=none
 $VM=root
 @20
 
->ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
+>ssh -X -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$HOST_PASS
 >export TMOUT=0
 >source /etc/nova/openrc
@@ -57,67 +57,67 @@ $VM=root
 >>$HOST_PASS
 >source /etc/nova/openrc
 
-; === check status of drbd
->drbdadm status
-+$DRBD=(drbd-c[a-zA-Z]*)
->system sda-list
--<degraded
+#; === check status of drbd
+#>drbdadm status
+#+$DRBD=(drbd-c[a-zA-Z]*)
+#>system sda-list
+#-<degraded
 
-; === unsync drbd
->drbdadm invalidate $DRBD
+#; === unsync drbd
+#>drbdadm invalidate $DRBD
 
-; === wait until alarm appears
-$i=0
-$MAX=24
-$result=none
+#; === wait until alarm appears
+#$i=0
+#$MAX=24
+#$result=none
 # while loop
-[ $result != $DRBD
-    +$i
-    >system alarm-list
-    +$result=($DRBD)
-    ?if $i > $MAX ? ; === alarm did not clear
-    ?if $i > $MAX ? %fail_to_appear
-    !sleep 5
-]
-; === verify status changed
->drbdadm status
-<Inconsistent
->system sda-list
-<degraded
+#[ $result != $DRBD
+#    +$i
+#    >system alarm-list
+#    +$result=($DRBD)
+#    ?if $i > $MAX ? ; === alarm did not clear
+#    ?if $i > $MAX ? %fail_to_appear
+#    !sleep 5
+#]
+#; === verify status changed
+#>drbdadm status
+#<Inconsistent
+#>system sda-list
+#<degraded
 
-?if 1 < 0 ? [
-    %fail_to_appear
-    *FAIL
-]
+#?if 1 < 0 ? [
+#    %fail_to_appear
+#    *FAIL
+#]
 
-; === bring up drbd
->drbdadm up $DRBD
+#; === bring up drbd
+#>drbdadm up $DRBD
 
-; === wait until alarm cleared
-$i=0
-$MAX=60
-$result=none
+#; === wait until alarm cleared
+#$i=0
+#$MAX=60
+#$result=none
 # while loop
-[ $result != __NO_STRING_CAPTURED__
-    +$i
-    >drbdadm status
-    +$result=(Inconsistent)
-    ?if $i > $MAX ? ; === did not sync
-    ?if $i > $MAX ? %fail_to_sync
-    !sleep 10
-]
+#[ $result != __NO_STRING_CAPTURED__
+#    +$i
+#    >drbdadm status
+#    +$result=(Inconsistent)
+#    ?if $i > $MAX ? ; === did not sync
+#    ?if $i > $MAX ? %fail_to_sync
+#    !sleep 10
+#]
 
-!sleep 20
-; === verify drbd synced
->system alarm-list
--<$DRBD
->system sda-list
--<degraded
+#!sleep 20
+#; === verify drbd synced
+#>system alarm-list
+#-<$DRBD
+#>system sda-list
+#-<degraded
 
-?if 1 < 0 ? [
-    %fail_to_sync
-    *FAIL
-]
+#?if 1 < 0 ? [
+#    %fail_to_sync
+#    *FAIL
+#]
 
 ; === fill /var/log and verify compute can still boot
 $i=0
@@ -134,7 +134,7 @@ $result=none
 
 @45
 ; === connect to compute-0 and change goenabled exit status to 1, thus forcing failure
->ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no compute-0
+>ssh -X -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no compute-0
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
 <ssword:
 >>$HOST_PASS
@@ -195,7 +195,7 @@ $result=none
     >system host-list
     +$result=$COMP0_ID .* \| (online|failed|offline)
     ?if $i > $MAX ? ; === $COMP0_ID did not lock
-    ?if $i > $MAX ? %fail_to_go_online
+    ?if $i > $MAX ? %fail_go_online
     !sleep 10
 ]
 
@@ -207,20 +207,32 @@ $result=none
 ]
 
 ; === connect to compute-0 and change goenabled exit status to 0, thus allowing compute to go enabled
->ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no compute-0
--<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
->>$HOST_PASS
->export TMOUT=0
->sudo su
-<ssword:
->>$HOST_PASS
->sed -i 's/exit 1/exit 0/g' /etc/goenabled.d/sysinv_goenabled_check.sh
->exit
->exit
+$i=0
+$MAX=30
+%retry_login
+$result=none
+>ssh -X -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no compute-0
++$result=(\w+):
+?if $result == ssh ? [
+    +$i
+    !sleep 10
+    ?if $i <= $MAX ? %retry_login
+    ?if $i > $MAX ? %fail_go_online
+]
+?if $result != ssh ? [
+    >>$HOST_PASS
+    >export TMOUT=0
+    >sudo su
+    <ssword:
+    >>$HOST_PASS
+    >sed -i 's/exit 1/exit 0/g' /etc/goenabled.d/sysinv_goenabled_check.sh
+    >exit
+    >exit
+]
 
 ; === unlock compute-0 expect to go available
 ?if 1 < 0 ? [
+    %remote_id_changed
     %fail_go_online
     *FAIL
 ]

@@ -30,7 +30,7 @@ $HOST_PASS=li69nux
 $HOST_IP=10.10.10.2
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$HOST_PASS
 >export TMOUT=0
 >source /etc/nova/openrc
@@ -121,11 +121,11 @@ $result=none
 ; === ssh into WRL VM via NATBox
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$NAT_PASS
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $VM@$VM_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$VM
 
 ; === verify existence of files and expected output
@@ -141,7 +141,7 @@ $result=none
 
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$HOST_PASS
 >export TMOUT=0
 >source ./openrc.tenant1
@@ -171,11 +171,11 @@ $result=none
 ; === ssh back into WRL VM
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$NAT_PASS
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $VM@$VM_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$VM
 
 ; === verify files still exist
@@ -191,7 +191,7 @@ $result=none
 
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$HOST_PASS
 >export TMOUT=0
 >source ./openrc.tenant1
