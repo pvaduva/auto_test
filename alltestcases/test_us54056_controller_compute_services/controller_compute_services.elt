@@ -206,6 +206,7 @@ $result=none
     *FAIL
 ]
 
+@20
 ; === connect to compute-0 and change goenabled exit status to 0, thus allowing compute to go enabled
 $i=0
 $MAX=30
@@ -230,6 +231,7 @@ $result=none
     >exit
 ]
 
+@45
 ; === unlock compute-0 expect to go available
 ?if 1 < 0 ? [
     %remote_id_changed
