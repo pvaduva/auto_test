@@ -70,7 +70,7 @@ $cnt=0
 
 @1000
 >scp -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP:/opt/backups/$BK_FNM $BACK_PATH/
-<assword:|$$BK_FNM
+<assword:|$BK_FNM|100%
 >>$HOST_PASSWD
 
 

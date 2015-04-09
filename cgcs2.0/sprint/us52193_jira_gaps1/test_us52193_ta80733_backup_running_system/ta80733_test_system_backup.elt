@@ -8,7 +8,7 @@ Create a backup of the running system
 
 
 *EXP_INFO
-*NOFAIL
+#*NOFAIL
 
 #HOST_IP=${HOST_IP} HOST_USER=${HOST_USER} HOST_PASSWD=${HOST_PASSWD}
 
