@@ -19,22 +19,36 @@
 +----+--------------+-------------+----------------+-------------+--------------+
 ;;;
 
-$max=120
+$max=200
 $cnt=0
+
 [ $cnt < $max
+
     =$cnt + 1
+
     @10
-    >system host-list
     ; +$STATUS=\|\s*[0-9]+\s*\|\s* $HOSTNAME \s*\|\s* $PERSONALITY \s*\|\s* $ADMINISTRATIVE \s*\|\s* $OPERATIONAL \s*\|\s* ($AVAILABILITY) \s*\|
+
+    >system host-list
     +$STATUS=\|\s*[0-9]+\s*\|\s* $HOSTNAME \s*\|\s* $PERSONALITY \s*\|\s* $ADMINISTRATIVE \s*\|\s* $OPERATIONAL \s*\|\s* ($AVAILABILITY) \s*\|
+
     ?if $STATUS == $AVAILABILITY ?%DONE
+
+    ; $cnt : 
+    ; node $HOSTNAME is not in status $AVAILABILITY yet, wait for 15 seconds and try again
     ! sleep 15
 ]
 
 ?if $cnt >= $max ? [
+
+    ; node $HOSTNAME failed to get to status $STATUS in $max * 15 seconds 
     ; consider it as a FAIL
+
     *FAIL
+
 ]
+
+; now node $HOSTNAME should be status $STATUS
 
 %DONE
 

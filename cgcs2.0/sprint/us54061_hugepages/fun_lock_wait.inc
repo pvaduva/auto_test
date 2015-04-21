@@ -10,7 +10,8 @@
 ;;;
 
 >system host-lock $HOSTNAME
-<\|\s* task \s*\|\s* Locking \s*\||Avoiding 'lock' action on already 'locked' host
+<\s* task \s*|\s* Locking \s*|Avoiding lock action on already.*
+#; Avoiding lock action on already
 
 ;;;
 +----+--------------+-------------+----------------+-------------+--------------+

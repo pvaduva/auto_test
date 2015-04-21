@@ -2,17 +2,17 @@
 
 ;;;
     automated test script for 'huge pages' support
+    reuired input:
+        $HOST_IP=${HOST_IP} $HOST_USER=${HOST_USER} $HOST_PASSWD=${HOST_PASSWD}
+
+        e.g.
+            $HOST_IP=128.224.150.189
+            $HOST_USER=wrsroot
+            $HOST_PASSWD=li69nux
 ;;;
 
 *EXP_INFO
 #*NOFAIL
-
-
-#HOST_IP=${HOST_IP} HOST_USER=${HOST_USER} HOST_PASSWD=${HOST_PASSWD} 
-$HOST_IP=128.224.150.189
-#$HOST_IP=10.10.10.3
-$HOST_USER=wrsroot
-$HOST_PASSWD=li69nux
 
 >ssh -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 <assword|SYSTEM:|WARNING:
@@ -27,10 +27,15 @@ $HOST_PASSWD=li69nux
 
 >date
 
-$CPT_LIST=~/.computes.list
+#; do semantic check
+#~fun_test_hugepage_negative.inc
+
+$CPT_LIST=~/.cmpts.list
 
 @20
->system host-list | grep compute | awk '{print $4}' > $CPT_LIST
+> rm -rf $CPT_LIST
+>system host-list | grep compute | grep -i 'enabled' | awk '{print $4}' | shuf > $CPT_LIST
+#>system host-list | grep compute | awk '{print $4}' | shuf > $CPT_LIST
 
 >wc -l $CPT_LIST
 +$TOTAL=\n([0-9]+)
@@ -38,30 +43,25 @@ $CPT_LIST=~/.computes.list
     ; no available compute nodes to test
     %ALL_DONE
 ]
->shuf $CPT_LIST
 
->echo $(($TOTAL * 2 / 3))
-+$NUM_TO_TEST=\n([0-9]+)
-?if $NUM_TO_TEST < 5 ? [
-    $NUM_TO_TEST=$TOTAL
-]
+$NUM_TO_TEST=1
 
->echo will test $NUM_TO_TEST compute nodes
+; randomly pick $NUM_TO_TEST compute nodes to test
 
 $CUR=1
 [ $CUR <= $NUM_TO_TEST
 
-    #>shuf -i 0-$TOTAL | head -n1
-    #+$CPTNO=\n([0-9]+)
-    #>tail -n+$CPTNO $CPT_LIST | head -n1
+    ; get the next compute to test on 
     >tail -n+$CUR $CPT_LIST | head -n1
     +$CPTNM=\n([a-zA-Z0-9-]+)
+
+    ; will test on $CPTNM
 
     ?if $CPTNM == __NO_STRING_CAPTURED__ ?%ALL_DONE
 
     =$CUR + 1 
 
-    ; test on compute node: $CPTNM
+    ; test on compute node: $CPTNM : $CUR
     ~fun_test_hugepage_on_compute.inc HOST_IP=$HOST_IP HOST_USER=$HOST_USER HOST_PASSWD=$HOST_PASSWD CPTNAME=$CPTNM
 ]
 
@@ -69,6 +69,4 @@ $CUR=1
 
 ; cleanup
 > rm -f $CPT_LIST
-
-
 
