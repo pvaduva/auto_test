@@ -1,0 +1,98 @@
+Scheduling with Vswitch on both numa nodes dependent on usage
+TC 5
+====
+
+=== Launched multiple avp instances and ran IXIA traffic through them ===
+[wrsroot@controller-0 ~(keystone_admin)]$ nova list --all-tenants
++--------------------------------------+--------------+--------+------------+-------------+-------------------------------------------------------------------------------------------------+
+| ID                                   | Name         | Status | Task State | Power State | Networks                                                                                        |
++--------------------------------------+--------------+--------+------------+-------------+-------------------------------------------------------------------------------------------------+
+| 053ee1f2-e213-4676-84bb-e75b5cbc5e58 | tenant1-avp1 | ACTIVE | -          | Running     | tenant1-mgmt-net=192.168.104.18, 192.168.4.6; tenant1-net2=172.16.2.1; internal0-net0=10.2.2.1  |
+| 48cee18b-12d1-4a57-9ac7-86d97d423158 | tenant1-avp2 | ACTIVE | -          | Running     | tenant1-mgmt-net=192.168.104.19, 192.168.4.7; tenant1-net3=172.16.3.1; internal0-net0=10.3.3.1  |
+| 04b52049-a856-4bdc-a404-374cdf7ead8c | tenant1-avp4 | ACTIVE | -          | Running     | tenant1-mgmt-net=192.168.104.21, 192.168.4.9; tenant1-net5=172.16.5.1; internal0-net1=10.5.1.1  |
+| da6e69dc-cab0-4ab8-b307-fb275e73b13f | tenant2-avp1 | ACTIVE | -          | Running     | tenant2-mgmt-net=192.168.204.12, 192.168.4.16; tenant2-net2=172.18.2.1; internal0-net0=10.2.2.2 |
+| 7facbca0-c73e-47fa-b18b-ee010ae58339 | tenant2-avp2 | ACTIVE | -          | Running     | tenant2-mgmt-net=192.168.204.13, 192.168.4.17; tenant2-net3=172.18.3.1; internal0-net0=10.3.3.2 |
+| 516209d4-d00b-4128-881a-a68807744336 | tenant2-avp3 | ACTIVE | -          | Running     | tenant2-mgmt-net=192.168.204.14, 192.168.4.18; tenant2-net4=172.18.4.1; internal0-net1=10.4.0.2 |
+| c33c8079-f13a-4d54-b685-5110236ebe1a | tenant2-avp4 | ACTIVE | -          | Running     | tenant2-mgmt-net=192.168.204.15, 192.168.4.19; tenant2-net5=172.18.5.1; internal0-net1=10.5.1.2 |
++--------------------------------------+--------------+--------+------------+-------------+-------------------------------------------------------------------------------------------------+
+
+=== VMs are on compute-1 ===
+[wrsroot@controller-0 ~(keystone_admin)]$ vm-topology -s servers
+vm-topology: 2015-04-27T20:06:27.489021  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+--------------+-----------+-------------------------+--------------+------------+-------------+-------+--------+--------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name         | host      | state (vm, task, power) | server_group | image      | flavor      | vcpus | memory | instance_topology                                      | in_libvirt |
++---------+--------------------------------------+-------------------+--------------+-----------+-------------------------+--------------+------------+-------------+-------+--------+--------------------------------------------------------+------------+
+| tenant1 | 053ee1f2-e213-4676-84bb-e75b5cbc5e58 | instance-00000019 | tenant1-avp1 | compute-1 |  active, None, Running  | -            | cgcs-guest | medium.dpdk | 2,2,2 |   1024 | node:1,  1024MB, pgsize:2M, vcpus:0,1, pcpus:11,12     |    yes     |
+| tenant1 | 48cee18b-12d1-4a57-9ac7-86d97d423158 | instance-0000001a | tenant1-avp2 | compute-1 |  active, None, Running  | -            | cgcs-guest | medium.dpdk | 2,2,2 |   1024 | node:1,  1024MB, pgsize:2M, vcpus:0,1, pcpus:13,14     |    yes     |
+| tenant1 | 04b52049-a856-4bdc-a404-374cdf7ead8c | instance-0000001c | tenant1-avp4 | compute-1 |  active, None, Running  | -            | cgcs-guest | small       | 1,1,1 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,1t, vcpus:0, pcpus:8 |    yes     |
+| tenant2 | da6e69dc-cab0-4ab8-b307-fb275e73b13f | instance-0000001d | tenant2-avp1 | compute-1 |  active, None, Running  | -            | cgcs-guest | small       | 1,1,1 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,1t, vcpus:0, pcpus:9 |    yes     |
+| tenant2 | 7facbca0-c73e-47fa-b18b-ee010ae58339 | instance-0000001e | tenant2-avp2 | compute-1 |  active, None, Running  | -            | cgcs-guest | small       | 1,1,1 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,1t, vcpus:0, pcpus:5 |    yes     |
+| tenant2 | 516209d4-d00b-4128-881a-a68807744336 | instance-0000001f | tenant2-avp3 | compute-1 |  active, None, Running  | -            | cgcs-guest | small       | 1,1,1 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,1t, vcpus:0, pcpus:6 |    yes     |
+| tenant2 | c33c8079-f13a-4d54-b685-5110236ebe1a | instance-00000020 | tenant2-avp4 | compute-1 |  active, None, Running  | -            | cgcs-guest | small       | 1,1,1 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,1t, vcpus:0, pcpus:7 |    yes     |
++---------+--------------------------------------+-------------------+--------------+-----------+-------------------------+--------------+------------+-------------+-------+--------+--------------------------------------------------------+------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ vshell --host compute-1 engine-stats-list
++--------------------------------------+----+-------+------------+------------+-------------+-------------+------------+------------+--------+
+| uuid                                 | id | cpuid | rx-packets | tx-packets | tx-disabled | tx-overflow | rx-discard | tx-discard | usage  |
++--------------------------------------+----+-------+------------+------------+-------------+-------------+------------+------------+--------+
+| 30a32c33-00fa-5ff2-bba8-a9f77b90cf75 | 0  | 1     | 0          | 0          | 0           | 0           | 0          | 0          | 93.20% |
+| af851cb3-b890-59db-9a0a-4fb462e3485f | 1  | 10    | 0          | 0          | 0           | 0           | 0          | 0          | 90.02% |
++--------------------------------------+----+-------+------------+------------+-------------+-------------+------------+------------+--------+
+
+=== Launch 1 VM on compute-1, verify scheduled on numa 1 even though sufficent space on numa 0 ===
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova boot --flavor=small  --nic net-id=9fc7cb45-d80c-44e5-a2ca-1a6af22c7f92,vif-model=avp --nic net-id=ce7272b1-ac67-4fb6-8ace-9443ef1c1267,vif-model=avp --block_device_mapping vda=8e244a9f-3a81-49ce-a141-c5e8cc5a3782:::0 expect_numa_1
+
+[wrsroot@controller-0 ~(keystone_tenant1)]$ vm-topology -s servers
+vm-topology: 2015-04-27T20:08:20.920389  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+---------------+-----------+-------------------------+--------------+------------+-------------+-------+--------+---------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name          | host      | state (vm, task, power) | server_group | image      | flavor      | vcpus | memory | instance_topology                                       | in_libvirt |
++---------+--------------------------------------+-------------------+---------------+-----------+-------------------------+--------------+------------+-------------+-------+--------+---------------------------------------------------------+------------+
+| tenant1 | 053ee1f2-e213-4676-84bb-e75b5cbc5e58 | instance-00000019 | tenant1-avp1  | compute-1 |  active, None, Running  | -            | cgcs-guest | medium.dpdk | 2,2,2 |   1024 | node:1,  1024MB, pgsize:2M, vcpus:0,1, pcpus:11,12      |    yes     |
+| tenant1 | 48cee18b-12d1-4a57-9ac7-86d97d423158 | instance-0000001a | tenant1-avp2  | compute-1 |  active, None, Running  | -            | cgcs-guest | medium.dpdk | 2,2,2 |   1024 | node:1,  1024MB, pgsize:2M, vcpus:0,1, pcpus:13,14      |    yes     |
+| tenant1 | 04b52049-a856-4bdc-a404-374cdf7ead8c | instance-0000001c | tenant1-avp4  | compute-1 |  active, None, Running  | -            | cgcs-guest | small       | 1,1,1 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,1t, vcpus:0, pcpus:8  |    yes     |
+| tenant2 | da6e69dc-cab0-4ab8-b307-fb275e73b13f | instance-0000001d | tenant2-avp1  | compute-1 |  active, None, Running  | -            | cgcs-guest | small       | 1,1,1 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,1t, vcpus:0, pcpus:9  |    yes     |
+| tenant2 | 7facbca0-c73e-47fa-b18b-ee010ae58339 | instance-0000001e | tenant2-avp2  | compute-1 |  active, None, Running  | -            | cgcs-guest | small       | 1,1,1 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,1t, vcpus:0, pcpus:5  |    yes     |
+| tenant2 | 516209d4-d00b-4128-881a-a68807744336 | instance-0000001f | tenant2-avp3  | compute-1 |  active, None, Running  | -            | cgcs-guest | small       | 1,1,1 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,1t, vcpus:0, pcpus:6  |    yes     |
+| tenant2 | c33c8079-f13a-4d54-b685-5110236ebe1a | instance-00000020 | tenant2-avp4  | compute-1 |  active, None, Running  | -            | cgcs-guest | small       | 1,1,1 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,1t, vcpus:0, pcpus:7  |    yes     |
+| tenant1 | 5b853976-f9f1-4dce-8183-0d8c1411cea5 | instance-00000024 | expect_numa_1 | compute-1 |  active, None, Running  | -            | cgcs-guest | small       | 1,1,1 |    512 | node:1,   512MB, pgsize:2M, 1s,1c,1t, vcpus:0, pcpus:16 |    yes     |
++---------+--------------------------------------+-------------------+---------------+-----------+-------------------------+--------------+------------+-------------+-------+--------+---------------------------------------------------------+------------+
+
+=== | tenant1 | 5b853976-f9f1-4dce-8183-0d8c1411cea5 | instance-00000024 | expect_numa_1 | compute-1 |  active, None, Running  | -            | cgcs-guest | small       | 1,1,1 |    512 | node:1,   512MB, pgsize:2M, 1s,1c,1t, vcpus:0, pcpus:16 |    yes     | ===
+
+[root@compute-1 ~(keystone_admin)]# virsh vcpupin instance-00000024
+VCPU: CPU Affinity
+----------------------------------
+   0: 16
+
+[wrsroot@controller-0 ~(keystone_tenant1)]$ vshell --host compute-1 engine-stats-list
++--------------------------------------+----+-------+------------+------------+-------------+-------------+------------+------------+--------+
+| uuid                                 | id | cpuid | rx-packets | tx-packets | tx-disabled | tx-overflow | rx-discard | tx-discard | usage  |
++--------------------------------------+----+-------+------------+------------+-------------+-------------+------------+------------+--------+
+| 30a32c33-00fa-5ff2-bba8-a9f77b90cf75 | 0  | 1     | 0          | 0          | 0           | 0           | 0          | 0          | 93.64% |
+| af851cb3-b890-59db-9a0a-4fb462e3485f | 1  | 10    | 0          | 0          | 0           | 0           | 0          | 0          | 90.47% |
++--------------------------------------+----+-------+------------+------------+-------------+-------------+------------+------------+--------+
+
+
+[wrsroot@controller-0 ~(keystone_admin)]$ date; cat /etc/build.info 
+Mon Apr 27 21:28:05 UTC 2015
+###
+### Wind River Titanium Server
+###     Release 15.04
+###
+###     Wind River Systems, Inc.
+###
+
+SW_VERSION="15.04"
+BUILD_TARGET="Host Installer"
+BUILD_TYPE="Formal"
+BUILD_ID="2015-04-25_22-05-05"
+SRC_BUILD_ID="2015-04-25_22-00-36"
+
+JOB="CGCS_2.0_Unified_Daily_Build"
+BUILD_BY="jenkins"
+BUILD_NUMBER="129"
+BUILD_HOST="yow-cgts2-lx"
+BUILD_DATE="2015-04-25 22:05:08 -0400"

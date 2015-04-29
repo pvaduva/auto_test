@@ -1,0 +1,168 @@
+Basic Vswitch functions
+
+TCs 1-4
+=======
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-cpu-modify -f vswitch -p0 0 -p1 0 compute-0
+Vswitch must have at least one core.
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-cpu-list compute-0
++--------------------------------------+----------+-----------+----------+--------+-------------------------------------------+-------------------+
+| uuid                                 | log_core | processor | phy_core | thread | processor_model                           | assigned_function |
++--------------------------------------+----------+-----------+----------+--------+-------------------------------------------+-------------------+
+| c947fb99-8d5f-4017-87e3-3433112a507a | 0        | 0         | 0        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | Platform          |
+| 5b4391a3-0ce9-4c03-bb93-0740b6eded6f | 1        | 0         | 1        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | Vswitch           |
+| 5f14a1f9-53df-4b78-ab98-9335fc596684 | 2        | 0         | 2        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | Vswitch           |
+| d1f37cb4-8722-4d72-9e6d-0ca7b224c7a7 | 3        | 0         | 3        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 0baa9df8-fd44-49b5-b197-196028ddd1cb | 4        | 0         | 4        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| ed388291-187b-4b80-bc64-40b84b95965a | 5        | 0         | 8        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 42592f5f-0a16-4b7a-b06a-3f47c7ef42c5 | 6        | 0         | 9        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| c3ecc318-4ba1-4679-bacb-323902899c12 | 7        | 0         | 10       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| ea50242c-1d4a-47f8-ad61-0381807e2a74 | 8        | 0         | 11       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| cb8ed476-7139-46e1-8f51-48d198968551 | 9        | 0         | 12       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| f1e49746-052e-4ed6-8ce7-ee34bcd4220c | 10       | 1         | 0        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 72902954-4596-430a-b3b2-a619149a01aa | 11       | 1         | 1        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 4e25ff9e-1ed5-424d-a7d7-a3b4194af993 | 12       | 1         | 2        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 081de002-b5bc-4770-b9c4-2d204cc22a3c | 13       | 1         | 3        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 6845b12d-172d-43df-8d1e-0eedc9a0ff1e | 14       | 1         | 4        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 53ee5a74-5db9-4e63-bfe5-fc1d05c986c1 | 15       | 1         | 8        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 75018db0-94ca-4305-8b8a-4e0c536469bf | 16       | 1         | 9        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| b99b1269-77c8-4f97-b676-fb6334cef89e | 17       | 1         | 10       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 5169cb7f-feca-4863-8e93-55e7a4acade0 | 18       | 1         | 11       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| f85e8a50-79bd-47d8-9754-b859b06c7ba6 | 19       | 1         | 12       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
++--------------------------------------+----------+-----------+----------+--------+-------------------------------------------+-------------------+
+
+=== Launch VMs on compute-0 take up all vcpus on numa 0 ===
+[wrsroot@controller-0 ~(keystone_admin)]$ nova flavor-show 102
++----------------------------+------------------------------------------------------------+
+| Property                   | Value                                                      |
++----------------------------+------------------------------------------------------------+
+| OS-FLV-DISABLED:disabled   | False                                                      |
+| OS-FLV-EXT-DATA:ephemeral  | 0                                                          |
+| disk                       | 0                                                          |
+| extra_specs                | {"hw:cpu_policy": "dedicated", "hw:mem_page_size": "2048"} |
+| id                         | 102                                                        |
+| name                       | 7-cpus                                                     |
+| os-flavor-access:is_public | True                                                       |
+| ram                        | 512                                                        |
+| rxtx_factor                | 1.0                                                        |
+| swap                       |                                                            |
+| vcpus                      | 7                                                          |
++----------------------------+------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova boot --flavor=102  --nic net-id=9fc7cb45-d80c-44e5-a2ca-1a6af22c7f92,vif-model=avp --nic net-id=ce7272b1-ac67-4fb6-8ace-9443ef1c1267,vif-model=avp --block_device_mapping vda=8e244a9f-3a81-49ce-a141-c5e8cc5a3782:::0 expect_numa_0
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova boot --flavor=102  --nic net-id=9fc7cb45-d80c-44e5-a2ca-1a6af22c7f92,vif-model=avp --nic net-id=ce7272b1-ac67-4fb6-8ace-9443ef1c1267,vif-model=avp --block_device_mapping vda=b3b8ef34-6ca4-4b58-9034-f7ed50486aca:::0 expect_numa_1
+
+=== check second VM launched on numa 1 since no space on numa 0 ===
+[wrsroot@controller-0 ~(keystone_tenant1)]$ vm-topology -s servers
+vm-topology: 2015-04-27T17:15:49.464956  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name            | host      | state (vm, task, power) | server_group | image      | flavor          | vcpus | memory | instance_topology                                                            | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant1 | a737da7b-c5ac-495b-8ad0-ce34e9d2fa30 | instance-00000004 | expect_numa_0   | compute-0 |  active, None, Running  | -            | cgcs-guest | 7-cpus          | 7,7,7 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,7t, vcpus:0-6, pcpus:3-9, siblings:{0-6}   |    yes     |
+| tenant1 | 971968f7-bad3-433d-9281-08f2bc423de4 | instance-00000005 | expect_numa_1   | compute-0 |  active, None, Running  | -            | cgcs-guest | 7-cpus          | 7,7,7 |    512 | node:1,   512MB, pgsize:2M, 1s,1c,7t, vcpus:0-6, pcpus:10-16, siblings:{0-6} |    yes     |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+[root@compute-0 ~(keystone_admin)]# virsh vcpupin instance-00000004
+VCPU: CPU Affinity
+----------------------------------
+   0: 3
+   1: 4
+   2: 5
+   3: 6
+   4: 7
+   5: 8
+   6: 9
+
+[root@compute-0 ~(keystone_admin)]# virsh vcpupin instance-00000005
+VCPU: CPU Affinity
+----------------------------------
+   0: 10
+   1: 11
+   2: 12
+   3: 13
+   4: 14
+   5: 15
+   6: 16
+
+=== Perform same as above but with compute-1 and switch only on numa 1 ===
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-cpu-modify -f vswitch -p0 0 -p1 2 compute-1
++--------------------------------------+----------+-----------+----------+--------+-------------------------------------------+-------------------+
+| uuid                                 | log_core | processor | phy_core | thread | processor_model                           | assigned_function |
++--------------------------------------+----------+-----------+----------+--------+-------------------------------------------+-------------------+
+| b2686225-13d0-4f42-bec4-aa2dffa8d58e | 0        | 0         | 0        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | Platform          |
+| d54f8a26-bd40-4291-95d9-281c178aa25c | 1        | 0         | 1        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 8707ee5d-5158-42aa-977f-070cd3a6436c | 2        | 0         | 2        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| a5d527cd-e700-40d9-afee-4531e3b5f3ca | 3        | 0         | 3        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 23f982a9-2c38-4501-a9be-09c131245336 | 4        | 0         | 4        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 8bdc15f3-3722-420e-ada8-b41035783890 | 5        | 0         | 8        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 2e73604e-4ff3-4861-8bdc-fe6160215789 | 6        | 0         | 9        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 1362ddd3-13cf-4e77-9d9d-327e7f9bcdc9 | 7        | 0         | 10       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 82284043-1e94-4e5e-bda2-a51a599d1ff3 | 8        | 0         | 11       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 3bd24fca-37bd-4a2f-9fd7-b21c04e6391a | 9        | 0         | 12       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| f293b0b6-7b9d-4029-ad0e-46d5d02fcc27 | 10       | 1         | 0        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | Vswitch           |
+| 845bbae9-66d7-4003-9c8c-01b025c04d02 | 11       | 1         | 1        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | Vswitch           |
+| f24fcf29-5f14-458a-9f54-a9c82d755546 | 12       | 1         | 2        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 29a2b115-7d70-4952-894b-98417c58754f | 13       | 1         | 3        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 2f43c40a-b1bf-4dcf-9ffd-e1f0032a1bd4 | 14       | 1         | 4        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 1fe3fe73-7708-4a5e-aa7a-23979f041b29 | 15       | 1         | 8        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 395abd36-cd90-4919-a5e4-7703e0771437 | 16       | 1         | 9        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 1e5f9900-2967-4ed5-a6f1-442950629d46 | 17       | 1         | 10       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| db51fd8b-ca28-4126-a14e-e103d56fce94 | 18       | 1         | 11       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| c5f9ff6a-74cd-475c-b06b-fcedb16a23fb | 19       | 1         | 12       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
++--------------------------------------+----------+-----------+----------+--------+-------------------------------------------+-------------------+
+
+=== expected VM will schedule on numa 1 first ===
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova boot --flavor=102  --nic net-id=9fc7cb45-d80c-44e5-a2ca-1a6af22c7f92,vif-model=avp --nic net-id=ce7272b1-ac67-4fb6-8ace-9443ef1c1267,vif-model=avp --block_device_mapping vda=8e244a9f-3a81-49ce-a141-c5e8cc5a3782:::0 expect_numa_1
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova boot --flavor=102  --nic net-id=9fc7cb45-d80c-44e5-a2ca-1a6af22c7f92,vif-model=avp --nic net-id=ce7272b1-ac67-4fb6-8ace-9443ef1c1267,vif-model=avp --block_device_mapping vda=1bb24d9a-9d1c-4716-aeb5-383f5c3e3875:::0 expect_numa_0
+[wrsroot@controller-0 ~(keystone_tenant1)]$ vm-topology -s servers
+vm-topology: 2015-04-27T21:06:29.120912  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+---------------+-----------+-------------------------+--------------+------------+--------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name          | host      | state (vm, task, power) | server_group | image      | flavor | vcpus | memory | instance_topology                                                            | in_libvirt |
++---------+--------------------------------------+-------------------+---------------+-----------+-------------------------+--------------+------------+--------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant1 | c849aad1-789d-4113-9548-fe888c7fb9e8 | instance-00000026 | expect_numa_1 | compute-1 |  active, None, Running  | -            | cgcs-guest | 7-cpus | 7,7,7 |    512 | node:1,   512MB, pgsize:2M, 1s,1c,7t, vcpus:0-6, pcpus:12-18, siblings:{0-6} |    yes     |
+| tenant1 | b98cbf8e-4816-47a3-a165-f339bae5eb1c | instance-00000027 | expect_numa_0 | compute-1 |  active, None, Running  | -            | cgcs-guest | 7-cpus | 7,7,7 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,7t, vcpus:0-6, pcpus:1-7, siblings:{0-6}   |    yes     |
++---------+--------------------------------------+-------------------+---------------+-----------+-------------------------+--------------+------------+--------+-------+--------+------------------------------------------------------------------------------+------------+
+[root@compute-1 ~(keystone_admin)]# virsh vcpupin instance-00000026
+VCPU: CPU Affinity
+----------------------------------
+   0: 12
+   1: 13
+   2: 14
+   3: 15
+   4: 16
+   5: 17
+   6: 18
+
+[root@compute-1 ~(keystone_admin)]# virsh vcpupin instance-00000027
+VCPU: CPU Affinity
+----------------------------------
+   0: 1
+   1: 2
+   2: 3
+   3: 4
+   4: 5
+   5: 6
+   6: 7
+
+
+[wrsroot@controller-0 ~(keystone_admin)]$ date; cat /etc/build.info 
+Mon Apr 27 21:28:05 UTC 2015
+###
+### Wind River Titanium Server
+###     Release 15.04
+###
+###     Wind River Systems, Inc.
+###
+
+SW_VERSION="15.04"
+BUILD_TARGET="Host Installer"
+BUILD_TYPE="Formal"
+BUILD_ID="2015-04-25_22-05-05"
+SRC_BUILD_ID="2015-04-25_22-00-36"
+
+JOB="CGCS_2.0_Unified_Daily_Build"
+BUILD_BY="jenkins"
+BUILD_NUMBER="129"
+BUILD_HOST="yow-cgts2-lx"
+BUILD_DATE="2015-04-25 22:05:08 -0400"

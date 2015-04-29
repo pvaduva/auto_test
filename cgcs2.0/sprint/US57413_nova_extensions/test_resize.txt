@@ -1,0 +1,312 @@
+Resize/Resize-revert
+TCs 9-11
+========
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-cpu-list compute-0
++--------------------------------------+----------+-----------+----------+--------+-------------------------------------------+-------------------+
+| uuid                                 | log_core | processor | phy_core | thread | processor_model                           | assigned_function |
++--------------------------------------+----------+-----------+----------+--------+-------------------------------------------+-------------------+
+| c947fb99-8d5f-4017-87e3-3433112a507a | 0        | 0         | 0        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | Platform          |
+| 5b4391a3-0ce9-4c03-bb93-0740b6eded6f | 1        | 0         | 1        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | Vswitch           |
+| 5f14a1f9-53df-4b78-ab98-9335fc596684 | 2        | 0         | 2        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | Vswitch           |
+| d1f37cb4-8722-4d72-9e6d-0ca7b224c7a7 | 3        | 0         | 3        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 0baa9df8-fd44-49b5-b197-196028ddd1cb | 4        | 0         | 4        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| ed388291-187b-4b80-bc64-40b84b95965a | 5        | 0         | 8        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 42592f5f-0a16-4b7a-b06a-3f47c7ef42c5 | 6        | 0         | 9        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| c3ecc318-4ba1-4679-bacb-323902899c12 | 7        | 0         | 10       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| ea50242c-1d4a-47f8-ad61-0381807e2a74 | 8        | 0         | 11       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| cb8ed476-7139-46e1-8f51-48d198968551 | 9        | 0         | 12       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| f1e49746-052e-4ed6-8ce7-ee34bcd4220c | 10       | 1         | 0        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 72902954-4596-430a-b3b2-a619149a01aa | 11       | 1         | 1        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 4e25ff9e-1ed5-424d-a7d7-a3b4194af993 | 12       | 1         | 2        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 081de002-b5bc-4770-b9c4-2d204cc22a3c | 13       | 1         | 3        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 6845b12d-172d-43df-8d1e-0eedc9a0ff1e | 14       | 1         | 4        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 53ee5a74-5db9-4e63-bfe5-fc1d05c986c1 | 15       | 1         | 8        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 75018db0-94ca-4305-8b8a-4e0c536469bf | 16       | 1         | 9        | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| b99b1269-77c8-4f97-b676-fb6334cef89e | 17       | 1         | 10       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| 5169cb7f-feca-4863-8e93-55e7a4acade0 | 18       | 1         | 11       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
+| f85e8a50-79bd-47d8-9754-b859b06c7ba6 | 19       | 1         | 12       | 0      | Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz | VMs               |
++--------------------------------------+----------+-----------+----------+--------+-------------------------------------------+-------------------+
+
+=== Launch VMs on compute-0 take up all vcpus on numa 0 ===
+[wrsroot@controller-0 ~(keystone_admin)]$ nova flavor-show 102
++----------------------------+------------------------------------------------------------+
+| Property                   | Value                                                      |
++----------------------------+------------------------------------------------------------+
+| OS-FLV-DISABLED:disabled   | False                                                      |
+| OS-FLV-EXT-DATA:ephemeral  | 0                                                          |
+| disk                       | 0                                                          |
+| extra_specs                | {"hw:cpu_policy": "dedicated", "hw:mem_page_size": "2048"} |
+| id                         | 102                                                        |
+| name                       | 7-cpus                                                     |
+| os-flavor-access:is_public | True                                                       |
+| ram                        | 512                                                        |
+| rxtx_factor                | 1.0                                                        |
+| swap                       |                                                            |
+| vcpus                      | 7                                                          |
++----------------------------+------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova flavor-show 103
++----------------------------+------------------------------------------------------------+
+| Property                   | Value                                                      |
++----------------------------+------------------------------------------------------------+
+| OS-FLV-DISABLED:disabled   | False                                                      |
+| OS-FLV-EXT-DATA:ephemeral  | 0                                                          |
+| disk                       | 0                                                          |
+| extra_specs                | {"hw:cpu_policy": "dedicated", "hw:mem_page_size": "2048"} |
+| id                         | 103                                                        |
+| name                       | 8-cpus                                                     |
+| os-flavor-access:is_public | True                                                       |
+| ram                        | 512                                                        |
+| rxtx_factor                | 1.0                                                        |
+| swap                       |                                                            |
+| vcpus                      | 8                                                          |
++----------------------------+------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova boot --flavor=102  --nic net-id=9fc7cb45-d80c-44e5-a2ca-1a6af22c7f92,vif-model=avp --nic net-id=ce7272b1-ac67-4fb6-8ace-9443ef1c1267,vif-model=avp --block_device_mapping vda=b3b8ef34-6ca4-4b58-9034-f7ed50486aca:::0 to_resize_up
++--------------------------------------+----------------------------------------------------+
+| Property                             | Value                                              |
++--------------------------------------+----------------------------------------------------+
+| OS-DCF:diskConfig                    | MANUAL                                             |
+| OS-EXT-AZ:availability_zone          | nova                                               |
+| OS-EXT-STS:power_state               | 0                                                  |
+| OS-EXT-STS:task_state                | scheduling                                         |
+| OS-EXT-STS:vm_state                  | building                                           |
+| OS-SRV-USG:launched_at               | -                                                  |
+| OS-SRV-USG:terminated_at             | -                                                  |
+| accessIPv4                           |                                                    |
+| accessIPv6                           |                                                    |
+| adminPass                            | PPxNb6L4dgFA                                       |
+| config_drive                         |                                                    |
+| created                              | 2015-04-27T17:23:41Z                               |
+| flavor                               | 7-cpus (102)                                       |
+| hostId                               |                                                    |
+| id                                   | 787b2ca4-2432-4af4-9a20-83463180b364               |
+| image                                | Attempt to boot from volume - no image supplied    |
+| key_name                             | -                                                  |
+| metadata                             | {}                                                 |
+| name                                 | to_resize_up                                       |
+| nics                                 |                                                    |
+| os-extended-volumes:volumes_attached | [{"id": "b3b8ef34-6ca4-4b58-9034-f7ed50486aca"}]   |
+| progress                             | 0                                                  |
+| security_groups                      | default                                            |
+| status                               | BUILD                                              |
+| tenant_id                            | 434ce0f49283408580e6385a83996e17                   |
+| updated                              | 2015-04-27T17:23:41Z                               |
+| user_id                              | dbd44640d3114d49a82d8cabee93b837                   |
+| wrs-res:topology                     | node:0,   512MB, pgsize:2M, vcpus:0-6, unallocated |
+| wrs-res:vcpus                        | [7, 7, 7]                                          |
+| wrs-sg:server_group                  |                                                    |
++--------------------------------------+----------------------------------------------------+
+
+=== Check VM launched on numa 0 ===
+[wrsroot@controller-0 ~(keystone_admin)]$ vm-topology -s servers
+vm-topology: 2015-04-27T17:28:38.442987  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+----------------------------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name            | host      | state (vm, task, power) | server_group | image      | flavor          | vcpus | memory | instance_topology                                                          | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+----------------------------------------------------------------------------+------------+
+| tenant1 | 787b2ca4-2432-4af4-9a20-83463180b364 | instance-00000006 | to_resize_up    | compute-0 |  active, None, Running  | -            | cgcs-guest | 7-cpus          | 7,7,7 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,7t, vcpus:0-6, pcpus:3-9, siblings:{0-6} |    yes     |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+----------------------------------------------------------------------------+------------+
+[root@compute-0 ~(keystone_admin)]# virsh vcpupin instance-00000006
+VCPU: CPU Affinity
+----------------------------------
+   0: 3
+   1: 4
+   2: 5
+   3: 6
+   4: 7
+   5: 8
+   6: 9
+=== Resize to larger flavor verify scheduled on numa 1 ===
+[wrsroot@controller-0 ~(keystone_admin)]$ nova resize 787b2ca4-2432-4af4-9a20-83463180b364 103    
+[wrsroot@controller-0 ~(keystone_admin)]$ nova resize-confirm 787b2ca4-2432-4af4-9a20-83463180b364
+[wrsroot@controller-0 ~(keystone_admin)]$ vm-topology -s servers
+vm-topology: 2015-04-27T17:30:35.969141  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name            | host      | state (vm, task, power) | server_group | image      | flavor          | vcpus | memory | instance_topology                                                            | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant1 | 787b2ca4-2432-4af4-9a20-83463180b364 | instance-00000006 | to_resize_up    | compute-0 |  active, None, Running  | -            | cgcs-guest | 8-cpus          | 8,8,8 |    512 | node:1,   512MB, pgsize:2M, 1s,1c,8t, vcpus:0-7, pcpus:10-17, siblings:{0-7} |    yes     |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+[root@compute-0 ~(keystone_admin)]# virsh vcpupin instance-00000006
+VCPU: CPU Affinity
+----------------------------------
+   0: 10
+   1: 11
+   2: 12
+   3: 13
+   4: 14
+   5: 15
+   6: 16
+   7: 17
+
+=== Resize down to smaller flavor verify scheduled on numa 0 ===
+[wrsroot@controller-0 ~(keystone_admin)]$ nova resize 787b2ca4-2432-4af4-9a20-83463180b364 102    
+[wrsroot@controller-0 ~(keystone_admin)]$ nova resize-confirm 787b2ca4-2432-4af4-9a20-83463180b364
+[wrsroot@controller-0 ~(keystone_admin)]$ vm-topology -s servers
+vm-topology: 2015-04-27T17:33:00.369539  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+----------------------------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name            | host      | state (vm, task, power) | server_group | image      | flavor          | vcpus | memory | instance_topology                                                          | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+----------------------------------------------------------------------------+------------+
+| tenant1 | 787b2ca4-2432-4af4-9a20-83463180b364 | instance-00000006 | to_resize_up    | compute-0 |  active, None, Running  | -            | cgcs-guest | 7-cpus          | 7,7,7 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,7t, vcpus:0-6, pcpus:3-9, siblings:{0-6} |    yes     |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+----------------------------------------------------------------------------+------------+
+[root@compute-0 ~(keystone_admin)]# virsh vcpupin instance-00000006
+VCPU: CPU Affinity
+----------------------------------
+   0: 3
+   1: 4
+   2: 5
+   3: 6
+   4: 7
+   5: 8
+   6: 9
+
+=== Resize VM and revert verify stays on numa 0 ===
+[wrsroot@controller-0 ~(keystone_admin)]$ nova resize 787b2ca4-2432-4af4-9a20-83463180b364 103
+[wrsroot@controller-0 ~(keystone_admin)]$ vm-topology -s servers
+vm-topology: 2015-04-27T17:36:26.155181  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name            | host      | state (vm, task, power) | server_group | image      | flavor          | vcpus | memory | instance_topology                                                            | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant1 | 787b2ca4-2432-4af4-9a20-83463180b364 | instance-00000006 | to_resize_up    | compute-1 | resized, None, Running  | -            | cgcs-guest | 8-cpus          | 8,8,8 |    512 | node:1,   512MB, pgsize:2M, 1s,1c,8t, vcpus:0-7, pcpus:11-18, siblings:{0-7} |    yes     |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+[root@compute-0 ~(keystone_admin)]# virsh vcpupin instance-00000006
+VCPU: CPU Affinity
+----------------------------------
+   0: 10
+   1: 11
+   2: 12
+   3: 13
+   4: 14
+   5: 15
+   6: 16
+   7: 17
+[wrsroot@controller-0 ~(keystone_admin)]$ nova resize-revert 787b2ca4-2432-4af4-9a20-83463180b364
+[wrsroot@controller-0 ~(keystone_admin)]$ vm-topology -s servers
+vm-topology: 2015-04-27T17:37:22.841755  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+----------------------------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name            | host      | state (vm, task, power) | server_group | image      | flavor          | vcpus | memory | instance_topology                                                          | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+----------------------------------------------------------------------------+------------+
+| tenant1 | 787b2ca4-2432-4af4-9a20-83463180b364 | instance-00000006 | to_resize_up    | compute-0 |  active, None, Running  | -            | cgcs-guest | 7-cpus          | 7,7,7 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,7t, vcpus:0-6, pcpus:3-9, siblings:{0-6} |    yes     |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+----------------------------------------------------------------------------+------------+
+[root@compute-0 ~(keystone_admin)]# virsh vcpupin instance-00000006
+VCPU: CPU Affinity
+----------------------------------
+   0: 3
+   1: 4
+   2: 5
+   3: 6
+   4: 7
+   5: 8
+   6: 9
+
+=== Launch second VM on numa 1, then delete VM on numa 0 ===
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova boot --flavor=102  --nic net-id=9fc7cb45-d80c-44e5-a2ca-1a6af22c7f92,vif-model=avp --nic net-id=ce7272b1-ac67-4fb6-8ace-9443ef1c1267,vif-model=avp --block_device_mapping vda=8e244a9f-3a81-49ce-a141-c5e8cc5a3782:::0 expect_numa_1
+[wrsroot@controller-0 ~(keystone_tenant1)]$ vm-topology -s servers
+vm-topology: 2015-04-27T17:40:35.457207  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name            | host      | state (vm, task, power) | server_group | image      | flavor          | vcpus | memory | instance_topology                                                            | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant1 | 787b2ca4-2432-4af4-9a20-83463180b364 | instance-00000006 | to_resize_up    | compute-0 |  active, None, Running  | -            | cgcs-guest | 7-cpus          | 7,7,7 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,7t, vcpus:0-6, pcpus:3-9, siblings:{0-6}   |    yes     |
+| tenant1 | e1217475-1346-4d63-bd81-81368a47bf74 | instance-00000008 | expect_numa_1   | compute-0 |  active, None, Running  | -            | cgcs-guest | 7-cpus          | 7,7,7 |    512 | node:1,   512MB, pgsize:2M, 1s,1c,7t, vcpus:0-6, pcpus:10-16, siblings:{0-6} |    yes     |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+[root@compute-0 ~(keystone_admin)]# virsh vcpupin instance-00000006
+VCPU: CPU Affinity
+----------------------------------
+   0: 3
+   1: 4
+   2: 5
+   3: 6
+   4: 7
+   5: 8
+   6: 9
+[root@compute-0 ~(keystone_admin)]# virsh vcpupin instance-00000008
+VCPU: CPU Affinity
+----------------------------------
+   0: 10
+   1: 11
+   2: 12
+   3: 13
+   4: 14
+   5: 15
+   6: 16
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova delete to_resize_up
+Request to delete server to_resize_up has been accepted.
+[wrsroot@controller-0 ~(keystone_tenant1)]$ vm-topology -s servers
+vm-topology: 2015-04-27T17:40:56.537491  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name            | host      | state (vm, task, power) | server_group | image      | flavor          | vcpus | memory | instance_topology                                                            | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant1 | e1217475-1346-4d63-bd81-81368a47bf74 | instance-00000008 | expect_numa_1   | compute-0 |  active, None, Running  | -            | cgcs-guest | 7-cpus          | 7,7,7 |    512 | node:1,   512MB, pgsize:2M, 1s,1c,7t, vcpus:0-6, pcpus:10-16, siblings:{0-6} |    yes     |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+[root@compute-0 ~(keystone_admin)]# virsh vcpupin instance-00000008
+VCPU: CPU Affinity
+----------------------------------
+   0: 10
+   1: 11
+   2: 12
+   3: 13
+   4: 14
+   5: 15
+   6: 16
+
+=== Attempt to resize and verify VM scheduled on numa 0 ===
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova resize e1217475-1346-4d63-bd81-81368a47bf74 101
+[wrsroot@controller-0 ~(keystone_tenant1)]$ vm-topology -s servers
+vm-topology: 2015-04-27T17:41:53.529860  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+----------------------------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name            | host      | state (vm, task, power) | server_group | image      | flavor          | vcpus | memory | instance_topology                                                          | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+----------------------------------------------------------------------------+------------+
+| tenant1 | e1217475-1346-4d63-bd81-81368a47bf74 | instance-00000008 | expect_numa_1   | compute-0 | resized, None, Running  | -            | cgcs-guest | wrl5.dpdk.small | 2,2,2 |    512 | node:0,   512MB, pgsize:2M, 1s,1c,2t, vcpus:0,1, pcpus:3,4, siblings:{0,1} |    yes     |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+----------------------------------------------------------------------------+------------+
+[root@compute-0 ~(keystone_admin)]# virsh vcpupin instance-00000008
+VCPU: CPU Affinity
+----------------------------------
+   0: 3
+   1: 4
+
+=== Resize revert, verify VM back on numa 1 even though enough cpus to be scheduled on numa 0 ===
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova resize-revert e1217475-1346-4d63-bd81-81368a47bf74
+[wrsroot@controller-0 ~(keystone_tenant1)]$ vm-topology -s servers
+vm-topology: 2015-04-27T17:42:24.883344  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name            | host      | state (vm, task, power) | server_group | image      | flavor          | vcpus | memory | instance_topology                                                            | in_libvirt |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant1 | e1217475-1346-4d63-bd81-81368a47bf74 | instance-00000008 | expect_numa_1   | compute-0 |  active, None, Running  | -            | cgcs-guest | 7-cpus          | 7,7,7 |    512 | node:1,   512MB, pgsize:2M, 1s,1c,7t, vcpus:0-6, pcpus:10-16, siblings:{0-6} |    yes     |
++---------+--------------------------------------+-------------------+-----------------+-----------+-------------------------+--------------+------------+-----------------+-------+--------+------------------------------------------------------------------------------+------------+
+
+
+[wrsroot@controller-0 ~(keystone_admin)]$ date; cat /etc/build.info 
+Mon Apr 27 21:28:05 UTC 2015
+###
+### Wind River Titanium Server
+###     Release 15.04
+###
+###     Wind River Systems, Inc.
+###
+
+SW_VERSION="15.04"
+BUILD_TARGET="Host Installer"
+BUILD_TYPE="Formal"
+BUILD_ID="2015-04-25_22-05-05"
+SRC_BUILD_ID="2015-04-25_22-00-36"
+
+JOB="CGCS_2.0_Unified_Daily_Build"
+BUILD_BY="jenkins"
+BUILD_NUMBER="129"
+BUILD_HOST="yow-cgts2-lx"
+BUILD_DATE="2015-04-25 22:05:08 -0400"

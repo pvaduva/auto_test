@@ -1,0 +1,166 @@
+TCs 6-8
+=======
+
+=== Set VSwitch for compute-0 on numa 0, set VSwitch on compute-1 on numa 1 ===
+=== Launch VM on compute-1 ===
+[wrsroot@controller-0 ~(keystone_tenant1)]$ nova boot --flavor=102  --nic net-id=9fc7cb45-d80c-44e5-a2ca-1a6af22c7f92,vif-model=avp --nic net-id=ce7272b1-ac67-4fb6-8ace-9443ef1c1267,vif-model=avp --block_device_mapping vda=1bb24d9a-9d1c-4716-aeb5-383f5c3e3875:::0 migrate_evac_to_numa_0
+[wrsroot@controller-0 ~(keystone_tenant1)]$ vm-topology -s servers
+vm-topology: 2015-04-27T21:13:02.266265  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+----------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name                   | host      | state (vm, task, power) | server_group | image      | flavor | vcpus | memory | instance_topology                                  | in_libvirt |
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+----------------------------------------------------+------------+
+| tenant1 | 06ed4967-b2df-488e-9f2f-72da2881bd0c | instance-00000028 | migrate_evac_to_numa_0 | compute-1 |  active, None, Running  | -            | cgcs-guest | 7-cpus | 7,7,7 |    512 | node:1,   512MB, pgsize:2M, vcpus:0-6, pcpus:12-18 |    yes     |
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+----------------------------------------------------+------------+
+[root@compute-1 ~(keystone_admin)]# virsh vcpupin instance-00000028
+VCPU: CPU Affinity
+----------------------------------
+   0: 12
+   1: 13
+   2: 14
+   3: 15
+   4: 16
+   5: 17
+   6: 18
+
+=== live migrate, verify scheduled on numa 0 of compute-0 ===
+[wrsroot@controller-0 ~(keystone_admin)]$ nova live-migration 06ed4967-b2df-488e-9f2f-72da2881bd0c
+[wrsroot@controller-0 ~(keystone_admin)]$ vm-topology -s servers
+vm-topology: 2015-04-27T21:14:34.031331  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+--------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name                   | host      | state (vm, task, power) | server_group | image      | flavor | vcpus | memory | instance_topology                                | in_libvirt |
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+--------------------------------------------------+------------+
+| tenant1 | 06ed4967-b2df-488e-9f2f-72da2881bd0c | instance-00000028 | migrate_evac_to_numa_0 | compute-0 |  active, None, Running  | -            | cgcs-guest | 7-cpus | 7,7,7 |    512 | node:0,   512MB, pgsize:2M, vcpus:0-6, pcpus:3-9 |    yes     |
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+--------------------------------------------------+------------+
+[root@compute-0 ~(keystone_admin)]# virsh vcpupin instance-00000028
+VCPU: CPU Affinity
+----------------------------------
+   0: 3
+   1: 4
+   2: 5
+   3: 6
+   4: 7
+   5: 8
+   6: 9
+
+=== migrate back to compute-1, verify scheduled on numa 1 ===
+[wrsroot@controller-0 ~(keystone_admin)]$ vm-topology -s servers
+vm-topology: 2015-04-27T21:16:35.642890  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name                   | host      | state (vm, task, power) | server_group | image      | flavor | vcpus | memory | instance_topology                                                            | in_libvirt |
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant1 | 06ed4967-b2df-488e-9f2f-72da2881bd0c | instance-00000028 | migrate_evac_to_numa_0 | compute-1 |  active, None, Running  | -            | cgcs-guest | 7-cpus | 7,7,7 |    512 | node:1,   512MB, pgsize:2M, 1s,1c,7t, vcpus:0-6, pcpus:12-18, siblings:{0-6} |    yes     |
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+------------------------------------------------------------------------------+------------+
+[root@compute-1 ~(keystone_admin)]# virsh vcpupin instance-00000028
+VCPU: CPU Affinity
+----------------------------------
+   0: 12
+   1: 13
+   2: 14
+   3: 15
+   4: 16
+   5: 17
+   6: 18
+
+=== Force VM evacuation by rebooting compute, VM currently on compute-0 ===
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 3  | storage-0    | storage     | unlocked       | enabled     | available    |
+| 4  | storage-1    | storage     | unlocked       | enabled     | available    |
+| 5  | compute-0    | compute     | unlocked       | enabled     | available    |
+| 6  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ vm-topology -s servers
+vm-topology: 2015-04-27T21:19:05.555367  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+--------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name                   | host      | state (vm, task, power) | server_group | image      | flavor | vcpus | memory | instance_topology                                | in_libvirt |
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+--------------------------------------------------+------------+
+| tenant1 | 06ed4967-b2df-488e-9f2f-72da2881bd0c | instance-00000028 | migrate_evac_to_numa_0 | compute-0 |  active, None, Running  | -            | cgcs-guest | 7-cpus | 7,7,7 |    512 | node:0,   512MB, pgsize:2M, vcpus:0-6, pcpus:3-9 |    yes     |
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+--------------------------------------------------+------------+
+[root@compute-0 ~(keystone_admin)]# virsh vcpupin instance-00000028
+VCPU: CPU Affinity
+----------------------------------
+   0: 3
+   1: 4
+   2: 5
+   3: 6
+   4: 7
+   5: 8
+   6: 9
+[wrsroot@controller-0 ~(keystone_admin)]$ ssh compute-0
+compute-0:~$ sudo su -
+Password:
+[root@compute-0 ~(keystone_admin)]# reboot
+
+Broadcast message from root@compute-0 (pts/1) (Mon Apr 27 21:20:46 2015):
+
+The system is going down for reboot NOW!
+[root@compute-0 ~(keystone_admin)]# Connection to compute-0 closed by remote host.
+Connection to compute-0 closed.
+
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-list
++----+--------------+-------------+----------------+-------------+--------------+
+| id | hostname     | personality | administrative | operational | availability |
++----+--------------+-------------+----------------+-------------+--------------+
+| 1  | controller-0 | controller  | unlocked       | enabled     | available    |
+| 2  | controller-1 | controller  | unlocked       | enabled     | available    |
+| 3  | storage-0    | storage     | unlocked       | enabled     | available    |
+| 4  | storage-1    | storage     | unlocked       | enabled     | available    |
+| 5  | compute-0    | compute     | unlocked       | enabled     | failed       |
+| 6  | compute-1    | compute     | unlocked       | enabled     | available    |
++----+--------------+-------------+----------------+-------------+--------------+
+
+=== verify evacuated to compute-1 numa 1 ===
+[wrsroot@controller-0 ~(keystone_admin)]$ vm-topology -s servers
+vm-topology: 2015-04-27T21:23:40.731058  options: show:['servers']
+
+SERVERS (nova view):
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant  | ID                                   | instance_name     | name                   | host      | state (vm, task, power) | server_group | image      | flavor | vcpus | memory | instance_topology                                                            | in_libvirt |
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+------------------------------------------------------------------------------+------------+
+| tenant1 | 06ed4967-b2df-488e-9f2f-72da2881bd0c | instance-00000028 | migrate_evac_to_numa_0 | compute-1 |  active, None, Running  | -            | cgcs-guest | 7-cpus | 7,7,7 |    512 | node:1,   512MB, pgsize:2M, 1s,1c,7t, vcpus:0-6, pcpus:12-18, siblings:{0-6} |    yes     |
++---------+--------------------------------------+-------------------+------------------------+-----------+-------------------------+--------------+------------+--------+-------+--------+------------------------------------------------------------------------------+------------+
+[root@compute-1 ~(keystone_admin)]# virsh vcpupin instance-00000028
+VCPU: CPU Affinity
+----------------------------------
+   0: 12
+   1: 13
+   2: 14
+   3: 15
+   4: 16
+   5: 17
+   6: 18
+
+
+[wrsroot@controller-0 ~(keystone_admin)]$ date; cat /etc/build.info 
+Mon Apr 27 21:28:05 UTC 2015
+###
+### Wind River Titanium Server
+###     Release 15.04
+###
+###     Wind River Systems, Inc.
+###
+
+SW_VERSION="15.04"
+BUILD_TARGET="Host Installer"
+BUILD_TYPE="Formal"
+BUILD_ID="2015-04-25_22-05-05"
+SRC_BUILD_ID="2015-04-25_22-00-36"
+
+JOB="CGCS_2.0_Unified_Daily_Build"
+BUILD_BY="jenkins"
+BUILD_NUMBER="129"
+BUILD_HOST="yow-cgts2-lx"
+BUILD_DATE="2015-04-25 22:05:08 -0400"
+

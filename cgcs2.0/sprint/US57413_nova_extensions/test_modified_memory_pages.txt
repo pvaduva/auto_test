@@ -1,0 +1,285 @@
+TCs 3 & 4
+=========
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-hugepage-update compute-0 0 -2M 3000 -1G 2
++-------------------------------+--------------------------------------+
+| Property                      | Value                                |
++-------------------------------+--------------------------------------+
+| Memory: Total     (MiB)       | 14158                                |
+|         Platorm   (MiB)       | 4000                                 |
+|         Available (MiB)       | 13134                                |
+| Huge Pages Configured         | True                                 |
+| AVS Huge Pages: Size (MiB)    | 1024                                 |
+|                 Total         | 1                                    |
+|                 Available     | 0                                    |
+| VM  Huge Pages (2M): Total    | 6567                                 |
+|                 Total Pending | 3000                                 |
+|                 Available     | 6567                                 |
+| VM  Huge Pages (1G): Total    | 0                                    |
+|                 Total Pending | 2                                    |
+|                 Available     | 0                                    |
+| uuid                          | 9f56f5b8-46fc-49f3-8a02-18d2e2d7be65 |
+| ihost_uuid                    | e600658c-d870-47c7-8665-c79fa77077d1 |
+| inode_uuid                    | f1da6397-b1b7-47de-8d19-951a2238dc6c |
+| created_at                    | 2015-04-26T22:44:29.540861+00:00     |
+| updated_at                    | 2015-04-28T18:07:26.534852+00:00     |
++-------------------------------+--------------------------------------+
++-------------------------------+--------------------------------------+
+| Property                      | Value                                |
++-------------------------------+--------------------------------------+
+| Memory: Total     (MiB)       | 14144                                |
+|         Platorm   (MiB)       | 2000                                 |
+|         Available (MiB)       | 13120                                |
+| Huge Pages Configured         | True                                 |
+| AVS Huge Pages: Size (MiB)    | 1024                                 |
+|                 Total         | 1                                    |
+|                 Available     | 0                                    |
+| VM  Huge Pages (2M): Total    | 6560                                 |
+|                 Total Pending | 6560                                 |
+|                 Available     | 6560                                 |
+| VM  Huge Pages (1G): Total    | 0                                    |
+|                 Total Pending | 2                                    |
+|                 Available     | 0                                    |
+| uuid                          | d029ee28-3a3d-4d2f-ae21-75c0c739f286 |
+| ihost_uuid                    | e600658c-d870-47c7-8665-c79fa77077d1 |
+| inode_uuid                    | ff055f2a-6eca-42f0-8e9b-b24cbea2c94a |
+| created_at                    | 2015-04-26T22:44:29.550215+00:00     |
+| updated_at                    | 2015-04-28T18:07:26.548370+00:00     |
++-------------------------------+--------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-hugepage-update compute-0 1 -2M 0 -1G 2
++-------------------------------+--------------------------------------+
+| Property                      | Value                                |
++-------------------------------+--------------------------------------+
+| Memory: Total     (MiB)       | 14144                                |
+|         Platorm   (MiB)       | 2000                                 |
+|         Available (MiB)       | 13120                                |
+| Huge Pages Configured         | True                                 |
+| AVS Huge Pages: Size (MiB)    | 1024                                 |
+|                 Total         | 1                                    |
+|                 Available     | 0                                    |
+| VM  Huge Pages (2M): Total    | 6560                                 |
+|                 Total Pending | 0                                    |
+|                 Available     | 6560                                 |
+| VM  Huge Pages (1G): Total    | 0                                    |
+|                 Total Pending | 2                                    |
+|                 Available     | 0                                    |
+| uuid                          | d029ee28-3a3d-4d2f-ae21-75c0c739f286 |
+| ihost_uuid                    | e600658c-d870-47c7-8665-c79fa77077d1 |
+| inode_uuid                    | ff055f2a-6eca-42f0-8e9b-b24cbea2c94a |
+| created_at                    | 2015-04-26T22:44:29.550215+00:00     |
+| updated_at                    | 2015-04-28T18:07:54.755227+00:00     |
++-------------------------------+--------------------------------------+
++-------------------------------+--------------------------------------+
+| Property                      | Value                                |
++-------------------------------+--------------------------------------+
+| Memory: Total     (MiB)       | 14158                                |
+|         Platorm   (MiB)       | 4000                                 |
+|         Available (MiB)       | 13134                                |
+| Huge Pages Configured         | True                                 |
+| AVS Huge Pages: Size (MiB)    | 1024                                 |
+|                 Total         | 1                                    |
+|                 Available     | 0                                    |
+| VM  Huge Pages (2M): Total    | 6567                                 |
+|                 Total Pending | 3000                                 |
+|                 Available     | 6567                                 |
+| VM  Huge Pages (1G): Total    | 0                                    |
+|                 Total Pending | 2                                    |
+|                 Available     | 0                                    |
+| uuid                          | 9f56f5b8-46fc-49f3-8a02-18d2e2d7be65 |
+| ihost_uuid                    | e600658c-d870-47c7-8665-c79fa77077d1 |
+| inode_uuid                    | f1da6397-b1b7-47de-8d19-951a2238dc6c |
+| created_at                    | 2015-04-26T22:44:29.540861+00:00     |
+| updated_at                    | 2015-04-28T18:07:54.717348+00:00     |
++-------------------------------+--------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ system host-unlock compute-0
++-----------------+--------------------------------------+
+| Property        | Value                                |
++-----------------+--------------------------------------+
+| action          | none                                 |
+| administrative  | locked                               |
+| availability    | online                               |
+| bm_ip           | None                                 |
+| bm_mac          |                                      |
+| bm_type         | None                                 |
+| bm_username     |                                      |
+| capabilities    | {}                                   |
+| created_at      | 2015-04-26T22:34:54.191526+00:00     |
+| cstatus         |                                      |
+| hostname        | compute-0                            |
+| iconfig_applied | 51111056-f808-485c-9232-ef10dad8e255 |
+| iconfig_fini    | None                                 |
+| iconfig_target  | 51111056-f808-485c-9232-ef10dad8e255 |
+| id              | 5                                    |
+| invprovision    | provisioned                          |
+| location        | {u'locn': u''}                       |
+| mgmt_ip         | 192.168.204.89                       |
+| mgmt_mac        | 00:1e:67:66:7d:78                    |
+| operational     | disabled                             |
+| personality     | compute                              |
+| reserved        | False                                |
+| serialid        | None                                 |
+| task            | Unlocking                            |
+| updated_at      | 2015-04-28T18:07:45.130502+00:00     |
+| uptime          | 6509                                 |
+| uuid            | e600658c-d870-47c7-8665-c79fa77077d1 |
++-----------------+--------------------------------------+
+
+=== Check memories have changed, tools are all equal still ===
+[wrsroot@controller-0 ~(keystone_admin)]$ nova hypervisor-show compute-0
++---------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Property                  | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
++---------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| cpu_info_arch             | x86_64                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| cpu_info_features         | ["pge", "avx", "clflush", "sep", "syscall", "vme", "dtes64", "msr", "fsgsbase", "xsave", "vmx", "erms", "xtpr", "cmov", "smep", "ssse3", "est", "pat", "monitor", "smx", "pbe", "lm", "tsc", "nx", "fxsr", "tm", "sse4.1", "pae", "sse4.2", "pclmuldq", "acpi", "tsc-deadline", "mmx", "osxsave", "cx8", "mce", "de", "tm2", "ht", "dca", "lahf_lm", "popcnt", "mca", "pdpe1gb", "apic", "sse", "f16c", "pse", "ds", "invtsc", "pni", "rdtscp", "aes", "sse2", "ss", "ds_cpl", "pcid", "fpu", "cx16", "pse36", "mtrr", "pdcm", "rdrand", "x2apic"] |
+| cpu_info_model            | SandyBridge                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| cpu_info_topology_cores   | 10                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| cpu_info_topology_sockets | 1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| cpu_info_topology_threads | 1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| cpu_info_vendor           | Intel                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| current_workload          | 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| disk_available_least      | 7                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| free_disk_gb              | 9                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| free_ram_mb               | 10096                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| host_ip                   | 127.0.0.1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| hypervisor_hostname       | compute-0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| hypervisor_type           | QEMU                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| hypervisor_version        | 2002000                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| id                        | 1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| local_gb                  | 9                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| local_gb_used             | 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| memory_mb                 | 10096                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| memory_mb_used            | 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| running_vms               | 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| service_disabled_reason   | -                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| service_host              | compute-0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| service_id                | 5                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| state                     | up                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| status                    | enabled                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| vcpus                     | 17                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| vcpus_used                | 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
++---------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+[wrsroot@controller-0 ~(keystone_admin)]$ vm-topology -s computes
+vm-topology: 2015-04-28T21:25:17.907414  options: show:['computes']
+
+COMPUTE HOSTS:  Legend: U = Used, F = Free, list = [node[i], ...], C = cpulist
++-----------+-----------------------------------------------------------------------------------------+-------------+-----------+---------+-------+---------+--------+----------+
+| Host      | Aggregate                                                                               | model       | topology  | servers | pcpus | U:vcpus | memory | U:memory |
++-----------+-----------------------------------------------------------------------------------------+-------------+-----------+---------+-------+---------+--------+----------+
+| compute-0 | remote_storage_hosts, dedicated_resources, provider_group0-data1, provider_group0-data0 | SandyBridge | 1s,10c,1t |       0 |    17 |       0 |  10096 |        0 |
+| compute-1 | remote_storage_hosts, provider_group0-data1, provider_group0-data0                      | SandyBridge | 1s,10c,1t |       0 |    17 |       0 | 118328 |        0 |
+| count: 2  | -                                                                                       | -           | -         |       0 |    34 |       0 | 128424 |        0 |
++-----------+-----------------------------------------------------------------------------------------+-------------+-----------+---------+-------+---------+--------+----------+
+compute-0:~$ cat /sys/devices/system/node/node0/meminfo
+Node 0 MemTotal:       33473852 kB
+Node 0 MemFree:        22050288 kB
+Node 0 MemUsed:        11423564 kB
+Node 0 Active:           662036 kB
+Node 0 Inactive:          93024 kB
+Node 0 Active(anon):     552584 kB
+Node 0 Inactive(anon):      504 kB
+Node 0 Active(file):     109452 kB
+Node 0 Inactive(file):    92520 kB
+Node 0 Unevictable:       18004 kB
+Node 0 Mlocked:           18004 kB
+Node 0 Dirty:               116 kB
+Node 0 Writeback:             0 kB
+Node 0 FilePages:        204816 kB
+Node 0 Mapped:            23452 kB
+Node 0 AnonPages:        568244 kB
+Node 0 Shmem:               728 kB
+Node 0 KernelStack:        5144 kB
+Node 0 PageTables:        16168 kB
+Node 0 NFS_Unstable:          0 kB
+Node 0 Bounce:                0 kB
+Node 0 WritebackTmp:          0 kB
+Node 0 Slab:              72192 kB
+Node 0 SReclaimable:      38148 kB
+Node 0 SUnreclaim:        34044 kB
+Node 0 HugePages_Total:  3000
+Node 0 HugePages_Free:   3000
+Node 0 HugePages_Surp:      0
+
+compute-0:~$ cat /sys/devices/system/node/node1/meminfo
+Node 1 MemTotal:       33554432 kB
+Node 1 MemFree:        29191892 kB
+Node 1 MemUsed:         4362540 kB
+Node 1 Active:              704 kB
+Node 1 Inactive:            404 kB
+Node 1 Active(anon):        404 kB
+Node 1 Inactive(anon):      100 kB
+Node 1 Active(file):        300 kB
+Node 1 Inactive(file):      304 kB
+Node 1 Unevictable:         808 kB
+Node 1 Mlocked:             808 kB
+Node 1 Dirty:                20 kB
+Node 1 Writeback:             0 kB
+Node 1 FilePages:          1548 kB
+Node 1 Mapped:             1100 kB
+Node 1 AnonPages:           364 kB
+Node 1 Shmem:               140 kB
+Node 1 KernelStack:         576 kB
+Node 1 PageTables:          108 kB
+Node 1 NFS_Unstable:          0 kB
+Node 1 Bounce:                0 kB
+Node 1 WritebackTmp:          0 kB
+Node 1 Slab:              30380 kB
+Node 1 SReclaimable:       7532 kB
+Node 1 SUnreclaim:        22848 kB
+Node 1 HugePages_Total:     0
+Node 1 HugePages_Free:      0
+Node 1 HugePages_Surp:      0
+
+compute-0:~$ cat /proc/meminfo
+MemTotal:       65937412 kB
+MemFree:        51241612 kB
+Buffers:           41520 kB
+Cached:           164984 kB
+SwapCached:            0 kB
+Active:           662764 kB
+Inactive:          93560 kB
+Active(anon):     553004 kB
+Inactive(anon):      604 kB
+Active(file):     109760 kB
+Inactive(file):    92956 kB
+Unevictable:       18812 kB
+Mlocked:           18812 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+Dirty:                64 kB
+Writeback:             0 kB
+AnonPages:        568624 kB
+Mapped:            24552 kB
+Shmem:               868 kB
+Slab:             102664 kB
+SReclaimable:      45728 kB
+SUnreclaim:        56936 kB
+KernelStack:        5720 kB
+PageTables:        16284 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:    26750976 kB
+Committed_AS:    4758068 kB
+VmallocTotal:   34359738367 kB
+VmallocUsed:      489772 kB
+VmallocChunk:   34325700372 kB
+HugePages_Total:    3000
+HugePages_Free:     3000
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+DirectMap4k:       14088 kB
+DirectMap2M:     2002944 kB
+DirectMap1G:    67108864 kB
+
+compute-0:~$ vi /var/log/user.log
+2015-04-28T18:16:51.000 compute-0 /etc/init.d/compute-huge.sh[8862]: debug Memory:  NUMA node:0, TOTAL:28398 MiB, INIT:29011 MiB, AVAIL:22199 MiB, RSS:199 MiB, HTOT:6000 MiB, HUGE:24399 MiB
+2015-04-28T18:16:51.000 compute-0 /etc/init.d/compute-huge.sh[8862]: debug compute: NUMA node:0  vswitch:1024 MiB, 2 cores,  BASE:4000 MiB, 1 cores
+2015-04-28T18:16:51.000 compute-0 /etc/init.d/compute-huge.sh[8862]: debug compute: NUMA node:0  MANUAL_VM:8048 MiB
+2015-04-28T18:16:52.000 compute-0 /etc/init.d/compute-huge.sh[8862]: debug Memory:  NUMA node:1, TOTAL:28515 MiB, INIT:29155 MiB, AVAIL:28515 MiB, RSS:0 MiB, HTOT:0 MiB, HUGE:26516 MiB
+2015-04-28T18:16:52.000 compute-0 /etc/init.d/compute-huge.sh[8862]: debug compute: NUMA node:1  vswitch:1024 MiB, 0 cores,  BASE:2000 MiB, 0 cores
+2015-04-28T18:16:52.000 compute-0 /etc/init.d/compute-huge.sh[8862]: debug compute: NUMA node:1  MANUAL_VM:2048 MiB
+2015-04-28T18:16:52.000 compute-0 /etc/init.d/compute-huge.sh[8862]: debug compute_cpulists:  base:0   vswitch:1,2   exclude:0,1,2 pinned:3-19
+2015-04-28T18:16:52.000 compute-0 /etc/init.d/compute-huge.sh[8862]: debug compute_hugetlb: node0:1048576kB:1 node1:1048576kB:1 node0:2048kB:3000 node0:1048576kB:2 node1:1048576kB:2
+2015-04-28T18:16:52.000 compute-0 /etc/init.d/compute-huge.sh[8862]: debug BYPASS allocate_one_pagesize: skip pgsize = 1048576kB
+2015-04-28T18:16:52.000 compute-0 /etc/init.d/compute-huge.sh[8862]: debug BYPASS allocate_one_pagesize: skip pgsize = 1048576kB
+2015-04-28T18:16:52.000 compute-0 /etc/init.d/compute-huge.sh[8862]: debug Allocating 3000 HugeTLB pages of 2048kB on node0
