@@ -1,0 +1,435 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	system test - VM operations TC8001
+#	
+As part of the Test Improvements identified in Sprint 4: A recommendation was made to create new System Test 
+which would cover 20 existing regression test cases (currently consuming 2h 45m of execution time). The new 
+System Test would cover VM operations, including: booting, rebooting, live-migration, cold migration,  
+passing cloud init data to VM, pause/resume, stop/resume.
+
+Options
+.	IP=<ip address/name of controller>
+.	vm_type_list="virtio avp dpdk"
+.	vm_name=<Specify when testing a single vm>
+.	cloud=no			<default=yes>
+.	with_traffic=yes	<default=no>
+
+NOTE: requires NAT access for cloud init test
+NOTE: required expect-lite 4.8.1
+
+Assumptions
+.	Lab is setup using lab_setup.sh, VMs are lauched with launch_instances.sh
+.	Ixia lab file is pre-loaded (this could be improved to load a file later)
+
+
+Version 1.0
+;;;
+
+#tag for TC selection (later)
+TAG:system
+
+### tests covered
+test_458_hard_reboot_vm_instance_with_kni_network_attachments	00:08:23
+test_526_terminate_vm_instance_with_avp_network_attachments	00:07:32
+test_530_1_boot_vm_instance_with_e1000_network_attachments	00:08:13
+test_530_2_boot_vm_instance_with_virtio_network_attachments	00:07:34
+test_531_1_soft_reboot_vm_instance_with_e1000_network_attachments	00:08:54
+test_531_2_soft_reboot_vm_instance_with_virtio_network_attachment	00:08:30
+test_532_1_hard_reboot_vm_instance_with_e1000_network_attachments	00:09:17
+test_532_2_hard_reboot_vm_instance_with_virtio_network_attachment	00:08:58
+test_533_1_suspend_and_resume_vm_inst_with_e1000_net_attachment	00:07:40
+test_533_2_suspend_and_resume_vm_inst_with_virtio_net_attachment	00:07:36
+test_534_1_terminate_vm_instance_with_e1000_network_attachments	00:08:07
+test_534_2_terminate_vm_instance_with_virtio_network_attachments	00:07:34
+test_535_1_cold_migrate_vm_instance_with_e1000_network_attachment	00:08:52
+test_535_2_cold_migrate_vm_instance_with_virtio_network	00:08:31
+test_536_1_live_migrate_vm_instance_with_e1000_network_attachment	00:08:56
+test_536_2_live_migrate_vm_instance_with_virtio_network	00:08:17
+test_539_1_scp_to_vm_with_e1000_from_ext_net	00:07:37
+test_541_pass_cloud_init_user_data_to_vm_instance	00:08:13
+test_639_validate_glance_image_replication_after_swact	00:07:58
+
+### run time of this test (with data): 13m0.593s
+
+Steps:
+1)  Get random number
+2)  Cd to Ixia directory
+3)  Show tcl files
+4)  Setup ixia env
+5)  Start traffic
+6)  Look at stats
+7)  Log onto controller
+8)  Source admin
+9)  Did user pass in a specific VM name?
+10)  Get vm name for type $desired_type
+11)  Get vm type
+12)  Get first active existing VM
+13)  Get vm type
+14)  REBOOT VM $vm_name
+15)  Wait for  VM to become reboot
+16)  Wait for  VM to become active
+17)  HARD REBOOT VM $vm_name
+18)  Wait for  VM to become reboot
+19)  Wait for  VM to become active
+20)  PAUSE VM $vm_name
+21)  Wait for  VM to become paused
+22)  UNPAUSE VM $vm_name
+23)  Wait for  VM to become unpaused
+24)  STOP VM $vm_name
+25)  Wait for  VM to become stopped
+26)  START VM $vm_name
+27)  Wait for  VM to become active
+28)  SUSPEND VM $vm_name
+29)  Wait for  VM to become suspended
+30)  RESUME VM $vm_name
+31)  Wait for  VM to become active
+32)  LIVE MIGRATE VM $vm_name
+33)  Wait for  VM to become migrating
+34)  Wait for  VM to become active
+35)  COLD MIGRATE VM $vm_name
+36)  Wait for  VM to become cold-migrating
+37)  Cold migrate VM $vm_name
+38)  Wait for  VM to become active
+39)  Check cloud init data
+40)  Check stats on the fly
+41)  Stop traffic
+42)  Show stats that traffic has stopped
+
+
+
+
+
+*NOFAIL
+*EXP_INFO
+
+
+#### Script Vars
+# common include path
+$inc_path=common
+
+# fail script
+#*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+$tenant_credentials=/home/wrsroot/openrc.tenant1
+$tenant=$tenant_credentials
+# trim to just last part
+=$tenant;.*[.](\w+);\1;
+
+#cloud init test
+$cloud=yes
+
+# initial type to look for
+$desired_type=avp
+
+#type list, walk through each of the types and do VM ops
+$vm_type_list=avp virtio dpdk
+#$vm_type_list=avp
+
+#### Control Ixia
+$with_traffic=no
+
+$ixia_host=yow-cgcs-test
+$ixia_user=svc-cgcsauto
+$ixia_pass=)OKM0okm
+
+$ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
+
+
+------------------------------
+
+; === get random number
+>echo $RANDOM
++$RAND=\n(\d+)
+
+
+?if $with_traffic == yes ? [
+	*FORK IXIA
+
+	~$inc_path/ssh_controller.inc IP=$ixia_host user=$ixia_user pass=$ixia_pass
+
+	; === cd to Ixia directory
+	>cd ixia
+
+	; === show tcl files
+	>ls *tcl
+
+	; === setup ixia env
+	>source ixia_env.sh
+
+	; === start traffic
+	>tclsh ixia_start_stop_traffic.tcl traffic=start
+
+	@60
+	; === look at stats
+	>tclsh ixia_show_stats.tcl stats=show
+	<Traffic Item
+	<Rx Frames
+	+$rx_frames1=: (\d+)
+	<Loss %
+	-<: 100
+
+]
+# end with_traffic
+
+
+
+
+*FORK default
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+@10
+; === source admin
+>source /etc/nova/openrc
+
+; === did user pass in a specific VM name?
+?if $vm_name != $blank ? [
+	#get into foreach loop with vm_name
+	$vm_type_list=$vm_name
+]
+
+# walk through vm types
+[ $desired_type=$vm_type_list
+
+	; === get vm name for type $desired_type
+	?if $vm_type_list != $vm_name? [
+		~$inc_path/get_vm_of_type.inc desired_type=$desired_type
+	]::[
+		; === get vm type
+		# user specified a vm_name
+		~$inc_path/get_vm_type.inc vm_name=$vm_name
+	]
+
+
+
+	?if $vm_name == $blank ? [
+		; === get first active existing VM
+		>nova list --all-tenants
+		+$vm_name=(\S+)\s+\| ACTIVE
+		; === get vm type
+		~$inc_path/get_vm_type.inc vm_name=$vm_name
+	]
+
+
+
+	@10
+
+	?if $vm_type != none ? [
+		;purple == testing VM:$vm_name VM_type:$vm_type
+
+		------------------------------
+
+		; === REBOOT VM $vm_name
+		>nova reboot $vm_uuid
+
+		; === wait for  VM to become reboot
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=REBOOT
+
+
+		; === wait for  VM to become active
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+
+		------------------------------
+
+		; === HARD REBOOT VM $vm_name
+		>nova reboot --hard $vm_uuid
+
+		; === wait for  VM to become reboot
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=HARD_REBOOT
+
+
+		; === wait for  VM to become active
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+
+		------------------------------
+
+		; === PAUSE VM $vm_name
+		>nova pause $vm_uuid
+
+
+		; === wait for  VM to become paused
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=PAUSED
+
+		------------------------------
+
+		; === UNPAUSE VM $vm_name
+		>nova unpause $vm_uuid
+
+		; === wait for  VM to become unpaused
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+
+
+		------------------------------
+		; === STOP VM $vm_name
+		>nova stop $vm_uuid
+
+
+		; === wait for  VM to become stopped
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=SHUTOFF
+
+		------------------------------
+
+		; === START VM $vm_name
+		>nova start $vm_uuid
+
+		; === wait for  VM to become active
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+
+
+		------------------------------
+
+		; === SUSPEND VM $vm_name
+		>nova suspend $vm_uuid
+
+
+		; === wait for  VM to become suspended
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=SUSPENDED
+
+		------------------------------
+
+		; === RESUME VM $vm_name
+		>nova resume $vm_uuid
+
+		; === wait for  VM to become active
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+
+		------------------------------
+
+		$ACTION=live-migration
+
+		; === LIVE MIGRATE VM $vm_name
+		>nova $ACTION $vm_uuid
+
+		; === wait for  VM to become migrating
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=MIGRATING
+
+
+		; === wait for  VM to become active
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+
+
+		------------------------------
+
+		$ACTION=migrate
+
+		; === COLD MIGRATE VM $vm_name
+		>nova $ACTION $vm_uuid
+
+		; === wait for  VM to become cold-migrating
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=VERIFY_RESIZE
+
+		$ACTION=resize-confirm
+		; === cold migrate VM $vm_name
+		>nova $ACTION $vm_uuid
+
+
+		; === wait for  VM to become active
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+
+		------------------------------
+
+		?if $cloud==yes ? [
+			; === check cloud init data
+			$user_data_path=/home/wrsroot/userdata
+			$vm_user_data=$vm_name
+			=$vm_user_data + _userdata.txt
+			=$vm_user_data/ //
+			>grep ADDRESSES $user_data_path/$vm_user_data | wc -l
+			+$cloud_addr_present=\n(\d)
+			
+			?if $cloud_addr_present == 1 ? [
+				>cat $user_data_path/$vm_user_data
+				<ADDRESSES=
+				+$cloud_addr=(172[0-9.]+),
+				<ROUTES=
+				+$cloud_route=(172[0-9.]+)/
+				~$inc_path/ssh_to_nat_to_vm.inc vm_name=$vm_name
+				>ip addr
+				<$cloud_addr
+				>ip route
+				<$cloud_route
+				>
+				#exit VM
+				>exit
+				<nat0
+				# exit NATbox
+				>exit
+				>
+			]
+		]
+		# if $cloud==yes 
+		
+		------------------------------
+		# check loss on VM
+		@60
+		?if $with_traffic == yes ? [
+			*FORK IXIA
+			# setup fuzzy expect
+			~=25
+			# yuck, ipv4 only
+			$vm_check=$vm_data_ip
+			=$vm_check/(\d+\.\d+\.\d+)\.\d+/\1/
+			
+			# adjust loss for VM type
+			? $vm_type==avp? $loss=50
+			? $vm_type==dpdk? $loss=25
+			? $vm_type==virtio? $loss=50
+			
+			# adjust for loss
+			; === check stats on the fly
+			>tclsh ixia_show_stats.tcl stats=show stype=flow | grep -B 3 -A 9 $vm_check | cat
+			<Traffic Item
+			<IP Src\s+: $vm_check
+			~<Loss %\s+: ($loss)
+			<Pkt Loss Duration
+			>
+		]
+		# end if traffic
+		@10
+		*FORK default
+		>
+	]::[
+
+		;red No VMs found for vm_type: $desired_type
+	]
+	# if $vm_type != none
+]
+# end foreach $desired_type=$vm_type_list
+
+
+
+------------------------------
+
+?if $with_traffic == yes ? [
+	*FORK IXIA
+	@40
+	; === stop traffic
+	>tclsh ixia_start_stop_traffic.tcl traffic=stop
+
+	!sleep 10
+	# setup fuzzy expect
+	~=10
+		
+	; === show stats that traffic has stopped
+	>tclsh ixia_show_stats.tcl stats=show stype=flow
+
+]
+# end with_traffic
+
+
+
+>
+*INTERACT
+
