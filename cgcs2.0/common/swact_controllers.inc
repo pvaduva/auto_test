@@ -12,7 +12,7 @@
 #
 
 To use:
-~ssh_controller.inc IP=<ip> [PORT=<custom port>]
+~swact_controllers.inc IP=<ip> [PORT=<custom port>]
 
 ;;;
 

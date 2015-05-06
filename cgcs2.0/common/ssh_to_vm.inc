@@ -32,7 +32,7 @@ $vm_name=tenant1-virtio1
 $cgcs=$vm_name
 =$cgcs/.*(tenant).*/\1/
 
-$mgmt_net=tenant1-mgmt-net
+$mgmt_net=mgmt-net
 #$mgmt_net=public-net0
 
 # cgcs credentials
@@ -43,18 +43,27 @@ $ssh_opts= -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no -o Connec
 
 $max_retry=5
 
+$ping=ping
+
+
 # setup fail script
 ?if $FAIL == $blank ? *~$inc_path/fail_show.inc :: ~$FAIL
 
 
 ; === get mangement uuid
 >neutron net-list
-+$tenant1_mgmt_net_uuid=([0-9a-f-]{36}) \| $mgmt_net
++$tenant1_mgmt_net_uuid=([0-9a-f-]{36}) \| \w*[-]?$mgmt_net
 
 ; === get vm management address
 >nova list --all-tenants
 <$vm_name
-+$vm_ip=$mgmt_net=([0-9.]{7,15})
+#+$vm_ip=$mgmt_net=([0-9.]{7,15})
++$vm_ip=$mgmt_net=([0-9.:]{7,37})
+
+# determine if address is IPv6
+$vm_ip6=$vm_ip
+=$vm_ip6/.*(:).*/\1/
+?if $vm_ip6 == : ? $ping=ping6
 
 ; === get net host
 >neutron dhcp-agent-list-hosting-net $tenant1_mgmt_net_uuid
@@ -75,7 +84,7 @@ $max_retry=5
 
 
 ; === ping the VM
->ip netns exec $ns ping -c 2 $vm_ip
+>ip netns exec $ns $ping -c 2 $vm_ip
 +$ping_result=(\d+ received| 0 received)
 
 ?if $ping_result != 0 received ? [
@@ -95,6 +104,7 @@ $max_retry=5
 			$response=ssword
 			;red VM:$vm_ip sshd not responding, returning to controller
 			>>^C
+			>>
 			>exit
 			>exit
 			*FAIL
@@ -108,6 +118,7 @@ $max_retry=5
 ]::[
 	;red VM $vm_name did not respond to ping, returning to controller
 	>>^C
+	>>
 	>exit
 	>exit
 	*FAIL

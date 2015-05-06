@@ -41,11 +41,11 @@ $admin_src_path=/etc/nova
 	@20
 	; === rebooting active controller
 	>sudo reboot $force_opt
-	<system is going down|Restarting system
+	#<system is going down|Restarting system
 	!sleep 5
 	>>
 	>>
-	<Connection to.+closed
+	<Connection to.+closed|Write failed: Broken pipe
 	>
 	; wait for other active controller...
 	>ping -c 20 $IP
