@@ -131,11 +131,11 @@ $flavor2=vcpu5-$flavor2_min_cpu
 
 
 #Create flavor1
->nova flavor-create --dedicated-cpus True $flavor1 5f0d748b-1c8b-4a70-1985-4d57e25ac137 512 0 $flavor1_max_cpu
+>nova flavor-create $flavor1 5f0d748b-1c8b-4a70-1985-4d57e25ac137 512 0 $flavor1_max_cpu
 >echo $?
 <\n0
 #Create flavor2
->nova flavor-create --dedicated-cpus True $flavor2 db9b37f5-cba5-1985-a264-a6c1375a4ff7 512 0 $flavor2_max_cpu
+>nova flavor-create $flavor2 db9b37f5-cba5-1985-a264-a6c1375a4ff7 512 0 $flavor2_max_cpu
 >echo $?
 <\n0
 ; === flavor created
@@ -144,12 +144,12 @@ $flavor2=vcpu5-$flavor2_min_cpu
 
 #Set min vcpu value
 ; === set minimum value for the cpu created
->nova flavor-key $flavor1 set hw:wrs:min_vcpus=$flavor1_min_cpu 
+>nova flavor-key $flavor1 set hw:wrs:min_vcpus=$flavor1_min_cpu hw:cpu_policy=dedicated
 >nova flavor-list --extra-specs | grep $flavor1
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor1 is $result
 
->nova flavor-key $flavor2 set hw:wrs:min_vcpus=$flavor2_min_cpu
+>nova flavor-key $flavor2 set hw:wrs:min_vcpus=$flavor2_min_cpu hw:cpu_policy=dedicated
 >nova flavor-list --extra-specs | grep $flavor2
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor2 is $result
