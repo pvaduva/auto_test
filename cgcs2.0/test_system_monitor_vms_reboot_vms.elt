@@ -1,0 +1,193 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	system test monitor running VMs (via NAT box) and reboot VMs
+#	TC651 Run 10 VM reboots and ensure automatic recovery
+#
+
+#	NOTE: running traffic will cause VMs to be too slow to log in, and test will fail
+
+Options
+.	max=5		Maximum times to reboot VMs
+.	num_vms=10	Number of VMs to reboot
+
+;;;
+
+*EXP_INFO
+*NOFAIL
+
+# common include path
+$inc_path=common
+
+# fail script
+#*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+$natbox=128.224.150.11
+
+# cgcs credentials
+$vm_user=root
+$vm_pass=root
+
+$vm_test_file=trace.txt
+$vm_fs_cmd=while (true) do date; dd if=/dev/urandom of=output.txt bs=1k count=1 conv=fsync|| break ; echo ; sleep 1; done 2>&1 | tee $vm_test_file &
+$vm_cmd_fs_check=mount | grep 'on / type' | grep 'rw,re'
+
+# number of VM reboots
+$max=5
+
+# number of VMs to reboot
+$num_vms=10
+
+# vars for launching extra VM
+# VM names
+$guest1=VM1
+$vcpu_size=1
+$test_flavor=big
+$test_flavor_uuid=5f0d748b-1c8b-4a70-8643-4d57e25ac137
+$tenant_credentials=/home/wrsroot/openrc.tenant1
+$tenant=$tenant_credentials
+# trim to just last part
+=$tenant;.*[.](\w+);\1;
+$glance_image_name=cgcs-guest
+
+
+
+
+
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+@15
+; === get first active existing VM
+>nova list --all-tenants
++$vm_name=(\S+)\s+\| ACTIVE
+
+; === create test flavor 
+>nova flavor-create $test_flavor $test_flavor_uuid 512 0 $vcpu_size
+
+; === look at neutron config
+>neutron net-list
++$mgmt_net_uuid=([0-9a-f-]{36}) \| tenant1-mgmt-net
++$tenant1_net_uuid=([0-9a-f-]{36}) \| tenant1-net0
+; === show images in glance
+>glance image-list
++$glance_image_uuid=([0-9a-f-]{36}) \| $glance_image_name
+
+
+; === get list of active VM management IPs
+>nova list --all-tenants | grep mgmt-net | awk -F"-mgmt-net=" '{print $2}' | awk '{print $1}' |tr -d  ',' | tr -d ';' | tail -$num_vms | paste -sd' '
++$vm_ip_list=\n([0-9. ]+)
+
+? $vm_ip_list == __NO_STRING_CAPTURED__ ? *FAIL
+
+*INTERACT
+
+
+*FORK NATBOX
+; === log onto controller
+~$inc_path/ssh_controller.inc user=cgcs IP=$natbox
+
+
+#$vm_ip_list=192.168.104.50
+
+#; === start FS commands on VMs
+#[ $vm_ip=$vm_ip_list
+#	~$inc_path/ssh_controller.inc IP=$vm_ip user=$vm_user pass=$vm_pass
+#	; === execute FS commands
+#	>$vm_fs_cmd
+#	>
+#	>exit
+#	>
+#]
+
+# create monitor list
+$vm_ip_mon_list=$vm_ip_list
+=$vm_ip_mon_list/ /,/
+
+; === monitoring vm management ip addresses
+>python tools/monitor.py --addresses $vm_ip_mon_list
+*INTERACT
+@3
+; get out of the monitor
+!send "Q\r"
+>>
+>
+
+$j=0
+[ $j < $max
+	; ---- begin loop $j ---
+
+
+	*FORK default
+	; === validate VMs are not in error state
+	@15
+	>nova list --all-tenants
+	<Networks
+	-<ERROR
+	>
+
+
+	*FORK NATBOX
+
+	@10
+	; === run commands on VMs
+	[ $vm_ip=$vm_ip_list
+		; === reboot VM 
+		~$inc_path/ssh_controller.inc IP=$vm_ip user=$vm_user pass=$vm_pass
+		; === execute VM Commands
+		@10
+		>reboot
+		<system is going down|Restarting system|doing soft reboot
+		>>
+		>>
+		!sleep 2
+		# back on NAT box
+		<cgcs@
+		>
+		>
+	]
+
+	---- end loop ---
+	+$j
+]
+
+*FORK default
+; === Look at state of VMs
+
+>nova list --all-tenants
+<Networks
+-<ERROR
+>
+
+
+>
+
+
+
+
+
+>
+*INTERACT
+
+; === cleanup
+*FORK default
+>source $tenant_credentials
+; === kill additional VM
+>nova delete $guest1
+
+
+; === Become Admin
+>source /etc/nova/openrc 
+>nova flavor-delete $test_flavor
+>
