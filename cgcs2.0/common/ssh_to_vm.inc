@@ -50,12 +50,12 @@ $ping=ping
 ?if $FAIL == $blank ? *~$inc_path/fail_show.inc :: ~$FAIL
 
 
-; === get mangement uuid
+; === get management uuid
 >neutron net-list
 +$tenant1_mgmt_net_uuid=([0-9a-f-]{36}) \| \w*[-]?$mgmt_net
 
 ; === get vm management address
->nova list --all-tenants
+>nova list --all-tenants | grep $vm_name
 <$vm_name
 #+$vm_ip=$mgmt_net=([0-9.]{7,15})
 +$vm_ip=$mgmt_net=([0-9.:]{7,37})

@@ -61,8 +61,8 @@ $admin_src_path=/etc/nova
 	<root
 	@20
 	>sudo reboot $force_opt
-	<system is going down|Restarting system
+	#<system is going down|Restarting system
 	>>
-	<Connection to.+closed
+	<Connection to.+closed|Write failed: Broken pipe
 ]
 >

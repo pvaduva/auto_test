@@ -17,14 +17,14 @@ To use:
 ;;;
 
 
-$IP=10.10.10.3
+$IP=10.10.10.2
 $user=wrsroot
 $pass=li69nux
 
 $admin_src_path=/etc/nova
 
 # support custom port support
-$ssh_opts= -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=20 
+$ssh_opts= -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=30 
 ?if $PORT != $blank ? $ssh_opts=$ssh_opts -p $PORT 
 
 
@@ -42,7 +42,8 @@ $ssh_opts= -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no -o Connec
 	; === set up sudo root access (to make it easier later in the interact session)
 	>echo "$pass" | sudo -S id
 	<root
-
+	; === show date & time
+	>date
 	; === show source admin credentials
 	>source $admin_src_path/openrc 
 
