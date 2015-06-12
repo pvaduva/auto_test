@@ -1,0 +1,253 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	system test - VM live-migrate
+#	
+
+
+Options
+.	IP=<ip address/name of controller>
+.	vm_type_list="virtio avp dpdk"
+.	vm_name=<Specify when testing a single vm>
+.	with_traffic=yes	<default=no>
+
+NOTE: requires NAT access for cloud init test
+NOTE: required expect-lite 4.8.1
+
+Assumptions
+.	Lab is setup using lab_setup.sh, VMs are lauched with launch_instances.sh
+.	Ixia lab file is pre-loaded (this could be improved to load a file later)
+
+
+Version 1.0
+;;;
+
+#
+#	NOTE: most code borrowed from TC8001
+#
+
+
+
+*NOFAIL
+*EXP_INFO
+
+
+#### Script Vars
+# common include path
+$inc_path=common
+
+# fail script
+#*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+$tenant_credentials=/home/wrsroot/openrc.tenant1
+$tenant=$tenant_credentials
+# trim to just last part
+=$tenant;.*[.](\w+);\1;
+
+#cloud init test
+$cloud=no
+
+# initial type to look for
+$desired_type=avp
+
+#type list, walk through each of the types and do VM ops
+$vm_type_list=avp virtio dpdk
+$vm_type_list=avp
+
+#### Control Ixia
+$with_traffic=no
+
+$ixia_host=yow-cgcs-test
+$ixia_user=svc-cgcsauto
+$ixia_pass=)OKM0okm
+
+$ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
+
+# VM FS check command
+$vm_cmd_fs_check=mount | grep 'on / type' | grep 'rw,re'
+
+
+; === include time functions
+~$inc_path/tcl_functions.inc
+#define time vars
+$time_start=0
+$time_fin=0
+
+
+
+
+
+; === get random number
+>echo $RANDOM
++$RAND=\n(\d+)
+
+
+?if $with_traffic == yes ? [
+	*FORK IXIA
+
+	~$inc_path/ssh_controller.inc IP=$ixia_host user=$ixia_user pass=$ixia_pass
+
+	; === cd to Ixia directory
+	>cd ixia
+
+	; === show tcl files
+	>ls *tcl
+
+	; === setup ixia env
+	>source ixia_env.sh
+
+	; === start traffic
+	>tclsh ixia_start_stop_traffic.tcl traffic=start
+
+	@60
+	; === look at stats
+	>tclsh ixia_show_stats.tcl stats=show
+	<Traffic Item
+	<Rx Frames
+	+$rx_frames1=: (\d+)
+	<Loss %
+	-<: 100
+
+]
+# end with_traffic
+
+
+*FORK default
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+@10
+; === source admin
+>source /etc/nova/openrc
+
+; === did user pass in a specific VM name?
+?if $vm_name != $blank ? [
+	#get into foreach loop with vm_name
+	$vm_type_list=$vm_name
+]
+
+# walk through vm types
+[ $desired_type=$vm_type_list
+
+	; === get vm name for type $desired_type
+	?if $vm_type_list != $vm_name? [
+		~$inc_path/get_vm_of_type.inc desired_type=$desired_type
+	]::[
+		; === get vm type
+		# user specified a vm_name
+		~$inc_path/get_vm_type.inc vm_name=$vm_name
+	]
+
+
+
+	?if $vm_name == $blank ? [
+		; === get first active existing VM
+		>nova list --all-tenants
+		+$vm_name=(\S+)\s+\| ACTIVE
+		; === get vm type
+		~$inc_path/get_vm_type.inc vm_name=$vm_name
+	]
+
+
+
+	@10
+
+	?if $vm_type != none ? [
+		;purple == testing VM:$vm_name VM_type:$vm_type
+
+		$ACTION=live-migration
+
+		; === LIVE MIGRATE VM $vm_name
+		!mark_time time_start
+		>nova $ACTION $vm_uuid
+		>echo $?
+		<\n0
+
+		; === wait for  VM to become migrating
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=MIGRATING
+
+
+		; === wait for  VM to become active
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+		!mark_time time_fin
+		>
+		------------------------------
+		# check loss on VM
+		@60
+		?if $with_traffic == yes ? [
+			*FORK IXIA
+			# setup fuzzy expect
+			~=25
+			# yuck, ipv4 only
+			$vm_check=$vm_data_ip
+			=$vm_check/(\d+\.\d+\.\d+)\.\d+/\1/
+			
+			# adjust loss for VM type
+			? $vm_type==avp? $loss=50
+			? $vm_type==dpdk? $loss=25
+			? $vm_type==virtio? $loss=50
+			
+			# adjust for loss
+			; === check stats on the fly
+			>tclsh ixia_show_stats.tcl stats=show stype=flow | grep -B 3 -A 9 $vm_check | cat
+			<Traffic Item
+			<IP Src\s+: $vm_check
+			~<Loss %\s+: ($loss)
+			<Pkt Loss Duration
+			>
+		]
+		# end if traffic
+		@10
+		*FORK default
+		>
+	]::[
+
+		;red No VMs found for vm_type: $desired_type
+	]
+	# if $vm_type != none
+
+]
+# end foreach $desired_type=$vm_type_list
+
+
+------------------------------
+
+?if $with_traffic == yes ? [
+	*FORK IXIA
+	@40
+	; === stop traffic
+	>tclsh ixia_start_stop_traffic.tcl traffic=stop
+
+	!sleep 10
+	# setup fuzzy expect
+	~=10
+		
+	; === show stats that traffic has stopped
+	>tclsh ixia_show_stats.tcl stats=show stype=flow
+
+]
+# end with_traffic
+; === calculate elasped time
+$time_elapse=$time_fin
+=$time_elapse - $time_start
+# convert to "regular" time
+#!show_time time_elapse time_date_elapse
+>
+; == elapsed time is: $time_elapse ms
+
+>
+*INTERACT
+
+
+

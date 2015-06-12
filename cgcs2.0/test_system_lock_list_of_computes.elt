@@ -1,0 +1,104 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	TC625 Lock/unlock a compute blade
+#
+Options
+.	max=5		maximum number of lock/unlocks
+.	compute_list=<list of computes to lock/unlock>
+;;;
+
+*NOFAIL
+*EXP_INFO
+
+# common include path
+$inc_path=common
+
+# fail script
+#*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+$max_wait=75
+
+$compute_list=compute-1 compute-25 compute-4
+#$compute_list=compute-4 compute-24 compute-9
+
+
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+$j=0
+$max=5
+@15
+[ $j < $max
+
+	[ $c=$compute_list
+		; === locking node: $c
+		>system host-lock $c
+	]
+	
+#	; === wait for host locked
+#	$i=0
+#	$state=none
+#	[ $state != disabled
+#		>system host-list
+#		<$c
+#		+$state=(available|online|offline|failed|intest|disabled)
+#
+#		!sleep 5
+#		+$i
+#		?if $i > $max_wait? %BREAK_AVAIL
+#	]
+#	%BREAK_AVAIL
+
+	
+	[ $c=$compute_list
+		; === waiting for lock of node: $c
+		~$inc_path/wait_node_state.inc node=$c state=disabled
+	]
+
+	>
+
+
+	; === locking computes
+	[ $c=$compute_list
+		; === unlocking node: $c
+		>system host-unlock $c
+	]
+
+#	; === wait for host to be unlocked
+#	$i=0
+#	$state=none
+#	[ $state != available
+#		>system host-list
+#		<$c
+#		+$state=(available|online|offline|failed|intest)
+#
+#		!sleep 5
+#		+$i
+#		?if $i > $max_wait? %BREAK_AVAIL2
+#	]
+#	%BREAK_AVAIL2
+
+	[ $c=$compute_list
+		; === waiting for lock of node: $c
+		~$inc_path/wait_node_state.inc node=$c state=available
+		
+	]
+
+
+
+	+$j
+]
+
+*INTERACT

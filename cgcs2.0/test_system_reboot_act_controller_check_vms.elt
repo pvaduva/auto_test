@@ -1,0 +1,161 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	TC514	Halt -f on active controller and confirm other controller takes activity; also then confirm can launch new
+#
+#	Options:
+#		node=<desired node name to reboot>
+#		tenant=<desired tenant>
+
+NOTE: must increase quotas to start another VM
+
+;;;
+
+*NOFAIL
+*EXP_INFO
+
+# common include path
+$inc_path=common
+
+# fail script
+#*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+#default node to reboot
+$node=controller-0
+
+$natbox=128.224.150.11
+
+# cgcs credentials
+$vm_user=root
+$vm_pass=root
+
+$vm_fs_cmd=while (true) do date; dd if=/dev/urandom of=output.txt bs=1k count=1 || break ; echo ; sleep 1; done 2>&1 > trace.txt &
+$vm_fs_cmd=dd if=/dev/urandom of=output.txt bs=1k count=1 
+
+$vm_cmd_fs_check=mount | grep 'on / type' | grep 'rw,re'
+
+$tenant=tenant11
+
+# vars for launching extra VM
+# VM names
+$guest1=VM1
+$vcpu_size=1
+$test_flavor=big
+$test_flavor_uuid=5f0d748b-1c8b-4a70-8643-4d57e25ac137
+$tenant_credentials=/home/wrsroot/openrc.$tenant
+$tenant=$tenant_credentials
+# trim to just last part
+=$tenant;.*[.](\w+);\1;
+$glance_image_name=cgcs-guest
+
+
+
+
+-------------------------------------
+
+
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+
+; === create test flavor 
+>nova flavor-create $test_flavor $test_flavor_uuid 512 0 $vcpu_size
+
+; === look at neutron config
+>neutron net-list | egrep '$tenant|internal'
++$internal_net_uuid=([0-9a-f-]{36}) \| internal0
++$tenant_net_uuid=([0-9a-f-]{36}) \| $tenant-net0
++$tenant_mgmt_net_uuid=([0-9a-f-]{36}) \| $tenant-mgmt
+
+; === show images in glance
+>glance image-list
++$glance_image_uuid=([0-9a-f-]{36}) \| $glance_image_name
+
+
+>hostname
++$node=\n(\S+)
+
+*INTERACT
+
+; === reboot Controller
+~$inc_path/reboot_node.inc node=$node force=yes
+
+
+; === show services
+>system sda-list
+
+; === switch to tenant mode for: $tenant
+>source $tenant_credentials
+!sleep 10
+@15
+; === launch VM
+>nova boot --key_name=keypair-$tenant --flavor=$test_flavor_uuid --nic net-id=$tenant_mgmt_net_uuid,vif-model=virtio --nic net-id=$tenant_net_uuid,vif-model=avp --image=$glance_image_uuid   $guest1
+>
+>
+
+
+; === Wait for VM to go active
+~$inc_path/wait_vm_active.inc vm_name=$guest1
+
+; === get VM IP
+>nova list --all-tenants | grep VM1
++$vm_ip_list=$tenant-mgmt-net=([0-9.:]{7,37})
+
+
+*FORK NATBOX
+; === log onto controller
+~$inc_path/ssh_controller.inc user=cgcs IP=$natbox
+>which ssh
+
+; === start FS commands on VMs
+[ $vm_ip=$vm_ip_list
+	>ping -c3 $vm_ip
+	~$inc_path/ssh_controller.inc IP=$vm_ip user=$vm_user pass=$vm_pass
+	; === execute FS commands
+	>$vm_fs_cmd && $vm_fs_cmd && $vm_fs_cmd
+	<\d+\.\d MB/s
+	>
+	; === execute FS commands
+	>$vm_cmd_fs_check
+	>$vm_cmd_fs_check | wc -l
+	<\n1
+
+	>
+	>exit
+	>
+]
+
+*FORK default
+>
+
+
+*INTERACT
+
+>source /etc/nova/openrc
+@10
+; === kill additional VM
+>nova delete $guest1
+
+>nova list --all-tenants | grep $guest1
++$guest_uuid=([0-9a-f-]{36})
+
+>nova delete $guest_uuid
+<Request to delete server
+
+; === cleanup
+
+; === Become Admin
+>source /etc/nova/openrc 
+>nova flavor-delete $test_flavor
+>

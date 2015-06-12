@@ -1,0 +1,85 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	sample system test - login into HW console
+#
+
+;;;
+
+*NOFAIL
+*EXP_INFO
+
+#F-Codes
+$F10=[21~ 	
+$F6=[17~
+$F2=[12~
+$UP=[A
+$DOWN=[B
+$RIGHT=[C
+$LEFT=[D
+
+# common include path
+$inc_path=common
+
+# fail script
+#*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+
+$node=ironpass27
+
+; === get vlm target id
+#returns vlm_board
+~$inc_path/node_to_vlm_id.inc node=$node
+
+; === power off target
+~$inc_path/vlm_cmd.inc vlm_id=$vlm_id cmd=poweroff
+
+; === power on target
+~$inc_path/vlm_cmd.inc vlm_id=$vlm_id cmd=poweron
+
+
+; === get vlm console info
+#returns vlm_value
+~$inc_path/vlm_field.inc vlm_id=$vlm_id vlm_field=console
+
+; === telnet to console
+>telnet $vlm_value
+
+
+#*INTERACT
+
+
+@180
+>>
+<Setup Menu
+<<F6> Boot Menu
+>>$F6
+<Please select boot device
+!after 500
+#boot option we want
+<01 
+
+>>$DOWN
+>>$DOWN
+>>$DOWN
+!sleep 5
+>>^M
+
+@5
+*INTERACT
+
+
+
+
+

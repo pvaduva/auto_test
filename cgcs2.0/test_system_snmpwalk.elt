@@ -1,0 +1,80 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	system test to snmpwalk controller
+#
+
+;;;
+
+*NOFAIL
+*EXP_INFO
+# adjust for a lot of looping
+*INFINITE_LOOP 50010
+
+# common include path
+$inc_path=common
+
+# fail script
+#*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+$oid=.1.3.6.1.4.1.731
+
+#include future sleep
+~$inc_path/sleep.inc
+
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+; === check for snmp comm string
+>system snmp-comm-list | wc -l
++$result=\n(\d+)
+
+?if $result == 1 ? [
+	; === add community
+	>system  snmp-comm-add -c public
+	>
+]
+
+
+*FORK SNMP
+; === check for snmpwalk
+>which snmpwalk
+</usr/bin/snmpwalk
+
+$i=0
+$max=50000
+@15
+[ $i < $max
+	; === iteration:$i
+	# modulo 10 $k to "see" every 10 run of the mib walk
+	$k=$i
+	=$k % 10
+	? $k == 0 ? [
+		>time snmpwalk -c public -v 2c $IP $oid
+		<real
+	]::[
+		>time snmpwalk -c public -v 2c $IP $oid > /dev/null	
+	]
+	; === check result
+	>echo $?
+	<\n0
+	;; sleeping...
+	#!sleep 5
+	!zzz 30
+	+$i
+]
+
+>
+*INTERACT
+

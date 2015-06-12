@@ -10,15 +10,14 @@
 # For more info see: expect-lite.html
 ;;;
 #
-#	system test log into VM
-#
+#	system test node reboot
 #
 #	Options:
-#		vm_name=<desired vm name>
-
-#
-
+#		node_list=<list of nodes to reboot>
 ;;;
+
+*NOFAIL
+*EXP_INFO
 
 # common include path
 $inc_path=common
@@ -28,32 +27,17 @@ $inc_path=common
 
 $IP=10.10.10.2
 
-
+#default node to reboot
+$node=compute-1
+$node_list=compute-4 compute-8
 
 ; === log onto controller
 ~$inc_path/ssh_controller.inc
 
-; === get first active existing VM
->nova list --all-tenants
-+$vm_name=(\S+)\s+\| ACTIVE
+[ $node=$node_list
+	; === reboot node
+	~$inc_path/reboot_node.inc node=$node force=yes
 
-? $vm_name == __NO_STRING_CAPTURED__ ? *FAIL
-
-
-? $vm_name != __NO_STRING_CAPTURED__ ? [
-	@10
-	#~$inc_path/ssh_to_vm.inc vm_name=$vm_name
-	~$inc_path/ssh_to_nat_to_vm.inc vm_name=$vm_name
-	@5
-	>ip route | grep default
-	+$default_route=via (\S+)
-	; === ping default router
-	>ping -c 2 $default_route
-	; === look at size of VM disk
-	>df -h
-	>
 ]
 
->
 *INTERACT
-

@@ -1,0 +1,141 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	TC698	Kill Major Process on a Compute node
+#	TC697	Kill Critical Process on a Compute node
+#
+Options
+.	compute=<compute>
+.	severity=<critical|major>		default=major
+;;;
+
+*NOFAIL
+*EXP_INFO
+
+# common include path
+$inc_path=common
+
+
+$IP=10.10.10.2
+
+$compute=compute-27
+
+$severity=critical
+$severity=major
+
+
+*FORK controller
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+
+
+*FORK compute
+
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+
+
+~$inc_path/ssh_controller.inc IP=$compute
+
+; === set up sudo root access (to make it easier later in the interact session)
+>echo "$pass" | sudo -S id
+<root
+
+>sudo su
+
+>cd /etc/pmon.d
+>grep -l "severity = $severity" *conf | sed -r 's;\.conf;;' | paste -sd' '
++$proc_list=\n([a-zA-Z0-9 _-]+)
+
+=$proc_list/hbsClient//
+
+*INTERACT
+
+[ $p=$proc_list
+	; == testing process $p
+	>egrep "(debounce|restarts|interval)" $p.conf
+	+$proc_bounce=debounce\s+=\s*(\d+)
+	+$proc_restart=restarts\s+=\s*(\d+)
+	+$proc_interval=interval\s+=\s*(\d+)
+	# add 1 second
+	+$proc_interval
+	# add 1 to restart
+	+$proc_restart
+	$i=0
+	# check result of egrep
+	>echo $?
+	+$result=\n(\d+)
+	? $result !=0 ? %SKIP_PROC
+	>ps ax | grep $p | grep -v grep | head -1 | awk '{print $1}'
+	+$proc_ps=\n(\d+)
+	[ $i < $proc_restart
+		*TIMESTAMP
+		; == kill  process $p pid:$proc_ps
+		?if $proc_ps != __NO_STRING_CAPTURED__ ? [
+			$proc_ps_old=$proc_ps
+			>kill -9 $proc_ps
+			#*INTERACT
+			#!sleep $proc_interval
+		]
+		$proc_ps=__NO_STRING_CAPTURED__
+		[ $proc_ps == __NO_STRING_CAPTURED__
+			>ps ax | grep $p | grep -v grep | head -1 | awk '{print $1}'
+			+$proc_ps=\n(\d+)
+			!sleep 1
+		]
+		?if $proc_ps == $proc_ps_old? [
+			;red Whoa, process $p did not die
+		]
+		+$i
+		*NOTIMESTAMP
+	]
+	# check alarms
+	*FORK controller
+	!sleep 5
+	@5
+	>system alarm-list | grep $compute
+	<[Dd]egraded
+	>system host-list | grep $compute
+	<degraded|disabled
+	>
+	; == waiting for degrade to clear
+	$count=1
+	[ $count == 1
+		>system host-list | grep $compute | egrep 'offline|degrade' | wc -l
+		+$count=\n(\d)
+		!sleep 1
+	]
+	
+	~$inc_path/wait_node_state.inc node=$compute 
+	*FORK compute
+	? $severity == critical? [
+		; === log back into compute (since it rebooted)
+		~$inc_path/ssh_controller.inc IP=$compute
+		>echo "$pass" | sudo -S id
+		<root
+
+		>sudo su
+		>cd /etc/pmon.d/
+		>
+	]
+	>
+	%SKIP_PROC
+]
+
+
+
+
+>
+*INTERACT
+

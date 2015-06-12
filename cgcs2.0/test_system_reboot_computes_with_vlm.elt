@@ -1,0 +1,55 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	Reboots computes using VLM
+#
+Options
+.	compute_list=<list of compute names>
+;;;
+
+# common include path
+$inc_path=common
+
+#clean up if reservation fails
+*~test_system_reboot_computes_with_vlm_fail.inc
+
+$IP=10.10.10.2
+
+$compute_list=compute-1 compute-27
+
+# use 3 foreach loops to reboot computes closer in time
+[ $c=$compute_list
+	; === rebooting with VLM node: $c
+	~$inc_path/lo_compute_to_vlm.inc compute=$c
+	>/folk/vlm/commandline/vlmTool reserve -t $vlm_board
+	<\n$vlm_board
+]
+*TIMESTAMP
+[ $c=$compute_list
+	~$inc_path/lo_compute_to_vlm.inc compute=$c
+	; === check that target is reserved
+	>/folk/vlm/commandline/vlmTool findMine
+	<$vlm_board
+	>/folk/vlm/commandline/vlmTool reboot -t $vlm_board
+]
+*NOTIMESTAMP
+
+[ $c=$compute_list
+	~$inc_path/lo_compute_to_vlm.inc compute=$c
+	>/folk/vlm/commandline/vlmTool unreserve -t $vlm_board
+	<\n1
+]
+
+
+>
+*INTERACT
+

@@ -1,0 +1,99 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	TC472	Kills KVM processes, and checks for VM recovery
+#		Retest of Jira CGTS=1580
+#
+Options
+.	compute=<compute>
+;;;
+
+*NOFAIL
+*EXP_INFO
+
+# common include path
+$inc_path=common
+
+
+$IP=10.10.10.2
+
+$compute=compute-27
+
+$max=10
+
+*FORK controller
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+
+
+*FORK compute
+
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+
+
+~$inc_path/ssh_controller.inc IP=$compute
+
+; === set up sudo root access (to make it easier later in the interact session)
+>echo "$pass" | sudo -S id
+<root
+
+>sudo su
+
+$i=0
+[ $i < $max
+	; === get proc list
+	>ps -ef | grep 'kvm -c' | awk '{print $2}' | paste -sd' '
+	+$proc_list=\n([a-zA-Z0-9 _-]+)
+
+
+	[ $p=$proc_list
+		; == killing process $p
+		>kill -9 $p	
+	]
+	+$i
+]
+
+# check alarms
+*FORK controller
+!sleep 5
+@5
+>system alarm-list | grep $compute
+#<degraded
+>system host-list | grep $compute
+#<degraded
+
+>nova list --all-tenants --fields OS-EXT-SRV-ATTR:host,name,status,networks | grep $compute
++$result=(ERROR|Shutdown)
+
+; === wait for VMs to recover
+[ $result != __NO_STRING_CAPTURED__
+	>nova list --all-tenants --fields OS-EXT-SRV-ATTR:host,name,status,networks | grep $compute
+	+$result=(ERROR|Shutdown)
+	!sleep 5
+]
+
+
+
+>
+>
+*FORK compute
+
+
+
+
+
+>
+*INTERACT
+

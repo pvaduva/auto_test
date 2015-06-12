@@ -1,0 +1,166 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	TC913	Measure VM Recovery Times
+#
+
+Options:
+.	vm_name=<specific vm_name>
+.	vm_type_list=avp				will pick the first available AVP
+
+;;;
+
+*NOFAIL
+*EXP_INFO
+
+
+# common include path
+$inc_path=common
+
+# fail script
+#*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+# desired tenant
+$tenant=tenant11
+
+$tenant_credentials=/home/wrsroot/openrc.$tenant
+$tenant=$tenant_credentials
+# trim to just last part
+=$tenant;.*[.](\w+);\1;
+
+#cloud init test
+$cloud=yes
+
+# initial type to look for
+$desired_type=avp
+
+#type list, walk through each of the types and do VM ops
+$vm_type_list=avp
+
+
+; === include time functions
+~$inc_path/tcl_functions.inc
+#define time vars
+$time_start=0
+$time_fin=0
+
+
+
+
+
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+
+; === source admin
+>source /etc/nova/openrc
+
+; === did user pass in a specific VM name?
+?if $vm_name != $blank ? [
+	#get into foreach loop with vm_name
+	$vm_type_list=$vm_name
+]
+
+# walk through vm types
+[ $desired_type=$vm_type_list
+
+	; === get vm name for type $desired_type
+	?if $vm_type_list != $vm_name? [
+		~$inc_path/get_vm_of_type.inc desired_type=$desired_type
+	]::[
+		; === get vm type
+		# user specified a vm_name
+		~$inc_path/get_vm_type.inc vm_name=$vm_name
+	]
+
+
+
+	?if $vm_name == $blank ? [
+		; === get first active existing VM
+		>nova list --all-tenants
+		+$vm_name=(\S+)\s+\| ACTIVE
+		; === get vm type
+		~$inc_path/get_vm_type.inc vm_name=$vm_name
+	]
+
+	@10
+	?if $vm_type != none ? [
+		;purple == testing VM:$vm_name VM_type:$vm_type
+		; === get instance id and compute
+		@30
+#		>vm-topology | grep $vm_name
+#		+$vm_instance_id=(instance-\d+)
+#		+$vm_compute=(compute-\d+)
+		>nova list --all-tenants --fields OS-EXT-SRV-ATTR:instance_name,OS-EXT-SRV-ATTR:host,name,status,networks | grep $vm_name
+		+$vm_compute=(compute-\d+)
+		+$vm_instance_id=(instance-\d+)
+		+$vm_uuid=([0-9a-f-]{36})
+		
+		
+
+		; === log into compute: $vm_compute
+		~$inc_path/ssh_controller.inc IP=$vm_compute
+		@10
+		; === set up sudo root access (to make it easier later in the interact session)
+		>echo "$pass" | sudo -S id
+		<root
+
+		
+		; === determine pid of VM
+		>ps -ef | grep /usr/bin/kvm | egrep '$vm_instance_id|$vm_uuid'
+		+$vm_pid=\nroot\s+(\d+)
+		<$vm_instance_id
+
+		*TIMESTAMP
+		
+		; === kill PID
+		@30
+		!mark_time time_start
+		>date --rfc-3339=ns > timestamp;sudo kill -9 $vm_pid ;tail -f /var/log/nova/nova-compute.log
+		<Instance crashed.
+		<Instance rebooted successfully
+		>>^C
+		!mark_time time_fin
+		>>
+		>
+		; === showing start time
+		>cat timestamp
+		
+		@10
+		; === calculate elasped time
+		$time_elapse=$time_fin
+		=$time_elapse - $time_start
+		# convert to "regular" time
+		#!show_time time_elapse time_date_elapse
+		>
+		; == elapsed time is: $time_elapse ms
+		>
+		?if $time_elapse > 10000? [
+			;red swact is larger than 10 seconds
+			*FAIL
+		]
+
+		
+		*INTERACT
+
+		; === exiting from compute
+		>exit
+	]
+	#end if vm_type
+
+>
+*INTERACT
+# disconnect ssh
+>>~.
+

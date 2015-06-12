@@ -1,0 +1,129 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	Part of TC1991	Recovery after DOS
+#		Launches a cinder based VM
+
+Automation assist script. TC still requires powering down storage nodes, and then power up
+
+NOTE: may have to increase quotas to launch VM
+;;;
+
+*NOFAIL
+*EXP_INFO
+
+
+# common include path
+$inc_path=common
+
+# fail script
+#*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+$tenant=tenant11
+
+# vars for launching extra VM
+# VM names
+$guest1=VM1
+$vcpu_size=1
+$test_flavor=big
+$test_flavor_uuid=5f0d748b-1c8b-4a70-8643-4d57e25ac137
+$tenant_credentials=/home/wrsroot/openrc.$tenant
+$tenant=$tenant_credentials
+# trim to just last part
+=$tenant;.*[.](\w+);\1;
+$glance_image_name=cgcs-guest
+
+$cinder_volume_name=vol-$tenant-zzz
+$vol_size=1
+
+
+
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+>ping -c2 storage-0
+>ping -c2 storage-1
+
+
+
+*INTERACT
+@15
+; === create test flavor 
+>nova flavor-create $test_flavor $test_flavor_uuid 512 0 $vcpu_size
+
+; === look at neutron config
+>neutron net-list | egrep '$tenant|internal'
++$internal_net_uuid=([0-9a-f-]{36}) \| internal0
++$tenant_net_uuid=([0-9a-f-]{36}) \| $tenant-net0
++$tenant_mgmt_net_uuid=([0-9a-f-]{36}) \| $tenant-mgmt
+
+; === show images in glance
+>glance image-list
++$glance_image_uuid=([0-9a-f-]{36}) \| $glance_image_name
+
+; === switch to tenant mode for: $tenant
+>source $tenant_credentials
+
+; === create cinder image
+@60
+>cinder create --image-id $glance_image_uuid --display-name=$cinder_volume_name $vol_size
+>
+>
+@15
+>cinder list --all-tenants | grep $cinder_volume_name
++$cinder_volume_uuid=\n\| ([0-9a-f-]{36})
+
+; === wait for cinder to be created
+$v_state=none
+[ $v_state != available
+	>cinder list --all-tenants | grep $cinder_volume_name
+	+$v_state=(downloading|creating|available)
+	!sleep 5
+]
+
+
+@15
+*TIMESTAMP
+; === launch VM
+>nova boot --key_name=keypair-$tenant --flavor=$test_flavor_uuid --nic net-id=$tenant_mgmt_net_uuid,vif-model=virtio --nic net-id=$tenant_net_uuid,vif-model=avp  --block_device_mapping vda=$cinder_volume_uuid:::0   $guest1
+>
+>
+; === Wait for VM to go active
+~$inc_path/wait_vm_active.inc vm_name=$guest1
+
+
+## todo ping VM from nat box
+
+>
+*INTERACT
+
+; === cleanup
+
+>source /etc/nova/openrc
+@10
+; === kill additional VM
+>nova delete $guest1
+
+>nova list --all-tenants | grep $guest1
++$guest_uuid=([0-9a-f-]{36})
+
+>nova delete $guest_uuid
+<Request to delete server
+
+
+; === Become Admin
+>source /etc/nova/openrc 
+>nova flavor-delete $test_flavor
+>cinder delete $cinder_volume_uuid
+>

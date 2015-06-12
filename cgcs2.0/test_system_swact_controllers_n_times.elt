@@ -10,49 +10,42 @@
 # For more info see: expect-lite.html
 ;;;
 #
-#	system test log into VM
+#	TC560 Stress: Run 10 Controller swacts via cli
 #
-#
-#	Options:
-#		vm_name=<desired vm name>
-
-#
-
+Options
+.	max=10			number of times to swact
 ;;;
+
+*NOFAIL
+*EXP_INFO
+
 
 # common include path
 $inc_path=common
 
 # fail script
-*~$inc_path/fail_show.inc
+#*~$inc_path/fail_show.inc
 
 $IP=10.10.10.2
+
+$max=3
+
+#force the swact by rebooting active controller
+$force=no
 
 
 
 ; === log onto controller
 ~$inc_path/ssh_controller.inc
 
-; === get first active existing VM
->nova list --all-tenants
-+$vm_name=(\S+)\s+\| ACTIVE
-
-? $vm_name == __NO_STRING_CAPTURED__ ? *FAIL
-
-
-? $vm_name != __NO_STRING_CAPTURED__ ? [
-	@10
-	#~$inc_path/ssh_to_vm.inc vm_name=$vm_name
-	~$inc_path/ssh_to_nat_to_vm.inc vm_name=$vm_name
-	@5
-	>ip route | grep default
-	+$default_route=via (\S+)
-	; === ping default router
-	>ping -c 2 $default_route
-	; === look at size of VM disk
-	>df -h
-	>
+@20
+$i=0
+[ $i < $max
+	; === swact controllers: $i
+	~$inc_path/swact_controllers.inc force=$force
+	+$i
 ]
+#end while
 
 >
 *INTERACT

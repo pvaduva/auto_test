@@ -1,0 +1,98 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	TC622	Run 10 cold/live migrations.
+
+#
+Options:
+.	max=5		maximum migrations
+.	vm_name_list=<list of vm names>
+;;;
+
+*NOFAIL
+*EXP_INFO
+
+# common include path
+$inc_path=common
+
+# fail script
+#*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+$max_wait=60
+
+#cold migrate?
+$cold=yes
+$cold=no
+
+$max=5
+
+tenant2-avp2
+tenant6-avp4
+$vm_name_list=tenant0-avp2 tenant3-virtio4
+
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+@15
+
+$net=4
+; === get list of VM victims
+>nova list --all-tenants | grep 'net$net=172' | awk '{print $4}' | paste -sd' '
++$vm_name_list=\n(.+)
+
+
+$j=0
+
+@15
+[ $j < $max
+	; === Migrating count:$j 
+	[ $vm_name=$vm_name_list
+		#need VM UUID
+		~$inc_path/get_vm_type.inc vm_name=$vm_name
+
+		?if $cold==yes? [
+			$ACTION=migrate
+			; === COLD MIGRATE VM $vm_name
+			>nova $ACTION $vm_uuid
+
+			; === wait for  VM to become cold-migrating
+			~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=VERIFY_RESIZE
+			$ACTION=resize-confirm
+			; === cold migrate VM $vm_name
+			>nova $ACTION $vm_uuid
+		]::[
+			$ACTION=live-migration
+
+			; === LIVE MIGRATE VM $vm_name
+			>nova $ACTION $vm_uuid
+
+			; === wait for  VM to become migrating
+			~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=MIGRATING
+		]
+		
+		; === wait for  VM to become active
+		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+	]
+	
+
+	>
+
+
+
+	#*INTERACT
+
+	+$j
+]
+
+*INTERACT

@@ -1,0 +1,145 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	TC911	Measure Controller SWACT Times
+#
+NOTE: uncontrolled SWACT will reboot the active controller!
+
+Options:
+.	type=controlled_swact		Uses swact command
+.	type=uncontrolled_swact		Uses reboot -f on active controller
+;;;
+
+
+*NOFAIL
+*EXP_INFO
+
+# common include path
+$inc_path=common
+
+# fail script
+#*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+# type of test
+$type=uncontrolled_swact
+$type=controlled_swact
+
+
+
+; === include time functions
+~$inc_path/tcl_functions.inc
+#define time vars
+$time_start=0
+$time_fin=0
+
+
+*FORK default
+
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+; === set up sudo root access (to make it easier later in the interact session)
+>echo "$pass" | sudo -S id
+<root
+
+
+
+; === identify active controller
+>system sda-list | grep controller-services
++$act_controller=controller-services.*(controller-\d).*active
+
+; === identify standby controller
+>system sda-list | grep controller-services
++$stby_controller=controller-services.*(controller-\d).*standby
+
+; === get IP address of standby controller
+~$inc_path/ssh_controller.inc IP=$stby_controller
+
+>/sbin/ip addr show dev eth0
++$stby_controller_ip=inet ([0-9.]+)
+
+; === return to active controller
+>exit
+
+*FORK stby
+
+; === log directly onto controller
+~$inc_path/ssh_controller.inc IP=$stby_controller_ip
+
+>hostname
+>
+
+
+*FORK default
+*TIMESTAMP
+>hostname
+; === get last entry in customer log
+
+>tail /var/log/sm-customer.log 
+>tail /var/log/sm-customer.log | tail -1
++$last_entry_num=(\d+) \| \w+
+
+; === get system time
+>date
++$sys_time=\n.+ (\d+:\d+):\d+
+
+?if $type==controlled_swact? [
+	@5
+	!mark_time time_start
+	>date;system host-swact $act_controller
+	>
+]::[
+	; === rebooting active controller - uncontrolled swact
+	@5
+	!mark_time time_start
+	>date;sudo shutdown -r 0 
+	>
+]
+
+
+*FORK stby
+@90
+>hostname
+; === monitor /var/log/customer.log for go-active
+>tail -n 10 -f /var/log/sm-customer.log
+<$sys_time
+<go-active
+>>^C
+!mark_time time_fin
+>>
+>
+@10
+; === calculate elasped time
+$time_elapse=$time_fin
+=$time_elapse - $time_start
+# convert to "regular" time
+#!show_time time_elapse time_date_elapse
+>
+; == elapsed time is: $time_elapse ms
+>
+?if $time_elapse > 30000? [
+	;red swact is larger than 30 seconds
+	*FAIL
+]
+
+
+>
+*INTERACT
+
+
+
+
+
+
+

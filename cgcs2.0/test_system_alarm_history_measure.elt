@@ -1,0 +1,88 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	sprint-2	Historical Alarm bench mark (trigger an even to create a lot alarm in the system)
+#
+
+Options:
+.	num=<number of historical entries>
+
+Assumptions:
+.	System has been running for a while, and already has many alarms
+;;;
+
+*NOFAIL
+*EXP_INFO
+
+
+# common include path
+$inc_path=common
+
+# fail script
+#*~$inc_path/fail_show.inc
+
+$IP=10.10.10.2
+
+# number of lines to list
+$num=100
+
+; === include time functions
+~$inc_path/tcl_functions.inc
+#define time vars
+$time_start=0
+$time_fin=0
+
+
+
+
+
+; === log onto controller
+~$inc_path/ssh_controller.inc
+
+
+; === source admin
+>source /etc/nova/openrc
+
+
+*TIMESTAMP
+
+; === List historical alarms 
+@360
+!mark_time time_start
+>system alarm-history-list -l $num
+>
+!mark_time time_fin
+>>
+# check that alarm history succeeded
+>echo $?
+<\n0
+>
+
+@10
+; === calculate elasped time
+$time_elapse=$time_fin
+=$time_elapse - $time_start
+# convert to "regular" time
+#!show_time time_elapse time_date_elapse
+>
+; == elapsed time is: $time_elapse ms
+>
+?if $time_elapse > 60000? [
+	;red swact is larger than 60 seconds
+	*FAIL
+]
+
+		
+
+>
+*INTERACT
+
