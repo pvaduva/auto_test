@@ -7,6 +7,7 @@
 #	! Embedded Expect commands
 # For more info see: expect-lite.html
 ;;;
+#	BROKEN: as of AVR, dev has stopped supporting this method, DO NOT USE
 #
 #	ssh to vm with login
 #	uses ip netns (name space)
@@ -25,6 +26,9 @@ set timeout to reasonable value before calling this script
 assumes admin user
 
 ;;;
+
+NOTE:
+	Dev broke this in Release 2 Sprint 6, must use ssh_to_nat_to_vm.inc instead
 
 # default vm name
 $vm_name=tenant1-virtio1 
