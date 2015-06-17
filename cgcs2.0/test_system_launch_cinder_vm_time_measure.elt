@@ -24,10 +24,10 @@ NOTE: may have to increase quotas to launch VM
 
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-#*~$inc_path/fail_show.inc
+#*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
@@ -49,7 +49,7 @@ $cinder_volume_name=vol-$tenant-zzz
 $vol_size=1
 
 ; === include time functions
-~$inc_path/tcl_functions.inc
+~$inc_path/util/tcl_functions.inc
 #define time vars
 $time_start=0
 $time_fin=0
@@ -64,7 +64,7 @@ $use_vm_top == no
 
 
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 @15
 ; === create test flavor 
@@ -114,7 +114,7 @@ $v_state=none
 ]
 
 ; === log into compute: $vm_compute
-~$inc_path/ssh_controller.inc IP=$vm_compute
+~$inc_path/node/ssh_controller.inc IP=$vm_compute
 @10
 ; === set up sudo root access (to make it easier later in the interact session)
 >echo "$pass" | sudo -S id

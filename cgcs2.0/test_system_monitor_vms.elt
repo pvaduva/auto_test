@@ -24,10 +24,10 @@
 *NOFAIL
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-*~$inc_path/fail_show.inc
+*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
@@ -57,7 +57,7 @@ $glance_image_name=cgcs-guest
 
 
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 ; === get first active existing VM
 >nova list --all-tenants
@@ -86,14 +86,14 @@ $glance_image_name=cgcs-guest
 @15
 *FORK NATBOX
 ; === log onto controller
-~$inc_path/ssh_controller.inc user=cgcs IP=$natbox
+~$inc_path/node/ssh_controller.inc user=cgcs IP=$natbox
 
 
 #$vm_ip_list=192.168.104.50
 
 ; === start FS commands on VMs
 [ $vm_ip=$vm_ip_list
-	~$inc_path/ssh_controller.inc IP=$vm_ip user=$vm_user pass=$vm_pass
+	~$inc_path/node/ssh_controller.inc IP=$vm_ip user=$vm_user pass=$vm_pass
 	; === execute FS commands
 	>$vm_fs_cmd
 	>
@@ -123,7 +123,7 @@ $vm_ip_mon_list=$vm_ip_list
 ; === Become Admin
 >source /etc/nova/openrc 
 >date
-~$inc_path/swact_controllers.inc IP=$IP
+~$inc_path/node/swact_controllers.inc IP=$IP
 >date
 
 ; === switch to tenant mode
@@ -150,7 +150,7 @@ $vm_ip_mon_list=$vm_ip_list
 ; === start FS commands on VMs
 [ $vm_ip=$vm_ip_list
 
-	~$inc_path/ssh_controller.inc IP=$vm_ip user=$vm_user pass=$vm_pass
+	~$inc_path/node/ssh_controller.inc IP=$vm_ip user=$vm_user pass=$vm_pass
 	; === execute FS commands
 	>$vm_cmd_fs_check
 	>$vm_cmd_fs_check | wc -l

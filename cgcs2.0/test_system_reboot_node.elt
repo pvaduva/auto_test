@@ -21,10 +21,10 @@
 *EXP_INFO
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-*~$inc_path/fail_show.inc
+*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
@@ -33,8 +33,8 @@ $node=compute-1
 
 
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 ; === reboot node
-~$inc_path/reboot_node.inc node=$node
+~$inc_path/node/reboot_node.inc node=$node
 *INTERACT

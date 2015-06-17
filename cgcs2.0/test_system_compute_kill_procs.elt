@@ -22,7 +22,7 @@ Options
 *EXP_INFO
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 
 $IP=10.10.10.2
@@ -35,18 +35,18 @@ $severity=major
 
 *FORK controller
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 
 
 *FORK compute
 
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 
 
-~$inc_path/ssh_controller.inc IP=$compute
+~$inc_path/node/ssh_controller.inc IP=$compute
 
 ; === set up sudo root access (to make it easier later in the interact session)
 >echo "$pass" | sudo -S id
@@ -117,11 +117,11 @@ $severity=major
 		!sleep 1
 	]
 	
-	~$inc_path/wait_node_state.inc node=$compute 
+	~$inc_path/node/wait_node_state.inc node=$compute 
 	*FORK compute
 	? $severity == critical? [
 		; === log back into compute (since it rebooted)
-		~$inc_path/ssh_controller.inc IP=$compute
+		~$inc_path/node/ssh_controller.inc IP=$compute
 		>echo "$pass" | sudo -S id
 		<root
 

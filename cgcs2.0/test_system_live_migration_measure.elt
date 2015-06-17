@@ -11,6 +11,7 @@
 ;;;
 #
 #	system test - VM live-migrate
+#	TC914	Measure VM Live Migration for different Network attachment
 #	
 
 
@@ -43,10 +44,10 @@ Version 1.0
 
 #### Script Vars
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-#*~$inc_path/fail_show.inc
+#*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
@@ -79,7 +80,7 @@ $vm_cmd_fs_check=mount | grep 'on / type' | grep 'rw,re'
 
 
 ; === include time functions
-~$inc_path/tcl_functions.inc
+~$inc_path/util/tcl_functions.inc
 #define time vars
 $time_start=0
 $time_fin=0
@@ -96,7 +97,7 @@ $time_fin=0
 ?if $with_traffic == yes ? [
 	*FORK IXIA
 
-	~$inc_path/ssh_controller.inc IP=$ixia_host user=$ixia_user pass=$ixia_pass
+	~$inc_path/node/ssh_controller.inc IP=$ixia_host user=$ixia_user pass=$ixia_pass
 
 	; === cd to Ixia directory
 	>cd ixia
@@ -125,7 +126,7 @@ $time_fin=0
 
 *FORK default
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 @10
 ; === source admin
@@ -142,11 +143,11 @@ $time_fin=0
 
 	; === get vm name for type $desired_type
 	?if $vm_type_list != $vm_name? [
-		~$inc_path/get_vm_of_type.inc desired_type=$desired_type
+		~$inc_path/vm/get_vm_of_type.inc desired_type=$desired_type
 	]::[
 		; === get vm type
 		# user specified a vm_name
-		~$inc_path/get_vm_type.inc vm_name=$vm_name
+		~$inc_path/vm/get_vm_type.inc vm_name=$vm_name
 	]
 
 
@@ -156,7 +157,7 @@ $time_fin=0
 		>nova list --all-tenants
 		+$vm_name=(\S+)\s+\| ACTIVE
 		; === get vm type
-		~$inc_path/get_vm_type.inc vm_name=$vm_name
+		~$inc_path/vm/get_vm_type.inc vm_name=$vm_name
 	]
 
 
@@ -175,11 +176,11 @@ $time_fin=0
 		<\n0
 
 		; === wait for  VM to become migrating
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=MIGRATING
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name vm_state=MIGRATING
 
 
 		; === wait for  VM to become active
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name 
 		!mark_time time_fin
 		>
 		------------------------------

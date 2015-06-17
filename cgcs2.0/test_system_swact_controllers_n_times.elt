@@ -21,10 +21,10 @@ Options
 
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-#*~$inc_path/fail_show.inc
+#*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
@@ -36,13 +36,13 @@ $force=no
 
 
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 @20
 $i=0
 [ $i < $max
 	; === swact controllers: $i
-	~$inc_path/swact_controllers.inc force=$force
+	~$inc_path/node/swact_controllers.inc force=$force
 	+$i
 ]
 #end while

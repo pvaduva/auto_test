@@ -115,10 +115,10 @@ Steps:
 
 #### Script Vars
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-#*~$inc_path/fail_show.inc
+#*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
@@ -157,7 +157,7 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 ?if $with_traffic == yes ? [
 	*FORK IXIA
 
-	~$inc_path/ssh_controller.inc IP=$ixia_host user=$ixia_user pass=$ixia_pass
+	~$inc_path/node/ssh_controller.inc IP=$ixia_host user=$ixia_user pass=$ixia_pass
 
 	; === cd to Ixia directory
 	>cd ixia
@@ -188,7 +188,7 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 
 *FORK default
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 @10
 ; === source admin
@@ -205,11 +205,11 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 
 	; === get vm name for type $desired_type
 	?if $vm_type_list != $vm_name? [
-		~$inc_path/get_vm_of_type.inc desired_type=$desired_type
+		~$inc_path/vm/get_vm_of_type.inc desired_type=$desired_type
 	]::[
 		; === get vm type
 		# user specified a vm_name
-		~$inc_path/get_vm_type.inc vm_name=$vm_name
+		~$inc_path/vm/get_vm_type.inc vm_name=$vm_name
 	]
 
 
@@ -219,7 +219,7 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 		>nova list --all-tenants
 		+$vm_name=(\S+)\s+\| ACTIVE
 		; === get vm type
-		~$inc_path/get_vm_type.inc vm_name=$vm_name
+		~$inc_path/vm/get_vm_type.inc vm_name=$vm_name
 	]
 
 
@@ -235,11 +235,11 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 		>nova reboot $vm_uuid
 
 		; === wait for  VM to become reboot
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=REBOOT
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name vm_state=REBOOT
 
 
 		; === wait for  VM to become active
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name 
 
 		------------------------------
 
@@ -247,11 +247,11 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 		>nova reboot --hard $vm_uuid
 
 		; === wait for  VM to become reboot
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=HARD_REBOOT
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name vm_state=HARD_REBOOT
 
 
 		; === wait for  VM to become active
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name 
 
 		------------------------------
 
@@ -260,7 +260,7 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 
 
 		; === wait for  VM to become paused
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=PAUSED
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name vm_state=PAUSED
 
 		------------------------------
 
@@ -268,7 +268,7 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 		>nova unpause $vm_uuid
 
 		; === wait for  VM to become unpaused
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name 
 
 
 		------------------------------
@@ -277,7 +277,7 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 
 
 		; === wait for  VM to become stopped
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=SHUTOFF
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name vm_state=SHUTOFF
 
 		------------------------------
 
@@ -285,7 +285,7 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 		>nova start $vm_uuid
 
 		; === wait for  VM to become active
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name 
 
 
 		------------------------------
@@ -295,7 +295,7 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 
 
 		; === wait for  VM to become suspended
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=SUSPENDED
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name vm_state=SUSPENDED
 
 		------------------------------
 
@@ -303,7 +303,7 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 		>nova resume $vm_uuid
 
 		; === wait for  VM to become active
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name 
 
 		------------------------------
 
@@ -313,11 +313,11 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 		>nova $ACTION $vm_uuid
 
 		; === wait for  VM to become migrating
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=MIGRATING
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name vm_state=MIGRATING
 
 
 		; === wait for  VM to become active
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name 
 
 
 		------------------------------
@@ -328,7 +328,7 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 		>nova $ACTION $vm_uuid
 
 		; === wait for  VM to become cold-migrating
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=VERIFY_RESIZE
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name vm_state=VERIFY_RESIZE
 
 		$ACTION=resize-confirm
 		; === cold migrate VM $vm_name
@@ -336,7 +336,7 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 
 
 		; === wait for  VM to become active
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name 
 
 		------------------------------
 
@@ -355,7 +355,7 @@ $ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
 				+$cloud_addr=(172[0-9.]+),
 				<ROUTES=
 				+$cloud_route=(172[0-9.]+)/
-				~$inc_path/ssh_to_nat_to_vm.inc vm_name=$vm_name
+				~$inc_path/vm/ssh_to_nat_to_vm.inc vm_name=$vm_name
 				>ip addr
 				<$cloud_addr
 				>ip route

@@ -28,10 +28,10 @@ $RIGHT=[C
 $LEFT=[D
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-#*~$inc_path/fail_show.inc
+#*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
@@ -40,18 +40,18 @@ $node=ironpass27
 
 ; === get vlm target id
 #returns vlm_board
-~$inc_path/node_to_vlm_id.inc node=$node
+~$inc_path/vlm/node_to_vlm_id.inc node=$node
 
 ; === power off target
-~$inc_path/vlm_cmd.inc vlm_id=$vlm_id cmd=poweroff
+~$inc_path/vlm/vlm_cmd.inc vlm_id=$vlm_id cmd=poweroff
 
 ; === power on target
-~$inc_path/vlm_cmd.inc vlm_id=$vlm_id cmd=poweron
+~$inc_path/vlm/vlm_cmd.inc vlm_id=$vlm_id cmd=poweron
 
 
 ; === get vlm console info
 #returns vlm_value
-~$inc_path/vlm_field.inc vlm_id=$vlm_id vlm_field=console
+~$inc_path/vlm/vlm_field.inc vlm_id=$vlm_id vlm_field=console
 
 ; === telnet to console
 >telnet $vlm_value
