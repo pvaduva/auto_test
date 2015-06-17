@@ -45,7 +45,7 @@ SET CR }
 SET CL {
 
 # generic expect-lite call 
-CALL ${WASSP_TC_PATH}/${WASSP_TC_NAME}.elt HOST_IP=$env.NODE.target.default.targetIP TENANT=tenant1 *NOINTERACT 
+CALL ${WASSP_TC_PATH}/${WASSP_TC_NAME}.elt HOST_IP=$env.NODE.target.default.targetIP TENANT=tenant1 PASSWORD=tenantnew *NOINTERACT 
 
 PASS
 
