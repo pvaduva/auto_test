@@ -32,10 +32,10 @@ $ts_pass=)OKM0okm
 
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-#*~$inc_path/fail_show.inc
+#*~$inc_path/util/fail_show.inc
 
 
 $config_file=hp380_pv.ixncfg
@@ -57,7 +57,7 @@ $IP=10.10.10.2
 *FORK CLI
 
 ; === log onto controller
-~$inc_path/ssh_controller.inc IP=$IP PORT=$PORT
+~$inc_path/node/ssh_controller.inc IP=$IP PORT=$PORT
 
 ; === check for running VMs
 # use existing VM rather than starting one.

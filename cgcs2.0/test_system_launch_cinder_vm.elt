@@ -23,10 +23,10 @@ NOTE: may have to increase quotas to launch VM
 
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-#*~$inc_path/fail_show.inc
+#*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
@@ -50,7 +50,7 @@ $vol_size=1
 
 
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 >ping -c2 storage-0
 >ping -c2 storage-1
@@ -100,7 +100,7 @@ $v_state=none
 >
 >
 ; === Wait for VM to go active
-~$inc_path/wait_vm_active.inc vm_name=$guest1
+~$inc_path/vm/wait_vm_active.inc vm_name=$guest1
 
 
 ## todo ping VM from nat box

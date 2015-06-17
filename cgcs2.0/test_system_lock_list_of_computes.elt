@@ -21,10 +21,10 @@ Options
 *EXP_INFO
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-#*~$inc_path/fail_show.inc
+#*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
@@ -35,7 +35,7 @@ $compute_list=compute-1 compute-25 compute-4
 
 
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 $j=0
 $max=5
@@ -64,7 +64,7 @@ $max=5
 	
 	[ $c=$compute_list
 		; === waiting for lock of node: $c
-		~$inc_path/wait_node_state.inc node=$c state=disabled
+		~$inc_path/node/wait_node_state.inc node=$c state=disabled
 	]
 
 	>
@@ -92,7 +92,7 @@ $max=5
 
 	[ $c=$compute_list
 		; === waiting for lock of node: $c
-		~$inc_path/wait_node_state.inc node=$c state=available
+		~$inc_path/node/wait_node_state.inc node=$c state=available
 		
 	]
 

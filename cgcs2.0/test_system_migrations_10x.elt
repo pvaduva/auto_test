@@ -22,10 +22,10 @@ Options:
 *EXP_INFO
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-#*~$inc_path/fail_show.inc
+#*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
@@ -42,7 +42,7 @@ tenant6-avp4
 $vm_name_list=tenant0-avp2 tenant3-virtio4
 
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 @15
 
@@ -59,7 +59,7 @@ $j=0
 	; === Migrating count:$j 
 	[ $vm_name=$vm_name_list
 		#need VM UUID
-		~$inc_path/get_vm_type.inc vm_name=$vm_name
+		~$inc_path/vm/get_vm_type.inc vm_name=$vm_name
 
 		?if $cold==yes? [
 			$ACTION=migrate
@@ -67,7 +67,7 @@ $j=0
 			>nova $ACTION $vm_uuid
 
 			; === wait for  VM to become cold-migrating
-			~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=VERIFY_RESIZE
+			~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name vm_state=VERIFY_RESIZE
 			$ACTION=resize-confirm
 			; === cold migrate VM $vm_name
 			>nova $ACTION $vm_uuid
@@ -78,11 +78,11 @@ $j=0
 			>nova $ACTION $vm_uuid
 
 			; === wait for  VM to become migrating
-			~$inc_path/wait_vm_active.inc vm_name=$vm_name vm_state=MIGRATING
+			~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name vm_state=MIGRATING
 		]
 		
 		; === wait for  VM to become active
-		~$inc_path/wait_vm_active.inc vm_name=$vm_name 
+		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name 
 	]
 	
 

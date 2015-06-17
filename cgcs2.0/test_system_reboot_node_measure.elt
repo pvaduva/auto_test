@@ -24,10 +24,10 @@
 *EXP_INFO
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-#*~$inc_path/fail_show.inc
+#*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
@@ -37,7 +37,7 @@ $node=compute-1
 $max=120
 
 ; === include time functions
-~$inc_path/tcl_functions.inc
+~$inc_path/util/tcl_functions.inc
 #define time vars
 $time_start=0
 $time_fin=0
@@ -45,11 +45,11 @@ $time_start_str=
 
 
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 ; === reboot node
 !mark_time time_start
-~$inc_path/reboot_node.inc node=$node force=yes
+~$inc_path/node/reboot_node.inc node=$node force=yes
 
 ; === ping node waiting for it to return
 @200
@@ -62,7 +62,7 @@ $time_start_str=
 *INTERACT
 
 ; === log onto node
-~$inc_path/ssh_controller.inc IP=$node
+~$inc_path/node/ssh_controller.inc IP=$node
 
 $i=0
 $goenabled=__NO_STRING_CAPTURED__

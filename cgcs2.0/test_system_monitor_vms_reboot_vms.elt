@@ -26,10 +26,10 @@ Options
 *NOFAIL
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-#*~$inc_path/fail_show.inc
+#*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
@@ -66,7 +66,7 @@ $glance_image_name=cgcs-guest
 
 
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 @15
 ; === get first active existing VM
@@ -96,14 +96,14 @@ $glance_image_name=cgcs-guest
 
 *FORK NATBOX
 ; === log onto controller
-~$inc_path/ssh_controller.inc user=cgcs IP=$natbox
+~$inc_path/node/ssh_controller.inc user=cgcs IP=$natbox
 
 
 #$vm_ip_list=192.168.104.50
 
 #; === start FS commands on VMs
 #[ $vm_ip=$vm_ip_list
-#	~$inc_path/ssh_controller.inc IP=$vm_ip user=$vm_user pass=$vm_pass
+#	~$inc_path/node/ssh_controller.inc IP=$vm_ip user=$vm_user pass=$vm_pass
 #	; === execute FS commands
 #	>$vm_fs_cmd
 #	>
@@ -144,7 +144,7 @@ $j=0
 	; === run commands on VMs
 	[ $vm_ip=$vm_ip_list
 		; === reboot VM 
-		~$inc_path/ssh_controller.inc IP=$vm_ip user=$vm_user pass=$vm_pass
+		~$inc_path/node/ssh_controller.inc IP=$vm_ip user=$vm_user pass=$vm_pass
 		; === execute VM Commands
 		@10
 		>reboot

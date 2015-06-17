@@ -24,10 +24,10 @@ NOTE: must increase quotas to start another VM
 *EXP_INFO
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-#*~$inc_path/fail_show.inc
+#*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
@@ -66,7 +66,7 @@ $glance_image_name=cgcs-guest
 
 
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 
 ; === create test flavor 
@@ -89,7 +89,7 @@ $glance_image_name=cgcs-guest
 *INTERACT
 
 ; === reboot Controller
-~$inc_path/reboot_node.inc node=$node force=yes
+~$inc_path/node/reboot_node.inc node=$node force=yes
 
 
 ; === show services
@@ -106,7 +106,7 @@ $glance_image_name=cgcs-guest
 
 
 ; === Wait for VM to go active
-~$inc_path/wait_vm_active.inc vm_name=$guest1
+~$inc_path/vm/wait_vm_active.inc vm_name=$guest1
 
 ; === get VM IP
 >nova list --all-tenants | grep VM1
@@ -115,13 +115,13 @@ $glance_image_name=cgcs-guest
 
 *FORK NATBOX
 ; === log onto controller
-~$inc_path/ssh_controller.inc user=cgcs IP=$natbox
+~$inc_path/node/ssh_controller.inc user=cgcs IP=$natbox
 >which ssh
 
 ; === start FS commands on VMs
 [ $vm_ip=$vm_ip_list
 	>ping -c3 $vm_ip
-	~$inc_path/ssh_controller.inc IP=$vm_ip user=$vm_user pass=$vm_pass
+	~$inc_path/node/ssh_controller.inc IP=$vm_ip user=$vm_user pass=$vm_pass
 	; === execute FS commands
 	>$vm_fs_cmd && $vm_fs_cmd && $vm_fs_cmd
 	<\d+\.\d MB/s

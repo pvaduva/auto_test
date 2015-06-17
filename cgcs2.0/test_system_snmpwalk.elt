@@ -15,26 +15,26 @@
 
 ;;;
 
+NOTE: requires expect-lite 4.9.0 (for sleep)
+
 *NOFAIL
 *EXP_INFO
 # adjust for a lot of looping
 *INFINITE_LOOP 50010
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 # fail script
-#*~$inc_path/fail_show.inc
+#*~$inc_path/util/fail_show.inc
 
 $IP=10.10.10.2
 
 $oid=.1.3.6.1.4.1.731
 
-#include future sleep
-~$inc_path/sleep.inc
 
 ; === log onto controller
-~$inc_path/ssh_controller.inc
+~$inc_path/node/ssh_controller.inc
 
 ; === check for snmp comm string
 >system snmp-comm-list | wc -l
@@ -70,8 +70,8 @@ $max=50000
 	>echo $?
 	<\n0
 	;; sleeping...
-	#!sleep 5
-	!zzz 30
+	#!sleep 5	
+	:30
 	+$i
 ]
 
