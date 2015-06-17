@@ -18,6 +18,23 @@ Options:
 .	vm_type_list=avp				will pick the first available AVP
 
 ;;;
+Steps:
+1)  Include time functions
+2)  Log onto controller
+3)  Source admin
+4)  Did user pass in a specific VM name?
+5)  Get vm name for type $desired_type
+6)  Get vm type
+7)  Get first active existing VM
+8)  Get vm type
+9)  Get instance id and compute
+10)  Log into compute: $vm_compute
+11)  Set up sudo root access (to make it easier later in the interact session)
+12)  Determine pid of VM
+13)  Kill PID
+14)  Showing start time
+15)  Calculate elasped time
+16)  Exiting from compute
 
 *NOFAIL
 *EXP_INFO

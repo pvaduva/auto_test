@@ -15,6 +15,9 @@
 Options
 .	compute_list=<list of compute names>
 ;;;
+Steps:
+1)  Rebooting with VLM node: $c
+2)  Check that target is reserved
 
 # common include path
 $inc_path=common/el

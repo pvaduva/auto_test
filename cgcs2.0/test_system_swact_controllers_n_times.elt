@@ -15,6 +15,9 @@
 Options
 .	max=10			number of times to swact
 ;;;
+Steps:
+1)  Log onto controller
+2)  Swact controllers: $i
 
 *NOFAIL
 *EXP_INFO

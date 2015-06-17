@@ -14,6 +14,12 @@
 #
 
 ;;;
+Steps:
+1)  Get vlm target id
+2)  Power off target
+3)  Power on target
+4)  Get vlm console info
+5)  Telnet to console
 
 *NOFAIL
 *EXP_INFO

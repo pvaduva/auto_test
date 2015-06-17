@@ -19,6 +19,24 @@
 NOTE: must increase quotas to start another VM
 
 ;;;
+Steps:
+1)  Log onto controller
+2)  Create test flavor
+3)  Look at neutron config
+4)  Show images in glance
+5)  Reboot Controller
+6)  Show services
+7)  Switch to tenant mode for: $tenant
+8)  Launch VM
+9)  Wait for VM to go active
+10)  Get VM IP
+11)  Log onto controller
+12)  Start FS commands on VMs
+13)  Execute FS commands
+14)  Execute FS commands
+15)  Kill additional VM
+16)  Cleanup
+17)  Become Admin
 
 *NOFAIL
 *EXP_INFO

@@ -21,6 +21,20 @@
 #
 
 ;;;
+Steps:
+1)  Connecting to cgcs test server
+2)  Log onto controller
+3)  Check for running VMs
+4)  Cd to Ixia directory
+5)  Show configs
+6)  Setup ixia env
+7)  Show help
+8)  NOTE: Ixia is slow...
+9)  Load config
+10)  Start traffic
+11)  Look at stats
+12)  Stop traffic
+13)  Check stats that traffic has stopped
 
 *NOFAIL
 *EXP_INFO

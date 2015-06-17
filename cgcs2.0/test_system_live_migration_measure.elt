@@ -36,6 +36,28 @@ Version 1.0
 #	NOTE: most code borrowed from TC8001
 #
 
+Steps:
+1)  Include time functions
+2)  Get random number
+3)  Cd to Ixia directory
+4)  Show tcl files
+5)  Setup ixia env
+6)  Start traffic
+7)  Look at stats
+8)  Log onto controller
+9)  Source admin
+10)  Did user pass in a specific VM name?
+11)  Get vm name for type $desired_type
+12)  Get vm type
+13)  Get first active existing VM
+14)  Get vm type
+15)  LIVE MIGRATE VM $vm_name
+16)  Wait for  VM to become migrating
+17)  Wait for  VM to become active
+18)  Check stats on the fly
+19)  Stop traffic
+20)  Show stats that traffic has stopped
+21)  Calculate elasped time
 
 
 *NOFAIL

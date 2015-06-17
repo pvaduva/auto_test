@@ -20,6 +20,15 @@ Assumptions:
 .	System has been running for a while, and already has many alarms
 ;;;
 
+Steps:
+1)  Include time functions
+2)  Log onto controller
+3)  Source admin
+4)  List historical alarms
+5)  Calculate elasped time
+
+
+
 *NOFAIL
 *EXP_INFO
 

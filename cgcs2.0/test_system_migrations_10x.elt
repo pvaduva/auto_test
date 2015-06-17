@@ -17,6 +17,16 @@ Options:
 .	max=5		maximum migrations
 .	vm_name_list=<list of vm names>
 ;;;
+Steps:
+1)  Log onto controller
+2)  Get list of VM victims
+3)  Migrating count:$j
+4)  COLD MIGRATE VM $vm_name
+5)  Wait for  VM to become cold-migrating
+6)  Cold migrate VM $vm_name
+7)  LIVE MIGRATE VM $vm_name
+8)  Wait for  VM to become migrating
+9)  Wait for  VM to become active
 
 *NOFAIL
 *EXP_INFO

@@ -17,6 +17,19 @@ Automation assist script. TC still requires powering down storage nodes, and the
 
 NOTE: may have to increase quotas to launch VM
 ;;;
+Steps:
+1)  Log onto controller
+2)  Create test flavor
+3)  Look at neutron config
+4)  Show images in glance
+5)  Switch to tenant mode for: $tenant
+6)  Create cinder image
+7)  Wait for cinder to be created
+8)  Launch VM
+9)  Wait for VM to go active
+10)  Cleanup
+11)  Kill additional VM
+12)  Become Admin
 
 *NOFAIL
 *EXP_INFO
