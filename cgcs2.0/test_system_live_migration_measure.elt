@@ -11,6 +11,7 @@
 ;;;
 #
 #	system test - VM live-migrate
+#	TC914	Measure VM Live Migration for different Network attachment
 #	
 
 

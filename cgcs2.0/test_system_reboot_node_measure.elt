@@ -11,6 +11,9 @@
 ;;;
 #
 #	system test node reboot
+#	TC910 Measure Node Reboot Times
+#
+#
 #
 #	Options:
 #		node=<desired node name to reboot>
