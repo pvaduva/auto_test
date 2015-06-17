@@ -16,6 +16,15 @@ Options
 .	max=5		maximum number of lock/unlocks
 .	compute_list=<list of computes to lock/unlock>
 ;;;
+Steps:
+1)  Log onto controller
+2)  Locking node: $c
+3) == wait for host locked
+4)  Waiting for lock of node: $c
+5)  Locking computes
+6)  Unlocking node: $c
+7) == wait for host to be unlocked
+8)  Waiting for lock of node: $c
 
 *NOFAIL
 *EXP_INFO

@@ -19,6 +19,11 @@
 #
 
 ;;;
+Steps:
+1)  Log onto controller
+2)  Get first active existing VM
+3)  Ping default router
+4)  Look at size of VM disk
 
 # common include path
 $inc_path=common/el

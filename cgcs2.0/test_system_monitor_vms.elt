@@ -19,6 +19,29 @@
 #
 
 ;;;
+Steps:
+1)  Log onto controller
+2)  Get first active existing VM
+3)  Create test flavor
+4)  Look at neutron config
+5)  Show images in glance
+6)  Get list of active VM management IPs
+7)  Log onto controller
+8)  Start FS commands on VMs
+9)  Execute FS commands
+10)  Monitoring vm management ip addresses
+11)  Become tenant
+12)  Kill additional VM
+13)  Swact controllers
+14)  Become Admin
+15)  Switch to tenant mode
+16)  Launch VM
+17)  Start FS commands on VMs
+18)  Execute FS commands
+19)  Check that FS write command still running
+20)  Check that file size has increased
+21)  Cleanup
+22)  Become Admin
 
 *EXP_INFO
 *NOFAIL

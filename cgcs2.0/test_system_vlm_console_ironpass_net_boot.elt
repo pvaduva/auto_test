@@ -15,6 +15,15 @@
 Options
 .	node=<node to boot>		(e.g. hp380-1 ironpass-8 ts-r720-4)
 ;;;
+Steps:
+1)  Get vlm target id
+2)  Power off target
+3)  Power on target
+4)  Get vlm console info
+5)  Telnet to console
+6)  Using ironpass
+7)  Using dell
+8)  Step down interface list
 
 *NOFAIL
 *EXP_INFO

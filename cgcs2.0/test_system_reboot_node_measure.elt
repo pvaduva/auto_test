@@ -19,6 +19,18 @@
 #		node=<desired node name to reboot>
 
 ;;;
+Steps:
+1)  Include time functions
+2)  Log onto controller
+3)  Reboot node
+4)  Ping node waiting for it to return
+5)  Log into failed node once console is up (may have to look at console)
+6)  Log onto node
+7)  Waiting for goenabled:$i
+8) = time start:$time_start_str
+9) = time end  :$goenabled
+10)  Calculate elasped time
+11) = approx elapsed time:$time_elapse ms
 
 *NOFAIL
 *EXP_INFO

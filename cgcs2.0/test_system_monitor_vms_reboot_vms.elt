@@ -21,6 +21,25 @@ Options
 .	num_vms=10	Number of VMs to reboot
 
 ;;;
+Steps:
+1)  Log onto controller
+2)  Get first active existing VM
+3)  Create test flavor
+4)  Look at neutron config
+5)  Show images in glance
+6)  Get list of active VM management IPs
+7)  Log onto controller
+8) = start FS commands on VMs
+9) == execute FS commands
+10)  Monitoring vm management ip addresses
+11)  Validate VMs are not in error state
+12)  Run commands on VMs
+13)  Reboot VM
+14)  Execute VM Commands
+15)  Look at state of VMs
+16)  Cleanup
+17)  Kill additional VM
+18)  Become Admin
 
 *EXP_INFO
 *NOFAIL

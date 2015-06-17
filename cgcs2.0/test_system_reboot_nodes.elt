@@ -15,6 +15,9 @@
 #	Options:
 #		node_list=<list of nodes to reboot>
 ;;;
+Steps:
+1)  Log onto controller
+2)  Reboot node
 
 *NOFAIL
 *EXP_INFO

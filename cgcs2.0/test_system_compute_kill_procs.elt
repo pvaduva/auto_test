@@ -17,6 +17,11 @@ Options
 .	compute=<compute>
 .	severity=<critical|major>		default=major
 ;;;
+Steps:
+1)  Log onto controller
+2)  Log onto controller
+3)  Set up sudo root access (to make it easier later in the interact session)
+4)  Log back into compute (since it rebooted)
 
 *NOFAIL
 *EXP_INFO

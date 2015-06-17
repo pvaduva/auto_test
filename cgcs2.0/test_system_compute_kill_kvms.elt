@@ -16,6 +16,12 @@
 Options
 .	compute=<compute>
 ;;;
+Steps:
+1)  Log onto controller
+2)  Log onto controller
+3)  Set up sudo root access (to make it easier later in the interact session)
+4)  Get proc list
+5)  Wait for VMs to recover
 
 *NOFAIL
 *EXP_INFO

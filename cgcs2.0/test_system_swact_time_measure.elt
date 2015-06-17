@@ -19,6 +19,20 @@ Options:
 .	type=uncontrolled_swact		Uses reboot -f on active controller
 ;;;
 
+Steps:
+1)  Include time functions
+2)  Log onto controller
+3)  Set up sudo root access (to make it easier later in the interact session)
+4)  Identify active controller
+5)  Identify standby controller
+6)  Get IP address of standby controller
+7)  Return to active controller
+8)  Log directly onto controller
+9)  Get last entry in customer log
+10)  Get system time
+11)  Rebooting active controller - uncontrolled swact
+12)  Monitor /var/log/customer.log for go-active
+13)  Calculate elasped time
 
 *NOFAIL
 *EXP_INFO
