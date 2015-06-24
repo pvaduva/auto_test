@@ -8,11 +8,12 @@
 # For more info see: expect-lite.html
 ;;;
 #
-#	ssh to controller
+#	ssh to node
 #
 
 To use:
 ~ssh_controller.inc IP=<ip> [PORT=<custom port>]
+~ssh_node.inc IP=<ip> [PORT=<custom port>]
 
 ;;;
 

@@ -1,0 +1,81 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	Ixia IxNetwork load config file
+#
+#	Loads config file, that's it.
+#
+
+Options
+.	config_file=<ixia_config_file>
+.	ix_ip=<ip for ixnetwork machine>	(default=128.224.8.149)
+.	ix_tcp_port=<port ixnetwork machine is listening on>		(default=8009)
+
+Assumptions
+.	IxNetwork machine is up and running with IxNetwork/TCL server running
+
+;;;
+Note: much of this script is from ixia_tcl_demo.elt
+
+
+*NOFAIL
+*EXP_INFO
+
+# common include path
+$inc_path=common/el
+
+
+$test_server_IP=yow-cgcs-test
+$test_server_user=svc-cgcsauto
+$test_server_pass=)OKM0okm
+
+# revo windows VM
+$ix_ip=128.224.8.149
+$ix_tcp_port=8009
+
+$ix_config_file=hp380_pv.ixncfg
+$ix_config_file=hp380_L2_only_2_str.ixncfg
+
+# support custom port support
+$ssh_opts= -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no 
+?if $PORT != $blank ? $ssh_opts=$ssh_opts -p $PORT 
+
+; === log onto controller
+~$inc_path/node/ssh_node.inc IP=$test_server_IP user=$test_server_user pass=$test_server_pass
+
+; === cd to Ixia directory
+>cd ixia
+
+; === show tcl files
+>ls *tcl
+
+; === show configs
+>ls *.ixncfg
+
+; === setup ixia env
+>source ixia_env.sh
+
+; === show help
+>tclsh ixia_load_config.tcl -h
+>tclsh ixia_start_stop_traffic.tcl -h
+>tclsh ixia_show_stats.tcl -h
+>
+; === NOTE: Ixia is slow...
+
+@40
+; === load config
+
+>tclsh ixia_load_config.tcl config=$ix_config_file ixnetwork=$ix_ip tcpport=$ix_tcp_port
+<ixia config loaded
+>
+
+*INTERACT
