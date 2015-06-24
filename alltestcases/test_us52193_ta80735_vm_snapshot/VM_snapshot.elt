@@ -66,7 +66,7 @@ $HOST_IP=10.10.10.2
 >keystone tenant-list
 +$TENANT=([0-9a-f]{32}) \| .*tenant1
 >cinder quota-show $TENANT
->cinder quota-update --volumes 20 $TENANT
+>cinder quota-update --volumes 40 $TENANT
 >cinder quota-show $TENANT
 
 @20

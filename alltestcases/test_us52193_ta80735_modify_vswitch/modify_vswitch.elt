@@ -98,7 +98,7 @@ $VM=root
 >keystone tenant-list
 +$TENANT=([0-9a-f]{32}) \| .*tenant1
 >cinder quota-show $TENANT
->cinder quota-update --volumes 20 $TENANT
+>cinder quota-update --volumes 40 $TENANT
 >cinder quota-show $TENANT
 ; === get the necessary image and network uuids
 >source ./openrc.tenant1
