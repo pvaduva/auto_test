@@ -25,7 +25,7 @@ $pass=li69nux
 $admin_src_path=/etc/nova
 
 # support custom port support
-$ssh_opts= -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=30 
+$ssh_opts= -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=30 
 ?if $PORT != $blank ? $ssh_opts=$ssh_opts -p $PORT 
 
 
