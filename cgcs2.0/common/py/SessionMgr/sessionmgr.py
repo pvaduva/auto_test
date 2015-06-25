@@ -50,9 +50,12 @@ class Session():
 		self.password = password
 		try:
 			self.session_name = pxssh.pxssh(timeout=5)
+			
 			# set to ignore ssh host fingerprinting
 			self.session_name.SSH_OPTS = " '-o StrictHostKeyChecking=no'" + " '-o UserKnownHostsFile /dev/null' "			
 			self.session_name.force_password = True
+			
+			# log into remote host
 			self.session_name.login(hostname, username, password, auto_prompt_reset=False, quiet=False)
 			
 			self.session_name.PROMPT = self.prompt
