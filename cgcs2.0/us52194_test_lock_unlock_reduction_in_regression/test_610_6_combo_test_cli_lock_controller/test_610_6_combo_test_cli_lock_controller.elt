@@ -106,13 +106,13 @@ $pass=li69nux
 # log into active controller
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $user@$IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$pass
 
 >export TMOUT=0
 
 >ssh -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no  $user@$stby_controller 
-<Password:
+<Password:|Last login:
 >>$pass
 >for f in $(seq 5); do $(/bin/dd if=/dev/zero of=/dev/null &) ; done
 >

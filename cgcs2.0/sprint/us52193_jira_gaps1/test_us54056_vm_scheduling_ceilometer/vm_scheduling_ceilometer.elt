@@ -68,7 +68,7 @@ $VM=root
 
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$HOST_PASS
 >export TMOUT=0
 >source /etc/nova/openrc
