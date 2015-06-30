@@ -8,11 +8,12 @@
         
 --> 
 <!-- 
-     Suite build XPD autotest application app/test.
+     Suite build TiS autotest application app/test.
 
 Modification history
 ====================
-05dec13,djy   Created
+30jun15, mhg   for us54061_hugepages automation
+
 -->
 
 <suite_build version="1.0">

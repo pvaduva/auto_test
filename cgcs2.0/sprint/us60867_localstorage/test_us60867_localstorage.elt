@@ -1,0 +1,186 @@
+#!/usr/bin/env expect-lite
+
+;;;
+This is a automated test script for 'local storage' feature.
+
+Options
+    reuired inputs:
+        host=<host>             host name or ip address of the active controller
+
+    optional inputs:
+        host_user=<user>        user name, 'wrsroot' by default
+        host_passwd=<passwd>    password, 'li69nux' by default
+        tn_admin=<admin_tenant> name of the 'Administorator' of the clound, 'admin' by default
+        pwd_admin=<admin_passwd>
+                                password of the 'Administorator' of the clound, 'admin' by default
+        tn_tenant1=<tenant1>    name of the tenant to test with, 'tenant1' by default
+        pwd_tenant1=<tenant1_pwd>
+                                password of the tenant to test with, 'tenant1' by default
+;;;
+
+*EXP_INFO
+#*NOFAIL
+$host=10.10.10.3
+$host_user=wrsroot
+$host_passwd=li69nux
+
+$compute2=NONE
+
+;test on $host
+>ssh -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $host_user@$host
+<assword|SYSTEM:|WARNING:
+>>$host_passwd
+
+>export TMOUT=0
+
+@9
+>source /etc/nova/openrc
+
+;start test 'local storage'
+>date
+
+;---------------------------------------
+;TC1 Local Storage configuration testing
+;---------------------------------------
+
+;show all the nodes in the system
+>system host-list
+
+;get the compute nodes list and save it in file
+;save the list to the file
+>date +%Y-%m-%d-%H:%M:%S
++$tm=\n([0-9:-]+)
+$compute_list=~/cpt.lst-$tm
+>rm -rf $compute_list
+>system host-list | awk '{if ($6 == "compute" && $8 == "unlocked" && $10 == "enabled" && $12 == "available") print $4}' > $compute_list
+
+;total number of computes
+> wc -l $compute_list
++$compute_cnt=\n([0-9]+)
+
+;check the number of computes
+? $compute_cnt <= 1? [
+    ;yellow WARNING: not enough computes for local storage test,
+    ;     at least 2 are required to test both local-storage and remote-storage.
+    *FAIL
+]
+
+;there are $compute_cnt compute nodes, that's enough nodes for testing
+
+;randomly pick up 1 compute node to configure it to 'local storage' 
+>shuf $compute_list | head -n 1
++$lc_cpt=\n(.*)
+
+? $lc_cpt == __NO_STRING_CAPTURED__ ?[
+    ; ERROR: no valid compute node to test on?! Fail the test in the case
+    *FAIL
+]
+
+;randomly pick up 1 compute node from 
+;   the rest of the computes for 'remote storage'
+>shuf $compute_list | grep -v "$lc_cpt" | head -n 1
++$rt_cpt=\n(.*)
+
+? $rt_cpt == __NO_STRING_CAPTURED__ ?[
+    ;red ERROR: no valid compute node to test on for remote-storage?! 
+    ;        Fail the test in the case
+    *FAIL
+]
+
+;in case of fail, run this script
+*~cleanup.inc
+
+;create flavors
+~create_flavors.inc
+
+;configure the compute $lc_cpt to local-storage configuration
+~convert_to_local_storage.inc compute=$lc_cpt
+
+#; configure the compute $rt_cpt to remote-storage configuration if it's not 
+#~convert_to_remote_storage.inc
+
+;PASS TC1
+
+;---------------------------------------
+;TC2 Launch an instance using :
+;  1   non-network flavour (no aggregate_instance_extra_specs key in extra spec)
+;  2   boot from image
+;---------------------------------------
+~test_vm_net_img.inc flavor=flv_local_storage-es vmname=vm00def_es
+;PASS TC2
+
+;---------------------------------------
+;TC3 Launch an instance using :
+;  1   network (non-local-storage) flavour
+;  2   boot from image
+;---------------------------------------
+~test_vm_net_img.inc vmname=vm001_net_img_es
+;PASS: TC3
+
+;---------------------------------------
+;TC4 Launch an instance using :
+;  1   network (non-local-storage) flavour
+;  2   boot from volume
+;---------------------------------------
+~test_vm_net_vol.inc
+;PASS TC4
+
+;---------------------------------------
+;TC5 Launch instance using :
+;   1   local storage flavour
+;   2   boot from image
+;---------------------------------------
+~test_vm_loc_img.inc
+;PASS TC5
+
+;---------------------------------------
+;TC6 Launch instance using :
+;   1   local storage flavour
+;   2   boot from volume
+;---------------------------------------
+;will not delete the VM
+~test_vm_loc_vol.inc delvm=false
+;PASS TC6
+
+$volume=true
+;vlmid=$vlmid volume=$volmue
+
+;---------------------------------------
+;TC8 VM live-migration should be rejected 
+; ---------------------------------------
+~test_live_migrate_vm.inc
+;PASS TC8
+
+;---------------------------------------
+;TC9 VM cold-migration testing
+;---------------------------------------
+~test_cold_migrate_vm.inc cnt_computes=$compute_cnt loc_compute=$lc_cpt
+;PASS TC9
+
+;---------------------------------------
+;TC10 Disable Local Storage:
+;---------------------------------------
+~convert_to_net_storage.inc compute=$lc_cpt
+;PASS TC10
+
+
+;---------------------------------------
+;TC6 Delete VMs using remote-storage 
+;    and check the nfs-folders/volumes
+;    are correctly removed
+;---------------------------------------
+#~test_del_net_vm.inc
+;---------------------------------------
+;TC7 Delete VMs using local-storage 
+;    and check the nfs-folders/volumes
+;    are correctly removed
+; ---------------------------------------
+#~test_del_loc_vm.inc
+;---------------------------------------
+;cleanup all the temparory files
+;>rm -rf $compute_list
+~cleanup.inc debug=no compute2=$compute2
+;---------------------------------------
+
+;TEST PASS  test_us60867_localstorage.elt
+

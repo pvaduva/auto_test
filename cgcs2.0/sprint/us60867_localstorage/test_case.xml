@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+
+Modification history
+====================
+30jun15, mhg  for us54061_hugepages automation
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="sanity/cgcs/${WASS_TC_NAME}" timeout="">
+    <test_case  name="sanity/cgcs/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" >
+    <!-- test_case  name="sanity/cgcs/${WASS_TC_NAME}" preTest="${WASSP_TESTCASE_BASE}/utils/loginCGCS.frag" postTest="${WASSP_TESTCASE_BASE}/utils/collectTempesLogs.frag"-->
+
+        #######################################################
+        # Test Sanity CGCS app/test
+        #######################################################
+
+LOOKFOR
+TYPE \n
+SINK 1 SEC
+
+SET HOST_IP     $env.NODE.target.Boot.oamFloat
+SET HOST_USER   $env.NODE.target.Connect.ssh_user
+SET HOST_PASSWD $env.NODE.target.Connect.ssh_pass
+
+Con1SSH PROMPTTIMEOUT 60 SEC
+Con1SSH PROMPT (.*:\~#\s)|(.*:\~\$)|(.*\]:\s)|(.*\)\]#\s)|(.*\]#\s)|(.*\)\]\$\s)
+
+Con1SSH TYPE export TMOUT=0\n
+Con1SSH WAIT 10 SEC
+
+Con1SSH TYPE echo executing ${WASSP_TC_NAME}\n
+Con1SSH WAIT 100 SEC
+
+Con1SSH FAILIF FAIL
+Con1SSH PASSIF Result: PASS
+
+Con1SSH CALL ${WASSP_TC_PATH}/test_us60867_localstorage.elt host=${HOST_IP} host_user=${HOST_USER} host_passwd=${HOST_PASSWD} *NOINTERACT
+
+PASS
+    </test_case>
+</test_module>
+</file>
+
