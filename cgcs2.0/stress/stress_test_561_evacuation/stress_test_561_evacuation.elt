@@ -461,7 +461,7 @@ $count=0
 					?if true == true? %CLEANUP
 				]
 			]
-			#<ssword:
+			#<ssword:|Last login:
 			>>root
 			; === inside VM, check filesystem and ping
 			@5

@@ -28,7 +28,7 @@ the exstra specs of the flavor is set to True/False randomly
 
 #>ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 >ssh -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
-#<ssword:
+#<ssword:|Last login:
 <assword|SYSTEM:|WARNING:
 >>$HOST_PASSWD
 
