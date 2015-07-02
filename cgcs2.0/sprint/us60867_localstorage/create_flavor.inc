@@ -4,18 +4,19 @@ Create a flavor and handling errors.
 
 Required inputs:
 
-  <name>                   Name of the new flavor
-  <id>                     Unique ID (integer or UUID) for the new flavor. If
-                           specifying 'auto', a UUID will be generated as id
-  <ram>                    Memory size in MB
-  <disk>                   Disk size in GB
-  <vcpus>                  Number of vcpus
+  name=<name>               Name of the new flavor
+  ram=<size_ram>            Memory size in MB
+  disk=<size_disk>          Disk size in GB
+  vcpus=<vcpus>             Number of vcpus
 
 Optional inputs:
-  <ephemeral>              n    empheral disk size, 0 indicating no epheral disk
-  <swap>                   n    swap disk size, 0 indicating no swap disk
+  id=<id>                   Unique ID (integer or UUID) for the new flavor. If
+                            specifying 'auto', a UUID will be generated as id
+  ephemeral_opt=<ephemeral> empheral disk size in GB, 0 indicating no epheral disk
+  swap_opt=<swap>           swap disk size in GB, 0 indicating no swap disk
 ;;;
 
+$id=auto
 $ephemeral_opt=
 >echo $ephemeral
 +$ephemeral=\n([0-9]+)
