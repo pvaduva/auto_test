@@ -87,9 +87,6 @@ $compute_list=~/cpt.lst-$tm
     *FAIL
 ]
 
-;in case of fail, run this script
-*~cleanup.inc
-
 ;create flavors
 ~create_flavors.inc
 
@@ -183,4 +180,7 @@ $volume=true
 ;---------------------------------------
 
 ;TEST PASS  test_us60867_localstorage.elt
+
+#;in case of fail, run this script
+#*~cleanup.inc
 
