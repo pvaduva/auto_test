@@ -181,6 +181,4 @@ $volume=true
 
 ;TEST PASS  test_us60867_localstorage.elt
 
-#;in case of fail, run this script
-#*~cleanup.inc
 
