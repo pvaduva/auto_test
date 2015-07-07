@@ -165,7 +165,7 @@ WAIT 1000 SEC
 
 # get the ubuntu cloud image.  This image is only available in Scott Little private dir
 # hard coding the cgts2 build server IP because the image only exists in scotts directory
-TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' ${EXECUTOR}@128.224.145.117:/localdisk/designer/slittle1/precise-server-cloudimg-amd64-disk1.password_enabled.img ${WRSDIR}/images/precise-server-cloudimg-amd64-disk1.img \n
+TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' ${EXECUTOR}@128.224.145.134:/localdisk/designer/cwinnick/precise-server-cloudimg-amd64-disk1.password_enabled.img ${WRSDIR}/images/precise-server-cloudimg-amd64-disk1.img \n
 WAIT 1000 SEC
 
 # Grab 3rd party guest images from: yow-cgts2-lx:/localdisk/designer/jenkins/images/precise-server-cloudimg-amd64-disk1.img
