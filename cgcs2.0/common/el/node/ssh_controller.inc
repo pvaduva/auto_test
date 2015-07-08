@@ -31,7 +31,7 @@ $ssh_opts= -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Connec
 
 ; === connecting to $IP
 
-@20
+@120
 >ssh -X $ssh_opts $user@$IP
 <ssword:|Last login:
 >>$pass
