@@ -50,7 +50,7 @@ $VM=root
 
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$HOST_PASS
 >export TMOUT=0
 >source /etc/nova/openrc
@@ -156,11 +156,11 @@ $result=none
 ; === connect to compute-0 and change goenabled exit status to 1, thus forcing failure
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no wrsroot@compute-0
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$HOST_PASS
 >export TMOUT=0
 >sudo su
-<ssword:
+<ssword:|Last login:
 >>$HOST_PASS
 >sed -i 's/exit 0/exit 1/g' /etc/goenabled.d/sysinv_goenabled_check.sh
 >exit
@@ -229,11 +229,11 @@ $result=none
 ; === connect to compute-0 and change goenabled exit status to 0, thus allowing compute to go enabled
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no wrsroot@compute-0
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$HOST_PASS
 >export TMOUT=0
 >sudo su
-<ssword:
+<ssword:|Last login:
 >>$HOST_PASS
 >sed -i 's/exit 1/exit 0/g' /etc/goenabled.d/sysinv_goenabled_check.sh
 >exit
@@ -271,7 +271,7 @@ $result=none
 
 
 >sudo su
-<ssword:
+<ssword:|Last login:
 >>$HOST_PASS
 >rm /var/log/cgcs-guest*
 >df

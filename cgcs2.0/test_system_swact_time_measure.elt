@@ -40,8 +40,11 @@ Steps:
 # common include path
 $inc_path=common/el
 
+$DEBUG=no
+
 # fail script
-#*~$inc_path/util/fail_show.inc
+*~$inc_path/util/fail_show.inc
+? $DEBUG!=no? *~$inc_path/util/fail_interact.inc
 
 $IP=10.10.10.2
 
@@ -142,7 +145,7 @@ $time_elapse=$time_fin
 >
 ; == elapsed time is: $time_elapse ms
 >
-?if $time_elapse > 30000? [
+?if $time_elapse > 20000? [
 	;red swact is larger than 30 seconds
 	*FAIL
 ]

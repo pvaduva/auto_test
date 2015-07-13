@@ -68,13 +68,13 @@ $vm_ip6=$vm_ip
 ?if $vm_ip6 == : ? $ping=ping6
 
 ; === connect to nat box
-~$inc_path/ssh_controller.inc user=cgcs IP=$natbox
+~$inc_path/node/ssh_controller.inc user=cgcs IP=$natbox
 
 >hostname
 
 ; === connect to vm
 
-~$inc_path/ssh_controller.inc user=$vm_user pass=$vm_pass IP=$vm_ip
+~$inc_path/node/ssh_controller.inc user=$vm_user pass=$vm_pass IP=$vm_ip
 >
 
 

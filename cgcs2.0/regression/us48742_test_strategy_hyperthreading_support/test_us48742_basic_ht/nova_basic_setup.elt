@@ -83,7 +83,7 @@ $tenant_credentials=/home/wrsroot/openrc.tenant1
 
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $user@$IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$pass
 
 >export TMOUT=0

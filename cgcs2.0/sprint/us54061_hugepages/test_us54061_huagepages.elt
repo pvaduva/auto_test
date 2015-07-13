@@ -14,59 +14,62 @@
 *EXP_INFO
 #*NOFAIL
 
+;test on the VBOX by default
+$HOST_IP=10.10.10.3
+$HOST_USER=wrsroot
+$HOST_PASSWD=li69nux
+
+;ssh onto $HOST_IP
 >ssh -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 <assword|SYSTEM:|WARNING:
 >>$HOST_PASSWD
 
 >export TMOUT=0
 
-@3
+@6
 >source /etc/nova/openrc
 
-; start test hugepages
+;start test hugepages
 
 >date
 
-#; do semantic check
-#~fun_test_hugepage_negative.inc
-
 $CPT_LIST=~/.cmpts.list
 
+;get list of compute nodes
 @20
 > rm -rf $CPT_LIST
 >system host-list | grep compute | grep -i 'enabled' | awk '{print $4}' | shuf > $CPT_LIST
-#>system host-list | grep compute | awk '{print $4}' | shuf > $CPT_LIST
 
 >wc -l $CPT_LIST
 +$TOTAL=\n([0-9]+)
-?if $TOTAL <= 0 ? [
-    ; no available compute nodes to test
+? $TOTAL <= 0 ? [
+    ;no available compute nodes to test
     %ALL_DONE
 ]
 
 $NUM_TO_TEST=1
 
-; randomly pick $NUM_TO_TEST compute nodes to test
+;randomly pick $NUM_TO_TEST compute nodes to test
 
 $CUR=1
 [ $CUR <= $NUM_TO_TEST
 
-    ; get the next compute to test on 
+    ;get the next compute to test on 
     >tail -n+$CUR $CPT_LIST | head -n1
     +$CPTNM=\n([a-zA-Z0-9-]+)
 
-    ; will test on $CPTNM
+    ;will test on $CPTNM
 
-    ?if $CPTNM == __NO_STRING_CAPTURED__ ?%ALL_DONE
+    ? $CPTNM == __NO_STRING_CAPTURED__ ?%ALL_DONE
 
     =$CUR + 1 
 
-    ; test on compute node: $CPTNM : $CUR
+    ;test on compute node: $CPTNM : $CUR
     ~fun_test_hugepage_on_compute.inc HOST_IP=$HOST_IP HOST_USER=$HOST_USER HOST_PASSWD=$HOST_PASSWD CPTNAME=$CPTNM
 ]
 
 %ALL_DONE
 
-; cleanup
+;cleanup
 > rm -f $CPT_LIST
 

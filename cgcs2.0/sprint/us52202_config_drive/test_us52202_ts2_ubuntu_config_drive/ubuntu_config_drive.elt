@@ -141,11 +141,11 @@ $result=none
 ; === ssh into Ubuntu VM via NATBox
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$NAT_PASS
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $VM@$VM_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$VM
 
 ; === Mount the injected files to /mnt/config
@@ -169,7 +169,7 @@ $result=none
 
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$HOST_PASS
 >export TMOUT=0
 >source ./openrc.tenant1
@@ -198,11 +198,11 @@ $result=none
 ; === ssh back into Ubuntu VM
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$NAT_PASS
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $VM@$VM_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$VM
 
 ; === mount files to /mnt/config and verify files still exist
@@ -226,7 +226,7 @@ $result=none
 
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:
+<ssword:|Last login:
 >>$HOST_PASS
 >export TMOUT=0
 >source ./openrc.tenant1
