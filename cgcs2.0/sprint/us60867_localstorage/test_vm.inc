@@ -54,7 +54,7 @@ $tenant2_user=tenant2
 ;ok, keypair=$keypair
 
 ;get the network IDs
-~get_net_ids.inc
+~get_net_ids.inc tenant=$tenant_user
 ;ok, net1=$net1
 ;    net2=$net2
 ;    net3=$net3

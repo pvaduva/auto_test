@@ -1,0 +1,1 @@
+../us60867_localstorage/wait_vlm_ready.inc

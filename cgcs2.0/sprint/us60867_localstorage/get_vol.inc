@@ -14,7 +14,6 @@ $size=1
 ;get one of the available volumes
 >cinder list | awk '{if ($4 == "available" && $8 == 1) print $2}' | head -n1
 +$vlmid=([0-9a-f-]{32,36})
-#+$vlmid=\s* ([0-9a-f-]{32,36}) \s*\|\s* available \s*\|
 
 ? $vlmid == __NO_STRING_CAPTURED__ ? [
     ;no volume available
