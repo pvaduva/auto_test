@@ -43,7 +43,7 @@ class RestAPI:
 
 	if resp.status_code == requests.codes.ok:
 	    data = json.loads(resp.text)
-            pp.pprint(data)
+            pprint.pprint(data)
 	    self.token = data['access']['token']['id']
             self.tenant_token = data['access']['token']['tenant']['id']
 	    logging.info("The token is: %s" % self.token)
@@ -82,7 +82,7 @@ class RestAPI:
 	if resp.status_code == requests.codes.ok:
 	    data = json.loads(resp.text)
 	    #logging.info("The returned data is: %s" % data)
-	    #pp.pprint(data)
+	    #pprint.pprint(data)
 	    return data
 	else:
 	    logging.error("Failed get request due to error: %s" % resp.status_code)
