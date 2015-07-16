@@ -1,0 +1,262 @@
+#!/usr/bin/env expect-lite
+
+;;;
+This is a automated test script for 'US57002: VIM: Migrate 'VM Event Request Notification
+and Voting'
+
+Options
+    reuired inputs:
+        host=<host>             host name or ip address of the active controller
+
+    optional inputs:
+        user=<user>             user name, 'wrsroot' by default
+        password=<password>     password, 'li69nux' by default
+        tn_admin=<admin_tenant> name of the 'Administorator' of the clound, 'admin' by default
+        pwd_admin=<admin_passwd>
+                                password of the 'Administorator' of the clound, 'admin' by default
+        tn_tenant1=<tenant1>    name of the tenant to test with, 'tenant1' by default
+        pwd_tenant1=<tenant1_pwd>
+                                password of the tenant to test with, 'tenant1' by default
+Steps:
+    1 create a flavor with 'guest heartbeating' support
+    2 launch a VM with the flavor from a bootable volume
+    3 test the VM-Voting feature
+    4 Ensure basic VM operations work properly
+        - suspend/resume
+        - pause/unpause
+        - live migrate
+        - cold migrate
+        - soft reboot
+        - cold reboot 
+        - stop/start
+    5 Pause/Suspend VM
+        - touch /tmp/vote_no_to_suspend on the VM
+        - Attempt to pause a VM
+        - Verify it is rejected
+        - Attempt to suspend a VM
+        - Verify it is rejected
+        - Remove the /tmp/vote_no_to_suspend file
+        - Verify a VM can be paused/unpaused
+        - Verify a VM can be suspended/resumed
+
+    6 Stop/Start a VM
+        - touch /tmp/vote_no_to_stop on the VM
+        - Attempt to stop a VM
+        - Verify it is rejected
+        - Remove the /tmp/vote_no_to_stop file 
+        - Verify a VM can be stopped
+        - Verify the VM can be started after stopping
+
+    7 Reboot a VM
+        - touch /tmp/vote_no_to_reboot on the VM
+        - Attempt to soft reboot a VM
+        - Verify it is rejected
+        - Attempt to hard reboot a VM
+        - Verify it is rejected
+        - Remove the /tmp/vote_no_to_reboot file
+        - Verify a VM can be soft rebooted
+        - Verify a VM can be hard rebooted
+
+    8 Migrate a VM
+        - touch /tmp/vote_no_to_migrate on the VM
+        - Attempt to live migrate a VM
+        - Verify it is rejected
+        - Attempt to cold migrate a VM
+        - Verify it is rejected
+        - Remove the /tmp/vote_no_to_migrate file
+        - Verify a VM can be live migrated
+        - Verify a VM can be cold migrated  
+        - Verify that cold migration revert size works properly
+
+    9 Voting timeout 
+        - touch /tmp/event_timeout on the VM to simulate a voting timeout
+        - Initiate the standard VM operations: suspend/resume, pause/unpause, etc.
+        - All of the commands should be allowed
+        - touch the negative voting files, i.e. /tmp/vote_no_to_migrate, etc.
+        - Ensure the migration proceeds, e.g. timeout trumps a no vote 
+        - Repeat the above 2 steps for the other files, e.g. /tmp/vote_no_to_suspend, etc. 
+
+    10 Modification of timeouts
+        - The VM has timeouts set in /etc/heartbeat/heartbeat.conf
+        - Try modifying some of the timeout values (with the minimal value being no smaller than 500 msec)
+        - Attempt some of the VM operations and ensure the appropriate timeout is observed 
+
+    11 Multiple VMs
+        - Create multiple VMs
+        - In each VM, provision different voting behaviour
+        - Ensure in each case, the VM behaviour corresponds with its voting settings
+        - Create one VM without the heartbeat extension
+        - Provision voting behaviour on that VM by touching the desired vote files
+        - Ensure the VM behaviour is not impacted by the vote settings  Pause/Suspend VM
+        
+;;;
+
+*EXP_INFO
+
+#*NOFAIL
+$host=10.10.10.2
+$user=wrsroot
+$password=li69nux
+
+$inc_path=../../common/el
+#does not work for current version 4.8.1 (as of 2015-07-10)
+#*~$inc_path/util/fail_show.inc
+
+;test on $host
+~$inc_path/node/ssh_controller.inc IP=$host user=$user pass=$password
+
+$flvname=us60867flv01
+$flvname2=us60867flv02
+$vmname=us60867vm01
+$nvcp=1
+$disk=1
+$ram=512
+
+$vmlog=/var/log/user.log
+$cntlog=/var/log/nfv-vim.log
+$cmptlog=
+
+*TIMESTAMP
+;check currently existing system alarms
+@10
+>system alarm-list
+
+;create flavor: $flvname
+~create_flavor.inc name=$flvname id=auto ram=$ram disk=$disk vcpus=$nvcp ephemeral=0 swap=0
+
+;create flavor: $flvname2
+~create_flavor.inc name=$flvname2 id=auto ram=$ram disk=$disk vcpus=$nvcp ephemeral=0 swap=0
+
+;set the heartbeat extra flavor
+>nova flavor-key $flvname set sw:wrs:guest:heartbeat=True
+
+$tenant=tenant1
+;switch to tenant: $tenant
+>source /home/wrsroot/openrc.$tenant
+
+;launch a VM using the flavor:$flvname
+;user data option
+$userdata=--user-data /home/wrsroot/userdata/$tenant-avp1_userdata.txt
+
+;get the keypair
+~get_keypair.inc
+
+;keypair=$keypair
+
+;get network ids
+~get_net_ids.inc tenant=$tenant
+;net ids: net1=$net1 net2=$net2 net3=$net3 
+
+;boot from volume
+~get_vol.inc vlmname=$vlmname disk=$disk
+$vlmid1=$vlmid
+
+@60
+;launch VM 
+>nova boot --poll --key_name=$keypair --flavor=$flvname $net1 $userdata --block_device_mapping vda=$vlmid1:::0 $vmname
++$vmid=\|\s*id\s*\|\s*([0-9a-f-]{32,36})\s*\|
+
+? $vmid == __NO_STRING_CAPTURED__ ? [
+    >nova show "$vmname"
+    +$vmid=\|\s*id\s*\|\s*([0-9a-f-]{32,36})\s*\|
+]
+
+$vmname1=$vmname
+$vmid1=$vmid
+$vlmid1=$vlmid
+
+;test on vm $vmid
+~test_vm_voting.inc password=$password vmname=$vmname1 vmid=$vmid1
+
+;switch to tenant: $tenant
+>source /home/wrsroot/openrc.$tenant
+
+;test on 2nd VM
+$vmname2=us60867vm02
+$vlmname2=us60867vlm02
+
+;get/create a volume
+~get_vol.inc vlmname=$vlmname2 disk=$disk
+$vlmid2=$vlmid
+
+;launch VM 
+>nova boot --poll --key_name=$keypair --flavor=$flvname $net1 $userdata --block_device_mapping vda=$vlmid2:::0 $vmname2
++$vmid2=\|\s*id\s*\|\s*([0-9a-f-]{32,36})\s*\|
+
+? $vmid2 == __NO_STRING_CAPTURED__ ? [
+    >nova show "$vmname2"
+    +$vmid2=\|\s*id\s*\|\s*([0-9a-f-]{32,36})\s*\|
+]
+
+~$inc_path/vm/ssh_to_nat_to_vm.inc vm_name=$vmid2
+>cp /etc/heartbeat/heartbeat.conf ./heartbeat.conf.bk
+>sed -i -e 's/^\s*\(SUSPEND_NOTICE\)=\(.*\)/\1=4000/g' /etc/heartbeat/heartbeat.conf
+>rm -rf /tmp/vote* /tmp/event_timeout
+>sync
+>exit
+>^C
+> hostname
+>exit
+>^C
+> hostname
+
+;test on vm2 $vmid2
+~test_vm_voting.inc password=$password vmname=$vmname2 vmid=$vmid2
+
+;test on non-heartbeating VM
+;switch to tenant: $tenant
+>source /home/wrsroot/openrc.$tenant
+
+$vmname3=us60867vm03
+$vlmname3=us60867vlm03
+
+;get/create a volume
+~get_vol.inc vlmname=$vlmname3 disk=$disk
+$vlmid3=$vlmid
+
+;launch VM 
+>nova boot --poll --key_name=$keypair --flavor=$flvname $net1 $userdata --block_device_mapping vda=$vlmid3:::0 $vmname3
++$vmid3=\|\s*id\s*\|\s*([0-9a-f-]{32,36})\s*\|
+
+? $vmid3 == __NO_STRING_CAPTURED__ ? [
+    >nova show "$vmname3"
+    +$vmid3=\|\s*id\s*\|\s*([0-9a-f-]{32,36})\s*\|
+]
+
+;test on non-heartbeating VM $vmid3
+~$inc_path/vm/ssh_to_nat_to_vm.inc vm_name=$vmid3
+>touch /tmp/vote_no_to_suspend
+>touch /tmp/vote_no_to_stop
+>touch /tmp/vote_no_to_reboot
+>touch /tmp/vote_no_to_migrate
+>touch /tmp/event_timeout
+>sync
+>exit
+>^C
+> hostname
+>exit
+>^C
+> hostname
+~vm_operations.inc vmname=$vmname3 vmid=$vmid3
+
+;cleanup
+;delete the vms
+>nova delete $vmid1
+>nova delete $vmid2
+>nova delete $vmid3
+
+;delete the flavors
+>nova flavor-delete $flvname
+>nova flavor-delete $flvname2
+
+;delete volumes
+>cinder delete $vlmid1
+>cinder delete $vlmid2
+>cinder delete $vlmid3
+
+;delete log files
+>rm -f *.log*
+>rm -rf nfv*.log* guestAgent.log*
+
+;TEST PASS
+

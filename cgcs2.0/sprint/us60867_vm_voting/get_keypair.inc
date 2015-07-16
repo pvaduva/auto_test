@@ -1,0 +1,1 @@
+../us60867_localstorage/get_keypair.inc
