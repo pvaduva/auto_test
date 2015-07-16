@@ -15,14 +15,14 @@ Options
         vmid=<vmid>             host name or ip address of the active controller
         ops=<suspend-resume|pause-unpause|live-migr|cold-migr|soft-reboot|cold-reboot|stop-start|migrates>        
                                 operations to be performed on the VM
-        pass=<password>
+        password=<password>
 Assumption:
     current user is 'admin'
 ;;;
 
 $inc_path=../../common/el
 
-$pass=li69nux
+$password=li69nux
 $ops=all
 
 #;clean up log entries
@@ -194,8 +194,9 @@ $_n=0
 
 %SKIP_STOP
 
-~clean_heartbeating_events.inc pass=$pass
+~clean_heartbeating_events.inc password=$password
 
+>source /etc/nova/openrc
 ;get the current system alarm list
 >system alarm-list
 
