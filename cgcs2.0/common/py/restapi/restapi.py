@@ -89,23 +89,27 @@ class RestAPI:
 	    logging.info("GET Request Test: FAILED")
 	    exit(resp.status_code)
 
-    def put_request(self, field, payload):
+    def put_request(self, port, version, field, payload):
 	""" This method uses the obtained x-auth-token and performs a post
 	    request.
 	"""
 
+        self.port = port
+        self.version = version
+        self.field = field
+
 	url = RestAPI._compose_url(self)
 	headers = {"Content-Type": "application/json",
 		   "Accept": "application/json",
-		   "X-Auth-Token": token}
+		   "X-Auth-Token": self.token}
 
 	resp = requests.put(url, headers=headers, data=json.dumps(payload))
 
 	if resp.status_code == requests.codes.ok:
 	    payload = json.loads(resp.text)
 	    #logging.info("The returned data is: %s" % payload)
-	    pp.pprint(data)
-	    return data
+	    pprint.pprint(payload)
+	    return payload 
 	else:
 	    logging.error("Failed put request due to error: %s" % resp.status_code)
 	    logging.error("We were trying to send: %s" % payload)

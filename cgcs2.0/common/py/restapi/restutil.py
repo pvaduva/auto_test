@@ -81,6 +81,8 @@ class RestUtil(RestAPI):
 
             [{u"controller-0": [u"unlocked", u"enabled", u"available"]}, ... 
             ] 
+
+            This is the equivalent of doing a system host-list.
         """
 
         logging.info("Return host administrative, operational and availability state")
@@ -108,7 +110,8 @@ class RestUtil(RestAPI):
 
     def check_all_hosts_unlocked_enabled_available(self):
         """ This method checks that all hosts are unlocked, enabled
-            and available. """ 
+            and available. 
+        """ 
 
         hoststate_list = RestUtil.get_host_state(self)
         desiredstate_list = [u"unlocked", u"enabled", u"available"]
@@ -210,6 +213,62 @@ class RestUtil(RestAPI):
         logging.info("System does not have storage nodes")
         return False
 
+    def disable_services(self, hostname):
+        """ This disables all services associated with a particular host.  Not sure
+            how useful this is.  The services will be brought back up by the 
+            system automatically.
+        """
+
+        disableservices_list = []
+
+        # Determine what services need to disabled
+        data = RestUtil.get_nova_services(self) 
+        for item in data:
+            if item[u"host"] == hostname:
+                disableservices_list.append(item[u"binary"])
+
+        logging.info("Services to be disabled for %s" % hostname)
+        pprint.pprint(disableservices_list)
+
+        # Construct payload
+        for item in disableservices_list:
+            payload_dict = {}
+            payload_dict[u"host"] = hostname
+            payload_dict[u"binary"] = item
+            print(payload_dict)
+
+        # Disable services 
+        version = NOVA_VERSION + "/" + x.tenant_token
+        x.put_request(port=NOVA_PORT, version=version, field="os-services/disable", payload=payload_dict)
+
+        data = RestUtil.get_nova_services(self) 
+                
+    def unlock_host(self, hostname):
+        """ This performs a host unlock of a controller, compute or storage node.  This is
+            equivalent of a system host-unlock <node>.
+
+            Returns True if unlock was successful.  Returns False if the node could not be
+            unlocked.
+        """
+
+    def lock_host(self, hostname):
+        """ This performs a host unlock of a controller, compute or storage node.  This is
+            equivalent of a system host-unlock <node>.
+
+            Returns True if unlock was successful.  Returns False if the node could not be
+            unlocked.
+        """
+   
+        # Construct payload 
+        payload_dict = {}
+        payload_dict[u"path"] = u"/administrative" 
+        payload_dict[u"value"] = u"locked"
+        payload_dict[u"op"] = u"replace"
+
+        field = "ihosts/" + hostname
+        x.put_request(port=SYSINV_PORT, version=SYSINV_VERSION, field=field, payload=payload_dict)
+
+        RestUtil.get_host_state(self)        
 
 if __name__ == "__main__":
     # Self test for class
@@ -225,10 +284,12 @@ if __name__ == "__main__":
 
     active_controller = RestUtil.get_active_controller(x)
     inactive_controller = RestUtil.get_inactive_controller(x)
-    RestUtil.check_all_hosts_unlocked_enabled_available(x)
-    RestUtil.check_smallfootprint(x)
-    RestUtil.check_storagenodes(x)
-#    RestUtil.get_nova_services(x)
+    nodesunlocked_status = RestUtil.check_all_hosts_unlocked_enabled_available(x)
+    smallfootprint_status = RestUtil.check_smallfootprint(x)
+    storage_status = RestUtil.check_storagenodes(x)
+    RestUtil.get_nova_services(x)
+    RestUtil.disable_services(x, u"compute-1")
+    #RestUtil.lock_host(x, u"compute-1")
 
 
  
