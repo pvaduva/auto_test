@@ -113,6 +113,7 @@ class RestUtil(RestAPI):
             and available. 
         """ 
 
+        flag = True
         hoststate_list = RestUtil.get_host_state(self)
         desiredstate_list = [u"unlocked", u"enabled", u"available"]
 
@@ -120,12 +121,16 @@ class RestUtil(RestAPI):
         for item in hoststate_list:
             for hostname in item:
                 if set(item[hostname]) != set(desiredstate_list):
-                    logging.error("TEST FAILED: %s is not unlocked-enabled-available" % hostname)
-                    return False
-
+                    logging.error("ERROR: %s is not unlocked-enabled-available" % hostname)
+                    flag = False
+                    
         # If we get here, all nodes are in the correct state 
-        logging.info("TEST PASSED: All hosts are in desired state")
-        return True
+        if flag == True:
+            logging.info("TEST PASSED: All hosts are in desired state")
+        else:
+            logging.error("TEST FAILED: Not all hosts are in desired state")
+
+        return flag 
 
     def check_all_hosts_available(self):
         """ This method checks that all hosts are available.
@@ -251,22 +256,53 @@ class RestUtil(RestAPI):
             unlocked.
         """
 
-    def lock_host(self, hostname):
-        """ This performs a host unlock of a controller, compute or storage node.  This is
-            equivalent of a system host-unlock <node>.
+    def host_action(self, hostname, action):
+        """ This performs an arbitrary action on a controller, compute or storage node. 
+            It supports: unlock, lock, swact, apply-profile, reboot, reset, power-on,
+            power-off and reinstall.
+
+            Arguments: 
+               * hostname, e.g. controller-1
+               * action, e.g. unlock
+
+            Note, if you attempt to lock a node that is already locked, TiS will return a
+            400 Bad Request error.  It is best to check the state of the system before
+            initiating operations.
 
             Returns True if unlock was successful.  Returns False if the node could not be
-            unlocked.
+            unlocked.  To be done.
         """
-   
-        # Construct payload 
-        payload_dict = {}
-        payload_dict[u"path"] = u"/administrative" 
-        payload_dict[u"value"] = u"locked"
-        payload_dict[u"op"] = u"replace"
+  
+        actions_list = [u"unlock", u"lock", u"swact", u"apply-profile", u"reboot", 
+                        u"reset", u"power-on", u"power-off", u"reinstall"]
 
-        field = "ihosts/" + hostname
-        x.put_request(port=SYSINV_PORT, version=SYSINV_VERSION, field=field, payload=payload_dict)
+        # Check if the action we are requesting is valid
+        if action not in actions_list:
+            logging.error("ERROR: You've requested an invalid action.")
+            logging.info("Valid actions are: %s" % actions_list)
+            return 1
+ 
+        # Action is valid so construct payload for patch request command
+        payload = [{"path":"/action", "value": action, "op":"replace"}]
+
+        # Get ihost raw data 
+        data = x.get_request(port=SYSINV_PORT, version=SYSINV_VERSION, field="ihosts")
+
+        # Parse ihost data for host uuid 
+        for d, l in data.items():
+            for item in l:
+                if item[u"hostname"] == hostname:
+                    uuid = item[u"uuid"]
+                    break
+
+        # If we didn't get a uuid, inform the user and return
+        if not uuid:
+            logging.error("Hostname %s was not found in the system" % hostname)
+            return 1
+
+        # Perform the patch request
+        field = "ihosts/" + uuid
+        x.patch_request(port=SYSINV_PORT, version=SYSINV_VERSION, field=field, payload=payload)
 
         RestUtil.get_host_state(self)        
 
@@ -282,14 +318,14 @@ if __name__ == "__main__":
     #x = RestUtil(ip="128.224.150.141")
     print(x)
 
-    active_controller = RestUtil.get_active_controller(x)
-    inactive_controller = RestUtil.get_inactive_controller(x)
-    nodesunlocked_status = RestUtil.check_all_hosts_unlocked_enabled_available(x)
-    smallfootprint_status = RestUtil.check_smallfootprint(x)
-    storage_status = RestUtil.check_storagenodes(x)
-    RestUtil.get_nova_services(x)
-    RestUtil.disable_services(x, u"compute-1")
-    #RestUtil.lock_host(x, u"compute-1")
+    #active_controller = RestUtil.get_active_controller(x)
+    #inactive_controller = RestUtil.get_inactive_controller(x)
+    #nodesunlocked_status = RestUtil.check_all_hosts_unlocked_enabled_available(x)
+    #smallfootprint_status = RestUtil.check_smallfootprint(x)
+    #storage_status = RestUtil.check_storagenodes(x)
+    #RestUtil.get_nova_services(x)
+    #RestUtil.disable_services(x, u"compute-1")
+    RestUtil.host_action(x, u"compute-1", u"unlock")
 
 
  

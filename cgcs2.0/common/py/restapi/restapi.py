@@ -16,19 +16,22 @@ class RestAPI:
     """A base class to instantiate REST calls.
     """
     
-    def __init__(self, ip=IP, port=IDENTITY_PORT, version=IDENTITY_VERSION, field="tokens", token=None,
-                 tenant_name=TENANT_NAME, tenant_token=None, username=USERNAME, password=PASSWORD):
-        """ This method initializes a REST API object. 
+    def __init__(self, ip=IP, port=None, version=None, field=None, token=None, tenant_name=None, 
+                 tenant_token=None, username=None, password=None, payload=None):
+        """ This method initializes a REST API object and then authenticates with Keystone to get a
+            token.
         """ 
-        self.ip = ip
-        self.port = port
-        self.version = version
-        self.field = field
+
+        self.ip = ip 
+        self.port = IDENTITY_PORT 
+        self.version = IDENTITY_VERSION 
+        self.field = "tokens" 
         self.token = None
-        self.tenant_name = tenant_name
+        self.tenant_name = TENANT_NAME 
         self.tenant_token = None
-        self.username = username
-        self.password = password
+        self.username = USERNAME 
+        self.password = PASSWORD 
+        self.payload = None
 
 	logging.info("Authenticating with Keystone to get token")
 
@@ -49,6 +52,7 @@ class RestAPI:
 	    logging.info("The token is: %s" % self.token)
 	else:
 	    logging.error("Failed to get token due to error: %s" % resp.status_code)
+            print(resp.status.code) 
 	    exit(resp.status_code)
 
     def __str__(self):
@@ -59,8 +63,10 @@ class RestAPI:
     def _compose_url(self):
 	""" This method composes a URL based on the controller IP, port, 
             version and field name.  It is invoked by other methods. 
+
 	"""
 
+        # An example of field is ihosts/<uuid>/actions
 	url = "http://%s:%s/%s/%s" % (self.ip, self.port, self.version, self.field)
 	return url
 
@@ -78,6 +84,7 @@ class RestAPI:
 		   "X-Auth-Token": self.token}
 
 	resp = requests.get(url, headers=headers)
+        print(resp.url)
 
 	if resp.status_code == requests.codes.ok:
 	    data = json.loads(resp.text)
@@ -85,12 +92,13 @@ class RestAPI:
 	    #pprint.pprint(data)
 	    return data
 	else:
-	    logging.error("Failed get request due to error: %s" % resp.status_code)
-	    logging.info("GET Request Test: FAILED")
+            # Return error if the get request failed
+	    logging.error("ERROR: GET request failed")
+            resp.raise_for_status()
 	    exit(resp.status_code)
 
     def put_request(self, port, version, field, payload):
-	""" This method uses the obtained x-auth-token and performs a post
+	""" This method uses the obtained x-auth-token and performs a put
 	    request.
 	"""
 
@@ -104,6 +112,7 @@ class RestAPI:
 		   "X-Auth-Token": self.token}
 
 	resp = requests.put(url, headers=headers, data=json.dumps(payload))
+        print(resp.url)
 
 	if resp.status_code == requests.codes.ok:
 	    payload = json.loads(resp.text)
@@ -111,10 +120,89 @@ class RestAPI:
 	    pprint.pprint(payload)
 	    return payload 
 	else:
-	    logging.error("Failed put request due to error: %s" % resp.status_code)
 	    logging.error("We were trying to send: %s" % payload)
-	    logging.info("PUT Request Test: FAILED")
+	    logging.error("ERROR: PUT request failed")
+            resp.raise_for_status()
 	    exit(resp.status_code)
+
+    def post_request(self, port, version, field, payload):
+        """ This method uses the obtained x-auth-token and performs a post
+            request.  Function not validated yet.  Note, __init__ function
+            does use the post successfully. 
+        """
+
+        self.port = port
+        self.version = version
+        self.field = field
+  
+        url = RestAPI._compose_url(self)
+	headers = {"Content-Type": "application/json",
+		   "Accept": "application/json",
+		   "X-Auth-Token": self.token}
+
+	resp = requests.post(url, headers=headers, data=json.dumps(payload))
+
+	if resp.status_code == requests.codes.ok:
+	    data = json.loads(resp.text)
+            # logging.info("The returned data is: %s" % data)
+            pprint.pprint(data)
+            return data
+	else:
+	    logging.error("ERROR: POST request failed")
+            resp.raise_for_status()
+            exit(resp.status_code)
+
+    def patch_request(self, port, version, field, payload):
+        """ This method uses the obtained x-auth-token and performs a patch
+            request.  Function not validated yet.  
+        """
+
+        self.port = port
+        self.version = version
+        self.field = field
+  
+        url = RestAPI._compose_url(self)
+	headers = {"Content-Type": "application/json",
+		   "Accept": "application/json",
+		   "X-Auth-Token": self.token}
+
+	resp = requests.patch(url, headers=headers, data=json.dumps(payload))
+        print(resp.url)
+        pprint.pprint(json.dumps(payload))
+
+	if resp.status_code == requests.codes.ok:
+	    data = json.loads(resp.text)
+            # logging.info("The returned data is: %s" % data)
+            pprint.pprint(data)
+            return data
+	else:
+	    logging.error("ERROR: PATCH request failed")
+            resp.raise_for_status()
+            exit(resp.status_code)
+
+    def delete_request(self, port, version, field, payload):
+        """ This method uses the obtained x-auth-token and performs a post
+            request.  Function not validated yet.  Note, __init__ function
+            does use the post successfully. 
+        """
+
+        self.port = port
+        self.version = version
+        self.field = field
+  
+        url = RestAPI._compose_url(self)
+
+	resp = requests.delete(url, headers=headers, data=json.dumps(payload))
+
+	if resp.status_code == requests.codes.ok:
+	    data = json.loads(resp.text)
+            # logging.info("The returned data is: %s" % data)
+            pprint.pprint(data)
+            return data
+	else:
+	    logging.error("Failed post request due to error: %s" % resp.status_code)
+            exit(resp.status_code)
+
 
     def get_value(self, port, version, field, values):
 	""" This is a generic method that performs a get request and extracts 
