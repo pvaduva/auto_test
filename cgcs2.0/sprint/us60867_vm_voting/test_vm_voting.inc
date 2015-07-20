@@ -3,11 +3,13 @@
     Test the VM voting on the specified VM
 
 Required Option
-    vmid=<uuid-of-vm>
-    vmname=<uuid-of-vm>
+    vmid=<uuid-of-vm>       uuid of the VM
+    vmname=<name-of-vm>     name of the VM
+    password=<password>     password for 'admin'
 ;;;
 
 >source /etc/nova/openrc
+$password=li69nux
 
 ;wait for the vm to be ready 
 ~wait_vm_status.inc vmid=$vmid
@@ -18,7 +20,7 @@ Required Option
 
 !sleep 60
 ;make sure the heartbeating is working
-~check_heartbeating_up.inc pass=$pass vmname=$vmname
+~check_heartbeating_up.inc password=$password vmname=$vmname
 
 ;us57002_tc2: Pause/Suspend VM (suspend/resume)
 ;create vote-file to 'suspend'
