@@ -82,8 +82,10 @@ $time_fin=0
 
 ; === get IP address of standby controller
 ~$inc_path/node/ssh_controller.inc IP=$stby_controller
+>grep -i oam_interface /etc/platform/platform.conf
++$oam_int=\=([a-zA-Z\d\-]+)
 
->/sbin/ip addr show dev eth0
+>/sbin/ip addr show dev $oam_int
 +$stby_controller_ip=inet ([0-9.]+)
 
 ; === return to active controller
