@@ -1,0 +1,276 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	TC567	Reset inactive controller x times and confirm  come back as the inactive controller; 
+#		have no impact on any of the compute nodes and have no impact on any of the VMs 
+#
+#	Options:
+#		node=<desired node name to reboot>
+#		tenant=<desired tenant>
+
+NOTE: must increase quotas to start another VM
+
+;;;
+Steps:
+1)  Log onto controller
+2)  Identify which controller is the inactive controller
+3)  All VMs are in Active/Running State
+4)  All VMs are pingable
+5)  Run traffic into the system
+6)  All resources are running on the active controller
+7)  Reset the inactive controller
+8)  Wait for it to recover
+9)  Show services
+10) Run the system host-list cmd
+11) Check VM status
+12) Check Ixia for message loss
+13)  Start FS commands on VMs
+14)  Execute FS commands
+15)  Execute FS commands
+16)  Cleanup
+17)  Become Admin
+
+*NOFAIL
+*EXP_INFO
+#tag for TC selection (later)
+TAG:system
+# common include path
+$inc_path=common/el
+
+# fail script
+#*~$inc_path/util/fail_show.inc
+
+$IP=10.10.10.2
+
+
+#default node to reboot
+$node=controller-0
+
+# test case domain (support only system now)
+$domain=system
+
+$natbox=128.224.150.11
+
+#### Control Ixia
+$with_traffic=no
+$ixia_host=yow-cgcs-test
+$ixia_user=svc-cgcsauto
+$ixia_pass=)OKM0okm
+$ixia_config_file=ironpass20_27_group0_L3_my.ixncfg
+
+$j=0
+$max_count=2
+# cgcs credentials
+$vm_user=root
+$vm_pass=root
+
+$vm_fs_cmd=while (true) do date; dd if=/dev/urandom of=output.txt bs=1k count=1 || break ; echo ; sleep 1; done 2>&1 > trace.txt &
+$vm_fs_cmd=dd if=/dev/urandom of=output.txt bs=1k count=1 
+
+$vm_cmd_fs_check=mount | grep 'on / type' | grep 'rw,re'
+
+
+-------------------------------------
+*FORK default
+
+; === Step-1: Log onto controller
+~$inc_path/node/ssh_node.inc
+
+; === set up sudo root access (to make it easier later in the interact session)
+>echo "$pass" | sudo -S id
+<root
+; === identify active controller
+>system sda-list | grep controller-services
++$act_controller=controller-services.*(controller-\d).*active
+
+; === identify standby controller
+>system sda-list | grep controller-services
++$stby_controller=controller-services.*(controller-\d).*standby
+
+; === get IP address of standby controller
+~$inc_path/node/ssh_controller.inc IP=$stby_controller
+
+>grep -i oam_interface /etc/platform/platform.conf
++$oam_int=\=([a-zA-Z\d\.]+)
+
+>/sbin/ip addr show dev $oam_int
++$stby_controller_ip=inet ([0-9.]+)
+
+; === return to active controller
+>exit
+
+*FORK stby
+
+; === log directly onto controller
+~$inc_path/node/ssh_controller.inc IP=$stby_controller_ip
+
+
+
+?if $with_traffic == yes ? [
+	*FORK IXIA
+
+	~$inc_path/node/ssh_node.inc IP=$ixia_host user=$ixia_user pass=$ixia_pass
+
+	; === cd to Ixia directory
+	>cd ixia
+
+	; === show tcl files
+	>ls *tcl
+
+	; === setup ixia env
+	>source ixia_env.sh
+
+	; === start traffic
+	>tclsh ixia_start_stop_traffic.tcl traffic=start
+
+	@60
+	; === look at stats
+	>tclsh ixia_show_stats.tcl stats=show
+	<Traffic Item
+	<Rx Frames
+	+$rx_frames1=: (\d+)
+	<Loss %
+	-<: 100
+
+]
+# end with_traffic
+*FORK default
+; === Step-3:All VMs are in Active/Running State before rebooting standby Standby controller
+>nova list --all-tenants
+-<ERROR
+
+; === Step-4:All VMs are pingable before rebooting standby controller
+; === get list of active VM management IPs
+>nova list --all-tenants --fields OS-EXT-SRV-ATTR:host,name,status,networks | grep mgmt-net | awk -F"-mgmt-net=" '{print $2}' | awk '{print $1}' |tr -d  ',' |tr -d  ';'| paste -sd' '
++$vm_ip_list=\n([0-9. ]+)
+
+
+
+?if $vm_ip_list == __NO_STRING_CAPTURED__ ? [
+; === No VMs found to ping, ping from Nat box will be skipped
+]::[
+; === Get the total number of Vms in the system
+>nova list --all-tenants --fields OS-EXT-SRV-ATTR:host,name,status,networks | grep mgmt-net | awk -F"-mgmt-net=" '{print $2}' | awk '{print $1}' |tr -d  ',' |tr -d  ';'| paste -sd' ' | wc -w
++$num=\n(\d+)
+
+@15
+*FORK NATBOX
+; === log onto controller
+~$inc_path/node/ssh_controller.inc user=cgcs IP=$natbox
+
+# create monitor list
+$vm_ip_mon_list=$vm_ip_list
+=$vm_ip_mon_list/ /,/
+; === monitoring vm management ip addresses
+>python tools/monitor.py --addresses $vm_ip_mon_list
+<$num\/$num
+; get out of the monitor
+!send "Q\r"
+
+]
+
+*FORK stby
+
+[ $j < $max_count
+    ; === Rebooting count:$j
+    *FORK stby
+    ; === Step-7:Reset the inactive controller
+    >echo "$pass" | sudo -S id
+    <root
+    @20
+    ; === rebooting inactive controller
+    >sudo reboot
+    #<system is going down|Restarting system
+    !sleep 5
+    >>
+    >>
+    <Connection to.+closed|Write failed: Broken pipe
+    >
+    
+    *FORK default
+    ;=== wait for standby controller to come up
+    ; === Waitng for 30 sec before checking standby controller status
+    !sleep 30
+    $count=1
+    [ $count == 1
+        >system host-list | grep $stby_controller | egrep 'offline|degrade|failed' | wc -l
+	+$count=\n(\d)
+	!sleep 60
+    ]
+  
+    ; === Step-9:Show services
+    >system sda-list
+    ; === Step-10:Run the system host-list cmd
+    >system host-list
+    -<failed
+    ; === Step-11:Check VM status
+    >nova list --all-tenants
+    -<ERROR
+
+    ?if $vm_ip_list == __NO_STRING_CAPTURED__ ? [
+       ; === No VMs found to ping, ping from Nat box will be skipped
+    ]::[
+
+       @15
+       *FORK NATBOX
+       ; === monitoring vm management ip addresses
+       >python tools/monitor.py --addresses $vm_ip_mon_list
+       <$num\/$num
+       ; get out of the monitor
+       !send "Q\r"
+   ]
+
+   ; === Re-connect to standby controller after it comes back out of reset
+   *FORK stby
+
+   ; === Log directly onto standby controller
+   ~$inc_path/node/ssh_node.inc IP=$stby_controller_ip
+
+
+   ?if $with_traffic == yes ? [
+        ; === Step-12:Check traffic after standby controller reboot
+        *FORK IXIA
+        # setup fuzzy expect
+			~=25
+        # yuck, ipv4 only
+        $vm_check=$vm_data_ip
+	=$vm_check/(\d+\.\d+\.\d+)\.\d+/\1/
+			
+	# adjust loss for VM type
+	? $vm_type==avp? $loss=50
+	? $vm_type==dpdk? $loss=25
+	? $vm_type==virtio? $loss=50
+			
+	# adjust for loss
+	; === check stats on the fly
+	>tclsh ixia_show_stats.tcl stats=show stype=flow | grep -B 3 -A 9 $vm_check | cat
+	<Traffic Item
+	<IP Src\s+: $vm_check
+	~<Loss %\s+: ($loss)
+	<Pkt Loss Duration
+        >
+    ]
+    # end if traffic
+
++$j
+
+]
+
+
+
+
+>
+
+
+*INTERACT
+
+>

@@ -19,7 +19,7 @@ To use:
 ;;;
 
 # common include path
-$inc_path=common
+$inc_path=common/el
 
 $admin_src_path=/etc/nova
 
@@ -50,11 +50,11 @@ $admin_src_path=/etc/nova
 	; wait for other active controller...
 	>ping -c 20 $IP
 	>
-	~$inc_path/ssh_controller.inc 
+	~$inc_path/node/ssh_controller.inc 
 	>
 ]::[
 	; === log into node
-	~$inc_path/ssh_controller.inc IP=$node PORT=
+	~$inc_path/node/ssh_node.inc IP=$node PORT=
 	; === reboot other node: $node
 	#set up root access
 	>echo "$pass" | sudo -S id

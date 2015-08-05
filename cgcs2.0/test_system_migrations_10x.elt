@@ -27,6 +27,7 @@ Steps:
 7)  LIVE MIGRATE VM $vm_name
 8)  Wait for  VM to become migrating
 9)  Wait for  VM to become active
+10) ssh to VM and write to FS
 
 *NOFAIL
 *EXP_INFO
@@ -46,6 +47,19 @@ $cold=yes
 $cold=no
 
 $max=5
+##### nat box and VM login info #######
+$natbox=128.224.150.11
+
+# cgcs credentials
+$vm_user=root
+$vm_pass=root
+
+$vm_fs_cmd=while (true) do date; dd if=/dev/urandom of=output.txt bs=1k count=1 || break ; echo ; sleep 1; done 2>&1 > trace.txt &
+$vm_fs_cmd=dd if=/dev/urandom of=output.txt bs=1k count=1 
+
+$vm_cmd_fs_check=mount | grep 'on / type' | grep 'rw,re'
+##################################
+
 
 tenant2-avp2
 tenant6-avp4
@@ -93,6 +107,37 @@ $j=0
 		
 		; === wait for  VM to become active
 		~$inc_path/vm/wait_vm_active.inc vm_name=$vm_name 
+		; === get VM IP
+		>nova list --all-tenants | grep $vm_name
+		+$vm_ip_list=$tenant-mgmt-net=([0-9.:]{7,37})
+		
+		*INTERACT
+		*FORK NATBOX
+		; === log onto nat box
+		~$inc_path/node/ssh_node.inc user=cgcs IP=$natbox
+		>which ssh
+
+		; === start FS commands on VMs
+		[ $vm_ip=$vm_ip_list
+			>ping -c3 $vm_ip
+			~$inc_path/node/ssh_node.inc IP=$vm_ip user=$vm_user pass=$vm_pass
+			; === execute FS commands
+			>$vm_fs_cmd && $vm_fs_cmd && $vm_fs_cmd
+			<\d+\.\d MB/s
+			>
+			; === execute FS commands
+			>$vm_cmd_fs_check
+			>$vm_cmd_fs_check | wc -l
+			<\n1
+
+			>
+			>exit
+			>
+		]
+		*FORK default
+		>
+
+
 	]
 	
 
