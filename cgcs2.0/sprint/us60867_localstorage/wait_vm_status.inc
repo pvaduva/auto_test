@@ -4,53 +4,70 @@ Wait the VM to be launched and behaviors correctly
 
 Required inputs:
     vmid=<vmid>             the uuid of the VM
-    timeout=<seconds>       maximum seconds to wait for the VM be ready
+    status=<status>         status of the VM instance
 
 Optional inputs:
-    $st_power               number indicating the power status
-    $st_task_state          state of the task
-    $st_vm_state            state of the VM instance
-    $st_status              status of the VM instance
+    power=<power>           number indicating the power status
+    task_state=<task>       state of the task
+    vm_state=<vmstate>      state of the VM instance
+    timeout=<seconds>       maximum seconds to wait for the VM be ready
 
 Assumption:
-    the VM belongs to the current tenant
+    the VM was created by the current tenant
 ;;;
 
-$wait=0
 $timeout=200
-$power=1
-$task_state=-
-$vm_state=active
+
+$power=NONE
+$task_state=NONE
+$vm_state=NONE
 $status=ACTIVE
 
-
-#VMSTATE=resized STATUS=VERIFY_RESIZE
+$_wait=0
+$_tm=5
 
 @10
-;wait for the VM to be ready, timeout:$timeout
-[ $wait <= $timeout
+;wait for the VM to be in the expected status, timeout:$timeout
+[ $_wait <= $timeout
     >nova show $vmid
-    +$st_power_state=\|\s* OS-EXT-STS:power_state \s*\|\s* ([0-9]+) \s*\|
-    +$st_task_state=\|\s* OS-EXT-STS:task_state \s*\|\s* ([^\s]+) \s*\|
-    +$st_vm_state=\|\s* OS-EXT-STS:vm_state \s*\|\s* ([^\s]+) \s*\|
-    +$st_status=\|\s* status\s*\|\s* ([^\s]+) \s*\|
+    +$_power=\|\s* OS-EXT-STS:power_state \s*\|\s* ([0-9]+) \s*\|
+    +$_task_state=\|\s* OS-EXT-STS:task_state \s*\|\s* ([^\s]+) \s*\|
+    +$_vm_state=\|\s* OS-EXT-STS:vm_state \s*\|\s* ([^\s]+) \s*\|
+    +$_status=\|\s* status\s*\|\s* ([^\s]+) \s*\|
 
-    ? $status == $st_status ? [
-        ? $vm_state == $st_vm_state ?%DONE 
+    $_pass=1
+
+    ? $_status != $status ? $_pass=0
+
+    ? $vm_state != NONE ? [
+        ? $_vm_state != $vm_state ? $_pass=0
+    ]
+    ? $power != NONE ? [
+        ? $_power != $power ? $_pass=0
+    ]
+    ? $task_state != NONE ? [
+        ? $_task_state != $task_state ? $_pass=0
+    ] :: [ 
+        ? $status == ACTIVE ? [
+            ? $_task_state != - ? $_pass=0
+        ]
     ]
 
-    ;try again after 10 seconds, toally waited:$wait
-    !sleep 10
-    =$wait + 10
+    ? $_pass == 1 ? %DONE
+
+    ;try again after $_tm seconds, toally waited:$_wait
+    !sleep $_tm
+    =$_wait + $_tm
 ]
 
-? $wait > $timeout ? [
-    ;ERROR: VM:$vmid not ready in $timeout seconds
+? $_wait > $timeout ? [
+    ;ERROR: VM:$vmid is not in expected status within $timeout seconds, 
+    ;   expected status: power=$power, task_state=$task_state, vm_state=$vm_state, status=$status
     *FAIL
 ]
 
 %DONE
 
-;vm is in status: power:$st_power_state, task:$st_task_state, vm_state:$st_vm_state, status:$st_status
+;vm is in status: power:$_power, task:$_task_state, vm_state:$_vm_state, status:$_status
 
 

@@ -1,0 +1,1 @@
+../us60867_localstorage/create_flavor.inc
