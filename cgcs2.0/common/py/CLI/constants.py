@@ -3,6 +3,10 @@
 # build servers, i.e. yow-cgts1-lx, yow-cgts2-lx, yow-cgts3-lx
 BUILD_SERVERS = ["128.224.145.95", "128.224.145.117", "128.224.145.134"]
 
+# flag whether to use new CLI commands or deprecated ones
+# e.g. /usr/bin/keystone tenant-list vs. openstack project list
+USE_NEWCMDS=True
+
 # scp user
 SCP_USERNAME = "svc-cgcsauto"
 SCP_PASSWORD = ")OKM0okm"
@@ -31,6 +35,9 @@ PROMPT=".*\$ "
 
 # pxssh default location for log file
 LOGFILE = "temp.txt"
+
+# timeout for the sudo collect all command
+COLLECT_TIMEOUT = 300
 
 # host availability states
 STATE = ["available", "online", "offline", "failed", "intest"]
@@ -71,7 +78,7 @@ EMPTY_TABLE = "\+\r\n\+"
 
 # checks for non-empty table
 # this one doesn't seem to work
-NON_EMPTY_TABLE = "\+.\r\n\+"
+NON_EMPTY_TABLE = "\+\r\n.*\r\n\+.*\r\n\|"
 
 # checks for alarms in the alarms table
 # this matches alarm UUIDs, e.g. 491462fe-a261-4af2-8669-606555df98ee
@@ -79,6 +86,15 @@ NON_EMPTY_TABLE = "\+.\r\n\+"
 #ALARMS_MATCH = "(?<=\|\s)([a-zA-Z0-9-]*)(?= \|\s\d)"
 #ALARMS_MATCH = "([0-9a-f-]{32,36})"
 UUID = "([0-9a-f-]{32,36})"
+
+# Match and extract a flavor ID.  So far, flavor IDs look like UUIDs or 
+# a numeric value, or alphabetic. Has a flaw in that it retrieves ID from the 
+# heading which is not a flavor ID so you must consume it first
+FLAVOR_ID = "(?<=\r\n\|\s)([0-9a-zA-Z-]{1,36})"
+
+# this extracts a project UUID from a table, e.g.
+# | 690d4635663a46aba6d4c1e6a3a9efc7 | admin    |
+USER_ID = "([0-9a-f]{32})"
 
 # checks for flavors in the flavors table
 FLAVOR_MATCH = "(?<=\|\s)([0-9a-f-]{1,36})"
@@ -118,3 +134,7 @@ TARBALL_NAME = "(?<=Compressing Tarball ..:\s)(.+)"
 CONT_PERSONALITY = "personality\s*\|\s(controller)"
 COMP_PERSONALITY = "personality\s*\|\s(compute)"
 STOR_PERSONALITY = "personality\s*\|\s(compute)"
+
+# extracts down services
+# 3 groups: service name, node, state
+DOWN_NOVASERVICE = "(nova-\w+)\s*\|\s(\w+-\d+).*(down).*\n" 

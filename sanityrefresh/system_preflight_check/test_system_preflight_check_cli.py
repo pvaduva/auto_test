@@ -51,9 +51,6 @@ sys.path.append(os.path.expanduser('~/wassp-repos/testcases/cgcs/cgcs2.0/common/
 
 from CLI.cli import *
 
-# globals
-WARNING = False
-
 def get_hostname(conn):
     """ This function returns the hostname of the current system. 
         Inputs:
@@ -427,50 +424,17 @@ def check_novaservices(conn, cont_hostname_list):
     else:
         return False    
     
-
-def collect_logs(conn, timeout):
-    """ This runs the sudo collect all command. 
-        Inputs:
-        * conn - ID of pexpect session
-        * timeout (sec) - how long to wait until collect completes, e.g. 300 seconds
-        Output:
-        * .tar.gz file created under /scratch
-        * scp'ed off target to /folk/cgts/logs
-        * no return value
-    """
-    if DEBUG == True:
-        # We need to refine the timeout since "collect" takes a long time
-        conn.timeout = timeout 
-        conn.sendline("sudo collect all")
-        conn.prompt()
-        resp = 0
-        while resp < 3:
-            resp = conn.expect(["\?", "Password\:", TARBALL_NAME, PROMPT, pexpect.TIMEOUT])
-            if resp == 0:
-                conn.sendline("yes")
-            elif resp == 1:
-                conn.sendline(PASSWORD)
-            elif resp == 2:
-                tarball = conn.match.group()
-                logging.info("Tarball name is: %s" % tarball)
-                # Reported tarball name differs from the actual file name.  Workaround product issue.
-                newtarball = string.replace(tarball, "tgz", "gz")
-                logging.info("New tarball name is: %s" % newtarball)
-                # scp it to /folk/cgts/logs
-            else:
-                logging.warning("Timed out before logs could be collected.  Please increase the timeout and try again.")
-        # reset timeout to original value after collect runs
-        conn.timeout = TIMEOUT
-
-
 if __name__ == "__main__":
 
     # Enable logging
     logging.basicConfig(level=logging.INFO)
 
+    # Test case name
+    test_name = "test_sanityrefresh_preflightcheck"
+
     # Get time
     test_start_time = datetime.datetime.now()
-    logging.info("Starting test at %s" % test_start_time)
+    logging.info("Starting %s at %s" % (test_name, test_start_time))
 
     # Establish connection
     conn = Session(timeout=TIMEOUT)
@@ -530,19 +494,14 @@ if __name__ == "__main__":
     # Fail condition is no flavors, no images, no instances or nova being down.  
     # We can revise this later.  Hosts not being available, or alarms are
     # not considered a fail currently.
-    logging.info("Test will fail if there are no flavors, no images, no instances or expected services are down.")
+    logging.info("Test will fail if there are no flavors, no images, no instances or expected nova services are down.")
     if not all ((flavors, images, instances, nova)):
         logging.error("Test Result: FAILED")
     else:
         logging.info("Test Result: PASSED")
 
-    # Collect all logs
-    DEBUG = False
-    if DEBUG == True:
-        collect_logs(conn, COLLECT_TIMEOUT) 
-
     # Test end time
     test_end_time = datetime.datetime.now()
     test_duration = test_end_time - test_start_time
-    logging.info("Ending test at %s" % test_end_time)
+    logging.info("Ending %s at %s" % (test_name, test_end_time))
     logging.info("Test ran for %s" % test_duration)
