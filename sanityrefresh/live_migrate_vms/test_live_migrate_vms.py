@@ -34,6 +34,8 @@ Future Enhancements:
 import os
 import sys
 import re
+import time
+import random
 # class is in non-standard location so refine python search path 
 sys.path.append(os.path.expanduser('~/wassp-repos/testcases/cgcs/cgcs2.0/common/py'))
 
@@ -50,6 +52,8 @@ def source_nova(conn, user=None):
         Tag:
         * Add to common functions
     """
+
+    logging.info("Sourcing the openrc file")
 
     # Admin user is the default.  Optionally, we can use tenant1 or tenant2
     if not user:
@@ -71,6 +75,84 @@ def source_nova(conn, user=None):
         exit(-1)
 
     return resp
+
+def get_hostpersonality(conn, hostname):
+    """ This function returns the personality of host.
+        Inputs:
+        * conn - ID of pexpect session
+        * hostname - name of host to check personality of, e.g. storage
+        Output:
+        * Return string, either storage, compute, controller or,
+        * Return resp (non-zero int value) if we fail
+    """
+
+    cmd = "system host-show %s" % hostname
+    conn.sendline(cmd)
+    resp = conn.expect([CONT_PERSONALITY, COMP_PERSONALITY, STOR_PERSONALITY,
+                        pexpect.TIMEOUT])
+    if resp == 0:
+        host_type = "controller" 
+    elif resp == 1:
+        host_type = "compute" 
+    elif resp == 2:
+        host_type = "storage" 
+    elif resp == 3:
+        logging.warning("Could not determine personality of host %s" % hostname)
+        return resp
+   
+    logging.info("Host type of host %s is %s" % (hostname, host_type)) 
+    conn.prompt()
+
+    return host_type 
+
+
+def get_hosts(conn):
+    """ This function checks the system for controllers, computes and storage nodes.
+        Input:
+        * conn - ID of pexpect session
+        Output:
+        Four lists - all hosts, controllers only, computes only, storage only
+    """
+
+    # Determine the hosts in the lab
+    cont_hostname_list = []   # list of controllers by hostname
+    comp_hostname_list = []   # list of computes by hostname
+    stor_hostname_list = []   # list of storage nodes by hostname
+    hostname_list = []        # list of all hostnames
+    conn.sendline('system host-list')
+
+    # Traverse the input buffer looking for controller, compute
+    # and storage nodes.
+    resp = 0
+    while resp < 1:
+        resp = conn.expect([HOSTNAME_MATCH_TBL, PROMPT, pexpect.TIMEOUT])
+
+        if resp == 0:
+            hostname_list.append(conn.match.group())
+
+    conn.prompt()
+    logging.info("Hostnames in the system: %s" % hostname_list)
+
+    # For each hostname grab its personality from system host-show
+    for host in hostname_list:
+        cmd = "system host-show %s" % host
+        conn.sendline(cmd)
+        resp = conn.expect([CONT_PERSONALITY, COMP_PERSONALITY, STOR_PERSONALITY,
+                            pexpect.TIMEOUT])
+        if resp == 0:
+            cont_hostname_list.append(host)
+        elif resp == 1:
+            comp_hostname_list.append(host)
+        elif resp == 2:
+            stor_hostname_list.append(host)
+        conn.prompt()
+
+    logging.info("Controllers in system: %s" % cont_hostname_list)
+    logging.info("Computes in system: %s" % comp_hostname_list)
+    logging.info("Storage nodes in system: %s" % stor_hostname_list)
+
+    return hostname_list, cont_hostname_list, comp_hostname_list, stor_hostname_list
+
 
 def get_activeinactive_controller(conn, cont_hostname_list):
     """ This function returns the hostname of the active controller 
@@ -125,7 +207,9 @@ def get_userid(conn, user):
         Tags:
         * Add to common functions 
     """
-    
+   
+    logging.info("Getting the tenant user id")
+ 
     cmd1 = "openstack project list"
     cmd = "keystone tenant-list"
 
@@ -171,6 +255,8 @@ def get_novavms(conn, return_value="id", tenant_name=None):
         * Returns a list of VM ids or names
     """
 
+    logging.info("Getting list of VMs by %s" % return_value)
+
     vm_list = []
 
     # Determine which nova list command to use depending on the arguments supplied to
@@ -184,25 +270,28 @@ def get_novavms(conn, return_value="id", tenant_name=None):
     else:
         cmd = "nova list --all-tenants"
 
-    #conn.prompt()
+    conn.prompt()
     conn.sendline(cmd)
-    #conn.prompt()
 
     # determine if we should return a list of vm names or IDs
     if return_value == "name":
-        extract = VM_NAME
+        #extract = VM_NAME
+        extract = "(?<=\r\n\|\s[0-9a-f-]{36}\s\|\s)([0-9a-zA-Z-]+)" 
     else:
-        extract = UUID
+        #extract = UUID
+        extract = "(?<=\r\n\|\s)([0-9a-f-]{36})" 
 
     resp = 0
-    while resp < 3:
-        resp = conn.expect([extract, PROMPT, ERROR, pexpect.TIMEOUT])
+    while resp < 1:
+        resp = conn.expect([extract, ERROR, PROMPT, pexpect.TIMEOUT])
         if resp == 0:
             vm_list.append(conn.match.group())
-        elif resp == 2:
-            logging.warning("Error listing nova VMs due to %s" % conn.match.group())
+        elif resp == 1:
+            msg = "Error listing nova VMs due to %s" % conn.match.group()
+            logging.warning(msg)
         elif resp == 3:
-            logging.warning("Command %s timed out" % cmd)
+            msg = "Command %s timed out" % cmd
+            logging.warning(msg)
 
     logging.info("VM list by %s: %s" % (return_value, vm_list))
 
@@ -297,26 +386,28 @@ def get_novashowvalue(conn, vm_id, field=None):
     if not field:
         field == "host"
 
-    #extract = "(?<=%s)\s*\|\s(\w+)" % field 
-    extract = "(?<=%s)\s*\|\s(.+)\r\n" % field 
-    print("This is extract: %s" % extract)
+    # Pull the value field associated with the corresponding property field
+    # Note, only tested with the "host" field so far
+    extract = "(?<=%s)\s*\|\s(.*?)\s*\|\r\n" % field 
 
     cmd = "nova show %s" % vm_id
-    conn.sendline(cmd)
+
     conn.prompt()
+    conn.sendline(cmd)
 
-    resp = conn.expect([extract, ERROR, pexpect.TIMEOUT])
-
+    resp = conn.expect([extract, ERROR, PROMPT, pexpect.TIMEOUT])
     if resp == 0:
         value = conn.match.group(1)
-        logging.info("Value for field %s for VM %s is %s" % (field, vm_id, value)) 
-        return value.strip()
+        conn.prompt()
+        logging.info("VM %s has %s field equal to %s" % (vm_id, field, value))
     elif resp == 1:
         logging.warning("Could not determine value of field %s associated with VM %s" % (field, vm_id))
-    elif resp == 2:
+        return resp
+    elif resp == 3:
         logging.warning("Command %s timed out." % cmd)
+        return resp
 
-    return resp
+    return value 
 
 
 def exec_novaresizeconf(conn, vm_id):
@@ -352,8 +443,11 @@ def exec_vm_migrate(conn, vm_id, migration_type="cold", dest_host=None):
         * Return False if the VM could not migrate.
     """
 
+    logging.info("Performing a %s migrate of VM %s" % (migration_type, vm_id))
+
     # Determine which host we're on
     original_vm_host = get_novashowvalue(conn, vm_id, "host")
+    logging.info("VM %s is on host %s" % (vm_id, original_vm_host))
 
     # Issue the appropriate migration type
     if migration_type == "cold":
@@ -361,34 +455,56 @@ def exec_vm_migrate(conn, vm_id, migration_type="cold", dest_host=None):
     elif migration_type == "live" and not dest_host:
         cmd = "nova live-migration %s" % vm_id
     else:
-        cmd = "nova live-migration %s %s" % (vm_id, migration_host)
+        cmd = "nova live-migration %s %s" % (vm_id, dest_host)
 
     # Issue migration
     conn.prompt()
+    logging.info(cmd)
     conn.sendline(cmd)
-    resp = conn.expect(["Finished", ERROR, pexpect.TIMEOUT])
-    # if resp == 0 and cold migrate we need to confirm resize.  We'll need to poll first
+    migration_start_time = datetime.datetime.now()
+
+    resp = conn.expect(["Finished", ERROR, PROMPT, pexpect.TIMEOUT])
     if resp == 1:
         logging.error("VM %s failed to %s migration due to %s" % (vm_id, migration_type, conn.group.match()))
-    elif resp == 2:
+    elif resp == 3:
         logging.warning("Command %s timed out." % cmd)
 
-    # Check if we really migrated to a different host
-    postmig_vm_host = get_novashowvalue(conn, vm_id, "host")
-    if postmig_vm_host != original_vm_host:
-        print("\r\n")
-        print(postmig_vm_host)
-        print("\r\n")
-        print(original_vm_host)
-        junk
-        logging.info("VM %s was on %s, and migrated to %s.  Migration was a success." %
-                    (vm_id, original_vm_host, postmig_vm_host))
-        return True
-    else:
-        logging.error("VM %s migration was not a success.  VM is still on the same host." % vm_id)
-        return False
+    # if resp == 0 and cold migrate we need to confirm resize.  We'll need to poll first (TO DO)
 
-   
+    # If we selected live migration, poll for the VM state
+    if migration_type == "live":
+        status = ""
+        while status != "ACTIVE":
+            status = get_novashowvalue(conn, vm_id, "status")
+            # check if error is correct status (NOTE)
+            if status == "ERROR":
+                logging.warning("VM %s is reporting error state" % vm_id)
+                break
+            wait_time = 2
+            time.sleep(wait_time)
+        if status == "ACTIVE":
+            migration_end_time = datetime.datetime.now()
+            logging.info("The VM is done migrating.")
+            migration_time = migration_end_time - migration_start_time
+            logging.info("VM %s took %s seconds to %s migrate" % (vm_id, migration_time, migration_type))
+            logging.info("Margin of error in measurements is approx. %s second(s)." % (wait_time))
+            # Check if we really migrated to the correct host
+            postmig_vm_host = get_novashowvalue(conn, vm_id, "host")
+            if dest_host:
+                if postmig_vm_host == dest_host:
+                    logging.info("VM %s migrated from %s to %s as expected" % (vm_id, original_vm_host, postmig_vm_host)) 
+                else:
+                    logging.warning("VM %s was expected to migrate to %s but instead is on %s" %
+                                   (vm_id, dest_host, postmig_vm_host))
+                    return False
+            else:
+                if postmig_vm_host != original_vm_host:
+                    logging.info("VM %s migrated off of %s as expected, and is now on host %s" % (vm_id, original_vm_host, postmig_vm_host))
+                else:
+                    logging.warning("VM %s did not migrate off host" % (vm_id, original_vm_host)) 
+                    return False
+            
+    return True
 
 if __name__ == "__main__":
 
@@ -435,9 +551,36 @@ if __name__ == "__main__":
             exit(-1)
     
     # we'll want to check what controller or compute a VM is on and then
-    # live migrate
+    # live migrate without a destination host
+    logging.info("Live migrating without a destination host specified")
     vm_list = get_novavms(conn, "id")
     exec_vm_migrate(conn, vm_list[1], "live")
+   
+    # Automatically determine another host to migrate to, could be controller or compute 
+    logging.info("Live migrating with a destination host specified")
+    current_vm_host = get_novashowvalue(conn, vm_list[1], "host")
+    logging.info("VM %s is on host %s" % (vm_list[1], current_vm_host))
+    # Get personality of VM host
+    host_personality = get_hostpersonality(conn, current_vm_host)
+    logging.info("Learn what hosts are on the system.")
+    hostname_list, cont_hostname_list, comp_hostname_list, stor_hostname_list = get_hosts(conn)
+
+    if host_personality == "controller":
+        subset_hostname_list = cont_hostname_list
+        subset_hostname_list.remove(current_vm_host)
+        dest_vm_host = random.choice(subset_hostname_list)
+    elif host_personality == "compute":
+        subset_hostname_list = comp_hostname_list
+        subset_hostname_list.remove(current_vm_host)
+        dest_vm_host = random.choice(subset_hostname_list)
+    logging.info("Live migrating VM %s from %s to %s" % (vm_list[1], current_vm_host, dest_vm_host)) 
+    exec_vm_migrate(conn, vm_list[1], "live", dest_vm_host)
+    
+    # Do a cold migrate 
+    #logging.info("Cold migrating instance")
+    #current_vm_host = get_novashowvalue(conn, vm_list[1], "host")
+    #logging.info("VM %s is on host %s" % (vm_list[1], current_vm_host))
+    #exec_vm_migrate(conn, vm_list[1], "cold")
 
     # Test end time
     test_end_time = datetime.datetime.now()
