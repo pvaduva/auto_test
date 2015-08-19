@@ -2,9 +2,9 @@
 
 """
 Usage:
-./test_system_setup.py <FloatingIPAddress>
+./test_live_migrate_vms.py <FloatingIPAddress>
 
-e.g.  ./test_system_setup.py 10.10.10.2
+e.g.  ./test_live_migrate_vms.py 10.10.10.2
 
 Assumptions:
 * System has been installed
@@ -17,9 +17,12 @@ tests can be run.
 Test Steps:
 0) SSH to the system
 1) Source /etc/nova/openrc
-2) Up the quotas
-3) Create additional flavors
-4) Launch VMs of each type (virtio, vswitch, avp)
+2) If no VMs exist, attempt to launch some (virtio, vswitch, avp) 
+3) For each VM: attempt a live migrate (scheduler picks destination host) 
+                attempt a live migrate with destination host specified
+                attempt a cold migrate with resize specified
+                attempt a cold migrate with resize revert specified
+4) Gather migration data for all VM migrations and report back 
 
 General Conventions:
 1) Functions that start with "list" have no return value and only report information
@@ -410,34 +413,47 @@ def get_novashowvalue(conn, vm_id, field=None):
     return value 
 
 
-def exec_novaresizeconf(conn, vm_id):
+def exec_novaresizeorrevert(conn, vm_id, nova_option=None):
     """ This issues a resize confirm after cold migration.
         Inputs:
         * conn - ID of pexpect session
         * vm_id - ID of VM to query
+        * nova_option (optional) - takes two options, confirm or revert.
+                                 - confirm is the default 
         Outputs:
         * Return resp - 0 for success, non-zero for fail
     """
 
+    # Resize is the default (if the option is not specified)
+    if nova_option == "revert":
+        cmd = "nova resize-revert %s" % vm_id
+    else:
+        cmd = "nova resize-confirm %s" % vm_id
+         
+
     conn.prompt()
-    cmd = "nova resize-confirm %s" % vm_id
     conn.sendline(cmd)
+    logging.info(cmd)
     resp = conn.expect([PROMPT, ERROR, pexpect.TIMEOUT])
     if resp == 1:
         logging.error("Failed to resize-confirm VM %s due to %s" % (vm_id, conn.match.group()))
+        return resp
     elif resp == 2:
         logging.warning("Command %s timed out." % cmd)
+        return resp
 
     return resp
     
 
-def exec_vm_migrate(conn, vm_id, migration_type="cold", dest_host=None):
+def exec_vm_migrate(conn, vm_id, migration_type="cold", option=None):
     """ This migrates a VM (either cold or live). 
         Inputs:
         * conn - ID of pexpect session
         * vm_id = ID of VM to migrate
         * migrate_type - either "cold" or "live"
-        * dest_host (optional) - destination host for migration, e.g. compute-1 
+        * option (optional) - destination host for migration, e.g. compute-1, if we
+                              selected "live" migrate
+                            - "confirm" or "revert" if we selected "cold" migrate
         Outputs:
         * Return True if the VM migrated
         * Return False if the VM could not migrate.
@@ -452,10 +468,10 @@ def exec_vm_migrate(conn, vm_id, migration_type="cold", dest_host=None):
     # Issue the appropriate migration type
     if migration_type == "cold":
         cmd = "nova migrate --poll %s" % vm_id
-    elif migration_type == "live" and not dest_host:
+    elif migration_type == "live" and not option:
         cmd = "nova live-migration %s" % vm_id
     else:
-        cmd = "nova live-migration %s %s" % (vm_id, dest_host)
+        cmd = "nova live-migration %s %s" % (vm_id, option)
 
     # Issue migration
     conn.prompt()
@@ -487,22 +503,72 @@ def exec_vm_migrate(conn, vm_id, migration_type="cold", dest_host=None):
             logging.info("The VM is done migrating.")
             migration_time = migration_end_time - migration_start_time
             logging.info("VM %s took %s seconds to %s migrate" % (vm_id, migration_time, migration_type))
-            logging.info("Margin of error in measurements is approx. %s second(s)." % (wait_time))
+            logging.info("Margin of error in measurements is approx. %s second(s) for polling." % (wait_time))
+            logging.info("Loss due to automation process is approx. 10 second(s)")
             # Check if we really migrated to the correct host
             postmig_vm_host = get_novashowvalue(conn, vm_id, "host")
-            if dest_host:
-                if postmig_vm_host == dest_host:
-                    logging.info("VM %s migrated from %s to %s as expected" % (vm_id, original_vm_host, postmig_vm_host)) 
+            if option:
+                if postmig_vm_host == option:
+                    logging.info("VM %s %s migrated from %s to %s as expected" % 
+                                (vm_id, migration_type, original_vm_host, postmig_vm_host)) 
                 else:
                     logging.warning("VM %s was expected to migrate to %s but instead is on %s" %
-                                   (vm_id, dest_host, postmig_vm_host))
+                                   (vm_id, option, postmig_vm_host))
                     return False
             else:
                 if postmig_vm_host != original_vm_host:
-                    logging.info("VM %s migrated off of %s as expected, and is now on host %s" % (vm_id, original_vm_host, postmig_vm_host))
+                    logging.info("VM %s %s migrated off of %s as expected, and is now on host %s" % 
+                                (vm_id, migration_type, original_vm_host, postmig_vm_host))
                 else:
                     logging.warning("VM %s did not migrate off host" % (vm_id, original_vm_host)) 
                     return False
+    else:
+        # If we selected cold migrate
+        # Once the status is set to verify resize, we're ready to go to the next step
+        status = ""
+        while status != "VERIFY_RESIZE":
+            status = get_novashowvalue(conn, vm_id, "status") 
+            if status == "ERROR":
+                logging.warning("VM %s is reporting error state." % vm_id)
+                break
+            wait_time = 2
+            time.sleep(wait_time)
+        if status == "VERIFY_RESIZE":
+            if option == "revert":
+                exec_novaresizeorrevert(conn, vm_id, "revert")
+            else:
+                exec_novaresizeorrevert(conn, vm_id)
+            migration_end_time = datetime.datetime.now()    
+            while status != "ACTIVE":
+                status = get_novashowvalue(conn, vm_id, "status")
+                # check if error is correct status (NOTE)
+                if status == "ERROR":
+                    logging.warning("VM %s is reporting error state" % vm_id)
+                    break
+                wait_time = 2
+                time.sleep(wait_time)
+            if status == "ACTIVE":
+               migration_end_time = datetime.datetime.now()
+               logging.info("The VM is done migrating.")
+               migration_time = migration_end_time - migration_start_time
+               logging.info("VM %s took %s seconds to %s migrate" % (vm_id, migration_time, migration_type))
+               logging.info("Margin of error in measurements is approx. %s second(s) for polling." % (wait_time))
+               logging.info("Loss due to automation process is approx. 10 second(s)")
+               postmig_vm_host = get_novashowvalue(conn, vm_id, "host")
+               if option:
+                   if postmig_vm_host == original_vm_host:
+                       logging.info("VM %s was on host %s, reverted cold migration, and is now back on host %s as expected" % 
+                                   (vm_id, original_vm_host, postmig_vm_host))
+                   else:
+                       logging.warning("VM %s should have been on host %s after cold migrate revert, but is instead on host %s" %
+                                      (vm_id, original_vm_host, postmig_vm_host))
+               else:
+                   if postmig_vm_host != original_vm_host:
+                       logging.info("VM %s %s migrated off of %s as expected, and is now on host %s" % 
+                                   (vm_id, migration_type, original_vm_host, postmig_vm_host))
+                   else:
+                       logging.warning("VM %s did not migrate off host" % (vm_id, original_vm_host)) 
+                       return False
             
     return True
 
@@ -551,12 +617,13 @@ if __name__ == "__main__":
             exit(-1)
     
     # we'll want to check what controller or compute a VM is on and then
-    # live migrate without a destination host
+    # SCENARIO 1: Live migrate without a destination host
     logging.info("Live migrating without a destination host specified")
     vm_list = get_novavms(conn, "id")
     exec_vm_migrate(conn, vm_list[1], "live")
    
     # Automatically determine another host to migrate to, could be controller or compute 
+    # SCENARIO 2: Live migrate with a destination host specified
     logging.info("Live migrating with a destination host specified")
     current_vm_host = get_novashowvalue(conn, vm_list[1], "host")
     logging.info("VM %s is on host %s" % (vm_list[1], current_vm_host))
@@ -576,11 +643,19 @@ if __name__ == "__main__":
     logging.info("Live migrating VM %s from %s to %s" % (vm_list[1], current_vm_host, dest_vm_host)) 
     exec_vm_migrate(conn, vm_list[1], "live", dest_vm_host)
     
-    # Do a cold migrate 
-    #logging.info("Cold migrating instance")
-    #current_vm_host = get_novashowvalue(conn, vm_list[1], "host")
-    #logging.info("VM %s is on host %s" % (vm_list[1], current_vm_host))
-    #exec_vm_migrate(conn, vm_list[1], "cold")
+    # Do a cold migrate and confirm resize
+    # SCENARIO 3: Cold migrate and confirm resize
+    logging.info("Cold migrating instance and then confirming resize")
+    current_vm_host = get_novashowvalue(conn, vm_list[1], "host")
+    logging.info("VM %s is on host %s" % (vm_list[1], current_vm_host))
+    exec_vm_migrate(conn, vm_list[1], "cold")
+ 
+    # Do a cold migrate and revert resize
+    # SCENARIO 4: Cold migrate and revert size
+    logging.info("Cold migrating instance and then resize reverting")
+    current_vm_host = get_novashowvalue(conn, vm_list[1], "host")
+    logging.info("VM %s is on host %s" % (vm_list[1], current_vm_host))
+    exec_vm_migrate(conn, vm_list[1], "cold", "revert")
 
     # Test end time
     test_end_time = datetime.datetime.now()
