@@ -11,13 +11,13 @@ Common regex matches are stored in a common constants file, which the developer 
 their own. 
 
 Inputs:
-
+* None
 
 Assumptions:
-
+* None
 
 To be done:
-- Take command line args
+- Take command line args for self-test
 - Extract self-test code into methods that users can invoke
 
 """
@@ -59,6 +59,7 @@ class Session(pxssh.pxssh):
             self.PROMPT = PROMPT
             self.force_password = True
             self.login(hostname, username, password, auto_prompt_reset=False, quiet=False)
+            #self.login(hostname, username, password, terminal_type='xterm', auto_prompt_reset=False, quiet=False)
             logging.info(self.before)
             logfile_out = open(LOGFILE, 'w+')
             self.logfile_read = sys.stdout 

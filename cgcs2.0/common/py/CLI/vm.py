@@ -164,9 +164,9 @@ def exec_vm_migrate(conn, vm_id, migration_type="cold", option=None):
             time.sleep(wait_time)
         if status == "VERIFY_RESIZE":
             if option == "revert":
-                exec_novaresizeorrevert(conn, vm_id, "revert")
+                nova.exec_novaresizeorrevert(conn, vm_id, "revert")
             else:
-                exec_novaresizeorrevert(conn, vm_id)
+                nova.exec_novaresizeorrevert(conn, vm_id)
             migration_end_time = datetime.datetime.now()
             while status != "ACTIVE":
                 status = nova.get_novashowvalue(conn, vm_id, "status")

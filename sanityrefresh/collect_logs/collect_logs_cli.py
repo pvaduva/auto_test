@@ -72,6 +72,12 @@ def collect_logs(conn, timeout):
 
 if __name__ == "__main__":
 
+    # Extract command line arguments
+    if len(sys.argv) < 2:
+        sys.exit("Usage: ./test_collect_logs_cli.py <Floating IP of host machine>")
+    else:
+        floating_ip = sys.argv[1]
+
     # Enable logging
     logging.basicConfig(level=logging.INFO)
 
@@ -84,7 +90,7 @@ if __name__ == "__main__":
 
     # Establish connection
     conn = Session(timeout=TIMEOUT)
-    conn.connect(hostname=HOSTNAME, username=USERNAME, password=PASSWORD)
+    conn.connect(hostname=floating_ip, username=USERNAME, password=PASSWORD)
     conn.setecho(ECHO)
 
     collect_logs(conn, COLLECT_TIMEOUT) 

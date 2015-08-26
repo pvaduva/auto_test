@@ -426,6 +426,12 @@ def check_novaservices(conn, cont_hostname_list):
     
 if __name__ == "__main__":
 
+    # Extract command line arguments
+    if len(sys.argv) < 2:
+        sys.exit("Usage: ./test_system_preflight_check_cli.py <Floating IP of host machine>")
+    else:
+        floating_ip = sys.argv[1]
+
     # Enable logging
     logging.basicConfig(level=logging.INFO)
 
@@ -438,7 +444,7 @@ if __name__ == "__main__":
 
     # Establish connection
     conn = Session(timeout=TIMEOUT)
-    conn.connect(hostname=HOSTNAME, username=USERNAME, password=PASSWORD)
+    conn.connect(hostname=floating_ip, username=USERNAME, password=PASSWORD)
     conn.setecho(ECHO)
 
     # Determine which host we're connected to and return the hostname
@@ -457,7 +463,7 @@ if __name__ == "__main__":
     hostname_list, cont_hostname_list, comp_hostname_list, stor_hostname_list = get_hosts(conn)
 
     # Check if we are using a storage lab 
-    if len(stor_hostname_list) > 2:
+    if len(stor_hostname_list) > 1:
         storage_system = True
         logging.info("This system is configured with storage nodes.")
     else:

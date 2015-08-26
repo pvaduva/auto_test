@@ -7,21 +7,28 @@ BUILD_SERVERS = ["128.224.145.95", "128.224.145.117", "128.224.145.134"]
 # e.g. /usr/bin/keystone tenant-list vs. openstack project list
 USE_NEWCMDS=True
 
+# Test server
+TEST_HOSTNAME = "128.224.150.21"
+TEST_USERNAME = "svc-cgcsauto"
+TEST_PASSWORD = ")OKM0okm"
+
 # scp user
 SCP_USERNAME = "svc-cgcsauto"
 SCP_PASSWORD = ")OKM0okm"
 LOG_LOCATION = "/folk/cgts/logs"
 
 # pxssh connection arguments
-#HOSTNAME="128.224.150.219"
-#HOSTNAME="128.224.150.189"
-HOSTNAME="128.224.150.219"
-#HOSTNAME="10.10.10.3"
-USERNAME="wrsroot"
-PASSWORD="li69nux"
+HOSTNAME = "10.10.10.3"
+USERNAME = "wrsroot"
+PASSWORD = "li69nux"
+
+# NAT box credentials
+NAT_HOSTNAME = "128.224.150.11"
+NAT_USERNAME = "cgcs"
+NAT_PASSWORD = "li69nux"
 
 # pxssh connection timeout
-TIMEOUT=5
+TIMEOUT = 6
 
 # pxssh search window size
 SEARCHWINSIZE = 50
@@ -38,6 +45,10 @@ LOGFILE = "temp.txt"
 
 # timeout for the sudo collect all command
 COLLECT_TIMEOUT = 300
+
+# response to match to detect when the CLI returns errors
+# it will report the error message as well
+ERROR = "(ERROR.*)\n"
 
 # host availability states
 STATE = ["available", "online", "offline", "failed", "intest"]
@@ -85,11 +96,13 @@ NON_EMPTY_TABLE = "\+\r\n.*\r\n\+.*\r\n\|"
 # can we do better than this??  position dependent the way it is written.
 #ALARMS_MATCH = "(?<=\|\s)([a-zA-Z0-9-]*)(?= \|\s\d)"
 #ALARMS_MATCH = "([0-9a-f-]{32,36})"
-UUID = "([0-9a-f-]{32,36})"
+#UUID = "([0-9a-f-]{32,36})"
+UUID = "(?<=\r\n\|\s)([0-9a-f-]{32,36})"
+ID = "(?<=\r\n\|\s)([0-9a-f-]{32,36})"
 
-# Match and extract a flavor ID.  So far, flavor IDs look like UUIDs or 
-# a numeric value, or alphabetic. Has a flaw in that it retrieves ID from the 
-# heading which is not a flavor ID so you must consume it first
+# Match and extract a nova flavor ID from the nova flavor-list table. Flavor IDs 
+# look like UUID, numeric value or alphabetic.  Has a flaw in that it retrieves
+# ID from the # heading which is not a flavor ID so you must consume it first
 FLAVOR_ID = "(?<=\r\n\|\s)([0-9a-zA-Z-]{1,36})"
 
 # this extracts a project UUID from a table, e.g.
@@ -133,8 +146,29 @@ TARBALL_NAME = "(?<=Compressing Tarball ..:\s)(.+)"
 # extracts personality from system host-list
 CONT_PERSONALITY = "personality\s*\|\s(controller)"
 COMP_PERSONALITY = "personality\s*\|\s(compute)"
-STOR_PERSONALITY = "personality\s*\|\s(compute)"
+STOR_PERSONALITY = "personality\s*\|\s(storage)"
 
 # extracts down services
 # 3 groups: service name, node, state
 DOWN_NOVASERVICE = "(nova-\w+)\s*\|\s(\w+-\d+).*(down).*\n" 
+
+# get vm by name
+# works on nova list
+# input: | 55ac9f6d-192c-4b7b-83f9-f5c8408c2700 | tenant1-avp1     
+# output: on the data above, it would extract tenant1-avp1
+VM_NAME = "(?<=\r\n\|\s[0-9a-f-]{36}\s\|\s)([0-9a-zA-Z-]+)"
+
+# get the host that the vm is on
+# works on the nova show <vm_id> command
+# input: | OS-EXT-SRV-ATTR:host                 | compute-0               
+# output: compute-0
+# must grab conn.match.group(1) with this regex 
+VM_HOST = "(?<=host)\s*\|\s(\w+\-\d+)"
+
+# get the state of the VM
+# works on the nvoa show <vm_id> command
+# input: | OS-EXT-STS:vm_state                  | active                   
+# output: active
+# must grab conn.match.group(1) with this regex
+VM_STATE= "(?<=host)\s*\|\s(\w+)"
+
