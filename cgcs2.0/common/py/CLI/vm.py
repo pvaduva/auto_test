@@ -8,6 +8,7 @@ import sys
 import re
 import time
 import random
+import string
 
 # class is in non-standard location so refine python search path
 sys.path.append(os.path.expanduser('~/wassp-repos/testcases/cgcs/cgcs2.0/common/py'))
@@ -201,3 +202,81 @@ def exec_vm_migrate(conn, vm_id, migration_type="cold", option=None):
 
     return True
 
+
+def get_vm_mgmt_ips(conn):
+    """ This function returns the management IPs for all VMs on the system.
+        We make the assumption that the management IPs start with "192"
+        Inputs:
+        conn - ID of pexpect session
+        Outputs:
+        vm_mgmtiplist - list of all VM management IPs
+    """
+
+    vm_list = nova.get_novavms(conn, "id")
+    all_public_mgmt_iplist = []
+    for item in vm_list:
+        public_mgmt_iplist = []
+        vm_ip = nova.get_novashowvalue(conn, item, "mgmt-net network")
+        vm_ip_list = string.split(vm_ip, ", ")
+        for ip in vm_ip_list:
+            if ip.startswith("192"):
+                public_mgmt_iplist.append(ip)
+        logging.info("VM %s has the following public mgmt network IPs: %s" % (item, public_mgmt_iplist))
+        all_public_mgmt_iplist = all_public_mgmt_iplist + public_mgmt_iplist
+
+    return all_public_mgmt_iplist
+
+def ping_vms_from_natbox(conn, ping_duration=None):
+    """ This function pings all VM management IPs.
+        Inputs:
+        * conn - Id of pexpect session
+        * ping_time - integer value for how long you want to ping the VMs (seconds)
+        Outputs:
+        * True or False - True if the test failed, or False if it didn't 
+    """
+  
+    testFailed_flag = False
+
+    # get the management ips
+    all_public_mgmt_iplist = get_vm_mgmt_ips(conn) 
+
+    # if ping_duration was not provided, default to 10 seconds
+    if not ping_duration:
+        ping_duration= 10
+
+    logging.info("Ping VMs from the NAT box")
+    connNAT = Session(timeout=TIMEOUT)
+    connNAT.connect(hostname=NAT_HOSTNAME, username=NAT_USERNAME, password=NAT_PASSWORD)
+    connNAT.setecho(ECHO)
+
+    # Construct monitor script command
+    addresses = ",".join(all_public_mgmt_iplist)
+    tools_path = "cd /home/cgcs/tools"
+    monitor_cmd = "python monitor.py --addresses %s" % addresses
+    cmd = tools_path + " && " + monitor_cmd
+
+    connNAT.sendline(cmd)
+
+    total_ips = str(len(all_public_mgmt_iplist))
+    # We are looking for the (X/X) field in the monitor script to see if it's done
+    # Once it's done, wait and then quit.  We wait to give the ping time to 
+    # run for a bit
+    extract = "\(" + total_ips + "\/" + total_ips + "\).*"
+    resp = connNAT.expect([extract, pexpect.TIMEOUT])
+    if resp == 0:
+        time.sleep(ping_duration)
+        connNAT.sendline("q\n")
+        connNAT.sendline("exit\n")
+    monitor_output = connNAT.before + connNAT.after
+
+    # VM can be reachable, not reachable, or reachable with packet loss
+    extract_pos = "%s is reachable"
+    extract_neg1 = "is not reachable"
+    extract_neg2 = "is reachable (missing.*)"
+    for ip in all_public_mgmt_iplist:
+        match1 = re.findall(extract_neg1, monitor_output)
+        match2 = re.findall(extract_neg2, monitor_output)
+        if match1 or match2:
+            testFailed_flag = True
+
+    return testFailed_flag
