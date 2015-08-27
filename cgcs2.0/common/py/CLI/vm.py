@@ -9,6 +9,7 @@ import re
 import time
 import random
 import string
+import copy
 
 # class is in non-standard location so refine python search path
 sys.path.append(os.path.expanduser('~/wassp-repos/testcases/cgcs/cgcs2.0/common/py'))
@@ -227,12 +228,12 @@ def get_vm_mgmt_ips(conn):
     return all_public_mgmt_iplist
 
 def ping_vms_from_natbox(conn, ping_duration=None):
-    """ This function pings all VM management IPs.
+    """ This function pings all VM management IPs from the NAT box
         Inputs:
         * conn - Id of pexpect session
         * ping_time - integer value for how long you want to ping the VMs (seconds)
         Outputs:
-        * True or False - True if the test failed, or False if it didn't 
+        * testFailed_flag - True if the test failed, or False if it didn't 
     """
   
     testFailed_flag = False
@@ -244,7 +245,7 @@ def ping_vms_from_natbox(conn, ping_duration=None):
     if not ping_duration:
         ping_duration= 10
 
-    logging.info("Ping VMs from the NAT box")
+    logging.info("Establishing connection to NAT box")
     connNAT = Session(timeout=TIMEOUT)
     connNAT.connect(hostname=NAT_HOSTNAME, username=NAT_USERNAME, password=NAT_PASSWORD)
     connNAT.setecho(ECHO)
@@ -280,3 +281,89 @@ def ping_vms_from_natbox(conn, ping_duration=None):
             testFailed_flag = True
 
     return testFailed_flag
+
+def ping_between_vms(conn, no_packets=10):
+    """ This function pings all VM management IPs from a VM.  It will ssh to the NAT box, and
+        then ssh to each VM, ping all management IPs and then exit the VM.
+        Inputs:
+        * conn - Id of pexpect session
+        * no_packets (integer) - number of ping packets for each VM 
+        Outputs:
+        * testFailed_flag - True if the test failed, False if the test passed 
+    """
+
+    # Authentication sequences to try 
+    vm_auth = {"root": "root", "ubuntu": "ubuntu"}
+ 
+    testFailed_flag = False
+
+    # Get the management ips
+    all_public_mgmt_iplist = get_vm_mgmt_ips(conn) 
+
+    logging.info("Establishing connection to NAT box")
+    connNAT = Session(timeout=TIMEOUT)
+    connNAT.connect(hostname=NAT_HOSTNAME, username=NAT_USERNAME, password=NAT_PASSWORD)
+    connNAT.setecho(ECHO)
+
+    for ip in all_public_mgmt_iplist:
+        # Revise the ping list so we don't bother ping our own IP
+        revised_ping_list = copy.deepcopy(all_public_mgmt_iplist)
+        revised_ping_list.remove(ip) 
+        loginfailures = 0
+        for item in vm_auth:
+            logging.info("Trying to ssh into %s with %s credentials" % (ip, item))
+            ssh_opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+            cmd = "ssh %s %s@%s" % (ssh_opts, item, ip)
+            connNAT.sendline(cmd)
+            resp = connNAT.expect(["assword:", pexpect.TIMEOUT])
+            if resp == 0:
+                connNAT.sendline(vm_auth[item])
+                # Might need to revisit how PROMPT is detected
+                resp = connNAT.expect(["~#", PROMPT, pexpect.TIMEOUT])
+                if resp == 0 or resp == 1:
+		    # Increase the timeout while we're pinging (assume each
+		    # ping is 1 sec) and add some buffer
+                    connNAT.timeout = no_packets + 5
+                    for vm_ip in revised_ping_list: 
+                        cmd = "ping -c%s %s" % (str(no_packets), vm_ip)
+                        connNAT.sendline(cmd)
+                        resp = connNAT.expect(["([\d]{1,3})\% packet loss", pexpect.TIMEOUT])
+                        if resp == 0:
+                            #print("Conn.match.group: %s" % connNAT.match.group())
+                            #print("Conn.match.group1: %s" % connNAT.match.group(1))
+                            percent_pktloss = connNAT.match.group(1)
+                            if int(percent_pktloss) == 100:
+                                logging.error("100% packet loss observed when pinging IP %s" % vm_ip)
+                                testFailed_flag = True 
+                            elif int(percent_pktloss) > 0:
+				logging.warning("%d\% packet loss observed when pinging IP %s" % (percent_pktloss, vm_ip))
+                            else:
+                                logging.info("No packet loss observed when ping IP %s" % (vm_ip))
+                        else:
+                            logging.warning("Command %s timed out" % cmd)
+                        connNAT.tiemout = TIMEOUT
+                        connNAT.prompt()
+                    # Restore timeout to original values
+                    connNAT.timeout = TIMEOUT
+                    # Test writing to VM filesystem    
+                    connNAT.sendline("touch writingtovmfilesystem.txt\n")
+                    # FIXME: Confirm that the file exists
+                    connNAT.sendline("exit\n") 
+                    break
+                else:
+                    # send Ctrl-C and then try the other username/password
+                    logging.warning("Command %s timed out" % cmd) 
+                    connNAT.sendline('\003') 
+                    loginfailures = loginfailures + 1 
+            else:
+                logging.warning("Command %s timed out" % cmd)
+        # If we tried all the login options and failed, the test has failed.
+        if loginfailures == len(vm_auth):
+            logging.error("System was not able to ssh to VM with IP %s" % ip)
+            testFailed_flag = True
+
+    # Logout when we're done with the NAT box
+    connNAT.logout()  
+
+    return testFailed_flag
+

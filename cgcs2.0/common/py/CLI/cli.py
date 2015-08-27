@@ -59,18 +59,16 @@ class Session(pxssh.pxssh):
             self.PROMPT = PROMPT
             self.force_password = True
             self.login(hostname, username, password, auto_prompt_reset=False, quiet=False)
-            #self.login(hostname, username, password, terminal_type='xterm', auto_prompt_reset=False, quiet=False)
             logging.info(self.before)
             logfile_out = open(LOGFILE, 'w+')
             self.logfile_read = sys.stdout 
 
         except pxssh.ExceptionPxssh as err:
-            logging.error("pxssh failed on login")
-            logging.error(err)
+            logging.error("pxssh failed on login due to %s" % err)
+            self.close()
 
         except pexpect.EOF as err:
-            logging.error("pxssh failed on login")
-            logging.error(err)
+            logging.error("pxssh failed on login due to %s" % err)
             self.close()
 
 if __name__ == "__main__":
