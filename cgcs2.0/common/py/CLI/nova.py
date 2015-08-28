@@ -170,3 +170,53 @@ def exec_novaresizeorrevert(conn, vm_id, nova_option=None):
 
     return resp
 
+def get_novahypervisors(conn):
+    """ This returns a list of hypervisors on the system.  This will be computes on a 
+        regular system, or controllers on a small footprint.
+        Inputs:
+        * conn - ID of pexpect session
+        Outputs:
+        * hypervisor_list - consisting of hostnames, e.g. compute-0, compute-1, etc.
+    """
+
+    hypervisor_list = []
+
+    cmd = "nova hypervisor-list"
+    conn.sendline(cmd)
+    resp = 0
+    while resp < 1:
+        resp = conn.expect([HOSTNAME_MATCH, PROMPT, ERROR, pexpect.TIMEOUT])
+        if resp == 0:
+            hypervisor_list.append(conn.match.group())
+        elif resp == 2:
+            logging.error("Command %s returned an error %s" % (cmd, conn.match.group()))
+        elif resp == 3:
+            logging.warning("Command %s timed out" % (cmd))
+    
+    return hypervisor_list
+
+def get_hypervisorservers(conn, hostname):
+    """ This returns a list of servers on a particular host by the VM ID.
+        Inputs:
+        * conn - ID of pexpect session
+        * hostname - e.g. compute-0, compute-1, controller-0
+        Outputs:
+        * hypervisorserver_list - consisting of VM IDs on that hypervisor
+    """
+
+    hypervisorserver_list = []
+
+    cmd = "nova hypervisor-servers %s" % hostname
+    conn.sendline(cmd)
+    resp = 0
+    while resp < 1:
+        resp = conn.expect([ID, PROMPT, ERROR, pexpect.TIMEOUT])
+        if resp == 0:
+            hypervisorserver_list.append(conn.match.group())
+        elif resp == 2:
+            logging.error("Command %s returned an error %s" % (cmd, conn.match.group()))
+        elif resp == 3:
+            logging.warning("Command %s timed out" % (cmd))
+    
+    return hypervisorserver_list
+

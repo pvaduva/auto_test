@@ -44,7 +44,6 @@ def get_hostpersonality(conn, hostname):
 
     return host_type
 
-
 def get_hosts(conn):
     """ This function checks the system for controllers, computes and storage nodes.
         Input:
@@ -72,23 +71,114 @@ def get_hosts(conn):
     conn.prompt()
     logging.info("Hostnames in the system: %s" % hostname_list)
 
-    # For each hostname grab its personality from system host-show
     for host in hostname_list:
-        cmd = "system host-show %s" % host
-        conn.sendline(cmd)
-        resp = conn.expect([CONT_PERSONALITY, COMP_PERSONALITY, STOR_PERSONALITY,
-                            pexpect.TIMEOUT])
-        if resp == 0:
+        value = get_hostshowvalue(conn, host,field="personality")
+        if value.startswith("controller"):
             cont_hostname_list.append(host)
-        elif resp == 1:
+        elif value.startswith("compute"):
             comp_hostname_list.append(host)
-        elif resp == 2:
+        elif value.startswith("storage"):
             stor_hostname_list.append(host)
-        conn.prompt()
 
     logging.info("Controllers in system: %s" % cont_hostname_list)
     logging.info("Computes in system: %s" % comp_hostname_list)
     logging.info("Storage nodes in system: %s" % stor_hostname_list)
 
     return hostname_list, cont_hostname_list, comp_hostname_list, stor_hostname_list
+
+def get_hostshowvalue(conn, hostname, field="availability"):
+    """ This returns a value from the host show table, e.g. host or state
+        Inputs:
+        * conn - ID of pexpect session
+        * hostname - name of host, e.g. controller-0 
+        * field is the type of data to return from the host show table, e.g. administrative, availability 
+          note1: this field needs to match with a field in the actual host show table
+          note2: this has not been tested with all field types
+          note3: if field is not provided, we assume you want the availability 
+        Outputs:
+        * hostname - hostname of machine hosting VM, e.g. compute-0, controller-1, etc. or
+        * resp - non-zero value if we didn't match
+    """
+
+    # Pull the value field associated with the corresponding property field
+    # Note, only tested with the "host" field so far
+    extract = "(?<=%s)\s*\|\s(.*?)\s*\|\r\n" % field
+
+    cmd = "system host-show %s" % hostname 
+
+    conn.prompt()
+    conn.sendline(cmd)
+
+    resp = conn.expect([extract, ERROR, PROMPT, pexpect.TIMEOUT])
+    if resp == 0:
+        value = conn.match.group(1)
+        conn.prompt()
+        logging.info("%s has %s field equal to %s" % (hostname, field, value))
+        return value
+    elif resp == 1:
+        logging.warning("Could not determine value of field %s associated with %s" % (field, hostname))
+        return resp
+    elif resp == 3:
+        logging.warning("Command %s timed out." % cmd)
+        return resp
+
+def lock_host(conn, hostname=None):
+    """ This function locks a specific host.
+        Input:
+        * conn - ID of pexpect
+        Output:
+        * True if the host could be locked, False if the lock failed
+    """
+
+    cmd = "system host-lock %s" %  hostname
+    conn.sendline(cmd)
+    resp = conn.expect([PROMPT, ERROR, pexpect.TIMEOUT, "(Avoiding.*)"])
+    if resp == 1 or resp == 3:
+        logging.error("Unable to lock %s due to %s" % (hostname, conn.match.group()))
+        return False
+    elif resp == 2:
+        logging.warning("Command %s timed out" % cmd)
+        return False
+
+    return True   
+
+def unlock_host(conn, hostname=None):
+    """ This function unlocks a specific host.
+        Input:
+        * conn - ID of pexpect
+        Output:
+        * True if the host could be unlocked, False if the unlock failed
+    """
+
+    cmd = "system host-unlock %s" %  hostname
+    conn.sendline(cmd)
+    resp = conn.expect([PROMPT, ERROR, pexpect.TIMEOUT, "(Avoiding.*)"])
+    if resp == 1 or resp == 3:
+        logging.error("Unable to lock %s due to %s" % (hostname, conn.match.group()))
+        return False
+    elif resp == 2:
+        logging.warning("Command %s timed out" % cmd)
+        return False
+
+    return True   
+
+def check_smallfootprint(conn):
+    """ This function checks to see if the system is configured for small footprint.
+        Inputs:
+        * conn - ID of pexpect session
+        Output:
+        * True if we are small footprint enabled or False if we are not
+    """
+
+    # Determine the hosts in the lab
+    hostname_list, cont_hostname_list, comp_hostname_list, stor_hostname_list = get_hosts(conn)
+
+    # Take one of the controllers, and check for the subfunctions field
+    # Subfunctions is only displayed on small footprint nodes not regular systems
+    result = get_hostshowvalue(conn, cont_hostname_list[0], "subfunctions")    
+    if type(result) is str:
+        if result == "controller, compute":
+            return True
+    else:
+        return False 
 

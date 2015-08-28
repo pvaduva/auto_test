@@ -54,11 +54,13 @@ def exec_launchvmscript(conn, tenant_name, vm_type, num_vms):
         if vm_name not in vm_list:
             cmd = "~/instances_group0/./launch_%s.sh" % vm_name
             conn.sendline(cmd)
-            resp = conn.expect(["Finished", ERROR, pexpect.TIMEOUT])
+            resp = conn.expect(["Finished", ERROR, pexpect.TIMEOUT, "No such file"])
             if resp == 1:
                 logging.error("Encountered an error on command %s: %s" % (cmd, conn.match.group()))
             elif resp == 2:
                 logging.error("Command %s timed out" % cmd)
+            elif resp == 3:
+                logging.warning("Launch script %s not found" % vm_name)
             conn.prompt()
         else:
             logging.warning("VM %s will not be launched since it is already present on the system" % vm_name)
