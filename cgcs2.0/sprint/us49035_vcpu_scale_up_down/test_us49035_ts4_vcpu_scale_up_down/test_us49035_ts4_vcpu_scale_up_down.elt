@@ -19,7 +19,7 @@
 US49035- VM Scale Up/Down Script
 
 Script can also be used as a scaling test:
-        ./ HOST_IP=t_us49035_ts1_vcpu_scale_up_down.elt env.NODE.target.default.targetIP
+	./test_us49035_ts1_vcpu_scale_up_down.elt  HOST_IP=env.NODE.target.default.targetIP (Active controller IP addr)
 Assumptions:
         Lab is setup with lab_setup.sh with Tenants
         heat template available in the switch
@@ -32,7 +32,7 @@ Assumptions:
 *EXP_INFO
 
 # Variables defined to be used as contants
-$HOST_IP=128.224.150.199
+$HOST_IP=128.224.151.244
 $HOST_USER=wrsroot
 $PASS=li69nux
 $NAT_IP=128.224.150.11
@@ -49,13 +49,13 @@ $lab_setup=yes
 >date +%F_%T
 +$DATE=\n(2.+)
 
-@2
+@25
 
 ; === connecting to controller
 
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:|Last login:
+<ssword:
 >>$PASS
 >export TMOUT=0
 
@@ -130,11 +130,11 @@ $flavor2=vcpu5-$flavor2_min_cpu
 
 
 #Create flavor1
->nova flavor-create --dedicated-cpus True $flavor1 5f0d748b-1c8b-4a70-1985-4d57e25ac137 512 0 $flavor1_max_cpu
+>nova flavor-create $flavor1 5f0d748b-1c8b-4a70-1985-4d57e25ac137 512 0 $flavor1_max_cpu
 >echo $?
 <\n0
 #Create flavor2
->nova flavor-create --dedicated-cpus True $flavor2 db9b37f5-cba5-1985-a264-a6c1375a4ff7 512 0 $flavor2_max_cpu
+>nova flavor-create $flavor2 db9b37f5-cba5-1985-a264-a6c1375a4ff7 512 0 $flavor2_max_cpu
 >echo $?
 <\n0
 ; === flavor created
@@ -143,12 +143,12 @@ $flavor2=vcpu5-$flavor2_min_cpu
 
 #Set min vcpu value
 ; === set minimum value for the cpu created
->nova flavor-key $flavor1 set hw:wrs:min_vcpus=$flavor1_min_cpu 
+>nova flavor-key $flavor1 set hw:wrs:min_vcpus=$flavor1_min_cpu hw:cpu_policy=dedicated
 >nova flavor-list --extra-specs | grep $flavor1
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor1 is $result
 
->nova flavor-key $flavor2 set hw:wrs:min_vcpus=$flavor2_min_cpu
+>nova flavor-key $flavor2 set hw:wrs:min_vcpus=$flavor2_min_cpu hw:cpu_policy=dedicated
 >nova flavor-list --extra-specs | grep $flavor2
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor2 is $result
@@ -213,9 +213,9 @@ $MAX=10
 # Do scale up/down afer manual migration - lock compute
 ; Create STACK1 for manual migration
 
->heat stack-create -f VMAutoScaling.yaml -P TenantUserId=$tenant_user_id -P PrivateNetName=tenant1-mgmt-net -P InstanceName=guest1 -P FlavorName=$flavor1 -P ImageName=cgcs-guest -P CustomMeterName=vote -P KeyName=keypair-tenant1 STACK1
+>heat stack-create -f VMAutoScaling.yaml -P NETWORK=tenant1-mgmt-net -P VM_NAME=guest1 -P FLAVOR=vcpu4-1 -P IMAGE=cgcs-guest -P METER_NAME=vote -P KEYPAIR=keypair-tenant1 STACK1
 ; === wait and check if heat stack1 create_complete
-!sleep 45
+!sleep 55
 >heat stack-show STACK1
 <stack_status
 -<CREATE_FAILED
@@ -236,7 +236,7 @@ $prev_vm1_compute=$vm1_compute
 ; === become admin to lock compute
 >source /etc/nova/openrc
 
-; === lock compute and check for migration 
+; === lock compute and check for evacuation 
 >system host-lock $vm1_compute --force
 >system host-list
 
@@ -259,17 +259,11 @@ $compute_state=none
 +$vm1_compute=(compute-\d)
 ?if $prev_vm1_compute==$compute_state? ;red === $vm1 did not migrate correctly after compute lock
 
-################## Scale up/down via heat #######################
-; === get ID of each instance
->nova list
->nova list | grep $vm$i
-+$resource_id_vm$i=([0-9a-f-]{32,36})\s* \|\s+$vm$i
+################### Scale up/down via heat #######################
 
-
-#Scale down guest1 via heat
 $value=2
->ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"display_name":"$vm1"}'
->ceilometer resource-show -r $resource_id_vm1
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.display_name":"$vm1"}'
+>ceilometer resource-show $resource_id_vm1
 !sleep 30
 >ceilometer alarm-list
 <STACK1.*Low.*|
@@ -280,24 +274,24 @@ $value=2
 $i=0
 $max=20 
 >nova show $vm1
-<$vm1
+<wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
 [ $cur_cpu != $min_cpu
 	   >nova show $vm1
-           <$vm1
+           <wrs-res:vcpus
            +$cur_cpu=\d+,\s*(\d+),\s*\d+
            !sleep 30
 	   ; === auto scaling down
            +$i
-           ?if $cur_cpu == $min_cpu? %BREAK_REACHED_MIN_CPU20
+           ?if $cur_cpu == $min_cpu? %BREAK_REACHED_MIN_CPU5
 ]
-%BREAK_REACHED_MIN_CPU20
+%BREAK_REACHED_MIN_CPU5
 
 ; === check if $vm1 current cpu value reached minimum cpu value:$min_cpu
 >nova show $vm1
-<(min/cur/max)
+<wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -308,8 +302,8 @@ $max=20
 
 #scale up guest1 via heat 
 $value=90
->ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"display_name":"$vm1"}'
->ceilometer resource-show -r $resource_id_vm1
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.display_name":"$vm1"}'
+>ceilometer resource-show $resource_id_vm1
 !sleep 30
 >ceilometer alarm-list
 <STACK1.*High.*|
@@ -318,24 +312,24 @@ $value=90
 $i=0
 $max=10 
 >nova show $vm1
-<$vm1
+<wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
 [ $cur_cpu != $max_cpu
 	   >nova show $vm1
-           <$vm1
+           <wrs-res:vcpus
            +$cur_cpu=\d+,\s*(\d+),\s*\d+
            !sleep 30
 	   ; === auto scaling up
            +$i
-           ?if $cur_cpu == $max_cpu? %BREAK_REACHED_MAX_CPU20
+           ?if $cur_cpu == $max_cpu? %BREAK_REACHED_MAX_CPU5
 ]
-%BREAK_REACHED_MAX_CPU20
+%BREAK_REACHED_MAX_CPU5
 
 ; === check if $vm1 current cpu value reached maximum cpu value:$max_cpu
 >nova show $vm1
-<(min/cur/max)
+<wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -343,12 +337,13 @@ $max=10
 ?if $cur_cpu!=$max_cpu? [
         ;red === $vm1 cpu value did not reached maximum value $max_cpu
 ]
-#complete guest1 scale up/down via heat
+
+##########complete guest1 scale up/down via heat
 
 ; === become admin to lock compute
 >source /etc/nova/openrc
 
-; === lock compute and check for migration 
+; === lock compute and check for evacuation 
 >system host-unlock $prev_vm1_compute 
 >system host-list
 <$prev_vm1_compute

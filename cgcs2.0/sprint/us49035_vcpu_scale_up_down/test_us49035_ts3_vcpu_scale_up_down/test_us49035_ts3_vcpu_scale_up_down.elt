@@ -19,7 +19,7 @@
 US49035- VM Scale Up/Down Script
 
 Script can also be used as a scaling test:
-        ./ HOST_IP=t_us49035_ts1_vcpu_scale_up_down.elt env.NODE.target.default.targetIP
+	./test_us49035_ts1_vcpu_scale_up_down.elt  HOST_IP=env.NODE.target.default.targetIP (Active controller IP addr)
 Assumptions:
         Lab is setup with lab_setup.sh with Tenants
         heat template available in the switch
@@ -31,7 +31,7 @@ Assumptions:
 *EXP_INFO
 
 # Variables defined to be used as contants
-$HOST_IP=128.224.150.199
+$HOST_IP=128.224.151.192
 $HOST_USER=wrsroot
 $PASS=li69nux
 $NAT_IP=128.224.150.11
@@ -54,7 +54,7 @@ $lab_setup=yes
 
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:|Last login:
+<ssword:
 >>$PASS
 >export TMOUT=0
 
@@ -129,11 +129,11 @@ $flavor2=vcpu5-$flavor2_min_cpu
 
 
 #Create flavor1
->nova flavor-create --dedicated-cpus True $flavor1 5f0d748b-1c8b-4a70-1985-4d57e25ac137 512 0 $flavor1_max_cpu
+>nova flavor-create $flavor1 5f0d748b-1c8b-4a70-1985-4d57e25ac137 512 0 $flavor1_max_cpu
 >echo $?
 <\n0
 #Create flavor2
->nova flavor-create --dedicated-cpus True $flavor2 db9b37f5-cba5-1985-a264-a6c1375a4ff7 512 0 $flavor2_max_cpu
+>nova flavor-create $flavor2 db9b37f5-cba5-1985-a264-a6c1375a4ff7 512 0 $flavor2_max_cpu
 >echo $?
 <\n0
 ; === flavor created
@@ -142,12 +142,12 @@ $flavor2=vcpu5-$flavor2_min_cpu
 
 #Set min vcpu value
 ; === set minimum value for the cpu created
->nova flavor-key $flavor1 set hw:wrs:min_vcpus=$flavor1_min_cpu processor:node=0
+>nova flavor-key $flavor1 set hw:wrs:min_vcpus=$flavor1_min_cpu processor:node=0 hw:cpu_policy=dedicated
 >nova flavor-list --extra-specs | grep $flavor1
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor1 is $result
 
->nova flavor-key $flavor2 set hw:wrs:min_vcpus=$flavor2_min_cpu
+>nova flavor-key $flavor2 set hw:wrs:min_vcpus=$flavor2_min_cpu hw:cpu_policy=dedicated
 >nova flavor-list --extra-specs | grep $flavor2
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor2 is $result
@@ -184,7 +184,7 @@ $quota_volumes=30
 
 # CGTS-804 - Validate that if the guest image is not valid in glance then the Heat Stack will not instantiate
 ; === CGTS-804 - Validate that if the guest image is not valid in glance then the Heat Stack will not instantiate
->heat stack-create -f VMAutoScaling.yaml -P TenantUserId=$tenant_user_id -P PrivateNetName=tenant1-mgmt-net -P InstanceName=invalid-guest -P FlavorName=$flavor1 -P ImageName=non-cgcs-guest -P CustomMeterName=vote -P KeyName=keypair-tenant1 INVALIDSTACK
+>heat stack-create -f VMAutoScaling.yaml -P NETWORK=tenant1-mgmt-net -P VM_NAME=invalid-guest -P FLAVOR=$flavor1 -P IMAGE=non-cgcs-guest -P METER_NAME=vote -P KEYPAIR=keypair-tenant1 INVALIDSTACK
 <ERROR
 >echo $?
 <1
@@ -210,7 +210,6 @@ $quota_volumes=30
 +$cgcs_guest_id=([0-9a-z-]{32,40})\s+\|\s+cgcs-guest
 
 ; === create heat stack from cinder volume
-#>heat stack-create -f BootFromCinder.yaml -P INTERNAL_NET_ID=tenant1-net1 -P PRIVATE_NET_ID=tenant1-mgmt-net -P FLAVOR_NAME=$flavor1 -P GLANCE_IMAGE_ID=cgcs-guest -P KEY_NAME=keypair-tenant1 CINDERSTACK
 >heat stack-create -f BootFromCinder.yaml -P INTERNAL_NET_ID=$tenant1_net0_id -P PRIVATE_NET_ID=$tenant1_mgmt_net_id -P FLAVOR_NAME=$flavor2 -P GLANCE_IMAGE_ID=$cgcs_guest_id -P KEY_NAME=keypair-tenant1 CINDERSTACK
 
 ; === check if CINDERSTACK create complete
@@ -244,7 +243,7 @@ $actual_cur_cpu=$cur_cpu
 
 ; === check if VM-from-cinder-volume current cpu value reached minimum cpu value:$min_cpu
 >nova show VM-from-cinder-volume
-<(min/cur/max)
+<wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -284,7 +283,7 @@ $actual_cur_cpu=$cur_cpu
 
 ; === check if VM-from-cinder-volume current cpu value reached max cpu value:$max_cpu
 >nova show VM-from-cinder-volume
-<(min/cur/max)
+<wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -322,10 +321,10 @@ $actual_cur_cpu=$cur_cpu
 >system host-swact $act_controller
 >
 @30
->ping -c 30 -W 30 $float_ip
-<icmp_req=\d+ ttl=64
+>ping -c 40 -W 0 $float_ip
+<icmp_(r|s)eq=\d+ ttl=64
 <Destination Host Unreachable
-<icmp_req=\d+ ttl=64
+<icmp_(r|s)eq=\d+ ttl=64
 >>^C
 >
 @5
@@ -364,7 +363,7 @@ $actual_cur_cpu=$cur_cpu
 
 ; === check if VM-from-cinder-volume current cpu value reached minimum cpu value:$min_cpu
 >nova show VM-from-cinder-volume
-<(min/cur/max)
+<wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -404,7 +403,7 @@ $actual_cur_cpu=$cur_cpu
 
 ; === check if VM-from-cinder-volume current cpu value reached max cpu value:$max_cpu
 >nova show VM-from-cinder-volume
-<(min/cur/max)
+<wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -449,10 +448,10 @@ $actual_cur_cpu=$cur_cpu
 >system host-swact $act_controller
 >
 @30
->ping -c 30 -W 30 $float_ip
-<icmp_req=\d+ ttl=64
+>ping -c 40 -W 40 $float_ip
+<icmp_(r|s)eq=\d+ ttl=64
 <Destination Host Unreachable
-<icmp_req=\d+ ttl=64
+<icmp_(r|s)eq=\d+ ttl=64
 >>^C
 >
 @5
@@ -471,7 +470,6 @@ $actual_cur_cpu=$cur_cpu
 ; === become admin to clean up
 >source /etc/nova/openrc
 ;cleanup all setup created for this testcase
-; === delete the stack created
 
 ; === delete the flavor created 
 >nova flavor-list
