@@ -6,7 +6,11 @@ controller personality, checking if we have storage nodes, etc.
 
 """
 
-from restapi import *
+from restapi import RestAPI 
+from constants import *
+import sys
+import logging
+import pprint
 
 class RestUtil(RestAPI):
     def __init__(self, ip=IP):
@@ -76,10 +80,10 @@ class RestUtil(RestAPI):
         return 1 
 
     def get_host_state(self):
-        """ This method returns a list of dicts showing the administrative, operational
-            and availability state of each host. 
+        """ This method returns a list of dicts showing the administrative, operational,
+            availability state and task of each host. 
 
-            [{u"controller-0": [u"unlocked", u"enabled", u"available"]}, ... 
+            [{u"controller-0": [u"unlocked", u"disabled", u"offline", u"Booting"]}, ... 
             ] 
 
             This is the equivalent of doing a system host-list.
@@ -101,6 +105,7 @@ class RestUtil(RestAPI):
                 hostattr_list.append(item[u"administrative"])
                 hostattr_list.append(item[u"operational"])
                 hostattr_list.append(item[u"availability"])
+                hostattr_list.append(item[u"task"])
                 host_dict[hostname] = hostattr_list 
                   
                 hoststate_list.append(host_dict)
@@ -126,9 +131,9 @@ class RestUtil(RestAPI):
                     
         # If we get here, all nodes are in the correct state 
         if flag == True:
-            logging.info("TEST PASSED: All hosts are in desired state")
+            logging.info("All hosts are in desired state")
         else:
-            logging.error("TEST FAILED: Not all hosts are in desired state")
+            logging.error("Not all hosts are in desired state")
 
         return flag 
 
@@ -144,10 +149,10 @@ class RestUtil(RestAPI):
         for item in hostavailability_list:
             for hostname in item:
                 if item[hostname] != u"available":
-                    logging.error("TEST FAILED: Not all hosts are available.")
+                    logging.error("Not all hosts are available.")
                     return False
                 else:
-                    logging.info("TEST PASSED: All hosts are available.")
+                    logging.info("All hosts are available.")
                     return True 
 
     def get_nova_services(self):
@@ -167,19 +172,6 @@ class RestUtil(RestAPI):
         pprint.pprint(data[u"services"])
 
         return data[u"services"]
-
-    def check_nova_services_state(self):
-        """ This method checks the state of nova services to ensure they are correct.
-            We are expecting that all services are enabled and up, except those
-            belong to the inactive controller.  An exception to this rule is when
-            we have a small footprint system.  In which case, the nova-compute service
-            will be up on both active and inactive controllers.
-        """
-
-        logging.info("Check that the nova services are in the correct state.") 
-        inactive_controller = RestUtil.get_inactive_controller(self) 
-
-        return
 
     def check_smallfootprint(self):
         """ Return True if the system we are testing is configured for small
@@ -213,10 +205,29 @@ class RestUtil(RestAPI):
         for d, l in data.items():
             for item in l:
                 if item[u"personality"] == u"storage":
+                    logging.info("System does have storage nodes")
                     return True
 
         logging.info("System does not have storage nodes")
         return False
+
+    def check_all_hosts_available(self):
+        """ This method checks that all hosts are available.
+        """
+
+        logging.info("Check that all hosts are available")
+
+        hostavailability_list = RestUtil.get_host_availability_state(self)
+
+        # Check that all hosts are available
+        for item in hostavailability_list:
+            for hostname in item:
+                if item[hostname] != u"available":
+                    logging.error("Not all hosts are available.")
+                    return False
+                else:
+                    logging.info("All hosts are available.")
+                    return True 
 
     def disable_services(self, hostname):
         """ This disables all services associated with a particular host.  Not sure
@@ -248,18 +259,10 @@ class RestUtil(RestAPI):
 
         data = RestUtil.get_nova_services(self) 
                 
-    def unlock_host(self, hostname):
-        """ This performs a host unlock of a controller, compute or storage node.  This is
-            equivalent of a system host-unlock <node>.
-
-            Returns True if unlock was successful.  Returns False if the node could not be
-            unlocked.
-        """
-
     def host_action(self, hostname, action):
         """ This performs an arbitrary action on a controller, compute or storage node. 
             It supports: unlock, lock, swact, apply-profile, reboot, reset, power-on,
-            power-off and reinstall.
+            power-off and reinstall.  This is based on the restapi sysinv wadl doc.
 
             Arguments: 
                * hostname, e.g. controller-1
@@ -267,12 +270,28 @@ class RestUtil(RestAPI):
 
             Note, if you attempt to lock a node that is already locked, TiS will return a
             400 Bad Request error.  It is best to check the state of the system before
-            initiating operations.
+            initiating operations.  Same goes for other operations like unlock.
 
-            Returns True if unlock was successful.  Returns False if the node could not be
-            unlocked.  To be done.
+            Commands tested:
+                * unlock - works but we get a 504 gateway error anyways
+                * lock - works 
+                * swact - works
+                * reboot - works
+
+            Possible controller commands on unlocked host:
+                * lock, (force lock), swact
+
+            Possible controller commands on locked host:
+                * unlock, reboot, reinstall, (delete)
+
+            Possible compute commands on unlocked host:
+                * lock, (force lock)
+
+            Possible compute commands on locked host:
+                * unlock, power-on, power-off, reboot, reset, reinstall, delete 
         """
-  
+
+        uuid = ""  
         actions_list = [u"unlock", u"lock", u"swact", u"apply-profile", u"reboot", 
                         u"reset", u"power-on", u"power-off", u"reinstall"]
 
@@ -281,7 +300,7 @@ class RestUtil(RestAPI):
             logging.error("ERROR: You've requested an invalid action.")
             logging.info("Valid actions are: %s" % actions_list)
             return 1
- 
+
         # Action is valid so construct payload for patch request command
         payload = [{"path":"/action", "value": action, "op":"replace"}]
 
@@ -301,8 +320,10 @@ class RestUtil(RestAPI):
             return 1
 
         # Perform the patch request
+        logging.info("Performing host action %s on %s" % (action, hostname))
         field = "ihosts/" + uuid
-        x.patch_request(port=SYSINV_PORT, version=SYSINV_VERSION, field=field, payload=payload)
+        retval = x.patch_request(port=SYSINV_PORT, version=SYSINV_VERSION, field=field, payload=payload)
+        print(retval)
 
         RestUtil.get_host_state(self)        
 
@@ -318,13 +339,11 @@ if __name__ == "__main__":
     #x = RestUtil(ip="128.224.150.141")
     print(x)
 
-    #active_controller = RestUtil.get_active_controller(x)
-    #inactive_controller = RestUtil.get_inactive_controller(x)
+    active_controller = RestUtil.get_active_controller(x)
+    inactive_controller = RestUtil.get_inactive_controller(x)
     #nodesunlocked_status = RestUtil.check_all_hosts_unlocked_enabled_available(x)
-    #smallfootprint_status = RestUtil.check_smallfootprint(x)
-    #storage_status = RestUtil.check_storagenodes(x)
-    #RestUtil.get_nova_services(x)
-    #RestUtil.disable_services(x, u"compute-1")
+    smallfootprint_status = RestUtil.check_smallfootprint(x)
+    storage_status = RestUtil.check_storagenodes(x)
     RestUtil.host_action(x, u"compute-1", u"unlock")
 
 

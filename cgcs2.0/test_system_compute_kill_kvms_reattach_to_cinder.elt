@@ -1,0 +1,166 @@
+#!/usr/bin/env expect-lite
+
+# How to use this expect-lite file, Lines that begin with:
+#	'>' send to remote host, implies "wait for prompt"
+#	'<' _MUST_ be received from the remote host, or this config script will fail
+#	# are comment lines, and have no effect
+#	; are printable (in stdout) comments, and have no other effect
+#	@ change the expect timeout value
+#	! Embedded Expect commands
+# For more info see: expect-lite.html
+;;;
+#
+#	TC714	kill VM and restart VM and validate no issues with
+#               re-attaching to Cinder Volume with external storage
+#
+Options
+.	compute=<compute>
+;;;
+Steps:
+1)  Log onto controller
+2)  Log onto compute
+3)  Set up sudo root access (to make it easier later in the interact session)
+4)  Get process list and kill the kvm proccess
+5)  Wait for VMs to recover
+6)  ping from Natbox and check VM for File system access (read/write)
+
+*NOFAIL
+*EXP_INFO
+
+#tag for TC selection (later)
+TAG:system
+
+# common include path
+$inc_path=common/el
+# domain to differenciate the testcase (system, regression, sanity), current support system only
+$domain=system
+
+$IP=10.10.10.2
+
+$natbox=128.224.150.11
+
+# cgcs credentials
+$vm_user=root
+$vm_pass=root
+
+$vm_fs_cmd=while (true) do date; dd if=/dev/urandom of=output.txt bs=1k count=1 || break ; echo ; sleep 1; done 2>&1 | tee trace.txt &
+$vm_cmd_fs_check=mount | grep 'on / type' | grep 'rw,re'
+
+$compute=compute-0
+
+$max=10
+; === Step-1:Log onto controller
+
+*FORK controller
+; === log onto controller
+~$inc_path/node/ssh_node.inc
+
+
+; === Step-2:Log onto compute
+
+*FORK compute
+
+; === log onto compute
+~$inc_path/node/ssh_node.inc
+
+
+
+~$inc_path/node/ssh_node.inc IP=$compute
+; === Step-3:Set up sudo root access (to make it easier later in the interact session)
+
+; === set up sudo root access (to make it easier later in the interact session)
+>echo "$pass" | sudo -S id
+<root
+
+>sudo su
+
+; === Step-4:Get proc list and kill the kvm proccess
+
+$i=0
+[ $i < $max
+	; === get proc list
+	>ps -ef | grep 'kvm -c' | awk '{print $2}' | paste -sd' '
+	+$proc_list=\n([a-zA-Z0-9 _-]+)
+
+
+	[ $p=$proc_list
+		; == killing process $p
+		>kill -9 $p	
+	]
+	+$i
+]
+
+# check alarms
+*FORK controller
+!sleep 5
+@5
+>system alarm-list | grep $compute
+
+>system host-list | grep $compute
+
+; === Step-5: Wait for VMs to recover
+>nova list --all-tenants --fields OS-EXT-SRV-ATTR:host,name,status,networks | grep $compute
++$result=(ERROR|Shutdown)
+
+; === wait for VMs to recover
+[ $result != __NO_STRING_CAPTURED__
+	>nova list --all-tenants --fields OS-EXT-SRV-ATTR:host,name,status,networks | grep $compute
+	+$result=(ERROR|Shutdown)
+	!sleep 5
+]
+
+; === Step-6:Ping from Natbox and check VM for File system access (read/write)
+
+; === get list of active VM management IPs
+>nova list --all-tenants --fields OS-EXT-SRV-ATTR:host,name,status,networks | grep mgmt-net | awk -F"-mgmt-net=" '{print $2}' | awk '{print $1}' |tr -d  ',' |tr -d  ';'| paste -sd' '
++$vm_ip_list=\n([0-9. ]+)
+
+
+
+?if $vm_ip_list == __NO_STRING_CAPTURED__ ? [
+    ; === No VMs found to ping or read/write file system, ping and read write will be skipped
+]::[
+
+    @15
+    *FORK NATBOX
+    ; === log onto controller
+    ~$inc_path/node/ssh_controller.inc user=cgcs IP=$natbox
+
+    @10
+    ; === Check FS commands on VMs
+    [ $vm_ip=$vm_ip_list
+	>ping -c2 $vm_ip
+	<0% packet loss
+	~$inc_path/node/ssh_node.inc IP=$vm_ip user=$vm_user pass=$vm_pass
+	; === execute FS commands	
+	>$vm_cmd_fs_check
+	>$vm_cmd_fs_check | wc -l
+	<\n1
+	?if evac == no? [
+		; === check that FS write command still running
+		>ls -l trace.txt
+		+$fs_size1=root (\d+)
+		!sleep 1
+		; === check that file size has increased
+		>ls -l trace.txt
+		-<$fs_size1
+		>tail trace.txt
+		>>killall tee
+		>>killall tee
+	]
+	>
+	>exit
+	>
+    ]
+]
+>
+>
+*FORK compute
+
+
+
+
+
+>
+*INTERACT
+
