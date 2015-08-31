@@ -19,7 +19,7 @@
 US49035- VM Scale Up/Down Script
 
 Script can also be used as a scaling test:
-	./ HOST_IP=t_us49035_ts1_vcpu_scale_up_down.elt env.NODE.target.default.targetIP
+	./test_us49035_ts1_vcpu_scale_up_down.elt  HOST_IP=env.NODE.target.default.targetIP (Active controller IP addr)
 Assumptions:
         Lab is setup with lab_setup.sh with Tenants
         heat template available in the switch
@@ -35,7 +35,7 @@ Steps:
 *EXP_INFO
 
 # Variables defined to be used as contants
-$HOST_IP=128.224.150.199
+$HOST_IP=128.224.151.35
 $HOST_USER=wrsroot
 $PASS=li69nux
 $NAT_IP=128.224.150.11
@@ -47,18 +47,18 @@ $tenant=$tenant_credentials
 # trim to just last part
 =$tenant;.*[.](\w+);\1;
 
-$lab_setup=yes
+$lab_setup=no
 
 >date +%F_%T
 +$DATE=\n(2.+)
 
-@2
+@25
 
 ; === connecting to controller
 
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $HOST_USER@$HOST_IP
 -<WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
-<ssword:|Last login:
+<ssword:
 >>$PASS
 >export TMOUT=0
 
@@ -133,11 +133,11 @@ $flavor2=vcpu5-$flavor2_min_cpu
 
 
 #Create flavor1
->nova flavor-create --dedicated-cpus True $flavor1 5f0d748b-1c8b-4a70-1985-4d57e25ac137 512 0 $flavor1_max_cpu
+>nova flavor-create $flavor1 5f0d748b-1c8b-4a70-1985-4d57e25ac147 512 0 $flavor1_max_cpu
 >echo $?
 <\n0
 #Create flavor2
->nova flavor-create --dedicated-cpus True $flavor2 db9b37f5-cba5-1985-a264-a6c1375a4ff7 512 0 $flavor2_max_cpu
+>nova flavor-create $flavor2 db9b37f5-cba5-1985-a264-a6c1375a4ff7 512 0 $flavor2_max_cpu
 >echo $?
 <\n0
 ; === flavor created
@@ -146,12 +146,12 @@ $flavor2=vcpu5-$flavor2_min_cpu
 
 #Set min vcpu value
 ; === set minimum value for the cpu created
->nova flavor-key $flavor1 set hw:wrs:min_vcpus=$flavor1_min_cpu processor:node=0
+>nova flavor-key $flavor1 set hw:wrs:min_vcpus=$flavor1_min_cpu processor:node=0 hw:cpu_policy=dedicated
 >nova flavor-list --extra-specs | grep $flavor1
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor1 is $result
 
->nova flavor-key $flavor2 set hw:wrs:min_vcpus=$flavor2_min_cpu
+>nova flavor-key $flavor2 set hw:wrs:min_vcpus=$flavor2_min_cpu hw:cpu_policy=dedicated
 >nova flavor-list --extra-specs | grep $flavor2
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor2 is $result
@@ -193,19 +193,13 @@ $quota_volumes=30
 >sed -i "s/Cooldown: '60'/Cooldown: '20'/g" VMAutoScaling.yaml
 >sed -i "s/period: '60'/period: '120'/g" VMAutoScaling.yaml
 
-###Scale UP with No available host cpu on NUMA node
-; === Scale UP with No available host cpu on NUMA node
-; === State of NUMA0 before launching heat stack
->vm-topology -s computes 
-<compute-0
-+$compute0_numa0=(\d+),\s*\d+
-<compute-1
-+$compute1_numa0=(\d+),\s*\d+
 
 ; === create STACK1 heat stack on same NUMA0
->heat stack-create -f VMAutoScaling.yaml -P TenantUserId=$tenant_user_id -P PrivateNetName=tenant1-mgmt-net -P InstanceName=guest1 -P FlavorName=vcpu4-1 -P ImageName=cgcs-guest -P CustomMeterName=vote -P KeyName=keypair-tenant1 STACK1
+>heat stack-create -f VMAutoScaling.yaml -P NETWORK=tenant1-mgmt-net -P VM_NAME=guest1 -P FLAVOR=vcpu4-1 -P IMAGE=cgcs-guest -P METER_NAME=vote -P KEYPAIR=keypair-tenant1 STACK1
 ; === wait and check if heat stack1 create_complete
-!sleep 45
+
+
+!sleep 60
 >heat stack-show STACK1
 <stack_status
 -<CREATE_FAILED
@@ -226,7 +220,7 @@ $quota_volumes=30
 +$cur_cpu=\d+,(\d+),\d+
 +$max_cpu=\d+,\d+,(\d+)
 
-;=== scale down guest1 cpu to the minimum value:$min_cpu
+; === scale down guest1 cpu to the minimum value:$min_cpu
 $actual_cur_cpu=$cur_cpu
 [ $min_cpu < $actual_cur_cpu
 	@25
@@ -238,7 +232,7 @@ $actual_cur_cpu=$cur_cpu
 
 ; === check if guest1 current cpu value reached minimum cpu value:$min_cpu
 >nova show guest1
-<(min/cur/max)
+<(wrs-res:vcpus)
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -255,7 +249,7 @@ $actual_cur_cpu=$cur_cpu
 
 # create heat STACK2 
 ; === scale down of guest1 completed
->heat stack-create -f VMAutoScaling.yaml -P TenantUserId=$tenant_user_id -P PrivateNetName=tenant1-mgmt-net -P InstanceName=guest2 -P FlavorName=vcpu4-1 -P ImageName=cgcs-guest -P CustomMeterName=vote -P KeyName=keypair-tenant1 STACK2
+>heat stack-create -f VMAutoScaling.yaml -P NETWORK=tenant1-mgmt-net -P VM_NAME=guest2 -P FLAVOR=vcpu4-1 -P IMAGE=cgcs-guest -P METER_NAME=vote -P KEYPAIR=keypair-tenant1  STACK2
 
 ; === wait and check if heat stack2 create_complete
 !sleep 45
@@ -269,7 +263,7 @@ $actual_cur_cpu=$cur_cpu
 >time vm-topology -s servers | grep guest2
 <guest2
 +$guest2_compute=(compute-\d)
-?if $guest1_compute != $guest2_compute? ;red === guest1 and guest are not in same NUMA0
+#?if $guest1_compute != $guest2_compute? ;red === guest1 and guest are not in same NUMA0
 
 #perform scale down for guest2
 ; === save the current state of guest2 cpu
@@ -279,7 +273,7 @@ $actual_cur_cpu=$cur_cpu
 +$cur_cpu=\d+,(\d+),\d+
 +$max_cpu=\d+,\d+,(\d+)
 
-;=== scale down guest2 cpu to the minimum value:$min_cpu
+; === scale down guest2 cpu to the minimum value:$min_cpu
 $actual_cur_cpu=$cur_cpu
 [ $min_cpu < $actual_cur_cpu
 	@25
@@ -291,7 +285,7 @@ $actual_cur_cpu=$cur_cpu
 
 ; === check if guest2 current cpu value reached minimum cpu value:$min_cpu
 >nova show guest2
-<(min/cur/max)
+<(wrs-res:vcpus)
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -317,7 +311,7 @@ $actual_cur_cpu=$cur_cpu
 +$cur_cpu=\d+,(\d+),\d+
 +$max_cpu=\d+,\d+,(\d+)
 
-;=== scale up cpu to the maximum value:$max_cpu
+; === scale up cpu to the maximum value:$max_cpu
 $actual_cur_cpu=$cur_cpu
 [ $actual_cur_cpu < $max_cpu
 @10
@@ -325,11 +319,12 @@ $actual_cur_cpu=$cur_cpu
 >echo $?
 <\n0
 +$actual_cur_cpu
+!sleep 5
 ]
 
 ; === check if guest1 current cpu value reached max cpu value:$max_cpu
 >nova show guest1
-<(min/cur/max)
+<(wrs-res:vcpus)
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -346,39 +341,37 @@ $actual_cur_cpu=$cur_cpu
 <\n1
 ; === scale up of guest1 completed
 
-; === Calculate the maximum limit guest2 can scale up
->vm-topology -s computes 
-<$guest1_compute
-+$max_resource=(\d+),\s*\d+
-
 #scale up guest to maximum allowed limit
-; === scale up guest2 cpu to the maximum value:$max_resource
+; === scale up guest2 cpu to the maximum value:$max_cpu
 >vm-topology -s servers
 <guest2
 +$min_cpu=(\d+),\d+,\d+
 +$cur_cpu=\d+,(\d+),\d+
 +$max_cpu=\d+,\d+,(\d+)
 
-;=== scale up cpu to the maximum value:$max_resource
+$available_cpu=3
+; === scale up cpu to the maximum value:$available_cpu
 $actual_cur_cpu=$cur_cpu
-$i=1
-[ $i <= $max_resource
+[ $actual_cur_cpu < $available_cpu
 @10
->vm-topology -s servers
 >nova scale guest2 cpu up
 >echo $?
 <\n0
-+$i
++$actual_cur_cpu
+!sleep 5
 ]
 
-; === check if guest2 current cpu value reached max cpu value:$max_resource
+
+; === check if guest2 current cpu value reached max cpu value:$available_cpu
 >nova show guest2
-<(min/cur/max)
+<(wrs-res:vcpus)
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
-
-; === guest2 scale up should fail beyond allowed max limit in MUMA0: $max_resource
+?if $cur_cpu!=$available_cpu? [
+        ;red === guest1 expected current cpu value $available_cpu, but actual current cpu value $cur_cpu 
+]
+; === guest2 scale up should fail beyond allowed max limit in MUMA0: $available_cpu
 >vm-topology -s servers
 >nova scale guest2 cpu up
 @25
@@ -417,11 +410,11 @@ $flavor2=vcpu5-$flavor2_min_cpu
 
 
 #Create flavor1
->nova flavor-create --dedicated-cpus True $flavor1 5f0d748b-1c8b-4a70-1985-4d57e25ac137 512 0 $flavor1_max_cpu
+>nova flavor-create $flavor1 5f0d748b-1c8b-4a70-1985-4d57e25ac137 512 0 $flavor1_max_cpu
 >echo $?
 <\n0
 #Create flavor2
->nova flavor-create --dedicated-cpus True $flavor2 db9b37f5-cba5-1985-a264-a6c1375a4ff7 512 0 $flavor2_max_cpu
+>nova flavor-create $flavor2 db9b37f5-cba5-1985-a264-a6c1375a4ff7 512 0 $flavor2_max_cpu
 >echo $?
 <\n0
 ; === flavor created
@@ -429,12 +422,12 @@ $flavor2=vcpu5-$flavor2_min_cpu
 >nova flavor-list | grep $flavor2
 
 #Set min vcpu value
->nova flavor-key $flavor1 set hw:wrs:min_vcpus=$flavor1_min_cpu 
+>nova flavor-key $flavor1 set hw:wrs:min_vcpus=$flavor1_min_cpu hw:cpu_policy=dedicated
 >nova flavor-list --extra-specs | grep $flavor1
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor1 is $result
 
->nova flavor-key $flavor2 set hw:wrs:min_vcpus=$flavor2_min_cpu
+>nova flavor-key $flavor2 set hw:wrs:min_vcpus=$flavor2_min_cpu hw:cpu_policy=dedicated
 >nova flavor-list --extra-specs | grep $flavor2
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor2 is $result
@@ -454,15 +447,16 @@ $MAX=10
 
 ; === create multiple heat stack
 $i=1
-$heat_stack_limit=3
+$heat_stack_limit=2
 $change_flavor=$heat_stack_limit
 =$change_flavor / 2
 $flavor=$flavor1
 [ $i<=$heat_stack_limit
-	>heat stack-create -f VMAutoScaling.yaml -P TenantUserId=$tenant_user_id -P PrivateNetName=tenant1-mgmt-net -P InstanceName=$vm$i -P FlavorName=$flavor -P ImageName=cgcs-guest -P CustomMeterName=vote -P KeyName=keypair-tenant1 STACK$i
+	>heat stack-create -f VMAutoScaling.yaml -P NETWORK=tenant1-mgmt-net -P VM_NAME=$vm$i -P FLAVOR=$flavor -P IMAGE=cgcs-guest -P METER_NAME=vote -P KEYPAIR=keypair-tenant1 STACK$i
 	? $i == $change_flavor ? $flavor=$flavor2
 	+$i
 ]
+
 
 
 ; === wait and check if heat stack create_complete
@@ -473,6 +467,13 @@ $i=1
 	<stack_status
 	-<CREATE_FAILED
 	<CREATE_COMPLETE
+	+$i
+]
+
+$i=1
+[ $i<=$heat_stack_limit
+	>heat stack-list | grep STACK$i
+	+$stack_id$i=([0-9a-f-]{32,36})\s*\|\s+STACK$i
 	+$i
 ]
 
@@ -506,7 +507,7 @@ $i=1
 
 	; === check if $vm$i current cpu value reached minimum cpu value:$min_cpu
 	>nova show $vm$i
-	<(min/cur/max)
+	<(wrs-res:vcpus)
 	+$min_cpu=(\d+),\s*\d+,\s*\d+
 	+$cur_cpu=\d+,\s*(\d+),\s*\d+
 	+$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -521,8 +522,8 @@ $i=1
 	@25
 	>echo $?
 	<\n1
-	+$i
 	; === scale down of vm$i completed
+	+$i
 ]
 ; === scale down of all VMs completed
 
@@ -548,7 +549,7 @@ $i=1
 
 	; === check if $vm$i current cpu value reached max cpu value:$max_cpu
 	>nova show $vm$i
-	<(min/cur/max)
+	<(wrs-res:vcpus)
 	+$min_cpu=(\d+),\s*\d+,\s*\d+
 	+$cur_cpu=\d+,\s*(\d+),\s*\d+
 	+$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -563,13 +564,12 @@ $i=1
 	@25
 	>echo $?
 	<\n1
-	+$i
 	; === scale up of vm$i completed
+	+$i
 ]
 ; === Scale up of all Vms completed
 
 ################## Scale up/down via heat #######################
-
 
 ; === get ID of each instance
 >nova list
@@ -582,8 +582,10 @@ $i=1
 
 #Scale down guest1 via heat
 $value=2
->ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"display_name":"$vm1"}'
->ceilometer resource-show -r $resource_id_vm1
+#>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.display_name":"$vm1"}'
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.stack_id":"$stack_id1"}'
+#>ceilometer resource-show -r $resource_id_vm1
+>ceilometer resource-show  $resource_id_vm1
 !sleep 30
 >ceilometer alarm-list
 <STACK1.*Low.*|
@@ -594,13 +596,13 @@ $value=2
 $i=0
 $max=20 
 >nova show $vm1
-<$vm1
+<wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
 [ $cur_cpu != $min_cpu
 	   >nova show $vm1
-           <$vm1
+           <wrs-res:vcpus
            +$cur_cpu=\d+,\s*(\d+),\s*\d+
 	   ; === auto scaling down
            !sleep 30
@@ -611,7 +613,7 @@ $max=20
 
 ; === check if $vm1 current cpu value reached minimum cpu value:$min_cpu
 >nova show $vm1
-<(min/cur/max)
+<(wrs-res:vcpus)
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -622,23 +624,26 @@ $max=20
 
 #scale up guest1 via heat 
 $value=90
->ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"display_name":"$vm1"}'
->ceilometer resource-show -r $resource_id_vm1
+#>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.display_name":"$vm1"}'
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.stack_id":"$stack_id1"}'
+>ceilometer resource-show $resource_id_vm1
 !sleep 30
 >ceilometer alarm-list
 <STACK1.*High.*|
 <alarm
+
+
 ; === going in a loop to check $vm1 reached maximum cpu vale 
 $i=0
 $max=10 
 >nova show $vm1
-<$vm1
+<wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
 [ $cur_cpu != $max_cpu
 	   >nova show $vm1
-           <$vm1
+           <wrs-res:vcpus
            +$cur_cpu=\d+,\s*(\d+),\s*\d+
            !sleep 30
 	   ; === auto scaling up
@@ -649,7 +654,7 @@ $max=10
 
 ; === check if $vm1 current cpu value reached maximum cpu value:$max_cpu
 >nova show $vm1
-<(min/cur/max)
+<(wrs-res:vcpus)
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -664,8 +669,9 @@ $max=10
 #start guest2 scale up/down via heat
 #Scale down guest2 via heat
 $value=2
->ceilometer sample-create -r $resource_id_vm2 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"display_name":"$vm2"}'
->ceilometer resource-show -r $resource_id_vm2
+#>ceilometer sample-create -r $resource_id_vm2 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.display_name":"$vm2"}'
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.stack_id":"$stack_id2"}'
+>ceilometer resource-show $resource_id_vm2
 !sleep 20
 >ceilometer alarm-list
 <STACK1.*Low.*|
@@ -676,13 +682,13 @@ $value=2
 $i=0
 $max=20 
 >nova show $vm2
-<$vm2
+<wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
 [ $cur_cpu != $min_cpu
 	   >nova show $vm2
-           <$vm2
+           <wrs-res:vcpus
            +$cur_cpu=\d+,\s*(\d+),\s*\d+
            !sleep 30
 	   ; === auto scaling down
@@ -693,7 +699,7 @@ $max=20
 
 ; === check if $vm2 current cpu value reached minimum cpu value:$min_cpu
 >nova show $vm2
-<(min/cur/max)
+<(wrs-res:vcpus)
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -704,8 +710,9 @@ $max=20
 
 #scale up guest2 via heat 
 $value=90
->ceilometer sample-create -r $resource_id_vm2 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"display_name":"$vm2"}'
->ceilometer resource-show -r $resource_id_vm2
+#>ceilometer sample-create -r $resource_id_vm2 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.display_name":"$vm2"}'
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.stack_id":"$stack_id2"}'
+>ceilometer resource-show $resource_id_vm2
 !sleep 40
 >ceilometer alarm-list
 <STACK1.*High.*|
@@ -715,13 +722,13 @@ $value=90
 $i=0
 $max=20 
 >nova show $vm2
-<$vm2
+<wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
 [ $cur_cpu != $max_cpu
 	   >nova show $vm2
-           <$vm2
+           <wrs-res:vcpus
            +$cur_cpu=\d+,\s*(\d+),\s*\d+
            !sleep 30
 	   ; === auto scaling up
@@ -732,7 +739,7 @@ $max=20
 
 ; === check if $vm2 current cpu value reached maximum cpu value:$max_cpu
 >nova show $vm2
-<(min/cur/max)
+<(wrs-res:vcpus)
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
@@ -741,7 +748,7 @@ $max=20
         ;red === $vm2 cpu value did not reached maximum value $max_cpu
 ]
 
-#complete guest2 scale up/down via heat
+#complete guest2 scale up/down 
 #Scale down in parallel
 ; scale down $vm1 $vm2 in parallel
 ; === save the current state of $vm1 cpu
@@ -926,7 +933,7 @@ $max=20
 ; === become tenant to clean up stack
 >source $tenant_credentials
 ; === delete heat stack created
->heat stack-delete STACK1 STACK2
+>heat stack-delete STACK1 STACK2 STACK3
 !sleep 45
 >heat stack-list
 -<STACK1
