@@ -11,8 +11,8 @@ Assumptions:
 * Lab setup has been run 
 
 Objective:
-* The objective of this test is to setup the system with appropriate flavors and up the quotas so
-tests can be run.
+* The objective of this test is to setup the system with appropriate flavors
+* and up the quotas so tests can be run.
 
 Test Steps:
 0) SSH to the system
@@ -22,16 +22,18 @@ Test Steps:
                 attempt a live migrate with destination host specified
                 attempt a cold migrate with resize specified
                 attempt a cold migrate with resize revert specified
-4) Gather migration data for all VM migrations and report back 
+4) Gather migration times for all VM migrations and report back 
 
 General Conventions:
-1) Functions that start with "list" have no return value and only report information
+1) Functions that start with "list" have no return value and only report
+   information
 2) Functions that start with "check" return Boolean values
-3) Functions that start with "get" check the system for conditions and return 1 or more values
+3) Functions that start with "get" check the system for conditions and return 1
+   or more values
 4) Functions that start with "exec", execute a command on the system
 
 Future Enhancements:
-*  Handle connection to inactive controller
+*  Handle connection to inactive controller in the case of VM launch
 """
 
 import os
@@ -47,35 +49,27 @@ from CLI.cli import *
 def source_nova(conn, user=None):
     """ This function sources the desired openrc file.
         Inputs:
-        * conn - ID of pexpect session
-        * user (optional) - user name, e.g. tenant1, tenant2 
+        * conn (string) - ID of pexpect session
+        * user (string) (optional) - user name, e.g. tenant1, tenant2 
         Outputs:
-        * Exit if command fails with non-zero return code
-        * Return zero if command passes
+        * resp (integer) - 0 if successful
         Tag:
         * Add to common functions
     """
 
-    logging.info("Sourcing the openrc file")
-
-    # Admin user is the default.  Optionally, we can use tenant1 or tenant2
-    if not user:
-        cmd = "source /etc/nova/openrc"
-        extract = "keystone_admin"
-    else:
+    # admin user is the default
+    cmd = "source /etc/nova/openrc"
+    if user:
         cmd = "source ./openrc." + user 
-        extract = "keystone_" + user
 
     conn.sendline(cmd)
 
-    # Check if the source nova openrc command succeeded or if we had errors
-    resp = conn.expect([extract, "-sh:.*\r\n", pexpect.TIMEOUT])
-    if resp == 1:
+    # Check if the command succeeded or if we had errors
+    resp = conn.expect([PROMPT, "-sh:.*\r\n", pexpect.TIMEOUT])
+    if resp == 2:
         logging.warning("Unable to %s due to %s" % (cmd, conn.match.group())) 
-        exit(-1)
-    elif resp == 2:
+    elif resp == 3:
         logging.warning("Command %s timed out." % cmd)
-        exit(-1)
 
     return resp
 
@@ -107,7 +101,6 @@ def get_hostpersonality(conn, hostname):
     conn.prompt()
 
     return host_type 
-
 
 def get_hosts(conn):
     """ This function checks the system for controllers, computes and storage nodes.
@@ -202,16 +195,16 @@ def get_userid(conn, user):
     """ Returns the user ID from the keystone tenant-list or 
         openstack project-list.
         Inputs:
-        * conn - ID of a pexpect session
-        * user - name of a user, e.g. tenant1, tenant2, admin, etc.
+        * conn (string) - ID of a pexpect session
+        * user (string) - name of a user, e.g. tenant1, tenant2, admin, etc.
         Outputs:
-        * id - a valid user ID or,
-        * resp - non-zero value if we couldn't get the user id 
+	* user_id (string) - a valid user ID or empty string if user ID was not
+	  found
         Tags:
         * Add to common functions 
     """
-   
-    logging.info("Getting the tenant user id")
+  
+    user_id = ""  
  
     cmd1 = "openstack project list"
     cmd = "keystone tenant-list"
@@ -221,22 +214,19 @@ def get_userid(conn, user):
         cmd = cmd1
 
     conn.sendline(cmd)
-    conn.prompt()
 
     resp = 0
     while resp < 1:
         # Extract the 32 character user ID 
         extract = "([0-9a-f]{32})(?=\s\| %s)" % user 
-        resp = conn.expect([extract, pexpect.TIMEOUT])
+        resp = conn.expect([extract, PROMPT, pexpect.TIMEOUT])
         if resp == 0:
             user_id = conn.match.group()
             logging.info("The ID of %s is %s" % (user, user_id))
-            return resp
-        elif resp == 1:
+        elif resp == 2:
             logging.error("Unable to get ID for %s" % user)
-            return resp
 
-    return user_id 
+    return user_id
 
 def get_novavms(conn, return_value="id", tenant_name=None):
     """ This functions does one of two things.  It does the equivalent of 
@@ -246,42 +236,34 @@ def get_novavms(conn, return_value="id", tenant_name=None):
 	Or it does nova list --tenant <tenant_id> if the tenant_name, e.g.
         tenant2, is supplied.
         
-        To keep it easy for the user, it takes the tenant_name and does a lookup
-        via keystone or openstack to extract the ID associated with that tenant.
+	To keep it easy for the user, it takes the tenant_name and does a
+	lookup via keystone or openstack to extract the ID or name associated
+        with that tenant.
  
         Inputs:
-        * conn - ID of pexpect session
-        * return_value - accepts either id or name, depending on whether the user
-          wants the function to return vms by name or id 
-        * tenant_name - optional parameter to specify a tenant, e.g. tenant1
+        * conn (string) - ID of pexpect session
+	* return_value (string) - accepts either id or name, depending on
+	  whether the user wants the function to return vms by name or id 
+	* tenant_name - optional parameter to specify a tenant, e.g. tenant1
         Outputs:
-        * Returns a list of VM ids or names
+        * Returns a list of VM ids or names.  Note, this list can be empty.
     """
-
-    logging.info("Getting list of VMs by %s" % return_value)
 
     vm_list = []
 
     # Determine which nova list command to use depending on the arguments supplied to
     # the function
-    if tenant_name != None:
+    cmd = "nova list --all-tenants"
+    if tenant_name:
         tenant_id = get_userid(conn, tenant_name)
-        if not tenant_id:
-            logging.error("Unable to retrieve corresponding ID for tenant %s" % cmd) 
-            return -1 
         cmd = "nova list --tenant %s" % tenant_id
-    else:
-        cmd = "nova list --all-tenants"
 
-    conn.prompt()
     conn.sendline(cmd)
 
     # determine if we should return a list of vm names or IDs
     if return_value == "name":
-        #extract = VM_NAME
         extract = "(?<=\r\n\|\s[0-9a-f-]{36}\s\|\s)([0-9a-zA-Z-]+)" 
     else:
-        #extract = UUID
         extract = "(?<=\r\n\|\s)([0-9a-f-]{36})" 
 
     resp = 0
@@ -296,6 +278,7 @@ def get_novavms(conn, return_value="id", tenant_name=None):
             msg = "Command %s timed out" % cmd
             logging.warning(msg)
 
+    #conn.prompt()
     logging.info("VM list by %s: %s" % (return_value, vm_list))
 
     return vm_list
@@ -324,38 +307,43 @@ def get_neutronnetid(conn, network_name):
     return resp
 
 
-def exec_launchvmscript(conn, tenant_name):
+def exec_launchvmscript(conn, tenant_name, vm_type, num_vms):
     """ This launches a VM using the scripts created by lab_setup.  Note, we'll have to switch to
         controller-0, since that's where the scripts are.
         Inputs:
-        * conn - ID of pexpect session
-        * tenant_name - name of tenant to launch VMs as, e.g. tenant1, tenant2
+        * conn (string) - ID of pexpect session
+        * tenant_name (string) - name of tenant to launch VMs as, e.g. tenant1, tenant2
+        * vm_type (string) - either avp, virtio or vswitch
+        * num_vms (int) - number of vms of that type to launch, e.g. 3
         Outputs:
-        * expectedvm_list - return list of VMs that we try to launch
+        * expectedvm_list (list) - return list of VMs that we try to launch
         Enhancements: allow user to specify type of VM to launch and number of instances
     """
 
     # FIX ME: Need to adjust if we are not on controller-0
 
     expectedvm_list = []
-    conn.prompt()
+    # Up the timeout since VMs need additional time to launch
     conn.timeout = 60 
 
     # Get the list of VMs that are already launched on the system by name
     vm_list = get_novavms(conn, "name")
 
-    # Types of instances to launch
-    instance_types = ["avp", "virtio", "vswitch"]
+    # Cap VM launch to 4 
+    if num_vms > 4:
+        num_vms = 4
+	logging.warning("lab_setup provides launch scripts for 4 VMs of a \
+			 particular type, so the number of VMs to launch will \
+                         be capped at 4.")
 
-    # Launch one of each type of VM for now
-    for instance in instance_types:
-        # Construct the name of VM to launch
-        vm_name = "%s-%s1" % (tenant_name, instance)
+    # Launch the desired VMs 
+    for vm_index in range(1, (num_vms + 1)): 
+        # Construct the name of VM to launch, i.e. tenant1-avp1
+        vm_name = "%s-%s%s" % (tenant_name, vm_type, str(vm_index))
         expectedvm_list.append(vm_name)
         if vm_name not in vm_list:
             cmd = "~/instances_group0/./launch_%s.sh" % vm_name 
             conn.sendline(cmd)
-            # Should report Finished if built properly
             resp = conn.expect(["Finished", ERROR, pexpect.TIMEOUT])
             if resp == 1:
                 logging.error("Encountered an error on command %s: %s" % (cmd, conn.match.group()))
@@ -463,7 +451,6 @@ def exec_vm_migrate(conn, vm_id, migration_type="cold", option=None):
 
     # Determine which host we're on
     original_vm_host = get_novashowvalue(conn, vm_id, "host")
-    logging.info("VM %s is on host %s" % (vm_id, original_vm_host))
 
     # Issue the appropriate migration type
     if migration_type == "cold":
@@ -496,7 +483,7 @@ def exec_vm_migrate(conn, vm_id, migration_type="cold", option=None):
             if status == "ERROR":
                 logging.warning("VM %s is reporting error state" % vm_id)
                 break
-            wait_time = 2
+            wait_time = 3
             time.sleep(wait_time)
         if status == "ACTIVE":
             migration_end_time = datetime.datetime.now()
@@ -574,6 +561,8 @@ def exec_vm_migrate(conn, vm_id, migration_type="cold", option=None):
 
 if __name__ == "__main__":
 
+    vmlist_virtio = vmlist_avp = vmlist_vswitch = [] 
+
     # Extract command line arguments
     if len(sys.argv) < 2:
         sys.exit("Usage: ./test_live_migrate_vms.py <Floating IP of host machine>")
@@ -596,37 +585,44 @@ if __name__ == "__main__":
     conn.setecho(ECHO)
 
     # source /etc/nova/openrc
+    logging.info("Test Step 1: source nova openrc")
     source_nova(conn)
 
     # Get the UUID for the user we're interested in
+    logging.info("Test Step 2: get the IDs associated with tenant users")
     tenant1_id = get_userid(conn, "tenant1")
+    tenant2_id = get_userid(conn, "tenant2")
 
     # Get the list of VMs on the system 
+    logging.info("Test Step 3: Check if there are already VMs on the system")
     vm_list = get_novavms(conn, "name")
 
     # Check that there are VMs on the system
-    if len(vm_list) == 0:
+    if not vm_list: 
         # Untested
-        logging.warning("There are no VMs present on the system.")
-        logging.info("The test will now launch some VMs in order to proceed.")
-        expectedvm_list = exec_launchvmscript(conn, "tenant1")
+	logging.warning("There are no VMs present on the system so the test " \
+                        "will launch some to proceed.")
+        vmlist_virtio = exec_launchvmscript(conn, "tenant1", "virtio", 1)
+        #vmlist_avp = exec_launchvmscript(conn, "tenant2", "avp", 1)
+        #vmlist_vswitch = exec_launchvmscript(conn, "tenant1", "vswitch", 1)
+        expectedvm_list = vmlist_virtio + vmlist_avp + vmlist_vswitch
         vm_list = get_novavms(conn, "name")
-        if vm_list != expectedvm_list:
+        if set(vm_list) != set(expectedvm_list):
             logging.error("Expected the following VMs: %s, instead we have the following: %s" %  
                          (expectedvm_list, vm_list))
             exit(-1)
     
     # we'll want to check what controller or compute a VM is on and then
     # SCENARIO 1: Live migrate without a destination host
-    logging.info("Live migrating without a destination host specified")
+    logging.info("Test Step 4: Live migrating without a destination host specified")
     vm_list = get_novavms(conn, "id")
-    exec_vm_migrate(conn, vm_list[1], "live")
+    exec_vm_migrate(conn, vm_list[0], "live")
    
     # Automatically determine another host to migrate to, could be controller or compute 
     # SCENARIO 2: Live migrate with a destination host specified
-    logging.info("Live migrating with a destination host specified")
-    current_vm_host = get_novashowvalue(conn, vm_list[1], "host")
-    logging.info("VM %s is on host %s" % (vm_list[1], current_vm_host))
+    logging.info("Test Step 5: Live migrating with a destination host specified")
+    current_vm_host = get_novashowvalue(conn, vm_list[0], "host")
+    logging.info("VM %s is on host %s" % (vm_list[0], current_vm_host))
     # Get personality of VM host
     host_personality = get_hostpersonality(conn, current_vm_host)
     logging.info("Learn what hosts are on the system.")
@@ -640,22 +636,22 @@ if __name__ == "__main__":
         subset_hostname_list = comp_hostname_list
         subset_hostname_list.remove(current_vm_host)
         dest_vm_host = random.choice(subset_hostname_list)
-    logging.info("Live migrating VM %s from %s to %s" % (vm_list[1], current_vm_host, dest_vm_host)) 
-    exec_vm_migrate(conn, vm_list[1], "live", dest_vm_host)
+    logging.info("Live migrating VM %s from %s to %s" % (vm_list[0], current_vm_host, dest_vm_host)) 
+    exec_vm_migrate(conn, vm_list[0], "live", dest_vm_host)
     
     # Do a cold migrate and confirm resize
     # SCENARIO 3: Cold migrate and confirm resize
-    logging.info("Cold migrating instance and then confirming resize")
-    current_vm_host = get_novashowvalue(conn, vm_list[1], "host")
-    logging.info("VM %s is on host %s" % (vm_list[1], current_vm_host))
-    exec_vm_migrate(conn, vm_list[1], "cold")
+    logging.info("Test Step 6: Cold migrating instance and then confirming resize")
+    current_vm_host = get_novashowvalue(conn, vm_list[0], "host")
+    logging.info("VM %s is on host %s" % (vm_list[0], current_vm_host))
+    exec_vm_migrate(conn, vm_list[0], "cold")
  
     # Do a cold migrate and revert resize
     # SCENARIO 4: Cold migrate and revert size
-    logging.info("Cold migrating instance and then resize reverting")
-    current_vm_host = get_novashowvalue(conn, vm_list[1], "host")
-    logging.info("VM %s is on host %s" % (vm_list[1], current_vm_host))
-    exec_vm_migrate(conn, vm_list[1], "cold", "revert")
+    logging.info("Test Step 7: Cold migrating instance and then resize reverting")
+    current_vm_host = get_novashowvalue(conn, vm_list[0], "host")
+    logging.info("VM %s is on host %s" % (vm_list[0], current_vm_host))
+    exec_vm_migrate(conn, vm_list[0], "cold", "revert")
 
     # Test end time
     test_end_time = datetime.datetime.now()

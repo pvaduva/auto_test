@@ -122,15 +122,21 @@ def get_hostshowvalue(conn, hostname, field="availability"):
         logging.warning("Command %s timed out." % cmd)
         return resp
 
-def lock_host(conn, hostname=None):
+def lock_host(conn, hostname, force=False):
     """ This function locks a specific host.
         Input:
         * conn - ID of pexpect
+        * hostname - name of host to issue lock against
+        * force (optional) - True if force lock is required 
+                           - False if force lock is not required
+                           - False is the default 
         Output:
         * True if the host could be locked, False if the lock failed
     """
-
     cmd = "system host-lock %s" %  hostname
+    if force:
+        cmd = cmd + " --force"
+
     conn.sendline(cmd)
     resp = conn.expect([PROMPT, ERROR, pexpect.TIMEOUT, "(Avoiding.*)"])
     if resp == 1 or resp == 3:
@@ -181,4 +187,71 @@ def check_smallfootprint(conn):
             return True
     else:
         return False 
+
+def get_hostname(conn):
+    """ Returns the hostname of the current system.
+        Inputs:
+        * conn - ID of pexpect session
+        Outputs:
+        * hostname - name of host, e.g. controller-0, controller-1, etc.
+                   - return empty string if we can't determine host 
+    """
+
+    current_host = ""
+    conn.sendline("cat /etc/hostname")
+    resp = conn.expect(HOSTNAME_MATCH)
+    current_host = conn.match.group()
+    if current_host:
+        logging.info("We're connected to host %s" % current_host)
+    else:
+        logging.warning("Unable to determine name of host")
+    conn.prompt()
+
+    return current_host
+
+def list_buildinfo(conn):
+    """ This function returns the build information of the current system.
+        Inputs:
+        * conn - ID of pexpect session
+        Outputs:
+        * prints build info
+        * returns nothing
+
+    """
+    conn.sendline("cat /etc/build.info")
+    resp = conn.expect(["BUILD_DATE", pexpect.TIMEOUT])
+    conn.prompt()
+
+def list_patchlevel(conn):
+    """ This function checks the patch level of the system.
+        Inputs:
+        * conn - ID of pexpect session
+        Outputs:
+        * prints patches (if any)
+    """
+    conn.sendline("sudo wrs-patch query")
+    conn.expect_exact("Password:")
+    conn.sendline(PASSWORD)
+    conn.prompt()
+
+def swact_host(conn, hostname=None):
+    """ This function issues a swact against a particular host. 
+        Input:
+        * conn - ID of pexpect
+        * hostname - name of host where the swact should be issued
+        Output:
+        * True if the host could be swacted, False if the swact fails
+    """
+
+    cmd = "system host-swact %s" %  hostname
+    conn.sendline(cmd)
+    resp = conn.expect([pexpect.EOF, ERROR, pexpect.TIMEOUT]) 
+    if resp == 1:
+        logging.error("Unable to swact %s due to %s" % (hostname, conn.match.group()))
+        return False
+    else:
+        conn.logout()
+        conn.close() 
+
+    return True 
 

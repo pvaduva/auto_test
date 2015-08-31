@@ -55,7 +55,8 @@ class Session(pxssh.pxssh):
             logging.info("Connecting to %s using username %s and password %s" %
                         (hostname, username, password))
 
-            self.SSH_OPTS = " '-o StrictHostKeyChecking=no'" + " '-o UserKnownHostsFile /dev/null' "
+            self.SSH_OPTS = " -o 'StrictHostKeyChecking=no'" + \
+                            " -o 'UserKnownHostsFile=/dev/null'"
             self.PROMPT = PROMPT
             self.force_password = True
             self.login(hostname, username, password, auto_prompt_reset=False, quiet=False)

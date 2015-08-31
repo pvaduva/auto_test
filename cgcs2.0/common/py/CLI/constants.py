@@ -46,6 +46,9 @@ LOGFILE = "temp.txt"
 # timeout for the sudo collect all command
 COLLECT_TIMEOUT = 300
 
+# max time to wait for swact to complete
+SWACT_MAXTIME = 85 
+
 # response to match to detect when the CLI returns errors
 # it will report the error message as well
 ERROR = "(ERROR.*)\n"

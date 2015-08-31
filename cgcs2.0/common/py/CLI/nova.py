@@ -21,8 +21,6 @@ def source_nova(conn, user=None):
         * user (string) (optional) - user name, e.g. tenant1, tenant2
         Outputs:
         * resp (integer) - 0 if successful
-        Tag:
-        * Add to common functions
     """
 
     # admin user is the default
@@ -33,12 +31,13 @@ def source_nova(conn, user=None):
     conn.sendline(cmd)
 
     # Check if the command succeeded or if we had errors
-    resp = conn.expect([PROMPT, "-sh:.*\r\n", pexpect.TIMEOUT])
-    if resp == 2:
+    #resp = conn.expect([PROMPT, "-sh:.*\r\n", pexpect.TIMEOUT])
+    resp = conn.expect(["keystone_", "-sh:.*\r\n", pexpect.TIMEOUT])
+    if resp == 1:
         logging.warning("Unable to %s due to %s" % (cmd, conn.match.group()))
-    elif resp == 3:
+    elif resp == 2:
         logging.warning("Command %s timed out." % cmd)
-
+    conn.prompt()
     return resp
 
 def get_novavms(conn, return_value="id", tenant_name=None):
@@ -220,3 +219,26 @@ def get_hypervisorservers(conn, hostname):
     
     return hypervisorserver_list
 
+def get_hypervisorvms(conn):
+    """ This function returns a dict that consists of hypervisors
+        as a key, i.e. controller-1, compute-2, etc. and a list as
+        a value.  The list contains the VM IDs associated with the
+        hypervisor.
+        Inputs:
+        * conn
+        Outputs:
+        * hypvm_dict - hypervisor as key, and VMs list as value
+    """
+
+    # Determine which hypervisors we have in the system
+    hypervisor_list = get_novahypervisors(conn)
+    logging.info("The system has the following hypervisors: %s" % hypervisor_list)
+
+    # Determine which VMs are associated with each hypervisor
+    hypvm_dict = {}
+    for hypervisor in hypervisor_list:
+        hypervisorserver_list = get_hypervisorservers(conn, hypervisor)
+        logging.info("VMs on server %s: %s" % (hypervisor, hypervisorserver_list))
+        hypvm_dict[hypervisor] = hypervisorserver_list
+
+    return hypvm_dict
