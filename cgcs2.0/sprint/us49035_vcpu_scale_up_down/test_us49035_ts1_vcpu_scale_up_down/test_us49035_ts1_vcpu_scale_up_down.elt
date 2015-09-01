@@ -35,7 +35,8 @@ Steps:
 *EXP_INFO
 
 # Variables defined to be used as contants
-$HOST_IP=128.224.151.35
+$HOST_IP=10.10.10.3
+#$HOST_IP=128.224.151.35
 $HOST_USER=wrsroot
 $PASS=li69nux
 $NAT_IP=128.224.150.11
@@ -583,7 +584,7 @@ $i=1
 #Scale down guest1 via heat
 $value=2
 #>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.display_name":"$vm1"}'
->ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.stack_id":"$stack_id1"}'
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.stack":"$stack_id1"}'
 #>ceilometer resource-show -r $resource_id_vm1
 >ceilometer resource-show  $resource_id_vm1
 !sleep 30
@@ -625,7 +626,7 @@ $max=20
 #scale up guest1 via heat 
 $value=90
 #>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.display_name":"$vm1"}'
->ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.stack_id":"$stack_id1"}'
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.stack":"$stack_id1"}'
 >ceilometer resource-show $resource_id_vm1
 !sleep 30
 >ceilometer alarm-list
@@ -670,7 +671,7 @@ $max=10
 #Scale down guest2 via heat
 $value=2
 #>ceilometer sample-create -r $resource_id_vm2 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.display_name":"$vm2"}'
->ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.stack_id":"$stack_id2"}'
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.stack":"$stack_id2"}'
 >ceilometer resource-show $resource_id_vm2
 !sleep 20
 >ceilometer alarm-list
@@ -711,7 +712,7 @@ $max=20
 #scale up guest2 via heat 
 $value=90
 #>ceilometer sample-create -r $resource_id_vm2 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.display_name":"$vm2"}'
->ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.stack_id":"$stack_id2"}'
+>ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.stack":"$stack_id2"}'
 >ceilometer resource-show $resource_id_vm2
 !sleep 40
 >ceilometer alarm-list
