@@ -210,7 +210,7 @@ $quota_volumes=30
 +$cgcs_guest_id=([0-9a-z-]{32,40})\s+\|\s+cgcs-guest
 
 ; === create heat stack from cinder volume
->heat stack-create -f BootFromCinder.yaml -P INTERNAL_NET_ID=$tenant1_net0_id -P PRIVATE_NET_ID=$tenant1_mgmt_net_id -P FLAVOR_NAME=$flavor2 -P GLANCE_IMAGE_ID=$cgcs_guest_id -P KEY_NAME=keypair-tenant1 CINDERSTACK
+>heat stack-create -f BootFromCinder.yaml -P FLAVOR=$flavor2 -P IMAGE=cgcs-guest -P KEYPAIR=keypair-tenant1 CINDERSTACK
 
 ; === check if CINDERSTACK create complete
 !sleep 45
