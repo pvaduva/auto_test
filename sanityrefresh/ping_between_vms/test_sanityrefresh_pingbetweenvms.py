@@ -2,7 +2,7 @@
 
 """
 Usage:
-./test_sanityrefresh_pingfromnatbox.py <FloatingIPAddress>
+./test_sanityrefresh_pingbetweenvms.py <FloatingIPAddress>
 
 e.g. ./test_sanityrefresh_pingbetweenvms.py 10.10.10.2 
 
@@ -50,12 +50,14 @@ from CLI import keystone
 from CLI import vm
 from CLI import sysinv
 
-def test_sanityrefresh_pingfromnatbox(conn):
-    """ This test performs a live migration of vms.  
+def test_sanityrefresh_pingbetweenvms(conn):
+    """ This test performs a ping between the VMs.  If there are no VMs, some are launched
+        so the test can continue.  It will ssh into the NAT box and from there, log into
+        each VM, and perform the pings. 
         Inputs:
         * conn (string) - ID of pexpect session
         Outputs:
-        * None.  We will simply reports if the test failed 
+        * testFailed_flag - True if the test fails, false otherwise 
     """
     
     vmlist_virtio = vmlist_avp = vmlist_vswitch = []
@@ -113,6 +115,8 @@ def test_sanityrefresh_pingfromnatbox(conn):
     logging.info("Ending %s at %s" % (test_name, test_end_time))
     logging.info("Test ran for %s" % test_duration)
 
+    return testFailed_flag
+
 if __name__ == "__main__":
 
     # Extract command line arguments
@@ -130,5 +134,15 @@ if __name__ == "__main__":
     conn.setecho(ECHO)
 
     # Invoke test
-    test_result = test_sanityrefresh_pingfromnatbox(conn)
+    test_result = test_sanityrefresh_pingbetweenvms(conn)
+
+    # Close connection at end of test
+    conn.logout()
+    conn.close()
+
+    # For HTEE, non-zero exit code means test failed
+    if test_result:
+        exit(1)
+    else:
+        exit(0)
 

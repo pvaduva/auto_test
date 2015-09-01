@@ -112,6 +112,8 @@ def test_sanityrefresh_pingfromnatbox(conn):
     logging.info("Ending %s at %s" % (test_name, test_end_time))
     logging.info("Test ran for %s" % test_duration)
 
+    return testFailed_flag
+
 if __name__ == "__main__":
 
     # Extract command line arguments
@@ -131,3 +133,12 @@ if __name__ == "__main__":
     # Invoke test
     test_result = test_sanityrefresh_pingfromnatbox(conn)
 
+    # Terminate connection
+    conn.logout()
+    conn.quit()
+
+    # For HTEE, non-zero exit code means test failed
+    if test_result:
+        exit(1)
+    else:
+        exit(0)

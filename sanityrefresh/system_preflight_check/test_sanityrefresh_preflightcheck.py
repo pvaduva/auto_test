@@ -2,9 +2,9 @@
 
 """
 Usage:
-./test_system_preflight_check_cli.py <FloatingIPAddress>
+./test_sanityrefresh_preflightcheck.py <FloatingIPAddress>
 
-e.g.  ./test_system_preflight_check_cli.py 10.10.10.2
+e.g.  ./test_sanityrefresh_preflightcheck.py 10.10.10.2
 
 Assumptions:
 * System has been installed
@@ -50,6 +50,10 @@ import re
 sys.path.append(os.path.expanduser('~/wassp-repos/testcases/cgcs/cgcs2.0/common/py'))
 
 from CLI.cli import *
+from CLI import nova
+from CLI import keystone
+from CLI import vm
+from CLI import sysinv
 
 def get_hostname(conn):
     """ This function returns the hostname of the current system. 
@@ -423,31 +427,23 @@ def check_novaservices(conn, cont_hostname_list):
         return True
     else:
         return False    
-    
-if __name__ == "__main__":
 
-    # Extract command line arguments
-    if len(sys.argv) < 2:
-        sys.exit("Usage: ./test_system_preflight_check_cli.py <Floating IP of host machine>")
-    else:
-        floating_ip = sys.argv[1]
+def test_sanityrefresh_preflightcheck(conn):
+    """ This test performs a check of the system to ensure that flavors, VMs, etc. are
+        available for tests to run properly.
+        Inputs: 
+        * conn - ID of pexpect session
+        Outputs:
+        * testFailed_flag - True if the test fails, False otherwise
+    """
 
-    # Enable logging
-    logging.basicConfig(level=logging.INFO)
-
-    # Test case name
-    test_name = "test_sanityrefresh_preflightcheck"
+    testFailed_flag = False
 
     # Get time
     test_start_time = datetime.datetime.now()
     logging.info("Starting %s at %s" % (test_name, test_start_time))
 
-    # Establish connection
-    conn = Session(timeout=TIMEOUT)
-    conn.connect(hostname=floating_ip, username=USERNAME, password=PASSWORD)
-    conn.setecho(ECHO)
-
-    # Determine which host we're connected to and return the hostname
+        # Determine which host we're connected to and return the hostname
     get_hostname(conn)
 
     # Cat the build info and extract the build type 
@@ -503,6 +499,7 @@ if __name__ == "__main__":
     logging.info("Test will fail if there are no flavors, no images, no instances or expected nova services are down.")
     if not all ((flavors, images, instances, nova)):
         logging.error("Test Result: FAILED")
+        testFailed_flag = True
     else:
         logging.info("Test Result: PASSED")
 
@@ -511,3 +508,38 @@ if __name__ == "__main__":
     test_duration = test_end_time - test_start_time
     logging.info("Ending %s at %s" % (test_name, test_end_time))
     logging.info("Test ran for %s" % test_duration)
+                                                                    
+    return testFailed_flag 
+
+    
+if __name__ == "__main__":
+
+    # Extract command line arguments
+    if len(sys.argv) < 2:
+        sys.exit("Usage: ./test_sanityrefresh_preflightcheck.py <Floating IP of host machine>")
+    else:
+        floating_ip = sys.argv[1]
+
+    # Enable logging
+    logging.basicConfig(level=logging.INFO)
+
+    # Test case name
+    test_name = "test_sanityrefresh_preflightcheck"
+
+    # Establish connection
+    conn = Session(timeout=TIMEOUT)
+    conn.connect(hostname=floating_ip, username=USERNAME, password=PASSWORD)
+    conn.setecho(ECHO)
+
+    test_result = test_sanityrefresh_preflightcheck(conn)
+
+    # Terminate connection
+    conn.logout()
+    conn.close()
+
+    # For HTEE, non-zero value means test failed
+    if test_result:
+        exit(1)
+    else:
+        exit(0)
+

@@ -2,9 +2,9 @@
 
 """
 Usage:
-./collect_logs.py <FloatingIPAddress>
+./test_sanityrefresh_collectlogs.py <FloatingIPAddress>
 
-e.g.  ./collect_logs.py 10.10.10.2
+e.g.  ./test_sanityrefresh_collectlogs.py 10.10.10.2
 
 Assumptions:
 * System has been installed
@@ -45,6 +45,12 @@ def collect_logs(conn, timeout):
         * scp'ed off target to /folk/cgts/logs
         * no return value
     """
+    testFailed_flag = False
+
+    # Get time
+    test_start_time = datetime.datetime.now()
+    logging.info("Starting %s at %s" % (test_name, test_start_time))
+
     conn.sendline("sudo collect all")
     conn.prompt()
     resp = 0
@@ -67,14 +73,23 @@ def collect_logs(conn, timeout):
         elif resp == 4:
             logging.warning("Timed out before logs could be collected.  Please increase the collect timeout and try again.")
             logging.error("Test Result: FAILED")
+            testFailed_flag = True
     # reset timeout to original value after collect runs
     conn.timeout=TIMEOUT
+
+    # Test end time
+    test_end_time = datetime.datetime.now()
+    test_duration = test_end_time - test_start_time
+    logging.info("Ending %s at %s" % (test_name, test_end_time))
+    logging.info("Test ran for %s" % test_duration)
+
+    return testFailed_flag
 
 if __name__ == "__main__":
 
     # Extract command line arguments
     if len(sys.argv) < 2:
-        sys.exit("Usage: ./test_collect_logs_cli.py <Floating IP of host machine>")
+        sys.exit("Usage: ./test_sanityrefresh_collectlogs.py <Floating IP of host machine>")
     else:
         floating_ip = sys.argv[1]
 
@@ -84,21 +99,20 @@ if __name__ == "__main__":
     # Name of test
     test_name = "test_sanityrefresh_collectlogs"
 
-    # Get time
-    test_start_time = datetime.datetime.now()
-    logging.info("Starting %s at %s" % (test_name, test_start_time))
-
     # Establish connection
     conn = Session(timeout=TIMEOUT)
     conn.connect(hostname=floating_ip, username=USERNAME, password=PASSWORD)
     conn.setecho(ECHO)
 
-    collect_logs(conn, COLLECT_TIMEOUT) 
+    test_result = collect_logs(conn, COLLECT_TIMEOUT) 
 
-    # Should terminate connection here
+    # Terminate connection
+    conn.logout()
+    conn.close() 
 
-    # Test end time
-    test_end_time = datetime.datetime.now()
-    test_duration = test_end_time - test_start_time
-    logging.info("Ending %s at %s" % (test_name, test_end_time))
-    logging.info("Test ran for %s" % test_duration)
+    # For HTEE, non-zero exit code is a failed test
+    if test_result:
+        exit(1)
+    else:
+        exit(0)
+

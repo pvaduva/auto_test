@@ -2,9 +2,9 @@
 
 """
 Usage:
-./test_live_migrate_vms.py <FloatingIPAddress>
+./test_sanityrefresh_livemigratevms.py <FloatingIPAddress>
 
-e.g.  ./test_live_migrate_vms.py 10.10.10.2
+e.g.  ./test_sanityrefresh_livemigratevms.py 10.10.10.2
 
 Assumptions:
 * System has been installed
@@ -19,7 +19,7 @@ Objective:
 Test Steps:
 0) SSH to the system
 1) Source /etc/nova/openrc
-2) If no VMs exist, attempt to launch some (virtio, vswitch, avp) 
+2) If no VMs exist, attempt to launch some (virtio, vswitch, avp) from volume 
 3) For each VM: attempt a live migrate (scheduler picks destination host) 
                 attempt a live migrate with destination host specified
 4) Gather migration times for all VM migrations and report back 
@@ -33,7 +33,11 @@ General Conventions:
 4) Functions that start with "exec", execute a command on the system
 
 Future Enhancements:
-*  Handle connection to inactive controller in the case of VM launch
+* Handle connection to inactive controller in the case of VM launch
+  Possible solution: rsync controller-0 /home/wrsroot to controller-1
+* Include launch from image VMs
+* Enhancement migration time measurement
+  Possible solution: use customer logs or nova migration-list 
 """
 
 import os
@@ -52,12 +56,12 @@ from CLI import keystone
 from CLI import vm
 from CLI import sysinv
 
-def test_sanityrefresh_live_migrate_vms(conn):
+def test_sanityrefresh_livemigratevms(conn):
     """ This test performs a live migration of vms.  
         Inputs:
         * conn (string) - ID of pexpect session
         Outputs:
-        * None.  We will simply reports if the test failed 
+        * testFailed_flag - True if the test fails, False otherwise 
     """
     
     vmlist_virtio = vmlist_avp = vmlist_vswitch = []
@@ -138,11 +142,13 @@ def test_sanityrefresh_live_migrate_vms(conn):
     logging.info("Ending %s at %s" % (test_name, test_end_time))
     logging.info("Test ran for %s" % test_duration)
 
+    return testFailed_flag
+
 if __name__ == "__main__":
 
     # Extract command line arguments
     if len(sys.argv) < 2:
-        sys.exit("Usage: ./test_live_migrate_vms.py <Floating IP of host machine>")
+        sys.exit("Usage: ./test_sanityrefresh_livemigratevms.py <Floating IP of host machine>")
     else:
         floating_ip = sys.argv[1]
 
@@ -155,18 +161,14 @@ if __name__ == "__main__":
     conn.setecho(ECHO)
 
     # Invoke test
-    test_result = test_sanityrefresh_live_migrate_vms(conn)
+    test_result = test_sanityrefresh_livemigratevms(conn)
 
-    # Do a cold migrate and confirm resize
-    # SCENARIO 3: Cold migrate and confirm resize
-    #logging.info("Test Step 6: Cold migrating instance and then confirming resize")
-    #current_vm_host = get_novashowvalue(conn, vm_list[0], "host")
-    #logging.info("VM %s is on host %s" % (vm_list[0], current_vm_host))
-    #exec_vm_migrate(conn, vm_list[0], "cold")
- 
-    # Do a cold migrate and revert resize
-    # SCENARIO 4: Cold migrate and revert size
-    #logging.info("Test Step 7: Cold migrating instance and then resize reverting")
-    #current_vm_host = get_novashowvalue(conn, vm_list[0], "host")
-    #logging.info("VM %s is on host %s" % (vm_list[0], current_vm_host))
-    #exec_vm_migrate(conn, vm_list[0], "cold", "revert")
+    # Close connection at end of test
+    conn.logout()
+    conn.close()
+
+    # For HTEE, non-zero exit code means test failed
+    if test_result:
+        exit(1)
+    else:
+        exit(0)

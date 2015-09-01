@@ -2,9 +2,9 @@
 
 """
 Usage:
-./test_cold_migrate_vms.py <FloatingIPAddress>
+./test_sanityrefresh_coldmigratevms.py <FloatingIPAddress>
 
-e.g.  ./test_cold_migrate_vms.py 10.10.10.2
+e.g.  ./test_sanityrefresh_coldmigratevms.py 10.10.10.2
 
 Assumptions:
 * System has been installed
@@ -33,6 +33,7 @@ General Conventions:
 
 Future Enhancements:
 *  Handle connection to inactive controller in the case of VM launch
+   Possible solution: rsync controller-0 /home/wrsroot with controller-1
 """
 
 import os
@@ -51,7 +52,7 @@ from CLI import keystone
 from CLI import vm
 from CLI import sysinv
 
-def test_sanityrefresh_cold_migrate_vms(conn):
+def test_sanityrefresh_coldmigratevms(conn):
     """ This test performs a cold migration of VMs.  If there are no VMs on the
         system, it will launch some.  It will do two cold migrations:
 
@@ -63,7 +64,7 @@ def test_sanityrefresh_cold_migrate_vms(conn):
         Inputs:
         * conn (string) - ID of pexpect session
         Outputs:
-        * None.  We will simply reports if the test passed or failed 
+        * testFailed_flag - True if the test fails, False otherwise 
     """
     
     vmlist_virtio = vmlist_avp = vmlist_vswitch = []
@@ -138,7 +139,7 @@ if __name__ == "__main__":
 
     # Extract command line arguments
     if len(sys.argv) < 2:
-        sys.exit("Usage: ./test_cold_migrate_vms.py <Floating IP of host machine>")
+        sys.exit("Usage: ./test_sanityrefresh_coldmigratevms.py <Floating IP of host machine>")
     else:
         floating_ip = sys.argv[1]
 
@@ -151,5 +152,15 @@ if __name__ == "__main__":
     conn.setecho(ECHO)
 
     # Invoke test
-    test_result = test_sanityrefresh_cold_migrate_vms(conn)
+    test_result = test_sanityrefresh_coldmigratevms(conn)
+
+    # Close connection at end of test
+    conn.logout()
+    conn.close()
+
+    # For HTEE, non-zero exit code means test failed
+    if test_result:
+        exit(1)
+    else:
+        exit(0)
 

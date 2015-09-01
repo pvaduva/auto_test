@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2013 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the DPDK autotest suite app/test.
+
+Modification history
+====================
+11feb15, ccw  Created
+-->
+
+<file>
+<environment>
+</environment>
+
+<test_module name="" timeout="">
+    <test_case name="${WASSP_TC_NAME}" preTest="" postTest="">
+
+# Non-zero exit code will automatically fail test
+
+CALL test_sanityrefresh_preflightcheck.py $env.NODE.target.Boot.oamFloat
+
+    </test_case>
+</test_module>
+</file>

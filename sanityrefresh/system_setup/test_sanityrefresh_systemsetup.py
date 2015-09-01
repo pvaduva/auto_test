@@ -2,9 +2,9 @@
 
 """
 Usage:
-./test_system_setup.py <FloatingIPAddress>
+./test_sanityrefresh_systemsetup.py <FloatingIPAddress>
 
-e.g.  ./test_system_setup.py 10.10.10.2
+e.g.  ./test_sanityrefresh_systemsetup.py 10.10.10.2
 
 Assumptions:
 * System has been installed
@@ -17,16 +17,15 @@ tests can be run.
 Test Steps:
 0) SSH to the system
 1) Source /etc/nova/openrc
-2) Run lab_cleanup (if exists)
-3) Run lab_setup (if exists)
-4) Up the quotas
-5) Unlock hosts if locked
-6) Create additional flavors
+2) Up the quotas
+3) Create additional flavors
+4) Launch VMs of each type (virtio, vswitch, avp)
 
 General Conventions:
 1) Functions that start with "list" have no return value and only report information
 2) Functions that start with "check" return Boolean values
 3) Functions that start with "get" check the system for conditions and return 1 or more values
+4) Functions that start with "exec", execute a command on the system
 
 Future Enhancements:
 *  Handle connection to inactive controller
@@ -39,22 +38,10 @@ import re
 sys.path.append(os.path.expanduser('~/wassp-repos/testcases/cgcs/cgcs2.0/common/py'))
 
 from CLI.cli import *
-
-def source_nova(conn):
-    """ This function sources the /etc/nova/openrc file.
-        Inputs:
-        * conn - ID of pexpect session
-        Outputs:
-    """
-    conn.sendline('source /etc/nova/openrc')
-    resp = conn.expect([PROMPT, pexpect.TIMEOUT])
-    if resp == 1:
-        logging.warning("Unable to source /etc/nova/openrc on %s" % current_host)
-        active_controller, inactive_controller = get_activeinactive_controller(conn)
-        current_host = get_hostname(conn)
-        if inactive_controller == current_host:
-            logging.warning("We are on the inactive controller") 
-        # should we try the other IPs?
+from CLI import nova
+from CLI import keystone
+from CLI import vm
+from CLI import sysinv
 
 def get_activeinactive_controller(conn, cont_hostname_list):
     """ This function returns the hostname of the active controller 
@@ -149,7 +136,7 @@ def check_novaservices(conn, cont_hostname_list):
         return False    
 
 def list_novaquota(conn, tenant_id):
-    """ This function returns the current nova quota.
+    """ This function returns the current nova quota for a particular user.
         Inputs:
         * conn - ID of pexpect session
         * tenant_id - id of a tenant, e.g. 690d4635663a46aba6d4c1e6a3a9efc7 
@@ -158,14 +145,16 @@ def list_novaquota(conn, tenant_id):
     """
     
     # Get nova quota list
+    conn.prompt()
     cmd = "nova quota-show --tenant %s" % tenant_id 
     conn.sendline(cmd)
-    #resp = conn.expect(["Quota", PROMPT, pexpect.TIMEOUT])
-    resp = conn.expect([NON_EMPTY_TABLE, PROMPT, pexpect.TIMEOUT])
-    if resp != 0:
-        logging.warning("Unable to retrieve Nova quota")
+    # Possible enhancement is for regex to match non-empty table, to be more generic
+    resp = conn.expect(["Quota", ERROR, pexpect.TIMEOUT])
+    if resp == 1:
+        logging.warning("Unable to list nova quota due to %s" % conn.match.group())
+    elif resp == 2:
+        logging.warning("Unable to retrieve Nova quota due to timeout.")
 
-    conn.prompt()
     return resp 
 
 def list_cinderquota(conn, tenant_id):
@@ -182,44 +171,12 @@ def list_cinderquota(conn, tenant_id):
     cmd = "cinder quota-show %s" % tenant_id 
     conn.sendline(cmd)
     #resp = conn.expect([NON_EMPTY_TABLE, PROMPT, pexpect.TIMEOUT])
-    resp = conn.expect(["Property", PROMPT, pexpect.TIMEOUT])
-    if resp != 0:
-        logging.warning("Unable to retrieve Cinder quota")
-    #conn.prompt()
+    #resp = conn.expect(["Property", PROMPT, pexpect.TIMEOUT])
+    resp = conn.expect(["Property", pexpect.TIMEOUT])
+    if resp == 2:
+        logging.warning("Cinder quota command %s timed out" % cmd)
+
     return resp 
-
-def get_projectuserid(conn, user):
-    """ Return the UUID of a project.
-        Inputs:
-        * conn - ID of a pexpect session
-        * user - name of a user, e.g. tenant1, tenant2, admin, etc.
-        Outputs:
-        * uuid - either a valid uuid or None
-    """
-    
-    cmd1 = "openstack project list"
-    cmd = "/usr/bin/keystone tenant-list"
-
-    # We will use the deprecated commands unless the flag is true
-    if USE_NEWCMDS:
-        cmd = cmd1
-
-    conn.sendline(cmd)
-    uuid = None 
-    resp = 0
-    while resp < 2:
-        # We could probably do better than this regex.  Revise.
-        project_match = USER_ID + "(?=\s\| %s)" % user 
-        resp = conn.expect([project_match, PROMPT, pexpect.TIMEOUT])
-        if resp == 0:
-            uuid = conn.match.group()
-            logging.info("The UUID of %s is %s" % (user, uuid))
-            break 
-        elif resp == 2:
-            logging.error("Unable to get UUID for %s" % user)
-            break
-    conn.prompt()
-    return uuid
 
 def put_novaquota(conn, tenant_id, quota_name, quota_value):
     """ Update the nova quota.
@@ -233,13 +190,9 @@ def put_novaquota(conn, tenant_id, quota_name, quota_value):
         * Returns False if the update was not successful 
     """
 
-    # This is what will be returned by the system if we encounter an error
-    # if this is generic enough, move to constants.py
-    err = "(ERROR.*)\n"
-
     cmd = "nova quota-update --%s %s %s" % (quota_name, quota_value, tenant_id)
     conn.sendline(cmd)
-    resp = conn.expect([PROMPT, err, pexpect.TIMEOUT]) 
+    resp = conn.expect([PROMPT, ERROR, pexpect.TIMEOUT]) 
     conn.prompt()
     if resp == 1:
         logging.warning("Unable to update nova quota due to %s" % conn.match.group())
@@ -262,13 +215,9 @@ def put_cinderquota(conn, tenant_id, quota_name, quota_value):
         * Returns False if the update was not successful 
     """
 
-    # This is what will be returned by the system if we encounter an error
-    # if this is generic enough, move to constants.py
-    err = "(ERROR.*)\n"
-
     cmd = "cinder quota-update --%s %s %s" % (quota_name, quota_value, tenant_id)
     conn.sendline(cmd)
-    resp = conn.expect([PROMPT, err, pexpect.TIMEOUT]) 
+    resp = conn.expect([PROMPT, ERROR, pexpect.TIMEOUT]) 
     conn.prompt()
     if resp == 1:
         logging.warning("Unable to update cinder quota due to %s" % conn.match.group())
@@ -286,20 +235,20 @@ def get_novaquotavalue(conn, tenant_id, quota_name):
         * tenant_id - id of a tenant, e.g. 690d4635663a46aba6d4c1e6a3a9efc7
         * quota_name - name of quota to query, e.g. cores
         Outputs:
-        * Returns value of quota or non-zero value
+        There might be a better way to handle this but for now:
+        * Returns value of quota which will be a string, or return resp (numeric) 
     """
 
-    err = "(ERROR.*)\n"
-
+    # Extract match to common file when perfected
     quota_match = "(?<=%s).*?(\d+)" % quota_name
     cmd = "nova quota-show --tenant %s" % tenant_id 
     conn.sendline(cmd)
-    resp = conn.expect([quota_match, PROMPT, pexpect.TIMEOUT])
-    if resp == 2:
-        logging.warning("The %s command timed out." % cmd) 
-        return resp
-    elif resp != 0:
-        logging.warning("Unable to retrieve value of Nova quota %s" % quota_name)
+    resp = conn.expect([quota_match, ERROR, pexpect.TIMEOUT])
+    if resp == 1:
+        logging.warning("Unable to list nova quota due to %s" % conn.match.group())
+        return resp 
+    elif resp == 2:
+        logging.warning("Unable to retrieve Nova quota due to timeout.")
         return resp
 
     return conn.match.group(1) 
@@ -313,8 +262,6 @@ def get_cinderquotavalue(conn, tenant_id, quota_name):
         Outputs:
         * Returns value of quota or non-zero value
     """
-
-    err = "(ERROR.*)\n"
 
     quota_match = "(?<=%s).*?(\d+)" % quota_name
     cmd = "cinder quota-show %s" % tenant_id 
@@ -351,7 +298,6 @@ def list_novaflavors(conn):
             flavorid_list.append(conn.match.group())
         elif resp == 3:
             logging.warning("The %s command timed out." % cmd)
-    #conn.prompt()
 
     if not flavorid_list:
         logging.info("There are no flavors currently defined.")
@@ -367,8 +313,6 @@ def put_bulknovaflavors(conn):
         Enhancement:
         * Optional arg so that the user can create custom flavors
     """
-    err = "(ERROR.*)\n"
-
     cmd = "nova flavor-create"
     options = ["m1.small 2 2048 20 1", 
                "wrl5.dpdk.small.heartbeat 200 512 0 2",
@@ -380,12 +324,11 @@ def put_bulknovaflavors(conn):
         fullcmd = cmd + " " + option
         conn.prompt()
         conn.sendline(fullcmd)
-        resp = conn.expect([err, PROMPT, pexpect.TIMEOUT])
+        resp = conn.expect([ERROR, PROMPT, pexpect.TIMEOUT])
         if resp == 0:
             logging.warning("Error creating nova flavor due to %s" % conn.match.group())
         elif resp == 2:
             logging.warning("Command %s timed out" % fullcmd)
-
 
 def put_bulknovaflavorkeys(conn):
     """ This creates some flavor keys to go along with the created flavors.
@@ -396,7 +339,6 @@ def put_bulknovaflavorkeys(conn):
          Enhancements:
          * Optional arg so that the user can create custom flavor keys
     """
-    err = "(ERROR.*)\n"
 
     cmd = "nova flavor-key"
     options = ["m1.small set hw:cpu_policy=dedicated hw:mem_page_size=2048",
@@ -411,7 +353,7 @@ def put_bulknovaflavorkeys(conn):
         fullcmd = cmd + " " + option
         conn.prompt()
         conn.sendline(fullcmd)
-        resp = conn.expect([err, PROMPT, pexpect.TIMEOUT])
+        resp = conn.expect([ERROR, PROMPT, pexpect.TIMEOUT])
         if resp == 0:
             logging.warning("Error creating nova flavor-key due to %s" % conn.match.group())
         elif resp == 2:
@@ -425,89 +367,57 @@ def delete_novaflavor(conn, name):
         Outputs:
         * None
     """
-    err = "(ERROR.*)\n"
 
     cmd = "nova flavor-delete"
     fullcmd = cmd + " " + name
     conn.prompt()
     conn.sendline(fullcmd)
-    resp = conn.expect([err, PROMPT, pexpect.TIMEOUT])
+    resp = conn.expect([ERROR, PROMPT, pexpect.TIMEOUT])
     if resp == 0:
         logging.warning("Error deleting nova flavor due to %s" % conn.match.group())
     elif resp == 2:
         logging.warning("Command %s timed out" % fullcmd)
 
-def list_nova(conn, tenant_name=None):
-    """ This lists all the VMs.
+def get_neutronnetid(conn, network_name):
+    """ This returns the ID of a network by querying neutron net-show.
         Inputs:
         * conn - ID of pexpect session
-        * tenant_name - optional parameter to specify a tenant, e.g. tenant1
+        * network_name - name of network to query, e.g. tenant1-mgmt-net
         Outputs:
-        * Returns a list of VM IDs 
+        * ID of network which is a string, or non-zero integer if failure
     """
 
-    vm_list = []
-    err = "(ERROR.*)\n"
-
-    if tenant_name != None:
-        tenant_id = get_projectuserid(conn, tenant_name)
-        if not tenant_id:
-            logging.error("Unable to retrieve corresponding ID for tenant %s" % cmd) 
-            # this is poor form.  let's think about a better return value
-            return -1 
-        cmd = "nova list --tenant %s" % tenant_id
-    else:
-        cmd = "nova list --all-tenants"
-
     conn.prompt()
+    cmd = "neutron net-show %s -F id" % network_name
     conn.sendline(cmd)
-    resp = 0
-    while resp < 3:
-        resp = conn.expect([UUID, err, PROMPT, pexpect.TIMEOUT])
-        if resp == 0:
-            vm_list.append(conn.match.group())
-        elif resp == 1:
-            logging.warning("Error listing nova VMs due to %s" % conn.match.group())
-        elif resp == 3:
-            logging.warning("Command %s timed out" % cmd)
+ 
+    resp = conn.expect([UUID, "(Unable.*)", pexpect.TIMEOUT])
+    if resp == 0:
+        return conn.match.group()
+    elif resp == 1:
+        logging.warning("Encountered error on command %s: %s" % (cmd, conn.match.group()))
+    elif resp == 2:
+        logging.warning("Command %s timed out" % cmd)
 
-    return vm_list
+    return resp
 
-def launch_bulkvms(conn, options_list=None):
-    """ This launches a bunch of VMs of different types.  If the user supplies a list of
-        options, the launcher will attempt to launch VMs of that type.
+def test_sanityrefresh_systemsetup(conn):
+    """ This test sets up the system for use by sanity.
         Inputs:
         * conn - ID of pexpect session
-        * options_list - a list of options, e.g. heartbeat, sriov, dpdk, etc.
         Outputs:
-        * None
-    """ 
-     
+        * testFailed_flag - True if test fails, false otherwise
+    """
 
-if __name__ == "__main__":
-
-    # Enable logging
-    logging.basicConfig(level=logging.INFO)
-
-    # Test case name
-    test_name = "test_sanityrefresh_systemsetup"
-
-    # Get time
-    test_start_time = datetime.datetime.now()
-    logging.info("Starting %s at %s" % (test_name, test_start_time))
-
-    # Establish connection
-    conn = Session(timeout=TIMEOUT)
-    #conn.connect(hostname=HOSTNAME, username=USERNAME, password=PASSWORD)
-    conn.connect(hostname="128.224.150.219", username=USERNAME, password=PASSWORD)
-    conn.setecho(ECHO)
+    testFailed_flag = False
 
     # source /etc/nova/openrc
-    source_nova(conn)
+    nova.source_nova(conn)
 
     # Get the UUID for the user we're interested in
-    tenant1_id = get_projectuserid(conn, "tenant2")
-
+    tenant1_id = keystone.get_userid(conn, "tenant1")
+    tenant2_id = keystone.get_userid(conn, "tenant2")
+ 
     # Get the nova quota for tenant1
     list_novaquota(conn, tenant1_id)
 
@@ -516,7 +426,7 @@ if __name__ == "__main__":
     max_instances = "100"
     max_ram = "51200"
     put_novaquota(conn, tenant1_id, "cores", max_cores)      
-    
+
     # Update quotas so we don't run out
     put_novaquota(conn, tenant1_id, "instances", max_instances)      
 
@@ -533,6 +443,7 @@ if __name__ == "__main__":
     else:
         logging.warning("Nova cores not set correctly.  Expected %s, received %s" % (max_cores, result))
 
+
     # Get the cinder quotas for tenant1
     list_cinderquota(conn, tenant1_id)
 
@@ -546,7 +457,7 @@ if __name__ == "__main__":
     if result == max_volumes:
         logging.info("Cinder volumes have been set correctly to %s" % max_volumes)
     else:
-        logging.warning("Cinder volumes not set correctly.  Expected %s, received %s" % (max_volumes, result)) 
+        logging.warning("Cinder volumes not set correctly.  Expected %s, received %s" % (max_volumes, result))
 
     # list existing flavors
     flavorid_list = list_novaflavors(conn)
@@ -557,16 +468,68 @@ if __name__ == "__main__":
 
     # create flavor-keys to go with the newly created flavors
     put_bulknovaflavorkeys(conn)
-     
-    # try deleting a flavor
+
+    # try deleting a flavor just for fun
     delete_novaflavor(conn, "fds")
 
-    # nova list to list VMs
-    vm_list = list_nova(conn)
-    print(vm_list)
+    # Launch VMs via script
+    vmlist_virtio = vm.exec_launchvmscript(conn, "tenant1", "virtio", 1)
+    vmlist_avp = vm.exec_launchvmscript(conn, "tenant2", "avp", 1)
+    vmlist_vswitch = vm.exec_launchvmscript(conn, "tenant1", "vswitch", 1)
+    expectedvm_list = vmlist_virtio + vmlist_avp + vmlist_vswitch
+
+    # Get an updated list of VMs that have been launched by the system 
+    vm_list = nova.get_novavms(conn, "name")
+
+    # Check if expected VMs are present 
+    logging.info("Test will fail if the expected VMs are not present on the system.")
+    if vm_list == expectedvm_list:
+        logging.info("Test result: PASSED")
+    else:
+        logging.error("Current VMs %s not equivalent to expected VMs %s" % (vm_list, expectedvm_list))
+        logging.info("Test result: FAILED")
+        testFailed_flag = True
 
     # Test end time
     test_end_time = datetime.datetime.now()
     test_duration = test_end_time - test_start_time
     logging.info("Ending %s at %s" % (test_name, test_end_time))
     logging.info("Test ran for %s" % test_duration)
+
+    return testFailed_flag
+
+if __name__ == "__main__":
+
+    # Extract command line arguments
+    if len(sys.argv) < 2:
+        sys.exit("Usage: ./test_sanityrefresh_systemsetup.py <Floating IP of host machine>")
+    else:
+        floating_ip = sys.argv[1]
+
+    # Enable logging
+    logging.basicConfig(level=logging.INFO)
+
+    # Test case name
+    test_name = "test_sanityrefresh_systemsetup"
+
+    # Get time
+    test_start_time = datetime.datetime.now()
+    logging.info("Starting %s at %s" % (test_name, test_start_time))
+
+    # Establish connection
+    conn = Session(timeout=TIMEOUT)
+    conn.connect(hostname=floating_ip, username=USERNAME, password=PASSWORD)
+    conn.setecho(ECHO)
+
+    # Invoke test
+    test_result = test_sanityrefresh_systemsetup(conn) 
+
+    # Terminate connection
+    conn.logout()
+    conn.close()
+
+    # For HTEE, non-zero value fails the test
+    if test_result:
+        exit(1)
+    else:
+        exit(0)
