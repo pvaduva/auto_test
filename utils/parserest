@@ -1,0 +1,52 @@
+#!/bin/bash
+
+mkdir -p .parserest
+rm -f .parserest/last-cmd.output .parserest/last-line.output.tmp
+
+awk '                              \
+BEGIN  {                           \
+   LASTLINE=" ";                   \
+}                                  \
+{                                  \
+   print LASTLINE;                 \
+   LASTLINE=$0;                    \
+}                                  \
+END {                              \
+   print LASTLINE > ".parserest/last-line.output.tmp"; \
+}' >> .parserest/last-cmd.output
+
+cat .parserest/last-line.output.tmp | json_pp >> .parserest/last-cmd.output
+rm -f .parserest/last-line.output.tmp
+
+
+cat .parserest/last-cmd.output
+
+
+if [[ $# > 0 ]]; then
+	if [ $1 = "-token" ]; then
+		rm -f .parserest/authorization.token;
+
+		awk '                              \
+		BEGIN  {                           \
+		   FS=":";                         \
+		   TOKEN="NOT_FOUND";              \
+		}                                  \
+		{                                  \
+		   gsub(/"/, "", $1);              \
+		   gsub(/ /, "", $1);              \
+		   if ( $1 == "id" ) {             \
+		      TOKEN=$2;                    \
+		   };                              \
+		}                                  \
+		END {                              \
+		   gsub(/ /, "", TOKEN);           \
+		   gsub(/,/, "", TOKEN);           \
+		   print "export TOKEN=" TOKEN "\n" ;     \
+		}' .parserest/last-cmd.output >> .parserest/authorization.token
+
+		echo
+		echo "Need to ... 'source .parserest/authorization.token'"
+		echo
+	fi
+fi
+
