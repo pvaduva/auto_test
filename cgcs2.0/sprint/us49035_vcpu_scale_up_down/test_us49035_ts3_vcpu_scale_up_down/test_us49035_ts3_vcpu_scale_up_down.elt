@@ -31,7 +31,7 @@ Assumptions:
 *EXP_INFO
 
 # Variables defined to be used as contants
-$HOST_IP=128.224.151.192
+$HOST_IP=128.224.150.199
 $HOST_USER=wrsroot
 $PASS=li69nux
 $NAT_IP=128.224.150.11
@@ -48,7 +48,7 @@ $lab_setup=yes
 >date +%F_%T
 +$DATE=\n(2.+)
 
-@2
+@60
 
 ; === connecting to controller
 
@@ -193,7 +193,7 @@ $quota_volumes=30
 #CGTS-907 scale up down via boot from cinder
 ; === switch to tenant mode
 >source $tenant_credentials
-
+@60
 ; === copy heat template to /home/wrsroot/ 
 >find . -iname BootFromCinder.yaml
 +$result=(\n.*/hot/scenarios/BootFromCinder.yaml)
@@ -202,15 +202,15 @@ $quota_volumes=30
 
 ; === get tenant_net1 id
 >neutron net-list
-+$tenant1_mgmt_net_id=([0-9a-f-]{32,40})\s+\|\s+tenant1-mgmt-net
-+$tenant1_net0_id=([0-9a-f-]{32,40})\s+\| tenant1-net0
++$tenant1_mgmt_net_id=([0-9a-f-]{32,45})\s+\|\s*tenant1-mgmt-net
++$tenant1_net0_id=([0-9a-f-]{32,45})\s+\|\s*tenant1-net0
 
 ; === get cgcs-guest image id
 >glance image-list
 +$cgcs_guest_id=([0-9a-z-]{32,40})\s+\|\s+cgcs-guest
 
 ; === create heat stack from cinder volume
->heat stack-create -f BootFromCinder.yaml -P FLAVOR=$flavor2 -P IMAGE=cgcs-guest -P KEYPAIR=keypair-tenant1 CINDERSTACK
+>heat stack-create -f BootFromCinder.yaml -P FLAVOR=$flavor2 -P IMAGE=cgcs-guest -P PRIVATE_NET=$tenant1_mgmt_net_id -P INTERNAL_NET=$tenant1_net0_id -P KEYPAIR=keypair-tenant1 CINDERSTACK
 
 ; === check if CINDERSTACK create complete
 !sleep 45
@@ -221,52 +221,52 @@ $quota_volumes=30
 
 ; === Do scale up/down 
 
-; === execute scale down for VM-from-cinder-volume
-# scale down VM-from-cinder-volume to minimum value
-; === save the current state of VM-from-cinder-volume cpu
+; === execute scale down for cinder-vm
+# scale down cinder-vm to minimum value
+; === save the current state of cinder-vm cpu
 @5
 >vm-topology -s servers
-<VM-from-cinder-volume
+<cinder-vm
 +$min_cpu=(\d+),\d+,\d+
 +$cur_cpu=\d+,(\d+),\d+
 +$max_cpu=\d+,\d+,(\d+)
-# scale down VM-from-cinder-volume to min value
-; === scale down VM-from-cinder-volume cpu to the minimum value:$min_cpu
+# scale down cinder-vm to min value
+; === scale down cinder-vm cpu to the minimum value:$min_cpu
 $actual_cur_cpu=$cur_cpu
 [ $min_cpu < $actual_cur_cpu
 	@10
-	>nova scale VM-from-cinder-volume cpu down
+	>nova scale cinder-vm cpu down
 	>echo $?
 	<\n0
 	-$actual_cur_cpu
 ]
 
-; === check if VM-from-cinder-volume current cpu value reached minimum cpu value:$min_cpu
->nova show VM-from-cinder-volume
+; === check if cinder-vm current cpu value reached minimum cpu value:$min_cpu
+>nova show cinder-vm
 <wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
 
 ?if $cur_cpu!=$min_cpu? [
-       ;red === VM-from-cinder-volume expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+       ;red === cinder-vm expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
 ]
 
-; === VM-from-cinder-volume scale down should fail beyond minimum limit: $min_cpu
+; === cinder-vm scale down should fail beyond minimum limit: $min_cpu
 >vm-topology -s servers
->nova scale VM-from-cinder-volume cpu down
+>nova scale cinder-vm cpu down
 @25
 >echo $?
 <\n1
 
-; === scale down of VM-from-cinder-volume completed
+; === scale down of cinder-vm completed
 
 
-# scale up VM-from-cinder-volume to max value
-; === scale up VM-from-cinder-volume cpu to the maximum value:$max_cpu
-; === save the current state of VM-from-cinder-volume cpu
+# scale up cinder-vm to max value
+; === scale up cinder-vm cpu to the maximum value:$max_cpu
+; === save the current state of cinder-vm cpu
 >vm-topology -s servers
-<VM-from-cinder-volume
+<cinder-vm
 +$min_cpu=(\d+),\d+,\d+
 +$cur_cpu=\d+,(\d+),\d+
 +$max_cpu=\d+,\d+,(\d+)
@@ -275,30 +275,30 @@ $actual_cur_cpu=$cur_cpu
 $actual_cur_cpu=$cur_cpu
 [ $actual_cur_cpu < $max_cpu
 @10
->nova scale VM-from-cinder-volume cpu up
+>nova scale cinder-vm cpu up
 >echo $?
 <\n0
 +$actual_cur_cpu
 ]
 
-; === check if VM-from-cinder-volume current cpu value reached max cpu value:$max_cpu
->nova show VM-from-cinder-volume
+; === check if cinder-vm current cpu value reached max cpu value:$max_cpu
+>nova show cinder-vm
 <wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
 
 ?if $cur_cpu!=$max_cpu? [
-        ;red === VM-from-cinder-volume expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+        ;red === cinder-vm expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
 ]
 
-; === VM-from-cinder-volume scale up should fail beyond max limit: $max_cpu
+; === cinder-vm scale up should fail beyond max limit: $max_cpu
 >vm-topology -s servers
->nova scale VM-from-cinder-volume cpu up
+>nova scale cinder-vm cpu up
 @25
 >echo $?
 <\n1
-; === scale up of VM-from-cinder-volume completed
+; === scale up of cinder-vm completed
 
 #scale up down via boot from cinder complete
 
@@ -340,53 +340,53 @@ $actual_cur_cpu=$cur_cpu
 >source $tenant_credentials
 
 ; === Do scale up/down 
-; === execute scale down for VM-from-cinder-volume
-# scale down VM-from-cinder-volume to minimum value
-; === save the current state of VM-from-cinder-volume cpu
+; === execute scale down for cinder-vm
+# scale down cinder-vm to minimum value
+; === save the current state of cinder-vm cpu
 !sleep 30
 @50
 >vm-topology -s servers
-<VM-from-cinder-volume
+<cinder-vm
 +$min_cpu=(\d+),\d+,\d+
 +$cur_cpu=\d+,(\d+),\d+
 +$max_cpu=\d+,\d+,(\d+)
-# scale down VM-from-cinder-volume to max value
-; === scale down VM-from-cinder-volume cpu to the minimum value:$min_cpu
+# scale down cinder-vm to max value
+; === scale down cinder-vm cpu to the minimum value:$min_cpu
 $actual_cur_cpu=$cur_cpu
 [ $min_cpu < $actual_cur_cpu
 	@10
-	>nova scale VM-from-cinder-volume cpu down
+	>nova scale cinder-vm cpu down
 	>echo $?
 	<\n0
 	-$actual_cur_cpu
 ]
 
-; === check if VM-from-cinder-volume current cpu value reached minimum cpu value:$min_cpu
->nova show VM-from-cinder-volume
+; === check if cinder-vm current cpu value reached minimum cpu value:$min_cpu
+>nova show cinder-vm
 <wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
 
 ?if $cur_cpu!=$min_cpu? [
-       ;red === VM-from-cinder-volume expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+       ;red === cinder-vm expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
 ]
 
-; === VM-from-cinder-volume scale down should fail beyond minimum limit: $min_cpu
+; === cinder-vm scale down should fail beyond minimum limit: $min_cpu
 >vm-topology -s servers
->nova scale VM-from-cinder-volume cpu down
+>nova scale cinder-vm cpu down
 @25
 >echo $?
 <\n1
 
-; === scale down of VM-from-cinder-volume completed
+; === scale down of cinder-vm completed
 
 
-# scale up VM-from-cinder-volume to max value
-; === scale up VM-from-cinder-volume cpu to the maximum value:$max_cpu
-; === save the current state of VM-from-cinder-volume cpu
+# scale up cinder-vm to max value
+; === scale up cinder-vm cpu to the maximum value:$max_cpu
+; === save the current state of cinder-vm cpu
 >vm-topology -s servers
-<VM-from-cinder-volume
+<cinder-vm
 +$min_cpu=(\d+),\d+,\d+
 +$cur_cpu=\d+,(\d+),\d+
 +$max_cpu=\d+,\d+,(\d+)
@@ -395,30 +395,30 @@ $actual_cur_cpu=$cur_cpu
 $actual_cur_cpu=$cur_cpu
 [ $actual_cur_cpu < $max_cpu
 @50
->nova scale VM-from-cinder-volume cpu up
+>nova scale cinder-vm cpu up
 >echo $?
 <\n0
 +$actual_cur_cpu
 ]
 
-; === check if VM-from-cinder-volume current cpu value reached max cpu value:$max_cpu
->nova show VM-from-cinder-volume
+; === check if cinder-vm current cpu value reached max cpu value:$max_cpu
+>nova show cinder-vm
 <wrs-res:vcpus
 +$min_cpu=(\d+),\s*\d+,\s*\d+
 +$cur_cpu=\d+,\s*(\d+),\s*\d+
 +$max_cpu=\d+,\s*\d+,\s*(\d+)
 
 ?if $cur_cpu!=$max_cpu? [
-        ;red === VM-from-cinder-volume expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
+        ;red === cinder-vm expected current cpu value $min_cpu, but actual current cpu value $cur_cpu 
 ]
 
-; === VM-from-cinder-volume scale up should fail beyond max limit: $max_cpu
+; === cinder-vm scale up should fail beyond max limit: $max_cpu
 >vm-topology -s servers
->nova scale VM-from-cinder-volume cpu up
+>nova scale cinder-vm cpu up
 @25
 >echo $?
 <\n1
-; === scale up of VM-from-cinder-volume completed
+; === scale up of cinder-vm completed
 
 # scale up down via boot from cinder complete
 

@@ -225,7 +225,7 @@ $MAX=10
 ; === get ID of each instance
 >nova list
 >nova list | grep $vm1
-+$resource_id_vm1=([0-9a-f-]{32,36})\s* \|\s+$vm1
++$resource_id_vm1=([0-9a-f-]{32,50})\s* \|\s+$vm1
 
 
 >vm-topology | grep $resource_id_vm1
@@ -262,7 +262,7 @@ $compute_state=none
 ################### Scale up/down via heat #######################
 
 >heat stack-list | grep STACK1
-+$stack_id1=([0-9a-f-]{32,36})\s*\|\s+STACK1
++$stack_id1=([0-9a-f-]{32,50})\s*\|\s+STACK1
 
 $value=2
 >ceilometer sample-create -r $resource_id_vm1 -m vote --meter-type gauge --meter-unit '%' --sample-volume $value --resource-metadata '{"metering.stack":"$stack_id1"}'

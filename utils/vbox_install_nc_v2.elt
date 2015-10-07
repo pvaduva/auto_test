@@ -546,6 +546,12 @@ $node_list=
 ?if $storage_consolidation == MI ? [
 	$storage_infra_interface=mgmt0
 ]
+
+# Combined Tagged Management & Infrastructure
+?if $storage_consolidation == TMI ? [
+	$storage_infra_interface=pxeboot0
+]
+
 # Seperate Management & Infrastructure
 
 ?if $storage_consolidation == M_I ? [
@@ -564,7 +570,7 @@ $node_list=
 	$compute_infra_interface=mgmt0
 ]
 ?if $compute_consolidation == TMI_D ? [
-	$compute_infra_interface=eth1
+	$compute_infra_interface=pxeboot0
 ]
 
 
@@ -634,6 +640,7 @@ $part=1
 # part 3 after config_controller, but before adding controller-1
 
 ?if $part == 2? [
+	@100
 	; === get serial port
 	>$vboxmanage showvminfo controller-0 | grep --color -i serial | cat
 	+$serial_pipe='(.+)'
@@ -647,7 +654,7 @@ $part=1
 	?if $part == 2? %PART2	
 ]
 
-
+?if $part == 4? %PART4
 
 ?if $part == 3? [
 	; === Restart install AFTER config_controller (part 3)
@@ -1057,6 +1064,8 @@ INTERACT
 ?if $https == no? [ 
 	<Use secure
 	>N
+	<Install custom firewall rules
+	>N
 ]
 
 ?if $https == yes? [ 
@@ -1068,6 +1077,8 @@ INTERACT
 	>server-with-key-with-passwd.pem
 	<Password for the CA-Signed
 	>li69nux
+	<Install custom firewall
+	>N
 ]
 
 <Create admin user password
@@ -1130,6 +1141,9 @@ INTERACT
 	%BREAK_CONTROLLER1
 
 ]
+
+%PART4
+*FORK $connection
 # controller in node list?
 $node_controllers=$node_list
 =$node_controllers/.*(controller)-\d.*/\1/
@@ -1144,8 +1158,8 @@ $node_controllers=$node_list
 ; === Get the infra interface name from controller-0 
 
 >system host-if-list controller-0 
-!sleep 10
-+$infra_name=[0-9a-z-]{30,36}\s* \|\s+(infra\d|eth\d.\d+|eth\d)\s*|s*infra
+!sleep 5
++$infra_name=[0-9a-z-]{24,50}\s* \|\s+(infra\d|eth\d.\d+)\s*|s*infra
 
 $node_storage=$node_list
 =$node_storage/.*(storage)-\d.*/\1/
@@ -1174,6 +1188,7 @@ $node_storage=$node_list
 				;red $node did not become online
 				# break out of while loop
 				$state=online
+				$i=0
 				; Giving user the option to recover the lab
 				*INTERACT
 			]
@@ -1196,7 +1211,43 @@ $node_storage=$node_list
 		]	
 
 		?if $node_controllers == controller ? [
+			@60
+			$i=0
+			$controller_node=controller-1
+			$state=none
+			>system host-list
+			<$controller_node
+			+$state=(available|online|offline|failed|intest)
+			?if $state == offline ? [
+				[ $state != online
+					$state=none
+					[ $state != online
+						; === wait for $controller_node to come online
+						>system host-list
+						<$controller_node
+						+$state=(available|online|offline|failed|intest)
 
+						!sleep 5
+						+$i
+						?if $i > $max? [
+							;red $controller_node did not become online
+							# break out of while loop
+							$state=online
+							$i=0
+							; Giving user the option to recover the lab
+							*INTERACT
+						]
+					]
+				]	
+			]
+			; === check again to see if controller is in unlocked state
+			
+			>system host-list
+			<$controller_node
+			+$administrative=(locked|unlocked)
+			?if $administrative == locked ? [
+			    >system host-unlock controller-1
+			]
 			@60
 			$i=0
 			$controller_node=controller-1
@@ -1206,8 +1257,8 @@ $node_storage=$node_list
 			+$state=(available|online|offline|failed|intest)
 			[ $state != available
 				$state=none
-				[ $state != online
-					; === wait for $controller_node to come online
+				[ $state != available
+					; === wait for $controller_node to come available
 					>system host-list
 					<$controller_node
 					+$state=(available|online|offline|failed|intest)
@@ -1215,10 +1266,11 @@ $node_storage=$node_list
 					!sleep 5
 					+$i
 					?if $i > $max? [
-						;red $controller_node did not become online
+						;red $controller_node did not become available
 						# break out of while loop
-						$state=online
+						$state=available
 						; Giving user the option to recover the lab
+						$i=0
 						*INTERACT
 					]
 				]
@@ -1246,6 +1298,7 @@ $node_storage=$node_list
 					;red $controller_node did not become available
 					# break out of while loop
 					$state=available
+					$i=0
 					; Giving user the option to recover the lab
 					*INTERACT
 				]
@@ -1285,6 +1338,7 @@ $node_storage=$node_list
 				;red $node did not become available
 				# break out of while loop
 				$state=available
+				$i=0
 				; Giving user the option to recover the lab
 				*INTERACT
 			]
@@ -1384,7 +1438,7 @@ $node_computes=$node_list
 
 		$state=none
 		[ $state != available
-			; === wait for $node to come online
+			; === wait for $node to come available
 			>system host-list
 			<$node
 			+$state=(available|online|offline|failed|intest)
@@ -1395,6 +1449,7 @@ $node_computes=$node_list
 				;red $node did not come available
 				# break out of while loop
 				$state=available
+				$i=0
 				; Giving user the option to recover the lab
 				*INTERACT
 			]
