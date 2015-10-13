@@ -111,7 +111,7 @@ Additional Assumptions for Windows support (see script for details):
 Limitations:
 .	Vbox Snapshots are not supported - must wipedisk prior to running script when using snapshots
 
-Version 1.1.4
+Version 2.0 
 ;;;
 
 #
