@@ -64,31 +64,31 @@ Install VirtualBox on Linux or Windows Host
 .	T - Tagged/VLAN
 .	U - Untagged
 
- 
-	Network Consolidation Options for controller (con): 
-.		 M_I   - Separate Management & OAM, No Infrastructure network
+.	Network Consolidation Options for controller (con): 
+
+.		 M_O   - Separate Management & OAM Interface (DEFAULT)
+.                M_O_I - Separate Management, OAM & Infrastructure network
+.	         M_O_TI- Seperate Management, OAM network & Tagged Infrastruture 
 .		 MOI   - Combined Management, OAM, Infrastructure network
 .	         MO_I  - Combined Management, OAM network & separate Infrastruture Untagged
-.	         MO_TI - Combined Management, OAM network & separate Infrastruture tagged
-.		 MI_O  - Combined Management, Infrastructure & separate OAM network
+.	         MO_TI  - Combined Management, OAM network & separate Infrastruture tagged
+.		 MI_O - Combined Management, Infrastructure & separate untagged OAM network
 .		 MI_TO - Combined Management, Infrastructure & separate Tagged OAM network
-.		 M_TOUI- Separate Management & combined Tagged OAM & untagged Infrastrucute network
+.		 M_TOTI- Separate Management & combined Tagged OAM & tagged Infrastrucute network
 .		 M_UOTI- Separate Management & combined untagged OAM & tagged Infrastrucute network
-.		 M_O   - Separate Management & OAM Interface (DEFAULT)
+.		 M_TOUI- Separate Management & combined tagged OAM & untagged Infrastrucute network
 
 	Network Consolidation Options for Storage (str): 
-.		 MI    - Combined Management, Infrastructure network
+.		 MI    - Combined Management, Infrastructure network (Default)
+.		 TMI   - Combined Tagged Management, Infrastructure network
 .		 M_I   - Separate Management & Infrastructure network
 .	         M_TI  - Separate Management & Tagged Infrastructure network
-.	         M     - Only Management Network (Default)
 
 	Network Consolidation Options for Compute (com): 
-.		 MID    - Combined Management, Infrastructure & Data network
-.		 MI_D   - Combined Management, Infrastructure & Separate Data network
-.	         MI_TD  - Combined Management, Infrastructure & Separate Tagged Data network
-.	         MD_I   - Combined Management, Data & Separate Infrastructure network
-.		 MD_TI  - Combined Management, Data & Separate Tagged Infrastructure network
-.	         M_DI   - Seperate Management & Combined Date, Infrastructure network
+.		 MI_D   - Combined Management, Infrastructure & Separate Data network (Default)
+.		 TMI_D  - Combined Management, Tagged Infrastructure & Separate Data network
+.	         M_I_D  - Seperate Management, Infrastructure & Data network
+.	         M_TI_D - Seperate Management, Data & Tagged Infrastructure network
 
 Assumptions:
 .	ssh keys on CGTS1 server (to pull latest image)
