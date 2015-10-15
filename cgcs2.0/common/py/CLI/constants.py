@@ -41,6 +41,7 @@ INITIAL_PROMPT="\$ "
 PROMPT=".*\$ "
 
 # pxssh default location for log file
+LOGFILE_BASE = "/tmp/"
 LOGFILE = "temp.txt"
 
 # timeout for the sudo collect all command

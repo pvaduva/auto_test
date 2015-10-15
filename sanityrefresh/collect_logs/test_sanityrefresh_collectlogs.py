@@ -43,20 +43,19 @@ def collect_logs(conn, timeout):
         Output:
         * .tar.gz file created under /scratch
         * scp'ed off target to /folk/cgts/logs
-        * no return value
+        * return code of 0 on pass, or non-zero on fail
     """
-    testFailed_flag = False
 
-    # Get time
-    test_start_time = datetime.datetime.now()
-    logging.info("Starting %s at %s" % (test_name, test_start_time))
+    # Default return code (0 is pass, non-zero fail)
+    rc = 0
 
     conn.sendline("sudo collect all")
     conn.prompt()
     resp = 0
+
     while resp < 3:
         conn.timeout=timeout
-        resp = conn.expect(["\?", "Password\:", TARBALL_NAME, PROMPT, pexpect.TIMEOUT])
+        resp = conn.expect(["\?", "assword\:", TARBALL_NAME, PROMPT, pexpect.TIMEOUT])
         if resp == 0:
             conn.sendline("yes")
         elif resp == 1:
@@ -69,13 +68,44 @@ def collect_logs(conn, timeout):
             logging.info("New tarball name is: %s" % newtarball)
             # should we ls to see if it's really there?
             logging.info("Test Result: PASSED")
+            break
             # scp it to /folk/cgts/logs
         elif resp == 4:
             logging.warning("Timed out before logs could be collected.  Please increase the collect timeout and try again.")
             logging.error("Test Result: FAILED")
-            testFailed_flag = True
-    # reset timeout to original value after collect runs
-    conn.timeout=TIMEOUT
+            rc = 83
+
+    return rc
+
+if __name__ == "__main__":
+
+    # Name of test
+    test_name = "test_sanityrefresh_collectlogs"
+
+    # Extract command line arguments
+    if len(sys.argv) < 2:
+        sys.exit("Usage: ./%s.py <Floating IP of host machine>" % test_name)
+    else:
+        floating_ip = sys.argv[1]
+    
+    # Enable logging
+    test_start_time = datetime.datetime.now()
+    logfile_name = test_name + "_" + test_start_time.strftime("%Y%m%d-%H%M%S")
+    logfile_path = LOGFILE_BASE + logfile_name
+    logging.basicConfig(level=logging.INFO, filename=logfile_path)
+    logging.info("Starting %s at %s" % (test_name, test_start_time))
+
+    # Establish connection
+    conn = Session(timeout=TIMEOUT)
+    conn.connect(hostname=floating_ip, username=USERNAME, password=PASSWORD)
+    conn.setecho(ECHO)
+
+    # Run test case and get return code
+    rc = collect_logs(conn, COLLECT_TIMEOUT) 
+
+    # Terminate connection
+    conn.logout()
+    conn.close() 
 
     # Test end time
     test_end_time = datetime.datetime.now()
@@ -83,36 +113,5 @@ def collect_logs(conn, timeout):
     logging.info("Ending %s at %s" % (test_name, test_end_time))
     logging.info("Test ran for %s" % test_duration)
 
-    return testFailed_flag
-
-if __name__ == "__main__":
-
-    # Extract command line arguments
-    if len(sys.argv) < 2:
-        sys.exit("Usage: ./test_sanityrefresh_collectlogs.py <Floating IP of host machine>")
-    else:
-        floating_ip = sys.argv[1]
-
-    # Enable logging
-    logging.basicConfig(level=logging.INFO)
-
-    # Name of test
-    test_name = "test_sanityrefresh_collectlogs"
-
-    # Establish connection
-    conn = Session(timeout=TIMEOUT)
-    conn.connect(hostname=floating_ip, username=USERNAME, password=PASSWORD)
-    conn.setecho(ECHO)
-
-    test_result = collect_logs(conn, COLLECT_TIMEOUT) 
-
-    # Terminate connection
-    conn.logout()
-    conn.close() 
-
     # For HTEE, non-zero exit code is a failed test
-    if test_result:
-        exit(1)
-    else:
-        exit(0)
-
+    exit(rc)

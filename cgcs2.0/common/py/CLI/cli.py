@@ -61,8 +61,8 @@ class Session(pxssh.pxssh):
             self.force_password = True
             self.login(hostname, username, password, auto_prompt_reset=False, quiet=False)
             logging.info(self.before)
-            logfile_out = open(LOGFILE, 'w+')
-            self.logfile_read = sys.stdout 
+            #logfile_out = open(LOGFILE, 'w+')
+            self.logfile_read = sys.stdout
 
         except pxssh.ExceptionPxssh as err:
             logging.error("pxssh failed on login due to %s" % err)
