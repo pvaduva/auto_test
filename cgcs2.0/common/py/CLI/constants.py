@@ -12,6 +12,9 @@ TEST_HOSTNAME = "128.224.150.21"
 TEST_USERNAME = "svc-cgcsauto"
 TEST_PASSWORD = ")OKM0okm"
 
+# VLM
+VLM = "/folk/vlm/commandline/vlmTool"
+
 # scp user
 SCP_USERNAME = "svc-cgcsauto"
 SCP_PASSWORD = ")OKM0okm"
@@ -21,6 +24,15 @@ LOG_LOCATION = "/folk/cgts/logs"
 HOSTNAME = "10.10.10.3"
 USERNAME = "wrsroot"
 PASSWORD = "li69nux"
+
+# BIOS options
+F10 = "^[[21~"
+F6 = "^[[17~"
+F2 = "^[[12~"
+UP = "^[[A"
+DOWN = "^[[B"
+RIGHT = "^[[C"
+LEFT = "^[[D"
 
 # NAT box credentials
 NAT_HOSTNAME = "128.224.150.11"
