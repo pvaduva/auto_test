@@ -23,6 +23,7 @@ from constants import *
 import datetime
 import logging
 import string
+import telnetlib
 
 def target_action(barcode="", action="findmine"):
     """ This function takes a target barcode and performs an action using
@@ -152,6 +153,130 @@ def target_action(barcode="", action="findmine"):
                 logging.error(msg)
                 return 1
 
+def telnet_conn(ip_addr, port=23):
+    """ This is used to establish a telnet connection to target.  When an IP
+        address and a port are supplied, there is no need to explicitly open
+        the connection.
+
+        Inputs:
+        * ip_addr - IP address
+        * port - Port to use.  Default is port 23.
+
+        Outputs:
+        * tn_conn - returns a telnet connection ID
+    """
+
+    tn_conn = telnetlib.Telnet(ip_addr, port)
+
+    return tn_conn
+
+def telnet_login(tn_conn, timeout=TIMEOUT, username=USERNAME,
+                 password=PASSWORD)
+    """ This is used to wait for the login prompt on a target and then
+        authenticate
+        Inputs:
+        * tn_conn - telnet connection ID
+        * timeout - how long to wait for a response (seconds)
+        * username - name of user to login as
+        * password - password of user that is logging in
+        Outputs:
+        * tn_conn - returns a telnet connect ID
+    """
+
+    resp = tn_conn.read_until("ogin:", timeout)
+    if not resp:
+        msg = "Login prompt not found in % seconds" % timeout
+        logging.error(msg)
+        exit(1)
+    tn_conn.write(username = "\n")
+
+    resp = tn_conn.read_until("assword:")
+    if not resp:
+        msg = "Password prompt not found"
+        logging.error(msg)
+        exit(1)
+    tn_conn.write(password + "\n")
+
+    return tn_conn
+
+def telnet_send(tn_conn, cmd):
+    """ This is used to send a command over the telnet connection.
+        Inputs:
+        * tn_conn - telnet connection ID
+        * cmd - The command you want to send, e.g. wipedisk
+        Outputs:
+        * resp - return value from write command
+    """
+
+    resp = tn_conn.write(cmd + "\n")
+
+    return resp
+
+def telnet_wipedisk(tn_conn):
+    """ This is used to send the wipedisk command to a target.
+        Inputs:
+        * tn_conn - telnet connection ID
+        Outputs:
+        * resp - return value from write command 
+    """
+
+    tn_conn.write("wipedisk\n")
+    tn_conn.read_until("ompletely:")
+    resp = tn_conn.write("wipediskscompletely\n")
+
+    return resp
+
+def telnet_biosboot(tn_conn)
+    """ This is used to drop into the BIOS to select the appropriate boot
+        device.
+        Inputs:
+        * tn_conn -telnet connection ID
+        Outputs:
+        * resp - 0 for success or just exits since we can't proceed if we can't
+          boot
+    """
+
+    boot_device = "01"
+
+    # Determine what type of machine we're on
+    bios_type = ["Hewlett-Packard", "American Megatrends", "Phoenix"]
+
+    resp = tn_conn.expect(bios_type, timeout)
+    if not resp:
+        msg = "BIOS not match any known BIOS type: %s" % \
+               bios_type
+        logging.error(msg)
+        exit(1)
+
+    if resp[0] == bios_type[0]:
+        bios_key = ESC + "@"
+    elif resp[0] == bios_type[1]:
+        bios_key = F6
+    elif resp[0] == bios_type[2]:
+        bios_key = F12
+
+    # Look for prompt asking user to Press a key
+    tn_conn.read_until("Press")
+    tn_conn.write(bios_key)
+
+    # Look for some variant of text boot menu
+    tn_conn.read_util("oot")
+
+    # Loop through list and look for boot device
+    while True:
+        line = tn_conn.read_until("\n")
+        if line and boot_device in line:
+            tn_conn.write("\n")
+            break
+        elif line:
+            tn_conn.write(DOWN)
+        else:
+            msg = "Could not find boot device named: %s" % boot_device
+            logging.error(msg)
+            exit(1)
+
+    return 0
+
 if __name__ == "__main__":
 
     # Name of test
@@ -189,4 +314,3 @@ if __name__ == "__main__":
     test_duration = test_end_time - test_start_time
     logging.info("Ending %s at %s" % (test_name, test_end_time))
     logging.info("Test ran for %s" % test_duration)
-
