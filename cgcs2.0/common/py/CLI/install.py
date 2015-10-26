@@ -171,7 +171,7 @@ def telnet_conn(ip_addr, port=23):
     return tn_conn
 
 def telnet_login(tn_conn, timeout=TIMEOUT, username=USERNAME,
-                 password=PASSWORD)
+                 password=PASSWORD):
     """ This is used to wait for the login prompt on a target and then
         authenticate
         Inputs:
@@ -188,7 +188,7 @@ def telnet_login(tn_conn, timeout=TIMEOUT, username=USERNAME,
         msg = "Login prompt not found in % seconds" % timeout
         logging.error(msg)
         exit(1)
-    tn_conn.write(username = "\n")
+    tn_conn.write(username + "\n")
 
     resp = tn_conn.read_until("assword:")
     if not resp:
@@ -226,7 +226,7 @@ def telnet_wipedisk(tn_conn):
 
     return resp
 
-def telnet_biosboot(tn_conn)
+def telnet_biosboot(tn_conn):
     """ This is used to drop into the BIOS to select the appropriate boot
         device.
         Inputs:
