@@ -20,6 +20,7 @@ NAT pass = password on the NATBox, e.g. li69nux
 *NOFAIL
 
 # Varibles that will become constants from script options
+$uuid=[0-9a-f-]{36}
 $NAT_IP=128.224.150.11
 $NAT_USER=cgcs
 $NAT_PASS=li69nux
@@ -36,9 +37,10 @@ $HOST_IP=10.10.10.2
 >cat /etc/build.info
 
 ; === Change quotas for cinder
-$TENANT=`keystone tenant-list | grep tenant1 | awk '{print $2}'`
+#$TENANT=`keystone tenant-list | grep tenant1 | awk '{print $2}'`
+$TENANT=`openstack project list | grep tenant1 | awk '{print $2}'`
 >cinder quota-show $TENANT
->cinder quota-update --volumes 40 $TENANT
+>cinder quota-update --volumes 50 $TENANT
 >cinder quota-show $TENANT
 
 @20
@@ -56,6 +58,15 @@ $TENANT=`keystone tenant-list | grep tenant1 | awk '{print $2}'`
 ?if $ping_result == __NO_STRING_CAPTURED__ ? [
     ; === NATBOX $NAT_IP not responding
     *TERM 1
+]
+
+; == create nova flavour if necessary
+>nova flavor-list | grep wrl5.dpdk.small | awk '{print $2}'
++$FLAVOR=(101)
+?if $FLAVOR == __NO_STRING_CAPTURED__ ? [
+    >source /etc/nova/openrc
+    >nova flavor-create wrl5.dpdk.small 101 512 0 2
+    >source ./openrc.tenant1
 ]
 
 ; === writing user file to be injected
@@ -85,15 +96,22 @@ $TENANT=`keystone tenant-list | grep tenant1 | awk '{print $2}'`
 
 ; === get the necessary image and network uuids
 >source ./openrc.tenant1
-$IMAGE=`glance image-list | grep ubuntu | awk '{print $2}'`
-$TENANT_MGMT=`neutron net-list | grep tenant1-mgmt-net | awk '{print $2}'`
-$TENANT_NET=`neutron net-list | grep tenant1-net0 | awk '{print $2}'`
-$VOL_NAME=vol-ubuntu-config
-$VM_NAME=test-ubuntu-config
+>glance image-list | grep ubuntu | awk '{print $2}'
++$IMAGE=($uuid)
+>neutron net-list | grep tenant1-mgmt-net | awk '{print $2}'
++$TENANT_MGMT=($uuid)
+>neutron net-list | grep tenant1-net0 | awk '{print $2}'
++$TENANT_NET=($uuid)
+$VOL_NAME=test_us52202_ts2_vol-ubuntu-config
+$VM_NAME=test_us52202_ts2_ubuntu-config
 $VM=ubuntu
 
 ; === create Ubuntu cinder volume
->cinder create --image-id $IMAGE --display-name=$VOL_NAME 3
+>cinder list | grep $VOL_NAME | awk '{print $2}'
++$CINDER_VOL=($uuid)
+?if $CINDER_VOL == __NO_STRING_CAPTURED__ ? [
+    >cinder create --image-id $IMAGE --display-name=$VOL_NAME 3
+]
 
 ; === wait for cinder volume $VOL_NAME to become available
 
@@ -113,10 +131,11 @@ $result=none
     >
 ]
 
-$CINDER_ID=`cinder list | grep $VOL_NAME | awk '{print $2}'`
+>cinder list | grep $VOL_NAME | awk '{print $2}'
++$CINDER_ID=($uuid)
 
 ; === attach Ubuntu VM to cinder volume
->nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=$TENANT_MGMT,vif-model=e1000 --nic net-id=$TENANT_NET,vif-model=e1000 --config-drive true --user-data /home/wrsroot/images/ubuntu_init.sh --file /tmp/foobar=./my-user-file.txt --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
+>nova boot --key_name=keypair-tenant1 --flavor=101 --nic net-id=$TENANT_MGMT,vif-model=e1000 --nic net-id=$TENANT_NET,vif-model=e1000 --config-drive true --user-data /home/wrsroot/images/ubuntu_init.sh --file /tmp/foobar=./my-user-file.txt --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
 
 ; === wait for Ubuntu VM to go available
 $i=0
@@ -136,7 +155,7 @@ $result=none
 ]
 !sleep 10
 >nova show $VM_NAME | grep 'tenant1-mgmt-net network' | awk '{print $5}'
-+$VM_IP=\n(.*)
++$VM_IP=\n(\d+\.\d+\.\d+\.\d+)
 
 ; === ssh into Ubuntu VM via NATBox
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
@@ -192,8 +211,6 @@ $result=none
     >
 ]
 !sleep 10
->nova show $VM_NAME | grep 'tenant1-mgmt-net network' | awk '{print $5}'
-+$VM_IP=\n(.*)
 
 ; === ssh back into Ubuntu VM
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
@@ -210,7 +227,6 @@ $result=none
 +$mount=\n(.*)
 >sudo mkdir -p /mnt/config/
 >sudo mount $mount /mnt/config/
-
 >cat /mnt/config/openstack/latest/meta_data.json
 -<No such file
 >cat /mnt/config/openstack/latest/user_data
@@ -278,8 +294,6 @@ $result=none
     %BREAK_CINDER_DELETE
     *FAIL
 ]
->source /etc/nova/openrc
->cinder quota-update --volumes 3 $TENANT
->cinder quota-show $TENANT
+
 ; === end of test
 
