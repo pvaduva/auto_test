@@ -66,23 +66,20 @@ $TENANT=`openstack project list | grep tenant1 | awk '{print $2}'`
 >source ./openrc.tenant1
 >glance image-list | grep wrl5-avp | awk '{print $2}'
 +$IMAGE=($uuid)
-#$IMAGE=`glance image-list | grep wrl5-avp | awk '{print $2}'`
-$TENANT_MGMT=`neutron net-list | grep tenant1-mgmt-net | awk '{print $2}'`
-$TENANT_NET=`neutron net-list | grep tenant1-net0 | awk '{print $2}'`
-$VOL_NAME=vol-wrl5-config
-$VM_NAME=test-wrl-config
+>neutron net-list | grep tenant1-mgmt-net | awk '{print $2}'
++$TENANT_MGMT=($uuid)
+>neutron net-list | grep tenant1-net0 | awk '{print $2}'
++$TENANT_NET=($uuid)
+$VOL_NAME=test_us55202_ts1_vol-wrl5-config
+$VM_NAME=test_u52202_ts1_wrl-config
 $VM=root
->echo This is image: $IMAGE
->echo This is tenant mgmt network: $TENANT_MGMT
->echo This is tenant network: $TENANT_NET
->echo This is volume name: $VOL_NAME
->echo This is VM name: $VM_NAME
->echo This is VM user: $VM
 
 ; === create wrl5 image if necessary
 ?if $IMAGE == __NO_STRING_CAPTURED__ ? [
     >glance image-create --name wrl5-avp --is-public true --container-format bare --disk-format qcow2 --file ~/images/cgcs-guest.img --property hw_vif_model=avp --progress
     <100%
+    >glance image-list | grep wrl5-avp | awk '{print $2}'
+    +$IMAGE=($uuid)
 ]
 
 ; === verify we can connect to NATBox
@@ -102,7 +99,7 @@ $VM=root
 
 ; == create nova flavour if necessary
 >nova flavor-list | grep wrl5.dpdk.small | awk '{print $2}'
-+$FLAVOR=($uuid)
++$FLAVOR=(101)
 ?if $FLAVOR == __NO_STRING_CAPTURED__ ? [
     >source /etc/nova/openrc
     >nova flavor-create wrl5.dpdk.small 101 512 0 2
@@ -110,12 +107,10 @@ $VM=root
 ]
 
 ; === create WRL cinder volume if necessary
->cinder list --all-tenant | grep vol-wrl5-config | awk '{print $2}'
+>cinder list | grep $VOL_NAME | awk '{print $2}'
 +$CINDER_VOL=($uuid)
 ?if $CINDER_VOL == __NO_STRING_CAPTURED__ ? [
-    >source /etc/nova/openrc
     >cinder create --image-id $IMAGE --display-name=$VOL_NAME 1
-    >source ./openrc.tenant1
 ]
 
 ; === wait for cinder volume $VOL_NAME to become available
@@ -127,7 +122,7 @@ $result=none
 [ $result != available
     +$i
     >cinder show $VOL_NAME 2>/dev/null | awk '{ if ($2 == "status") {print $4} }'
-    +$result=\n(available|creating|downloading)
+    +$result=(available|creating|downloading)
     ?if $i > $MAX ? ; === cinder volume $VOL_NAME did not become available
     ?if $i > $MAX ? %BREAK_CINDER_CREATE
     ?if $result == error ? ; === cinder volume $VOL_NAME is in error state
@@ -136,7 +131,8 @@ $result=none
     >
 ]
 
-$CINDER_ID=`cinder list --all-tenant | grep $VOL_NAME | awk '{print $2}'`
+>cinder list | grep $VOL_NAME | awk '{print $2}'
++$CINDER_ID=($uuid)
 
 ; === attach WRL VM to cinder volume
 >nova boot --key_name=keypair-tenant1 --flavor=101 --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --config-drive true --user-data ./my-user-data.txt --file /tmp/foobar=./my-user-file.txt --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
@@ -161,7 +157,6 @@ $result=none
 !sleep 10
 >nova show $VM_NAME | grep 'tenant1-mgmt-net network' | awk '{print $5}'
 +$VM_IP=\n(\d+\.\d+\.\d+\.\d+)
-#+$VM_IP=\n(.*)
 
 ; === ssh into WRL VM via NATBox
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
@@ -175,14 +170,11 @@ $result=none
 
 ; === verify existence of files and expected output
 # path below is located in the VM itself
-#>cat /media/hdd/openstack/latest/meta_data.json
 >cat /media/	/openstack/latest/meta_data.json
 -<No such file
-#>cat /media/hdd/openstack/latest/user_data
 >cat /media/	/openstack/latest/user_data
 -<No such file
 <user data
-#>cat /media/hdd/openstack/content/0000
 >cat /media/	/openstack/content/0000
 -<No such file
 <user file
@@ -214,8 +206,8 @@ $result=none
 ]
 
 !sleep 10
->nova show $VM_NAME | grep 'tenant1-mgmt-net network' | awk '{print $5}'
-+$VM_IP=\n(.*)
+#>nova show $VM_NAME | grep 'tenant1-mgmt-net network' | awk '{print $5}'
+#+$VM_IP=\n(.*)
 
 ; === ssh back into WRL VM
 >ssh -X -o UserKnownHostsFIle=/dev/null -o StrictHostKeyChecking=no $NAT_USER@$NAT_IP
@@ -228,14 +220,11 @@ $result=none
 >>$VM
 
 ; === verify files still exist
-#>cat /media/hdd/openstack/latest/meta_data.json
 >cat /media/	/openstack/latest/meta_data.json
 -<No such file
-#>cat /media/hdd/openstack/latest/user_data
 >cat /media/	/openstack/latest/user_data
 -<No such file
 <user data
-#>cat /media/hdd/openstack/content/0000
 >cat /media/	/openstack/content/0000
 -<No such file
 <user file
@@ -262,7 +251,7 @@ $result=none
 # while loop
 [ $result != __NO_STRING_CAPTURED__
     +$i
-    >nova list --all-tenant 2>/dev/null | grep $VM_NAME | awk '{print $4}'
+    >nova list 2>/dev/null | grep $VM_NAME | awk '{print $4}'
     +$result=\n($VM_NAME)
     ?if $i > $MAX ? ; === VM $VM_NAME did not delete
     ?if $i > $MAX ? %BREAK_VM_DELETE
@@ -283,7 +272,7 @@ $result=none
 # while loop
 [ $result != __NO_STRING_CAPTURED__
     +$i
-    >cinder list --all-tenant 2>/dev/null | grep $VOL_NAME | awk '{print $6}'
+    >cinder list 2>/dev/null | grep $VOL_NAME | awk '{print $6}'
     +$result=\n($VOL_NAME)
     ?if $i > $MAX ? ; === cinder volume $VOL_NAME did not delete
     ?if $i > $MAX ? %BREAK_CINDER_DELETE
@@ -294,8 +283,5 @@ $result=none
     %BREAK_CINDER_DELETE
     *FAIL
 ]
->source /etc/nova/openrc
-#Removing the quota reduction (will just create problems)
-#>cinder quota-update --volumes 3 $TENANT
-#>cinder quota-show $TENANT
+
 ; === end of test
