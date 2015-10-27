@@ -74,14 +74,19 @@ def authenticate(ip):
     """
     logging.info("Authenticating with Keystone to get token")
     
-    url = compose_url(ip, KEYSTONE_PORT, KEYSTONE_VERSION, "tokens") 
+    url = compose_url(ip, KEYSTONE_PORT, KEYSTONE_VERSION, "tokens")
     headers = {"Content-Type": "application/json", 
                "User-Agent": "python-keystoneclient"} 
     payload = {"auth": {"tenantName": TENANT_NAME, 
                         "passwordCredentials": {"username": USERNAME, 
                                                 "password": PASSWD}}}
 
-    resp = requests.post(url, headers=headers, data=json.dumps(payload))
+    try:
+        resp = requests.post(url, headers=headers, data=json.dumps(payload))
+    except Exception,e:
+        logging.error("Failed to establish connection with target due to: %s" % e)
+        logging.info("Please check if you are using the floating IP.")
+        return 1
 
     if resp.status_code == requests.codes.ok:
         data = json.loads(resp.text)
@@ -89,6 +94,7 @@ def authenticate(ip):
         logging.info("The token is: %s" % id)
         return id
     else:
+        logging.error("Authentication Test: FAILED")
         logging.error("Failed to get token due to error: %s" % resp.status_code)
         exit(resp.status_code)
 
@@ -138,24 +144,26 @@ def put_request(ip, id, extension, payload):
 
 def validate_extension(data):
     """ This function validates that the extension contains the correct data
-        types, as defined by the API doc, namely, string or list.
+        types, as defined by the API doc, namely, unicode string or list.
     """
     
     for k, l in data.items():
         for d in l:
             for key in d:
                 if key != u"links":	
-                    if type(d[key]) is not str:
+                    if not isinstance(d[key], unicode):
                         logging.error("Received wrong data type for key %s" % key)
                         logging.error("Unicode expected, %s received" % type(d[key]))
                         logging.error("Extension data type test: FAILED")
-                        exit(1) 
+                        return 1 
                 else:
                      if type(d[key]) is not list:
                         logging.error("Received wrong data type for key %s" % key)
                         logging.error("List expected, %s received" % type(d[key]))
                         logging.error("Extension data type test: FAILED")
-                        exit(1) 
+                        return 1
+
+    return 0
 
 def validate_pipelines(data):
     """ This function validates that the pipelines contains the correct data
@@ -163,56 +171,75 @@ def validate_pipelines(data):
     """
 
     # We should probably report which field is of the wrong type if we have a fail
-    if type(data["name"]) is not str or \
+    if type(data["name"]) is not unicode or \
        type(data["meters"]) is not list or \
-       type(data["location"]) is not str or \
+       type(data["location"]) is not unicode or \
        type(data["compress"]) is not bool or \
        type(data["enabled"]) is not bool or \
        type(data["backup_count"]) is not int or \
        type(data["max_bytes"]) is not int:
         logging.error("Received wrong data type")
         logging.error("Pipelines data type test: FAILED")
-        exit(1)    
+        return 1
+
+    return 0
 
 if __name__ == "__main__":
 
     logging.basicConfig(level=logging.DEBUG)
     pp = pprint.PrettyPrinter(indent=4)
+    test_failed = False
 
     # get floating ip from command line
-    ip = sys.argv[1]
+    if len(sys.argv) < 2:
+        logging.info("Usage: ./<test_name.py> <floating_ip>")
+        exit(1)
+    else:
+        ip = sys.argv[1]
 
     # get x-auth-token
     id = authenticate(ip)
+    # if we couldn't authenticate, don't proceed
+    if id == 1:
+        test_failed = True
+        logging.error("Authentication Test Result: FAILED")
+        exit(1)
 
     # check that we can make a REST API query for the extensions and then
     # validate the extension data to ensure we get data of the right type
-    logging.info("TEST 1 - Get Extensions")
+    logging.info("=== TEST 1 - Get Extensions ===\n")
     data = get_request(ip, id, "extensions")
-    validate_extension(data) 
+    resp = validate_extension(data)
+    if resp:
+        test_failed = True
+        logging.error("TEST 1 - Get Extensions test: FAILED") 
 
     # Do a bulk query of all pipelines and see if we receive the expected
     # number of pipelines.  We expect at least 2.
-    logging.info("TEST 2 - Get All Pipelines")
+    logging.info("=== TEST 2 - Get All Pipelines ===\n")
     pipelines = get_request(ip, id, "wrs-pipelines") 
     if len(pipelines) < NUM_PIPELINES:
         logging.error("ERROR: %s pipelines expected but %s were received" % 
                       (NUM_PIPELINES, len(pipelines)))
-        logging.error("Pipelines test: FAILED")
-        exit(1)
+        logging.error("TEST 2 - Pipelines test: FAILED")
+        test_failed = True
 
     # Construct a query requesting a specific pipeline and validate the
     # data to ensure it is of the right type
-    logging.info("TEST 3 - Get Individual Pipelines")
+    logging.info("=== TEST 3 - Get Individual Pipelines ===\n")
     for item in pipelines:
         pipeline_id = "wrs-pipelines/" + item["name"]
         data = get_request(ip, id, pipeline_id) 
-        validate_pipelines(data)
+        resp = validate_pipelines(data)
+        if resp:
+            logging.error("TEST 3 - Get Individual Pipelines test: FAILED")
+            test_failed = True
+            break
 
     # Modify a specific pipeline by changing a few of the parameters, and
     # confirm the data has been appropriately modified.  Restore the pipeline 
     #parameters at the end of the test
-    logging.info("TEST 4 - Modify Individual Pipelines")
+    logging.info("=== TEST 4 - Modify Individual Pipelines ===\n")
     for item in pipelines:
         pipeline_id = "wrs-pipelines/" + item["name"]
         payload = get_request(ip, id, pipeline_id)
@@ -225,8 +252,8 @@ if __name__ == "__main__":
         data = get_request(ip, id, pipeline_id) 
         if payload != data:
             logging.error("ERROR: Data was not properly provisioned on PUT") 
-            logging.error("Pipelines modification test: FAILED")
-            exit(1)
+            logging.error("TEST 4 - Modify Individual Pipelines test: FAILED")
+            test_failed = True 
 
         # Undo changes after test is done
         put_request(ip, id, pipeline_id, copy_payload)
@@ -235,6 +262,11 @@ if __name__ == "__main__":
         if copy_payload != data:
             logging.error("Failed to restore data to original values")
             logging.error("Test Teardown: FAILED")
-            exit(1)
+            test_failed = True 
 
-    exit(0)
+    if test_failed:
+        logging.error("\nOverall Test Result: FAILED")
+        exit(1)
+    else:
+        logging.info("\nOverall Test Result: PASSED")
+        exit(0)
