@@ -78,12 +78,30 @@ $HOST_IP=10.10.10.2
 >neutron net-list
 +$TENANT_MGMT=([0-9a-f-]{36}) \| .*tenant1-mgmt-net
 +$TENANT_NET=([0-9a-f-]{36}) \| .*tenant1-net0
-$VOL_NAME=vol-wrl5-orig
-$VM_NAME=original
+$VOL_NAME=test_us52193_vol_wrl5_orig
+$VM_NAME=test_us52193_original
 $VM=root
-$SNAP_NAME=snapshot-of-cinder
-$SNAP_VOL=vol-wrl5-snap
-$SNAP_VM=snapshot
+$SNAP_NAME=test_us52193_snapshot_of_cinder
+$SNAP_VOL=test_us52193_vol_wrl5_snap
+$SNAP_VM=test_us52193_snapshot
+
+; === create image if it doesn't exist ===
+?if $IMAGE == __NO_STRING_CAPTURED__ ? [
+    >glance image-create --name wrl5-avp --is-public true --container-format bare --disk-format qcow2 --file ~/images/cgcs-guest.img --property hw_vif_model=avp
+    $i=0
+    $MAX=12
+    $result=none
+    [ $result != active
+        +$i
+        >glance image-list
+        +$result=(active)
+        ?if $result == active ? [
+            +$IMAGE=([0-9a-f-]{36}) \| .*wrl5-avp
+        ] 
+        ?if $i > $MAX ? ;== unable to create wrl5-avp image
+        ?if $i > $MAX ? *TERM 1
+    ]
+]
 
 ; === verify we can connect to NATBox
 >ping -c4 $NAT_IP
@@ -102,7 +120,7 @@ $SNAP_VM=snapshot
 ; === create WRL cinder volume
 >cinder create --image-id $IMAGE --display-name=$VOL_NAME 1
 
-; === wait for cinder volume vol-wrl5-orig to become available
+; === wait for cinder volume test_us52193_vol_wrl5_orig to become available
 
 $i=0
 $MAX=12
@@ -122,6 +140,15 @@ $result=none
 
 >cinder list
 +$CINDER_ID=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME
+
+; === check if flavor exists and if not, create it
+>nova flavor-list | grep wrl5.dpdk.small | awk '{print $2}'
++$FLAVOR=(101)
+?if $FLAVOR == __NO_STRING_CAPTURED__ ? [
+    >source /etc/nova/openrc
+    >nova flavor-create wrl5.dpdk.small 101 512 0 2
+    >source ./openrc.tenant1
+]
 
 ; === attach WRL VM to cinder volume
 >nova boot --key_name=keypair-tenant1 --flavor=101  --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
