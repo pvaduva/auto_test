@@ -2,7 +2,7 @@
 
 ;;;
 
-VM Snapshot Test Script
+Network Subnet Test Script
 
 Steps:
 1)  Change quotas for cinder
@@ -48,8 +48,6 @@ NAT user = username on the NATBox, e.g. cgcs
 NAT pass = password on the NATBox, e.g. li69nux
 ;;;
 
-
-
 *EXP_INFO
 *NOFAIL
 
@@ -72,17 +70,28 @@ $HOST_IP=10.10.10.2
 @20
 ; === Change quotas for cinder
 >keystone tenant-list
++$ADMIN=([0-9a-f]{32}) \| .*admin
 +$TENANT=([0-9a-f]{32}) \| .*tenant1
 >cinder quota-show $TENANT
 >cinder quota-update --volumes 40 $TENANT
 >cinder quota-show $TENANT
 
+; === Change quotes for neutron networks
+>neutron quota-list
+>neutron quota-update --network 40 --tenant_id $TENANT
+>neutron quota-list
+
+; === Update quotas for nova cores and instances
+>nova quota-show
+>nova quota-update --cores 30 --instances 20 $TENANT
+>nova quota-show
+
 ; === create a new tenant1 network
-$NET_NAME=new_net
->neutron providernet-range-list
->neutron providernet-range-list | grep tenant1
-+$PROVIDER_NET=\n\| ([A-Za-z0-9-]*)
-+$SEGMENT_ID=tenant1.*\| [ ]*([0-9]*) \|
+$NET_NAME=test_us52193_ta80735_net
+>neutron providernet-range-list | grep "data0 " | awk '{print $6}'
++$PROVIDER_NET=\n(.*)\n
+>neutron providernet-range-list | grep "data0 " | awk '{print $12}'
++$SEGMENT_ID=\n(.*)\n
 
 >neutron net-create --tenant-id $TENANT --provider:network_type=vlan --provider:physical_network=$PROVIDER_NET --provider:segmentation_id=$SEGMENT_ID $NET_NAME
 
@@ -93,12 +102,12 @@ $NET_NAME=new_net
 >neutron net-list
 +$TENANT_MGMT=([0-9a-f-]{36}) \| .*tenant1-mgmt-net
 +$TENANT_NET=([0-9a-f-]{36}) \| .*$NET_NAME
-$VOL_NAME=vol-wrl5-one
-$VM_NAME=VM1
+$VOL_NAME=test_us52193_ta80735_vol-wrl5-one
+$VM_NAME=test_us52193_ta80735_VM1
 $VM=root
-$SUBNET_NAME=unmanaged_net
+$SUBNET_NAME=test_us52193_ta80735_unmanaged_subnet
 $SUBNET_IP=172.16.255.0/24
-$ROUTER_NAME=to_attach
+$ROUTER_NAME=test_us52193_ta80735_to_attach
 
 ; === verify we can connect to NATBox
 >ping -c4 $NAT_IP
@@ -133,7 +142,8 @@ $ROUTER_NAME=to_attach
 <Invalid input for operation
 
 ; === Attempt to create unmanaged subnet with VLAN tagging, expect success
->neutron subnet-create --name $SUBNET_NAME --vlan-id $SEGMENT_ID --ip-version 4 --unmanaged --disable-dhcp $TENANT_NET $SUBNET_IP
+>echo neutron subnet-create --name $SUBNET_NAME --wrs-net:vlan_id $SEGMENT_ID --ip-version 4 --unmanaged --disable-dhcp $TENANT_NET $SUBNET_IP
+>neutron subnet-create --name $SUBNET_NAME --wrs-net:vlan_id $SEGMENT_ID --ip-version 4 --unmanaged --disable-dhcp $TENANT_NET $SUBNET_IP
 <Created a new subnet
 >neutron subnet-list
 +$SUBNET_ID=([0-9a-f-]{36}) \| $SUBNET_NAME
@@ -195,7 +205,8 @@ $result=none
 >nova list
 >nova list | grep $VM_NAME
 <ACTIVE
-<No subnet
+#<No subnet
+<No
 
 ; === delete WRL VM
 >nova delete $VM_NAME
@@ -279,7 +290,8 @@ $result=none
 >nova list
 >nova list | grep $VM_NAME
 <ACTIVE
-<No subnet
+#<No subnet
+<No
 
 ; === delete WRL VM
 >nova delete $VM_NAME
@@ -314,10 +326,57 @@ $result=none
 >neutron subnet-delete $SUBNET_ID
 <Unable to complete operation on subnet
 
+; === Delete the existing cinder volume
+# We need to do this because sshd will not launch properly if we use the
+# existing volume.
+
+>cinder delete $VOL_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != __NO_STRING_CAPTURED__
+    +$i
+    >cinder list
+    +$result=($VOL_NAME)
+    ?if $i > $MAX ? ; === cinder volume $VOL_NAME did not delete
+    ?if $i > $MAX ? %BREAK_CINDER_DELETE
+    !sleep 5
+    >
+]
+?if 1 < 0 ? [
+    %BREAK_VM_DELETE
+    %BREAK_CINDER_DELETE
+    *FAIL
+]
+
 ; === attach WRL VM to cinder volume
+
+; === create a new WRL cinder volume
+>cinder create --image-id $IMAGE --display-name=$VOL_NAME 1
+
+; === wait for cinder volume vol-wrl5-one to become available
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != available
+    +$i
+    >cinder show $VOL_NAME
+    +$result=(available|creating|downloading|error)
+    ?if $i > $MAX ? ; === cinder volume $VOL_NAME did not become available
+    ?if $i > $MAX ? %BREAK_CINDER_CREATE
+    ?if $result == error ? ; === cinder volume $VOL_NAME is in error state
+    ?if $result == error ? %BREAK_CINDER_CREATE
+    !sleep 5
+    >
+]
+
+>cinder list
++$CINDER_ID=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME
 >nova boot --key_name=keypair-tenant1 --flavor=101 --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
 
-; === wait for WRL VM to go available, go into VM and verify meta-data accessible
+; === wait for WRL VM to go available
 $i=0
 $MAX=12
 $result=none
@@ -334,6 +393,7 @@ $result=none
     >
 ]
 
+; === sleep while VM boots
 !sleep 20
 >nova show $VM_NAME
 +$VM_IP=tenant1-mgmt-net network.*\| ([0-9.]*)
