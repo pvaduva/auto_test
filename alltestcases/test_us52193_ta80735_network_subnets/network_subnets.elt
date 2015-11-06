@@ -208,6 +208,22 @@ $result=none
 #<No subnet
 <No
 
+; === Stop VM
+>nova stop $VM_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != SHUTOFF
+    +$i
+    >nova show $VM_NAME
+    +$result=(SHUTOFF)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not shutoff
+    ?if $i > $MAX ? %BREAK_VM_DELETE
+    !sleep 5
+    >
+]
+
 ; === delete WRL VM
 >nova delete $VM_NAME
 $i=0
@@ -249,6 +265,22 @@ $result=none
 >nova list | grep $VM_NAME
 <ACTIVE
 <172.16.255.3
+
+; === Stop VM
+>nova stop $VM_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != SHUTOFF
+    +$i
+    >nova show $VM_NAME
+    +$result=(SHUTOFF)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not shutoff
+    ?if $i > $MAX ? %BREAK_VM_DELETE
+    !sleep 5
+    >
+]
 
 ; === delete WRL VM
 >nova delete $VM_NAME
@@ -293,6 +325,22 @@ $result=none
 #<No subnet
 <No
 
+; === Stop VM
+>nova stop $VM_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != SHUTOFF
+    +$i
+    >nova show $VM_NAME
+    +$result=(SHUTOFF)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not shutoff
+    ?if $i > $MAX ? %BREAK_VM_DELETE
+    !sleep 5
+    >
+]
+
 ; === delete WRL VM
 >nova delete $VM_NAME
 $i=0
@@ -326,54 +374,8 @@ $result=none
 >neutron subnet-delete $SUBNET_ID
 <Unable to complete operation on subnet
 
-; === Delete the existing cinder volume
-# We need to do this because sshd will not launch properly if we use the
-# existing volume.
-
->cinder delete $VOL_NAME
-$i=0
-$MAX=12
-$result=none
-# while loop
-[ $result != __NO_STRING_CAPTURED__
-    +$i
-    >cinder list
-    +$result=($VOL_NAME)
-    ?if $i > $MAX ? ; === cinder volume $VOL_NAME did not delete
-    ?if $i > $MAX ? %BREAK_CINDER_DELETE
-    !sleep 5
-    >
-]
-?if 1 < 0 ? [
-    %BREAK_VM_DELETE
-    %BREAK_CINDER_DELETE
-    *FAIL
-]
-
 ; === attach WRL VM to cinder volume
 
-; === create a new WRL cinder volume
->cinder create --image-id $IMAGE --display-name=$VOL_NAME 1
-
-; === wait for cinder volume vol-wrl5-one to become available
-$i=0
-$MAX=12
-$result=none
-# while loop
-[ $result != available
-    +$i
-    >cinder show $VOL_NAME
-    +$result=(available|creating|downloading|error)
-    ?if $i > $MAX ? ; === cinder volume $VOL_NAME did not become available
-    ?if $i > $MAX ? %BREAK_CINDER_CREATE
-    ?if $result == error ? ; === cinder volume $VOL_NAME is in error state
-    ?if $result == error ? %BREAK_CINDER_CREATE
-    !sleep 5
-    >
-]
-
->cinder list
-+$CINDER_ID=([0-9a-f-]{36}) \| (.*) \| .*$VOL_NAME
 >nova boot --key_name=keypair-tenant1 --flavor=101 --nic net-id=$TENANT_MGMT,vif-model=avp --nic net-id=$TENANT_NET,vif-model=avp --block_device_mapping vda=$CINDER_ID:::0 $VM_NAME
 
 ; === wait for WRL VM to go available
@@ -425,6 +427,22 @@ $result=none
 ?if 1 < 0 ? [
     %BREAK_VM_CREATE
     *FAIL
+]
+
+; === Stop VM
+>nova stop $VM_NAME
+$i=0
+$MAX=12
+$result=none
+# while loop
+[ $result != SHUTOFF
+    +$i
+    >nova show $VM_NAME
+    +$result=(SHUTOFF)
+    ?if $i > $MAX ? ; === VM $VM_NAME did not shutoff
+    ?if $i > $MAX ? %BREAK_VM_DELETE
+    !sleep 5
+    >
 ]
 
 ; === delete WRL VM
