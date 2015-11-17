@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2015 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+-->
+<!--
+     Run the LACP test setup
+
+Modification history
+====================
+oct2015 amf - created
+
+-->
+
+<test_module name="ceilometer_benchmarking" timeout="">
+    <test_case  name="ceilometer_benchmarking" >
+
+    #######################################################
+    # Objective:  Collect certain ceilometer benchmarks based on various   
+    # ceilometer samples
+    #
+    #######################################################
+
+
+    # Create a ceilometer template
+
+    # Set permissions
+    source /etc/nova/openrc
+
+    time (ceilometer sample-list)
+    time (ceilometer sample-list -m hardware.ipmi.fan -m compute.node.cpu.percent -m avg.vswitch.port.transmit.packets -m avg.vswitch.engine.util -m hardware.ipmi.voltage)
+    ceilometer sample-list --meter cpu_util -q 'resource_id=5c3a3e2d-7a63-43c3-9e65-b7f06640d49a'
+    
+    ceilometer pipeline-show -n csv
+    ceilometer pipeline-list
+    
+
+    PASS
+
+    </test_case>
+</test_module>

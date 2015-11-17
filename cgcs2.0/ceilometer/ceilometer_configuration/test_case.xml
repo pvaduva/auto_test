@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2015 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+Modification history
+====================
+oct2015 amf - created
+
+-->
+
+<test_module name="ceilometer_configuration" timeout="">
+    <test_case  name="ceilometer_configuration" >
+
+    #######################################################
+    # Objective:  Verify that ceilometer can be enabled on the system
+    #
+    #######################################################
+
+
+    # Verify that ceilometer custom templates can be created
+
+    # Create meters on compute1
+    ceilometer sample-create -r compute1 --meter-type gauge --meter-unit C  --meter-name temp_zone_1 --sample-volume 45
+    ceilometer sample-create -r compute1 --meter-type gauge --meter-unit C  --meter-name temp_zone_1 --sample-volume 47
+    ceilometer sample-create -r compute1 --meter-type gauge --meter-unit C  --meter-name temp_zone_1 --sample-volume 47
+    ceilometer sample-create -r compute1 --meter-type gauge --meter-unit C  --meter-name temp_zone_1 --sample-volume 50
+
+    # Create meters on compute2
+    ceilometer sample-create -r compute2 --meter-type gauge --meter-unit C  --meter-name temp_zone_1 --sample-volume 50
+    ceilometer sample-create -r compute2 --meter-type gauge --meter-unit C  --meter-name temp_zone_1 --sample-volume 45
+    ceilometer sample-create -r compute2 --meter-type gauge --meter-unit C  --meter-name temp_zone_1 --sample-volume 40
+
+    # Query custom meters
+    ceilometer sample-list -m temp_zone_1
+    ceilometer sample-list -m temp_zone_1 --query resource=compute1
+
+    # Query all samples
+    ceilometer sample-list
+
+    # Query IPMI meters on an Intel board
+    ceilometer sample-list -m hardware.ipmi.node.outlet_temperature - fails
+    ceilometer sample-list -m hardware.ipmi.node.airflow - fails
+    ceilometer sample-list -m hardware.ipmi.node.cups - fail
+    ceilometer sample-list -m hardware.ipmi.node.cpu_util - fail
+    ceilometer sample-list -m hardware.ipmi.node.mem_util - fail
+    ceilometer sample-list -m hardware.ipmi.node.io_util - fail 
+    ceilometer sample-list -m hardware.ipmi.node.temperature - pass
+    ceilometer sample-list -m hardware.ipmi.node.power - pass
+    ceilometer sample-list -m hardware.ipmi.voltage - pass
+    ceilometer sample-list -m hardware.ipmi.fan - pass
+    ceilometer sample-list -m hardware.ipmi.temperature - pass
+    ceilometer sample-list -m hardware.ipmi.current - pass
+
+    # Query meters on an HP380 board
+    ceilometer sample-list -m hardware.ipmi.fan
+    ceilometer sample-list -m hardware.ipmi.temperature
+    ceilometer sample-list -m hardware.ipmi.current
+
+    # Query meters on a Nokia board
+    ceilometer sample-list -m hardware.ipmi.node.outlet_temperature
+    ceilometer sample-list -m hardware.ipmi.node.airflow
+    ceilometer sample-list -m hardware.ipmi.node.cups
+    ceilometer sample-list -m hardware.ipmi.node.cpu_util
+    ceilometer sample-list -m hardware.ipmi.node.mem_util
+    ceilometer sample-list -m hardware.ipmi.node.io_util 
+    ceilometer sample-list -m hardware.ipmi.node.temperature
+    ceilometer sample-list -m hardware.ipmi.node.power
+    ceilometer sample-list -m hardware.ipmi.voltage
+    ceilometer sample-list -m hardware.ipmi.fan
+    ceilometer sample-list -m hardware.ipmi.temperature
+    ceilometer sample-list -m hardware.ipmi.current
+
+
+    # Query meters on Dell720 1-2 small footprint board
+    ceilometer sample-list -m hardware.ipmi.voltage
+    ceilometer sample-list -m hardware.ipmi.fan
+    ceilometer sample-list -m hardware.ipmi.temperature
+    ceilometer sample-list -m hardware.ipmi.current
+
+    # Query meters on a large office board
+    ceilometer sample-list -m hardware.ipmi.node.outlet_temperature
+    ceilometer sample-list -m hardware.ipmi.node.airflow
+    ceilometer sample-list -m hardware.ipmi.node.cups
+    ceilometer sample-list -m hardware.ipmi.node.cpu_util
+    ceilometer sample-list -m hardware.ipmi.node.mem_util
+    ceilometer sample-list -m hardware.ipmi.node.io_util 
+    ceilometer sample-list -m hardware.ipmi.node.temperature
+    ceilometer sample-list -m hardware.ipmi.node.power
+    ceilometer sample-list -m hardware.ipmi.voltage
+    ceilometer sample-list -m hardware.ipmi.fan
+    ceilometer sample-list -m hardware.ipmi.temperature
+    ceilometer sample-list -m hardware.ipmi.current
+    PASS
+
+    </test_case>
+</test_module>
