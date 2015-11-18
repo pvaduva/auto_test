@@ -13,6 +13,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import NoAlertPresentException
+import os
 import unittest, time, re
 import paramiko
 
@@ -27,7 +28,7 @@ NODE_OAM_ADDRESS_2='128.224.151.212'
 CONTROLLER_0_ADDRESS='192.168.204.3'
 CONTROLLER_0_MAC='c8:1f:66:e0:ff:01'
 
-# IP1-4
+# VBOX
 NODE_OAM_ADDRESS_3='10.10.10.2'
 CONTROLLER_0_ADDRESS='192.168.204.3'
 CONTROLLER_0_MAC='c8:1f:66:e0:ff:01'
@@ -45,14 +46,26 @@ class BmcQuantaConfig(unittest.TestCase):
                       'controller-1',
                       'compute-0',
                       'compute-1']
+
+        # open a connection to the hosts
         ssh = paramiko.SSHClient()
         ssh.load_system_host_keys()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect("%s" % NODE_OAM_ADDRESS_3, username="wrsroot", password="li69nux")
+
+        # transfer a password updating script to the host
+        os.system ('expect ./sendfile.exp %s %s' % 
+                        ("./set_root_password.exp", NODE_OAM_ADDRESS_3))
+
+        # set the root password on the hosts
+        print("Updating host root password")
+        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("expect ./set_root_password.exp")
+         
+        # configure the alarms   
+        print("Configuring alarms...")
         ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("echo 'li69nux' | sudo -S cp -rf /usr/sbin/show_quanta /usr/sbin/show")
-        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("echo root:li69nux > passwd.txt")
-        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("sudo -S chpasswd < 'passwd.txt'")
-    
+
+
     def bmc_login(self):
         driver = self.driver
         driver.get(self.base_url + "/auth/login/")
@@ -73,7 +86,7 @@ class BmcQuantaConfig(unittest.TestCase):
             #print("link: %s" % board_mgmnt)
             if (node in board_mgmnt):
                 board_mgmnt_id = links[i+1].get_attribute("id")
-                print("board magnemtn id: %s" % board_mgmnt_id)
+                print("Board management id: %s" % board_mgmnt_id)
                 driver.find_element_by_id(board_mgmnt_id).click()
                 break
         try:
