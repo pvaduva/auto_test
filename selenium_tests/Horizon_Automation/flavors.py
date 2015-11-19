@@ -8,11 +8,22 @@ import time
 
 __author__ = 'jbarber'
 
+
 class Flavors():
 
     @classmethod
     def flavors(cls, flavor_name, vcpus, ram, root_disk, ephemeral_disk, swap_disk):
-        print "Create Flavors (Admin -> System -> Flavors)-------------------------------------------------------------"
+        """
+        Function for initializing flavors class
+
+        :param flavor_name: name of flavor
+        :param vcpus: number of vcpus
+        :param ram: amount of RAM (MB)
+        :param root_disk: size of root disk (GB)
+        :param ephemeral_disk: size of ephemeral disk (GB)
+        :param swap_disk: size of swap disk (MB)
+        """
+
         # Get driver
         driver = DriverUtils.get_driver()
         # Get URL text from class
@@ -25,17 +36,31 @@ class Flavors():
         DriverUtils.wait_for_elements(settings.DEFAULT_ELEMENT_LOAD_TIME)
         # Call Functions below
         cls.create_flavor(flavor_name, vcpus, ram, root_disk, ephemeral_disk, swap_disk)
-        time.sleep(5)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
         flavor_full_link = cls.get_flavor_link(flavor_name)
         if(flavor_full_link == -1):
             print "Error finding flavor name"
             return
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
         return flavor_full_link
 
     @classmethod
     def create_flavor(cls, flavor_name, vcpus, ram, root_disk, ephemeral_disk, swap_disk):
+        """
+        Function for creating flavor in Horizon
+
+        :param flavor_name: name of flavor
+        :param vcpus: number of vcpus
+        :param ram: amount of RAM (MB)
+        :param root_disk: size of root disk (GB)
+        :param ephemeral_disk: size of ephemeral disk (GB)
+        :param swap_disk: size of swap disk (MB)
+        """
+
+        print "Create Flavors (Admin -> System -> Flavors)-------------------------------------------------------------"
+        print flavor_name
         driver = DriverUtils.get_driver()
 
         create_button = driver.find_element_by_id("flavors__action_create")
@@ -69,25 +94,25 @@ class Flavors():
 
     @classmethod
     def get_flavor_link(cls, flavor_name):
+        """
+        Function for getting flavor details link
+
+        :param flavor_name: name of flavor
+        :return flavor_id_link: link for details page of flavor name sent
+        """
+
         flavor_id_link = -1
-        index = [6]
-        # TODO: Grab driver, read table, compare to user_name, navigate to modify quotas section!
-        # Read table, match name with project ID, use constants like in 'lock_host.py'
-        # tuple of Name and Project ID
         # Get driver
         driver = DriverUtils.get_driver()
-
         # Get link from partial text in table (Host Name column)
         links = driver.find_elements_by_partial_link_text('')
         for link in links:
             host_local = link.get_attribute("text")
-            #print host_local
             # Match host_to_lock with link
             if(flavor_name in host_local):
                 flavor_id_link = link.get_attribute("href")
         # Append to end of URL
         driver.get(DriverUtils.set_url(flavor_id_link + constants.FLAVOR_EXTRA_SPEC_TAB))
-        print flavor_id_link
         # Navigate to newly appended URL
         driver.get(DriverUtils.get_url())
         # Wait for elements on page to load
@@ -96,6 +121,15 @@ class Flavors():
 
     @classmethod
     def create_extra_spec(cls, flavor_full_link, first_input, second_input):
+        """
+        Function for creating flavor extra spec
+
+        :param flavor_full_link: link to flavor details section in Horizon
+        :param first_input: extra spec type [example (CPU Policy)]
+        :param second_input: extra spec type details [example (Dedicated)]
+        """
+
+        print "Flavors: Create Extra Spec (Admin -> System -> Flavors)-------------------------------------------------"
         # Get driver
         driver = DriverUtils.get_driver()
         # Get URL text from class
@@ -111,8 +145,6 @@ class Flavors():
 
         # Select extra spec
         extra_spec_first_input = Select(driver.find_element_by_id("id_type"))
-        print first_input
-        print second_input
         if(first_input in constants.FLAVOR_EXTRA_SPEC_TYPE_CPU_POLICY):
             extra_spec_first_input.select_by_visible_text(constants.FLAVOR_EXTRA_SPEC_TYPE_CPU_POLICY)
             if(second_input in constants.FLAVOR_EXTRA_SPEC_TYPE_CPU_POLICY_DEDICATED):
@@ -132,8 +164,7 @@ class Flavors():
         submit_form.submit()
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
-
-
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
 
 
 

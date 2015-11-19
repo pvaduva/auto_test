@@ -1,5 +1,7 @@
 from common_utils import DriverUtils
+from selenium import webdriver
 import settings
+import time
 
 __author__ = 'jbarber'
 
@@ -8,7 +10,12 @@ class KeyPairs():
 
     @classmethod
     def key_pairs(cls, key_pair_name):
-        print "Create Key-Pair (Project -> Compute -> Access & Security)-----------------------------------------------"
+        """
+        Function for initializing key pairs class
+
+        :param key_pair_name: name of key pair
+        """
+
         # Get driver
         driver = DriverUtils.get_driver()
         # Get URL text from class
@@ -23,9 +30,18 @@ class KeyPairs():
         cls.create_key_pair(key_pair_name)
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
 
     @classmethod
     def create_key_pair(cls, key_pair_name):
+        """
+        Function for creating a key pair
+
+        :param key_pair_name: name of key pair
+        """
+
+        print "Create Key-Pair (Project -> Compute -> Access & Security)-----------------------------------------------"
+        print key_pair_name
         # Get driver
         driver = DriverUtils.get_driver()
 
@@ -36,11 +52,4 @@ class KeyPairs():
         key_pair_input.send_keys(key_pair_name)
         key_pair_input.submit()
 
-
-
-
-
-
-
-
-
+        time.sleep(settings.DEFAULT_SLEEP_TIME)

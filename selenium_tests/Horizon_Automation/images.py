@@ -5,7 +5,10 @@ from common_utils import DriverUtils
 import constants
 import settings
 import time
-# import paramiko
+import os
+import pexpect
+import subprocess
+
 
 __author__ = 'jbarber'
 
@@ -14,7 +17,21 @@ class Images():
 
     @classmethod
     def images(cls, image_name, image_location, format, copy_data, timeout, downtime, public, instance_auto_recovery):
-        print "Create Images (Admin -> System -> Images)---------------------------------------------------------------"
+        """
+        Function for initializing images class
+
+        :param image_name: name of image
+        :param image_location: URL of image location
+        :param format: format of image
+        :param copy_data: copy image data to service [True or False]
+        :param timeout: timeout for live migration
+        :param downtime: downtime for live migration
+        :param public: is the image public [True or False]
+        :param instance_auto_recovery: [True or False]
+        """
+
+        print "Create Image (Admin -> System -> Images)----------------------------------------------------------------"
+        print image_name
         # Get driver
         driver = DriverUtils.get_driver()
         # Get URL text from class
@@ -30,10 +47,24 @@ class Images():
                           instance_auto_recovery)
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
 
     @classmethod
     def create_images(cls, image_name, image_location, format, copy_data, timeout, downtime, public,
                       instance_auto_recovery):
+        """
+        Function for creating an image
+
+        :param image_name: name of image
+        :param image_location: URL of image location
+        :param format: format of image
+        :param copy_data: copy image data to service [True or False]
+        :param timeout: timeout for live migration
+        :param downtime: downtime for live migration
+        :param public: is the image public [True or False]
+        :param instance_auto_recovery: [True or False]
+        """
+
         # Get driver
         driver = DriverUtils.get_driver()
 
@@ -94,35 +125,20 @@ class Images():
             pass
 
         image_name_input.submit()
-    """
+
     @classmethod
     def get_guest_image(cls):
-        print "Hi"
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.WarningPolicy())
-        client.connect('128.224.145.121', '22', 'jbarber', '3jbarber')
-        stdin, stdout, stderr = client.exec_command("cd /buildarea3/users/jbarber/")
-        return_value = stdout.channel.recv_exit_status()
-        print return_value
-        if(return_value == 0):
-            pass
-        else:
-            print "CD Failed"
-            return 1
-        time.sleep(1)
-        stdin, stdout, stderr = client.exec_command("scp jbarber@128.224.145.134:"
-                            "/localdisk/loadbuild/jenkins/CGCS_2.0_Guest_Daily_Build/cgcs-guest.img ./cgcs-guest.img")
-        return_value2 =  stdout.channel.recv_exit_status()
-        print return_value2
-        if(return_value2 == 0):
-            pass
-        else:
-            print "SCP Failed"
-            return 2
-        time.sleep(1)
         """
-
-
+        Function for getting the guest image from 'CGCS_2.0_Guest_Daily_Build'
+        """
+        
+        child = pexpect.spawn("sudo scp jbarber@128.224.145.134:/localdisk/loadbuild/jenkins/CGCS_2.0_Guest_Daily_Build/cgcs-guest.img /var/www/cgcs-guest.img", timeout=None)
+        child.expect('jbarber:')
+        child.sendline('3jbarber')
+        child.expect('password:')
+        child.sendline('3jbarber')
+        child.sendline('3jbarber')
+        child.expect(pexpect.EOF)
 
 
 

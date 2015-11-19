@@ -13,7 +13,15 @@ class Volumes():
 
     @classmethod
     def volumes(cls, volume_name, volume_source, image_source, availability_zone):
-        print "Create Volumes (Project -> Compute -> Volumes)----------------------------------------------------------"
+        """
+        Function for initializing volumes class
+
+        :param volume_name: name of volume
+        :param volume_source: source of volume [image]
+        :param image_source: image name
+        :param availability_zone: [any or nova]
+        """
+
         # Get driver
         driver = DriverUtils.get_driver()
         # Get URL text from class
@@ -28,9 +36,21 @@ class Volumes():
         cls.create_volume(volume_name, volume_source, image_source, availability_zone)
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
 
     @classmethod
     def create_volume(cls, volume_name, volume_source, image_source, availability_zone):
+        """
+        Function for initializing volumes class
+
+        :param volume_name: name of volume
+        :param volume_source: source of volume [image]
+        :param image_source: image name
+        :param availability_zone: [any or nova]
+        """
+
+        print "Create Volumes (Project -> Compute -> Volumes)----------------------------------------------------------"
+        print volume_name
         # Get driver
         driver = DriverUtils.get_driver()
 
@@ -48,7 +68,6 @@ class Volumes():
         image_source_input.select_by_index(1)
         for option in image_source_input.options:
             value = option.get_attribute('value')
-            print value
             if(image_source == value):
                 image_source_input.select_by_value(value)
                 break

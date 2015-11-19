@@ -58,3 +58,7 @@ FLAVOR_EXTRA_SPEC_TYPE_VCPU_MODEL = "VCPU Model"
 FLAVOR_EXTRA_SPEC_TYPE_VCPU_MODEL_INTEL_9XX = "Intel Core i7 9xx (Nehalem Class Core i7)"
 
 ROUTER_INTERFACE_TAB = "?tab=router_details__interfaces"
+
+ROUTER_EDIT_INTERFACE_DROPDOWN = "a.btn:nth-child(2)"
+ROUTER_EDIT_INTERFACE_FIRST_HALF = "Routers__row_"
+ROUTER_EDIT_INTERFACE_SECOND_HALF = "__action_update"

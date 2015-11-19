@@ -13,7 +13,13 @@ class Hosts():
 
     @classmethod
     def hosts(cls):
-        print "Check Hosts (Admin -> System -> Inventory)----------------------------------------------------------"
+        """
+        Function for initializing hosts class
+
+        :return host_list: list of hosts in host table
+        """
+
+        print "Check Hosts (Admin -> System -> Inventory)--------------------------------------------------------------"
         # Get driver
         driver = DriverUtils.get_driver()
         # Get URL text from class
@@ -28,26 +34,29 @@ class Hosts():
         host_list = cls.get_hosts()
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
         return host_list
 
     @classmethod
     def get_hosts(cls):
-        #print host_to_lock
+        """
+        Function for getting all hosts in table
+
+        :return host_list: list of hosts in host table
+        """
+
         host_list = []
         row_number = -1
         driver = DriverUtils.get_driver()
-
-        # Get link from partial text in table (Host Name column)
+        # Get link from partial text in host table (Host Name column)
         links = driver.find_elements_by_partial_link_text('')
         for link in links:
             host_local = link.get_attribute("text")
-            #print host_local
             # Match host_to_lock with link
             if("compute" in host_local):
                 parse = link.get_attribute("href")
                 # Parse number from link
                 parse = parse.split("/")
-                #print parse
                 # Find the number in the list
                 for num in parse:
                     if num.isdigit():
@@ -58,19 +67,27 @@ class Hosts():
             host = item[0]
             row = item[1]
             # Call function to check Avail State
-            print host
             return_value = cls.check_host_avail_state(row)
             if(return_value == 0):
                 print "Host is online"
             if(return_value == 1):
                 print "Host is in an invalide state"
+                # Attempt to lock host?
         return host_list
 
     @classmethod
     def check_host_avail_state(cls, row_number):
+        """
+        Function for checking column 'Available State' in host table
+
+        :param row_number: row number of host [Row number is assigned by creation order not order in table]
+        :return return_value: return value for valid or invalid host status [0 valid, 1 invalid]
+        """
+
         return_value = -1
         driver = DriverUtils.get_driver()
-        host_label = constants.HOST_CHECK_AVAIL_STATE_FIST_HALF + str(row_number) + constants.HOST_CHECK_AVAIL_STATE_SECOND_HALF
+        host_label = constants.HOST_CHECK_AVAIL_STATE_FIST_HALF + str(row_number) + \
+                     constants.HOST_CHECK_AVAIL_STATE_SECOND_HALF
         check = driver.find_element_by_css_selector(host_label)
         if("Online" in check.text):
             print "Host Status: Host is locked"
@@ -80,9 +97,25 @@ class Hosts():
         return return_value
 
     @classmethod
-    def create_interface(cls, host_name, iface_name, network_type, iface_type, eth_mode, ports, mtu, *provider_networks):
+    def create_interface(cls, host_name, iface_name, network_type, iface_type, eth_mode, ports, mtu,
+                         *provider_networks):
+        """
+        Function for creating an interface for specified host
+
+        :param host_name: name of host in Hosts table
+        :param iface_name: name of interface
+        :param network_type: type of network [mgmt, oam, data, infra, pxeboot]
+        :param iface_type: type of interface [aggregated or vlan]
+        :param eth_mode: aggregated ethernet mode
+        :param ports: network adapter?
+        :param mtu: maximum transmit unit
+        :param provider_networks: list of provider networks
+        """
+
+        print "Create Interface (Admin -> System -> Inventory)---------------------------------------------------------"
         host_link = ""
         print host_name
+        print iface_name
         # Get driver
         driver = DriverUtils.get_driver()
         # Get URL of compute passed to function
@@ -93,7 +126,6 @@ class Hosts():
             # Match host_to_lock with link
             if(host_name in host_local):
                 host_link = link.get_attribute("href")
-        print host_link
         # Append to end of URL
         driver.get(DriverUtils.set_url(host_link + constants.HOST_INTERFACE_TAB))
         # Navigate to newly appended URL
@@ -134,11 +166,21 @@ class Hosts():
 
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
 
     @classmethod
     def create_interface_profile(cls, host_name, if_profile_name):
+        """
+        Function for creating an interface profile for specified host
+
+        :param host_name: name of host in Hosts table
+        :param if_profile_name: name of interface profile for specified host
+        """
+
+        print "Create Interface Profile (Admin -> System -> Inventory)-------------------------------------------------"
         host_link = ""
         print host_name
+        print if_profile_name
         # Get driver
         driver = DriverUtils.get_driver()
         # Get URL text from class
@@ -174,11 +216,21 @@ class Hosts():
 
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
 
     @classmethod
     def create_cpu_profile(cls, host_name, cpu_profile_name):
+        """
+        Function for creating an cpu profile for specified host
+
+        :param host_name: name of host in Hosts table
+        :param cpu_profile_name: name of cpu profile for specified host
+        """
+
+        print "Create Interface (Admin -> System -> Inventory)---------------------------------------------------------"
         host_link = ""
         print host_name
+        print cpu_profile_name
         # Get driver
         driver = DriverUtils.get_driver()
         # Get URL text from class
@@ -214,11 +266,21 @@ class Hosts():
 
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
 
     @classmethod
     def create_mem_profile(cls, host_name, mem_profile_name):
+        """
+        Function for creating an memory profile for specified host
+
+        :param host_name: name of host in Hosts table
+        :param mem_profile_name: name of memory profile for specified host
+        """
+
+        print "Create Memory Profile (Admin -> System -> Inventory)----------------------------------------------------"
         host_link = ""
         print host_name
+        print mem_profile_name
         # Get driver
         driver = DriverUtils.get_driver()
         # Get URL text from class
@@ -253,6 +315,7 @@ class Hosts():
 
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
 
 
 

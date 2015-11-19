@@ -8,11 +8,21 @@ import time
 
 __author__ = 'jbarber'
 
+
 class Networks():
 
     @classmethod
     def networks(cls, network_provider_name, network_provider_type, mtu, vlan_transparent):
-        print "Create Networks (Admin -> System -> Networks)-----------------------------------------------------------"
+        """
+        Function for initializing networks class
+
+        :param network_provider_name: provider network name for network
+        :param network_provider_type: type of network [flat, vlan, vxlan]
+        :param mtu: maximum transfer units
+        :param vlan_transparent: True or False
+        :return provider_net_link: link to provider net details to specified provider network
+        """
+
         # Get driver
         driver = DriverUtils.get_driver()
         # Get URL text from class
@@ -32,10 +42,22 @@ class Networks():
             return
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
         return provider_net_link
 
     @classmethod
     def create_provider_net(cls, network_provider_name, network_provider_type, mtu, vlan_transparent):
+        """
+        Function for creating a provider network
+
+        :param network_provider_name: provider network name for network
+        :param network_provider_type: type of network [flat, vlan, vxlan]
+        :param mtu: maximum transfer units
+        :param vlan_transparent: True or False
+        """
+
+        print "Create Provider Network (Admin -> System -> Networks)---------------------------------------------------"
+        print network_provider_name
         driver = DriverUtils.get_driver()
         # Get URL text from class
         url = DriverUtils.get_url()
@@ -80,19 +102,20 @@ class Networks():
 
     @classmethod
     def get_provider_net(cls, network_provider_name):
+        """
+        Function for getting provider net details
+
+        :param network_provider_name: provider network name for network
+        :return provider_id_link: link to provider net details to specified provider network
+        """
+
         provider_net_link = -1
-        index = [6]
-        # TODO: Grab driver, read table, compare to user_name, navigate to modify quotas section!
-        # Read table, match name with project ID, use constants like in 'lock_host.py'
-        # tuple of Name and Project ID
         # Get driver
         driver = DriverUtils.get_driver()
-
         # Get link from partial text in table (Host Name column)
         links = driver.find_elements_by_partial_link_text('')
         for link in links:
             host_local = link.get_attribute("text")
-            #print host_local
             # Match host_to_lock with link
             if(network_provider_name in host_local):
                 provider_id_link = link.get_attribute("href")
@@ -102,6 +125,18 @@ class Networks():
 
     @classmethod
     def provider_net_range_create(cls, provider_net_link, provider_name, shared, project_name, min_range, max_range):
+        """
+        Function for creating a net range in specified provider network
+
+        :param provider_net_link: link to provider net details
+        :param provider_name: name of provider net
+        :param shared: True or False
+        :param project_name: name of project
+        :param min_range: minimum segmentation range
+        :param max_range: maximum segmentation range
+        """
+
+        print "Create Provider Network: Range (Admin -> System -> Networks)--------------------------------------------"
         # Get driver
         driver = DriverUtils.get_driver()
         DriverUtils.set_url(provider_net_link)
@@ -135,12 +170,23 @@ class Networks():
         max_range_input.click()
         max_range_input.send_keys(max_range)
         max_range_input.submit()
-
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
 
     @classmethod
     def create_qos_policy(cls, policy_name, description, weight, project_name):
+        """
+        Function for creating a QoS policy
+
+        :param policy_name: name of QoS policy
+        :param description: description of QoS policy
+        :param weight: scheduler weight
+        :param project_name: name of project
+        """
+
+        print "Create Network QoS Policy (Admin -> System -> Networks)-------------------------------------------------"
+        print policy_name
         # Get driver
         driver = DriverUtils.get_driver()
         # Get URL text from class
@@ -177,10 +223,28 @@ class Networks():
 
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
 
     @classmethod
     def create_network(cls, network_name, project_name, network_type, physical_network, \
                        segmentation_id, qos_policy, shared, external_network, vlan_transparent):
+        """
+        Function for creating a network
+
+        :param network_name: name of network
+        :param project_name: name of project
+        :param network_type: type of network [flat, vlan, vxlan]
+        :param physical_network: name of provider network(s)
+        :param segmentation_id: [int]
+        :param qos_policy: name of QoS policy
+        :param shared: True or False
+        :param external_network: True or False
+        :param vlan_transparent: True or False
+        :return network_name: name of network
+        """
+
+        print "Create Network (Admin -> System -> Networks)------------------------------------------------------------"
+        print network_name
         # Get driver
         driver = DriverUtils.get_driver()
         # Get URL text from class
@@ -238,11 +302,30 @@ class Networks():
 
         # Submit create network form
         network_name_input.submit()
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
         return network_name
 
     @classmethod
     def create_subnet(cls, network_name, subnet_name, network_address, gateway_ip, disable_gateway,
                       system_managed_subnet, dhcp, allocation_pools, dns_name_servers, host_routes, vlan):
+        """
+        Function for creating a network subnet
+
+        :param network_name: name of network
+        :param subnet_name: name of subnet
+        :param network_address: network address in CIDR format
+        :param gateway_ip: ip address of gateway
+        :param disable_gateway: True or False
+        :param system_managed_subnet: True or False
+        :param dhcp: True or False
+        :param allocation_pools: ip address allocation pools
+        :param dns_name_servers: ip address list of DNS name servers
+        :param host_routes: additional routes announced to the hosts
+        :param vlan: vlan id of subnet
+        """
+
+        print "Create Network Subnet (Admin -> System -> Networks)-----------------------------------------------------"
+        print subnet_name
         network_link = -1
         # Get driver
         driver = DriverUtils.get_driver()
@@ -339,10 +422,29 @@ class Networks():
         vlan_input.submit()
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
 
     @classmethod
     def create_project_subnet(cls, network_name, subnet_name, network_address, gateway_ip, disable_gateway,
                               system_managed_subnet, dhcp, allocation_pools, dns_name_servers, host_routes, vlan):
+        """
+        Function for creating a project network subnet
+
+        :param network_name: name of network
+        :param subnet_name: name of subnet
+        :param network_address: network address in CIDR format
+        :param gateway_ip: ip address of gateway
+        :param disable_gateway: True or False
+        :param system_managed_subnet: True or False
+        :param dhcp: True or False
+        :param allocation_pools: ip address allocation pools
+        :param dns_name_servers: ip address list of DNS name servers
+        :param host_routes: additional routes announced to the hosts
+        :param vlan: vlan id of subnet
+        """
+
+        print "Create Project Network Subnet (Project -> Network -> Networks)------------------------------------------"
+        print subnet_name
         network_link = -1
         print network_name
         # Get driver
@@ -359,15 +461,12 @@ class Networks():
         links = driver.find_elements_by_partial_link_text('')
         for link in links:
             host_local = link.get_attribute("text")
-            print host_local
             # Match host_to_lock with link
             if(network_name in host_local):
-                print network_name
                 network_link = link.get_attribute("href")
-        print network_link
         # Append to end of URL
         driver.get(DriverUtils.set_url(network_link))
-        time.sleep(3)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
         # Navigate to newly appended URL
         driver.get(DriverUtils.get_url())
         # Wait for elements on page to load
@@ -444,6 +543,7 @@ class Networks():
         vlan_input.submit()
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
+        time.sleep(settings.DEFAULT_SLEEP_TIME)
 
 
 
