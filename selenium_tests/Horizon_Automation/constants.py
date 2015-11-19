@@ -15,6 +15,9 @@ CONST_LOCK_LABEL_SECOND_HALF = "__action_lock"
 CONST_UNLOCK_LABEL_FIRST_HALF = "#hosts__row_"
 CONST_UNLOCK_LABEL_SECOND_HALF = "__action_unlock"
 
+# CONSTANTS FOR SWACT HOST ##########################################################
+CONST_SWACT_LABEL_FIRST_HALF = "#hosts__row_"
+CONST_SWACT_LABEL_SECOND_HALF = "__action_swact"
 
 # These strings represent the unique values for the drop down button of each host
 CONST_DROPDOWN_FIRST_HALF = "#hosts__row__"
