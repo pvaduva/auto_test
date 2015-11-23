@@ -351,20 +351,20 @@ function randomize_fname($name) {
 	</td></tr><tr><td>
 
         </td></tr><tr><td>
+        Test Tags:
+        </td><td>
+        <input name="tag" type="text"/></br>
+        </td></tr><tr><td>
+
         <?php
-        echo "Test Tags:";
+	echo "</td></tr><tr><td>";
+        echo "Release Name:";
         echo "</td><td>";
-        echo "<select name=\"tag\">";
+        echo "<select name=\"release_name\">";
         echo "<option value=\"Titanium Server 15.12\">Titanium Server 15.12</option>";
         echo "</select>";
         echo "</td></tr><tr><td>";
         ?>
-
-	</td></tr><tr><td>
-        Release Name:	
-	</td><td>	
-	<input name="release_name" type="text"/></br>
-	</td></tr><tr><td>
 
 </td></tr></table>
 
