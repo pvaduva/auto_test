@@ -1,0 +1,59 @@
+README file for Pau (a web frontend for Manual Test Submission to MongoDB)
+by Craig Miller		3 June 2015
+
+
+Pau is the Hawaiian word for Done.
+
+ARCHITECTURE:
+
+Pau consists of 3 layers written in 3 languages:
+	pau.php (PHP) - webserver backend: creates form, collects user information
+	ini_writer.sh (SHELL) - called by pau.php, and writes temp INI file, with user information
+	testReportManual.py (Pyhton) - called by pau.php after INI file is written, feeds INI file to WASSP MongoDB Submit script
+	
+    Web Client ----------------> Apache/PHP server
+                                    |
+                                    \/
+                                    pau.php -----> testReportManual.py --->MongoDB
+                                    |    /\
+                                    \/    |
+                                    ini_writer_iot.sh
+	
+OVERVIEW OF THE COMPONENTS:
+								
+	pau.php is designed to handle different groups of users by the method of "themes". Each Theme can support: a different background image, and different fields for user entry. pau.php also handles file upload, and is currently limited to a single file (if multiple files are required to be submitted, the user must zip or tar them first). Uploaded files appear in the "console log" column of wassp.
+	
+	A separate ini_writer shell script is used for each theme. Although it is possible to have a single ini_writer for all themes, it was decided that the code would be simpler with one ini_writer per user group (or theme). This allows for static data (e.g. build, or board name) to be written directly in the ini_writer script
+	
+	After the INI file is written to a temporary location (as defined in pau.php), the WASSP MongoDB submit script with the INI file, and the data is submitted to MongoDB.
+	
+	
+CONFIGURATION FOR ENVIRONMENT:
+
+Near the top of pau.php are variables which need to be customized for each webserver, where pau.php is run. The following variables should point to the site specific locations:
+// ===== Change these vars to valid values in your environment ====
+
+// path to this script and ini_writer scripts
+$path="/home/cmiller/public_html/EL/Pau";
+// default ini path
+$ini_path="/tmp/uploads";		//this must be world writable 'chmod 777'
+$ini_name="results.ini";		//base file name for INI, name is randomized to allow multiuser operation
+
+$dir_name="/tmp/uploads";		//this must be world writable 'chmod 777', location of file uploads
+
+// wassp directory
+$wassp_dir="/localdisk/WASSP/";	//root path to wassp tree
+
+//ini file writer script
+$pau_ini_writer="ini_writer.sh";	//default ini_writer script, themes will assign new script name
+
+
+DEBUGGING:
+
+There is a special User Story, to allow debugging. By entering "DEBUG" as a User Story, only the INI file will be created. This allows the programmer to see the generated INI file (in the browser) without submitting to MongoDB.
+
+Additionally, when programming in php, monitoring the /var/log/apache2/error.log is very helpful, as syntax errors will be highlighted in this log file.
+
+
+
+	
