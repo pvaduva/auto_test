@@ -1,0 +1,59 @@
+#!/usr/bin/env python3.4
+
+"""
+ssh.py - Class representation for hosts in Titanium Server system.
+
+Copyright (c) 2015 Wind River Systems, Inc.
+
+The right to copy, distribute, modify, or otherwise make use
+of this software may be licensed only pursuant to the terms
+of an applicable Wind River license agreement.
+"""
+
+from pprint import pprint
+from .log import print_name_value
+import copy
+
+class Host(object):
+    """Host representation.
+
+    Host contains various attributes such as IP address, hostname, etc.,
+    and methods to execute various functions on the host (e.g. ping, ps, etc.).
+
+    """
+
+    def __init__(self, **kwargs):
+        """Returns custom logger for module with assigned level."""
+
+        self.telnet_negotiate = False
+        self.telnet_vt100query = False
+        self.telnet_conn = None
+        self.ssh_conn = None
+        self.administrative = None
+        self.operational = None
+        self.availability = None
+
+        for key in kwargs:
+            setattr(self, key, kwargs[key])
+
+    def print_attrs(self):
+        # Attributes to list first
+        first_attrs = ['name', 'personality', 'host_name', 'barcode', 'host_ip',
+                       'telnet_ip', 'telnet_port']
+        attrs = copy.deepcopy(vars(self))
+        for key in first_attrs:
+            value = attrs.pop(key, None)
+            print_name_value(key, value)
+        for item in sorted(attrs.items()):
+            print_name_value(item[0], item[1])
+
+    def __str__(self):
+        return str(vars(self))
+
+class Controller(Host):
+    """Controller representation.
+
+    """
+    def  __init__(*initial_data, **kwargs):
+        super().__init__(*initial_data, **kwargs)
+        
