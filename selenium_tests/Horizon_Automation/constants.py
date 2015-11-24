@@ -23,12 +23,19 @@ CONST_SWACT_LABEL_SECOND_HALF = "__action_swact"
 CONST_DROPDOWN_FIRST_HALF = "#hosts__row__"
 CONST_DROPDOWN_SECOND_HALF = "> td:nth-child(8) > div:nth-child(1) > a:nth-child(2)"
 
+# Check label personailty to determine if host is either active or standby
+CONST_CHECK_PERSONALITY_FIRST_HALF = "#hosts__row__"
+CONST_CHECK_PERSONALITY_SECOND_HALF = " > td:nth-child(2)"
+
 # Check label Admin State to ensure host is either locked or unlocked
 CONST_CHECK_ADMIN_STATE_FIRST_HALF = "#hosts__row__"
 CONST_CHECK_ADMIN_STATE_SECOND_HALF = " > td:nth-child(3)"
 
 HOST_CHECK_AVAIL_STATE_FIST_HALF = "#hosts__row__"
 HOST_CHECK_AVAIL_STATE_SECOND_HALF = "> td:nth-child(5)"
+
+HOST_CHECK_STATUS_FIRST_HALF = "#hosts__row__"
+HOST_CHECK_STATUS_SECOND_HALF = "> td:nth-child(7)"
 
 HOST_INTERFACE_TAB = "?tab=inventory_details__interfaces"
 HOST_PROCESSOR_TAB = "?tab=inventory_details__cpufunctions"

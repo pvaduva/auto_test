@@ -33,7 +33,7 @@ class FaultAlarms():
         Function for getting fault names in Fault Management
         """
         fault_count = 0
-        fault_names = []
+        cls.fault_names = []
         # Get driver
         driver= DriverUtils.get_driver()
 
@@ -45,11 +45,11 @@ class FaultAlarms():
         for name in fault_name:
             fault_count += 1
             # Append all faults found in table to list
-            fault_names.append(name)
+            cls.fault_names.append(name)
             # Or check against constants for matching faults
             # cls.check_faults_found(name)
         # Call function to output faults to console
-        cls.output_faults(fault_names, fault_count)
+        cls.output_faults(cls.fault_names, fault_count)
 
     @classmethod
     def output_faults(cls, fault_names, fault_count):
