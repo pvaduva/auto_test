@@ -1,0 +1,168 @@
+#!/usr/bin/env python3.4
+
+"""
+common.py - Common utilities.
+
+Copyright (c) 2015 Wind River Systems, Inc.
+
+The right to copy, distribute, modify, or otherwise make use
+of this software may be licensed only pursuant to the terms
+of an applicable Wind River license agreement.
+"""
+
+from constants import *
+from .log import getLogger, print_step
+from .classes import Host
+import sys
+import re
+import subprocess
+import configparser
+import pexpect
+
+log = getLogger(__name__)
+
+def create_node_dict(nodes, node_type):
+    """Read .ini file for each node and create Host object for the node.
+
+    The data in the .ini file is read into a dictionary which is used to
+    create a Host object for the node.
+
+    Return dictionary of node names mapped to their respective Host objects.
+    """
+    node_dict = {}
+    i = 0
+    
+    for node in nodes:
+        config = configparser.ConfigParser()
+        try:
+            node_filepath = NODE_INFO_DIR + '/{}.ini'.format(node)
+            node_file = open(node_filepath, 'r')
+            config.readfp(node_file)
+        except Exception:
+            log.exception('Failed to read \"{}\"'.format(node_filepath))
+            sys.exit(1)
+
+        node_info_dict = {}
+        for section in config.sections():
+            for opt in config.items(section):
+                key, value = opt
+                node_info_dict[section + '_' + key] = value
+        name = node_type + "-{}".format(i)
+        node_info_dict['name'] = name
+        node_info_dict['type'] = node_type
+        node_info_dict['barcode'] = node
+
+        node_dict[name]=Host(**node_info_dict)
+        i += 1
+
+    print_step(node_type + " nodes:")
+    for key, value in sorted(node_dict.items()):
+        value.print_attrs()
+        print()
+
+    return node_dict
+
+def remove_markers(str):
+    return str.translate({ord(OPEN_MARKER): '', ord(CLOSE_MARKER): ''})
+
+def find_error_msg(str):
+    if re.search("error", str, re.IGNORECASE):
+        found_error_msg = True
+    else:
+        found_error_msg = False
+    return found_error_msg
+
+def pexpect_exec_cmd(cmd, tmout=10, event_dict=None):
+    """Run cmd on localhost using pexpect.run.
+
+    pexpect.run supports sending a dictionary of patterns and responses as
+    events if specified.
+
+    Return return code and output from command.
+    """
+    log.info(cmd)
+    (output, rc) = pexpect.run(cmd, timeout=tmout, withexitstatus=1,
+                               events=event_dict)
+    return (rc, output.decode('utf-8','ignore'))
+
+def exec_cmd(cmd, check_output=False):
+    rc = 0
+    log.info(" ".join(cmd))
+    try:
+        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, universal_newlines=True)
+    except subprocess.CalledProcessError as ex:
+        rc = ex.returncode
+        output = ex.output
+    output = output.rstrip()
+    log.info("Output:\n" + output)
+    log.info("Return code: " + str(rc))
+    return (rc, output)
+
+def vlm_reserve(barcodes, note=None):
+    if isinstance(barcodes, str):
+        barcodes = [barcodes]
+    action = VLM_RESERVE
+    cmd = [VLM, action, "-t"]
+    [cmd.append(barcode) for barcode in barcodes]
+    reserve_note_params = []
+    if note is not None:
+        reserve_note_params = ["-n", note]
+    cmd += reserve_note_params
+    reserved_barcodes = exec_cmd(cmd, check_output=True)[1]
+    if not reserved_barcodes or "Error" in reserved_barcodes:
+        log.error("Failed to reserve target(s): " + str(barcodes))
+        sys.exit(1)
+    if any(barcode not in reserved_barcodes for barcode in barcodes):
+        msg = "Only reserved {} of {}".format(reserved_barcodes, barcodes)
+        msg += ". Remaining barcode(s) are already reserved"
+        log.error(msg)
+        sys.exit(1)
+
+def vlm_getattr(barcodes):
+    attr_values = []
+    if isinstance(barcodes, str):
+        barcodes = [barcodes]
+    for barcode in barcodes:
+        attr_dict = {}
+        cmd = [VLM, VLM_GETATTR, "-t"]
+        cmd.append(barcode)
+        cmd.append("all")
+        output = exec_cmd(cmd, check_output=True)[1]
+        if not output or "Error" in output:
+            log.error("Failed to get attributes for target(s): {}".format(barcodes))
+            sys.exit(1)
+        for line in output.splitlines():
+            if line:
+                attr, val = re.split("\s*:\s+", line)
+                attr_dict[attr] = val
+        attr_values.append(attr_dict)
+    return attr_values
+
+def vlm_findmine():
+    cmd = [VLM, VLM_FINDMINE]
+    output = exec_cmd(cmd, check_output=True)[1]
+    if re.search("\d+", output):
+        reserved_targets = output.split()
+        msg = "Target(s) reserved by user: {}".format(str(reserved_targets))
+    else:
+       msg = "User has no reserved target(s)"
+       reserved_targets = []
+    log.info(msg)
+    return reserved_targets
+
+def vlm_exec_cmd(action, barcode):
+    if action not in VLM_CMDS_REQ_RESERVE:
+        msg = '"{}" is an invalid action.'.format(action)
+        msg += " Valid actions: {}".format(str(VLM_CMDS_REQ_RESERVE))
+        log.error(msg)
+        return 1
+    elif barcode not in vlm_findmine():
+        msg = 'Failed to {} target {}. Target is not reserved by user'.format(action, barcode)
+        log.error(msg)
+        return 1
+    else:
+        cmd = [VLM, action, "-t", barcode]
+        output = exec_cmd(cmd, check_output=True)[1]
+        if output != "1":
+            log.error('Failed to execute "{}" on target'.format(barcode))
+            sys.exit(1)
