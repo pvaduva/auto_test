@@ -6,8 +6,17 @@ from selenium.webdriver.support.ui import Select
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import NoAlertPresentException
 import os
+import sys
 import unittest, time, re
 import paramiko
+
+sys.path.append(os.path.join(sys.path[0], "..","..",".."))
+from selenium_tests.Horizon_Automation.common_utils import DriverUtils
+from selenium_tests.Horizon_Automation.lock_host import LockHost
+from selenium_tests.Horizon_Automation.unlock_host import UnlockHost
+from selenium_tests.Horizon_Automation.authentication import Login
+from selenium_tests.Horizon_Automation.locate_sensor import LocateSensor
+from selenium_tests.Horizon_Automation.swact_host import SwactHost
 
 # define constants
 #PV-0
@@ -36,6 +45,22 @@ class BmcQuantaConfig(unittest.TestCase):
         self.verificationErrors = []
         self.accept_next_alert = True
 
+        # List of alarm groups
+        alarm_group = ['power supply fans', 'server fans', 'server power',
+                       'server temperature', 'server voltage']
+        # Configure the alarm through the GUI
+        self.connect_host(NODE_OAM_ADDRESS_4)
+
+        # Set alarm action
+        if LocateSensor.get_sensors("controller-0"):
+            for a_name in alarm_group:
+                LocateSensor.set_sensor_action("controller-0", "Alarm", 'critical', a_name)
+        else:
+           return
+
+        # Wait for elements on page to load
+        time.sleep(30)
+
         # open a connection to the host
         ssh = paramiko.SSHClient()
         ssh.load_system_host_keys()
@@ -55,10 +80,25 @@ class BmcQuantaConfig(unittest.TestCase):
         os.system("expect ./sendfile.exp %s %s" % ("../critical_alarms/show_quanta", NODE_OAM_ADDRESS_4))
         ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("echo 'li69nux' | sudo -S cp -rf /home/wrsroot/show_quanta /usr/sbin/show")
         print("Waiting 2mins for the alarms to be set to critical....")
+        print("Dump host-sensor-list....")
         time.sleep (120)
         ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("source /etc/nova/openrc; system host-sensor-list controller-0")
         self.print_out (ssh_stdout.readlines())
+
+        print("Please check logs at /var/log/mtcAgent.log....")
     
+    def connect_host(self, node):
+        base_url = "http://%s/" % node 
+        # Start web driver with firefox and set URL address 
+        DriverUtils.open_driver("firefox")
+        DriverUtils.set_url(base_url)
+
+        # Call login module
+        Login.login("admin", "admin")
+
+        # Wait for elements on page to load
+        DriverUtils.wait_for_elements(30)
+
     def bmc_login(self):
         return
         driver = self.driver
@@ -73,9 +113,7 @@ class BmcQuantaConfig(unittest.TestCase):
 
     def test_bmc_quanta_configured_cli(self):
         self.bmc_login()
-        #self.bmc_config()
 
-    
     def is_element_present(self, how, what):
         try: self.driver.find_element(by=how, value=what)
         except NoSuchElementException, e: return False

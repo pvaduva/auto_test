@@ -12,7 +12,7 @@ __author__ = 'jbarber'
 class LocateSensor():
 
     @classmethod
-    def set_sensor_action(cls, host_name, action):
+    def set_sensor_action(cls, host_name, action, severity='critical', alarm_name='server power'):
 
         # Get driver
         driver = DriverUtils.get_driver()
@@ -27,12 +27,12 @@ class LocateSensor():
         DriverUtils.wait_for_elements(settings.DEFAULT_ELEMENT_LOAD_TIME)
 
         # Call function to set action
-        cls.set_host_alarms(host_name, action)
+        cls.set_host_alarms(host_name, action, severity, alarm_name)
         # Reset URL to home page in Horizon
-        DriverUtils.set_url(settings.DEFAULT_URL)
+        DriverUtils.set_url(cls.base_url)
 
     @classmethod
-    def get_sensor_name(cls, host_name):
+    def get_sensors(cls, host_name):
 
         # Get driver
         driver = DriverUtils.get_driver()
@@ -40,7 +40,6 @@ class LocateSensor():
         url = DriverUtils.get_url()
         cls.base_url = url
         # Append to end of URL
-        print url
         driver.get(url + "/admin/inventory/")
         driver.find_element_by_link_text("Inventory").click()
         driver.find_element_by_link_text("Hosts").click()
@@ -55,14 +54,14 @@ class LocateSensor():
         time.sleep(10)
         check_return_value = cls.check_sensor_exists()
         if(check_return_value == 1):
-            print "Test Passed"
-            pass
+            print "Configured alarms found"
+            return True
         else:
-            print "Test Failed"
-            return
+            print "No configured alarms found"
+            return False
 
     @classmethod
-    def set_host_alarms(cls, host_to_alarm, action):
+    def set_host_alarms(cls, host_to_alarm, action, severity='critical', alarm_name='server power'):
 
         host_list = []
         row_number = -1
@@ -90,15 +89,13 @@ class LocateSensor():
             row = item[1]
             if(host_to_alarm == host):
                 # Call function with row number
-                print ('Horizon row entry: %s' % row)
-                cls.set_alarm_action(host_link, action)
+                cls.set_alarm_action(host_link, action, severity, alarm_name)
             else:
                 print "Wrong Host found"
 
     @classmethod
-    def set_alarm_action(cls, link, action='log'):
+    def set_alarm_action(cls, link, action='log', severity='critical', alarm_name='server power'):
 
-        #print("Link: %s" % link)
         driver = DriverUtils.get_driver()
         driver.get(link)
 
@@ -108,8 +105,9 @@ class LocateSensor():
         for i in range(len(links)):
             sensor_name = links[i].get_attribute("text")
             #print("link: %s" % sensor_name)
-            if ('server fans' in sensor_name):
+            if (alarm_name in sensor_name):
                 sensor_id = links[i+1].get_attribute("id")
+                print("Sensor name: %s" % sensor_name)
                 print("Sensor id: %s" % sensor_id)
                 driver.find_element_by_id(sensor_id).click()
                 break
@@ -118,54 +116,53 @@ class LocateSensor():
         driver.find_element_by_id("id_audit_interval_group").clear()
         driver.find_element_by_id("id_audit_interval_group").send_keys("10")
 
-        # set the action for the critical alarm levels
-        Select(driver.find_element_by_id("id_actions_critical_group")).select_by_visible_text(action)
-        driver.find_element_by_css_selector("option[value=\"%s\"]" % action.lower()).click()
-
-        # set the action for the major alarm levels
-        Select(driver.find_element_by_id("id_actions_major_group")).select_by_visible_text(action)
+        # set the action for the severity level specified
+        Select(driver.find_element_by_id("id_actions_%s_group" % severity)).select_by_visible_text(action)
         driver.find_element_by_css_selector("option[value=\"%s\"]" % action.lower()).click()
 
         # save the entries
         driver.find_element_by_xpath("//input[@value='Save']").click()
 
-        # Confirm alarm severity and action
         DriverUtils.wait_for_elements(settings.DEFAULT_ELEMENT_LOAD_TIME)
         time.sleep(10)
-        check_return_value = cls.check_alarm('critical')
+
+        # Confirm alarm severity and action
+        check_return_value = cls.check_alarm(severity)
         if(check_return_value == 1):
-            print "Test Passed"
+            print ("Changed for alarm severity: %s to action: %s" % (severity, action))
             pass
         else:
-            print "Test Failed"
+            print ("No alarms found for alarm severity: %s. Please check logs." % severity)
             return
 
     @classmethod
     def check_alarm(cls, alarm_name):
+
+        return_value = -1
 
         DriverUtils.set_url(cls.base_url)
         FaultAlarms.check_alarms()
 
         for name in FaultAlarms.fault_names:
             if(alarm_name in name):
-                print ("%s alarm found" % alarm_name)
                 return_value = 1
         return return_value
 
 
     @classmethod
-    def check_sensor_exists(cls):
+    def check_sensor_exists(cls, alarm_name='Temp_CPU0'):
         """
         Function for getting sensor names in host
         """
 
         fault_count = 0
+        return_value = -1
         cls.sensor_names = []
         # Get driver
         driver= DriverUtils.get_driver()
 
         sensor_name = driver.find_element_by_xpath("//table[@id='sensors']")
-        print ('sensor_name: %s' % sensor_name.text)
+        #print ('sensor_name: %s' % sensor_name.text)
         sensor_name = sensor_name.text
         sensor_name = sensor_name.split('\n')
         sensor_name = sensor_name[6:]
@@ -173,7 +170,7 @@ class LocateSensor():
         for name in sensor_name:
             fault_count += 1
             # Append all faults found in table to list
-            print('Name: %s' % name)
+            #print('Name: %s' % name)
             cls.sensor_names.append(name)
             # Or check against constants for matching faults
             # cls.check_faults_found(name)
