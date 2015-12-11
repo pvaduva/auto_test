@@ -1,4 +1,21 @@
-__author__ = 'jbarber'
+'''
+constants.py - Handles constants for Horizon Automation
+
+Copyright (c) 2015 Wind River Systems, Inc.
+
+The right to copy, distribute, modify, or otherwise make use
+of this software may be licensed only pursuant to the terms
+of an applicable Wind River license agreement.
+
+
+Contains constants for Horizon Automation.
+'''
+
+'''
+modification history:
+---------------------
+26nov15,jbb  Initial file
+'''
 
 # CONSTANTS FOR HOSTS --------------------------------------------------------------------------------------------------
 
@@ -40,8 +57,11 @@ HOST_CHECK_STATUS_SECOND_HALF = "> td:nth-child(7)"
 HOST_INTERFACE_TAB = "?tab=inventory_details__interfaces"
 HOST_PROCESSOR_TAB = "?tab=inventory_details__cpufunctions"
 HOST_MEMORY_TAB = "?tab=inventory_details__memorys"
+HOST_STORAGE_TAB = "?tab=inventory_details__storages"
+HOST_STORAGE_LOCAL_VOLUME_GROUP_PARAM_TAB = "?tab=lvg_details__lvg_params"
 
-
+HOST_INTERFACE_EDIT_FIRST_HALF = "interfaces__row_"
+HOST_INTERFACE_EDIT_SECOND_HALF = "__action_update"
 
 # END CONSTANTS FOR HOSTS ----------------------------------------------------------------------------------------------
 

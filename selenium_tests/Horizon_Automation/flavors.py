@@ -1,12 +1,28 @@
-from selenium.webdriver import ActionChains
-from selenium.webdriver.common.keys import Keys
+'''
+flavors.py - Handles creation of flavors in Horizon
+
+Copyright (c) 2015 Wind River Systems, Inc.
+
+The right to copy, distribute, modify, or otherwise make use
+of this software may be licensed only pursuant to the terms
+of an applicable Wind River license agreement.
+
+
+Contains create flavor function and create extra spec function.
+'''
+
+'''
+modification history:
+---------------------
+26nov15,jbb  Initial file
+30nov15,jbb  Add fail messages
+'''
+
 from selenium.webdriver.support.ui import Select
 from common_utils import DriverUtils
 import constants
 import settings
 import time
-
-__author__ = 'jbarber'
 
 
 class Flavors():
@@ -39,7 +55,7 @@ class Flavors():
         time.sleep(settings.DEFAULT_SLEEP_TIME)
         flavor_full_link = cls.get_flavor_link(flavor_name)
         if(flavor_full_link == -1):
-            print "Error finding flavor name"
+            print "Test: FAIL - Error finding flavor name"
             return
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
@@ -67,27 +83,21 @@ class Flavors():
         create_button.click()
 
         flavor_name_input = driver.find_element_by_id("id_name")
-        flavor_name_input.click()
         flavor_name_input.send_keys(flavor_name)
 
         vcpus_input = driver.find_element_by_id("id_vcpus")
-        vcpus_input.click()
         vcpus_input.send_keys(vcpus)
 
         ram_input = driver.find_element_by_id("id_memory_mb")
-        ram_input.click()
         ram_input.send_keys(ram)
 
         root_disk_input = driver.find_element_by_id("id_disk_gb")
-        root_disk_input.click()
         root_disk_input.send_keys(root_disk)
 
         ephemeral_disk_input = driver.find_element_by_id("id_eph_gb")
-        ephemeral_disk_input.click()
         ephemeral_disk_input.send_keys(ephemeral_disk)
 
         swap_disk_input = driver.find_element_by_id("id_swap_mb")
-        swap_disk_input.click()
         swap_disk_input.send_keys(swap_disk)
 
         swap_disk_input.submit()

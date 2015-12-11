@@ -1,9 +1,26 @@
+'''
+authentication.py - Handles authentication functions
+
+Copyright (c) 2015 Wind River Systems, Inc.
+
+The right to copy, distribute, modify, or otherwise make use
+of this software may be licensed only pursuant to the terms
+of an applicable Wind River license agreement.
+
+
+Contains login and logout functions
+'''
+
+'''
+modification history:
+---------------------
+26nov15,jbb  Initial file
+30nov15,jbb  Add fail messages
+'''
+
 from common_utils import DriverUtils
 import settings
 import time
-
-
-__author__ = 'jbarber'
 
 
 class Login():
@@ -37,8 +54,7 @@ class Login():
                 password_element.submit()
                 time.sleep(settings.DEFAULT_SLEEP_TIME)
         else:
-            print "Username or Password is missing/invalid"
-            print "Exiting..."
+            print "Test: FAIL - Username or Password is missing/invalid"
             exit(1)
 
 

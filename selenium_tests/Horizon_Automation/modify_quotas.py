@@ -1,13 +1,28 @@
-from selenium.webdriver import ActionChains
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import Select
+'''
+modify_quotas.py - Handles the modification of quotas for projects in Horizon
+
+Copyright (c) 2015 Wind River Systems, Inc.
+
+The right to copy, distribute, modify, or otherwise make use
+of this software may be licensed only pursuant to the terms
+of an applicable Wind River license agreement.
+
+
+Contains function: get project id, modify quotas
+'''
+
+'''
+modification history:
+---------------------
+26nov15,jbb  Initial file
+30nov15,jbb  Add fail messages
+'''
+
 from common_utils import DriverUtils
 import constants
 from common_utils import InputFields
 import settings
 import time
-
-__author__ = 'jbarber'
 
 
 class ModifyQuotas():
@@ -34,7 +49,7 @@ class ModifyQuotas():
         # Call Functions below
         project_id = cls.get_project_id(project_name)
         if(project_id == -1):
-            print "Error finding project name"
+            print "Test: FAIL - Error finding project name"
             return
         cls.modify_quotas(project_id, quota_dict)
         # Reset URL to home page in Horizon
@@ -73,14 +88,14 @@ class ModifyQuotas():
     @classmethod
     def modify_quotas(cls, project_id, quota_dict):
         """
-        Function for getting project id
+        Function for modifying quotas for a project
 
         :param project_id: id of project in Horizon
         :param quota_dict: dictionary of all quotas to modify [example (input_id_name: value)]
         """
 
         if(project_id == None):
-            print "No username was given, failed modifying quotas"
+            print "Test: FAIL - No username was given, failed modifying quotas"
             return
         else:
             print "Modify Quotas (Identity -> Projects)--------------------------------------------------------------------"

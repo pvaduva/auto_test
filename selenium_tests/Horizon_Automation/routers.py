@@ -1,12 +1,29 @@
-from selenium.webdriver import ActionChains
-from selenium.webdriver.common.keys import Keys
+'''
+routers.py - Handles the creation of routers and router interfaces
+
+Copyright (c) 2015 Wind River Systems, Inc.
+
+The right to copy, distribute, modify, or otherwise make use
+of this software may be licensed only pursuant to the terms
+of an applicable Wind River license agreement.
+
+
+Contains function: create router, create router interface,
+and router distribution
+'''
+
+'''
+modification history:
+---------------------
+26nov15,jbb  Initial file
+30nov15,jbb  Add fail messages
+'''
+
 from selenium.webdriver.support.ui import Select
 from common_utils import DriverUtils
 import constants
 import settings
 import time
-
-__author__ = 'jbarber'
 
 
 class Routers():
@@ -36,7 +53,7 @@ class Routers():
         time.sleep(settings.DEFAULT_SLEEP_TIME)
         router_full_link = cls.get_router_link(router_name)
         if(router_full_link == -1):
-            print "Error finding flavor name"
+            print "Test: FAIL - Error finding flavor name"
             return
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
@@ -61,7 +78,6 @@ class Routers():
         create_button.click()
 
         router_name_input = driver.find_element_by_id("id_name")
-        router_name_input.click()
         router_name_input.send_keys(router_name)
 
         external_network_name_input = Select(driver.find_element_by_id("id_external_network"))
@@ -121,7 +137,6 @@ class Routers():
         subnet_name_input.select_by_visible_text(subnet_name)
 
         subnet_ip_input = driver.find_element_by_id("id_ip_address")
-        subnet_ip_input.click()
         subnet_ip_input.send_keys(subnet_ip)
 
         subnet_ip_input.submit()
@@ -132,7 +147,7 @@ class Routers():
     @classmethod
     def router_distributed(cls, router_link, distributed):
         """
-        Function for creating a router interface
+        Function for changing router distribution
 
         :param router_link: link of router details for specified router
         :param distributed: True or False
@@ -168,6 +183,11 @@ class Routers():
 
             distributed_input = Select(driver.find_element_by_id("id_mode"))
             distributed_input.select_by_visible_text("Distributed")
+
+            # Get name for form submission
+            name_input = driver.find_element_by_id("id_name")
+            name_input.submit()
+
             # Reset URL to home page in Horizon
             DriverUtils.set_url(settings.DEFAULT_URL)
             time.sleep(settings.DEFAULT_SLEEP_TIME)

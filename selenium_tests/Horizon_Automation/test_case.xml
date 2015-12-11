@@ -1,0 +1,25 @@
+<test_module name="selenium_Tests">
+    <test_case  name="tests">
+    <!--test_case  name="tests" preTest="${WASSP_TC_PATH}/pre_test.frag" postTest="${WASSP_TC_PATH}/post_test.frag" -->
+    <!--test_case  name="tests" preTest="${WASSP_TESTCASE_DIR}/Horizon_Automation/pre_test.frag"-->
+        #######################################################
+        # Runs all the report generator web app tests
+        #######################################################
+
+        TYPE cd $WASSP_TC_PATH \n
+        #TYPE cd $WASSP_TESTCASE_DIR/$WASSP_TC_NAME \n
+	TYPE pwd \n
+
+	FAILIF Test: FAIL
+        FAILIF can't open file 'lab_setup_horizon.py'
+        FAILIF Traceback \(most recent call last\):
+        FAILIF unable to open display
+
+     	TYPE /usr/bin/python2.7 lab_setup_horizon.py \n
+     	        
+	WAITNOPROMPT 1500 SEC UI Tests finished
+
+        PASS
+    </test_case>
+</test_module>
+

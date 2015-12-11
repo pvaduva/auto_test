@@ -1,16 +1,28 @@
-from selenium.webdriver import ActionChains
+'''
+images.py - Handles the creation of images in Horizon and retrieval from remote server
+
+Copyright (c) 2015 Wind River Systems, Inc.
+
+The right to copy, distribute, modify, or otherwise make use
+of this software may be licensed only pursuant to the terms
+of an applicable Wind River license agreement.
+
+
+Contains functions: create image, get guest image
+'''
+
+'''
+modification history:
+---------------------
+26nov15,jbb  Initial file
+'''
+
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
 from common_utils import DriverUtils
-import constants
 import settings
 import time
-import os
 import pexpect
-import subprocess
-
-
-__author__ = 'jbarber'
 
 
 class Images():
@@ -72,11 +84,9 @@ class Images():
         create_button.click()
 
         image_name_input = driver.find_element_by_id("id_name")
-        image_name_input.click()
         image_name_input.send_keys(image_name)
 
         image_location_input = driver.find_element_by_id("id_image_url")
-        image_location_input.click()
         image_location_input.send_keys(image_location)
 
         format_input = Select(driver.find_element_by_id("id_disk_format"))
@@ -90,26 +100,22 @@ class Images():
 
         if(timeout == None):
             timeout_input = driver.find_element_by_id("id_hw_wrs_live_migration_timeout")
-            timeout_input.click()
             timeout_input.send_keys(Keys.BACKSPACE)
             timeout_input.send_keys(Keys.BACKSPACE)
             timeout_input.send_keys(Keys.BACKSPACE)
             timeout_input.send_keys(Keys.BACKSPACE)
         else:
             timeout_input = driver.find_element_by_id("id_hw_wrs_live_migration_timeout")
-            timeout_input.click()
             timeout_input.send_keys(timeout)
 
         if(downtime == None):
             downtime_input = driver.find_element_by_id("id_hw_wrs_live_migration_max_downtime")
-            downtime_input.click()
             downtime_input.send_keys(Keys.BACKSPACE)
             downtime_input.send_keys(Keys.BACKSPACE)
             downtime_input.send_keys(Keys.BACKSPACE)
             downtime_input.send_keys(Keys.BACKSPACE)
         else:
             downtime_input = driver.find_element_by_id("id_hw_wrs_live_migration_timeout")
-            downtime_input.click()
             downtime_input.send_keys(downtime)
 
         if(public == True):
@@ -132,16 +138,12 @@ class Images():
         Function for getting the guest image from 'CGCS_2.0_Guest_Daily_Build'
         """
         
-        child = pexpect.spawn("sudo scp jbarber@128.224.145.134:/localdisk/loadbuild/jenkins/CGCS_2.0_Guest_Daily_Build/cgcs-guest.img /var/www/cgcs-guest.img", timeout=None)
-        child.expect('jbarber:')
-        child.sendline('3jbarber')
+        child = pexpect.spawn("ssh svc-cgcsauto@128.224.145.134", timeout=None)
         child.expect('password:')
-        child.sendline('3jbarber')
-        child.sendline('3jbarber')
+        child.sendline(')OKM0okm')
+        child.sendline('rsync /localdisk/loadbuild/jenkins/CGCS_2.0_Guest_Daily_Build/cgcs-guest.img svc-cgcsauto@128.224.150.21:/home/svc-cgcsauto/public_html/files/cgcs_guestimg/cgcs-guest.img')
+        child.sendline('exit')
         child.expect(pexpect.EOF)
-
-
-
 
 
 

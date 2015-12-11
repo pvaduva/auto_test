@@ -1,12 +1,29 @@
-from selenium.webdriver import ActionChains
+'''
+networks.py - Handles the creation of networks and subnets in Horizon
+
+Copyright (c) 2015 Wind River Systems, Inc.
+
+The right to copy, distribute, modify, or otherwise make use
+of this software may be licensed only pursuant to the terms
+of an applicable Wind River license agreement.
+
+
+Contains function: create provider net, create provider net range,
+create qos policy, create network, create subnet, and create project subnet
+'''
+
+'''
+modification history:
+---------------------
+26nov15,jbb  Initial file
+30nov15,jbb  Add fail messages
+'''
+
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
 from common_utils import DriverUtils
-import constants
 import settings
 import time
-
-__author__ = 'jbarber'
 
 
 class Networks():
@@ -38,7 +55,7 @@ class Networks():
         time.sleep(5)
         provider_net_link = cls.get_provider_net(network_provider_name)
         if(provider_net_link == -1):
-            print "Error finding provider net name"
+            print "Test: FAIL - Error finding provider net name"
             return
         # Reset URL to home page in Horizon
         DriverUtils.set_url(settings.DEFAULT_URL)
@@ -72,7 +89,6 @@ class Networks():
         create_button.click()
 
         name_input = driver.find_element_by_id("id_name")
-        name_input.click()
         name_input.send_keys(network_provider_name)
 
         type_input = Select(driver.find_element_by_id("id_type"))
@@ -85,7 +101,6 @@ class Networks():
             type_input.select_by_visible_text("vxlan")
 
         mtu_input = driver.find_element_by_id("id_mtu")
-        mtu_input.click()
         mtu_input.send_keys(Keys.BACKSPACE)
         mtu_input.send_keys(Keys.BACKSPACE)
         mtu_input.send_keys(Keys.BACKSPACE)
@@ -149,12 +164,13 @@ class Networks():
         create_button.click()
 
         name_input = driver.find_element_by_id("id_name")
-        name_input.click()
         name_input.send_keys(provider_name)
 
-        shared_input = driver.find_element_by_id("id_shared")
-        shared_input.click()
-        shared_input.send_keys(shared)
+        if(shared == True):
+            shared_input = driver.find_element_by_id("id_shared")
+            shared_input.click()
+        else:
+            pass
 
         if(project_name == None):
             pass
@@ -163,11 +179,9 @@ class Networks():
             project_input.select_by_visible_text(project_name)
 
         min_range_input = driver.find_element_by_id("id_minimum")
-        min_range_input.click()
         min_range_input.send_keys(min_range)
 
         max_range_input = driver.find_element_by_id("id_maximum")
-        max_range_input.click()
         max_range_input.send_keys(max_range)
         max_range_input.submit()
         # Reset URL to home page in Horizon
@@ -202,15 +216,12 @@ class Networks():
         create_button.click()
 
         policy_name_input = driver.find_element_by_id("id_name")
-        policy_name_input.click()
         policy_name_input.send_keys(policy_name)
 
         description_input = driver.find_element_by_id("id_description")
-        description_input.click()
         description_input.send_keys(description)
 
         weight_input = driver.find_element_by_id("id_weight")
-        weight_input.click()
         weight_input.send_keys(weight)
 
         if(project_name == None):
@@ -260,7 +271,6 @@ class Networks():
         create_button.click()
 
         network_name_input = driver.find_element_by_id("id_name")
-        network_name_input.click()
         network_name_input.send_keys(network_name)
 
         project_input = Select(driver.find_element_by_id("id_tenant_id"))
@@ -272,9 +282,11 @@ class Networks():
         physical_network_input = Select(driver.find_element_by_id("id_physical_network_vlan"))
         physical_network_input.select_by_visible_text(physical_network)
 
-        segmentation_id_input = driver.find_element_by_id("id_segmentation_id")
-        segmentation_id_input.click()
-        segmentation_id_input.send_keys(segmentation_id)
+        if(segmentation_id == None):
+            pass
+        else:
+            segmentation_id_input = driver.find_element_by_id("id_segmentation_id")
+            segmentation_id_input.send_keys(segmentation_id)
 
         if(qos_policy == None):
             pass
@@ -355,18 +367,15 @@ class Networks():
         create_button.click()
 
         subnet_name_input = driver.find_element_by_id("id_subnet_name")
-        subnet_name_input.click()
         subnet_name_input.send_keys(subnet_name)
 
         network_address_input = driver.find_element_by_id("id_cidr")
-        network_address_input.click()
         network_address_input.send_keys(network_address)
 
         if(gateway_ip == None):
             pass
         else:
             gateway_ip_input = driver.find_element_by_id("id_gateway_ip")
-            gateway_ip_input.click()
             gateway_ip_input.send_keys(gateway_ip)
 
         if(disable_gateway == False):
@@ -394,28 +403,24 @@ class Networks():
             pass
         else:
             allocation_pools_input = driver.find_element_by_id("id_allocation_pools")
-            allocation_pools_input.click()
             allocation_pools_input.send_keys(allocation_pools)
 
         if(dns_name_servers == None):
             pass
         else:
             dns_name_servers_input = driver.find_element_by_id("id_dns_nameservers")
-            dns_name_servers_input.click()
             dns_name_servers_input.send_keys(dns_name_servers)
 
         if(host_routes == None):
             pass
         else:
             host_routes_input = driver.find_element_by_id("id_host_routes")
-            host_routes_input.click()
             host_routes_input.send_keys(host_routes)
 
         if(vlan == None):
             pass
         else:
             vlan_input = driver.find_element_by_id("id_vlan_id")
-            vlan_input.click()
             vlan_input.send_keys(vlan)
 
         vlan_input = driver.find_element_by_id("id_vlan_id")
@@ -452,7 +457,7 @@ class Networks():
         # Get URL text from class
         url = DriverUtils.get_url()
         # Append to end of URL
-        driver.get(DriverUtils.set_url(url + "/project/networks/?tab=networks__networks"))
+        DriverUtils.set_url(url + "/project/networks/?tab=networks__networks")
         # Navigate to newly appended URL
         driver.get(DriverUtils.get_url())
         # Wait for elements on page to load
@@ -476,18 +481,15 @@ class Networks():
         create_button.click()
 
         subnet_name_input = driver.find_element_by_id("id_subnet_name")
-        subnet_name_input.click()
         subnet_name_input.send_keys(subnet_name)
 
         network_address_input = driver.find_element_by_id("id_cidr")
-        network_address_input.click()
         network_address_input.send_keys(network_address)
 
         if(gateway_ip == None):
             pass
         else:
             gateway_ip_input = driver.find_element_by_id("id_gateway_ip")
-            gateway_ip_input.click()
             gateway_ip_input.send_keys(gateway_ip)
 
         if(disable_gateway == False):
@@ -515,28 +517,24 @@ class Networks():
             pass
         else:
             allocation_pools_input = driver.find_element_by_id("id_allocation_pools")
-            allocation_pools_input.click()
             allocation_pools_input.send_keys(allocation_pools)
 
         if(dns_name_servers == None):
             pass
         else:
             dns_name_servers_input = driver.find_element_by_id("id_dns_nameservers")
-            dns_name_servers_input.click()
             dns_name_servers_input.send_keys(dns_name_servers)
 
         if(host_routes == None):
             pass
         else:
             host_routes_input = driver.find_element_by_id("id_host_routes")
-            host_routes_input.click()
             host_routes_input.send_keys(host_routes)
 
         if(vlan == None):
             pass
         else:
             vlan_input = driver.find_element_by_id("id_vlan_id")
-            vlan_input.click()
             vlan_input.send_keys(vlan)
 
         vlan_input = driver.find_element_by_id("id_vlan_id")

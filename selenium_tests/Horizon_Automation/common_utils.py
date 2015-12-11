@@ -1,12 +1,30 @@
+'''
+common_utils.py - Handles common utilities for automating Selenium
+
+Copyright (c) 2015 Wind River Systems, Inc.
+
+The right to copy, distribute, modify, or otherwise make use
+of this software may be licensed only pursuant to the terms
+of an applicable Wind River license agreement.
+
+
+Contains DriverUtils class which maintains the web driver's status and URL.
+Contains InputFields class which manages the type of HTML input and performs
+the correct action.
+'''
+
+'''
+modification history:
+---------------------
+26nov15,jbb  Initial file
+30nov15,jbb  Add headless option
+'''
+
 import settings
 import os
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
-from pyvirtualdisplay import Display
-
-__author__ = 'jbarber'
-
 
 class DriverUtils():
 
@@ -15,30 +33,14 @@ class DriverUtils():
     url = settings.DEFAULT_URL
 
     @classmethod
-    def open_driver(cls, browser):
+    def open_driver(cls, browser, headless):
         """ Determines the browser to be used and opens it """
 
-        if(browser.lower() == "firefox"):
-            """
-            profile = webdriver.FirefoxProfile()
-            path = "C:/Users/JBARBER/Downloads"
-            profile.set_preference("browser.download.folderList", 2)
-            profile.set_preference("browser.download.dir", path)
-            profile.set_preference("browser.download.alertOnPEMOpen", False)
-            profile.set_preference("browser.helperApps.neverAsksaveToDisk", "text/pem")
-            profile.set_preference("browser.download.manager.showWhenStarting", False)
-            profile.set_preference("browser.download.manager.focusWhenStarting", False)
-            profile.set_preference("browser.helperApps.alwaysAsk.force", False)
-            profile.set_preference("browser.download.manager.alertOnOpen", False)
-            profile.set_preference("browser.download.manager.closeWhenDone", False)
-            profile.set_preference("browser.download.manager.showAlertOnComplete", False)
-            profile.set_preference("browser.download.manager.useWindow", False)
-            profile.set_preference("browser.download.manager.showWhenStarting", False)
-            profile.set_preference("services.sync.prefs.sync.browser.download.manager.showWhenStarting", False)
-            profile.set_preference("pdfjs.disabled", True)
-            """
+        if(headless):
+            from pyvirtualdisplay import Display
             display = Display(visible=0, size=(1024, 768))
             display.start()
+        if(browser.lower() == "firefox"):
             cls.driver = webdriver.Firefox()
         elif(browser.lower() == "chrome"):
             chromePath = os.path.realpath('drivers/chromedriver_linux64')
@@ -118,7 +120,6 @@ class InputFields():
         # Get driver
         driver = DriverUtils.get_driver()
         common_input = driver.find_element_by_id(key)
-        common_input.click()
         common_input.send_keys(Keys.BACKSPACE)
         common_input.send_keys(Keys.BACKSPACE)
         common_input.send_keys(Keys.BACKSPACE)

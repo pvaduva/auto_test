@@ -1,12 +1,26 @@
-from selenium.webdriver import ActionChains
-from selenium.webdriver.common.keys import Keys
+'''
+volumes.py - Handles the creation of volumes for tenants
+
+Copyright (c) 2015 Wind River Systems, Inc.
+
+The right to copy, distribute, modify, or otherwise make use
+of this software may be licensed only pursuant to the terms
+of an applicable Wind River license agreement.
+
+
+Contains function: create volume
+'''
+
+'''
+modification history:
+---------------------
+26nov15,jbb  Initial file
+'''
+
 from selenium.webdriver.support.ui import Select
 from common_utils import DriverUtils
-import constants
 import settings
 import time
-
-__author__ = 'jbarber'
 
 
 class Volumes():
@@ -41,7 +55,7 @@ class Volumes():
     @classmethod
     def create_volume(cls, volume_name, volume_source, image_source, availability_zone):
         """
-        Function for initializing volumes class
+        Function for creating a volume
 
         :param volume_name: name of volume
         :param volume_source: source of volume [image]
@@ -58,7 +72,6 @@ class Volumes():
         create_button.click()
 
         volume_name_input = driver.find_element_by_id("id_name")
-        volume_name_input.click()
         volume_name_input.send_keys(volume_name)
 
         volume_source_input = Select(driver.find_element_by_id("id_volume_source_type"))
