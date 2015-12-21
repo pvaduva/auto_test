@@ -21,7 +21,7 @@ import pexpect
 
 log = getLogger(__name__)
 
-def create_node_dict(nodes, node_type):
+def create_node_dict(nodes, personality):
     """Read .ini file for each node and create Host object for the node.
 
     The data in the .ini file is read into a dictionary which is used to
@@ -37,7 +37,7 @@ def create_node_dict(nodes, node_type):
         try:
             node_filepath = NODE_INFO_DIR + '/{}.ini'.format(node)
             node_file = open(node_filepath, 'r')
-            config.readfp(node_file)
+            config.read_file(node_file)
         except Exception:
             log.exception('Failed to read \"{}\"'.format(node_filepath))
             sys.exit(1)
@@ -47,15 +47,15 @@ def create_node_dict(nodes, node_type):
             for opt in config.items(section):
                 key, value = opt
                 node_info_dict[section + '_' + key] = value
-        name = node_type + "-{}".format(i)
+        name = personality + "-{}".format(i)
         node_info_dict['name'] = name
-        node_info_dict['type'] = node_type
+        node_info_dict['personality'] = personality
         node_info_dict['barcode'] = node
 
         node_dict[name]=Host(**node_info_dict)
         i += 1
 
-    print_step(node_type + " nodes:")
+    print_step(personality + " nodes:")
     for key, value in sorted(node_dict.items()):
         value.print_attrs()
         print()

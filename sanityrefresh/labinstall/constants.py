@@ -1,45 +1,65 @@
 #!/usr/bin/env python3.4
 
 # Directory and file paths/names
-NODE_INFO_DIR="node_info"
-LAB_SETTINGS_DIR="lab_settings"
-LATEST_BUILD_DIR="latest_build"
-LAB_YOW_REL_PATH="layers/wr-cgcs/cgcs/extras.ND/lab/yow"
-SYSTEM_CONFIG_FILENAME="system_config"
-BULK_CONFIG_FILENAME="hosts_bulk_add.xml"
-CUSTOM_LAB_SETTINGS_FILENAME="settings.ini"
+NODE_INFO_DIR = "node_info"
+LAB_SETTINGS_DIR = "lab_settings"
+LATEST_BUILD_DIR = "latest_build"
+EXPORT_LAB_REL_PATH = "export/lab"
+LAB_YOW_REL_PATH = EXPORT_LAB_REL_PATH + "/yow"
+LAB_SCRIPTS_REL_PATH = EXPORT_LAB_REL_PATH + "/scripts"
+SYSTEM_CONFIG_FILENAME = "system_config"
+BULK_CONFIG_FILENAME = "hosts_bulk_add.xml"
+CUSTOM_LAB_SETTINGS_FILENAME = "settings.ini"
 LICENSE_FILEPATH = "/folk/cgts/lab/TiS15-GA-demo.lic"
-ETC_PROFILE="/etc/profile"
+WRSROOT_ETC_PROFILE = "/etc/profile"
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards"
-HOME_DIR = "/home/wrsroot"
-PATCHES_DIR = HOME_DIR + "/patches"
+RPM_INSTALL_REL_PATH = "export/RPM_INSTALL"
+WRSROOT_HOME_DIR = "/home/wrsroot"
+WRSROOT_PATCHES_DIR = WRSROOT_HOME_DIR + "/patches"
+WRSROOT_IMAGES_DIR = WRSROOT_HOME_DIR + "/images"
 
 # .ini section and option names
-CFG_PROVISION_SECTION_NAME="provision"
-CFG_CMD_OPT_NAME="commands"
-CFG_BOOT_INTERFACES_NAME="boot_interfaces"
+CFG_PROVISION_SECTION_NAME = "provision"
+CFG_CMD_OPT_NAME = "commands"
+CFG_BOOT_INTERFACES_NAME = "boot_interfaces"
 
 # Node names
-CONTROLLER='controller'
-COMPUTE='compute'
-STORAGE='storage'
-CONTROLLER0='controller-0'
+CONTROLLER = 'controller'
+COMPUTE = 'compute'
+STORAGE = 'storage'
+CONTROLLER0 = 'controller-0'
+
+ONLINE = "online"
+OFFLINE = "offline"
+AVAILABLE = "available"
+ENABLED = "enabled"
+DISABLED = "disabled"
+UNLOCKED = "unlocked"
+LOCKED = "locked"
+
+ADMINISTRATIVE = "administrative"
+OPERATIONAL = "operational"
+AVAILABILITY = "availability"
+
+STATE_TYPE_DICT = {ADMINISTRATIVE: [UNLOCKED, LOCKED],
+                   OPERATIONAL: [ENABLED, DISABLED],
+                   AVAILABILITY: [ONLINE, OFFLINE, AVAILABLE]}
 
 # Installation
-DEFAULT_BOOT_DEVICES = { 'controller-0' : 'A00',
-                 'compute' : 'A01',
-                 'storage' : 'A01'}
+DEFAULT_BOOT_DEVICE_DICT = {'controller-0': '[ABC]00',
+                        'compute': '[ABC]01',
+                        'storage': '[ABC]01'}
 BIOS_TYPES = [b"American Megatrends", b"Hewlett-Packard", b"Phoenix"]
 BIOS_TYPE_FN_KEY_ESC_CODES = ['\x1b' + '[17~', '\x1b' + '@', '\x1b' + '^[24~'] # F6, ESC + @, F12 Phoenix used for R720 nodes (i.e. Dell)
-INSTALL_TIMEOUTS = [1000, 2200, 1000]
+INSTALL_TIMEOUTS = [1000, 2100, 2100]
 SERIAL_KICKSTART_CONTROLLER_INSTALL = "Serial Kickstart Controller Install"
 MAX_BOOT_MENU_LINES = 10
 
 # BIOS options
-UP = "^[[A"
-DOWN = "^[[B"
-RIGHT = "^[[C"
-LEFT = "^[[D"
+UP = '\x1b' + '[A'
+DOWN = '\x1b' + '[B'
+RIGHT = '\x1b' + '[C'
+LEFT = '\x1b' + '[D'
 
 # VLM commands and options
 VLM = "/folk/vlm/commandline/vlmTool"
@@ -62,10 +82,6 @@ TUXLAB_SERVERS = ["yow-tuxlab", "yow-tuxlab2"]
 DEFAULT_TUXLAB_SERVER = "yow-tuxlab"
 HOST_EXT = ".wrs.com"
 
-# SCP user
-SCP_USERNAME = "svc-cgcsauto"
-SCP_PASSWORD = ")OKM0okm"
-
 # wrsroot user
 WRSROOT_USERNAME = "wrsroot"
 WRSROOT_DEFAULT_PASSWORD = WRSROOT_USERNAME
@@ -87,17 +103,18 @@ SSH_DIR = "~/.ssh"
 SSH_KEY_FPATH = SSH_DIR + "/id_rsa.pub"
 AUTHORIZED_KEYS_FPATH = SSH_DIR + "/authorized_keys"
 
-# Rsync
+# Command timeouts
 RSYNC_TIMEOUT = 300
-
-REBOOT_TIMEOUT = 600
+REBOOT_TIMEOUT = 900
+WAIT_STATE_TIME = 60
 BIOS_TYPE_TIMEOUT = 420
 CONFIG_CONTROLLER_TIMEOUT = 1200
+LAB_SETUP_TIMEOUT = 900
 
 # Prompts
 LOGIN_PROMPT = "ogin:"
 PASSWORD_PROMPT = "assword:"
-PROMPT=".*\$ "
+PROMPT = ".*\$ "
 
 # Other
 LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
@@ -105,8 +122,10 @@ LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
 # Surrounding return code with special characters to ensure
 # other numbers (i.e. date-timestamp prompt) in the output
 # are not mistaken for it
-OPEN_MARKER ='['
-CLOSE_MARKER =']'
-
-RETURN_CODE_PATTERN=r"\{}".format(OPEN_MARKER) + "\d" + r"\{}".format(CLOSE_MARKER)
-RETURN_CODE_CMD="echo {}$?{}".format(OPEN_MARKER, CLOSE_MARKER)
+OPEN_MARKER = '['
+CLOSE_MARKER = ']'
+RETURN_CODE_REGEX = r"\{}".format(OPEN_MARKER) + "\d+" + r"\{}".format(CLOSE_MARKER)
+RETURN_CODE_CMD = "echo {}$?{}".format(OPEN_MARKER, CLOSE_MARKER)
+# e.g. Tue Nov 24 15:52:39 UTC 2015
+DATE_TIMESTAMP_REGEX = r"\w{3} \w{3} \d{2} \d{2}:\d{2}:\d{2} \w{3} \d{4}"
+TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"

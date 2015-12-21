@@ -51,6 +51,7 @@ modification history:
 import pdb
 import sys
 import re
+import time
 import socket
 import selectors
 try:
@@ -768,34 +769,59 @@ class Telnet:
            Fails if given string is not found or if EOF is encountered.
         """
         try:
-            text = self.read_until(str.encode(expected), timeout)
+            output = self.read_until(str.encode(expected), timeout)
         except EOFError:
             log.exception("Connection closed: Reached EOF and no data was read in Telnet session: {}:{}.".format(self.host, self.port))
             sys.exit(1)
-        if not text:
-            log.error('Timeout occurred: Failed to match \"{}\" in output'.format(expected))
+
+        output = output.decode('utf-8', 'ignore')
+        if expected not in output:
+            log.error('Timeout occurred: Failed to find \"{}\" in output. Output:\n{}'.format(expected, output))
             sys.exit(1)
 
-        lines = text.decode('utf-8','ignore').splitlines()
-        if len(lines) == 2:
-            idx = 0
+        lines = output.splitlines()
+        # Remove command
+        start = 1
+        if len(lines) > 2:
+            # Remove prompt
+            end = -1
         else:
-            idx = 1
-        # Do not include command executed or prompt
-        output = "\n".join(lines[idx:-1])
+            end = None
 
+        output = "\n".join(output.splitlines()[start:end])
 
         return output
 
-    def exec_cmd(self, cmd, timeout=SSH_EXPECT_TIMEOUT, show_output=True):
+    def find_prompt(self, timeout=TELNET_EXPECT_TIMEOUT):
+        """Matches against prompt regex.
+
+           Returns output matched up to prompt.
+        """
+        try:
+            result = self.expect([str.encode(PROMPT)], timeout)
+            index = result[0]
+            output = result[2]
+        except EOFError:
+            log.exception("Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port))
+            sys.exit(1)
+        if index != 0:
+            log.error("Timeout occurred: Failed to find prompt")
+            sys.exit(1)
+
+        # Remove command and prompt
+        output = "\n".join(output.decode('utf-8', 'ignore').splitlines()[1:-1])
+
+        return output
+
+    def exec_cmd(self, cmd, timeout=TELNET_EXPECT_TIMEOUT, show_output=True):
         log.info(cmd)
         self.write_line(cmd)
-        output = self.get_read_until(PROMPT, timeout)
+        output = self.find_prompt(timeout)
         if show_output:
             log.info("Output:\n" + output)
         self.write_line(RETURN_CODE_CMD)
         try:
-            index, match = self.expect([str.encode(RETURN_CODE_PATTERN)], timeout)[:2]
+            index, match = self.expect([str.encode(RETURN_CODE_REGEX)], TELNET_EXPECT_TIMEOUT)[:2]
         except EOFError:
             log.exception("Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port))
             sys.exit(1)
@@ -803,59 +829,120 @@ class Telnet:
             rc = remove_markers(match.group(0).decode('utf-8','ignore'))
             log.info("Return code: " + rc)
         else:
-            log.error("Timeout occurred: Failed to match prompt")
+            log.error("Timeout occurred: Failed to find return code")
             sys.exit(1)
+        self.find_prompt(TELNET_EXPECT_TIMEOUT)
         return (int(rc), output)
 
-    def login(self, timeout=TELNET_EXPECT_TIMEOUT, username=WRSROOT_USERNAME, password=WRSROOT_PASSWORD, reset=False):
+    def login(self, username=WRSROOT_USERNAME, password=WRSROOT_PASSWORD, reset=False):
         """Waits for login prompt to authenticate user.
 
            Does nothing if user is already logged in.
         """
         if reset:
             self.write_line(WRSROOT_USERNAME)
-            self.get_read_until(PASSWORD_PROMPT, timeout)
+            self.get_read_until(PASSWORD_PROMPT)
             self.write_line(WRSROOT_DEFAULT_PASSWORD)
-            self.get_read_until(PASSWORD_PROMPT, timeout)
+            self.get_read_until(PASSWORD_PROMPT)
             self.write_line(WRSROOT_DEFAULT_PASSWORD)
-            self.get_read_until(PASSWORD_PROMPT, timeout)
+            self.get_read_until(PASSWORD_PROMPT)
             self.write_line(WRSROOT_PASSWORD)
-            self.get_read_until(PASSWORD_PROMPT, timeout)
+            self.get_read_until(PASSWORD_PROMPT)
             self.write_line(WRSROOT_PASSWORD)
-            self.get_read_until(PROMPT, timeout)
+            self.find_prompt()
         else:
             count = 0
             while count < MAX_SEARCH_ATTEMPTS:
                 log.info("Searching for login prompt...")
                 self.write_line("")
                 try:
-                    index  = (self.expect([b"ogin:", str.encode(PROMPT)], timeout))[0]
+                    index  = (self.expect([b"ogin:", str.encode(PROMPT)], TELNET_EXPECT_TIMEOUT))[0]
                 except EOFError:
                     log.exception("Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port))
                     sys.exit(1)
                 if index == 0:
                     log.info("Found login prompt. Login as {}".format(username))
                     self.write_line(username)
-                    self.get_read_until(PASSWORD_PROMPT, timeout)
+                    self.get_read_until(PASSWORD_PROMPT, TELNET_EXPECT_TIMEOUT)
                     self.write_line(password)
                     break
                 elif index == 1:
                     log.info('User "{}" is already logged in.'.format(username))
                     break
-                count = count + 1
+                count += 1
             if count == MAX_SEARCH_ATTEMPTS:
-                log.error("Timeout occurred: Failed to match login or prompt")
+                log.error("Timeout occurred: Failed to find login or prompt")
                 sys.exit(1)
 
-    def write_sudo_cmd_password(self, cmd):
-        self.write("sudo " + cmd + "\n")
-        self.get_read_until(PASSWORD_PROMPT)
-        self.write_line(PASSWORD)
+    #TODO: Fix why does this return zero?!?
+    def install(self, node, boot_device_dict, small_footprint=False):
+        if "wildcat" in node.host_name:
+            index = 0
+            bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[index]
+            install_timeout = INSTALL_TIMEOUTS[index]
+            bios_type = BIOS_TYPES[index]
+            log.info("BIOS type: " + bios_type.decode('utf-8','ignore'))
+            log.info("Use BIOS key: " + bios_key)
+            log.info("Installation timeout: " + str(install_timeout))
 
-    def install(self, node, boot_devices):
+            self.get_read_until("boot menu", 360)
+            log.info("Enter BIOS key")
+            self.write(str.encode(bios_key))
+
+            boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
+            if boot_device_regex is None:
+                log.error("Failed to determine boot device for: " + node.name)
+                sys.exit(1)
+            log.info("Boot device is: " + str(boot_device_regex))
+
+            self.get_read_until("Please select boot device", 60)
+
+            count = 0
+            down_press_count = 0
+            while count < MAX_SEARCH_ATTEMPTS:
+                log.info("Searching boot device menu for {}...".format(boot_device_regex))
+                #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
+                regex = re.compile(b"\x1b\[\d+;22(.*)\x1b")
+                try:
+                    index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
+                except EOFError:
+                    log.exception("Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port))
+                    sys.exit(1)
+                if index == 0:
+                    match = match.group(1).decode('utf-8','ignore')
+                    log.info("Matched: " + match)
+                    if re.search(boot_device_regex, match):
+                        log.info("Found boot device {}".format(boot_device_regex))
+                        break
+                    else:
+                        log.info("Move the cursor down in the menu")
+#                        self.write(str.encode(DOWN))
+                        down_press_count += 1
+                count += 1
+            if count == MAX_SEARCH_ATTEMPTS:
+                log.error("Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex))
+                sys.exit(1)
+
+            log.info("Waiting for ESC to exit")
+            self.get_read_until("ESC to exit")
+            # Sleep is required before pressing enter
+            time.sleep(5)
+            for i in range(0, down_press_count):
+                self.write(str.encode(DOWN))
+            self.write(str.encode("\r\r"))
+            if node.name == CONTROLLER0:
+                #TODO: Check time on this
+                self.get_read_until("Kickstart Boot Menu", 120)
+                log.info("Enter second option for Controller Install")
+                self.write_line("2")
+
+            self.get_read_until(LOGIN_PROMPT, install_timeout)
+            log.info("Found login prompt. {} installation has completed".format(node.name))
+            return 0
+
         try:
             log.info("Find BIOS type")
-            index, match, text = self.expect(BIOS_TYPES, BIOS_TYPE_TIMEOUT)
+            index, match = self.expect(BIOS_TYPES, BIOS_TYPE_TIMEOUT)[:2]
         except EOFError:
             log.exception("Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port))
             sys.exit(1)
@@ -870,12 +957,13 @@ class Telnet:
             log.error("Timeout occurred: Failed to find BIOS type {} while booting {}".format(str(BIOS_TYPES), node.name))
             sys.exit(1)
 
+        # American Megatrends BIOS, e.g. IronPass
         if bios_type == BIOS_TYPES[0]:
-            boot_device = next((value for key, value in boot_devices.items() if key == node.type), None)
-            if boot_device is None:
+            boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
+            if boot_device_regex is None:
                 log.error("Failed to determine boot device for: " + node.name)
                 sys.exit(1)
-            log.info("Boot device is: " + str(boot_device))
+            log.info("Boot device is: " + str(boot_device_regex))
 
             self.get_read_until("Boot Menu", 100)
             log.info("Enter BIOS key")
@@ -884,58 +972,86 @@ class Telnet:
             self.get_read_until("Please select boot device", 200)
 
             count = 0
+            down_press_count = 0
             while count < MAX_SEARCH_ATTEMPTS:
-                log.info("Searching boot device menu for {}...".format(boot_device))
-                regex = re.compile(b"\\x1b\[1;37;44m\|\s.*\s+\|")
+                log.info("Searching boot device menu for {}...".format(boot_device_regex))
+                regex = re.compile(b"\\x1b\[1;37;44m.*\|\s(.*)\s+\|")
                 try:
-                    index, match, text = self.expect([regex], 200)
+                    index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
                 except EOFError:
                     log.exception("Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port))
                     sys.exit(1)
                 if index == 0:
-                    match = match.group(0).decode('utf-8','ignore')
+                    match = match.group(1).decode('utf-8','ignore')
                     log.info("Matched: " + match)
-                    if boot_device in match:
-                        log.info("Found boot device {}".format(boot_device))
-                        log.info("Select boot device")
-                        self.write_line("")
+                    if re.search(boot_device_regex, match):
+                        log.info("Found boot device {}".format(boot_device_regex))
                         break
                     else:
                         log.info("Move the cursor down in the menu")
-                        self.write(str.encode(DOWN))
+#                        self.write(str.encode(DOWN))
+                        down_press_count += 1
+                count += 1
             if count == MAX_SEARCH_ATTEMPTS:
-                log.error("Timeout occurred: Failed to find boot device {} in menu".format(boot_device))
+                log.error("Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex))
                 sys.exit(1)
+
+            log.info("Waiting for ENTER to select boot device")
+            self.get_read_until("ESC to boot using defaults")
+            # Sleep is required before pressing enter
+            time.sleep(5)
+            for i in range(0, down_press_count):
+                self.write(str.encode(DOWN))
+            self.write(str.encode("\r\r"))
+            if node.name == CONTROLLER0:
+                #TODO: Check time on this
+                self.get_read_until("Kickstart Boot Menu", 60)
+                log.info("Enter second option for Controller Install")
+                self.write_line("2")
         elif bios_type == BIOS_TYPES[1]:
-            self.get_read_until("Network Boot", 100)
+            # Hewlett-Packard BIOS
+            self.get_read_until("Network Boot", 120)
+            self.get_read_until("Network Boot", 10)
             log.info("Enter BIOS key")
             self.write(str.encode(bios_key))
-            self.get_read_until("Kickstart Boot Menu", 200)
             #TODO: Enhance to support parsing of Anaconda boot menu
             #      For now assuming controller install is the second option
             #      With bulk add, computes will use default so nothing to select
-            if node.type == CONTROLLER:
+            if node.name == CONTROLLER0:
+                self.get_read_until("Kickstart Boot Menu", 30)
                 log.info("Enter second option for Controller Install")
                 self.write_line("2")
-    #            log.info("Move the cursor down in the menu")
-    #            self.write(str.encode(DOWN))
-    #            self.write_line("")
-        #TODO: Figure out boot sequence for Phoenix, used for R720 nodes (i.e. Dell)
         elif bios_type == BIOS_TYPES[2]:
-            log.error("Installation not supported yet for {} BIOS".format(bios_type.decode('utf-8','ignore')))
-            sys.exit(1)
+            # Phoenix BIOS, e.g. Dell
+            if small_footprint:
+                if node.name == CONTROLLER0:
+                    self.get_read_until("Kickstart Boot Menu", 600)
+                    log.info("Enter third option for Controller+Compute Install")
+                    self.write_line("3")
+#                else:
+                    #TODO: Put in to configure personality if small_footprint and not controller-0
+            else:
+                log.error("Installation not supported yet for {} BIOS".format(bios_type.decode('utf-8','ignore')))
+                sys.exit(1)
 
         self.get_read_until(LOGIN_PROMPT, install_timeout)
         log.info("Found login prompt. {} installation has completed".format(node.name))
 
         return 0
 
-def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, negotiate=False, vt100query=False, logfile=None):
+def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, negotiate=False, vt100query=False, log_path=None, debug=False):
     """Establishes telnet connection to host."""
+
+    if log_path:
+        logfile = open(log_path, 'a')
+    else:
+        logfile = None
     try:
         log.info("Open Telnet connection to: {} {}".format(ip_addr, port))
         conn = Telnet(ip_addr, port, timeout, negotiate, vt100query, logfile)
-        #conn.set_debuglevel(1)
+
+        if debug:
+            conn.set_debuglevel(1)
     except ConnectionRefusedError:
         log.exception("Connection refused: Telnet session already open: {} {}".format(ip_addr, port))
         sys.exit(1)

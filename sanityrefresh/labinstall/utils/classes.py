@@ -29,13 +29,16 @@ class Host(object):
         self.telnet_vt100query = False
         self.telnet_conn = None
         self.ssh_conn = None
+        self.administrative = None
+        self.operational = None
+        self.availability = None
 
         for key in kwargs:
             setattr(self, key, kwargs[key])
 
     def print_attrs(self):
         # Attributes to list first
-        first_attrs = ['name', 'type', 'host_name', 'barcode', 'host_ip',
+        first_attrs = ['name', 'personality', 'host_name', 'barcode', 'host_ip',
                        'telnet_ip', 'telnet_port']
         attrs = copy.deepcopy(vars(self))
         for key in first_attrs:

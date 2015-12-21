@@ -15,8 +15,11 @@ from constants import *
 from .common import remove_markers
 from .log import getLogger
 import pexpect
+#import wr_pexpect
 from pexpect import pxssh
+#from wr_pexpect import pxssh
 import sys
+import re
 
 log = getLogger(__name__)
 
@@ -26,7 +29,7 @@ class SSHClient(pxssh.pxssh):
     Inherits from pxssh, which is an extension on pxpect.
     """
 
-    def __init__(self, tmout=SSH_EXPECT_TIMEOUT, logf=None, echo_flag=SSH_EXPECT_ECHO, encode='utf-8'):
+    def __init__(self, tmout=SSH_EXPECT_TIMEOUT, log_path=None, echo_flag=SSH_EXPECT_ECHO, encode='utf-8'):
         """Initialize connection class.
 
            Only expects attributes that can be passed to the parent constructor.
@@ -36,6 +39,12 @@ class SSHClient(pxssh.pxssh):
            spawn class:
            /usr/local/lib/python3.4/dist-packages/pexpect/pty_spawn.py
         """
+
+        if log_path:
+            logf = open(log_path, 'a')
+        else:
+            logf = None
+
         # Chain to parent constructor
         pxssh.pxssh.__init__(self, timeout=tmout, logfile=logf, echo=echo_flag, encoding=encode)
 
@@ -56,25 +65,27 @@ class SSHClient(pxssh.pxssh):
             log.error("Failed to login to SSH session: {}@{}".format(username, hostname))
             self.close()
 
-    def match_prompt(self, timeout=SSH_EXPECT_TIMEOUT):
+    def find_prompt(self, timeout=SSH_EXPECT_TIMEOUT):
         matched = self.prompt(timeout)
         if not matched:
-            log.error("Failed to match prompt")
+            log.error("Timeout occurred: Failed to find prompt")
             sys.exit(1)
 
     def get_after(self):
+        output = None
         after = self.after
         if after is pexpect.TIMEOUT:
-            log.exception("Timeout occurred: Failed to get text after executing command")
+            log.exception("Timeout occurred: Failed to find text after executing command")
             sys.exit(1)
 
         lines = after.splitlines()
-        if len(lines) == 2:
-            idx = 0
-        else:
-            idx = 1
-        # Do not include command executed or prompt
-        output = "\n".join(lines[idx:-1])
+        if len(lines) >= 2:
+            # Remove date-timestamp and prompt
+            if re.search(DATE_TIMESTAMP_REGEX, lines[-2]):
+                output = "\n".join(lines[:-2])
+        if output is None:
+            # Remove prompt
+            output = "\n".join(lines[:-1])
 
         return output
 
@@ -89,15 +100,15 @@ class SSHClient(pxssh.pxssh):
                 log.exception("Connection closed: Reached EOF in SSH session: {}@{}".format(self.username, self.hostname))
                 sys.exit(1)
             except pexpect.TIMEOUT as ex:
-                log.exception("Timeout occurred: Failed to match \"{}\" in ouput. Output:\n{}".format(repr(expect_pattern), self.before))
+                log.exception("Timeout occurred: Failed to find \"{}\" in output. Output:\n{}".format(expect_pattern, self.before))
                 sys.exit(1)
             else:
                 output = self.match.group().strip()
                 log.info("Match: " + output)
-                self.match_prompt(timeout)
+                self.find_prompt(timeout)
                 return output
         else:
-            self.match_prompt(timeout)
+            self.find_prompt(timeout)
             output = self.get_after()
             rc = self.get_rc()
             if output and show_output:
@@ -106,7 +117,7 @@ class SSHClient(pxssh.pxssh):
             return (int(rc), output)
 
     def get_rc(self):
-        rc = self.exec_cmd(RETURN_CODE_CMD, expect_pattern=RETURN_CODE_PATTERN)
+        rc = self.exec_cmd(RETURN_CODE_CMD, expect_pattern=RETURN_CODE_REGEX)
         return remove_markers(rc)
 
     def rsync(self, source, dest_user, dest_server, dest, extra_opts=None):

@@ -728,8 +728,8 @@ if __name__ == '__main__':
 #        match_prompt(bld_server_conn)
 #        print("\nafter =\n" + str(bld_server_conn.after)) #TODO: Can just print the commands before and then print the after
 
-    run_cmd(cont_conn, 'grep -q "TMOUT=" ' + ETC_PROFILE + ' && echo li69nux | sudo -S sed -i.bkp "/\(TMOUT=\|export TMOUT\)/d" ' + ETC_PROFILE)
-    run_cmd(cont_conn, 'echo li69nux | sudo -S sed -i.bkp "$ a\TMOUT=\\nexport TMOUT" ' + ETC_PROFILE)
+    run_cmd(cont_conn, 'grep -q "TMOUT=" ' + WRSROOT_ETC_PROFILE + ' && echo li69nux | sudo -S sed -i.bkp "/\(TMOUT=\|export TMOUT\)/d" ' + WRSROOT_ETC_PROFILE)
+    run_cmd(cont_conn, 'echo li69nux | sudo -S sed -i.bkp "$ a\TMOUT=\\nexport TMOUT" ' + WRSROOT_ETC_PROFILE)
 
     run_cmd(cont_conn, 'export HISTTIMEFORMAT="%Y-%m-%d %T " >> ' + HOME_DIR + "/.bashrc")
     run_cmd(cont_conn, 'export PROMPT_COMMAND="date; $$PROMPT_COMMAND" >> ' + HOME_DIR + "/.bashrc")
