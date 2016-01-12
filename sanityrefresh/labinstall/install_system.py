@@ -269,9 +269,8 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path):
 def wipe_disk(node):
 
     if node.telnet_conn is None:
-        telnet_conn = telnetlib.connect(node.telnet_ip, int(node.telnet_port), negotiate=node.telnet_negotiate, vt100query=node.telnet_vt100query, log_path=output_dir + "/" + node.name + ".telnet.log", debug=False)
-        telnet_conn.login()
-        node.telnet_conn = telnet_conn
+        node.telnet_conn = telnetlib.connect(node.telnet_ip, int(node.telnet_port), negotiate=node.telnet_negotiate, vt100query=node.telnet_vt100query, log_path=output_dir + "/" + node.name + ".telnet.log", debug=False)
+        node.telnet_conn.login()
 
     node.telnet_conn.write_line("sudo -k wipedisk")
     node.telnet_conn.get_read_until(PASSWORD_PROMPT)
@@ -280,7 +279,7 @@ def wipe_disk(node):
     node.telnet_conn.write_line("y")
     node.telnet_conn.get_read_until("confirm")
     node.telnet_conn.write_line("wipediskscompletely")
-    node.telnet_conn.get_read_until("The disk(s) have been wiped.")
+    node.telnet_conn.get_read_until("The disk(s) have been wiped.", WIPE_DISK_TIMEOUT)
 
     log.info("Disk(s) have been wiped on: " + node.name)
 
@@ -308,7 +307,7 @@ def wait_state(nodes, type, expected_state):
         log.info('Waiting for {} to be \"{}\"...'.format(node_names, expected_state))
         # Create copy of list so that it is unaffected by removal of node
         for node in copy.copy(nodes):
-            match = re.search("^.*{}.*{}.*$".format(node.name, expected_state), output, re.MULTILINE)
+            match = re.search("^.*{}.*{}.*$".format(node.name, expected_state), output, re.MULTILINE|re.IGNORECASE)
             if match:
                 if type == ADMINISTRATIVE:
                     node.administrative = expected_state
@@ -333,18 +332,15 @@ def wait_state(nodes, type, expected_state):
 
 def bring_up(node, boot_device_dict, small_footprint, close_telnet_conn=True):
     if node.telnet_conn is None:
-        telnet_conn = telnetlib.connect(node.telnet_ip, int(node.telnet_port), negotiate=node.telnet_negotiate, vt100query=node.telnet_vt100query, log_path=output_dir + "/" + node.name + ".telnet.log")
-        node.telnet_conn = telnet_conn
+        node.telnet_conn = telnetlib.connect(node.telnet_ip, int(node.telnet_port), negotiate=node.telnet_negotiate, vt100query=node.telnet_vt100query, log_path=output_dir + "/" + node.name + ".telnet.log")
     vlm_exec_cmd(VLM_TURNON, node.barcode)
     logutils.print_step("Installing {}...".format(node.name))
     node.telnet_conn.install(node, boot_device_dict, small_footprint)
-    print("got here")
     if close_telnet_conn:
         node.telnet_conn.close()
 
 def apply_patches(node, bld_server_conn, patch_dir_paths):
     patch_names = []
-    valid_states = "(Available|Partial-Apply)"
 
     for dir_path in patch_dir_paths.split(","):
         if bld_server_conn.exec_cmd("test -d " + dir_path)[0] != 0:
@@ -355,7 +351,7 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
             log.error("Failed to cd to: " + dir_path)
             sys.exit(1)
 
-        rc, output = bld_server_conn.exec_cmd("ls -1 *.patch")
+        rc, output = bld_server_conn.exec_cmd("ls -1 --color=none *.patch")
         if rc != 0:
             log.error("Failed to list patches in: " + dir_path)
             sys.exit(1)
@@ -385,9 +381,11 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
         log.error("Failed to query patches")
         sys.exit(1)
 
+    # Remove table header
+    output = "\n".join(output.splitlines()[2:])
     for patch in patch_names:
-        if not re.search("{}\s+{}".format(patch, valid_states), output, re.MULTILINE):
-            log.error('Patch \"{}\" is not in the patch list/not in a valid state: {}'.format(patch, valid_states))
+        if not re.search("^{}.*{}.*$".format(patch, AVAILABLE), output, re.MULTILINE|re.IGNORECASE):
+            log.error('Patch \"{}\" is not in list or in {} state'.format(patch, AVAILABLE))
             sys.exit(1)
 
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S sw-patch apply --all"
@@ -536,52 +534,51 @@ if __name__ == '__main__':
             except configparser.NoSectionError:
                 pass
 
-    set_network_boot_feed(controller0.barcode, tuxlab_server, bld_server_conn, load_path)
+    executed = False
+    if not executed:
+        set_network_boot_feed(controller0.barcode, tuxlab_server, bld_server_conn, load_path)
 
     nodes = list(controller_dict.values()) + list(compute_dict.values()) + list(storage_dict.values())
 
     [barcodes.append(node.barcode) for node in nodes]
 
-    vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
+    executed = False
+    if not executed:
+        vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
-    #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of the nodes as the system was left not in an installed state
-    #TODO: IN THIS CASE STILL NEED TO SET TELNET FOR CONTROLLER0 SO PERHAPS LEAVE THIS OUTSIDE OF WIPEDISK METHOD?
-#    cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, int(controller0.telnet_port), negotiate=controller0.telnet_negotiate, vt100query=controller0.telnet_vt100query, log_path=output_dir + "/" + CONTROLLER0 + ".telnet.log", debug=False)
-#    cont0_telnet_conn.login()
-#    controller0.telnet_conn = cont0_telnet_conn
+        #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of the nodes as the system was left not in an installed state
+        #TODO: IN THIS CASE STILL NEED TO SET TELNET FOR CONTROLLER0 SO PERHAPS LEAVE THIS OUTSIDE OF WIPEDISK METHOD?
+        cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, int(controller0.telnet_port), negotiate=controller0.telnet_negotiate, vt100query=controller0.telnet_vt100query, log_path=output_dir + "/" + CONTROLLER0 + ".telnet.log", debug=False)
+        cont0_telnet_conn.login()
+        controller0.telnet_conn = cont0_telnet_conn
 
-    for node in nodes:
-        node_thread = threading.Thread(target=wipe_disk,name=node.name,args=(node,))
-        threads.append(node_thread)
-        log.info("Starting thread for {}".format(node_thread.name))
-        node_thread.start()
+        for node in nodes:
+            node_thread = threading.Thread(target=wipe_disk,name=node.name,args=(node,))
+            threads.append(node_thread)
+            log.info("Starting thread for {}".format(node_thread.name))
+            node_thread.start()
 
-    for thread in threads:
-        thread.join()
+        for thread in threads:
+            thread.join()
 
-    for barcode in barcodes:
-        vlm_exec_cmd(VLM_TURNOFF, barcode)
+        for barcode in barcodes:
+            vlm_exec_cmd(VLM_TURNOFF, barcode)
 
-##    vlm_exec_cmd(VLM_TURNON, controller0.barcode)
-##    logutils.print_step("Installing {}...".format(controller0.name))
-##    cont0_telnet_conn.install(controller0, boot_device_dict, small_footprint)
-##    controller0.telnet_conn.install(controller0, boot_device_dict, small_footprint)
-    bring_up(controller0, boot_device_dict, small_footprint, close_telnet_conn=False)
-    logutils.print_step("Initial login and password set for " + controller0.name)
-##    cont0_telnet_conn.login(reset=True)
-    controller0.telnet_conn.login(reset=True)
+        bring_up(controller0, boot_device_dict, small_footprint, close_telnet_conn=False)
+        logutils.print_step("Initial login and password set for " + controller0.name)
+        controller0.telnet_conn.login(reset=True)
 
-    #TODO: Need to pass in gateway for each node and test this code out
-#    cmd += "echo " + WRSROOT_PASSWORD + " | sudo -S"
-#    cmd += " ip addr add " + controller0.host_ip + "/24" + " dev eth0"
-#    cont0_ssh_conn.exec_cmd(cmd)
-#    cmd += "echo " + WRSROOT_PASSWORD + " | sudo -S"
-#    cmd += " ip link set dev eth0 up"
-#    cont0_ssh_conn.exec_cmd(cmd)
+        #TODO: Need to pass in gateway for each node and test this code out
+    #    cmd += "echo " + WRSROOT_PASSWORD + " | sudo -S"
+    #    cmd += " ip addr add " + controller0.host_ip + "/24" + " dev eth0"
+    #    cont0_ssh_conn.exec_cmd(cmd)
+    #    cmd += "echo " + WRSROOT_PASSWORD + " | sudo -S"
+    #    cmd += " ip link set dev eth0 up"
+    #    cont0_ssh_conn.exec_cmd(cmd)
 
-    if patch_dir_paths != None:
-        deploy_key(controller0.telnet_conn)
-        apply_patches(controller0, bld_server_conn, patch_dir_paths)
+        if patch_dir_paths != None:
+            deploy_key(controller0.telnet_conn)
+            apply_patches(controller0, bld_server_conn, patch_dir_paths)
 
     cont0_ssh_conn = SSHClient(log_path=output_dir + "/" + CONTROLLER0 + ".ssh.log")
     cont0_ssh_conn.connect(hostname=controller0.host_ip, username=WRSROOT_USERNAME,
@@ -590,100 +587,115 @@ if __name__ == '__main__':
 
     deploy_key(controller0.ssh_conn)
 
-    bld_server_conn.rsync(LICENSE_FILEPATH, WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR + "/license.lic")
-    bld_server_conn.rsync(lab_cfg_path + "/*", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR)
+    executed = False
+    if not executed:
+        bld_server_conn.rsync(LICENSE_FILEPATH, WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR + "/license.lic")
+        bld_server_conn.rsync(lab_cfg_path + "/*", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR)
 
-    cmd = 'grep -q "TMOUT=" ' + WRSROOT_ETC_PROFILE
-    cmd += " && echo " + WRSROOT_PASSWORD + " | sudo -S"
-    cmd += ' sed -i.bkp "/\(TMOUT=\|export TMOUT\)/d"'
-    cmd += " " + WRSROOT_ETC_PROFILE
-    cont0_ssh_conn.exec_cmd(cmd)
-    cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
-    cmd += ' sed -i.bkp "$ a\TMOUT=\\nexport TMOUT"'
-    cmd += " " + WRSROOT_ETC_PROFILE
-    cont0_ssh_conn.exec_cmd(cmd)
-    cmd = 'echo \'export HISTTIMEFORMAT="%Y-%m-%d %T "\' >>'
-    cmd += " " + WRSROOT_HOME_DIR + "/.bashrc"
-    cont0_ssh_conn.exec_cmd(cmd)
-    cmd = 'echo \'export PROMPT_COMMAND="date; $PROMPT_COMMAND"\' >>'
-    cmd += " " + WRSROOT_HOME_DIR + "/.bashrc"
-    cont0_ssh_conn.exec_cmd(cmd)
-    cont0_ssh_conn.exec_cmd("source " + WRSROOT_HOME_DIR + "/.bashrc")
+        cmd = 'grep -q "TMOUT=" ' + WRSROOT_ETC_PROFILE
+        cmd += " && echo " + WRSROOT_PASSWORD + " | sudo -S"
+        cmd += ' sed -i.bkp "/\(TMOUT=\|export TMOUT\)/d"'
+        cmd += " " + WRSROOT_ETC_PROFILE
+        cont0_ssh_conn.exec_cmd(cmd)
+        cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
+        cmd += ' sed -i.bkp "$ a\TMOUT=\\nexport TMOUT"'
+        cmd += " " + WRSROOT_ETC_PROFILE
+        cont0_ssh_conn.exec_cmd(cmd)
+        cmd = 'echo \'export HISTTIMEFORMAT="%Y-%m-%d %T "\' >>'
+        cmd += " " + WRSROOT_HOME_DIR + "/.bashrc"
+        cont0_ssh_conn.exec_cmd(cmd)
+        cmd = 'echo \'export PROMPT_COMMAND="date; $PROMPT_COMMAND"\' >>'
+        cmd += " " + WRSROOT_HOME_DIR + "/.bashrc"
+        cont0_ssh_conn.exec_cmd(cmd)
+        cont0_ssh_conn.exec_cmd("source " + WRSROOT_ETC_PROFILE)
+        cont0_ssh_conn.exec_cmd("source " + WRSROOT_HOME_DIR + "/.bashrc")
 
-    cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
-    cmd += " config_controller --config-file " + SYSTEM_CONFIG_FILENAME
-    if cont0_ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)[0] != 0:
-        log.error("config_controller failed")
-        sys.exit(1)
+        cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
+        cmd += " config_controller --config-file " + SYSTEM_CONFIG_FILENAME
+        if cont0_ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)[0] != 0:
+            log.error("config_controller failed")
+            sys.exit(1)
 
-    bld_server_conn.rsync(load_path + "/" + LAB_SCRIPTS_REL_PATH + "/*", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR)
-    # Extra forward slash at end is required to indicate it is a directory
-    bld_server_conn.rsync(guest_load_path + "/cgcs-guest.img", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_IMAGES_DIR + "/")
+        bld_server_conn.rsync(load_path + "/" + LAB_SCRIPTS_REL_PATH + "/*", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR)
+        # Extra forward slash at end is required to indicate it is a directory
+        bld_server_conn.rsync(guest_load_path + "/cgcs-guest.img", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_IMAGES_DIR + "/")
+
+    #TODO: Add system host-if-list controller-0 -a here!
 
     cmd = "source /etc/nova/openrc"
     if cont0_ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
 
-    #TODO: Open connection to test server, don't need to deploy key if same user as already deployed it on controller-0 connection
-#    CREATE_TEST_SERVER_CONN.rsync("/home/svc-cgcsauto/precise-server-cloudimg-amd64-disk1.img", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_IMAGES_DIR + "/")
+    executed = False
+    if not executed:
+        #TODO: Open connection to test server, don't need to deploy key if same user as already deployed it on controller-0 connection
+    #    CREATE_TEST_SERVER_CONN.rsync("/home/svc-cgcsauto/precise-server-cloudimg-amd64-disk1.img", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_IMAGES_DIR + "/")
 
-    cmd = "system host-bulk-add hosts_bulk_add.xml"
-    if cont0_ssh_conn.exec_cmd(cmd)[0] != 0:
-        log.error("Failed to bulk add hosts")
-        sys.exit(1)
-
-    threads.clear()
-    for node in nodes:
-        if node.name != CONTROLLER0:
-            node_thread = threading.Thread(target=bring_up,name=node.name,args=(node, boot_device_dict, small_footprint))
-            threads.append(node_thread)
-            log.info("Starting thread for {}".format(node_thread.name))
-            node_thread.start()
-
-    for thread in threads:
-        thread.join()
-
-    for node in nodes:
-        cmd = "system host-if-list {} -a".format(node.name)
-        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-            log.error("Failed to get list of interfaces for node: " + node.name)
+        cmd = "system host-bulk-add hosts_bulk_add.xml"
+        if cont0_ssh_conn.exec_cmd(cmd)[0] != 0:
+            log.error("Failed to bulk add hosts")
             sys.exit(1)
 
-    #TODO: Put this in a loop
-    wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
-    wait_state(controller0, OPERATIONAL, ENABLED)
-    wait_state(controller0, AVAILABILITY, AVAILABLE)
+    if not executed:
+        threads.clear()
+        for node in nodes:
+            if node.name != CONTROLLER0:
+                node_thread = threading.Thread(target=bring_up,name=node.name,args=(node, boot_device_dict, small_footprint))
+                threads.append(node_thread)
+                log.info("Starting thread for {}".format(node_thread.name))
+                node_thread.start()
 
-    nodes.remove(controller0)
-    wait_state(nodes, ADMINISTRATIVE, LOCKED)
-    wait_state(nodes, AVAILABILITY, ONLINE)
+        for thread in threads:
+            thread.join()
+
+        for node in nodes:
+            cmd = "system host-if-list {} -a".format(node.name)
+            if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+                log.error("Failed to get list of interfaces for node: " + node.name)
+                sys.exit(1)
+
+    executed = False
+    if not executed:
+        #TODO: Put this in a loop
+        wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
+        wait_state(controller0, OPERATIONAL, ENABLED)
+        wait_state(controller0, AVAILABILITY, AVAILABLE)
+
+        nodes.remove(controller0)
+        wait_state(nodes, ADMINISTRATIVE, LOCKED)
+        wait_state(nodes, AVAILABILITY, ONLINE)
 
     #TODO: Put in workaround to set TEST_PROFILES="no" in lab_setup.sh due to CGTS-3219
 
     lab_setup_cmd = WRSROOT_HOME_DIR + "/lab_setup.sh"
-    for i in range(0, 2):
+
+    if not executed:
+        for i in range(0, 2):
+            if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+                log.error("Failed during lab_setup.sh")
+                sys.exit(1)
+
+    if not executed:
+        for node in nodes:
+            cmd = "system host-unlock " + node.name
+            if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+                log.error("Failed to unlock: " + node.name)
+                sys.exit(1)
+
+        wait_state(nodes, ADMINISTRATIVE, UNLOCKED)
+        wait_state(nodes, OPERATIONAL, ENABLED)
+        wait_state(nodes, AVAILABILITY, AVAILABLE)
+
+    executed = False
+    if not executed:
         if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
             log.error("Failed during lab_setup.sh")
             sys.exit(1)
 
-    for node in nodes:
-        cmd = "system host-unlock " + node.name
-        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-            log.error("Failed to unlock: " + node.name)
-            sys.exit(1)
-
-    wait_state(nodes, ADMINISTRATIVE, UNLOCKED)
-    wait_state(nodes, OPERATIONAL, ENABLED)
-    wait_state(nodes, AVAILABILITY, AVAILABLE)
-
-    if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
-        log.error("Failed during lab_setup.sh")
-        sys.exit(1)
-
-    nodes.insert(0, controller0)
-    wait_state(nodes, ADMINISTRATIVE, UNLOCKED)
-    wait_state(nodes, OPERATIONAL, ENABLED)
-    wait_state(nodes, AVAILABILITY, AVAILABLE)
+#        nodes.insert(0, controller0)
+        wait_state(nodes, ADMINISTRATIVE, UNLOCKED)
+        wait_state(nodes, OPERATIONAL, ENABLED)
+        wait_state(nodes, AVAILABILITY, AVAILABLE)
 
     for node in nodes:
         cmd = "system host-if-list {} -a".format(node.name)
@@ -700,6 +712,11 @@ if __name__ == '__main__':
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to get build info")
         sys.exit(1)
+
+    #TODO: MUST UNRESERVE TARGETS IF YOU EXIT EARLY FOR SOME REASON OR FAIL EARLY TOO SO NEXT TIME IT RUNS IT WILL BE ABLE TO RESERVE THEM
+    #       PUT THIS INSIDE EXCEPTION ERROR HANDLING
+    for barcode in barcodes:
+        vlm_exec_cmd(VLM_UNRESERVE, barcode)
 
     #TODO: Add system alarm-list and SUDO sm-dump, etc. print-outs
 

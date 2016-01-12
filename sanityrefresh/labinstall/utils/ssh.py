@@ -64,6 +64,7 @@ class SSHClient(pxssh.pxssh):
         except (pxssh.ExceptionPxssh, pexpect.EOF):
             log.error("Failed to login to SSH session: {}@{}".format(username, hostname))
             self.close()
+            sys.exit(1)
 
     def find_prompt(self, timeout=SSH_EXPECT_TIMEOUT):
         matched = self.prompt(timeout)
