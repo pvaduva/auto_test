@@ -1039,6 +1039,14 @@ class Telnet:
 
         return 0
 
+def deploy_ssh_key(self):
+    self.write_line("mkdir -p ~/.ssh/")
+    cmd = 'grep -q "{}" {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH)
+    if self.exec_cmd(cmd)[0] != 0:
+        log.info("Adding public key to {}".format(AUTHORIZED_KEYS_FPATH))
+        self.write_line('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
+        self.write_line("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
+
 def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, negotiate=False, vt100query=False, log_path=None, debug=False):
     """Establishes telnet connection to host."""
 

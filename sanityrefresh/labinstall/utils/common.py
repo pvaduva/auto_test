@@ -14,12 +14,15 @@ from constants import *
 from .log import getLogger, print_step
 from .classes import Host
 import sys
+import os
 import re
 import subprocess
 import configparser
 import pexpect
 
 log = getLogger(__name__)
+
+#TODO: Should functions return 1 instead of sys.exit(1)?
 
 def create_node_dict(nodes, personality):
     """Read .ini file for each node and create Host object for the node.
@@ -65,8 +68,8 @@ def create_node_dict(nodes, personality):
 def remove_markers(str):
     return str.translate({ord(OPEN_MARKER): '', ord(CLOSE_MARKER): ''})
 
-def find_error_msg(str):
-    if re.search("error", str, re.IGNORECASE):
+def find_error_msg(str, msg="error"):
+    if re.search(msg, str, re.IGNORECASE):
         found_error_msg = True
     else:
         found_error_msg = False
@@ -85,7 +88,7 @@ def pexpect_exec_cmd(cmd, tmout=10, event_dict=None):
                                events=event_dict)
     return (rc, output.decode('utf-8','ignore'))
 
-def exec_cmd(cmd, check_output=False):
+def exec_cmd(cmd, show_output=True):
     rc = 0
     log.info(" ".join(cmd))
     try:
@@ -94,9 +97,20 @@ def exec_cmd(cmd, check_output=False):
         rc = ex.returncode
         output = ex.output
     output = output.rstrip()
-    log.info("Output:\n" + output)
+    if output and show_output:
+        log.info("Output:\n" + output)
     log.info("Return code: " + str(rc))
     return (rc, output)
+
+def get_ssh_key():
+    ssh_key_fpath = os.path.expanduser(SSH_KEY_FPATH)
+    if not os.path.isfile(ssh_key_fpath):
+        print("CMD = " + CREATE_PUBLIC_SSH_KEY_CMD.format(ssh_key_fpath))
+        if exec_cmd(CREATE_PUBLIC_SSH_KEY_CMD)[0] != 0:
+            log.error("Failed to create public ssh key for current user")
+            sys.exit(1)
+    ssh_key = exec_cmd(GET_PUBLIC_SSH_KEY_CMD.format(ssh_key_fpath).split())[1]
+    return ssh_key
 
 def vlm_reserve(barcodes, note=None):
     if isinstance(barcodes, str):
@@ -108,7 +122,7 @@ def vlm_reserve(barcodes, note=None):
     if note is not None:
         reserve_note_params = ["-n", note]
     cmd += reserve_note_params
-    reserved_barcodes = exec_cmd(cmd, check_output=True)[1]
+    reserved_barcodes = exec_cmd(cmd)[1]
     if not reserved_barcodes or "Error" in reserved_barcodes:
         log.error("Failed to reserve target(s): " + str(barcodes))
         sys.exit(1)
@@ -127,7 +141,7 @@ def vlm_getattr(barcodes):
         cmd = [VLM, VLM_GETATTR, "-t"]
         cmd.append(barcode)
         cmd.append("all")
-        output = exec_cmd(cmd, check_output=True)[1]
+        output = exec_cmd(cmd)[1]
         if not output or "Error" in output:
             log.error("Failed to get attributes for target(s): {}".format(barcodes))
             sys.exit(1)
@@ -140,7 +154,7 @@ def vlm_getattr(barcodes):
 
 def vlm_findmine():
     cmd = [VLM, VLM_FINDMINE]
-    output = exec_cmd(cmd, check_output=True)[1]
+    output = exec_cmd(cmd)[1]
     if re.search("\d+", output):
         reserved_targets = output.split()
         msg = "Target(s) reserved by user: {}".format(str(reserved_targets))
@@ -157,12 +171,11 @@ def vlm_exec_cmd(action, barcode):
         log.error(msg)
         return 1
     elif barcode not in vlm_findmine():
-        msg = 'Failed to {} target {}. Target is not reserved by user'.format(action, barcode)
-        log.error(msg)
-        return 1
+        log.error("Failed to {} target {}. Target is not reserved by user".format(action, barcode))
+        sys.exit(1)
     else:
         cmd = [VLM, action, "-t", barcode]
-        output = exec_cmd(cmd, check_output=True)[1]
+        output = exec_cmd(cmd)[1]
         if output != "1":
-            log.error('Failed to execute "{}" on target'.format(barcode))
+            log.error("Failed to execute "{}" on target".format(barcode))
             sys.exit(1)

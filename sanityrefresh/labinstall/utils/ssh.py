@@ -19,6 +19,7 @@ import pexpect
 from pexpect import pxssh
 #from wr_pexpect import pxssh
 import sys
+import os
 import re
 
 log = getLogger(__name__)
@@ -41,7 +42,10 @@ class SSHClient(pxssh.pxssh):
         """
 
         if log_path:
-            logf = open(log_path, 'a')
+            if log_path is sys.stdout:
+                logf = log_path
+            else:
+                logf = open(log_path, 'a')
         else:
             logf = None
 
@@ -133,3 +137,44 @@ class SSHClient(pxssh.pxssh):
         if self.exec_cmd(cmd, RSYNC_TIMEOUT, show_output=False)[0] != 0:
             log.error("Rsync failed")
             sys.exit(1)
+
+    def collect_logs(self):
+        cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S collect all"
+        self.sendline(cmd)
+        while True:
+            try:
+                resp = self.expect(["Are you sure you want to continue connecting (yes/no)?", "password:", "Compressing Tarball ..: (.*.tar.tgz)", PROMPT], timeout=COLLECT_TIMEOUT)
+                if resp == 0:
+                    self.sendline("yes")
+                elif resp == 1:
+                    self.sendline(WRSROOT_PASSWORD)
+                elif resp == 2:
+                    tarball = self.match.group(1)
+                elif resp == 3:
+                    print("Done!")
+                    break
+            except pexpect.EOF:
+                log.exception("Connection closed: Reached EOF in SSH session: {}@{}".format(self.username, self.hostname))
+                sys.exit(1)
+            except pexpect.TIMEOUT as ex:
+                log.exception("Timeout occurred: Failed to find \"{}\" in output. Output:\n{}".format(expect_pattern, self.before))
+                sys.exit(1)
+        return tarball
+
+    def get_ssh_key(self):
+        rc = self.exec_cmd("test -e " + SSH_KEY_FPATH)[0]
+        if rc != 0:
+#            self.sendline(CREATE_PUBLIC_SSH_KEY_CMD)
+            if self.exec_cmd(CREATE_PUBLIC_SSH_KEY_CMD.format(SSH_KEY_FPATH))[0] != 0:
+                log.error("Failed to create public ssh key for user")
+                sys.exit(1)
+        ssh_key = self.exec_cmd(GET_PUBLIC_SSH_KEY_CMD.format(SSH_KEY_FPATH))[1]
+        return ssh_key
+
+    def deploy_ssh_key(self, ssh_key=None):
+        self.sendline("mkdir -p ~/.ssh/")
+        cmd = 'grep -q "{}" {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH)
+        if self.exec_cmd(cmd)[0] != 0:
+            log.info("Adding public key to {}".format(AUTHORIZED_KEYS_FPATH))
+            self.sendline('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
+            self.sendline("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))

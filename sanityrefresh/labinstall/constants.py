@@ -10,13 +10,14 @@ LAB_SCRIPTS_REL_PATH = EXPORT_LAB_REL_PATH + "/scripts"
 SYSTEM_CONFIG_FILENAME = "system_config"
 BULK_CONFIG_FILENAME = "hosts_bulk_add.xml"
 CUSTOM_LAB_SETTINGS_FILENAME = "settings.ini"
-LICENSE_FILEPATH = "/folk/cgts/lab/TiS15.10-demo-mar2016.lic"
+LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-demo-jun2016.lic"
 WRSROOT_ETC_PROFILE = "/etc/profile"
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards"
 RPM_INSTALL_REL_PATH = "export/RPM_INSTALL"
 WRSROOT_HOME_DIR = "/home/wrsroot"
 WRSROOT_PATCHES_DIR = WRSROOT_HOME_DIR + "/patches"
 WRSROOT_IMAGES_DIR = WRSROOT_HOME_DIR + "/images"
+JIRA_LOGS_DIR = "/folk/cgts/logs"
 
 # .ini section and option names
 CFG_PROVISION_SECTION_NAME = "provision"
@@ -57,6 +58,8 @@ INSTALL_TIMEOUTS = [1000, 2100, 2100]
 SERIAL_KICKSTART_CONTROLLER_INSTALL = "Serial Kickstart Controller Install"
 MAX_BOOT_MENU_LINES = 10
 
+NIC_INTERFACE = "eth0"
+
 # BIOS options
 UP = '\x1b' + '[A'
 DOWN = '\x1b' + '[B'
@@ -82,6 +85,7 @@ BLD_SERVERS = ["yow-cgts1-lx", "yow-cgts2-lx", "yow-cgts3-lx"]
 DEFAULT_BLD_SERVER = "yow-cgts3-lx"
 TUXLAB_SERVERS = ["yow-tuxlab", "yow-tuxlab2"]
 DEFAULT_TUXLAB_SERVER = "yow-tuxlab"
+DNS_SERVER ="8.8.8.8"
 HOST_EXT = ".wrs.com"
 
 # wrsroot user
@@ -102,17 +106,23 @@ RSYNC_SSH_OPTIONS = ["-o StrictHostKeyChecking=no",
                      "-o UserKnownHostsFile=/dev/null",
                      "-o ConnectTimeout={}".format(SSH_EXPECT_TIMEOUT)]
 SSH_DIR = "~/.ssh"
-SSH_KEY_FPATH = SSH_DIR + "/id_rsa.pub"
+SSH_KEY_FPATH = SSH_DIR + "/id_rsa"
 AUTHORIZED_KEYS_FPATH = SSH_DIR + "/authorized_keys"
+GET_PUBLIC_SSH_KEY_CMD = "ssh-keygen -y -f {}"
+CREATE_PUBLIC_SSH_KEY_CMD = "ssh-keygen -f {} -t rsa -N ''"
+#TODO: Remove this after verified that above command works
+#CREATE_PUBLIC_SSH_KEY_CMD = GET_PUBLIC_SSH_KEY_CMD + ' -q -P ""'
 
 # Command timeouts
+COLLECT_TIMEOUT=300
 RSYNC_TIMEOUT = 300
 REBOOT_TIMEOUT = 1800
-WAIT_STATE_TIME = 60
 BIOS_TYPE_TIMEOUT = 420
 CONFIG_CONTROLLER_TIMEOUT = 1200
 LAB_SETUP_TIMEOUT = 900
 WIPE_DISK_TIMEOUT = 30
+PING_TIMEOUT = 60
+TIMEOUT_BUFFER = 2
 
 # Prompts
 LOGIN_PROMPT = "ogin:"

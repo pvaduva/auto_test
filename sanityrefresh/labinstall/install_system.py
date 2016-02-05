@@ -26,12 +26,13 @@ import configparser
 from constants import *
 from utils.ssh import SSHClient
 import utils.log as logutils
-from utils.common import create_node_dict, vlm_reserve, vlm_exec_cmd, find_error_msg
+from utils.common import create_node_dict, vlm_reserve, vlm_exec_cmd, find_error_msg, get_ssh_key
 from utils.classes import Host
 import utils.wr_telnetlib as telnetlib
 
 LOGGER_NAME = os.path.splitext(__name__)[0]
 SCRIPT_DIR = os.path.dirname(__file__)
+PUBLIC_SSH_KEY = None
 USERNAME = None
 PASSWORD = None
 
@@ -196,6 +197,7 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path):
 
     return lab_cfg_path, lab_settings_filepath
 
+#TODO: Remove this as using deploy_key defined for ssh and telnetlib
 def deploy_key(conn):
     try:
         ssh_key = (open(os.path.expanduser(SSH_KEY_FPATH)).read()).rstrip()
@@ -227,7 +229,7 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path):
     tuxlab_conn = SSHClient(log_path=output_dir + "/" + tuxlab_server + ".ssh.log")
     tuxlab_conn.connect(hostname=tuxlab_server, username=USERNAME,
                         password=PASSWORD)
-    deploy_key(tuxlab_conn)
+    tuxlab_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
 
     tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + "/" + barcode
 
@@ -420,6 +422,7 @@ if __name__ == '__main__':
 
     USERNAME = getpass.getuser()
     PASSWORD = args.password or getpass.getpass()
+    PUBLIC_SSH_KEY = get_ssh_key()
 
     lab_cfg_location = args.lab_config_location
 
@@ -534,7 +537,7 @@ if __name__ == '__main__':
             except configparser.NoSectionError:
                 pass
 
-    executed = False
+    executed = True
     if not executed:
         set_network_boot_feed(controller0.barcode, tuxlab_server, bld_server_conn, load_path)
 
@@ -542,7 +545,7 @@ if __name__ == '__main__':
 
     [barcodes.append(node.barcode) for node in nodes]
 
-    executed = False
+    executed = True
     if not executed:
         vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
@@ -568,16 +571,38 @@ if __name__ == '__main__':
         logutils.print_step("Initial login and password set for " + controller0.name)
         controller0.telnet_conn.login(reset=True)
 
-        #TODO: Need to pass in gateway for each node and test this code out
-    #    cmd += "echo " + WRSROOT_PASSWORD + " | sudo -S"
-    #    cmd += " ip addr add " + controller0.host_ip + "/24" + " dev eth0"
-    #    cont0_ssh_conn.exec_cmd(cmd)
-    #    cmd += "echo " + WRSROOT_PASSWORD + " | sudo -S"
-    #    cmd += " ip link set dev eth0 up"
-    #    cont0_ssh_conn.exec_cmd(cmd)
+    executed = True
+    if not executed:
+        if small_footprint:
+
+            cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, int(controller0.telnet_port), negotiate=controller0.telnet_negotiate, vt100query=controller0.telnet_vt100query, log_path=output_dir + "/" + CONTROLLER0 + ".telnet.log", debug=False)
+            cont0_telnet_conn.login()
+            controller0.telnet_conn = cont0_telnet_conn
+
+            cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip addr add " + controller0.host_ip + controller0.host_routing_prefix + " dev " + NIC_INTERFACE
+            if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
+                log.error("Failed to add IP address: " + controller0.host_ip)
+                sys.exit(1)
+
+            cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip link set dev {} up".format(NIC_INTERFACE)
+            if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
+                log.error("Failed to bring up {} interface".format(NIC_INTERFACE))
+                sys.exit(1)
+
+            time.sleep(2)
+            cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S route add default gw " + controller0.host_gateway
+            if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
+                log.error("Failed to add default gateway: " + controller0.host_gateway)
+                sys.exit(1)
+
+            #TODO: Fix this, put in a loop over timeout
+            cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, DNS_SERVER)
+            if controller0.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT + TIMEOUT_BUFFER)[0] != 0:
+                log.error("Failed to ping outside network")
+                sys.exit(1)
 
         if patch_dir_paths != None:
-            deploy_key(controller0.telnet_conn)
+            controller0.telnet_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
             apply_patches(controller0, bld_server_conn, patch_dir_paths)
 
     cont0_ssh_conn = SSHClient(log_path=output_dir + "/" + CONTROLLER0 + ".ssh.log")
@@ -585,12 +610,15 @@ if __name__ == '__main__':
                             password=WRSROOT_PASSWORD)
     controller0.ssh_conn = cont0_ssh_conn
 
-    deploy_key(controller0.ssh_conn)
+    controller0.ssh_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
 
-    executed = False
+    executed = True
     if not executed:
         bld_server_conn.rsync(LICENSE_FILEPATH, WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR + "/license.lic")
         bld_server_conn.rsync(lab_cfg_path + "/*", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR)
+        bld_server_conn.rsync(load_path + "/" + LAB_SCRIPTS_REL_PATH + "/*", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR)
+        # Extra forward slash at end is required to indicate it is a directory
+        bld_server_conn.rsync(guest_load_path + "/cgcs-guest.img", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_IMAGES_DIR + "/")
 
         cmd = 'grep -q "TMOUT=" ' + WRSROOT_ETC_PROFILE
         cmd += " && echo " + WRSROOT_PASSWORD + " | sudo -S"
@@ -610,23 +638,23 @@ if __name__ == '__main__':
         cont0_ssh_conn.exec_cmd("source " + WRSROOT_ETC_PROFILE)
         cont0_ssh_conn.exec_cmd("source " + WRSROOT_HOME_DIR + "/.bashrc")
 
+    executed = True
+    if not executed:
         cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
         cmd += " config_controller --config-file " + SYSTEM_CONFIG_FILENAME
-        if cont0_ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)[0] != 0:
+        rc, output = cont0_ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+        if rc != 0 or find_error_msg(output, "Configuration failed"):
             log.error("config_controller failed")
             sys.exit(1)
-
-        bld_server_conn.rsync(load_path + "/" + LAB_SCRIPTS_REL_PATH + "/*", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR)
-        # Extra forward slash at end is required to indicate it is a directory
-        bld_server_conn.rsync(guest_load_path + "/cgcs-guest.img", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_IMAGES_DIR + "/")
-
+            
     #TODO: Add system host-if-list controller-0 -a here!
-
+    
+   
     cmd = "source /etc/nova/openrc"
     if cont0_ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
 
-    executed = False
+    executed = True
     if not executed:
         #TODO: Open connection to test server, don't need to deploy key if same user as already deployed it on controller-0 connection
     #    CREATE_TEST_SERVER_CONN.rsync("/home/svc-cgcsauto/precise-server-cloudimg-amd64-disk1.img", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_IMAGES_DIR + "/")
@@ -636,6 +664,7 @@ if __name__ == '__main__':
             log.error("Failed to bulk add hosts")
             sys.exit(1)
 
+    executed = True
     if not executed:
         threads.clear()
         for node in nodes:
@@ -692,7 +721,7 @@ if __name__ == '__main__':
             log.error("Failed during lab_setup.sh")
             sys.exit(1)
 
-#        nodes.insert(0, controller0)
+        nodes.insert(0, controller0)
         wait_state(nodes, ADMINISTRATIVE, UNLOCKED)
         wait_state(nodes, OPERATIONAL, ENABLED)
         wait_state(nodes, AVAILABILITY, AVAILABLE)
