@@ -537,7 +537,7 @@ if __name__ == '__main__':
             except configparser.NoSectionError:
                 pass
 
-    executed = True
+    executed = False
     if not executed:
         set_network_boot_feed(controller0.barcode, tuxlab_server, bld_server_conn, load_path)
 
@@ -545,7 +545,7 @@ if __name__ == '__main__':
 
     [barcodes.append(node.barcode) for node in nodes]
 
-    executed = True
+    executed = False
     if not executed:
         vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
@@ -571,7 +571,7 @@ if __name__ == '__main__':
         logutils.print_step("Initial login and password set for " + controller0.name)
         controller0.telnet_conn.login(reset=True)
 
-    executed = True
+    executed = False
     if not executed:
         if small_footprint:
 
@@ -612,7 +612,7 @@ if __name__ == '__main__':
 
     controller0.ssh_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
 
-    executed = True
+    executed = False
     if not executed:
         bld_server_conn.rsync(LICENSE_FILEPATH, WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR + "/license.lic")
         bld_server_conn.rsync(lab_cfg_path + "/*", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR)
@@ -638,7 +638,7 @@ if __name__ == '__main__':
         cont0_ssh_conn.exec_cmd("source " + WRSROOT_ETC_PROFILE)
         cont0_ssh_conn.exec_cmd("source " + WRSROOT_HOME_DIR + "/.bashrc")
 
-    executed = True
+    executed = False
     if not executed:
         cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
         cmd += " config_controller --config-file " + SYSTEM_CONFIG_FILENAME
@@ -654,7 +654,7 @@ if __name__ == '__main__':
     if cont0_ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
 
-    executed = True
+    executed = False
     if not executed:
         #TODO: Open connection to test server, don't need to deploy key if same user as already deployed it on controller-0 connection
     #    CREATE_TEST_SERVER_CONN.rsync("/home/svc-cgcsauto/precise-server-cloudimg-amd64-disk1.img", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_IMAGES_DIR + "/")
@@ -664,7 +664,7 @@ if __name__ == '__main__':
             log.error("Failed to bulk add hosts")
             sys.exit(1)
 
-    executed = True
+    executed = False
     if not executed:
         threads.clear()
         for node in nodes:

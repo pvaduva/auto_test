@@ -177,5 +177,5 @@ def vlm_exec_cmd(action, barcode):
         cmd = [VLM, action, "-t", barcode]
         output = exec_cmd(cmd)[1]
         if output != "1":
-            log.error("Failed to execute "{}" on target".format(barcode))
+            log.error('Failed to execute "{}" on target'.format(barcode))
             sys.exit(1)
