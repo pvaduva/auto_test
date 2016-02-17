@@ -31,7 +31,8 @@ from utils.classes import Host
 import utils.wr_telnetlib as telnetlib
 
 LOGGER_NAME = os.path.splitext(__name__)[0]
-SCRIPT_DIR = os.path.dirname(__file__)
+#SCRIPT_DIR = os.path.dirname(__file__)
+SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 PUBLIC_SSH_KEY = None
 USERNAME = None
 PASSWORD = None
@@ -191,9 +192,16 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path):
 
     lab_settings_rel_path = LAB_SETTINGS_DIR + "/{}.ini".format(
                             lab_cfg_location)
-    if os.path.isfile(lab_settings_rel_path):
+    lab_settings_filepath = SCRIPT_DIR + "/" + lab_settings_rel_path
+    # MARIA ADD START
+    if not os.path.isfile(lab_settings_filepath):
+        log.error('Lab settings filepath was not found.')
+    # MARIA ADD END
+    # MARIA COMMENT START
+    #if os.path.isfile(lab_settings_rel_path):
         # Path is relative to current directory
-        lab_settings_filepath = SCRIPT_DIR + "/" + lab_settings_rel_path
+    #    lab_settings_filepath = SCRIPT_DIR + "/" + lab_settings_rel_path
+    # MARIA COMMENT END
 
     return lab_cfg_path, lab_settings_filepath
 
