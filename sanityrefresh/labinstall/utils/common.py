@@ -22,7 +22,7 @@ import pexpect
 
 log = getLogger(__name__)
 
-#TODO: Should functions return 1 instead of sys.exit(1)?
+#TODO: Decide if functions should return 1 instead of sys.exit(1)
 
 def create_node_dict(nodes, personality):
     """Read .ini file for each node and create Host object for the node.

@@ -61,7 +61,7 @@ def parse_args():
                          help="Tuxlab server with controller-0 feed directory"
                          "\n(default: %(default)s)")
     lab_grp.add_argument('--run-lab-setup', dest='run_lab_setup',
-                           action='store_true', help="Run lab_setup.sh")
+                           action='store_true', help="Run lab setup")
 
     #TODO: Have an if for this and say it is not supported yet
     lab_grp.add_argument('--small-footprint', dest='small_footprint',
@@ -549,8 +549,10 @@ if __name__ == '__main__':
     if not executed:
         vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
-        #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of the nodes as the system was left not in an installed state
-        #TODO: IN THIS CASE STILL NEED TO SET TELNET FOR CONTROLLER0 SO PERHAPS LEAVE THIS OUTSIDE OF WIPEDISK METHOD?
+        #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of
+        #      the nodes as the system was left not in an installed state
+        #TODO: In this case still need to set the telnet session for controller0
+        #      so consider keeping this outside of the wipe_disk method
         cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, int(controller0.telnet_port), negotiate=controller0.telnet_negotiate, vt100query=controller0.telnet_vt100query, log_path=output_dir + "/" + CONTROLLER0 + ".telnet.log", debug=False)
         cont0_telnet_conn.login()
         controller0.telnet_conn = cont0_telnet_conn
@@ -574,11 +576,6 @@ if __name__ == '__main__':
     executed = False
     if not executed:
         if small_footprint:
-
-            cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, int(controller0.telnet_port), negotiate=controller0.telnet_negotiate, vt100query=controller0.telnet_vt100query, log_path=output_dir + "/" + CONTROLLER0 + ".telnet.log", debug=False)
-            cont0_telnet_conn.login()
-            controller0.telnet_conn = cont0_telnet_conn
-
             cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip addr add " + controller0.host_ip + controller0.host_routing_prefix + " dev " + NIC_INTERFACE
             if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
                 log.error("Failed to add IP address: " + controller0.host_ip)
@@ -595,7 +592,7 @@ if __name__ == '__main__':
                 log.error("Failed to add default gateway: " + controller0.host_gateway)
                 sys.exit(1)
 
-            #TODO: Fix this, put in a loop over timeout
+            #TODO: Fix this, put in a loop over timeout, not working as expected
             cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, DNS_SERVER)
             if controller0.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT + TIMEOUT_BUFFER)[0] != 0:
                 log.error("Failed to ping outside network")
@@ -624,43 +621,54 @@ if __name__ == '__main__':
         cmd += " && echo " + WRSROOT_PASSWORD + " | sudo -S"
         cmd += ' sed -i.bkp "/\(TMOUT=\|export TMOUT\)/d"'
         cmd += " " + WRSROOT_ETC_PROFILE
-        cont0_ssh_conn.exec_cmd(cmd)
+        controller0.ssh_conn.exec_cmd(cmd)
         cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
         cmd += ' sed -i.bkp "$ a\TMOUT=\\nexport TMOUT"'
         cmd += " " + WRSROOT_ETC_PROFILE
-        cont0_ssh_conn.exec_cmd(cmd)
+        controller0.ssh_conn.exec_cmd(cmd)
         cmd = 'echo \'export HISTTIMEFORMAT="%Y-%m-%d %T "\' >>'
         cmd += " " + WRSROOT_HOME_DIR + "/.bashrc"
-        cont0_ssh_conn.exec_cmd(cmd)
+        controller0.ssh_conn.exec_cmd(cmd)
         cmd = 'echo \'export PROMPT_COMMAND="date; $PROMPT_COMMAND"\' >>'
         cmd += " " + WRSROOT_HOME_DIR + "/.bashrc"
-        cont0_ssh_conn.exec_cmd(cmd)
-        cont0_ssh_conn.exec_cmd("source " + WRSROOT_ETC_PROFILE)
-        cont0_ssh_conn.exec_cmd("source " + WRSROOT_HOME_DIR + "/.bashrc")
+        controller0.ssh_conn.exec_cmd(cmd)
+        controller0.ssh_conn.exec_cmd("source " + WRSROOT_ETC_PROFILE)
+        controller0.ssh_conn.exec_cmd("source " + WRSROOT_HOME_DIR + "/.bashrc")
 
     executed = False
     if not executed:
         cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
         cmd += " config_controller --config-file " + SYSTEM_CONFIG_FILENAME
-        rc, output = cont0_ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+        rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
         if rc != 0 or find_error_msg(output, "Configuration failed"):
             log.error("config_controller failed")
             sys.exit(1)
             
-    #TODO: Add system host-if-list controller-0 -a here!
-    
+    cmd = "system host-if-list {} -a".format(controller0.name)
+    if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+        log.error("Failed to get list of interfaces for node: " + controller0.name)
+        sys.exit(1)
+
+    #TODO: Implement separate workflow for storage nodes
+    # Run lab_setup.sh twice
+
+    # If you have storage:
+    #   Unlock controller-1 and wait for it to be unlocked and enabled
+    #   Unlock storage nodes and wait for them to become enabled
+    #   Run lab_setup.sh 3rd time
+
+    # Unlock computes in parallel
+
+    # Run lab_setup.sh 4th time   
    
     cmd = "source /etc/nova/openrc"
-    if cont0_ssh_conn.exec_cmd(cmd)[0] != 0:
+    if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
 
     executed = False
     if not executed:
-        #TODO: Open connection to test server, don't need to deploy key if same user as already deployed it on controller-0 connection
-    #    CREATE_TEST_SERVER_CONN.rsync("/home/svc-cgcsauto/precise-server-cloudimg-amd64-disk1.img", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_IMAGES_DIR + "/")
-
-        cmd = "system host-bulk-add hosts_bulk_add.xml"
-        if cont0_ssh_conn.exec_cmd(cmd)[0] != 0:
+        cmd = "system host-bulk-add " + BULK_CFG_FILENAME
+        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
             log.error("Failed to bulk add hosts")
             sys.exit(1)
 
@@ -694,14 +702,12 @@ if __name__ == '__main__':
         wait_state(nodes, ADMINISTRATIVE, LOCKED)
         wait_state(nodes, AVAILABILITY, ONLINE)
 
-    #TODO: Put in workaround to set TEST_PROFILES="no" in lab_setup.sh due to CGTS-3219
-
-    lab_setup_cmd = WRSROOT_HOME_DIR + "/lab_setup.sh"
+    lab_setup_cmd = WRSROOT_HOME_DIR + "/" + LAB_SETUP_CFG_FILENAME
 
     if not executed:
         for i in range(0, 2):
             if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
-                log.error("Failed during lab_setup.sh")
+                log.error("Failed during lab setup")
                 sys.exit(1)
 
     if not executed:
@@ -718,7 +724,7 @@ if __name__ == '__main__':
     executed = False
     if not executed:
         if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
-            log.error("Failed during lab_setup.sh")
+            log.error("Failed during lab setup")
             sys.exit(1)
 
         nodes.insert(0, controller0)
@@ -742,44 +748,11 @@ if __name__ == '__main__':
         log.error("Failed to get build info")
         sys.exit(1)
 
-    #TODO: MUST UNRESERVE TARGETS IF YOU EXIT EARLY FOR SOME REASON OR FAIL EARLY TOO SO NEXT TIME IT RUNS IT WILL BE ABLE TO RESERVE THEM
-    #       PUT THIS INSIDE EXCEPTION ERROR HANDLING
+    #TODO: Add unreserving of targets if you exit early for some reason
+    #      This needs to be in the exception error handling for failure cases
     for barcode in barcodes:
         vlm_exec_cmd(VLM_UNRESERVE, barcode)
 
     #TODO: Add system alarm-list and SUDO sm-dump, etc. print-outs
 
-    #TODO: Check return code
- #   dirs = "{0}/images {0}/heat {0}/bin".format(WRSROOT_HOME_DIR)
- #   cont0_ssh_conn.exec_cmd("mkdir -p " + dirs)
- #   cont0_ssh_conn.exec_cmd("chmod 777 " + dirs)
-
     sys.exit(0)
-
-    # Run lab_setup.sh twice
-
-    # If you have storage:
-    #   Unlock controller-1 and wait for it to be unlocked and enabled
-    #   Unlock storage nodes and wait for them to become enabled
-    #   Run lab_setup.sh 3rd time
-
-    # Unlock computes in parallel
-
-    # Run lab_setup.sh 4th time
-
-
-    #NOTE: When you unlock controller-0 it will have availability as "degraded" so don't check availability, instead check administrative (unlocked) and operational (enabled)
-
-
-#    wait for controller-1 to go enabled <-- from Matt: Semantically you have to wait for controller-1 to be unlocked-enable before you can unlock the storage nodes.
-#    (optional) if the lab has storage nodes:
-#     install storage-0 and storage-1 and wait for them to go "online"
-#     run lab_setup.sh <-- extra run only if you have storage
-#     unlock both storage nodes and wait for them to go "enabled"
-
-#    run lab_setup.sh <-- part of back-to-back
-#    install all compute nodes
-#    wait for compute nodes to go "online"
-#    run lab_setup.sh <-- part of back-to-back
-#    unlock all compute nodes and wait for them to go "enabled"
-#    run lab_setup.sh <-- last one

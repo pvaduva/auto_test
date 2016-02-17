@@ -874,7 +874,7 @@ class Telnet:
                 log.error("Timeout occurred: Failed to find login or prompt")
                 sys.exit(1)
 
-    #TODO: Fix why does this return zero?!?
+    #TODO: If script returns zero, should check return code, otherwise remove it
     def install(self, node, boot_device_dict, small_footprint=False):
         if "wildcat" in node.host_name:
             index = 0
@@ -916,7 +916,6 @@ class Telnet:
                         break
                     else:
                         log.info("Move the cursor down in the menu")
-#                        self.write(str.encode(DOWN))
                         down_press_count += 1
                 count += 1
             if count == MAX_SEARCH_ATTEMPTS:
