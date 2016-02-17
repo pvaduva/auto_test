@@ -102,10 +102,13 @@ class SSHClient(pxssh.pxssh):
             try:
                 self.expect(expect_pattern, timeout)
             except pexpect.EOF:
-                log.exception("Connection closed: Reached EOF in SSH session: {}@{}".format(self.username, self.hostname))
+                log.exception("Connection closed: "
+                              "Reached EOF in SSH session:"
+                              " {}@{}".format(self.username, self.hostname))
                 sys.exit(1)
             except pexpect.TIMEOUT as ex:
-                log.exception("Timeout occurred: Failed to find \"{}\" in output. Output:\n{}".format(expect_pattern, self.before))
+                log.exception('Timeout occurred: Failed to find "{}" in output:'
+                              "\n{}".format(expect_pattern, self.before))
                 sys.exit(1)
             else:
                 output = self.match.group().strip()
@@ -143,7 +146,10 @@ class SSHClient(pxssh.pxssh):
         self.sendline(cmd)
         while True:
             try:
-                resp = self.expect(["Are you sure you want to continue connecting (yes/no)?", "password:", "Compressing Tarball ..: (.*.tar.tgz)", PROMPT], timeout=COLLECT_TIMEOUT)
+                resp = self.expect(["Are you sure you want to continue"
+                                    " connecting (yes/no)?", "password:",
+                                    "Compressing Tarball ..: (.*.tar.tgz)",
+                                    PROMPT], timeout=COLLECT_TIMEOUT)
                 if resp == 0:
                     self.sendline("yes")
                 elif resp == 1:
@@ -154,10 +160,13 @@ class SSHClient(pxssh.pxssh):
                     print("Done!")
                     break
             except pexpect.EOF:
-                log.exception("Connection closed: Reached EOF in SSH session: {}@{}".format(self.username, self.hostname))
+                log.exception("Connection closed: "
+                              "Reached EOF in SSH session:"
+                              " {}@{}".format(self.username, self.hostname))
                 sys.exit(1)
             except pexpect.TIMEOUT as ex:
-                log.exception("Timeout occurred: Failed to find \"{}\" in output. Output:\n{}".format(expect_pattern, self.before))
+                log.exception('Timeout occurred: Failed to find "{}" in output:'
+                              "\n{}".format(expect_pattern, self.before))
                 sys.exit(1)
         return tarball
 

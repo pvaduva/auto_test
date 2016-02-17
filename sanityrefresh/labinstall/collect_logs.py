@@ -18,21 +18,25 @@ import socket
 from utils.ssh import SSHClient
 from constants import *
 
-#TODO: Make --dest_ip optional and if specified make --path and --jira mutually exclusive options that are required if --dest_ip is specified
 def parse_args():
     parser = argparse.ArgumentParser(formatter_class=\
                                      argparse.RawTextHelpFormatter,
                                      add_help=False, prog=__file__,
                                      description="Script to collect logs.")
+
     parser.add_argument('--src_ip', required=True,
                           help="Floating IP address")
-    parser.add_argument('--dest_ip', required=True,
+    parser.add_argument('--dest_ip',
                         default=socket.gethostbyname(DEFAULT_BLD_SERVER + HOST_EXT),
-                        help="Destination IP address")
-    parser.add_argument('--path', help="Destination path to scp logs to")
-    parser.add_argument('--jira', help="JIRA identifier to create destination folder with under " + JIRA_LOGS_DIR + " on " + DEFAULT_BLD_SERVER)
+                        help="Destination IP address\n(default: %(default)s)")
     parser.add_argument('-h','--help', action='help',
                            help="Show this help message and exit")
+
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--path', help="Destination path to scp logs to")    
+    group.add_argument('--jira', help="JIRA identifier for destination folder"
+                       ' in "{}" on {}'.format(JIRA_LOGS_DIR,
+                       DEFAULT_BLD_SERVER))
 
     args = parser.parse_args()
     return args
@@ -58,7 +62,7 @@ if __name__ == '__main__':
                             password=WRSROOT_PASSWORD)
 
     tarball = cont0_ssh_conn.collect_logs()
-#    tarball = "/scratch/ALL_NODES_20160122.234108.tar.tgz"
+    # Remove .tgz extension and add .gz
     tarball = os.path.splitext(tarball)[0]+'.gz'
 
     dest_server_conn = SSHClient()
