@@ -1,17 +1,24 @@
 #!/usr/bin/env python3.4
 
-"""
+'''
 install_system.py - Installs Titanium Server load on specified configuration.
 
-Copyright (c) 2015 Wind River Systems, Inc.
+Copyright (c) 2015-2016 Wind River Systems, Inc.
 
 The right to copy, distribute, modify, or otherwise make use
 of this software may be licensed only pursuant to the terms
 of an applicable Wind River license agreement.
-"""
+'''
+
+'''
+modification history:
+---------------------
+18feb16,amf  Adding doc strings to each function
+02dec15,kav  initial version
+'''
+
 
 import pdb
-
 import os
 import sys
 import re
@@ -37,6 +44,8 @@ USERNAME = None
 PASSWORD = None
 
 def parse_args():
+    ''' Get commandline options. '''
+
     parser = argparse.ArgumentParser(formatter_class=\
                                      argparse.RawTextHelpFormatter,
                                      add_help=False, prog=__file__,
@@ -46,7 +55,8 @@ def parse_args():
     node_grp.add_argument('--controller', metavar='LIST', required=True,
                           help="Comma-separated list of VLM barcodes"
                           " for controllers")
-    #TODO: Removed required here, this should be mutually-exclusive with running small footprint
+    #TODO: Removed required here, this should be mutually-exclusive with 
+    #running small footprint
     node_grp.add_argument('--compute', metavar='LIST',
                           help="Comma-separated list of VLM barcodes"
                           " for computes")
@@ -140,6 +150,11 @@ def parse_args():
     return args
 
 def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir, tis_bld_dir):
+    ''' Get the directory path for the load that will be used in the 
+        lab. This directory path is typically taken as the latest build on
+        the TiS build server.
+    '''
+
     load_path = "{}/{}".format(bld_server_wkspce, tis_blds_dir)
 
     if tis_bld_dir == LATEST_BUILD_DIR:
@@ -155,6 +170,10 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir, tis_bld_dir)
     return load_path
 
 def verify_custom_lab_cfg_location(lab_cfg_location):
+    ''' Verify that the correct configuration file is used in setting up the 
+        lab. 
+    '''
+
     # Rename variable to reflect that it is a path
     lab_cfg_path = lab_cfg_location
     lab_settings_filepath = None
@@ -179,6 +198,10 @@ def verify_custom_lab_cfg_location(lab_cfg_location):
     return lab_cfg_path, lab_settings_filepath
 
 def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path):
+    ''' Get the directory path for the configuration file that is used in 
+        setting up the lab. 
+    '''
+
     lab_cfg_rel_path = LAB_YOW_REL_PATH + "/" + lab_cfg_location
     lab_cfg_path = load_path + "/" + lab_cfg_rel_path
     lab_settings_filepath = None
@@ -199,6 +222,9 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path):
 
 #TODO: Remove this as using deploy_key defined for ssh and telnetlib
 def deploy_key(conn):
+    ''' Set the keys used for ssh and telnet connections.
+    '''
+
     try:
         ssh_key = (open(os.path.expanduser(SSH_KEY_FPATH)).read()).rstrip()
     except FileNotFoundError:
@@ -223,6 +249,10 @@ def deploy_key(conn):
             conn.write_line("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
 
 def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path):
+    ''' Transfer the load and set the feed on the tuxlab server in preparation
+        for booting up the lab. 
+    '''
+
     logutils.print_step("Set feed for {} network boot".format(barcode))
     tuxlab_sub_dir = USERNAME + '/' + os.path.basename(load_path)
 
@@ -269,6 +299,9 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path):
     tuxlab_conn.logout()
 
 def wipe_disk(node):
+    ''' Perform a wipedisk operation on the lab before booting a new load into
+        it. 
+    '''
 
     if node.telnet_conn is None:
         node.telnet_conn = telnetlib.connect(node.telnet_ip, int(node.telnet_port), negotiate=node.telnet_negotiate, vt100query=node.telnet_vt100query, log_path=output_dir + "/" + node.name + ".telnet.log", debug=False)
@@ -286,6 +319,11 @@ def wipe_disk(node):
     log.info("Disk(s) have been wiped on: " + node.name)
 
 def wait_state(nodes, type, expected_state):
+    ''' Function to wait for the lab to enter a specified state.  
+        If the expected state is not entered, the boot operation will be 
+        terminated.
+    '''
+
     if isinstance(nodes, Host):
         nodes = [nodes]
     else:
@@ -333,6 +371,9 @@ def wait_state(nodes, type, expected_state):
         sys.exit(1)
 
 def bring_up(node, boot_device_dict, small_footprint, close_telnet_conn=True):
+    ''' Initiate the boot and installation operation.
+    '''
+
     if node.telnet_conn is None:
         node.telnet_conn = telnetlib.connect(node.telnet_ip, int(node.telnet_port), negotiate=node.telnet_negotiate, vt100query=node.telnet_vt100query, log_path=output_dir + "/" + node.name + ".telnet.log")
     vlm_exec_cmd(VLM_TURNON, node.barcode)
@@ -342,6 +383,9 @@ def bring_up(node, boot_device_dict, small_footprint, close_telnet_conn=True):
         node.telnet_conn.close()
 
 def apply_patches(node, bld_server_conn, patch_dir_paths):
+    ''' Apply any patches after the load is installed.  
+    '''
+
     patch_names = []
 
     for dir_path in patch_dir_paths.split(","):
@@ -409,6 +453,7 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
     node.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
 
 if __name__ == '__main__':
+
     boot_device_dict = DEFAULT_BOOT_DEVICE_DICT
     custom_lab_setup = False
     lab_settings_filepath = ""
