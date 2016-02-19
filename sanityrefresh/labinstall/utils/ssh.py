@@ -113,7 +113,8 @@ class SSHClient(pxssh.pxssh):
                 self.find_prompt(timeout)
                 return output
         else:
-            self.find_prompt(timeout)
+            #MARIA TEMP COMMENT OUT
+            #self.find_prompt(timeout)
             output = self.get_after()
             rc = self.get_rc()
             if output and show_output:

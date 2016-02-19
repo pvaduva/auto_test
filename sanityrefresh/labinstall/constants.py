@@ -84,15 +84,14 @@ INSTALLATION_RESERVE_NOTE = "AUTO: Lab installation"
 BLD_SERVERS = ["yow-cgts1-lx", "yow-cgts2-lx", "yow-cgts3-lx"]
 DEFAULT_BLD_SERVER = "yow-cgts3-lx"
 TUXLAB_SERVERS = ["yow-tuxlab", "yow-tuxlab2"]
-DEFAULT_TUXLAB_SERVER = "yow-tuxlab"
+DEFAULT_TUXLAB_SERVER = "yow-tuxlab2"
 DNS_SERVER ="8.8.8.8"
 HOST_EXT = ".wrs.com"
 
 # wrsroot user
 WRSROOT_USERNAME = "wrsroot"
 WRSROOT_DEFAULT_PASSWORD = WRSROOT_USERNAME
-#WRSROOT_PASSWORD = "li69nux"
-WRSROOT_PASSWORD = "adminuser"
+WRSROOT_PASSWORD = "li69nux"
 
 #Telnet expect
 TELNET_EXPECT_TIMEOUT = 20
@@ -128,7 +127,8 @@ TIMEOUT_BUFFER = 2
 # Prompts
 LOGIN_PROMPT = "ogin:"
 PASSWORD_PROMPT = "assword:"
-PROMPT = ".*\$ "
+PROMPT = ".*\$"
+#PROMPT = ".*\$ "
 
 # Other
 LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']

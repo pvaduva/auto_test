@@ -31,7 +31,6 @@ from utils.classes import Host
 import utils.wr_telnetlib as telnetlib
 
 LOGGER_NAME = os.path.splitext(__name__)[0]
-#SCRIPT_DIR = os.path.dirname(__file__)
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 PUBLIC_SSH_KEY = None
 USERNAME = None
@@ -559,15 +558,16 @@ if __name__ == '__main__':
 
         #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of the nodes as the system was left not in an installed state
         #TODO: IN THIS CASE STILL NEED TO SET TELNET FOR CONTROLLER0 SO PERHAPS LEAVE THIS OUTSIDE OF WIPEDISK METHOD?
-        cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, int(controller0.telnet_port), negotiate=controller0.telnet_negotiate, vt100query=controller0.telnet_vt100query, log_path=output_dir + "/" + CONTROLLER0 + ".telnet.log", debug=False)
-        cont0_telnet_conn.login()
-        controller0.telnet_conn = cont0_telnet_conn
+        #cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, int(controller0.telnet_port), negotiate=controller0.telnet_negotiate, vt100query=controller0.telnet_vt100query, log_path=output_dir + "/" + CONTROLLER0 + ".telnet.log", debug=False)
+        #cont0_telnet_conn.login()
+        #controller0.telnet_conn = cont0_telnet_conn
 
-        for node in nodes:
-            node_thread = threading.Thread(target=wipe_disk,name=node.name,args=(node,))
-            threads.append(node_thread)
-            log.info("Starting thread for {}".format(node_thread.name))
-            node_thread.start()
+        # MARIA COMMENTING OUT SECTION
+        #for node in nodes:
+        #    node_thread = threading.Thread(target=wipe_disk,name=node.name,args=(node,))
+        #    threads.append(node_thread)
+        #    log.info("Starting thread for {}".format(node_thread.name))
+        #    node_thread.start()
 
         for thread in threads:
             thread.join()
