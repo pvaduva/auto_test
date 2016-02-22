@@ -19,6 +19,7 @@ modification history:
 
 
 import pdb
+
 import os
 import sys
 import re
@@ -55,8 +56,12 @@ def parse_args():
     node_grp.add_argument('--controller', metavar='LIST', required=True,
                           help="Comma-separated list of VLM barcodes"
                           " for controllers")
-    #TODO: Removed required here, this should be mutually-exclusive with 
-    #running small footprint
+    #TODO: Removed required here, this should be mutually-exclusive with running
+    #      small_footprint. Need to add logic in the parser or outside of it
+    #      to check if small_footprint option is used,
+    #      ignore --compute and --storage
+    #      Logic is required otherwise if the same barcode is specified as both
+    #      controller and compute, it will try to get reserved twice and fail
     node_grp.add_argument('--compute', metavar='LIST',
                           help="Comma-separated list of VLM barcodes"
                           " for computes")
@@ -70,6 +75,11 @@ def parse_args():
                          default=DEFAULT_TUXLAB_SERVER,
                          help="Tuxlab server with controller-0 feed directory"
                          "\n(default: %(default)s)")
+
+    #TODO: This option is not being referenced in code. Add logic to
+    #      exit after config_controller unless this option is specified
+    #      or modify this option to be "skip_lab_setup" so that it skips
+    #      lab_setup.sh if specified. Either way option needs to be used somehow
     lab_grp.add_argument('--run-lab-setup', dest='run_lab_setup',
                            action='store_true', help="Run lab setup")
 
@@ -78,6 +88,9 @@ def parse_args():
                            action='store_true',help="Run installation"
                            " as small footprint")
 
+    #TODO: Custom directory path is not supported yet. Need to add code
+    #      to rsync files from custom directory path on local PC to controller-0
+    #      Can use rsync exec_cmd(...) in common.py to do the transfer locally
     parser.add_argument('lab_config_location', help=textwrap.dedent('''\
                         Specify either:\n\n
                         (a) Directory for lab listed under:
@@ -354,6 +367,7 @@ def wait_state(nodes, type, expected_state):
         log.info('Waiting for {} to be \"{}\"...'.format(node_names, expected_state))
         # Create copy of list so that it is unaffected by removal of node
         for node in copy.copy(nodes):
+            #TODO: Should use table_parser here instead
             match = re.search("^.*{}.*{}.*$".format(node.name, expected_state), output, re.MULTILINE|re.IGNORECASE)
             if match:
                 if type == ADMINISTRATIVE:
@@ -437,6 +451,7 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
     # Remove table header
     output = "\n".join(output.splitlines()[2:])
     for patch in patch_names:
+        #TODO: Should use table_parser here instead
         if not re.search("^{}.*{}.*$".format(patch, AVAILABLE), output, re.MULTILINE|re.IGNORECASE):
             log.error('Patch \"{}\" is not in list or in {} state'.format(patch, AVAILABLE))
             sys.exit(1)
@@ -601,11 +616,13 @@ if __name__ == '__main__':
     if not executed:
         vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
-        #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of the nodes as the system was left not in an installed state
-        #TODO: IN THIS CASE STILL NEED TO SET TELNET FOR CONTROLLER0 SO PERHAPS LEAVE THIS OUTSIDE OF WIPEDISK METHOD?
-        #cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, int(controller0.telnet_port), negotiate=controller0.telnet_negotiate, vt100query=controller0.telnet_vt100query, log_path=output_dir + "/" + CONTROLLER0 + ".telnet.log", debug=False)
-        #cont0_telnet_conn.login()
-        #controller0.telnet_conn = cont0_telnet_conn
+        #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of
+        #      the nodes as the system was left not in an installed state
+        #TODO: In this case still need to set the telnet session for controller0
+        #      so consider keeping this outside of the wipe_disk method
+        cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, int(controller0.telnet_port), negotiate=controller0.telnet_negotiate, vt100query=controller0.telnet_vt100query, log_path=output_dir + "/" + CONTROLLER0 + ".telnet.log", debug=False)
+        cont0_telnet_conn.login()
+        controller0.telnet_conn = cont0_telnet_conn
 
         # MARIA COMMENTING OUT SECTION
         #for node in nodes:
@@ -755,6 +772,9 @@ if __name__ == '__main__':
 
     lab_setup_cmd = WRSROOT_HOME_DIR + "/" + LAB_SETUP_CFG_FILENAME
 
+    # Running lab_setup.sh twice is required for heterogeneous controllers
+    # The second lab_setup.sh sets up OAM interfaces for controller-1 and that
+    # has to be done before it is unlocked
     if not executed:
         for i in range(0, 2):
             if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
@@ -805,5 +825,14 @@ if __name__ == '__main__':
         vlm_exec_cmd(VLM_UNRESERVE, barcode)
 
     #TODO: Add system alarm-list and SUDO sm-dump, etc. print-outs
+
+    #TODO: Should fail if major alarms are present at the end
+    #[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
+    #+--------------------------------------+----------+----------------------------------+-----------------------------------------------------------+----------+----------------------------+
+    #| UUID                                 | Alarm ID | Reason Text                      | Entity Instance ID                                        | Severity | Time Stamp                 |
+    #+--------------------------------------+----------+----------------------------------+-----------------------------------------------------------+----------+----------------------------+
+    #| 60e5273c-5ba0-49f5-b291-c93debcd9aca | 300.003  | Networking Agent not responding. | host=compute-0.agent=ba5b78ac-5b4b-47bf-af8f-24e2ff18e5b6 | major    | 2015-12-13T18:32:20.927370 |
+    #| de67feaa-ba52-41cf-afcb-4a1b02a66eef | 300.003  | Networking Agent not responding. | host=compute-1.agent=a8efa7bb-9da7-41fd-ac4d-abb9db7d2351 | major    | 2015-12-13T18:32:21.049578 |
+    #+--------------------------------------+----------+----------------------------------+-----------------------------------------------------------+----------+----------------------------+    
 
     sys.exit(0)

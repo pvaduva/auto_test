@@ -874,6 +874,20 @@ class Telnet:
                 log.error("Timeout occurred: Failed to find login or prompt")
                 sys.exit(1)
 
+    #TODO: The regular expression passed into re.compile(...) to search through
+    #      the boot menu for each BIOS type should perhaps be set as constants
+    #      or even specified in the barcode .ini for each node. Some nodes
+    #      e.g. wildcat13-14 do not print their BIOS type (wildcat) when they
+    #      boot so the logic below to expect the BIOS type to be printed
+    #      does not work. This is why for wildcat the host_name is searched
+    #      for reference to "wildcat". But it is messy to search the boot
+    #      console for the BIOS type for some nodes and not for others.
+    #      So this function needs more consistency in terms of how it
+    #      figures out what the BIOS type is and subsequently, how it determines
+    #      which regex to pass into re.compile(...).
+
+    #TODO: The timeouts in this function need to be tested to see if they
+    #      should be increased/decreased
     #TODO: If script returns zero, should check return code, otherwise remove it
     def install(self, node, boot_device_dict, small_footprint=False):
         if "wildcat" in node.host_name:

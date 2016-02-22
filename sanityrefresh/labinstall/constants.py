@@ -1,5 +1,8 @@
 #!/usr/bin/env python3.4
 
+#TODO: This file should be under some directory like utils/ and not at
+#      the same level as install_system.py
+
 # Directory and file paths/names
 NODE_INFO_DIR = "node_info"
 LAB_SETTINGS_DIR = "lab_settings"
@@ -7,11 +10,18 @@ LATEST_BUILD_DIR = "latest_build"
 EXPORT_LAB_REL_PATH = "export/lab"
 LAB_YOW_REL_PATH = EXPORT_LAB_REL_PATH + "/yow"
 LAB_SCRIPTS_REL_PATH = EXPORT_LAB_REL_PATH + "/scripts"
+
+#TODO: Not all labs define their config_controller file as "system_config"
+#      E.g. some refer to it as cgcs_config or TiS_config.ini
+#      Need this filename to be ORed with other options or standardize naming
+#      for config files in Stash
 SYSTEM_CFG_FILENAME = "system_config"
-SYSTEM_CONFIG_FILENAME = "cgcs_config"
+# TODO: Same todo as above, where the bulk add filename might be different
 BULK_CFG_FILENAME = "hosts_bulk_add.xml"
 LAB_SETUP_CFG_FILENAME = "lab_setup.conf"
 CUSTOM_LAB_SETTINGS_FILENAME = "settings.ini"
+# TODO: Specifying full path to latest license instead of symlink as there
+#       was a problem rsyncing the symlink "TiS15-GA-eval.lic". Fix this
 LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-demo-jun2016.lic"
 WRSROOT_ETC_PROFILE = "/etc/profile"
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards"
@@ -129,8 +139,7 @@ TIMEOUT_BUFFER = 2
 # Prompts
 LOGIN_PROMPT = "ogin:"
 PASSWORD_PROMPT = "assword:"
-PROMPT = ".*\$"
-#PROMPT = ".*\$ "
+PROMPT = ".*\$ "
 
 # Other
 LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']

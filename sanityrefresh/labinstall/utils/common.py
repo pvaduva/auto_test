@@ -29,6 +29,10 @@ import pexpect
 
 log = getLogger(__name__)
 
+#TODO: Would be nice to have a common function which can perform an
+#      action on a node (e.g. lock, unlock)
+#      It would take parameter host_name and action='unlock', say by default
+
 #TODO: Decide if functions should return 1 instead of sys.exit(1)
 
 def create_node_dict(nodes, personality):
