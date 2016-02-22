@@ -1,14 +1,21 @@
 #!/usr/bin/env python3.4
 
-"""
+'''
 common.py - Common utilities.
 
-Copyright (c) 2015 Wind River Systems, Inc.
+Copyright (c) 2015-2016 Wind River Systems, Inc.
 
 The right to copy, distribute, modify, or otherwise make use
 of this software may be licensed only pursuant to the terms
 of an applicable Wind River license agreement.
-"""
+    
+    
+modification history:
+---------------------
+22feb16,amf  Using the full path for the node data file
+02dec15,kav  initial version
+'''
+
 
 from constants import *
 from .log import getLogger, print_step
@@ -38,7 +45,9 @@ def create_node_dict(nodes, personality):
     for node in nodes:
         config = configparser.ConfigParser()
         try:
-            node_filepath = NODE_INFO_DIR + '/{}.ini'.format(node)
+            local_path = os.path.dirname(__file__)
+            node_filepath = os.path.join(local_path, '..',
+                                         NODE_INFO_DIR, '%s.ini' % node)
             node_file = open(node_filepath, 'r')
             config.read_file(node_file)
         except Exception:
