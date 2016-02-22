@@ -988,7 +988,7 @@ class Telnet:
                         break
                     else:
                         log.info("Move the cursor down in the menu")
-#                        self.write(str.encode(DOWN))
+                        self.write(str.encode(DOWN))
                         down_press_count += 1
                 count += 1
             if count == MAX_SEARCH_ATTEMPTS:
@@ -999,8 +999,8 @@ class Telnet:
             self.get_read_until("ESC to boot using defaults")
             # Sleep is required before pressing enter
             time.sleep(5)
-            for i in range(0, down_press_count):
-                self.write(str.encode(DOWN))
+            #for i in range(0, down_press_count):
+            #    self.write(str.encode(DOWN))
             self.write(str.encode("\r\r"))
             if node.name == CONTROLLER0:
                 #TODO: Check time on this

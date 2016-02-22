@@ -38,7 +38,7 @@ from utils.classes import Host
 import utils.wr_telnetlib as telnetlib
 
 LOGGER_NAME = os.path.splitext(__name__)[0]
-SCRIPT_DIR = os.path.dirname(__file__)
+SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 PUBLIC_SSH_KEY = None
 USERNAME = None
 PASSWORD = None
@@ -214,9 +214,16 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path):
 
     lab_settings_rel_path = LAB_SETTINGS_DIR + "/{}.ini".format(
                             lab_cfg_location)
-    if os.path.isfile(lab_settings_rel_path):
+    lab_settings_filepath = SCRIPT_DIR + "/" + lab_settings_rel_path
+    # MARIA ADD START
+    if not os.path.isfile(lab_settings_filepath):
+        log.error('Lab settings filepath was not found.')
+    # MARIA ADD END
+    # MARIA COMMENT START
+    #if os.path.isfile(lab_settings_rel_path):
         # Path is relative to current directory
-        lab_settings_filepath = SCRIPT_DIR + "/" + lab_settings_rel_path
+    #    lab_settings_filepath = SCRIPT_DIR + "/" + lab_settings_rel_path
+    # MARIA COMMENT END
 
     return lab_cfg_path, lab_settings_filepath
 
@@ -594,19 +601,18 @@ if __name__ == '__main__':
     if not executed:
         vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
-        #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of
-        #      the nodes as the system was left not in an installed state
-        #TODO: In this case still need to set the telnet session for controller0
-        #      so consider keeping this outside of the wipe_disk method
-        cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, int(controller0.telnet_port), negotiate=controller0.telnet_negotiate, vt100query=controller0.telnet_vt100query, log_path=output_dir + "/" + CONTROLLER0 + ".telnet.log", debug=False)
-        cont0_telnet_conn.login()
-        controller0.telnet_conn = cont0_telnet_conn
+        #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of the nodes as the system was left not in an installed state
+        #TODO: IN THIS CASE STILL NEED TO SET TELNET FOR CONTROLLER0 SO PERHAPS LEAVE THIS OUTSIDE OF WIPEDISK METHOD?
+        #cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, int(controller0.telnet_port), negotiate=controller0.telnet_negotiate, vt100query=controller0.telnet_vt100query, log_path=output_dir + "/" + CONTROLLER0 + ".telnet.log", debug=False)
+        #cont0_telnet_conn.login()
+        #controller0.telnet_conn = cont0_telnet_conn
 
-        for node in nodes:
-            node_thread = threading.Thread(target=wipe_disk,name=node.name,args=(node,))
-            threads.append(node_thread)
-            log.info("Starting thread for {}".format(node_thread.name))
-            node_thread.start()
+        # MARIA COMMENTING OUT SECTION
+        #for node in nodes:
+        #    node_thread = threading.Thread(target=wipe_disk,name=node.name,args=(node,))
+        #    threads.append(node_thread)
+        #    log.info("Starting thread for {}".format(node_thread.name))
+        #    node_thread.start()
 
         for thread in threads:
             thread.join()

@@ -122,21 +122,32 @@ def get_ssh_key():
     return ssh_key
 
 def vlm_reserve(barcodes, note=None):
+    total_barcodes = []
+    # number of targets we can reserve in VLM at once
+    n = 5
     if isinstance(barcodes, str):
         barcodes = [barcodes]
+    chunks = [barcodes[i:i+n] for i in range(0,len(barcodes), n)]
     action = VLM_RESERVE
-    cmd = [VLM, action, "-t"]
-    [cmd.append(barcode) for barcode in barcodes]
-    reserve_note_params = []
-    if note is not None:
-        reserve_note_params = ["-n", note]
-    cmd += reserve_note_params
-    reserved_barcodes = exec_cmd(cmd)[1]
-    if not reserved_barcodes or "Error" in reserved_barcodes:
-        log.error("Failed to reserve target(s): " + str(barcodes))
-        sys.exit(1)
-    if any(barcode not in reserved_barcodes for barcode in barcodes):
-        msg = "Only reserved {} of {}".format(reserved_barcodes, barcodes)
+    for chunk in chunks:
+        print(chunk)
+        cmd = [VLM, action, "-t"]
+        # convert chunk to strings
+        [cmd.append(barcode) for barcode in chunk]
+        reserve_note_params = []
+        if note is not None:
+            #reserve_note_params = ["-n", note]
+            reserve_note_params = ["-n", '"{}"'.format(note)]
+            cmd += reserve_note_params
+            print("This is cmd: %s" % cmd)
+            #reserved_barcodes = exec_cmd(cmd)
+            reserved_barcodes = exec_cmd(cmd)[1]
+            if not reserved_barcodes or "Error" in reserved_barcodes:
+                log.error("Failed to reserve target(s): " + str(chunk))
+                sys.exit(1)
+        total_barcodes.extend(reserved_barcodes.split())
+    if any(barcode not in total_barcodes for barcode in barcodes):
+        msg = "Only reserved {} of {}".format(total_barcodes, barcodes)
         msg += ". Remaining barcode(s) are already reserved"
         log.error(msg)
         sys.exit(1)
