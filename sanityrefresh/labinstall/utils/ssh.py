@@ -110,11 +110,16 @@ class SSHClient(pxssh.pxssh):
                 log.exception('Timeout occurred: Failed to find "{}" in output:'
                               "\n{}".format(expect_pattern, self.before))
                 sys.exit(1)
-            else:
-                output = self.match.group().strip()
-                log.info("Match: " + output)
-                self.find_prompt(timeout)
-                return output
+
+            output = self.match.group().strip()
+            log.info("Match: " + output)
+            self.find_prompt(timeout)
+            return output
+#            else:
+#                output = self.match.group().strip()
+#                log.info("Match: " + output)
+#                self.find_prompt(timeout)
+#                return output
         else:
             self.find_prompt(timeout)
             output = self.get_after()
@@ -128,14 +133,17 @@ class SSHClient(pxssh.pxssh):
         rc = self.exec_cmd(RETURN_CODE_CMD, expect_pattern=RETURN_CODE_REGEX)
         return remove_markers(rc)
 
-    def rsync(self, source, dest_user, dest_server, dest, extra_opts=None):
+    def rsync(self, source, dest_user, dest_server, dest, extra_opts=None, pre_opts=None):
         if extra_opts:
             extra_opts_str = " ".join(extra_opts) + " "
         else:
             extra_opts_str = ""
 
+        if not pre_opts:
+            pre_opts = ""
+
         ssh_opts = '"ssh {}" '.format(" ".join(RSYNC_SSH_OPTIONS))
-        cmd = "rsync -ave {} {} {} ".format(ssh_opts, extra_opts_str, source)
+        cmd = "{} rsync -ave {} {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
         if self.exec_cmd(cmd, RSYNC_TIMEOUT, show_output=False)[0] != 0:
             log.error("Rsync failed")

@@ -13,6 +13,7 @@ of an applicable Wind River license agreement.
 '''
 modification history:
 ---------------------
+22feb16,mzy  Add sshpass support
 18feb16,amf  Adding doc strings to each function
 02dec15,kav  initial version
 '''
@@ -215,15 +216,8 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path):
     lab_settings_rel_path = LAB_SETTINGS_DIR + "/{}.ini".format(
                             lab_cfg_location)
     lab_settings_filepath = SCRIPT_DIR + "/" + lab_settings_rel_path
-    # MARIA ADD START
     if not os.path.isfile(lab_settings_filepath):
         log.error('Lab settings filepath was not found.')
-    # MARIA ADD END
-    # MARIA COMMENT START
-    #if os.path.isfile(lab_settings_rel_path):
-        # Path is relative to current directory
-    #    lab_settings_filepath = SCRIPT_DIR + "/" + lab_settings_rel_path
-    # MARIA COMMENT END
 
     return lab_cfg_path, lab_settings_filepath
 
@@ -662,11 +656,12 @@ if __name__ == '__main__':
 
     executed = False
     if not executed:
-        bld_server_conn.rsync(LICENSE_FILEPATH, WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR + "/license.lic")
-        bld_server_conn.rsync(lab_cfg_path + "/*", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR)
-        bld_server_conn.rsync(load_path + "/" + LAB_SCRIPTS_REL_PATH + "/*", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR)
+        pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
+        bld_server_conn.rsync(LICENSE_FILEPATH, WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR + "/license.lic", pre_opts=pre_opts)
+        bld_server_conn.rsync(lab_cfg_path + "/*", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR, pre_opts=pre_opts)
+        bld_server_conn.rsync(load_path + "/" + LAB_SCRIPTS_REL_PATH + "/*", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_HOME_DIR, pre_opts=pre_opts)
         # Extra forward slash at end is required to indicate it is a directory
-        bld_server_conn.rsync(guest_load_path + "/cgcs-guest.img", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_IMAGES_DIR + "/")
+        bld_server_conn.rsync(guest_load_path + "/cgcs-guest.img", WRSROOT_USERNAME, controller0.host_ip, WRSROOT_IMAGES_DIR + "/", pre_opts=pre_opts)
 
         cmd = 'grep -q "TMOUT=" ' + WRSROOT_ETC_PROFILE
         cmd += " && echo " + WRSROOT_PASSWORD + " | sudo -S"
@@ -689,7 +684,7 @@ if __name__ == '__main__':
     executed = False
     if not executed:
         cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
-        cmd += " config_controller --config-file " + SYSTEM_CONFIG_FILENAME
+        cmd += " config_controller --answer-file " + SYSTEM_CFG_FILENAME
         rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
         if rc != 0 or find_error_msg(output, "Configuration failed"):
             log.error("config_controller failed")
