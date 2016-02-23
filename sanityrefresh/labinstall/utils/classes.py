@@ -14,6 +14,8 @@ from pprint import pprint
 from .log import print_name_value
 import copy
 
+#TODO: Can rename this file to something more descriptive than classes.py
+
 class Host(object):
     """Host representation.
 
