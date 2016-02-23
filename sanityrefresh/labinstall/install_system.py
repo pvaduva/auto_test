@@ -701,16 +701,11 @@ if __name__ == '__main__':
     executed = False
     if not executed:
         cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
-        cmd += " config_controller --answer-file " + SYSTEM_CFG_FILENAME
+        cmd += " config_controller --config-file " + SYSTEM_CFG_FILENAME
         rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
         if rc != 0 or find_error_msg(output, "Configuration failed"):
             log.error("config_controller failed")
             sys.exit(1)
-            
-    cmd = "system host-if-list {} -a".format(controller0.name)
-    if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-        log.error("Failed to get list of interfaces for node: " + controller0.name)
-        sys.exit(1)
 
     #TODO: Implement separate workflow for storage nodes
     # Run lab_setup.sh twice
