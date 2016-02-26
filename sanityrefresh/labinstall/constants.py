@@ -65,7 +65,7 @@ DEFAULT_BOOT_DEVICE_DICT = {'controller-0': '[ABC]00',
                         'compute': '[ABC]01',
                         'storage': '[ABC]01'}
 BIOS_TYPES = [b"American Megatrends", b"Hewlett-Packard", b"Phoenix"]
-BIOS_TYPE_FN_KEY_ESC_CODES = ['\x1b' + '[17~', '\x1b' + '@', '\x1b' + '^[24~'] # F6, ESC + @, F12 Phoenix used for R720 nodes (i.e. Dell)
+BIOS_TYPE_FN_KEY_ESC_CODES = ['\x1b' + '[17~', '\x1b' + '@', '\x1b' + '[24~'] # F6, ESC + @, F12 Phoenix used for R720 nodes (i.e. Dell)
 INSTALL_TIMEOUTS = [1000, 2100, 2100]
 SERIAL_KICKSTART_CONTROLLER_INSTALL = "Serial Kickstart Controller Install"
 MAX_BOOT_MENU_LINES = 10
@@ -106,11 +106,11 @@ WRSROOT_DEFAULT_PASSWORD = WRSROOT_USERNAME
 WRSROOT_PASSWORD = "li69nux"
 
 #Telnet expect
-TELNET_EXPECT_TIMEOUT = 300
-MAX_SEARCH_ATTEMPTS = 10
+TELNET_EXPECT_TIMEOUT = 3600
+MAX_SEARCH_ATTEMPTS = 20
 
 # SSH expect
-SSH_EXPECT_TIMEOUT = 300
+SSH_EXPECT_TIMEOUT = 3600
 SSH_EXPECT_ECHO = False
 
 # ssh

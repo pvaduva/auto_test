@@ -1,14 +1,19 @@
 #!/usr/bin/env python3.4
 
-"""
+'''
 ssh.py - SSH utilities that use pxssh and pexpect.
 
-Copyright (c) 2015 Wind River Systems, Inc.
+Copyright (c) 2015-2016 Wind River Systems, Inc.
 
 The right to copy, distribute, modify, or otherwise make use
 of this software may be licensed only pursuant to the terms
 of an applicable Wind River license agreement.
-"""
+
+modification history:
+---------------------
+26feb16,amf  Add a disconnect function to cleanup connections
+02dec15,kav  initial version
+'''
 
 import pdb
 from constants import *
@@ -69,6 +74,10 @@ class SSHClient(pxssh.pxssh):
             log.error("Failed to login to SSH session: {}@{}".format(username, hostname))
             self.close()
             sys.exit(1)
+
+    def disconnect(self):
+        self.logout()
+        self.close()
 
     def find_prompt(self, timeout=SSH_EXPECT_TIMEOUT):
         matched = self.prompt(timeout)

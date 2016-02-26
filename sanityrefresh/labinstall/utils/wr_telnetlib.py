@@ -1041,8 +1041,23 @@ class Telnet:
                     self.get_read_until("Kickstart Boot Menu", 600)
                     log.info("Enter third option for Controller+Compute Install")
                     self.write_line("3")
-#                else:
-                    #TODO: Put in to configure personality if small_footprint and not controller-0
+                else:
+                    # Wait for the prompt for F12
+                    bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[2]
+                    self.get_read_until("F12", 100)
+                    self.write_line(bios_key)
+                    log.info("Entered BIOS key: %s" % bios_key)
+
+                    # Wait for the PXE selection menu
+                    self.get_read_until("NIC 2 BRCM MBA", 600)
+                    self.write_line("\r")
+                    self.write_line("\r")
+                    log.info("Integrated NIC 2 BRCM MBA Slot found")
+
+                    # wait for the prompt to set the personality
+                    self.get_read_until("Please configure the personality", 600)
+                    log.info("Personality request found")
+                    return True
             else:
                 log.error("Installation not supported yet for {} BIOS".format(bios_type.decode('utf-8','ignore')))
                 sys.exit(1)
