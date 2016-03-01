@@ -23,6 +23,7 @@ CUSTOM_LAB_SETTINGS_FILENAME = "settings.ini"
 # TODO: Specifying full path to latest license instead of symlink as there
 #       was a problem rsyncing the symlink "TiS15-GA-eval.lic". Fix this
 LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-demo-jun2016.lic"
+SFP_LICENSE_FILEPATH = "/folk/cgts/lab/wrslicense-CPE-16.lic"
 WRSROOT_ETC_PROFILE = "/etc/profile"
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards"
 RPM_INSTALL_REL_PATH = "export/RPM_INSTALL"
@@ -127,7 +128,7 @@ CREATE_PUBLIC_SSH_KEY_CMD = "ssh-keygen -f {} -t rsa -N ''"
 
 # Command timeouts
 COLLECT_TIMEOUT=300
-RSYNC_TIMEOUT = 300
+RSYNC_TIMEOUT = 3600
 REBOOT_TIMEOUT = 1800
 BIOS_TYPE_TIMEOUT = 420
 CONFIG_CONTROLLER_TIMEOUT = 1200
