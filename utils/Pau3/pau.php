@@ -363,6 +363,7 @@ function randomize_fname($name) {
         echo "</td><td>";
         echo "<select name=\"release_name\">";
         echo "<option value=\"Titanium Server 15.12\">Titanium Server 15.12</option>";
+        echo "<option value=\"Titanium Server R3\">Titanium Server R3</option>";
         echo "</select>";
         echo "</td></tr><tr><td>";
         ?>
