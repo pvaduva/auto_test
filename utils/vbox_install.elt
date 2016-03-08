@@ -121,6 +121,7 @@ Install VirtualBox on Linux or Windows Host
 .		Vbox Snapshots are not supported - must wipedisk prior to running script when using snapshots
 .		Data Consolidation is not supported 
 
+Version 1.0 by Craig miller
 Version 2.0 by senthilkumar
 ;;;
 
