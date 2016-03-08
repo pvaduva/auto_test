@@ -330,6 +330,7 @@ class Telnet:
             buffer = buffer.replace(IAC, IAC+IAC)
         self.msg("send %r", buffer)
         self.sock.sendall(buffer)
+        return buffer
 
     def read_until(self, match, timeout=None):
         """Read until a given string is encountered or until timeout.
@@ -893,10 +894,11 @@ class Telnet:
         if "wildcat" in node.host_name:
             index = 0
             bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[index]
+            bios_key_hr = BIOS_TYPE_FN_HUMAN_READ[index]
             install_timeout = INSTALL_TIMEOUTS[index]
             bios_type = BIOS_TYPES[index]
             log.info("BIOS type: " + bios_type.decode('utf-8','ignore'))
-            log.info("Use BIOS key: " + bios_key)
+            log.info("Use BIOS key: " + bios_key_hr)
             log.info("Installation timeout: " + str(install_timeout))
 
             self.get_read_until("boot menu", 360)
@@ -961,10 +963,11 @@ class Telnet:
             sys.exit(1)
         if 0 <= index <= len(BIOS_TYPES)-1:
             bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[index]
+            bios_key_hr = BIOS_TYPE_FN_HUMAN_READ[index]
             install_timeout = INSTALL_TIMEOUTS[index]
             bios_type = match.group(0)
-            log.info("Matched: " + bios_type.decode('utf-8','ignore'))
-            log.info("Use BIOS key: " + bios_key)
+            log.info("BIOS type: " + bios_type.decode('utf-8','ignore'))
+            log.info("Use BIOS key: " + bios_key_hr)
             log.info("Installation timeout: " + str(install_timeout))
         else:
             log.error("Timeout occurred: Failed to find BIOS type {} while booting {}".format(str(BIOS_TYPES), node.name))
@@ -979,7 +982,7 @@ class Telnet:
             log.info("Boot device is: " + str(boot_device_regex))
 
             self.get_read_until("Boot Menu", 100)
-            log.info("Enter BIOS key")
+            log.info("Pressing BIOS key " + bios_key_hr)
             self.write(str.encode(bios_key))
 
             self.get_read_until("Please select boot device", 200)
@@ -988,7 +991,9 @@ class Telnet:
             down_press_count = 0
             while count < MAX_SEARCH_ATTEMPTS:
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
-                regex = re.compile(b"\\x1b\[1;37;44m.*\|\s(.*)\s+\|")
+                #regex = re.compile(b"\\x1b\[1;37;44m.*\|\s(.*)\s+\**\|")
+                regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s*(.*)\s+\S*\|")
+                #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
                 try:
                     index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
                 except EOFError:
@@ -999,23 +1004,27 @@ class Telnet:
                     log.info("Matched: " + match)
                     if re.search(boot_device_regex, match):
                         log.info("Found boot device {}".format(boot_device_regex))
+                        time.sleep(1)
+                        log.info("Pressing ENTER key")
+                        self.write(str.encode("\r\r"))
                         break
                     else:
-                        log.info("Move the cursor down in the menu")
+                        time.sleep(1)
                         self.write(str.encode(DOWN))
                         down_press_count += 1
+                        log.info("DOWN key count: " + str(down_press_count))
                 count += 1
             if count == MAX_SEARCH_ATTEMPTS:
                 log.error("Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex))
                 sys.exit(1)
 
-            log.info("Waiting for ENTER to select boot device")
-            self.get_read_until("ESC to boot using defaults")
+#            log.info("Waiting for ENTER to select boot device")
+#            self.get_read_until("ESC to boot using defaults")
             # Sleep is required before pressing enter
-            time.sleep(5)
-            #for i in range(0, down_press_count):
-            #    self.write(str.encode(DOWN))
-            self.write(str.encode("\r\r"))
+#            time.sleep(5)
+#            for i in range(0, down_press_count):
+#                self.write(str.encode(DOWN))
+#            self.write(str.encode("\r\r"))
             if node.name == CONTROLLER0:
                 #TODO: Check time on this
                 self.get_read_until("Kickstart Boot Menu", 60)

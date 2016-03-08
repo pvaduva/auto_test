@@ -662,6 +662,10 @@ if __name__ == '__main__':
                                               ".telnet.log", debug=False)
         cont0_telnet_conn.login()
         controller0.telnet_conn = cont0_telnet_conn
+        #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of
+        #      the nodes as the system was left not in an installed state
+        #TODO: In this case still need to set the telnet session for controller0
+        #      so consider keeping this outside of the wipe_disk method
 
         # Run the wipedisk utility if the nodes are accessible
         for node in nodes:
@@ -773,18 +777,6 @@ if __name__ == '__main__':
             log.error("config_controller failed")
             sys.exit(1)
 
-    #TODO: Implement separate workflow for storage nodes
-    # Run lab_setup.sh twice
-
-    # If you have storage:
-    #   Unlock controller-1 and wait for it to be unlocked and enabled
-    #   Unlock storage nodes and wait for them to become enabled
-    #   Run lab_setup.sh 3rd time
-
-    # Unlock computes in parallel
-
-    # Run lab_setup.sh 4th time   
-   
     cmd = "source /etc/nova/openrc"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
@@ -845,17 +837,130 @@ if __name__ == '__main__':
         for thread in threads:
             thread.join()
 
-        if not small_footprint:
-            for node in nodes:
-                cmd = "source /etc/nova/openrc; system host-if-list {} -a".format(node.name)
+        # Not sure why we need to do this for any lab - commenting out for now
+        #if not small_footprint:
+        #    for node in nodes:
+        #        cmd = "source /etc/nova/openrc; system host-if-list {} -a".format(node.name)
+        #        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+        #            log.error("Failed to get list of interfaces for node: " + node.name)
+        #            sys.exit(1)
+
+    # Create seperate process for storage lab installs
+    # Check if we can make this work for regular lab
+    executed = False
+    if not executed and storage_nodes is not None:
+        log.info("Beginning lab setup procedure for storage lab")
+
+        # Remove controller-0 from the nodes list since it's up
+        nodes.remove(controller0)
+
+        # WE RUN LAB_SETUP REPEATEDLY - MOVE TO FUNC
+        # Run lab setup
+        lab_setup_cmd = WRSROOT_HOME_DIR + "/" + LAB_SETUP_SCRIPT
+        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+            log.error("Failed during lab setup")
+            sys.exit(1)
+
+        # Wait for storage nodes to come online before running lab_setup again
+        for node in nodes:
+            if node.name.startswith("storage"):
+                wait_state(node, AVAILABILITY, ONLINE)
+
+        # Run lab_setup
+        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+            log.error("Failed during lab setup")
+            sys.exit(1)
+
+        # Wait for controller-1 to be online before unlocking the host and
+        # running lab_setup again
+        for node in nodes:
+            if node.name == "controller-1":
+                wait_state(node, AVAILABILITY, ONLINE)
+                cmd = "source /etc/nova/openrc; system host-unlock " + node.name
                 if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-                    log.error("Failed to get list of interfaces for node: " + node.name)
+                    log.error("Failed to unlock: " + node.name)
                     sys.exit(1)
+
+                wait_state(node, OPERATIONAL, ENABLED)
+                if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+                    log.error("Failed during lab setup")
+                    sys.exit(1)
+                nodes.remove(node)
+
+                break
+
+        # Run lab_setup
+        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+            log.error("Failed during lab setup")
+            sys.exit(1)
+
+        # Unlock storage nodes
+        for node in nodes:
+            if node.name.startswith("storage"):
+                cmd = "source /etc/nova/openrc; system host-unlock " + node.name
+                if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+                    log.error("Failed to unlock: " + node.name)
+                    sys.exit(1)
+
+        # Wait for storage nodes to be enabled and computes to be online before
+        # running lab_setup again
+        for node in nodes:
+            if node.name.startswith("storage"):
+                wait_state(node, OPERATIONAL, ENABLED)
+            else:
+                wait_state(node, AVAILABILITY, ONLINE)
+
+        # Run lab_setup
+        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+            log.error("Failed during lab setup")
+            sys.exit(1)
+
+        # Unlock computes
+        for node in nodes:
+            if node.name.startswith("compute"):
+                cmd = "source /etc/nova/openrc; system host-unlock " + node.name
+                if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+                    log.error("Failed to unlock: " + node.name)
+                    sys.exit(1)
+
+        # Wait for computes to become enabled before we run lab_setup again
+        wait_state(nodes, OPERATIONAL, ENABLED)
+
+        # Run lab_setup again
+        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+            log.error("Failed during lab setup")
+            sys.exit(1)
+
+        # Check that the computes and storage nodes are available
+        wait_state(nodes, AVAILABILITY, AVAILABLE)
+
+        # COMMON CODE TO MOVE OUT START
+        # Get alarms
+        cmd = "source /etc/nova/openrc; system alarm-list"
+        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+            log.error("Failed to get alarm list")
+            sys.exit(1)
+
+        # Get build info
+        cmd = "cat /etc/build.info"
+        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+            log.error("Failed to get build info")
+            sys.exit(1)
+
+        # Unreserve targets
+        for barcode in barcodes:
+            vlm_exec_cmd(VLM_UNRESERVE, barcode)
+
+        # If we made it this far, we probably had a successful install
+        log.info("Terminating storage system install")
+        sys.exit(0)
+        # COMMON CODE TO MOVE OUT END
 
     # Verify the nodes are up and running
     executed = False
     if not executed:
         #TODO: Put this in a loop
+        log.info("Waiting for controller0 come online")
         wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
         wait_state(controller0, OPERATIONAL, ENABLED)
         wait_state(controller0, AVAILABILITY, AVAILABLE)
