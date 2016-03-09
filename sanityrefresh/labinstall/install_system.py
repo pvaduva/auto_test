@@ -13,6 +13,7 @@ of an applicable Wind River license agreement.
 '''
 modification history:
 ---------------------
+08mar16,mzy  Inserting steps for storage lab installation
 25feb16,amf  Inserting steps for small footprint installations
 22feb16,mzy  Add sshpass support
 18feb16,amf  Adding doc strings to each function
@@ -854,6 +855,10 @@ if __name__ == '__main__':
         # Remove controller-0 from the nodes list since it's up
         nodes.remove(controller0)
 
+        # Wait for all nodes to be online to allow lab_setup to set
+        # interfaces properly
+        wait_state(nodes, AVAILABILITY, ONLINE)
+
         # WE RUN LAB_SETUP REPEATEDLY - MOVE TO FUNC
         # Run lab setup
         lab_setup_cmd = WRSROOT_HOME_DIR + "/" + LAB_SETUP_SCRIPT
@@ -861,21 +866,14 @@ if __name__ == '__main__':
             log.error("Failed during lab setup")
             sys.exit(1)
 
-        # Wait for storage nodes to come online before running lab_setup again
-        for node in nodes:
-            if node.name.startswith("storage"):
-                wait_state(node, AVAILABILITY, ONLINE)
-
-        # Run lab_setup
+        # Storage nodes are online so run lab_setup again
         if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
             log.error("Failed during lab setup")
             sys.exit(1)
 
-        # Wait for controller-1 to be online before unlocking the host and
-        # running lab_setup again
+        # Unlock controller-1 and then run lab_setup
         for node in nodes:
             if node.name == "controller-1":
-                wait_state(node, AVAILABILITY, ONLINE)
                 cmd = "source /etc/nova/openrc; system host-unlock " + node.name
                 if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
                     log.error("Failed to unlock: " + node.name)
@@ -888,11 +886,6 @@ if __name__ == '__main__':
                 nodes.remove(node)
 
                 break
-
-        # Run lab_setup
-        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
-            log.error("Failed during lab setup")
-            sys.exit(1)
 
         # Unlock storage nodes
         for node in nodes:
