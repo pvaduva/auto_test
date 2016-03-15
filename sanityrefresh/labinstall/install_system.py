@@ -124,7 +124,7 @@ def parse_args():
                          "\n(default: %(default)s)")
     bld_grp.add_argument('--tis-blds-dir', metavar='DIR',
                          dest='tis_blds_dir',
-                         default="CGCS_2.0_Unified_Daily_Build",
+                         default="CGCS_3.0_Unified_Daily_Build",
                          help='Directory under "--bld-server-wkspce"'
                          " containing directories for Titanium Server loads"
                          "\n(default: %(default)s)")
@@ -135,7 +135,7 @@ def parse_args():
                          " \n(default: %(default)s)")
     bld_grp.add_argument('--guest-bld-dir', metavar='DIR',
                          dest='guest_bld_dir',
-                         default="CGCS_2.0_Guest_Daily_Build",
+                         default="CGCS_3.0_Guest_Daily_Build",
                          help='Directory under "--bld-server-wkspce"'
                          " containing directories for guest images"
                          "\n(default: %(default)s)")
