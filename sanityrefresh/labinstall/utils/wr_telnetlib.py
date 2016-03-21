@@ -1068,9 +1068,56 @@ class Telnet:
                     log.info("Personality request found")
                     return True
             else:
-                log.error("Installation not supported yet for {} BIOS".format(bios_type.decode('utf-8','ignore')))
-                sys.exit(1)
+                boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
+                if boot_device_regex is None:
+                    log.error("Failed to determine boot device for: " + node.name)
+                    sys.exit(1)
+                log.info("Boot device is: " + str(boot_device_regex))
+                # Read until we are prompted for the boot type
+                self.get_read_until("PXE")
+                log.info("Pressing BIOS key " + bios_key_hr)
+                self.write(str.encode(bios_key))
+                # Wait until we see the boot device menu
+                self.get_read_until("From")
+                count = 0
+                down_press_count = 0
+                while count < MAX_SEARCH_ATTEMPTS:
+                    log.info("Searching boot device menu for {}...".format(boot_device_regex))
+                    # e.g. Integrated NIC 2 BRCM MBA Slot 0101 v16.2.1
+                    #regex = re.compile(b"\x1B\(B(.*)\x1B")
+                    regex = re.compile(b"\x1B\(B(.*)\x1B\(0x")
+                    try:
+                        index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
+                    except EOFError:
+                        log.exception("Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port))
+                        sys.exit(1)
 
+                    if index == 0:
+                        match = match.group(1).decode('utf-8','ignore')
+                        log.info("Matched: " + match)
+                        if re.search(boot_device_regex, match):
+                            log.info("Found boot device {}".format(boot_device_regex))
+                            time.sleep(1)
+                            log.info("Pressing ENTER key")
+                            self.write(str.encode("\r\r"))
+                            break
+                        else:
+                            time.sleep(1)
+                            self.write(str.encode(DOWN))
+                            down_press_count += 1
+                            log.info("DOWN key count: " + str(down_press_count))
+                    count += 1
+                if count == MAX_SEARCH_ATTEMPTS:
+                    log.error("Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex))
+                    sys.exit(1)
+            
+                if node.name == CONTROLLER0:
+                    #TODO: Check time on this
+                    self.get_read_until("Kickstart Boot Menu", 300)
+                    log.info("Enter second option for Controller Install")
+                    self.write_line("2")
+
+        # Not fool-proof.  FIX
         self.get_read_until(LOGIN_PROMPT, install_timeout)
         log.info("Found login prompt. {} installation has completed".format(node.name))
 

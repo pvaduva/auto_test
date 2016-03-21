@@ -319,37 +319,39 @@ def wipe_disk(node):
         it. 
     '''
 
-    if node.telnet_conn is None:
-        node.telnet_conn = telnetlib.connect(node.telnet_ip, \
-                                             int(node.telnet_port), \
-                                             negotiate=node.telnet_negotiate,\
-                                             vt100query=node.telnet_vt100query,\
-                                             log_path=output_dir + "/"\
-                                             + node.name + ".telnet.log", \
-                                             debug=False)
+    # Only works for small footprint
+    if small_footprint: 
+        if node.telnet_conn is None:
+            node.telnet_conn = telnetlib.connect(node.telnet_ip, \
+                                                int(node.telnet_port), \
+                                                negotiate=node.telnet_negotiate,\
+                                                vt100query=node.telnet_vt100query,\
+                                                log_path=output_dir + "/"\
+                                                + node.name + ".telnet.log", \
+                                                debug=False)
 
-        # Check that the node is accessible for wipedisk to run.
-        # If we cannot successfully ping the interface of the node, then it is
-        # expected that the login will fail. This may be due to the node not 
-        # being left in an installed state.
-        cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, node.host_ip)
-        if (node.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT +
-                                     TIMEOUT_BUFFER)[0] != 0):
-            log.info("Node not responding. Skipping wipedisk process")
-            return
-        else:
-            node.telnet_conn.login()
+            # Check that the node is accessible for wipedisk to run.
+            # If we cannot successfully ping the interface of the node, then it is
+            # expected that the login will fail. This may be due to the node not 
+            # being left in an installed state.
+            cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, node.host_ip)
+            if (node.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT +
+                                        TIMEOUT_BUFFER)[0] != 0):
+                log.info("Node not responding. Skipping wipedisk process")
+                return
+            else:
+                node.telnet_conn.login()
 
-    node.telnet_conn.write_line("sudo -k wipedisk")
-    node.telnet_conn.get_read_until(PASSWORD_PROMPT)
-    node.telnet_conn.write_line(WRSROOT_PASSWORD)
-    node.telnet_conn.get_read_until("[y/n]")
-    node.telnet_conn.write_line("y")
-    node.telnet_conn.get_read_until("confirm")
-    node.telnet_conn.write_line("wipediskscompletely")
-    node.telnet_conn.get_read_until("The disk(s) have been wiped.", WIPE_DISK_TIMEOUT)
+        node.telnet_conn.write_line("sudo -k wipedisk")
+        node.telnet_conn.get_read_until(PASSWORD_PROMPT)
+        node.telnet_conn.write_line(WRSROOT_PASSWORD)
+        node.telnet_conn.get_read_until("[y/n]")
+        node.telnet_conn.write_line("y")
+        node.telnet_conn.get_read_until("confirm")
+        node.telnet_conn.write_line("wipediskscompletely")
+        node.telnet_conn.get_read_until("The disk(s) have been wiped.", WIPE_DISK_TIMEOUT)
 
-    log.info("Disk(s) have been wiped on: " + node.name)
+        log.info("Disk(s) have been wiped on: " + node.name)
 
 def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
     ''' Function to wait for the lab to enter a specified state.  
@@ -661,7 +663,7 @@ if __name__ == '__main__':
                                               vt100query=controller0.telnet_vt100query,\
                                               log_path=output_dir + "/" + CONTROLLER0 +\
                                               ".telnet.log", debug=False)
-        cont0_telnet_conn.login()
+        #cont0_telnet_conn.login()
         controller0.telnet_conn = cont0_telnet_conn
         #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of
         #      the nodes as the system was left not in an installed state
@@ -771,12 +773,34 @@ if __name__ == '__main__':
     # Configure the controller as required
     executed = False
     if not executed:
-        cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
-        cmd += " config_controller --config-file " + SYSTEM_CFG_FILENAME
-        rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
-        if rc != 0 or find_error_msg(output, "Configuration failed"):
-            log.error("config_controller failed")
+        # No consistency in naming of config file naming
+        cfg_found = False
+        for cfgfile in CFGFILE_LIST: 
+            cfgpath = WRSROOT_HOME_DIR + "/" + cfgfile
+            cmd = "test -f " + cfgpath
+            if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
+                cfg_found = True
+                #cmd = "source /etc/nova/openrc"
+                #if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
+                #    log.error("Failed to source environment")
+                cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
+                cmd += " config_controller --config-file " + cfgfile
+                rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+                if rc != 0 or find_error_msg(output, "Configuration failed"):
+                    log.error("config_controller failed")
+                    sys.exit(1)
+                break
+
+        if not cfg_found:
+            log.error("Configuration failed: No configuration files found")
             sys.exit(1)
+
+        #cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
+        #cmd += " config_controller --config-file " + SYSTEM_CFG_FILENAME
+        #rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+        #if rc != 0 or find_error_msg(output, "Configuration failed"):
+        #    log.error("config_controller failed")
+        #    sys.exit(1)
 
     cmd = "source /etc/nova/openrc"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
