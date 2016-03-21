@@ -1428,69 +1428,69 @@ $node_computes=$node_list
 	]
 	>system host-list
 	
-
-	@60
-	$i=0
-	$controller_node=controller-1
-	>system host-list
-	<$controller_node
-	+$administrative=(locked|unlocked)
-	?if $administrative == locked ? [
-		$state=none
-		>system host-list
-		<$controller_node
-		+$state=(available|online|offline|failed|intest)
-		[ $state != online
-			$state=none
-			[ $state != online
-				; === wait for $controller_node to come online
-				>system host-list
-				<$controller_node
-				+$state=(available|online|offline|failed|intest)
-
-				!sleep 5
-				+$i
-				?if $i > $max? [
-					;red $controller_node did not become online
-					# break out of while loop
-					$state=online
-					; Giving user the option to recover the lab
-					$i=0
-					*INTERACT
-				]
-			]
-		]
-
-	]
-
-	$state=none
-	>system host-list
-	<$controller_node
-	+$state=(available|online|offline|failed|intest)
-	?if $state == online		
+	?if $node_controllers == controller ? [
+		@60
+		$i=0
+		$controller_node=controller-1
 		>system host-list
 		<$controller_node
 		+$administrative=(locked|unlocked)
 		?if $administrative == locked ? [
- 		    >system host-if-modify -n oam0 -nt oam controller-1 $(system host-if-list -a controller-1 | awk '{if ($4 == "eth0") { print $2;}}')
-		    >system host-stor-add controller-1 cinder $(system host-disk-list controller-1 | awk '{if ($4 == "/dev/sdb") { print $2;}}')
-        	    ?if $configure_infrastructure_interface == Y ? [
-			    ?if $configure_infrastructure_VLAN == Y ? [
-				>system host-if-add -V $infrastructure_VLAN_ID -nt infra $controller_node $infra_name vlan $controller_infra_interface
-				!sleep 2
-				<created_at
-			    ]
-		            ?if $configure_infrastructure_VLAN == N ? [
-				>system host-if-modify -n $infra_name -nt infra  $controller_node $controller_infra_interface
-				!sleep 2
-				<created_at
-			    ]
-		    ]
-		    ; === Unlock  
-	            >system host-unlock $controller_node
-	  	]
-	]
+			$state=none
+			>system host-list
+			<$controller_node
+			+$state=(available|online|offline|failed|intest)
+			[ $state != online
+				$state=none
+				[ $state != online
+					; === wait for $controller_node to come online
+					>system host-list
+					<$controller_node
+					+$state=(available|online|offline|failed|intest)
+	
+					!sleep 5
+					+$i
+					?if $i > $max? [
+						;red $controller_node did not become online
+						# break out of while loop
+						$state=online
+						; Giving user the option to recover the lab
+						$i=0
+						*INTERACT
+					]
+				]
+			]
 
+		]
+
+		$state=none
+		>system host-list
+		<$controller_node
+		+$state=(available|online|offline|failed|intest)
+		?if $state == online		
+			>system host-list
+			<$controller_node
+			+$administrative=(locked|unlocked)
+			?if $administrative == locked ? [
+ 			    >system host-if-modify -n oam0 -nt oam controller-1 $(system host-if-list -a controller-1 | awk '{if ($4 == "eth0") { print $2;}}')
+			    >system host-stor-add controller-1 cinder $(system host-disk-list controller-1 | awk '{if ($4 == "/dev/sdb") { print $2;}}')
+        		    ?if $configure_infrastructure_interface == Y ? [
+				    ?if $configure_infrastructure_VLAN == Y ? [
+					>system host-if-add -V $infrastructure_VLAN_ID -nt infra $controller_node $infra_name vlan $controller_infra_interface
+					!sleep 2
+					<created_at
+				    ]
+			            ?if $configure_infrastructure_VLAN == N ? [
+					>system host-if-modify -n $infra_name -nt infra  $controller_node $controller_infra_interface
+					!sleep 2
+					<created_at
+				    ]
+			    ]
+			    ; === Unlock  
+		            >system host-unlock $controller_node
+		  	]
+		]
+	]
 
 	#----------- 2 of 3 Lab_setup
 	@300
