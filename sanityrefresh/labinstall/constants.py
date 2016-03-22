@@ -24,8 +24,9 @@ LAB_SETUP_CFG_FILENAME = "lab_setup.conf"
 CUSTOM_LAB_SETTINGS_FILENAME = "settings.ini"
 # TODO: Specifying full path to latest license instead of symlink as there
 #       was a problem rsyncing the symlink "TiS15-GA-eval.lic". Fix this
+LIC_FILENAME = "license.lic"
 LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-full-jun2016.lic"
-SFP_LICENSE_FILEPATH = "/folk/cgts/lab/wrslicense-CPE-16.lic"
+SFP_LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-CPE-full-jun2016.lic"
 WRSROOT_ETC_PROFILE = "/etc/profile"
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards"
 RPM_INSTALL_REL_PATH = "export/RPM_INSTALL"

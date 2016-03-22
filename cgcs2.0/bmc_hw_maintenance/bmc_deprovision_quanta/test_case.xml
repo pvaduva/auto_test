@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2015 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+Modification history
+====================
+oct2015 amf - created
+
+-->
+
+<test_module name="ceilometer_configuration" timeout="">
+    <test_case  name="ceilometer_configuration" >
+
+    #######################################################
+    # Objective:  Verify that ceilometer can be enabled on the system
+    #
+    #######################################################
+
+    # Perform the GUI De-provisioning on all hosts:
+    Board Management Controller Type
+    	No Board Management
+
+    # Get a list of enabled sensors
+    system host-sensor-list controller-0
+    system host-sensor-list controller-1
+    system host-sensor-list compute-0
+    system host-sensor-list compute-1
+
+    PASS
+
+    </test_case>
+</test_module>

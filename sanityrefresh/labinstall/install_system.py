@@ -319,6 +319,9 @@ def wipe_disk(node):
         it. 
     '''
 
+    # Until we have time to figure out how to have this fool-proof
+    return
+
     # Only works for small footprint
     if small_footprint: 
         if node.telnet_conn is None:
@@ -750,7 +753,16 @@ if __name__ == '__main__':
                               pre_opts=pre_opts)
             bld_server_conn.rsync(controller0.host_config_filename, 
                               WRSROOT_USERNAME, controller0.host_ip, 
-                              os.path.join(WRSROOT_HOME_DIR, SYSTEM_CFG_FILENAME))
+                              os.path.join(WRSROOT_HOME_DIR, SYSTEM_CFG_FILENAME),
+                              pre_opts=pre_opts)
+            bld_server_conn.rsync(controller0.host_lab_filename,
+                              WRSROOT_USERNAME, controller0.host_ip,
+                              os.path.join(WRSROOT_HOME_DIR, "lab_setup.conf"),
+                              pre_opts=pre_opts)
+            bld_server_conn.rsync(controller0.host_hosts_filename,
+                              WRSROOT_USERNAME, controller0.host_ip,
+                              os.path.join(WRSROOT_HOME_DIR, BULK_CFG_FILENAME),
+                              pre_opts=pre_opts)
 
         cmd = 'grep -q "TMOUT=" ' + WRSROOT_ETC_PROFILE
         cmd += " && echo " + WRSROOT_PASSWORD + " | sudo -S"
@@ -780,12 +792,11 @@ if __name__ == '__main__':
             cmd = "test -f " + cfgpath
             if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
                 cfg_found = True
-                #cmd = "source /etc/nova/openrc"
-                #if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
-                #    log.error("Failed to source environment")
                 cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
                 cmd += " config_controller --config-file " + cfgfile
-                rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+                #rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+                # Switching to ssh due to CGTS-4051
+                rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
                 if rc != 0 or find_error_msg(output, "Configuration failed"):
                     log.error("config_controller failed")
                     sys.exit(1)
@@ -795,16 +806,14 @@ if __name__ == '__main__':
             log.error("Configuration failed: No configuration files found")
             sys.exit(1)
 
-        #cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
-        #cmd += " config_controller --config-file " + SYSTEM_CFG_FILENAME
-        #rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
-        #if rc != 0 or find_error_msg(output, "Configuration failed"):
-        #    log.error("config_controller failed")
-        #    sys.exit(1)
-
     cmd = "source /etc/nova/openrc"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
+
+    cmd = "system host-bulk-add " + BULK_CFG_FILENAME
+    if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+        log.error("Failed to bulk add hosts")
+        sys.exit(1)
 
     # Complete controller0 configuration either as a regular host 
     # or a small footprint host.
@@ -842,12 +851,12 @@ if __name__ == '__main__':
                                    password=WRSROOT_PASSWORD)
             controller0.ssh_conn = cont0_ssh_conn
 
-        else:
-            cmd = "system host-bulk-add " + BULK_CFG_FILENAME
+            # Run lab_setup again to setup controller-1 interfaces
+            cmd = './lab_setup.sh'
             if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-                log.error("Failed to bulk add hosts")
+                log.error("lab_setup failed in small footprint configuration")
                 sys.exit(1)
- 
+
     # Bring up other hosts
     executed = False
     if not executed:
@@ -861,14 +870,6 @@ if __name__ == '__main__':
 
         for thread in threads:
             thread.join()
-
-        # Not sure why we need to do this for any lab - commenting out for now
-        #if not small_footprint:
-        #    for node in nodes:
-        #        cmd = "source /etc/nova/openrc; system host-if-list {} -a".format(node.name)
-        #        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-        #            log.error("Failed to get list of interfaces for node: " + node.name)
-        #            sys.exit(1)
 
     # Create seperate process for storage lab installs
     # Check if we can make this work for regular lab
@@ -973,6 +974,7 @@ if __name__ == '__main__':
         sys.exit(0)
         # COMMON CODE TO MOVE OUT END
 
+
     # Verify the nodes are up and running
     executed = False
     if not executed:
@@ -982,29 +984,13 @@ if __name__ == '__main__':
         wait_state(controller0, OPERATIONAL, ENABLED)
         wait_state(controller0, AVAILABILITY, AVAILABLE)
 
-        if small_footprint:
-            if (wait_state(controller0, ADMINISTRATIVE, LOCKED, None, True) and \
-                wait_state(controller0, OPERATIONAL, DISABLED, None, True) and \
-                wait_state(controller0, AVAILABILITY, OFFLINE, None, True)):
-                    cmd = "source /etc/nova/openrc; \
-                           system host-update 3 personality=controller"
-                    if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
-                        log.error("Warning: Failed to bring up {}".\
-                                   format("node"))
-                        sys.exit(1)
-
-        log.info("Waiting for controller0 come online")
-        wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
-        wait_state(controller0, OPERATIONAL, ENABLED)
-        wait_state(controller0, AVAILABILITY, AVAILABLE)
-
         nodes.remove(controller0)
-        wait_state(nodes, ADMINISTRATIVE, LOCKED)
+
         wait_state(nodes, AVAILABILITY, ONLINE)
 
         if small_footprint:
             cmd = "source /etc/nova/openrc; ./lab_setup.sh"
-            if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
+            if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
                 log.error("Warning: Failed to bring up {}".\
                            format("node"))
 

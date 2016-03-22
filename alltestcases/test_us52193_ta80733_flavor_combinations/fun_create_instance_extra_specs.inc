@@ -19,9 +19,9 @@
 
 ; set the extra specs to flavor $FLVUUID
 ?if $ESPECTYPE == 0 ? [
-    >nova flavor-key $FLVUUID set dedicated:cpus=True guest:heartbeat=True processor:node=0 wrs:min_vcpus=1
+    >nova flavor-key $FLVUUID set hw:cpu_policy=dedicated sw:wrs:guest:heartbeat=True hw:numa_node.0=0 hw:wrs:min_vcpus=1
 ]::[
-    >nova flavor-key $FLVUUID set dedicated:cpus=True guest:heartbeat=True shared:vcpu=0 wrs:min_vcpus=1
+    >nova flavor-key $FLVUUID set hw:cpu_policy=dedicated sw:wrs:guest:heartbeat=True hw:wrs:shared_vcpu=0 hw:wrs:min_vcpus=1
 ]
 >nova flavor-show $FLVUUID
 

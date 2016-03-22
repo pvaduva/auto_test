@@ -1,0 +1,20 @@
+#!/usr/bin/expect
+
+set arg0 [lindex $argv 0]
+set arg1 [lindex $argv 1]
+
+proc usage {} {
+    puts stderr "Usage: " 
+    puts stderr " sendfile.exp file_to_transfer dest_ip"
+    exit 2
+}
+
+if {$arg0 == "" || $arg1 == ""} {
+    usage 
+}
+
+spawn rsync -avP  ./$arg0 wrsroot@$arg1:/home/wrsroot/
+set pass "li69nux"
+expect {
+   password: {send "$pass\r"; exp_continue}
+      }

@@ -37,12 +37,12 @@ Install VirtualBox on Linux or Windows Host
 
 .	Common options:
 .		pull_new_image=yes		(default no)
-.		topology=2only			(default 2x2)
+.		topology=2x1x1			(default 2x2)
 .		topology=1x1			(1 controller & 1 compute)
 .		rel2=no				(default yes)
-.		cnt_con=			(default M_O)   - CONTROLLER NETWORK CONSOIDATION
-.		cmp_con=			(default M_D)   - COMPUTE NETWORK CONSOLIDATION
-.		str_con= 			(default M)     - STORAGE NETWORK CONSOLIDATION
+.		con=M_O_I			(default MI_O)   - CONTROLLER NETWORK CONSOIDATION
+.		com=M_I_D			(default MI_D)   - COMPUTE NETWORK CONSOLIDATION
+.		str=M_I	 			(default MI)     - STORAGE NETWORK CONSOLIDATION
 .		https=yes                       (default no)
 
 .	e.g. for linux
@@ -52,66 +52,77 @@ Install VirtualBox on Linux or Windows Host
 .	./vbox_install.elt pull_new_image=yes topology=2x2x2 rel2=yes con=MI_O str=MI com=MI_D
 
 .	e.g. for windows
-.	./vbox_install.elt -r <windows machine IP> pull_new_image=yes topology=2only
-
-. Network Consolidation Abbreviations:
-
-.	_ - Separate
-.	M - Management Network
-.	O - OAM Network
-.	D - Data Network
-.	I - Infrastructure Network
-.	T - Tagged/VLAN
-.	U - Untagged
+.	./vbox_install.elt -r <windows machine IP> pull_new_image=yes topology=2x1 con=MI_O str=MI com=MI_D
+.
+.
+. 	Supported topology
+. 		2only 	- controller-0 controller-1
+.		1x1  	- controller-0 compute-0
+. 		2x1	- controller-0 controller-1 compute-0
+.		2x2	- controller-0 controller-1 compute-0 compute-1
+.		2x1x1	- controller-0 controller-1 compute-0 storage-0
+.		2x2x2 	- controller-0 controller-1 compute-0 compute-1 storage-0 storage-1
+.
+. 	Network Consolidation Abbreviations:
+.
+.		_ - Separate
+.		M - Management Network
+.		O - OAM Network
+.		D - Data Network
+.		I - Infrastructure Network
+.		T - Tagged/VLAN
+.		U - Untagged
 
 .	Network Consolidation Options for controller (con): 
 
-.		 M_O   - Separate Management & OAM Interface (DEFAULT)
+.		 M_O   - Separate Management & OAM Interface (Only supported for 2only)
 .                M_O_I - Separate Management, OAM & Infrastructure network
 .	         M_O_TI- Seperate Management, OAM network & Tagged Infrastruture 
 .		 MOI   - Combined Management, OAM, Infrastructure network
 .	         MO_I  - Combined Management, OAM network & separate Infrastruture Untagged
 .	         MO_TI  - Combined Management, OAM network & separate Infrastruture tagged
-.		 MI_O - Combined Management, Infrastructure & separate untagged OAM network
+.		 MI_O - Combined Management, Infrastructure & separate untagged OAM network (DEFAULT)
 .		 MI_TO - Combined Management, Infrastructure & separate Tagged OAM network
 .		 M_TOTI- Separate Management & combined Tagged OAM & tagged Infrastrucute network
 .		 M_UOTI- Separate Management & combined untagged OAM & tagged Infrastrucute network
 .		 M_TOUI- Separate Management & combined tagged OAM & untagged Infrastrucute network
 
-	Network Consolidation Options for Storage (str): 
+.	Network Consolidation Options for Storage (str): 
 .		 MI    - Combined Management, Infrastructure network (Default)
 .		 TMI   - Combined Tagged Management, Infrastructure network
 .		 M_I   - Separate Management & Infrastructure network
 .	         M_TI  - Separate Management & Tagged Infrastructure network
 
-	Network Consolidation Options for Compute (com): 
+.	Network Consolidation Options for Compute (com): 
 .		 MI_D   - Combined Management, Infrastructure & Separate Data network (Default)
 .		 TMI_D  - Combined Management, Tagged Infrastructure & Separate Data network
 .	         M_I_D  - Seperate Management, Infrastructure & Data network
 .	         M_TI_D - Seperate Management, Data & Tagged Infrastructure network
 
-Assumptions:
-.	ssh keys on CGTS1 server (to pull latest image)
-.		ssh-copy-id $USER@yow-cgts3-lx.wrs.com
-.	Node VMs named 'controller-0' 'controller-1' 'compute-0' 'compute-1'
-.		Nodes have serial port configured (as per wiki) e.g. /tmp/controller0_serial
-.	Wipedisk has been run on nodes prior to install - or enable with wipedisk=yes
-.	Linux or Linux VM has ssh keys 
-.		ssh-keygen -t rsa
+. 	Assumptions:
+.		ssh keys on CGTS1 server (to pull latest image)
+.			ssh-copy-id $USER@yow-cgts3-lx.wrs.com
+.		Node VMs named 'controller-0' 'controller-1' 'compute-0' 'compute-1'
+.			Nodes have serial port configured (as per wiki) e.g. /tmp/controller0_serial
+.		Wipedisk has been run on nodes prior to install - or enable with wipedisk=yes
+.		Linux or Linux VM has ssh keys 
+.			ssh-keygen -t rsa
 
-Additional Assumptions for Windows support (see script for details):
-.	MobaXterm Installed, socat installed
-.	Named Pipe TCP Proxy Utility (NPTP) installed
-.		serial console configured for port 7000
-.	Windows Firewall configured to allow inbound connections (for socat proxy)
-.	sshd running on Windows (via MobaXterm/cygwin) /bin/sshd
-.	ssh keys on linux machine (for auto login to windows machine)
-.		ssh-copy-id $USER@<windows machine>
+. 	Additional Assumptions for Windows support (see script for details):
+.		MobaXterm Installed, socat installed
+.		Named Pipe TCP Proxy Utility (NPTP) installed
+.			serial console configured for port 7000
+.		Windows Firewall configured to allow inbound connections (for socat proxy)
+.		sshd running on Windows (via MobaXterm/cygwin) /bin/sshd
+.		ssh keys on linux machine (for auto login to windows machine)
+.			ssh-copy-id $USER@<windows machine>
 
-Limitations:
-.	Vbox Snapshots are not supported - must wipedisk prior to running script when using snapshots
+.	Limitations:
+.		Vbox Snapshots are not supported - must wipedisk prior to running script when using snapshots
+.		Data Consolidation is not supported 
 
-Version 2.0 
+Version 1.0 by Craig miller
+Version 2.0 by senthilkumar
 ;;;
 
 #
@@ -134,7 +145,7 @@ Version 2.0
 #			\\.\pipe\controller0_serial	-> 7000
 #		Getting /bin/sshd to run
 #			copy sshd_config to /etc
-#				wget http://yow-cmiller-lx/files/Win/sshd_config
+#				wget http://yow-smukunda-lx/files/Win/sshd_config
 #			add user sshd to /etc/passwd
 #				echo "sshd::99:99:/bin/false" >> /etc/passwd
 #			mkdir /etc/ssh
@@ -203,7 +214,7 @@ $rel2=yes
 
 $install_tenant_files=yes
 # Maximum wait loop count
-$max=300
+$max=500
 
 
 # port for socat proxy
@@ -215,8 +226,8 @@ $https=no
 
 ## Topologies supported
 $topology=2only
-$topology=1x1
 $topology=2x2
+$topology=1x1
 
 ## Controller Consolidation Combinations
 # DEFAULT Separate Management & OAM interface
@@ -235,6 +246,7 @@ $com=MI_D
 $controller_consolidation=$con
 $compute_consolidation=$com
 $storage_consolidation=$str 
+$infra_name=infra0
 
 # Default session
 $connection=SSH
@@ -262,6 +274,7 @@ $boot_image_win=/drives/c/Users/$USER/VBox/latest_bootimage.iso
 
 
 #create topology node list
+
 $node_list=
 ?if $topology == 2only? [
 	$node_list=controller-1
@@ -328,6 +341,7 @@ $node_list=
 	$configure_infrastructure_interface=N
 	$infrastructure_interface_link_aggregation=N/A
 	$infrastructure_interface=N/A
+	$controller_infra_interface=N/A
 	$configure_infrastructure_VLAN=N/A
 	$infrastructure_VLAN_ID=N/A
 	$infrastructure_interface_MTU=N/A
@@ -346,6 +360,7 @@ $node_list=
         $configure_infrastructure_interface=Y
         $infrastructure_interface_link_aggregation=N
         $infrastructure_interface=eth3
+	$controller_infra_interface=eth3
         $configure_infrastructure_VLAN=N
         $infrastructure_VLAN_ID=N/A
         $infrastructure_interface_MTU=1500
@@ -365,6 +380,7 @@ $node_list=
         $configure_infrastructure_interface=Y
         $infrastructure_interface_link_aggregation=N
         $infrastructure_interface=eth3
+	$controller_infra_interface=eth3
         $configure_infrastructure_VLAN=Y
         $infrastructure_VLAN_ID=21
         $infrastructure_interface_MTU=9216
@@ -383,6 +399,7 @@ $node_list=
 	$configure_infrastructure_interface=Y
 	$infrastructure_interface_link_aggregation=N
 	$infrastructure_interface=eth1
+	$controller_infra_interface=mgmt0
 	$configure_infrastructure_VLAN=Y
 	$infrastructure_VLAN_ID=21
 	$infrastructure_interface_MTU=1500
@@ -403,6 +420,7 @@ $node_list=
 	$configure_infrastructure_interface=Y
 	$infrastructure_interface_link_aggregation=N
 	$infrastructure_interface=eth1
+	$controller_infra_interface=mgmt0
 	$configure_infrastructure_VLAN=Y
 	$infrastructure_VLAN_ID=21
 	$infrastructure_interface_MTU=1500
@@ -421,6 +439,7 @@ $node_list=
         $configure_infrastructure_interface=Y
         $infrastructure_interface_link_aggregation=N
         $infrastructure_interface=eth3
+	$controller_infra_interface=eth3
         $configure_infrastructure_VLAN=N
         $infrastructure_VLAN_ID=N/A
         $infrastructure_interface_MTU=1500
@@ -439,6 +458,7 @@ $node_list=
         $configure_infrastructure_interface=Y
         $infrastructure_interface_link_aggregation=N
         $infrastructure_interface=eth3
+	$controller_infra_interface=eth3
         $configure_infrastructure_VLAN=Y
         $infrastructure_VLAN_ID=21
         $infrastructure_interface_MTU=1500
@@ -457,6 +477,7 @@ $node_list=
         $configure_infrastructure_interface=Y
         $infrastructure_interface_link_aggregation=N
         $infrastructure_interface=eth1
+	$controller_infra_interface=mgmt0
         $configure_infrastructure_VLAN=Y
         $infrastructure_VLAN_ID=21
         $infrastructure_interface_MTU=1500
@@ -475,6 +496,7 @@ $node_list=
         $configure_infrastructure_interface=Y
         $infrastructure_interface_link_aggregation=N
         $infrastructure_interface=eth1
+	$controller_infra_interface=mgmt0
         $configure_infrastructure_VLAN=Y
         $infrastructure_VLAN_ID=21
         $infrastructure_interface_MTU=1500
@@ -493,6 +515,7 @@ $node_list=
         $configure_infrastructure_interface=Y
         $infrastructure_interface_link_aggregation=N
         $infrastructure_interface=eth3
+	$controller_infra_interface=eth3
         $configure_infrastructure_VLAN=Y
         $infrastructure_VLAN_ID=21
         $infrastructure_interface_MTU=1500
@@ -511,6 +534,7 @@ $node_list=
         $configure_infrastructure_interface=Y
         $infrastructure_interface_link_aggregation=N
         $infrastructure_interface=eth0
+	$controller_infra_interface=oam0
         $configure_infrastructure_VLAN=Y
         $infrastructure_VLAN_ID=21
         $infrastructure_interface_MTU=1500
@@ -529,6 +553,7 @@ $node_list=
         $configure_infrastructure_interface=Y
         $infrastructure_interface_link_aggregation=N
         $infrastructure_interface=eth3
+	$controller_infra_interface=eth3
         $configure_infrastructure_VLAN=N
         $infrastructure_VLAN_ID=N/A
         $infrastructure_interface_MTU=1500
@@ -892,7 +917,7 @@ $install_tenant_files=yes
 #	<real
 
 	; === grab lab_setup files
-	$file_list=lab_setup.conf.hp380 lab_setup.conf.ip1-4 lab_setup.conf.ip20-27 lab_setup.conf.ip7-12 lab_setup.conf.vbox lab_setup.sh lab_cleanup.sh server-with-key-with-passwd.pem server-with-key.pem
+	$file_list=lab_setup.conf.hp380 lab_setup.conf.ip1-4 lab_setup.conf.ip20-27 lab_setup.conf.ip7-12 lab_setup.conf.vbox lab_setup.sh lab_cleanup.sh server-with-key-with-passwd.pem server-with-key.pem system_config
 	[ $file=$file_list
 		>wget  http://$url:$proxy_port/files/install/$file
 	]
@@ -921,8 +946,8 @@ $install_tenant_files=yes
 
 ; === cp vbox labsetup file
 >cp lab_setup.conf.vbox  lab_setup.conf
-INTERACT
-@3
+; === wait for files to copy 
+!sleep 30
 ; === NEXT: config controller
 >
 *INTERACT
@@ -936,7 +961,11 @@ INTERACT
 >$storage_type
 <Database storage
 >>^M
-<Image storage 
+?if $storage_type == lvm ? [
+	<Image storage 
+	>>^M
+]
+<Image conversion space
 >>^M
 <Backup storage
 >>^M
@@ -959,6 +988,8 @@ INTERACT
 	>>$management_interface
 	<Management interface MTU
 	>>^M
+	<Management interface link capacity Mbps
+	>>^M
 	<Management VLAN Identifier
 	>$management_VLAN_ID
 	<Management subnet
@@ -978,6 +1009,8 @@ INTERACT
 	>>^M
 	<Management interface MTU
 	>>^M
+	<Management interface link capacity Mbps
+	>>^M
 	<Management subnet
 	>>^M
 	<Use entire management
@@ -987,7 +1020,7 @@ INTERACT
 ]
 
 <Configure board management control network
->>^M
+>>N
 
 
 ; === Configuring Infrastructure Interface 
@@ -1009,6 +1042,8 @@ INTERACT
 	]
 	<Infrastructure interface MTU
 	>$infrastructure_interface_MTU
+	<Infrastructure interface link capacity Mbps
+	>^M
 	<Infrastructure subnet
 	>$infrastructure_subnet
 	<Use entire infrastructure subnet
@@ -1086,7 +1121,7 @@ INTERACT
 <Repeat admin user password
 !send "$admin_password\r"
 <Apply the above configuration
-@1000
+@1500
 >y
 <real
 ; === wait for config controller to do its thing
@@ -1099,7 +1134,7 @@ INTERACT
 %PART3
 
 
------------ install remaining of nodes
+; ================ install remaining of nodes
 
 
 [ $node=$node_list
@@ -1149,17 +1184,13 @@ $node_controllers=$node_list
 =$node_controllers/.*(controller)-\d.*/\1/
 >
 
-?if $node_controllers == controller? [
-	: === bring controller-1 online
-	>system host-unlock controller-1
-	>	
-]
 @100
-; === Get the infra interface name from controller-0 
+
+#; === Get the infra interface name from controller-0 
 
 >system host-if-list controller-0 
-!sleep 5
-+$infra_name=[0-9a-z-]{24,50}\s* \|\s+(infra\d|eth\d.\d+)\s*|s*infra
+#!sleep 5
+#+$infra_name=[0-9a-z-]{24,50}\s* \|\s+(infra\d|eth\d.\d+)\s*|s*infra
 
 $node_storage=$node_list
 =$node_storage/.*(storage)-\d.*/\1/
@@ -1240,14 +1271,9 @@ $node_storage=$node_list
 					]
 				]	
 			]
-			; === check again to see if controller is in unlocked state
-			
-			>system host-list
-			<$controller_node
-			+$administrative=(locked|unlocked)
-			?if $administrative == locked ? [
-			    >system host-unlock controller-1
-			]
+
+			; === check to see if controller became online 
+
 			@60
 			$i=0
 			$controller_node=controller-1
@@ -1255,10 +1281,10 @@ $node_storage=$node_list
 			>system host-list
 			<$controller_node
 			+$state=(available|online|offline|failed|intest)
-			[ $state != available
+			[ $state != online
 				$state=none
-				[ $state != available
-					; === wait for $controller_node to come available
+				[ $state != online
+					; === wait for $controller_node to come online
 					>system host-list
 					<$controller_node
 					+$state=(available|online|offline|failed|intest)
@@ -1266,9 +1292,9 @@ $node_storage=$node_list
 					!sleep 5
 					+$i
 					?if $i > $max? [
-						;red $controller_node did not become available
+						;red $controller_node did not become online
 						# break out of while loop
-						$state=available
+						$state=online
 						; Giving user the option to recover the lab
 						$i=0
 						*INTERACT
@@ -1276,22 +1302,36 @@ $node_storage=$node_list
 				]
 			]
 			; === Unlock $controller_node 
-
-			; === check again to see if controller is in unlocked state
-			
+		
 			>system host-list
 			<$controller_node
 			+$administrative=(locked|unlocked)
 			?if $administrative == locked ? [
-			    >system host-unlock controller-1
+		 	    >system host-if-modify -n oam0 -nt oam controller-1 $(system host-if-list -a controller-1 | awk '{if ($4 == "eth0") { print $2;}}')
+			    >system host-stor-add controller-1 cinder $(system host-disk-list controller-1 | awk '{if ($4 == "/dev/sdb") { print $2;}}')
+
+		            ?if $configure_infrastructure_interface == Y ? [
+			    ?if $configure_infrastructure_VLAN == Y ? [
+				>system host-if-add -V $infrastructure_VLAN_ID -nt infra $controller_node $infra_name vlan $controller_infra_interface
+				!sleep 2
+				<created_at
+			        ]
+		            ?if $configure_infrastructure_VLAN == N ? [
+				>system host-if-modify -n $infra_name -nt infra  $controller_node $controller_infra_interface
+				!sleep 2
+				<created_at
+			        ]
+		            ]
+			    ; ==== Unlock $controller_node
+			    >system host-unlock $controller_node
 			]
 			$state=none		
 			[ $state != available
 				; === wait for $controller_node to come available
+				!sleep 3
 				>system host-list
 				<$controller_node
 				+$state=(available|online|offline|failed|intest)
-
 				!sleep 5
 				+$i
 				?if $i > $max? [
@@ -1387,16 +1427,68 @@ $node_computes=$node_list
 		]
 	]
 	>system host-list
-	@5
-	: === if present, bring controller-1 online
-	?if $nodes_controllers == controller? ]
-		; === check again to see if controller is in unlocked state
-		$controller_node=controller-1
+	
+
+	@60
+	$i=0
+	$controller_node=controller-1
+	>system host-list
+	<$controller_node
+	+$administrative=(locked|unlocked)
+	?if $administrative == locked ? [
+		$state=none
+		>system host-list
+		<$controller_node
+		+$state=(available|online|offline|failed|intest)
+		[ $state != online
+			$state=none
+			[ $state != online
+				; === wait for $controller_node to come online
+				>system host-list
+				<$controller_node
+				+$state=(available|online|offline|failed|intest)
+
+				!sleep 5
+				+$i
+				?if $i > $max? [
+					;red $controller_node did not become online
+					# break out of while loop
+					$state=online
+					; Giving user the option to recover the lab
+					$i=0
+					*INTERACT
+				]
+			]
+		]
+
+	]
+
+	$state=none
+	>system host-list
+	<$controller_node
+	+$state=(available|online|offline|failed|intest)
+	?if $state == online		
 		>system host-list
 		<$controller_node
 		+$administrative=(locked|unlocked)
 		?if $administrative == locked ? [
-		>system host-unlock controller-1
+ 		    >system host-if-modify -n oam0 -nt oam controller-1 $(system host-if-list -a controller-1 | awk '{if ($4 == "eth0") { print $2;}}')
+		    >system host-stor-add controller-1 cinder $(system host-disk-list controller-1 | awk '{if ($4 == "/dev/sdb") { print $2;}}')
+        	    ?if $configure_infrastructure_interface == Y ? [
+			    ?if $configure_infrastructure_VLAN == Y ? [
+				>system host-if-add -V $infrastructure_VLAN_ID -nt infra $controller_node $infra_name vlan $controller_infra_interface
+				!sleep 2
+				<created_at
+			    ]
+		            ?if $configure_infrastructure_VLAN == N ? [
+				>system host-if-modify -n $infra_name -nt infra  $controller_node $controller_infra_interface
+				!sleep 2
+				<created_at
+			    ]
+		    ]
+		    ; === Unlock  
+	            >system host-unlock $controller_node
+	  	]
 	]
 
 

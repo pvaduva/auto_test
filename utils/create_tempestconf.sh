@@ -15,9 +15,14 @@ ADMINPASS=${10}
 WRSPASS=${11}
 #Alter  tempest.conf  based on runtime parameters configured during: setupCgcsNetworking
 
+source /etc/nova/openrc
+unset PROMPT_COMMAND
+uri_ip=`keystone endpoint-list|grep 5000|awk {'print $8}' | grep -Eo '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}'`
+
 cd /etc/tempest
 cp -p tempest.conf tempest.conf.orig`date +%Y-%m-%d_%H%M%S`
 
+sed -i.bkp "s|uri = http://192.168.204.2:5000/v2.0/|uri = http://${uri_ip}:5000/v2.0/|g" tempest.conf
 sed -i.bkp "s/127.0.0.1/192.168.204.2/g" tempest.conf
 sed -i.bkp "s/8081\/keystone\/main/5000/g" tempest.conf
 sed -i.bkp "s/password = root/password = password/" tempest.conf

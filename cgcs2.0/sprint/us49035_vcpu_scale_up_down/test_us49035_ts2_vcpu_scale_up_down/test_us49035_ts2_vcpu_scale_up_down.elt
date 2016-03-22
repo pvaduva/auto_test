@@ -45,7 +45,7 @@ $tenant=$tenant_credentials
 # trim to just last part
 =$tenant;.*[.](\w+);\1;
 
-$lab_setup=yes
+$lab_setup=no
 
 >date +%F_%T
 +$DATE=\n(2.+)
@@ -194,7 +194,7 @@ $quota_volumes=30
 
 $i=1
 $MAX=10
-[ $i<=$MAX
+[ $i <= $MAX
       $vm$i=guest$i
       +$i
 ]
@@ -208,7 +208,7 @@ $heat_stack_limit=1
 $change_flavor=$heat_stack_limit
 =$change_flavor / 2
 $flavor=$flavor1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>heat stack-create -f VMAutoScaling.yaml -P NETWORK=tenant1-mgmt-net -P VM_NAME=$vm$i -P FLAVOR=$flavor -P IMAGE=cgcs-guest -P METER_NAME=vote -P KEYPAIR=keypair-tenant1 STACK$i
 	? $i == $change_flavor ? $flavor=$flavor2
 	+$i
@@ -218,7 +218,7 @@ $flavor=$flavor1
 ; === wait and check if heat stack create_complete
 !sleep 30
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>heat stack-show STACK$i
 	<stack_status
 	-<CREATE_FAILED
@@ -229,7 +229,7 @@ $i=1
 ; === get ID of each instance
 >nova list
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>nova list | grep $vm$i
 	+$resource_id_vm$i=([0-9a-f-]{32,36})\s* \|\s+$vm$i
 	+$i	
@@ -237,7 +237,7 @@ $i=1
 
 ; === check the VMs in good state
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>nova list
 	<$vm$i
 	-<ERROR
@@ -247,8 +247,8 @@ $i=1
 
 ; === show vm-topology on VMs and save pre-migrate compute state
 $i=1
-[ $i<=$heat_stack_limit
-	@30
+[ $i <= $heat_stack_limit
+	@20
 	>time vm-topology -s all | grep $resource_id_vm$i
 	<$vm$i
 	+$premigrate_compute_vm$i=(compute-\d)
@@ -260,7 +260,7 @@ $i=1
 
 ; === live migrate guest1
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>nova live-migration $resource_id_vm$i
 	!sleep 10
 	+$i
@@ -288,7 +288,7 @@ $vm_state=none
 
 ; === check the VMs in good state
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>nova list
 	<$vm$i
 	-<ERROR
@@ -299,8 +299,8 @@ $i=1
 ; === show vm-topology on VMs and save after migration compute state
 
 $i=1
-[ $i<=$heat_stack_limit
-	@30
+[ $i <= $heat_stack_limit
+	@20
 	>time vm-topology -s all | grep $resource_id_vm$i
 	<$vm$i
 	+$after_migration_compute_vm$i=(compute-\d)
@@ -310,17 +310,16 @@ $i=1
 ; === Verify VMs migrated
 ?$premigrate_compute_vm1 == $after_migration_compute_vm1 ? ;red === guest1 did not live migrate
 
-
 # Scale up/down via CLI
 
 ; === Do scale up/down sequentially
 
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	; === execute scale down for $vm$i
 	# scale down guest1 to minimum value
 	; === save the current state of $vm$i cpu
-	@10
+	@20
 	>vm-topology -s servers
 	<$vm$i
 	+$min_cpu=(\d+),\d+,\d+
@@ -350,6 +349,7 @@ $i=1
 	]
 
 	; === $vm$i scale down should fail beyond minimum limit: $min_cpu
+	@20
 	>vm-topology -s servers
 	>nova scale $vm$i cpu down
 	@25
@@ -362,8 +362,9 @@ $i=1
 
 # scale up all VMs to max value
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	; === save the current state of $vm$i cpu
+	@20
 	>vm-topology -s servers
 	<$vm$i
 	+$min_cpu=(\d+),\d+,\d+
@@ -392,6 +393,7 @@ $i=1
 	]
 
 	; === $vm$i scale up should fail beyond max limit: $max_cpu
+	@20
 	>vm-topology -s servers
 	>nova scale $vm$i cpu up
 	@25
@@ -402,11 +404,11 @@ $i=1
 ]
 ; === Scale up of all Vms completed
 
-############# Cold migrate instanceas and do scale up/down ##########
+############# Cold migrate instances and do scale up/down ##########
 
 ; === check the VMs in good state
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>nova list
 	<$vm$i
 	-<ERROR
@@ -417,7 +419,7 @@ $i=1
 ; === show vm-topology on VMs and save pre-migrate compute state
 
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	@30
 	>time vm-topology -s all | grep $resource_id_vm$i
 	<$vm$i
@@ -430,11 +432,11 @@ $i=1
 
 ; === live migrate Vms
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>nova migrate $resource_id_vm$i
 	+$i
 ]
->nova migrate $resource_id_vm1
+
 ; === switch to tenant mode
 >source /home/wrsroot/openrc.tenant1
 >nova list
@@ -457,7 +459,7 @@ $vm_state=none
 
 ; === check the VMs in VERIFY_RESIZE state
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	@10
 	>nova list | grep $vm$i
 	-<ERROR
@@ -469,7 +471,7 @@ $i=1
 
 ; === confirm resize 
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>nova resize-confirm $resource_id_vm$i
 	>echo $?
 	<\n0
@@ -494,7 +496,7 @@ $vm_state=none
 
 ; === check the VMs in good state
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>nova list
 	<$vm$i
 	-<ERROR
@@ -505,8 +507,8 @@ $i=1
 ; === show vm-topology on VMs and save after migration compute state
 
 $i=1
-[ $i<=$heat_stack_limit
-	@30
+[ $i <= $heat_stack_limit
+	@20
 	>time vm-topology -s all | grep $resource_id_vm$i
 	<$vm$i
 	+$after_migration_compute_vm$i=(compute-\d)
@@ -519,11 +521,11 @@ $i=1
 ; === Do scale up/down sequentially
 
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	; === execute scale down for $vm$i
 	# scale down guest1 to minimum value
 	; === save the current state of $vm$i cpu
-	@5
+	@20
 	>vm-topology -s servers
 	<$vm$i
 	+$min_cpu=(\d+),\d+,\d+
@@ -553,6 +555,7 @@ $i=1
 	]
 
 	; === $vm$i scale down should fail beyond minimum limit: $min_cpu
+	@20
 	>vm-topology -s servers
 	>nova scale $vm$i cpu down
 	@25
@@ -565,8 +568,9 @@ $i=1
 
 # scale up all VMs to max value
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	; === save the current state of $vm$i cpu
+	@20
 	>vm-topology -s servers
 	<$vm$i
 	+$min_cpu=(\d+),\d+,\d+
@@ -595,6 +599,7 @@ $i=1
 	]
 
 	; === $vm$i scale up should fail beyond max limit: $max_cpu
+	@20
 	>vm-topology -s servers
 	>nova scale $vm$i cpu up
 	@25
@@ -627,7 +632,7 @@ $i=1
 <ACTIVE
 
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>heat stack-list | grep STACK$i
 	+$stack_id$i=([0-9a-f-]{32,36})\s*\|\s+STACK$i
 	+$i
@@ -763,7 +768,7 @@ $vm_state=none
 
 ; === check the VMs in good state
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>nova list
 	<$vm$i
 	-<ERROR
@@ -774,11 +779,11 @@ $i=1
 ; === Do scale up/down sequentially
 @10
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	; === execute scale down for $vm$i
 	# scale down guest1 to minimum value
 	; === save the current state of $vm$i cpu
-	@5
+	@20
 	>vm-topology -s servers
 	<$vm$i
 	+$min_cpu=(\d+),\d+,\d+
@@ -812,8 +817,9 @@ $i=1
 
 # scale up all VMs to max value
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	; === save the current state of $vm$i cpu
+	@20
 	>vm-topology -s servers
 	<$vm$i
 	+$min_cpu=(\d+),\d+,\d+

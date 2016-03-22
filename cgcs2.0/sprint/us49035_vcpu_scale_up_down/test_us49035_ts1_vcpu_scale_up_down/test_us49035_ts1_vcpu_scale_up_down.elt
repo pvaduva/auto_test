@@ -146,13 +146,14 @@ $flavor2=vcpu5-$flavor2_min_cpu
 >nova flavor-list | grep $flavor2
 
 #Set min vcpu value
-; === set minimum value for the cpu created
->nova flavor-key $flavor1 set hw:wrs:min_vcpus=$flavor1_min_cpu processor:node=0 hw:cpu_policy=dedicated
+; === set vcpu minimum value and set NUMA Node=0
+>nova flavor-key $flavor1 set hw:wrs:min_vcpus=$flavor1_min_cpu hw:numa_node.0=0 hw:cpu_policy=dedicated
 >nova flavor-list --extra-specs | grep $flavor1
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor1 is $result
 
->nova flavor-key $flavor2 set hw:wrs:min_vcpus=$flavor2_min_cpu hw:cpu_policy=dedicated
+; === set vcpu minimum value and set NUMA Node=0
+>nova flavor-key $flavor2 set hw:wrs:min_vcpus=$flavor2_min_cpu hw:numa_node.0=0 hw:cpu_policy=dedicated
 >nova flavor-list --extra-specs | grep $flavor2
 +$result=min.*vcpus.*(\d+)
 ; === Minimum CPU value set for $flavor2 is $result
@@ -171,7 +172,7 @@ $flavor2=vcpu5-$flavor2_min_cpu
 # expand quotas for tenants
 $quota_instances=30
 $quota_vcpus=60
-$quota_port=60
+$quota_port=80
 $quota_volumes=30
 
 ; === increase quotas for test
@@ -205,6 +206,9 @@ $quota_volumes=30
 <stack_status
 -<CREATE_FAILED
 <CREATE_COMPLETE
+
+>nova list | grep guest1
++$resource_id_guest1=([0-9a-f-]{32,36})\s* \|\s+guest1
 
 ; === find the compute on which guest1 booted
 @25
@@ -264,7 +268,56 @@ $actual_cur_cpu=$cur_cpu
 >time vm-topology -s servers | grep guest2
 <guest2
 +$guest2_compute=(compute-\d)
-#?if $guest1_compute != $guest2_compute? ;red === guest1 and guest are not in same NUMA0
+
+?if $guest1_compute != $guest2_compute? [
+       ;red === guest1 and guest are not on the same compute
+       ; === live migrate guest1 to $guest2_compute
+
+       ; === Become Admin to migrate
+       >source /etc/nova/openrc
+
+       ; === live migrate guest1
+       >nova live-migration $resource_id_guest1 $guest2_compute
+       !sleep 10
+
+       ; === switch to tenant mode
+       >source /home/wrsroot/openrc.tenant1
+       >nova list
+
+       ; === wait for guest1 to finish migrating
+
+       $i=0
+       $max=50
+       $vm_state=none
+       [ $vm_state != ACTIVE
+               >nova list
+               <guest1
+               +$vm_state=(BUILD|ACTIVE|ERROR|MIGRATING)
+               !sleep 2
+               +$i
+               ?if $vm_state == ERROR? %BREAK_VM_MIGRATE1
+               ?if $i > $max? %BREAK_VM_MIGRATE1
+       ]
+       %BREAK_VM_MIGRATE1
+
+       ; === check the VM in good state
+       >nova list
+       <guest1
+       -<ERROR
+       <ACTIVE
+
+       ; === show vm-topology on VM and save after migration compute state
+       @25
+       >time vm-topology -s servers | grep guest1
+       <guest1
+       +$guest1_new_compute=(compute-\d)
+       ?if $guest1_compute == $guest1_new_compute? [
+              ;red === guest1 did not live migrate
+       ]
+       ?if $guest1_new_compute != $guest2_compute? [
+              ;red === guest1 and guest are not on the same compute
+       ]
+]
 
 #perform scale down for guest2
 ; === save the current state of guest2 cpu
@@ -400,7 +453,6 @@ $actual_cur_cpu=$cur_cpu
 >nova flavor-delete $flavor2
 ###Completed-Scale UP with No available host cpu on NUMA node
 
-
 ; === Create necessary flavors and set minimum vcpu value
 $flavor1_min_cpu=1
 $flavor2_min_cpu=2
@@ -440,7 +492,7 @@ $flavor2=vcpu5-$flavor2_min_cpu
 # Create Multiple heat stack for Auto scaling 
 $i=1
 $MAX=10
-[ $i<=$MAX
+[ $i <= $MAX
       $vm$i=guest$i
       +$i
 ]
@@ -452,18 +504,17 @@ $heat_stack_limit=2
 $change_flavor=$heat_stack_limit
 =$change_flavor / 2
 $flavor=$flavor1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>heat stack-create -f VMAutoScaling.yaml -P NETWORK=tenant1-mgmt-net -P VM_NAME=$vm$i -P FLAVOR=$flavor -P IMAGE=cgcs-guest -P METER_NAME=vote -P KEYPAIR=keypair-tenant1 STACK$i
 	? $i == $change_flavor ? $flavor=$flavor2
 	+$i
 ]
 
 
-
 ; === wait and check if heat stack create_complete
 !sleep 30
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>heat stack-show STACK$i
 	<stack_status
 	-<CREATE_FAILED
@@ -472,7 +523,7 @@ $i=1
 ]
 
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>heat stack-list | grep STACK$i
 	+$stack_id$i=([0-9a-f-]{32,36})\s*\|\s+STACK$i
 	+$i
@@ -484,7 +535,7 @@ $i=1
 ; === Do scale up/down sequentially
 
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	; === execute scale down for $vm$i
 	# scale down guest1 to minimum value
 	; === save the current state of $vm$i cpu
@@ -530,7 +581,7 @@ $i=1
 
 # scale up all VMs to max value
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	; === save the current state of $vm$i cpu
 	>vm-topology -s servers
 	<$vm$i
@@ -575,7 +626,7 @@ $i=1
 ; === get ID of each instance
 >nova list
 $i=1
-[ $i<=$heat_stack_limit
+[ $i <= $heat_stack_limit
 	>nova list | grep $vm$i
 	+$resource_id_vm$i=([0-9a-f-]{32,36})\s* \|\s+$vm$i
 	+$i	
@@ -593,7 +644,7 @@ $value=2
 <alarm
 
 
-; === going in a loop to check $vm1 reached minimum cpu vale 
+; === going in a loop to check $vm1 reached minimum cpu value 
 $i=0
 $max=20 
 >nova show $vm1
@@ -634,7 +685,7 @@ $value=90
 <alarm
 
 
-; === going in a loop to check $vm1 reached maximum cpu vale 
+; === going in a loop to check $vm1 reached maximum cpu value 
 $i=0
 $max=10 
 >nova show $vm1
@@ -678,7 +729,7 @@ $value=2
 <STACK1.*Low.*|
 <alarm
 
-; === going in a loop to check $vm2 reached minimum cpu vale 
+; === going in a loop to check $vm2 reached minimum cpu value 
 
 $i=0
 $max=20 
@@ -719,7 +770,7 @@ $value=90
 <STACK1.*High.*|
 <alarm
 
-; === going in a loop to check $vm2 reached maximum cpu vale 
+; === going in a loop to check $vm2 reached maximum cpu value 
 $i=0
 $max=20 
 >nova show $vm2
@@ -774,7 +825,7 @@ $max=20
         =$exp_cur_cpu1 - 1
         $exp_cur_cpu2=$cur_cpu2
         =$exp_cur_cpu2 - 1
-        @5
+        @10
         >vm-topology -s servers
         <$vm1
         +$cur_cpu1=\d+,(\d+),\d+
@@ -911,18 +962,10 @@ $max=20
 #    ]
 ]
 
-; === clean up setup
->heat stack-delete STACK1 STACK2 STACK3
-!sleep 30
->heat stack-list
-
-
-
 ################## Clean up #############################################
 ; === become admin to clean up
 >source /etc/nova/openrc
 ;cleanup all setup created for this testcase
-; === delete the stack created
 
 ; === delete the flavor created 
 >nova flavor-list
@@ -934,8 +977,8 @@ $max=20
 ; === become tenant to clean up stack
 >source $tenant_credentials
 ; === delete heat stack created
->heat stack-delete STACK1 STACK2 STACK3
-!sleep 45
+>heat stack-delete STACK1 STACK2
+!sleep 30
 >heat stack-list
 -<STACK1
 

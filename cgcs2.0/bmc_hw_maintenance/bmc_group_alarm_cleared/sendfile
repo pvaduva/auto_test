@@ -1,0 +1,7 @@
+#!/usr/bin/expect
+        #spawn scp -rf /home/amcfarla/wassp-repos/testcases/cgcs/cgcs2.0/bmc_hw_maintenance/bmc_group_alarm_cleared/show_quanta  wrsroot@10.10.10.2:/home/wrsroot/show
+        spawn rsync -avP  /home/amcfarla/wassp-repos/testcases/cgcs/cgcs2.0/bmc_hw_maintenance/bmc_group_alarm_cleared/show_quanta wrsroot@10.10.10.2:/home/wrsroot/show_quanta
+        set pass "li69nux"
+        expect {
+        password: {send "$pass\r"; exp_continue}
+                  }

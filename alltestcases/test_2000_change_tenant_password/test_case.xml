@@ -45,7 +45,10 @@ SET CR }
 SET CL {
 
 # generic expect-lite call 
-CALL ${WASSP_TC_PATH}/${WASSP_TC_NAME}.elt HOST_IP=$env.NODE.target.default.targetIP TENANT=tenant1 PASSWORD=tenantnew *NOINTERACT 
+CALL ${WASSP_TC_PATH}/${WASSP_TC_NAME}.elt HOST_IP=$env.NODE.target.default.targetIP TENANT=tenant1 CUR_PASSWORD=tenant1 NEW_PASSWORD=tenantnew *NOINTERACT 
+
+# Restore the password at the end of the test
+CALL ${WASSP_TC_PATH}/${WASSP_TC_NAME}.elt HOST_IP=$env.NODE.target.default.targetIP TENANT=tenant1 CUR_PASSWORD=tenantnew NEW_PASSWORD=tenant1 *NOINTERACT 
 
 PASS
 

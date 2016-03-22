@@ -92,14 +92,34 @@ $FLVNM=flv_ta80733_2_mincpu_minmem
 ;  create flavor with maximum memory (1/2 of the total memory) and minimum number of cpus
 ; get size of memory
 @60
->vm-topology -s computes
-+$FREEMEM1=\|\s*compute-[0-9]*\s*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|\s*[^\|]*\s*\|\s*[^\|]*\s*\|\s*([0-9]+)\s*
-+$FREEMEM2=\|\s*compute-[0-9]*\s*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|\s*[^\|]*\s*\|\s*[^\|]*\s*\|\s*([0-9]+)\s*
-=$FREEMEM1
 
-$FREEMEM=$FREEMEM1
+# Changing this to use nova hypervisor-show compute-0 instead of vm-topology
+# (which changes often). Calculating max RAM is not a simple calculation.  This
+# needs to be done on a per numa node basis.  Max RAM is shown in
+# nova-compute.log in the Numa node=0; memory: X MiB, X MiB avail field.  Since
+# we don't want to look in the logs, for now let's take the Free memory, divide
+# by 2 and then subtract a thousand.  We won't provision exactly the max RAM
+# but we'll approximate.  Note, we must be page-size divisable, which by
+# default is 2048
+>nova hypervisor-show compute-0
++$FREEMEM=memory_mb\s*\|\s*([0-9]+)
+#>vm-topology -s computes
+#+$FREEMEM=compute-[0-9]\s*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|\s*([0-9]+)
+#+$FREEMEM1=\|\s*compute-[0-9]*\s*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|\s*[^\|]*\s*\|\s*[^\|]*\s*\|\s*([0-9]+)\s*
+#+$FREEMEM2=\|\s*compute-[0-9]*\s*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|[^\|]*\|\s*[^\|]*\s*\|\s*[^\|]*\s*\|\s*([0-9]+)\s*
+#=$FREEMEM1
+
+#$FREEMEM=$FREEMEM1
 ; 1G less memory
-=$FREEMEM - 1000
+=$FREEMEM/2
+=$FREEMEM-1000
+$PAGE_SIZE=2048
+$MOD=$FREEMEM%$PAGE_SIZE
+?if $MOD != 0 ? [
+    # correct the fact we're not page-size divisable
+    =$FREEMEM-$MOD
+]
+
 ?if $FREEMEM < 128 ? [
     $FREEMEM=128
 ]

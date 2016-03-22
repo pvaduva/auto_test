@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2015 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+Modification history
+====================
+oct2015 amf - created
+
+-->
+
+<test_module name="ceilometer_configuration" timeout="">
+    <test_case  name="ceilometer_configuration" >
+
+    #######################################################
+    # Objective:  Configure the group alarms
+    #
+    #######################################################
+
+    # Configure Fault Insertion:
+    cp /usr/sbin/show_quanta /usr/sbin/show
+
+    # Perform the GUI Provisioning on all hosts:
+    Management MAC
+        00:1e:67:54:aa:39
+    Management IP
+        192.168.204.3
+    Board Management Controller User Name
+        root
+    Board Management Controller Password
+        root 
+
+    sudo passwd root
+    root
+
+    # Modify the sensor group action
+    # Via GUI
+
+    #Via CLI
+    system host--sensogroup-modify controller-0 ac38cfeb-3200- 
+
+    # Get a list of enabled sensors
+    system host-sensor-list controller-0
+    system host-sensor-list controller-1
+    system host-sensor-list compute-0
+    system host-sensor-list compute-1
+
+    PASS
+
+    </test_case>
+</test_module>

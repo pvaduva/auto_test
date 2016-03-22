@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2015 Wind River Systems, Inc.
+        !
+        ! The right to copy, distribute, modify or otherwise make use
+        ! of this software may be licensed only pursuant to the terms
+        ! of an applicable Wind River license agreement.
+        
+Modification history
+====================
+oct2015 amf - created
+
+-->
+
+<test_module name="ipmi_configuration" timeout="">
+    <test_case  name="ipmi_configuration" >
+
+    #######################################################
+    #
+    #######################################################
+
+
+    # Check ipmi status 
+    /etc/init.d/ipmi status
+    cat /proc/devices | grep ipmi
+    ls -l /dev/ipmi0
+
+    # Disable ipmi and ensure no ipmi sensors are present
+    sudo /etc/init.d/ipmi stop
+    sudo ipmitool sensor
+
+    # Enable ipmi and ensure ipmi sensors are running
+    /etc/init.d/ipmi start
+    sudo ipmitool sensor
+
+    # Generate ipmi stats
+    sudo ipmitool raw -v
+    sudo ipmitool raw 0x06 0x04
+    sudo ipmitool bmc info
+    sudo ipmitool bmc reset cold
+    sudo ipmitool bmc getenables
+    sudo ipmitool raw 0x0a 0x10
+    sudo ipmitool -I lanplus -H addr:128.224.151.192 -U wrsroot raw 0x04 0x02 0x04 0x07 0x61 0x6F 0x08 00 00
+
+    # List all the ipmi sensors
+    sudo ipmitool sensor
+
+
+    sudo ipmitool mc info
+    sudo ipmitool hpm check
+
+    # Taken from defect Jira CGTS-1829
+    sudo ipmitool lan set 1 ipsrc dhcp
+    sudo ipmitool lan set 0 ipsrc dhcp
+    sudo ipmitool mc reset cold
+    PASS
+
+    </test_case>
+</test_module>

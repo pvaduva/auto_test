@@ -35,14 +35,16 @@
 #]
 
 ; set the extra specs to flavor $FLVUUID
->nova flavor-key $FLVUUID set dedicated:cpus=$DDTD_CPUS guest:heartbeat=$GST_HREARTBEAT
->nova flavor-show $FLVUUID
+#>nova flavor-key $FLVUUID set hw:cpu_policy=dedicated sw:wrs:guest:heartbeat=$GST_HREARTBEAT
+#>nova flavor-show $FLVUUID
 
 ; create service instance
+@6
 #$VMNM=ta80733_vm_1
 ~fun_del_vm.inc $VMNM
 >nova boot --key_name=$KEYPAIR --flavor=$FLVNM --nic net-id=$PUB_NET,vif-model=avp --nic net-id=$INT_NET,vif-model=e1000 --image=$IMAGE $VMNM
 +$UUID=\|\s*id\s*\|\s*([a-f0-9-]{32,36})\s*\|
+@3
 
 ; perform operations on the instance
 ~fun_operation_instace.inc VMUUID=$UUID VMNM=$VMNM
@@ -53,8 +55,8 @@
 ; delete the falvor $FLVUUID
 >nova flavor-delete $FLVUUID
 
-; again?
->nova flavor-delete $FLVUUID
+#; again?
+#>nova flavor-delete $FLVUUID
 
 ; done
 
