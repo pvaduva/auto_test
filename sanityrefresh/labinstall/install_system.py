@@ -13,6 +13,7 @@ of an applicable Wind River license agreement.
 '''
 modification history:
 ---------------------
+08mar16,mzy  Inserting steps for storage lab installation
 25feb16,amf  Inserting steps for small footprint installations
 22feb16,mzy  Add sshpass support
 18feb16,amf  Adding doc strings to each function
@@ -123,7 +124,7 @@ def parse_args():
                          "\n(default: %(default)s)")
     bld_grp.add_argument('--tis-blds-dir', metavar='DIR',
                          dest='tis_blds_dir',
-                         default="CGCS_2.0_Unified_Daily_Build",
+                         default="CGCS_3.0_Unified_Daily_Build",
                          help='Directory under "--bld-server-wkspce"'
                          " containing directories for Titanium Server loads"
                          "\n(default: %(default)s)")
@@ -134,7 +135,7 @@ def parse_args():
                          " \n(default: %(default)s)")
     bld_grp.add_argument('--guest-bld-dir', metavar='DIR',
                          dest='guest_bld_dir',
-                         default="CGCS_2.0_Guest_Daily_Build",
+                         default="CGCS_3.0_Guest_Daily_Build",
                          help='Directory under "--bld-server-wkspce"'
                          " containing directories for guest images"
                          "\n(default: %(default)s)")
@@ -318,37 +319,42 @@ def wipe_disk(node):
         it. 
     '''
 
-    if node.telnet_conn is None:
-        node.telnet_conn = telnetlib.connect(node.telnet_ip, \
-                                             int(node.telnet_port), \
-                                             negotiate=node.telnet_negotiate,\
-                                             vt100query=node.telnet_vt100query,\
-                                             log_path=output_dir + "/"\
-                                             + node.name + ".telnet.log", \
-                                             debug=False)
+    # Until we have time to figure out how to have this fool-proof
+    return
 
-        # Check that the node is accessible for wipedisk to run.
-        # If we cannot successfully ping the interface of the node, then it is
-        # expected that the login will fail. This may be due to the node not 
-        # being left in an installed state.
-        cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, node.host_ip)
-        if (node.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT +
-                                     TIMEOUT_BUFFER)[0] != 0):
-            log.info("Node not responding. Skipping wipedisk process")
-            return
-        else:
-            node.telnet_conn.login()
+    # Only works for small footprint
+    if small_footprint: 
+        if node.telnet_conn is None:
+            node.telnet_conn = telnetlib.connect(node.telnet_ip, \
+                                                int(node.telnet_port), \
+                                                negotiate=node.telnet_negotiate,\
+                                                vt100query=node.telnet_vt100query,\
+                                                log_path=output_dir + "/"\
+                                                + node.name + ".telnet.log", \
+                                                debug=False)
 
-    node.telnet_conn.write_line("sudo -k wipedisk")
-    node.telnet_conn.get_read_until(PASSWORD_PROMPT)
-    node.telnet_conn.write_line(WRSROOT_PASSWORD)
-    node.telnet_conn.get_read_until("[y/n]")
-    node.telnet_conn.write_line("y")
-    node.telnet_conn.get_read_until("confirm")
-    node.telnet_conn.write_line("wipediskscompletely")
-    node.telnet_conn.get_read_until("The disk(s) have been wiped.", WIPE_DISK_TIMEOUT)
+            # Check that the node is accessible for wipedisk to run.
+            # If we cannot successfully ping the interface of the node, then it is
+            # expected that the login will fail. This may be due to the node not 
+            # being left in an installed state.
+            cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, node.host_ip)
+            if (node.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT +
+                                        TIMEOUT_BUFFER)[0] != 0):
+                log.info("Node not responding. Skipping wipedisk process")
+                return
+            else:
+                node.telnet_conn.login()
 
-    log.info("Disk(s) have been wiped on: " + node.name)
+        node.telnet_conn.write_line("sudo -k wipedisk")
+        node.telnet_conn.get_read_until(PASSWORD_PROMPT)
+        node.telnet_conn.write_line(WRSROOT_PASSWORD)
+        node.telnet_conn.get_read_until("[y/n]")
+        node.telnet_conn.write_line("y")
+        node.telnet_conn.get_read_until("confirm")
+        node.telnet_conn.write_line("wipediskscompletely")
+        node.telnet_conn.get_read_until("The disk(s) have been wiped.", WIPE_DISK_TIMEOUT)
+
+        log.info("Disk(s) have been wiped on: " + node.name)
 
 def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
     ''' Function to wait for the lab to enter a specified state.  
@@ -660,8 +666,12 @@ if __name__ == '__main__':
                                               vt100query=controller0.telnet_vt100query,\
                                               log_path=output_dir + "/" + CONTROLLER0 +\
                                               ".telnet.log", debug=False)
-        cont0_telnet_conn.login()
+        #cont0_telnet_conn.login()
         controller0.telnet_conn = cont0_telnet_conn
+        #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of
+        #      the nodes as the system was left not in an installed state
+        #TODO: In this case still need to set the telnet session for controller0
+        #      so consider keeping this outside of the wipe_disk method
 
         # Run the wipedisk utility if the nodes are accessible
         for node in nodes:
@@ -743,7 +753,16 @@ if __name__ == '__main__':
                               pre_opts=pre_opts)
             bld_server_conn.rsync(controller0.host_config_filename, 
                               WRSROOT_USERNAME, controller0.host_ip, 
-                              os.path.join(WRSROOT_HOME_DIR, SYSTEM_CFG_FILENAME))
+                              os.path.join(WRSROOT_HOME_DIR, SYSTEM_CFG_FILENAME),
+                              pre_opts=pre_opts)
+            bld_server_conn.rsync(controller0.host_lab_filename,
+                              WRSROOT_USERNAME, controller0.host_ip,
+                              os.path.join(WRSROOT_HOME_DIR, "lab_setup.conf"),
+                              pre_opts=pre_opts)
+            bld_server_conn.rsync(controller0.host_hosts_filename,
+                              WRSROOT_USERNAME, controller0.host_ip,
+                              os.path.join(WRSROOT_HOME_DIR, BULK_CFG_FILENAME),
+                              pre_opts=pre_opts)
 
         cmd = 'grep -q "TMOUT=" ' + WRSROOT_ETC_PROFILE
         cmd += " && echo " + WRSROOT_PASSWORD + " | sudo -S"
@@ -766,28 +785,35 @@ if __name__ == '__main__':
     # Configure the controller as required
     executed = False
     if not executed:
-        cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
-        cmd += " config_controller --config-file " + SYSTEM_CFG_FILENAME
-        rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
-        if rc != 0 or find_error_msg(output, "Configuration failed"):
-            log.error("config_controller failed")
+        # No consistency in naming of config file naming
+        cfg_found = False
+        for cfgfile in CFGFILE_LIST: 
+            cfgpath = WRSROOT_HOME_DIR + "/" + cfgfile
+            cmd = "test -f " + cfgpath
+            if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
+                cfg_found = True
+                cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
+                cmd += " config_controller --config-file " + cfgfile
+                #rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+                # Switching to ssh due to CGTS-4051
+                rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+                if rc != 0 or find_error_msg(output, "Configuration failed"):
+                    log.error("config_controller failed")
+                    sys.exit(1)
+                break
+
+        if not cfg_found:
+            log.error("Configuration failed: No configuration files found")
             sys.exit(1)
 
-    #TODO: Implement separate workflow for storage nodes
-    # Run lab_setup.sh twice
-
-    # If you have storage:
-    #   Unlock controller-1 and wait for it to be unlocked and enabled
-    #   Unlock storage nodes and wait for them to become enabled
-    #   Run lab_setup.sh 3rd time
-
-    # Unlock computes in parallel
-
-    # Run lab_setup.sh 4th time   
-   
     cmd = "source /etc/nova/openrc"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
+
+    cmd = "system host-bulk-add " + BULK_CFG_FILENAME
+    if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+        log.error("Failed to bulk add hosts")
+        sys.exit(1)
 
     # Complete controller0 configuration either as a regular host 
     # or a small footprint host.
@@ -825,12 +851,12 @@ if __name__ == '__main__':
                                    password=WRSROOT_PASSWORD)
             controller0.ssh_conn = cont0_ssh_conn
 
-        else:
-            cmd = "system host-bulk-add " + BULK_CFG_FILENAME
+            # Run lab_setup again to setup controller-1 interfaces
+            cmd = './lab_setup.sh'
             if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-                log.error("Failed to bulk add hosts")
+                log.error("lab_setup failed in small footprint configuration")
                 sys.exit(1)
- 
+
     # Bring up other hosts
     executed = False
     if not executed:
@@ -845,44 +871,126 @@ if __name__ == '__main__':
         for thread in threads:
             thread.join()
 
-        if not small_footprint:
-            for node in nodes:
-                cmd = "source /etc/nova/openrc; system host-if-list {} -a".format(node.name)
+    # Create seperate process for storage lab installs
+    # Check if we can make this work for regular lab
+    executed = False
+    if not executed and storage_nodes is not None:
+        log.info("Beginning lab setup procedure for storage lab")
+
+        # Remove controller-0 from the nodes list since it's up
+        nodes.remove(controller0)
+
+        # Wait for all nodes to be online to allow lab_setup to set
+        # interfaces properly
+        wait_state(nodes, AVAILABILITY, ONLINE)
+
+        # WE RUN LAB_SETUP REPEATEDLY - MOVE TO FUNC
+        # Run lab setup
+        lab_setup_cmd = WRSROOT_HOME_DIR + "/" + LAB_SETUP_SCRIPT
+        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+            log.error("Failed during lab setup")
+            sys.exit(1)
+
+        # Storage nodes are online so run lab_setup again
+        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+            log.error("Failed during lab setup")
+            sys.exit(1)
+
+        # Unlock controller-1 and then run lab_setup
+        for node in nodes:
+            if node.name == "controller-1":
+                cmd = "source /etc/nova/openrc; system host-unlock " + node.name
                 if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-                    log.error("Failed to get list of interfaces for node: " + node.name)
+                    log.error("Failed to unlock: " + node.name)
                     sys.exit(1)
+
+                wait_state(node, OPERATIONAL, ENABLED)
+                if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+                    log.error("Failed during lab setup")
+                    sys.exit(1)
+                nodes.remove(node)
+
+                break
+
+        # Unlock storage nodes
+        for node in nodes:
+            if node.name.startswith("storage"):
+                cmd = "source /etc/nova/openrc; system host-unlock " + node.name
+                if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+                    log.error("Failed to unlock: " + node.name)
+                    sys.exit(1)
+
+        # Wait for storage nodes to be enabled and computes to be online before
+        # running lab_setup again
+        for node in nodes:
+            if node.name.startswith("storage"):
+                wait_state(node, OPERATIONAL, ENABLED)
+            else:
+                wait_state(node, AVAILABILITY, ONLINE)
+
+        # Run lab_setup
+        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+            log.error("Failed during lab setup")
+            sys.exit(1)
+
+        # Unlock computes
+        for node in nodes:
+            if node.name.startswith("compute"):
+                cmd = "source /etc/nova/openrc; system host-unlock " + node.name
+                if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+                    log.error("Failed to unlock: " + node.name)
+                    sys.exit(1)
+
+        # Wait for computes to become enabled before we run lab_setup again
+        wait_state(nodes, OPERATIONAL, ENABLED)
+
+        # Run lab_setup again
+        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+            log.error("Failed during lab setup")
+            sys.exit(1)
+
+        # Check that the computes and storage nodes are available
+        wait_state(nodes, AVAILABILITY, AVAILABLE)
+
+        # COMMON CODE TO MOVE OUT START
+        # Get alarms
+        cmd = "source /etc/nova/openrc; system alarm-list"
+        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+            log.error("Failed to get alarm list")
+            sys.exit(1)
+
+        # Get build info
+        cmd = "cat /etc/build.info"
+        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+            log.error("Failed to get build info")
+            sys.exit(1)
+
+        # Unreserve targets
+        for barcode in barcodes:
+            vlm_exec_cmd(VLM_UNRESERVE, barcode)
+
+        # If we made it this far, we probably had a successful install
+        log.info("Terminating storage system install")
+        sys.exit(0)
+        # COMMON CODE TO MOVE OUT END
+
 
     # Verify the nodes are up and running
     executed = False
     if not executed:
         #TODO: Put this in a loop
-        wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
-        wait_state(controller0, OPERATIONAL, ENABLED)
-        wait_state(controller0, AVAILABILITY, AVAILABLE)
-
-        if small_footprint:
-            if (wait_state(controller0, ADMINISTRATIVE, LOCKED, None, True) and \
-                wait_state(controller0, OPERATIONAL, DISABLED, None, True) and \
-                wait_state(controller0, AVAILABILITY, OFFLINE, None, True)):
-                    cmd = "source /etc/nova/openrc; \
-                           system host-update 3 personality=controller"
-                    if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
-                        log.error("Warning: Failed to bring up {}".\
-                                   format("node"))
-                        sys.exit(1)
-
         log.info("Waiting for controller0 come online")
         wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
         wait_state(controller0, OPERATIONAL, ENABLED)
         wait_state(controller0, AVAILABILITY, AVAILABLE)
 
         nodes.remove(controller0)
-        wait_state(nodes, ADMINISTRATIVE, LOCKED)
+
         wait_state(nodes, AVAILABILITY, ONLINE)
 
         if small_footprint:
             cmd = "source /etc/nova/openrc; ./lab_setup.sh"
-            if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
+            if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
                 log.error("Warning: Failed to bring up {}".\
                            format("node"))
 

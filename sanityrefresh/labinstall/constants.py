@@ -16,12 +16,15 @@ LAB_SCRIPTS_REL_PATH = EXPORT_LAB_REL_PATH + "/scripts"
 #      Need this filename to be ORed with other options or standardize naming
 #      for config files in Stash
 SYSTEM_CFG_FILENAME = "system_config"
+CFGFILE_LIST = ["system_config", "TiS_config.ini"]
 # TODO: Same todo as above, where the bulk add filename might be different
 BULK_CFG_FILENAME = "hosts_bulk_add.xml"
+LAB_SETUP_SCRIPT = "lab_setup.sh"
 LAB_SETUP_CFG_FILENAME = "lab_setup.conf"
 CUSTOM_LAB_SETTINGS_FILENAME = "settings.ini"
 # TODO: Specifying full path to latest license instead of symlink as there
 #       was a problem rsyncing the symlink "TiS15-GA-eval.lic". Fix this
+LIC_FILENAME = "license.lic"
 LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-full-jun2016.lic"
 SFP_LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-CPE-full-jun2016.lic"
 WRSROOT_ETC_PROFILE = "/etc/profile"
@@ -67,9 +70,10 @@ DEFAULT_BOOT_DEVICE_DICT = {'controller-0': '[ABC]00',
                         'storage': '[ABC]01'}
 BIOS_TYPES = [b"American Megatrends", b"Hewlett-Packard", b"Phoenix"]
 BIOS_TYPE_FN_KEY_ESC_CODES = ['\x1b' + '[17~', '\x1b' + '@', '\x1b' + '[24~'] # F6, ESC + @, F12 Phoenix used for R720 nodes (i.e. Dell)
-INSTALL_TIMEOUTS = [1000, 2100, 2100]
+BIOS_TYPE_FN_HUMAN_READ = ['F6', 'ESC + @', 'F12']
+INSTALL_TIMEOUTS = [2100, 2100, 2100]
 SERIAL_KICKSTART_CONTROLLER_INSTALL = "Serial Kickstart Controller Install"
-MAX_BOOT_MENU_LINES = 10
+MAX_BOOT_MENU_LINES = 15
 
 NIC_INTERFACE = "eth0"
 
@@ -130,9 +134,9 @@ CREATE_PUBLIC_SSH_KEY_CMD = "ssh-keygen -f {} -t rsa -N ''"
 COLLECT_TIMEOUT=300
 RSYNC_TIMEOUT = 3600
 REBOOT_TIMEOUT = 1800
-BIOS_TYPE_TIMEOUT = 420
+BIOS_TYPE_TIMEOUT = 1800
 CONFIG_CONTROLLER_TIMEOUT = 1200
-LAB_SETUP_TIMEOUT = 900
+LAB_SETUP_TIMEOUT = 1800
 WIPE_DISK_TIMEOUT = 30
 PING_TIMEOUT = 60
 TIMEOUT_BUFFER = 2
