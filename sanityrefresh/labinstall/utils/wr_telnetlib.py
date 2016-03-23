@@ -918,7 +918,8 @@ class Telnet:
             while count < MAX_SEARCH_ATTEMPTS:
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
                 #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
-                regex = re.compile(b"\x1b\[\d+;22(.*)\x1b")
+                #regex = re.compile(b"\x1b\[\d+;22(.*)\x1b")
+                regex = re.compile(b"\[\d+;22(.*)\x1b")
                 try:
                     index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
                 except EOFError:
@@ -929,10 +930,15 @@ class Telnet:
                     log.info("Matched: " + match)
                     if re.search(boot_device_regex, match):
                         log.info("Found boot device {}".format(boot_device_regex))
+                        time.sleep(1)
+                        log.info("Pressing ENTER key")
+                        self.write(str.encode("\r\r"))
                         break
                     else:
-                        log.info("Move the cursor down in the menu")
+                        time.sleep(1)
+                        self.write(str.encode(DOWN))
                         down_press_count += 1
+                        log.info("DOWN key count: " + str(down_press_count))
                 count += 1
             if count == MAX_SEARCH_ATTEMPTS:
                 log.error("Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex))
@@ -941,10 +947,10 @@ class Telnet:
             log.info("Waiting for ESC to exit")
             self.get_read_until("ESC to exit")
             # Sleep is required before pressing enter
-            time.sleep(5)
-            for i in range(0, down_press_count):
-                self.write(str.encode(DOWN))
-            self.write(str.encode("\r\r"))
+            #time.sleep(5)
+            #for i in range(0, down_press_count):
+            #    self.write(str.encode(DOWN))
+            #self.write(str.encode("\r\r"))
             if node.name == CONTROLLER0:
                 #TODO: Check time on this
                 self.get_read_until("Kickstart Boot Menu", 120)
