@@ -810,10 +810,27 @@ if __name__ == '__main__':
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
 
-    cmd = "system host-bulk-add " + BULK_CFG_FILENAME
-    if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-        log.error("Failed to bulk add hosts")
-        sys.exit(1)
+    # Run host bulk add 
+    executed = False
+    if not executed:
+        # No consistency in naming of hosts file
+        bulkfile_found = False
+        for bulkfile in BULKCFG_LIST: 
+            bulkpath = WRSROOT_HOME_DIR + "/" + bulkfile
+            cmd = "test -f " + bulkpath
+            if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
+                bulkfile_found = True
+                cmd = "system host-bulk-add " + bulkfile
+                rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+                if rc != 0 or find_error_msg(output, "Configuration failed"):
+                    log.error("system host-bulk-add failed")
+                    sys.exit(1)
+                break
+
+        if not bulkfile_found:
+            log.error("Configuration failed: No host-bulk-add file was found.")
+            sys.exit(1)
+
 
     # Complete controller0 configuration either as a regular host 
     # or a small footprint host.

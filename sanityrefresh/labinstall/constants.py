@@ -18,6 +18,7 @@ LAB_SCRIPTS_REL_PATH = EXPORT_LAB_REL_PATH + "/scripts"
 SYSTEM_CFG_FILENAME = "system_config"
 CFGFILE_LIST = ["system_config", "TiS_config.ini"]
 # TODO: Same todo as above, where the bulk add filename might be different
+BULKCFG_LIST = ["hosts_bulk_add.xml", "hosts.xml"]
 BULK_CFG_FILENAME = "hosts_bulk_add.xml"
 LAB_SETUP_SCRIPT = "lab_setup.sh"
 LAB_SETUP_CFG_FILENAME = "lab_setup.conf"
