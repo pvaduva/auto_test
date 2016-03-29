@@ -37,7 +37,7 @@ import configparser
 from constants import *
 from utils.ssh import SSHClient
 import utils.log as logutils
-from utils.common import create_node_dict, vlm_reserve, vlm_exec_cmd, find_error_msg, get_ssh_key
+from utils.common import create_node_dict, vlm_reserve, vlm_findmine, vlm_exec_cmd, find_error_msg, get_ssh_key
 from utils.classes import Host
 import utils.wr_telnetlib as telnetlib
 
@@ -657,7 +657,15 @@ if __name__ == '__main__':
     executed = False
     if not executed:
         # Reserve the nodes via VLM
-        vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
+        #check first if nodes already reserved by user
+        reservedbyme = vlm_findmine()
+        barcodesForReserve = []
+        for item in barcodes:
+            if item not in reservedbyme:
+                barcodesForReserve.append(item)
+
+        vlm_reserve(barcodesForReserve, note=INSTALLATION_RESERVE_NOTE)
+        #vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
         # Open a telnet session for controller0.
         cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, 
