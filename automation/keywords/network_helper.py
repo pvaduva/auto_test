@@ -1,0 +1,92 @@
+import random
+import re
+
+from keywords import common
+from utils import table_parser, cli
+from utils.tis_log import LOG
+from consts.auth import Tenant, Primary
+from consts.cgcs import MGMT_IP
+
+
+def create_network(name, admin_state='up', qos_policy=None, vlan_transparent=None, **subnet):
+    raise NotImplementedError
+
+
+def _get_net_id(net_name, con_ssh=None, auth_info=None):
+    table_ = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_values(table_, 'id', name=net_name)
+
+
+def get_mgmt_net_id(con_ssh=None, auth_info=None):
+    if auth_info is None:
+        auth_info = Primary.get_primary()
+
+    tenant = auth_info['tenant']
+    mgmt_net_name = '-'.join([tenant, 'mgmt', 'net'])
+    return _get_net_id(mgmt_net_name, con_ssh=con_ssh, auth_info=auth_info)[0]
+
+
+def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
+    net_ids = get_tenant_net_ids(net_names=net_name, con_ssh=con_ssh, auth_info=auth_info)
+    return random.choice(net_ids)
+
+
+def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        net_names:
+        con_ssh:
+        auth_info:
+
+    Returns (list): tenant net list. such as [tenant2-net1, tenant2-net8]
+
+    """
+    table_ = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=auth_info))
+    if net_names is None:
+        tenant_name = common.get_tenant_name(auth_info=auth_info)
+        name = tenant_name + '-net'
+        return table_parser.get_values(table_, 'id', strict=False, name=name)
+    else:
+        if isinstance(net_names, str):
+            net_names = [net_names]
+        table_ = table_parser.filter_table(table_, name=net_names)
+        return table_parser.get_column(table_, 'id')
+
+
+def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False):
+    """ This function returns the management IPs for all VMs on the system.
+        We make the assumption that the management IPs start with "192"
+        Args:
+            vms: vm ids list. If None, management ips for ALL vms with given Tenant(via auth_info) will be returned.
+            con_ssh: active controller SSHClient object
+            auth_info: use admin by default unless specified
+            rtn_dict: return list if False, return dict if True
+        Returns:
+            list of all VM management IPs
+            if rtn_dict is True: return a dictionary with vm IDs as the keys, and mgmt ips as values.
+    """
+
+    table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+    if vms:
+        table_ = table_parser.filter_table(table_, ID=vms)
+    elif vms is not None:
+        raise ValueError("Invalid value for vms: {}".format(vms))
+    all_ips = []
+    all_ips_dict = {}
+    mgmt_ip_reg = re.compile(MGMT_IP)
+    vm_ids = table_parser.get_column(table_, 'ID')
+    vm_nets = table_parser.get_column(table_, 'Networks')
+
+    for i in range(len(vm_ids)):
+        vm_id = vm_ids[i]
+        mgmt_ips_for_vm = mgmt_ip_reg.findall(vm_nets[i])
+        all_ips_dict[vm_id] = mgmt_ips_for_vm
+        all_ips += mgmt_ips_for_vm
+
+    LOG.info("Management IPs dict: {}".format(all_ips_dict))
+
+    if rtn_dict:
+        return all_ips_dict
+    else:
+        return all_ips
