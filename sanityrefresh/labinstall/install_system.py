@@ -427,6 +427,14 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
         log.error('Waited {} seconds and {} did not become \"{}\"'.format(str(REBOOT_TIMEOUT), node_names, expected_state))
         sys.exit(1)
 
+def get_availability_controller1():
+    ## Todo: Make this generic for any node
+    ''' Gets the availablity state of a node after unlock
+    '''
+    cmd = "source /etc/nova/openrc; system host-show controller-1 | awk ' / availability / { print $4}'"
+    output = controller0.ssh_conn.exec_cmd(cmd)[1]
+    return output
+
 def bring_up(node, boot_device_dict, small_footprint, close_telnet_conn=True):
     ''' Initiate the boot and installation operation.
     '''
@@ -929,6 +937,15 @@ if __name__ == '__main__':
                     sys.exit(1)
 
                 wait_state(node, OPERATIONAL, ENABLED)
+                if get_availability_controller1() == "degraded":
+                    # Controler1 is in degraded state. Sometimes the fault could be
+                    # corrected by re-boot.
+                    log.info("Controller1 is in degraded state. Attempting to reset")
+                    node.telnet_conn.exec_cmd("echo " + WRSROOT_PASSWORD + " | sudo -S reboot")
+                    node.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
+                    log.info("Found login prompt. Controller1 reset has completed")
+                    wait_state(node, OPERATIONAL, ENABLED)
+
                 if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
                     log.error("Failed during lab setup")
                     sys.exit(1)
