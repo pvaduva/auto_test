@@ -1,16 +1,29 @@
 import time
 
+from utils import cli, exceptions, table_parser
+from utils.ssh import ControllerClient, SSHFromSSH
+from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import HostAavailabilityState, HostAdminState
 from consts.timeout import HostTimeout
 from keywords import system_helper
 from keywords.security_helper import LinuxUser
-from utils import cli, exceptions, table_parser
-from utils.ssh import ControllerClient, SSHFromSSH
-from utils.tis_log import LOG
 
 
 def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False):
+    """
+    Reboot one or multiple host(s)
+
+    Args:
+        hostnames (list): list of hostnames to reboot. str input is also acceptable when only one host to be rebooted
+        timeout (int): timeout waiting for reboot to complete in seconds
+        con_ssh (SSHClient): Active controller ssh
+        fail_ok (bool): Whether it is okay or not for rebooting to fail on any host
+
+    Returns (list): [rtn_code, message]
+        [0, ''] hosts are successfully rebooted and back to available/degraded or online state.
+
+    """
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
     if isinstance(hostnames, str):
@@ -77,7 +90,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     for host in hostnames:
         vals = get_hostshow_values(host, con_ssh, 'task', 'availability')
         if not vals['task'] == '':
-            task_unfinished_msg = task_unfinished_msg + "{} still in task: {}. ".format(host, vals['task'])
+            task_unfinished_msg = "{}{} still in task: {}. ".format(task_unfinished_msg, host, vals['task'])
         states_vals[host] = vals
 
     message = "Host(s) state(s) - {}. ".format(states_vals)
@@ -390,4 +403,3 @@ def get_good_computes(con_ssh=None):
                                     operational='enabled', administrative='unlocked')
     LOG.debug("Computes that are in good states: {}".format(hosts))
     return hosts
-

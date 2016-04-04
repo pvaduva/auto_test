@@ -1,12 +1,12 @@
 import re
 
-from consts import cgcs
-from consts.auth import Tenant
 from utils import cli
 from utils import exceptions
 from utils import table_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
+from consts import cgcs
+from consts.auth import Tenant
 
 
 class System:

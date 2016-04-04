@@ -1,10 +1,11 @@
-import os
 import pytest
+
 import setups
 from keywords.verify_fixtures import *
 
 con_ssh = None
 is_first = True
+
 
 @pytest.fixture(scope='session', autouse=True)
 def setup_test_session(request):

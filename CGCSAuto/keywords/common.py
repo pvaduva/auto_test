@@ -1,6 +1,5 @@
-from consts.auth import Primary
-from utils.ssh import ControllerClient
 from utils.tis_log import LOG
+from consts.auth import Primary
 
 
 def collect_tis_logs(con_ssh=None):
@@ -26,7 +25,7 @@ def get_tenant_name(auth_info=None):
     return auth_info['tenant']
 
 
-class _Count:
+class Count:
     __vm_count = 0
     __flavor_count = 0
     __volume_count = 0

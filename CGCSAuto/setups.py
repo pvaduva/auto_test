@@ -1,10 +1,10 @@
 import os
 
-import setup_consts
-from consts.auth import Primary, Tenant
-from consts.cgcs import Prompt
 from utils import exceptions
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, ssh_to_controller0
+from consts.auth import Primary, Tenant
+from consts.cgcs import Prompt
+import setup_consts
 
 
 def create_tmp_dir():

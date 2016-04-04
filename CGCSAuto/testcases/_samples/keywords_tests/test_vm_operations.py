@@ -1,11 +1,10 @@
-from pytest import fixture, mark, skip, raises
+from pytest import mark, skip
 
+import keywords.cinder_helper
+import keywords.glance_helper
 from consts.auth import Tenant
-from utils import cli, exceptions
-from utils import table_parser
 from utils.tis_log import LOG
-from keywords import nova_helper, vm_helper, host_helper, system_helper, network_helper
-from setup_consts import P1, P2, P3
+from keywords import nova_helper, vm_helper
 
 _skip = False
 
@@ -50,7 +49,7 @@ def test_ping_vms_from_natbox(vm_count):
     if vm_count == 'all':
         vm_ids = None
     else:
-        vm_ids = vm_helper.get_any_vms(count=vm_count)
+        vm_ids = vm_helper.get_any_vm_ids(count=vm_count)
 
     assert vm_ids != []
 
@@ -63,11 +62,11 @@ def test_ping_vms_from_natbox(vm_count):
     'all'
 ])
 def test_ping_vms_from_vm_1(vm_count):
-    from_vm = vm_helper.get_any_vms(count=1)[0]
+    from_vm = vm_helper.get_any_vm_ids(count=1)[0]
     if vm_count == 'all':
         vm_ids = None
     else:
-        vm_ids = vm_helper.get_any_vms(count=vm_count)
+        vm_ids = vm_helper.get_any_vm_ids(count=vm_count)
 
     assert vm_ids != []
 
@@ -81,20 +80,20 @@ def test_ping_vms_from_vm_1(vm_count):
     'centos',
 ])
 def test_ping_vms_from_vm_various_images(vm_image):
-    image_id = nova_helper.get_image_id_from_name(name=vm_image, strict=False)
+    image_id = keywords.glance_helper.get_image_id_from_name(name=vm_image, strict=False)
     if not image_id:
         skip("No image name has substring: {}.".format(vm_image))
 
     vol_size = 1
     if vm_image in ['ubuntu', 'centos']:
         vol_size = 8
-    vol_id = nova_helper.create_volume(name='vol_' + vm_image, image_id=image_id, size=vol_size)[1]
+    vol_id = keywords.cinder_helper.create_volume(name='vol_' + vm_image, image_id=image_id, size=vol_size)[1]
     vm_id = vm_helper.boot_vm(source='volume', source_id=vol_id)[1]
 
     vm_helper.ping_vms_from_vm(from_vm=vm_id)
 
 
 def test_ping_vms_from_vm_2():
-    to_vms = vm_helper.get_any_vms(auth_info=Tenant.ADMIN, all_tenants=True)
-    for vm in vm_helper.get_any_vms():
+    to_vms = vm_helper.get_any_vm_ids(auth_info=Tenant.ADMIN, all_tenants=True)
+    for vm in vm_helper.get_any_vm_ids():
         vm_helper.ping_vms_from_vm(from_vm=vm, to_vms=to_vms)

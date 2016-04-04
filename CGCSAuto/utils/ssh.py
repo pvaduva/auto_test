@@ -697,12 +697,11 @@ class ControllerClient:
     @classmethod
     def set_active_controllers(cls, *args):
         """
+        Set active controller(s) for lab(s).
 
         Args:
-            *args:ssh clients for labs
+            *args:ssh clients for lab(s)
                 e.g.,ip_1-4_ssh , hp380_ssh
-
-        Returns:
 
         """
         for lab_ssh in args:

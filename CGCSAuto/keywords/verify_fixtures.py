@@ -4,9 +4,19 @@ from utils import table_parser
 from utils.tis_log import LOG
 from keywords import system_helper
 
+########################
+# Test Fixtures Module #
+########################
+
 
 @fixture()
 def check_alarms(request):
+    """
+    Check system alarms before the after test run.
+
+    Args:
+        request: caller of this fixture. i.e., test func.
+    """
     LOG.info("Gathering system alarms info before test begins.")
     before_tab = system_helper.get_alarms()
     before_rows = table_parser.get_all_rows(before_tab)
@@ -30,7 +40,7 @@ def check_hosts(request):
     LOG.debug("Gathering systems hosts status before test begins.")
     raise NotImplementedError
 
+
 @fixture()
 def check_vms(request):
     raise NotImplementedError
-

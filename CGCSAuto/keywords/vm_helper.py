@@ -3,24 +3,25 @@ import re
 import time
 from contextlib import contextmanager
 
-from consts.auth import Tenant, Primary
-from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, Prompt
-from consts.timeout import VMTimeout
-from keywords import network_helper, nova_helper, system_helper
-from keywords.common import _Count
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
 from utils.tis_log import LOG
+from consts.auth import Tenant, Primary
+from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME
+from consts.timeout import VMTimeout
+from keywords import network_helper, nova_helper, system_helper, cinder_helper
+from keywords.common import Count
 
 
-def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False):
+def get_any_vm_ids(count=None, con_ssh=None, auth_info=None, all_tenants=False):
     """
+    Get a list of vm ids.
 
     Args:
-        count:
-        con_ssh:
-        auth_info:
-        all_tenants: whether to get any vms from all tenants or just admin tenant if admin is given in auth_info
+        count (int): number of vms ids to return. If None, all vms for specific tenant will be returned.
+        con_ssh (SSHClient):
+        auth_info (dict):
+        all_tenants (bool): whether to get any vms from all tenants or just admin tenant if auth_info is set to Admin
 
     Returns:
 
@@ -38,15 +39,41 @@ def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False):
     return vms
 
 
-def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1,
-            max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            auth_info=None, con_ssh=None, nics=None, fail_ok=False):
+def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, nics=None,
+            max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None, fail_ok=False,
+            auth_info=None, con_ssh=None):
+    """
+
+    Args:
+        name (str):
+        flavor (str):
+        source (str):
+        source_id (str):
+        min_count (int):
+        max_count (int):
+        key_name (str):
+        swap (int):
+        ephemeral (int):
+        user_data:
+        block_device:
+        auth_info (dict):
+        con_ssh (SSHClient):
+        nics (list): [{'net-id1': <net_id1>, 'vif-model1': <vif1>}, {'net-id2': <net_id2>, 'vif-model2': <vif2>}, ...]
+        fail_ok (bool):
+
+    Returns (list): [rtn_code (int), vm_id or message (str)]
+        [0, vm_id]: vm is created successfully and in Active state.
+        [1, vm_id]: create vm cli command failed.
+        [2, vm_id]: create vm cli accepted, but vm building is not 100% completed.
+        [3, vm_id]: vm is not in Active state after created.
+
+    """
     LOG.info("Processing boot_vm args...")
     # Handle mandatory arg - name
     if auth_info is None:
         auth_info = Primary.get_primary()
     tenant = auth_info['tenant']
-    vm_num = _Count.get_vm_count()
+    vm_num = Count.get_vm_count()
     if name is None:
         name = 'vm'
     name = '-'.join([tenant, name, str(vm_num)])
@@ -84,14 +111,14 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1,
     volume_id = image = snapshot_id = None
     if source is None:
         vol_name = 'vol-' + name
-        volume_id = nova_helper.create_volume(vol_name)[1]
+        volume_id = cinder_helper.create_volume(vol_name)[1]
     elif source.lower() == 'volume':
-        volume_id = source_id if source_id else nova_helper.create_volume('vol-' + name)[1]
+        volume_id = source_id if source_id else cinder_helper.create_volume('vol-' + name)[1]
     elif source.lower() == 'image':
         image = source_id if source_id else 'cgcs-guest'
     elif source.lower() == 'snapshot':
         if not snapshot_id:
-            snapshot_id = nova_helper.get_snapshot_id()
+            snapshot_id = cinder_helper.get_snapshot_id()
             if not snapshot_id:
                 raise ValueError("snapshot id is required to boot vm; however no snapshot exists on the system.")
     # Handle mandatory arg - key_name
@@ -133,7 +160,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1,
 
     tmout = VMTimeout.STATUS_CHANGE
     if not _wait_for_vm_status(vm_id=vm_id, status=VMStatus.ACTIVE, timeout=tmout, con_ssh=con_ssh,
-                           auth_info=auth_info, fail_ok=True):
+                               auth_info=auth_info, fail_ok=True):
         vm_status = nova_helper.get_vm_info(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)
         message = "VM {} did not reach ACTIVE state within {}. VM status: {}".format(vm_id, tmout, vm_status)
         if fail_ok:
@@ -156,6 +183,16 @@ def __compose_args(optional_args_dict):
 
 
 def get_keypair(auth_info=None, con_ssh=None):
+    """
+    Get keypair for specific tenant.
+
+    Args:
+        auth_info (dict): If None, default tenant will be used.
+        con_ssh (SSHClient):
+
+    Returns (str): key name
+
+    """
     if auth_info is None:
         auth_info = Primary.get_primary()
     tenant = auth_info['tenant']
@@ -271,7 +308,8 @@ def launch_vm_custom_script(script, con_ssh=None):
     return vms_launched
 
 
-def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=False, fail_ok=False, auth_info=Tenant.ADMIN):
+def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=False, fail_ok=False,
+                    auth_info=Tenant.ADMIN):
     """
 
     Args:
@@ -439,19 +477,24 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     """
 
     Args:
-        vm_id (str):
+        vm_id (str): vm to cold migrate
         revert (bool): False to confirm resize, True to revert
         con_ssh (SSHClient):
+        fail_ok (bool): True if fail ok. Default to False, ie., throws exception upon cold migration fail.
         auth_info (dict):
 
     Returns: [rtn_code, message]
-        details (dict):
-                {
-                'before_host': compute-0
-                'after_host': compute-1
-                'before_status': ACTIVE
-                'after_status': ACTIVE
-                }
+        [0, ''] Cold migration and confirm/revert succeeded. VM is back to original state or Active state.
+        [1, <stderr>] Cold migration cli command rejected. <stderr> is the err message returned by cli cmd.
+        [2, <stdout>] Cold migration cli accepted, but not finished. <stdout> is the output of cli cmd.
+        [3, timeout_message] Cold migration command ran successfully, but timed out waiting for VM to reach
+            'Verify Resize' state or Error state.
+        [4, err_msg] Cold migration command ran successfully, but VM is in Error state.
+        [5, err_msg] Cold migration command ran successfully, and resize confirm/revert performed. But VM is not in
+            Active state after confirm/revert.
+        [6, err_msg] Cold migration and resize confirm/revert ran successfully, and vm in active state. But host for vm
+            is not as expected. i.e., still the same host after confirm resize, or different host after revert resize.
+
     """
     before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
     before_status = nova_helper.get_vm_info(vm_id, 'status', strict=True, con_ssh=con_ssh)
@@ -460,7 +503,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
     LOG.info("Colding migrating VM {} from {}...".format(vm_id, before_host))
     exitcode, output = cli.nova('migrate --poll', vm_id, ssh_client=con_ssh, auth_info=auth_info,
-                      timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=fail_ok, rtn_list=True)
+                                timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=fail_ok, rtn_list=True)
     if exitcode == 1:
         return [1, output]
 
@@ -475,6 +518,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
                                     con_ssh=con_ssh)
 
     if vm_status is None:
+
         return [3, 'Timed out waiting for Error or Active status for VM {}'.format(vm_id)]
 
     verify_resize_str = 'Revert' if revert else 'Confirm'
@@ -483,16 +527,17 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
         _confirm_or_revert_resize(vm=vm_id, revert=revert, con_ssh=con_ssh)
 
     elif vm_status == VMStatus.ERROR:
-        message = "VM {} in Error state after cold migrate. {} resize is not reached.".format(vm_id, verify_resize_str)
+        err_msg = "VM {} in Error state after cold migrate. {} resize is not reached.".format(vm_id, verify_resize_str)
         if fail_ok:
-            return [4, message]
-        raise exceptions.VMPostCheckFailed(message)
+            return [4, err_msg]
+        raise exceptions.VMPostCheckFailed(err_msg)
 
-    post_confirm_state = _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=fail_ok, con_ssh=con_ssh)
+    post_confirm_state = _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM,
+                                             fail_ok=fail_ok, con_ssh=con_ssh)
 
     if post_confirm_state is None:
-        message = "VM {} is not in Active state after {} Resize".format(vm_id, verify_resize_str)
-        return [5, message]
+        err_msg = "VM {} is not in Active state after {} Resize".format(vm_id, verify_resize_str)
+        return [5, err_msg]
 
     # Process results
     after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
@@ -501,11 +546,11 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     operation_ok = not host_changed if revert else host_changed
 
     if not operation_ok:
-        message = ("VM {} host {} after {} Resize. Before host: {}. After host: {}".
+        err_msg = ("VM {} host {} after {} Resize. Before host: {}. After host: {}".
                    format(vm_id, host_change_str, verify_resize_str, before_host, after_host))
         if fail_ok:
-            return [6, message]
-        raise exceptions.VMPostCheckFailed(message)
+            return [6, err_msg]
+        raise exceptions.VMPostCheckFailed(err_msg)
 
     LOG.info("VM {} successfully cold migrated and {}ed Resize.".format(vm_id, verify_resize_str))
     return [0, '']
@@ -571,25 +616,24 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
 
     return packet_loss_rate
 
-def get_vm_image_type(vm_id, con_ssh=None, auth_info=None):
-    nova_helper.get
 
-def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=True):
+def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False):
     """
 
     Args:
-        vm_ids: ping these vms' management ips
-        ssh_client: ping from this ssh client
-        con_ssh: controller ssh client to run cli command to get all the management ips
-        num_pings:
-        timeout:
-        fail_ok:
+        vm_ids (list): list of vms to ping
+        ssh_client (SSHClient): ping from this ssh client. Usually a natbox' ssh client or another vm's ssh client
+        con_ssh (SSHClient): active controller ssh client to run cli command to get all the management ips
+        num_pings (int): number of pings to send
+        timeout (int): timeout waiting for response of ping messages in seconds
+        fail_ok (bool): Whether it's okay to have 100% packet loss rate.
 
-    Returns:result dictionary
+    Returns (list): [res (bool), packet_loss_dict (dict)]
+        Packet loss rate dictionary format:
         {
-        ip1: packet_loss_percentile1,
-        ip2: packet_loss_percentile2,
-        ...
+         ip1: packet_loss_percentile1,
+         ip2: packet_loss_percentile2,
+         ...
         }
 
     """
@@ -610,18 +654,20 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
     """
 
     Args:
-        con_ssh: (SSHClient) active controller client to retrieve the vm info
-        natbox_client: (NATBoxClient) ping vms from this client
-        num_pings: (int)
-        timeout: (int)
-        fail_ok: (bool)
-            Default to True, so it will still ping the rest of the vms and return results even if pinging one vm failed.
+        vm_ids: vms to ping. If None, all vms will be ping'd.
+        con_ssh (SSHClient): active controller client to retrieve the vm info
+        natbox_client (NATBoxClient): ping vms from this client
+        num_pings (int): number of pings to send
+        timeout (int): timeout waiting for response of ping messages in seconds
+        fail_ok (bool): When False, test will stop right away if one ping failed. When True, test will continue to ping
+            the rest of the vms and return results even if pinging one vm failed.
 
-    Returns: result dictionary
+    Returns (list): [res (bool), packet_loss_dict (dict)]
+        Packet loss rate dictionary format:
         {
-        vm_ip1: packet_loss_percentile1,
-        vm_ip2: packet_loss_percentile2,
-        ...
+         ip1: packet_loss_percentile1,
+         ip2: packet_loss_percentile2,
+         ...
         }
     """
     if not natbox_client:
@@ -645,10 +691,17 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         natbox_client:
         num_pings:
         timeout:
-        fail_ok:
+        fail_ok:  When False, test will stop right away if one ping failed. When True, test will continue to ping
+            the rest of the vms and return results even if pinging one vm failed.
         auth_info:
 
-    Returns:
+    Returns (list): [res (bool), packet_loss_dict (dict)]
+        Packet loss rate dictionary format:
+        {
+         ip1: packet_loss_percentile1,
+         ip2: packet_loss_percentile2,
+         ...
+        }
 
     """
     vms_ips = network_helper.get_mgmt_ips_for_vms(con_ssh=con_ssh, auth_info=auth_info, rtn_dict=True)
@@ -659,19 +712,33 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         to_vms = vms_ids
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
-                                        auth_info=auth_info, prompt=prompt) as from_vm_ssh:
+                               auth_info=auth_info, prompt=prompt) as from_vm_ssh:
 
         res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
                         fail_ok=fail_ok)
-
-    #if close_conn:
-     #   from_vm_ssh.close()
 
     return res
 
 
 @contextmanager
 def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, natbox_client=None, auth_info=Tenant.ADMIN):
+    """
+    ssh to a vm from natbox.
+
+    Args:
+        vm_id (str): vm to ssh to
+        username (str):
+        password (str):
+        prompt (str):
+        natbox_client (NATBoxClient):
+        auth_info (dict):
+
+    Returns (SSHClient): ssh client of the vm
+
+    Examples: with ssh_to_vm_from_natbox(vm_id=<id>) as vm_ssh:
+                  vm_ssh.exec_cmd(cmd)
+
+    """
     vm_image_name = (nova_helper.get_vm_image_name(vm_id=vm_id, auth_info=auth_info)).strip().lower()
     vm_name = nova_helper.get_vm_name_from_id(vm_id=vm_id)
     vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id, auth_info=auth_info)[0]
@@ -683,7 +750,7 @@ def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, natb
         vm_ssh.close()
 
 
-def get_vms(image=None, status=VMStatus.ACTIVE, flavor=None, host=None, tenant=None, delete=False):
+def get_vm_ids(image=None, status=VMStatus.ACTIVE, flavor=None, host=None, tenant=None, delete=False):
     raise NotImplementedError
 
 

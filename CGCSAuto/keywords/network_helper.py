@@ -1,11 +1,11 @@
 import random
 import re
 
-from keywords import common
 from utils import table_parser, cli
 from utils.tis_log import LOG
 from consts.auth import Tenant, Primary
 from consts.cgcs import MGMT_IP
+from keywords import common
 
 
 def create_network(name, admin_state='up', qos_policy=None, vlan_transparent=None, **subnet):
@@ -18,6 +18,16 @@ def _get_net_id(net_name, con_ssh=None, auth_info=None):
 
 
 def get_mgmt_net_id(con_ssh=None, auth_info=None):
+    """
+    Get the management net id of given tenant.
+
+    Args:
+        con_ssh (SSHClient): If None, active controller ssh will be used.
+        auth_info (dict): Tenant dict. If None, primary tenant will be used.
+
+    Returns (str): Management network id of a specific tenant.
+
+    """
     if auth_info is None:
         auth_info = Primary.get_primary()
 
@@ -27,19 +37,33 @@ def get_mgmt_net_id(con_ssh=None, auth_info=None):
 
 
 def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
+    """
+    Get one tenant network id that matches the given net_name of a specific tenant.
+
+    Args:
+        net_name (str): name of the tenant network. This can be a substring of the tenant net name, such as 'net1',
+            and it will return id for <tenant>-net1
+        con_ssh (SSHClient):
+        auth_info (dict): If None, primary tenant will be used.
+
+    Returns (str): A tenant network id for given tenant network name.
+        If multiple ids matches the given name, only one will be returned, and the choice will be random.
+
+    """
     net_ids = get_tenant_net_ids(net_names=net_name, con_ssh=con_ssh, auth_info=auth_info)
     return random.choice(net_ids)
 
 
 def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
     """
+    Get a list of tenant network ids that match the given net_names for a specific tenant.
 
     Args:
-        net_names:
-        con_ssh:
-        auth_info:
+        net_names (str or list): list of tenant network name(s) to get id(s) for
+        con_ssh (SSHClient):
+        auth_info (dict): If None, primary tenant will be used
 
-    Returns (list): tenant net list. such as [tenant2-net1, tenant2-net8]
+    Returns (list): list of tenant nets. such as [<id for tenant2-net1>, <id for tenant2-net8>]
 
     """
     table_ = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -50,21 +74,24 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
     else:
         if isinstance(net_names, str):
             net_names = [net_names]
-        table_ = table_parser.filter_table(table_, name=net_names)
+        table_ = table_parser.filter_table(table_, name=net_names, strict=False)
         return table_parser.get_column(table_, 'id')
 
 
 def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False):
-    """ This function returns the management IPs for all VMs on the system.
-        We make the assumption that the management IPs start with "192"
-        Args:
-            vms: vm ids list. If None, management ips for ALL vms with given Tenant(via auth_info) will be returned.
-            con_ssh: active controller SSHClient object
-            auth_info: use admin by default unless specified
-            rtn_dict: return list if False, return dict if True
-        Returns:
-            list of all VM management IPs
-            if rtn_dict is True: return a dictionary with vm IDs as the keys, and mgmt ips as values.
+    """
+    This function returns the management IPs for all VMs on the system.
+    We make the assumption that the management IPs start with "192".
+    Args:
+        vms (str or list): vm ids list. If None, management ips for ALL vms with given Tenant(via auth_info) will be
+            returned.
+        con_ssh (SSHClient): active controller SSHClient object
+        auth_info (dict): use admin by default unless specified
+        rtn_dict (bool): return list if False, return dict if True
+
+    Returns:
+        list of all VM management IPs
+        if rtn_dict is True: return a dictionary with vm IDs as the keys, and mgmt ips as values.
     """
 
     table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=auth_info))

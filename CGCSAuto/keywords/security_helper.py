@@ -1,5 +1,6 @@
 from utils.ssh import ControllerClient
 
+
 class LinuxUser:
     users = {'wrsroot': 'li69nux'}
     con_ssh = ControllerClient.get_active_controller()

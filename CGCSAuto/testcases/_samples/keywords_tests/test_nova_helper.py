@@ -1,5 +1,6 @@
 from pytest import fixture, mark, skip, raises
 
+import keywords.cinder_helper
 from utils import cli, exceptions
 from utils import table_parser
 from utils.tis_log import LOG
@@ -15,12 +16,12 @@ _skip = False
 ])
 def test_volume(volume_name,delete_name):
     # create a volume
-    new_volume= nova_helper.create_volume(volume_name, size=6)
+    new_volume= keywords.cinder_helper.create_volume(volume_name, size=6)
     assert new_volume[0]==0
     new_volume_id = new_volume[1]
 
     # verified its available after created
-    vol_status = nova_helper.get_volume_states(new_volume_id,"status")['status']
+    vol_status = keywords.cinder_helper.get_volume_states(new_volume_id, "status")['status']
     assert vol_status == "available"
 
     bol = nova_helper.delete_volume(delete_name)
