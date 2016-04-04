@@ -37,7 +37,7 @@ import configparser
 from constants import *
 from utils.ssh import SSHClient
 import utils.log as logutils
-from utils.common import create_node_dict, vlm_reserve, vlm_exec_cmd, find_error_msg, get_ssh_key
+from utils.common import create_node_dict, vlm_reserve, vlm_findmine, vlm_exec_cmd, find_error_msg, get_ssh_key
 from utils.classes import Host
 import utils.wr_telnetlib as telnetlib
 
@@ -427,6 +427,14 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
         log.error('Waited {} seconds and {} did not become \"{}\"'.format(str(REBOOT_TIMEOUT), node_names, expected_state))
         sys.exit(1)
 
+def get_availability_controller1():
+    ## Todo: Make this generic for any node
+    ''' Gets the availablity state of a node after unlock
+    '''
+    cmd = "source /etc/nova/openrc; system host-show controller-1 | awk ' / availability / { print $4}'"
+    output = controller0.ssh_conn.exec_cmd(cmd)[1]
+    return output
+
 def bring_up(node, boot_device_dict, small_footprint, close_telnet_conn=True):
     ''' Initiate the boot and installation operation.
     '''
@@ -657,7 +665,15 @@ if __name__ == '__main__':
     executed = False
     if not executed:
         # Reserve the nodes via VLM
-        vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
+        #check first if nodes already reserved by user
+        reservedbyme = vlm_findmine()
+        barcodesForReserve = []
+        for item in barcodes:
+            if item not in reservedbyme:
+                barcodesForReserve.append(item)
+
+        vlm_reserve(barcodesForReserve, note=INSTALLATION_RESERVE_NOTE)
+        #vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
         # Open a telnet session for controller0.
         cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, 
@@ -810,10 +826,27 @@ if __name__ == '__main__':
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
 
-    cmd = "system host-bulk-add " + BULK_CFG_FILENAME
-    if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-        log.error("Failed to bulk add hosts")
-        sys.exit(1)
+    # Run host bulk add 
+    executed = False
+    if not executed:
+        # No consistency in naming of hosts file
+        bulkfile_found = False
+        for bulkfile in BULKCFG_LIST: 
+            bulkpath = WRSROOT_HOME_DIR + "/" + bulkfile
+            cmd = "test -f " + bulkpath
+            if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
+                bulkfile_found = True
+                cmd = "system host-bulk-add " + bulkfile
+                rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+                if rc != 0 or find_error_msg(output, "Configuration failed"):
+                    log.error("system host-bulk-add failed")
+                    sys.exit(1)
+                break
+
+        if not bulkfile_found:
+            log.error("Configuration failed: No host-bulk-add file was found.")
+            sys.exit(1)
+
 
     # Complete controller0 configuration either as a regular host 
     # or a small footprint host.
@@ -871,8 +904,7 @@ if __name__ == '__main__':
         for thread in threads:
             thread.join()
 
-    # Create seperate process for storage lab installs
-    # Check if we can make this work for regular lab
+    # STORAGE LAB INSTALL
     executed = False
     if not executed and storage_nodes is not None:
         log.info("Beginning lab setup procedure for storage lab")
@@ -905,6 +937,13 @@ if __name__ == '__main__':
                     sys.exit(1)
 
                 wait_state(node, OPERATIONAL, ENABLED)
+                if get_availability_controller1() == "degraded":
+                    # Controler1 is in degraded state. Sometimes the fault could be
+                    # corrected by re-boot.
+                    log.info("Controller1 is in degraded state. Attempting to reset")
+                    vlm_exec_cmd(VLM_REBOOT, node.barcode)
+                    wait_state(node, OPERATIONAL, ENABLED)
+
                 if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
                     log.error("Failed during lab setup")
                     sys.exit(1)
@@ -974,6 +1013,94 @@ if __name__ == '__main__':
         sys.exit(0)
         # COMMON CODE TO MOVE OUT END
 
+    # REGULAR LAB PROCEDURE
+    executed = False
+    if not executed and not storage_nodes and not small_footprint:
+        log.info("Beginning lab setup procedure for regular lab")
+
+        # Remove controller-0 from the nodes list since it's up
+        nodes.remove(controller0)
+
+        # Wait for all nodes to be online to allow lab_setup to set
+        # interfaces properly
+        wait_state(nodes, AVAILABILITY, ONLINE)
+
+        # Run lab setup
+        lab_setup_cmd = WRSROOT_HOME_DIR + "/" + LAB_SETUP_SCRIPT
+        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+            log.error("Failed during lab setup")
+            sys.exit(1)
+
+        # Run lab_setup again
+        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+            log.error("Failed during lab setup")
+            sys.exit(1)
+
+        # Unlock computes and then run lab_setup
+        for node in nodes:
+            if node.name.startswith("compute"):
+                cmd = "source /etc/nova/openrc; system host-unlock " + node.name
+                if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+                    log.error("Failed to unlock: " + node.name)
+                    sys.exit(1)
+
+        # Wait until computes are enabled
+        for node in nodes:
+            if node.name.startswith("compute"):
+                wait_state(node, OPERATIONAL, ENABLED)
+
+        # Run lab_setup again
+        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+            log.error("Failed during lab setup")
+            sys.exit(1)
+
+        # Unlock controller-1
+        for node in nodes:
+            if node.name == "controller-1":
+                cmd = "source /etc/nova/openrc; system host-unlock " + node.name
+                if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+                    log.error("Failed to unlock: " + node.name)
+                    sys.exit(1)
+
+                wait_state(node, OPERATIONAL, ENABLED)
+                controller1_state = get_availability_controller1()
+                if re.search('degraded', controller1_state):
+                    # Controler1 is in degraded state. Sometimes the fault could be
+                    # corrected by re-boot.
+                    log.info("Controller1 is in degraded state. Attempting to reset")
+                    vlm_exec_cmd(VLM_REBOOT, node.barcode)
+                    wait_state(node, OPERATIONAL, ENABLED)
+
+        # Run lab_setup again
+        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
+            log.error("Failed during lab setup")
+            sys.exit(1)
+
+        # Check that the nodes are available
+        wait_state(nodes, AVAILABILITY, AVAILABLE)
+
+        # COMMON CODE TO MOVE OUT START
+        # Get alarms
+        cmd = "source /etc/nova/openrc; system alarm-list"
+        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+            log.error("Failed to get alarm list")
+            sys.exit(1)
+
+        # Get build info
+        cmd = "cat /etc/build.info"
+        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+            log.error("Failed to get build info")
+            sys.exit(1)
+
+        # Unreserve targets
+        for barcode in barcodes:
+            vlm_exec_cmd(VLM_UNRESERVE, barcode)
+
+        # If we made it this far, we probably had a successful install
+        log.info("Terminating regular system install")
+        sys.exit(0)
+        # COMMON CODE TO MOVE OUT END
+
 
     # Verify the nodes are up and running
     executed = False
@@ -993,17 +1120,6 @@ if __name__ == '__main__':
             if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
                 log.error("Warning: Failed to bring up {}".\
                            format("node"))
-
-    lab_setup_cmd = WRSROOT_HOME_DIR + "/" + LAB_SETUP_CFG_FILENAME
-
-    # Running lab_setup.sh twice is required for heterogeneous controllers
-    # The second lab_setup.sh sets up OAM interfaces for controller-1 and that
-    # has to be done before it is unlocked
-    if not executed:
-        for i in range(0, 2):
-            if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
-                log.error("Failed during lab setup")
-                sys.exit(1)
 
     if not executed:
         for node in nodes:
@@ -1047,16 +1163,5 @@ if __name__ == '__main__':
     #      This needs to be in the exception error handling for failure cases
     for barcode in barcodes:
         vlm_exec_cmd(VLM_UNRESERVE, barcode)
-
-    #TODO: Add system alarm-list and SUDO sm-dump, etc. print-outs
-
-    #TODO: Should fail if major alarms are present at the end
-    #[wrsroot@controller-0 ~(keystone_admin)]$ system alarm-list
-    #+--------------------------------------+----------+----------------------------------+-----------------------------------------------------------+----------+----------------------------+
-    #| UUID                                 | Alarm ID | Reason Text                      | Entity Instance ID                                        | Severity | Time Stamp                 |
-    #+--------------------------------------+----------+----------------------------------+-----------------------------------------------------------+----------+----------------------------+
-    #| 60e5273c-5ba0-49f5-b291-c93debcd9aca | 300.003  | Networking Agent not responding. | host=compute-0.agent=ba5b78ac-5b4b-47bf-af8f-24e2ff18e5b6 | major    | 2015-12-13T18:32:20.927370 |
-    #| de67feaa-ba52-41cf-afcb-4a1b02a66eef | 300.003  | Networking Agent not responding. | host=compute-1.agent=a8efa7bb-9da7-41fd-ac4d-abb9db7d2351 | major    | 2015-12-13T18:32:21.049578 |
-    #+--------------------------------------+----------+----------------------------------+-----------------------------------------------------------+----------+----------------------------+    
 
     sys.exit(0)

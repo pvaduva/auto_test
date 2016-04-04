@@ -18,6 +18,7 @@ LAB_SCRIPTS_REL_PATH = EXPORT_LAB_REL_PATH + "/scripts"
 SYSTEM_CFG_FILENAME = "system_config"
 CFGFILE_LIST = ["system_config", "TiS_config.ini"]
 # TODO: Same todo as above, where the bulk add filename might be different
+BULKCFG_LIST = ["hosts_bulk_add.xml", "hosts.xml"]
 BULK_CFG_FILENAME = "hosts_bulk_add.xml"
 LAB_SETUP_SCRIPT = "lab_setup.sh"
 LAB_SETUP_CFG_FILENAME = "lab_setup.conf"
@@ -71,7 +72,7 @@ DEFAULT_BOOT_DEVICE_DICT = {'controller-0': '[ABC]00',
 BIOS_TYPES = [b"American Megatrends", b"Hewlett-Packard", b"Phoenix"]
 BIOS_TYPE_FN_KEY_ESC_CODES = ['\x1b' + '[17~', '\x1b' + '@', '\x1b' + '[24~'] # F6, ESC + @, F12 Phoenix used for R720 nodes (i.e. Dell)
 BIOS_TYPE_FN_HUMAN_READ = ['F6', 'ESC + @', 'F12']
-INSTALL_TIMEOUTS = [2100, 2100, 2100]
+INSTALL_TIMEOUTS = [2400, 2100, 2100]  # Some labs take longer that 2100 seconds to install; increased to 2400.
 SERIAL_KICKSTART_CONTROLLER_INSTALL = "Serial Kickstart Controller Install"
 MAX_BOOT_MENU_LINES = 15
 
@@ -133,7 +134,7 @@ CREATE_PUBLIC_SSH_KEY_CMD = "ssh-keygen -f {} -t rsa -N ''"
 # Command timeouts
 COLLECT_TIMEOUT=300
 RSYNC_TIMEOUT = 3600
-REBOOT_TIMEOUT = 1800
+REBOOT_TIMEOUT = 3600
 BIOS_TYPE_TIMEOUT = 1800
 CONFIG_CONTROLLER_TIMEOUT = 1200
 LAB_SETUP_TIMEOUT = 1800
