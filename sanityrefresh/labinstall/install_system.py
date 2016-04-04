@@ -941,9 +941,7 @@ if __name__ == '__main__':
                     # Controler1 is in degraded state. Sometimes the fault could be
                     # corrected by re-boot.
                     log.info("Controller1 is in degraded state. Attempting to reset")
-                    node.telnet_conn.exec_cmd("echo " + WRSROOT_PASSWORD + " | sudo -S reboot")
-                    node.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
-                    log.info("Found login prompt. Controller1 reset has completed")
+                    vlm_exec_cmd(VLM_REBOOT, node.barcode)
                     wait_state(node, OPERATIONAL, ENABLED)
 
                 if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
@@ -1063,6 +1061,15 @@ if __name__ == '__main__':
                 if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
                     log.error("Failed to unlock: " + node.name)
                     sys.exit(1)
+
+                wait_state(node, OPERATIONAL, ENABLED)
+                controller1_state = get_availability_controller1()
+                if re.search('degraded', controller1_state):
+                    # Controler1 is in degraded state. Sometimes the fault could be
+                    # corrected by re-boot.
+                    log.info("Controller1 is in degraded state. Attempting to reset")
+                    vlm_exec_cmd(VLM_REBOOT, node.barcode)
+                    wait_state(node, OPERATIONAL, ENABLED)
 
         # Run lab_setup again
         if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
