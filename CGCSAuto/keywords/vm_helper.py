@@ -3,10 +3,11 @@ import re
 import time
 from contextlib import contextmanager
 
+# import keywords.cinder_helper
 from consts.auth import Tenant, Primary
 from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, Prompt
 from consts.timeout import VMTimeout
-from keywords import network_helper, nova_helper, system_helper
+from keywords import network_helper, nova_helper, system_helper, cinder_helper
 from keywords.common import _Count
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
@@ -84,9 +85,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1,
     volume_id = image = snapshot_id = None
     if source is None:
         vol_name = 'vol-' + name
-        volume_id = nova_helper.create_volume(vol_name)[1]
+        volume_id = cinder_helper.create_volume(vol_name)[1]
     elif source.lower() == 'volume':
-        volume_id = source_id if source_id else nova_helper.create_volume('vol-' + name)[1]
+        volume_id = source_id if source_id else cinder_helper.create_volume('vol-' + name)[1]
     elif source.lower() == 'image':
         image = source_id if source_id else 'cgcs-guest'
     elif source.lower() == 'snapshot':
