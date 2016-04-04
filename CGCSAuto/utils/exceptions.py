@@ -113,6 +113,10 @@ class VolumeError(TiSError):
     message = "Volume error."
 
 
+class ImageError(TiSError):
+    message = "Image error."
+
+
 class FlavorError(TiSError):
     message = "Flavor error."
 

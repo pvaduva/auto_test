@@ -3,85 +3,9 @@ import time
 
 from consts.auth import Tenant
 from consts.timeout import VolumeTimeout
-from keywords.glance_helper import get_image_id_from_name
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
-
-
-def _wait_for_volume_in_cinder_list(volume_id,column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
-            check_interval=3,con_ssh=None, auth_info=None):
-    """
-        check if a specific field still exist in a specified column
-        an id in cinder list's ID column
-        an id in nova list's ID column
-        etc...
-    """
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        table_ = table_parser.table(cli.cinder('list', ssh_client=con_ssh, auth_info=auth_info))
-        ids_list = table_parser.get_column(table_, column)
-
-        if volume_id not in ids_list:
-            return True
-        time.sleep(check_interval)
-    else:
-        if fail_ok:
-            return False
-        raise exceptions.TimeoutException("Timed out waiting for {} to not be in column {}. "
-                                          "Actual still in column".format(volume_id, column))
-
-
-def volume_exists(volume_id, con_ssh=None, auth_info=Tenant.ADMIN):
-    """
-    Args:
-        volume_id:
-        con_ssh:
-        auth_info
-
-    Returns:
-        return
-    """
-    exit_code, output = cli.cinder('show', volume_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
-    return exit_code == 0
-
-
-def delete_volume(volume_id,fail_ok=False, con_ssh=None, auth_info=Tenant.TENANT_1):
-
-    """
-    Args:
-        volume_id (str): id of the volume
-        fail_ok (bool): raise local exception based off result from cli.cinder
-        con_ssh (SSHClient):
-    Returns:
-        a boolean: True if volume successfully deleted, raise exception otherwise
-
-    """
-    # if volume doesn't exist return [-1,'']
-    if volume_id is not None:
-        v_exist = volume_exists(volume_id)
-        if not v_exist:
-            LOG.info("To be deleted Volume: {} does not exists.".format(volume_id))
-            return [-1, '']
-
-    # execute the delete command
-    exit_code, cmd_output = cli.cinder('delete', volume_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
-                auth_info=auth_info)
-
-    if exit_code == 1:
-        return [1, cmd_output]
-
-    # check if the volume is deleted
-    vol_status = _wait_for_volume_in_cinder_list(volume_id, column='ID',fail_ok=fail_ok)
-
-    if not vol_status:
-        if fail_ok:
-            LOG.warning("deletion command is executed but '{}' still show up within cinder list".format(volume_id))
-            return [2, volume_id]
-        raise exceptions.VolumeError("deletion command is executed but '{}' "
-                                     "still show up within cinder list".format(volume_id))
-
-    LOG.info("Volume {} is deleted .".format(volume_id))
-    return [0, '']
+from keywords import glance_helper
 
 
 def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=None, status=None, attached_vm=None,
@@ -177,7 +101,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
         elif source_vol_id:
             source_arg = '--source-volid ' + source_vol_id
         else:
-            image_id = image_id if image_id is not None else get_image_id_from_name('cgcs-guest')
+            image_id = image_id if image_id is not None else glance_helper.get_image_id_from_name('cgcs-guest')
             source_arg = '--image-id ' + image_id
 
     optional_args = {'--display-name': name,
@@ -294,3 +218,77 @@ def get_snapshot_id(status='available', vol_id=None, name=None, size=None, con_s
     return random.choice(ids)
 
 
+def _wait_for_volume_in_cinder_list(volume_id,column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
+            check_interval=3,con_ssh=None, auth_info=None):
+    """
+        check if a specific field still exist in a specified column
+        an id in cinder list's ID column
+        an id in nova list's ID column
+        etc...
+    """
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        table_ = table_parser.table(cli.cinder('list', ssh_client=con_ssh, auth_info=auth_info))
+        ids_list = table_parser.get_column(table_, column)
+
+        if volume_id not in ids_list:
+            return True
+        time.sleep(check_interval)
+    else:
+        if fail_ok:
+            return False
+        raise exceptions.TimeoutException("Timed out waiting for {} to not be in column {}. "
+                                          "Actual still in column".format(volume_id, column))
+
+
+def volume_exists(volume_id, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Args:
+        volume_id:
+        con_ssh:
+        auth_info
+
+    Returns:
+        return
+    """
+    exit_code, output = cli.cinder('show', volume_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
+    return exit_code == 0
+
+
+def delete_volume(volume_id,fail_ok=False, con_ssh=None, auth_info=Tenant.TENANT_1):
+
+    """
+    Args:
+        volume_id (str): id of the volume
+        fail_ok (bool): raise local exception based off result from cli.cinder
+        con_ssh (SSHClient):
+    Returns:
+        a boolean: True if volume successfully deleted, raise exception otherwise
+
+    """
+    # if volume doesn't exist return [-1,'']
+    if volume_id is not None:
+        v_exist = volume_exists(volume_id)
+        if not v_exist:
+            LOG.info("To be deleted Volume: {} does not exists.".format(volume_id))
+            return [-1, '']
+
+    # execute the delete command
+    exit_code, cmd_output = cli.cinder('delete', volume_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
+                auth_info=auth_info)
+
+    if exit_code == 1:
+        return [1, cmd_output]
+
+    # check if the volume is deleted
+    vol_status = _wait_for_volume_in_cinder_list(volume_id, column='ID',fail_ok=fail_ok)
+
+    if not vol_status:
+        if fail_ok:
+            LOG.warning("deletion command is executed but '{}' still show up within cinder list".format(volume_id))
+            return [2, volume_id]
+        raise exceptions.VolumeError("deletion command is executed but '{}' "
+                                     "still show up within cinder list".format(volume_id))
+
+    LOG.info("Volume {} is deleted .".format(volume_id))
+    return [0, '']
