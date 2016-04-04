@@ -176,6 +176,7 @@ def vlm_getattr(barcodes):
         attr_values.append(attr_dict)
     return attr_values
 
+
 def vlm_findmine():
     cmd = [VLM, VLM_FINDMINE]
     output = exec_cmd(cmd)[1]
