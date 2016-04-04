@@ -1034,8 +1034,12 @@ class Telnet:
             if node.name == CONTROLLER0:
                 #TODO: Check time on this
                 self.get_read_until("Kickstart Boot Menu", 60)
-                log.info("Enter second option for Controller Install")
-                self.write_line("2")
+                if small_footprint:
+                    log.info("Enter third option for Controller and Compute Install")
+                    self.write_line("3")
+                else:
+                    log.info("Enter second option for Controller Install")
+                    self.write_line("2")
         elif bios_type == BIOS_TYPES[1]:
             # Hewlett-Packard BIOS
             self.get_read_until("Network Boot", 120)

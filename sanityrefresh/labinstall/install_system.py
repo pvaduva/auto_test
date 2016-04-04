@@ -762,11 +762,13 @@ if __name__ == '__main__':
                               WRSROOT_USERNAME, controller0.host_ip, \
                               WRSROOT_IMAGES_DIR + "/",\
                               pre_opts=pre_opts)
+
         if small_footprint:
             bld_server_conn.rsync(SFP_LICENSE_FILEPATH, WRSROOT_USERNAME, 
                               controller0.host_ip, 
                               os.path.join(WRSROOT_HOME_DIR, "license.lic"),
                               pre_opts=pre_opts)
+            """
             bld_server_conn.rsync(controller0.host_config_filename, 
                               WRSROOT_USERNAME, controller0.host_ip, 
                               os.path.join(WRSROOT_HOME_DIR, SYSTEM_CFG_FILENAME),
@@ -779,6 +781,8 @@ if __name__ == '__main__':
                               WRSROOT_USERNAME, controller0.host_ip,
                               os.path.join(WRSROOT_HOME_DIR, BULK_CFG_FILENAME),
                               pre_opts=pre_opts)
+            """
+
 
         cmd = 'grep -q "TMOUT=" ' + WRSROOT_ETC_PROFILE
         cmd += " && echo " + WRSROOT_PASSWORD + " | sudo -S"
@@ -1104,7 +1108,7 @@ if __name__ == '__main__':
 
     # Verify the nodes are up and running
     executed = False
-    if not executed:
+    if not executed and small_footprint:
         #TODO: Put this in a loop
         log.info("Waiting for controller0 come online")
         wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
@@ -1115,30 +1119,20 @@ if __name__ == '__main__':
 
         wait_state(nodes, AVAILABILITY, ONLINE)
 
-        if small_footprint:
-            cmd = "source /etc/nova/openrc; ./lab_setup.sh"
-            if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-                log.error("Warning: Failed to bring up {}".\
-                           format("node"))
 
-    if not executed:
-        for node in nodes:
-            cmd = "source /etc/nova/openrc; system host-unlock " + node.name
-            if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-                log.error("Failed to unlock: " + node.name)
-                sys.exit(1)
+        cmd = "source /etc/nova/openrc; ./lab_setup.sh"
+        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+            log.error("Warning: Failed to bring up {}".\
+                       format("node"))
 
-        wait_state(nodes, ADMINISTRATIVE, UNLOCKED)
-        wait_state(nodes, OPERATIONAL, ENABLED)
-        wait_state(nodes, AVAILABILITY, AVAILABLE)
+        # unlock controller-1
+        if not executed:
+            for node in nodes:
+                cmd = "source /etc/nova/openrc; system host-unlock " + node.name
+                if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+                    log.error("Failed to unlock: " + node.name)
+                    sys.exit(1)
 
-    executed = False
-    if not executed:
-        if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
-            log.error("Failed during lab setup")
-            sys.exit(1)
-
-        nodes.insert(0, controller0)
         wait_state(nodes, ADMINISTRATIVE, UNLOCKED)
         wait_state(nodes, OPERATIONAL, ENABLED)
         wait_state(nodes, AVAILABILITY, AVAILABLE)
