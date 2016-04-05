@@ -4,7 +4,6 @@ import setups
 from keywords.verify_fixtures import *
 
 con_ssh = None
-is_first = True
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -46,6 +45,61 @@ def tis_ssh():
     return con_ssh
 
 
+class MakeReport:
+    nodeid = None
+    instances = {}
+
+    def __init__(self, item):
+        MakeReport.nodeid = item.nodeid
+        self.test_pass = None
+        self.test_results = {}
+        MakeReport.instances[item.nodeid] = self
+
+    def update_results(self, call, report):
+        if report.failed:
+            LOG.debug("\nTest failed at test {}.\nDetails: {}\n{}".format(call.when, call.excinfo, report.longrepr))
+            self.test_results[call.when] = ['Failed', call.excinfo]
+        elif report.skipped:
+            self.test_results[call.when] = ['Skipped', call.excinfo]
+        elif report.passed:
+            self.test_results[call.when] = ['Passed', '']
+
+    def get_results(self):
+        return self.test_results
+
+    @classmethod
+    def get_report(cls, item):
+        if item.nodeid == cls.nodeid:
+            return cls.instances[cls.nodeid]
+        else:
+            return cls(item)
+
+
+def pytest_runtest_makereport(item, call, __multicall__):
+    report = __multicall__.execute()
+
+    my_rep = MakeReport.get_report(item)
+    my_rep.update_results(call, report)
+
+    if report.when == 'teardown':
+        test_res = 'Test Passed'
+        fail_at = []
+        res = my_rep.get_results()
+        for key, val in res.items():
+            if val[0] == 'Failed':
+                fail_at.append('test ' + key)
+            elif val[0] == 'Skipped':
+                test_res = 'Test Skipped'
+                break
+        if fail_at:
+            fail_at = ', '.join(fail_at)
+            test_res = 'Test Failed at {}'.format(fail_at)
+
+        testcase_log(msg=test_res, nodeid=item.nodeid, log_type='tc_end')
+
+    return report
+
+
 def pytest_collectstart():
     """
     Set up the ssh session at collectstart. Because skipif condition is evaluated at the collecting test cases phase.
@@ -74,18 +128,6 @@ def pytest_runtest_teardown(item):
     con_ssh.flush()
 
 
-def pytest_runtest_protocol(item, nextitem):
-    global is_first
-    if is_first:
-        is_first = False
-        return
-    message = "Test case ended."
-    testcase_log(message, item.nodeid, log_type='tc_end')
-
-#def pytest_keyboard_interrupt():
-#    print("\nKeyboard Interrupted.")
-#    os._exit(1)
-
 # TODO: add support for feature marks
 
 
@@ -97,7 +139,7 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
     logging_msg = '\n{}{} {}'.format(separator, msg, nodeid)
     print(print_msg)
     if log_type == 'tc_end':
-        LOG.tc_end()
+        LOG.tc_end(msg=msg, tc_name=nodeid)
     elif log_type == 'tc_start':
         LOG.tc_start(nodeid)
     elif log_type == 'tc_setup':

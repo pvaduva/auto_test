@@ -1,8 +1,10 @@
 from pytest import fixture
 
+from consts.auth import Tenant
 from utils import table_parser
 from utils.tis_log import LOG
-from keywords import system_helper
+from keywords import system_helper, vm_helper
+
 
 ########################
 # Test Fixtures Module #

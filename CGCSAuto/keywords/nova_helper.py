@@ -379,7 +379,7 @@ def get_vm_boot_info(vm_id, auth_info=None, con_ssh=None):
         return {'type': 'image', 'id': match.group(0)}
 
 
-def get_vm_image_name(vm_id, auth_info=None, con_ssh=None):
+def get_vm_image_name(vm_id, auth_info=Tenant.ADMIN, con_ssh=None):
     """
 
     Args:
@@ -399,7 +399,7 @@ def get_vm_image_name(vm_id, auth_info=None, con_ssh=None):
         if not image_name:
             image_name = table_parser.get_value_two_col_table(image_show_table, 'name')
     else:      # booted from volume
-        vol_show_table = table_parser.table(cli.cinder('show', boot_info['id']))
+        vol_show_table = table_parser.table(cli.cinder('show', boot_info['id'], auth_info=Tenant.ADMIN))
         image_meta_data = table_parser.get_value_two_col_table(vol_show_table, 'volume_image_metadata')
         image_name = eval(image_meta_data)['image_name']
 

@@ -34,7 +34,7 @@ def get_any_vm_ids(count=None, con_ssh=None, auth_info=None, all_tenants=False):
         return random.sample(vms, count)
 
     for i in range(diff):
-        vms.append(boot_vm()[1])
+        vms.append(boot_vm(con_ssh=con_ssh, auth_info=auth_info)[1])
 
     return vms
 
@@ -646,7 +646,7 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
 
     LOG.info("Ping results: {}".format(res_dict))
 
-    res_bool = any(loss_rate == 100 for loss_rate in res_dict.values())
+    res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
     return res_bool, res_dict
 
 
@@ -678,7 +678,7 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None,
-                     natbox_client=None, num_pings=5, timeout=15, fail_ok=False, auth_info=None):
+                     natbox_client=None, num_pings=5, timeout=15, fail_ok=False):
     """
 
     Args:
@@ -704,7 +704,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         }
 
     """
-    vms_ips = network_helper.get_mgmt_ips_for_vms(con_ssh=con_ssh, auth_info=auth_info, rtn_dict=True)
+    vms_ips = network_helper.get_mgmt_ips_for_vms(con_ssh=con_ssh, rtn_dict=True)
     vms_ids = vms_ips.keys()
     if from_vm is None:
         from_vm = random.choice(vms_ids)
@@ -712,7 +712,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         to_vms = vms_ids
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
-                               auth_info=auth_info, prompt=prompt) as from_vm_ssh:
+                               prompt=prompt) as from_vm_ssh:
 
         res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
                         fail_ok=fail_ok)
@@ -721,7 +721,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
 
 
 @contextmanager
-def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, natbox_client=None, auth_info=Tenant.ADMIN):
+def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, natbox_client=None):
     """
     ssh to a vm from natbox.
 
@@ -739,9 +739,9 @@ def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, natb
                   vm_ssh.exec_cmd(cmd)
 
     """
-    vm_image_name = (nova_helper.get_vm_image_name(vm_id=vm_id, auth_info=auth_info)).strip().lower()
+    vm_image_name = (nova_helper.get_vm_image_name(vm_id=vm_id)).strip().lower()
     vm_name = nova_helper.get_vm_name_from_id(vm_id=vm_id)
-    vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id, auth_info=auth_info)[0]
+    vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id)[0]
     vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_name=vm_name, vm_img_name=vm_image_name,
                          user=username, password=password, prompt=prompt)
     try:

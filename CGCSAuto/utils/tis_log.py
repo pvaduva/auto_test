@@ -26,7 +26,7 @@ class TisLogger(logging.getLoggerClass()):
             self._log(logging.DEBUG, '\n{}Test steps started for: {}'.format(separator, tc_name), args)
             self.test_step = 0
 
-    def tc_end(self, *args, **kwargs):
+    def tc_end(self, msg, tc_name, *args, **kwargs):
         """
 
         Args:
@@ -38,7 +38,8 @@ class TisLogger(logging.getLoggerClass()):
         Examples: logger.test_end("Successfully created vm")
         """
         if self.show_log:
-            msg = "\n=================================================================\nTest case ended.\n\n"
+            msg = "\n=================================================================\nTest Result for {}: {}\n\n".\
+                format(tc_name, msg)
             self._log(logging.DEBUG, msg, args, **kwargs)
             self.test_step = -1
 
@@ -61,6 +62,12 @@ class TisLogger(logging.getLoggerClass()):
             msg = ("\n----------------------------------------------------------------------\nTeardown started for: {}".
                    format(tc_name))
             self._log(logging.DEBUG, msg, args)
+
+    def tc_result(self, tc_name, result, *args):
+        if self.show_log:
+            msg = ("\n----------------------------------------------------------------------\nTest Result for: {} - {}".
+                   format(tc_name, result))
+            self._log(logging.INFO, msg, args)
 
 # register our logger
 logging.setLoggerClass(TisLogger)
