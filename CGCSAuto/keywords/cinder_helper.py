@@ -1,7 +1,6 @@
 import random
 import time
 
-from consts.auth import Tenant
 from consts.timeout import VolumeTimeout
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
@@ -304,6 +303,7 @@ def delete_volume(volume_id, fail_ok=False, con_ssh=None, auth_info=None):
         fail_ok (bool): True or False
         con_ssh (SSHClient):
         auth_info (dict):
+
     Returns:
         [-1,''] if volume does not exist.
         [0,''] volume is successfully deleted.
