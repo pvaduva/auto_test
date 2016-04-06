@@ -719,7 +719,6 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         timeout:
         fail_ok:  When False, test will stop right away if one ping failed. When True, test will continue to ping
             the rest of the vms and return results even if pinging one vm failed.
-        auth_info:
 
     Returns (list): [res (bool), packet_loss_dict (dict)]
         Packet loss rate dictionary format:
@@ -757,7 +756,6 @@ def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, natb
         password (str):
         prompt (str):
         natbox_client (NATBoxClient):
-        auth_info (dict):
 
     Returns (SSHClient): ssh client of the vm
 
@@ -942,18 +940,15 @@ def delete_vm(vm_id, delete_volumes=True, fail_ok=False, con_ssh=None, auth_info
     Request to delete server 74e37830-97a2-4d9d-b892-ad58bc4148a7 has been accepted.
 
     """
-    status = []
     # check if vm exist
     if vm_id is not None:
         vm_exist = vm_exists(vm_id)
         if not vm_exist:
-            LOG.info("To be deleted VM: {} does not exists return [-1,''].".format(vm_id))
+            LOG.info("VM {} does not exists on system. Do nothing".format(vm_id))
             return [-1, '']
 
-    # list attached volumes to vm
+    # get volumes attached to vm
     volume_list = cinder_helper.get_volumes(attached_vm=vm_id)
-    if not volume_list:
-        LOG.info("There are no volumes attached to VM {}".format(vm_id))
 
     # delete vm
     vm_exit_code, vm_cmd_output = cli.nova('delete', vm_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
@@ -973,12 +968,7 @@ def delete_vm(vm_id, delete_volumes=True, fail_ok=False, con_ssh=None, auth_info
     # delete volumes that were attached to the vm
     if delete_volumes:
         for volume_id in volume_list:
-            vol_exit_code, vol_cmd_output = cinder_helper.delete_volume(volume_id, fail_ok=True, auth_info=auth_info,
-                                                                        con_ssh=con_ssh)
-            if vol_exit_code == 1:
-                LOG.warning("Delete Volume {} failed due to: {}".format(volume_id,vol_cmd_output))
+            cinder_helper.delete_volume(volume_id, fail_ok=True, auth_info=auth_info, con_ssh=con_ssh)
 
-        LOG.info("All Volumes attached to VM {} are deleted".format(vm_id))
-
-    LOG.info("VM is deleted successfully.")
+    LOG.info("VM is successfully deleted.")
     return [0, '']
