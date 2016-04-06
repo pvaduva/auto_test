@@ -218,8 +218,8 @@ def get_snapshot_id(status='available', vol_id=None, name=None, size=None, con_s
     return random.choice(ids)
 
 
-def _wait_for_volume_in_cinder_list(volume_id,column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
-            check_interval=3,con_ssh=None, auth_info=None):
+def _wait_for_volume_deleted(volume_id, column='ID', timeout=VolumeTimeout.DELETE, fail_ok=True,
+                             check_interval=3, con_ssh=None, auth_info=None):
     """
         check if a specific field still exist in a specified column
         an id in cinder list's ID column
@@ -255,40 +255,42 @@ def volume_exists(volume_id, con_ssh=None, auth_info=Tenant.ADMIN):
     return exit_code == 0
 
 
-def delete_volume(volume_id,fail_ok=False, con_ssh=None, auth_info=None):
-
+def delete_volume(volume_id, fail_ok=False, con_ssh=None, auth_info=None):
     """
+    Delete given volume
+
     Args:
         volume_id (str): id of the volume
-        fail_ok (bool): raise local exception based off result from cli.cinder
+        fail_ok (bool): True or False
         con_ssh (SSHClient):
+        auth_info (dict):
+
     Returns:
-        a boolean: True if volume successfully deleted, raise exception otherwise
 
     """
     # if volume doesn't exist return [-1,'']
     if volume_id is not None:
         v_exist = volume_exists(volume_id)
         if not v_exist:
-            LOG.info("To be deleted Volume: {} does not exists.".format(volume_id))
+            LOG.info("Volume {} does not exist on system. Do nothing".format(volume_id))
             return [-1, '']
 
     # execute the delete command
     exit_code, cmd_output = cli.cinder('delete', volume_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
-                auth_info=auth_info)
+                                       auth_info=auth_info)
 
     if exit_code == 1:
         return [1, cmd_output]
 
     # check if the volume is deleted
-    vol_status = _wait_for_volume_in_cinder_list(volume_id, column='ID',fail_ok=fail_ok)
+    vol_deleted = _wait_for_volume_deleted(volume_id, column='ID', fail_ok=fail_ok)
 
-    if not vol_status:
+    if not vol_deleted:
+        msg = "Volume {} did not disappear within {} seconds".format(volume_id, VolumeTimeout.DELETE)
         if fail_ok:
-            LOG.warning("deletion command is executed but '{}' still show up within cinder list".format(volume_id))
+            LOG.warning(msg)
             return [2, volume_id]
-        raise exceptions.VolumeError("deletion command is executed but '{}' "
-                                     "still show up within cinder list".format(volume_id))
+        raise exceptions.VolumeError(msg)
 
     LOG.info("Volume {} is deleted .".format(volume_id))
     return [0, '']
