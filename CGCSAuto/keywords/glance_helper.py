@@ -24,8 +24,8 @@ def create_image(name, desc=None, source='image location', format='raw', min_dis
     raise NotImplementedError
 
 
-def _wait_for_image_in_glance_list(image_id,column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
-            check_interval=3,con_ssh=None, auth_info=None):
+def _wait_for_image_in_glance_list(image_id, column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
+                                   check_interval=3, con_ssh=None, auth_info=None):
     """
         check if a specific field still exist in a specified column
         an id in cinder list's ID column
@@ -71,7 +71,7 @@ def delete_image(image_id, fail_ok=False, con_ssh=None, auth_info=Tenant.TENANT_
 
     # delete image
     exit_code, cmd_output = cli.glance('image-delete', image_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
-                auth_info=auth_info)
+                                       auth_info=auth_info)
 
     if exit_code == 1:
         return [1, cmd_output]

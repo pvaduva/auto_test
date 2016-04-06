@@ -364,7 +364,7 @@ def _wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=30, 
         swact_complete_timeout:
 
     Returns:
-
+        [0,''] if swact complete pass
     """
     start = time.time()
     end_swact_start = start + swact_start_timeout
@@ -403,3 +403,19 @@ def get_good_computes(con_ssh=None):
                                     operational='enabled', administrative='unlocked')
     LOG.debug("Computes that are in good states: {}".format(hosts))
     return hosts
+
+
+def get_hosts(con_ssh=None, **states):
+    """
+
+    Args:
+        con_ssh:
+        **states: fields that customized a host. for instance avaliability='available', personality='controller'
+        will make sure that a list of host that are available and controller to be returned by the function.
+
+    Returns (list):A list of host specificed by the **states
+
+    """
+    # get_hosts(availability='available', personality='controller')
+    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
+    return table_parser.get_values(table_, 'hostname', **states)

@@ -245,6 +245,36 @@ def get_all_vms(return_val='ID', con_ssh=None):
     return table_parser.get_column(table_, return_val)
 
 
+def get_field_by_vms(vm_ids=None, field="Status", con_ssh=None, auth_info=None):
+    """
+    get a dictionary in the form {vm_id:field,vm_id:field...} for a specific field
+
+    Args:
+        vm_ids (list or str):a list of vm ids OR a vm id in string
+        field (str): A specific field header Such as Name,Status,Power State
+        con_ssh (str):
+        auth_info (dict):
+    Returns:
+        A dict with vm_ids as key and an field's value as value.
+        If the list is Empty return all the Ids with their status
+
+    """
+    ids_status = {}
+    # list is empty then return the whole list with their status
+    if not vm_ids:
+        vm_ids = get_vms(con_ssh=con_ssh)
+
+    if isinstance(vm_ids, str):
+        vm_ids = [vm_ids]
+
+    table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+
+    for vm in vm_ids:
+        ids_status[vm] = table_parser.get_values(table_=table_, target_header=field, ID=vm)
+
+    return ids_status
+
+
 def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False):
     """
     get a list of VM IDs or Names for given tenant in auth_info param.
@@ -310,11 +340,29 @@ def get_hypervisor_hosts(con_ssh=None):
 
 
 def get_vms_on_hypervisor(hostname, con_ssh=None):
+    """
+
+    Args:
+        hostname (str):Name of a compute node
+        con_ssh:
+
+    Returns (list): A list of VMs' ID under a hypervisor
+
+    """
     table_ = table_parser.table(cli.nova('hypervisor-servers', hostname, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     return table_parser.get_column(table_, 'ID')
 
 
 def get_vms_by_hypervisors(con_ssh=None):
+    """
+
+    Args:
+        con_ssh:
+
+    Returns (dict):return a dictionary where the host(hypervisor) is the key
+    and value are a list of VMs under the host
+
+    """
     host_vms = {}
     for host in get_hypervisor_hosts(con_ssh=con_ssh):
         host_vms[host] = get_vms_on_hypervisor(host, con_ssh)
@@ -322,8 +370,8 @@ def get_vms_by_hypervisors(con_ssh=None):
     return host_vms
 
 
-def _wait_for_vm_in_nova_list(vm_id,column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
-                              check_interval=3,con_ssh=None, auth_info=None):
+def _wait_for_vm_in_nova_list(vm_id, column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
+                              check_interval=3, con_ssh=None, auth_info=None):
     """
         similar to _wait_for_volume_in_cinder_list
     """

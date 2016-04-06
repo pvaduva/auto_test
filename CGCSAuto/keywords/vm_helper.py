@@ -25,6 +25,7 @@ def get_any_vm_ids(count=None, con_ssh=None, auth_info=None, all_tenants=False):
         all_tenants (bool): whether to get any vms from all tenants or just admin tenant if auth_info is set to Admin
 
     Returns:
+        a list of vm ids
 
     """
     vms = nova_helper.get_vms(con_ssh=con_ssh, auth_info=auth_info, all_vms=all_tenants)
@@ -730,7 +731,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
 
     """
     vms_ips = network_helper.get_mgmt_ips_for_vms(con_ssh=con_ssh, rtn_dict=True)
-    vms_ids = vms_ips.keys()
+    vms_ids = list(vms_ips.keys())
     if from_vm is None:
         from_vm = random.choice(vms_ids)
     if to_vms is None:
