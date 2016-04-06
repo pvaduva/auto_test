@@ -3,6 +3,7 @@ import re
 import time
 from contextlib import contextmanager
 
+from keywords.nova_helper import vm_exists, _wait_for_vm_in_nova_list
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
 from utils.tis_log import LOG
@@ -37,6 +38,32 @@ def get_any_vm_ids(count=None, con_ssh=None, auth_info=None, all_tenants=False):
         vms.append(boot_vm(con_ssh=con_ssh, auth_info=auth_info)[1])
 
     return vms
+
+
+def wait_for_vol_attach(vm_id, vol_id, timeout=VMTimeout.VOL_ATTACH, con_ssh=None, auth_info=None):
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        vols_attached = nova_helper.get_vm_volumes(vm_id=vm_id, con_ssh=con_ssh, auth_info=auth_info)
+        if vol_id in vols_attached:
+            return True
+        time.sleep(3)
+
+    return False
+
+
+def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
+    if vol_id is None:
+        vols = cinder_helper.get_volumes(auth_info=auth_info, con_ssh=con_ssh, status='available')
+        vol_id = random.choice(vols)
+    LOG.info("Attaching volume {} to vm {}".format(vol_id, vm_id))
+    cli.nova('volume-attach', ' '.join([vm_id, vol_id]))
+    # volumes = cinder_helper.get_volumes(attached_vm=vm_id, con_ssh=con_ssh, auth_info=auth_info)
+    # LOG.warning('vol_id: {}. all_vols: {}'.format(vm_id, volumes))
+    if not wait_for_vol_attach(vm_id=vm_id, vol_id=vol_id, con_ssh=con_ssh, auth_info=auth_info):
+        raise exceptions.VMPostCheckFailed("Volume {} is not attached to vm {} within {} seconds".
+                                           format(vol_id, vm_id, VMTimeout.VOL_ATTACH))
+
+    LOG.info("Volume {} is attached to vm {}".format(vol_id, vm_id))
 
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, nics=None,
@@ -370,8 +397,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=Fals
                                  auth_info=auth_info)
 
     if exit_code == 1:
-        LOG.warning("Live migration of vm {} failed. Error message: {}\nChecking if this is expected failure...".
-                    format(vm_id, output))
+        LOG.warning("Live migration of vm {} failed. Checking if this is expected failure...".format(vm_id))
         if _is_live_migration_allowed(vm_id, block_migrate=block_migrate) and \
                 (destination_host or get_dest_host_for_live_migrate(vm_id)):
             if fail_ok:
@@ -644,7 +670,7 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
                                         fail_ok=fail_ok)
         res_dict[ip] = packet_loss_rate
 
-    LOG.info("Ping results: {}".format(res_dict))
+    LOG.info("Ping results from {}: {}".format(ssh_client.host, res_dict))
 
     res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
     return res_bool, res_dict
@@ -895,3 +921,64 @@ class VMInfo:
     @classmethod
     def remove_instance(cls, vm_id):
         cls.__instances.pop(vm_id, default="No instance found")
+
+
+def delete_vm(vm_id, delete_volumes=True, fail_ok=False, con_ssh=None, auth_info=None):
+    """
+    Args:
+        vm_id
+        delete_volumes: (boolean) delete all attached volumes if set to True
+        fail_ok:
+        con_ssh
+        auth_info
+    Returns:
+        [-1,''] if VM does not exist
+        [0,''] VM is successfully deleted.
+        [1,output] if delete vm cli errored when executing
+        [2,vm_id] if delete vm cli executed but still show up in nova list
+
+
+    [wrsroot@controller-0 ~(keystone_tenant1)]$ nova delete 74e37830-97a2-4d9d-b892-ad58bc4148a7
+    Request to delete server 74e37830-97a2-4d9d-b892-ad58bc4148a7 has been accepted.
+
+    """
+    status = []
+    # check if vm exist
+    if vm_id is not None:
+        vm_exist = vm_exists(vm_id)
+        if not vm_exist:
+            LOG.info("To be deleted VM: {} does not exists return [-1,''].".format(vm_id))
+            return [-1, '']
+
+    # list attached volumes to vm
+    volume_list = cinder_helper.get_volumes(attached_vm=vm_id)
+    if not volume_list:
+        LOG.info("There are no volumes attached to VM {}".format(vm_id))
+
+    # delete vm
+    vm_exit_code, vm_cmd_output = cli.nova('delete', vm_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
+                                           auth_info=auth_info)
+    if vm_exit_code == 1:
+        return [1, vm_cmd_output]
+
+    # check if the vm is deleted
+    vol_status = _wait_for_vm_in_nova_list(vm_id, column='ID', fail_ok=fail_ok)
+    if not vol_status:
+        if fail_ok:
+            LOG.warning("Delete VM {} command is executed but still shows up in nova list".format(vm_id))
+            return [2, vm_id]
+        raise exceptions.VolumeError("Delete VM {} command is executed but "
+                                     "still shows up in nova list".format(vm_id))
+
+    # delete volumes that were attached to the vm
+    if delete_volumes:
+        for volume_id in volume_list:
+            vol_exit_code, vol_cmd_output = cinder_helper.delete_volume(volume_id, fail_ok=True, auth_info=auth_info,
+                                                                        con_ssh=con_ssh)
+            if vol_exit_code == 1:
+                LOG.warning("Delete Volume {} failed due to: {}".format(volume_id,vol_cmd_output))
+
+        LOG.info("All Volumes attached to VM {} are deleted".format(vm_id))
+
+    LOG.info("VM is deleted successfully.")
+    return [0, '']

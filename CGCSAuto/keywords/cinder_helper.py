@@ -255,7 +255,7 @@ def volume_exists(volume_id, con_ssh=None, auth_info=Tenant.ADMIN):
     return exit_code == 0
 
 
-def delete_volume(volume_id,fail_ok=False, con_ssh=None, auth_info=Tenant.TENANT_1):
+def delete_volume(volume_id,fail_ok=False, con_ssh=None, auth_info=None):
 
     """
     Args:

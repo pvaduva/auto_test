@@ -18,7 +18,6 @@ def test_ping_vms_from_natbox(tenants_vms):
     LOG.tc_step("Pinging VMs...")
     res_bool, res_dict = vm_helper.ping_vms_from_natbox(vm_ids=vms, fail_ok=True)
     assert res_bool
-    LOG.info("Test Result - Passed.")
 
 
 def test_ping_vms_from_vm(tenants_vms):
@@ -32,4 +31,3 @@ def test_ping_vms_from_vm(tenants_vms):
     LOG.tc_step("Check ping results...")
     for val in res.values():
         assert val[0]
-    LOG.info("Test Result - Passed.")

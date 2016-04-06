@@ -2,14 +2,13 @@ import random
 import re
 import time
 
-from utils import cli, exceptions
-from utils import table_parser
-from utils.tis_log import LOG
 from consts.auth import Tenant, Primary
 from consts.cgcs import BOOT_FROM_VOLUME, UUID
 from consts.timeout import VolumeTimeout
-from keywords import cinder_helper
 from keywords.common import Count
+from utils import cli, exceptions
+from utils import table_parser
+from utils.tis_log import LOG
 
 
 def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ephemeral=None, swap=None,
@@ -80,6 +79,57 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
     flavor_id = table_parser.get_column(table_, 'ID')[0]
     LOG.info("Flavor {} created successfully.".format(flavor_name))
     return [0, flavor_id]
+
+
+def flavor_exists(flavor, header='ID', con_ssh=None, auth_info=None):
+    table_ = table_parser.table(cli.nova('flavor-list', ssh_client=con_ssh, auth_info=auth_info))
+    return flavor in table_parser.get_column(table_, header=header)
+
+
+def delete_flavors(flavor_ids, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    if isinstance(flavor_ids, str):
+        flavor_ids = [flavor_ids]
+    flavors_to_del = []
+    flavors_deleted = []
+    for flavor in flavor_ids:
+        if flavor_exists(flavor, con_ssh=con_ssh, auth_info=auth_info):
+            flavors_to_del.append(flavor)
+        else:
+            flavors_deleted.append(flavor)
+
+    if not flavors_to_del:
+        msg = "None of the flavor(s) provided exist on system: {}. Do nothing.".format(flavor_ids)
+        LOG.info(msg)
+        return [-1, {}]
+
+    if flavors_deleted:
+        LOG.warning("Some flavor(s) do no exist on system: {}".format(flavors_deleted))
+
+    LOG.info("Flavor(s) to delete: {}".format(flavors_to_del))
+    results = {}
+    fail = False
+    for flavor in flavors_to_del:
+        LOG.info("Deleting flavor {}...".format(flavor))
+        # Always get the result for individual flavor, so deletion will be attempted to all flavors instead of failing
+        # right away upon one failure
+        rtn_code, output = cli.nova('flavor-delete', flavor, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
+        if rtn_code == 1:
+            result = [1, output]
+            fail = True
+        elif flavor_exists(flavor, con_ssh=con_ssh, auth_info=auth_info):
+            result = [2, "Flavor {} still exists on system after deleted.".format(flavor)]
+            fail = True
+        else:
+            result = [0, '']
+        results[flavor] = result
+    if fail:
+        if fail_ok:
+            return [1, results]
+        raise exceptions.FlavorError("Failed to delete flavor(s). Details: {}".format(results))
+
+    LOG.info("Flavor(s) deleted successfully: {}".format(flavor_ids))
+    # Return empty dict upon successfully deleting all flavors
+    return [0, {}]
 
 
 def get_flavor(name=None, memory=None, disk=None, ephemeral=None, swap=None, vcpu=None, rxtx=None, is_public=None,
@@ -229,6 +279,22 @@ def get_vm_name_from_id(vm_id, con_ssh=None):
     return table_parser.get_values(table_, 'Name', ID=vm_id)[0]
 
 
+def get_vm_volumes(vm_id, con_ssh=None, auth_info=None):
+    """
+    Get volume ids attached to given vm.
+
+    Args:
+        vm_id (str):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (list): list of volume ids attached to specific vm
+
+    """
+    table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+    return _get_vm_volumes(table_)
+
+
 def get_vm_info(vm_id, field, strict=False, con_ssh=None, auth_info=Tenant.ADMIN):
     table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_value_two_col_table(table_, field, strict)
@@ -290,66 +356,6 @@ def vm_exists(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     exit_code, output = cli.nova('show', vm_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
     return exit_code == 0
-
-
-def delete_vm(vm_id, delete_volumes=True, fail_ok=False, con_ssh=None, auth_info=None):
-    """
-    Args:
-        vm_id
-        delete_volumes: (boolean) delete all attached volumes if set to True
-        fail_ok:
-        con_ssh
-        auth_info
-    Returns:
-        [-1,''] if VM does not exist
-        [0,''] VM is successfully deleted.
-        [1,output] if delete vm cli errored when executing
-        [2,vm_id] if delete vm cli executed but still show up in nova list
-
-
-    [wrsroot@controller-0 ~(keystone_tenant1)]$ nova delete 74e37830-97a2-4d9d-b892-ad58bc4148a7
-    Request to delete server 74e37830-97a2-4d9d-b892-ad58bc4148a7 has been accepted.
-
-    """
-    status = []
-    # check if vm exist
-    if vm_id is not None:
-        vm_exist = vm_exists(vm_id)
-        if not vm_exist:
-            LOG.info("To be deleted VM: {} does not exists return [-1,''].".format(vm_id))
-            return [-1, '']
-
-    # list attached volumes to vm
-    volume_list = cinder_helper.get_volumes(attached_vm=vm_id)
-    if not volume_list:
-        LOG.info("There are no volumes attached to VM {}".format(vm_id))
-
-    # delete vm
-    vm_exit_code, vm_cmd_output = cli.nova('delete', vm_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
-                                           auth_info=auth_info)
-    if vm_exit_code == 1:
-        return [1, vm_cmd_output]
-
-    # check if the vm is deleted
-    vol_status = _wait_for_vm_in_nova_list(vm_id, column='ID', fail_ok=fail_ok)
-    if not vol_status:
-        if fail_ok:
-            LOG.warning("Delete VM {} command is executed but still shows up in nova list".format(vm_id))
-            return [2, vm_id]
-        raise exceptions.VolumeError("Delete VM {} command is executed but "
-                                     "still shows up in nova list".format(vm_id))
-
-    # delete volumes that were attached to the vm
-    if delete_volumes:
-        for volume_id in volume_list:
-            vol_exit_code, vol_cmd_output = cinder_helper.delete_volume(volume_id, fail_ok=True)
-            if vol_exit_code == 1:
-                LOG.warning("Delete Volume {} failed due to: {}".format(volume_id,vol_cmd_output))
-
-        LOG.info("All Volumes attached to VM {} are deleted".format(vm_id))
-
-    LOG.info("VM is deleted successfully.")
-    return [0, '']
 
 
 def get_vm_boot_info(vm_id, auth_info=None, con_ssh=None):

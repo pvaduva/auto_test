@@ -57,7 +57,8 @@ class MakeReport:
 
     def update_results(self, call, report):
         if report.failed:
-            LOG.debug("\nTest failed at test {}.\nDetails: {}\n{}".format(call.when, call.excinfo, report.longrepr))
+            LOG.info("\n***Failure at test {}.\nDetails: {}".format(call.when, call.excinfo))
+            LOG.debug("\n***Details: {}".format(report.longrepr))
             self.test_results[call.when] = ['Failed', call.excinfo]
         elif report.skipped:
             self.test_results[call.when] = ['Skipped', call.excinfo]
@@ -75,6 +76,7 @@ class MakeReport:
             return cls(item)
 
 
+@pytest.mark.tryfirst
 def pytest_runtest_makereport(item, call, __multicall__):
     report = __multicall__.execute()
 
@@ -89,7 +91,7 @@ def pytest_runtest_makereport(item, call, __multicall__):
             if val[0] == 'Failed':
                 fail_at.append('test ' + key)
             elif val[0] == 'Skipped':
-                test_res = 'Test Skipped'
+                test_res = "Test Skipped\nDetails: {}".format(val[1])
                 break
         if fail_at:
             fail_at = ', '.join(fail_at)

@@ -15,6 +15,7 @@ class VMTimeout:
     LIVE_MIGRATE_COMPLETE = 60
     COLD_MIGRATE_CONFIRM = 120
     BOOT_VM = 60
+    VOL_ATTACH = 60
 
 
 class VolumeTimeout:

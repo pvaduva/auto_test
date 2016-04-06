@@ -1,7 +1,7 @@
 import random
 import re
 
-from utils import table_parser, cli
+from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from consts.auth import Tenant, Primary
 from consts.cgcs import MGMT_IP
@@ -103,13 +103,21 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
     all_ips_dict = {}
     mgmt_ip_reg = re.compile(MGMT_IP)
     vm_ids = table_parser.get_column(table_, 'ID')
+    if not vm_ids:
+        raise ValueError("No vm is on the system. Please boot vm(s) first.")
     vm_nets = table_parser.get_column(table_, 'Networks')
 
     for i in range(len(vm_ids)):
         vm_id = vm_ids[i]
         mgmt_ips_for_vm = mgmt_ip_reg.findall(vm_nets[i])
-        all_ips_dict[vm_id] = mgmt_ips_for_vm
-        all_ips += mgmt_ips_for_vm
+        if not mgmt_ips_for_vm:
+            LOG.warning("No management ip found for vm {}".format(vm_id))
+        else:
+            all_ips_dict[vm_id] = mgmt_ips_for_vm
+            all_ips += mgmt_ips_for_vm
+
+    if not all_ips:
+        raise ValueError("No management ip found for any of these vms: {}".format(vm_ids))
 
     LOG.info("Management IPs dict: {}".format(all_ips_dict))
 

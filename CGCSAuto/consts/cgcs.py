@@ -2,7 +2,7 @@
 DATE_OUTPUT = r'[01]\d:[0-5]\d:[0-5]\d\s[A-Z]{3}\s\d{4}$'
 
 # such as 192.168.11.6
-MGMT_IP = r'mgmt-net\d?=(192.168\.\d{1,3}\.\d{1,3})'
+MGMT_IP = r'mgmt-net\d?=.*(192.168\.\d{1,3}\.\d{1,3})'
 
 # such as in string '5 packets transmitted, 0 received, 100% packet loss, time 4031ms', number 100 will be found
 PING_LOSS_RATE = r'\, (\d{1,3})\% packet loss\,'
