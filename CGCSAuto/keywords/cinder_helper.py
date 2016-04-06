@@ -13,19 +13,19 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
     """
     Return a list of volume ids based on the given criteria
     Args:
-        vols:
-        name:
-        name_strict:
-        vol_type:
-        size:
-        status:
-        attached_vm:
-        bootable:
-        auth_info:
-        con_ssh:
+        vols (list or str):
+        name (str):
+        name_strict (bool):
+        vol_type (str):
+        size (str):
+        status:(str)
+        attached_vm (str):
+        bootable (str):
+        auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT_1,Tenant.TENANT_2
+        con_ssh (str):
 
     Returns:
-
+        Return a list of volume ids based on the given criteria
     """
     if bootable is not None:
         bootable = str(bootable).lower()
@@ -144,6 +144,18 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
 
 
 def get_volume_states(vol_id, fields, con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        vol_id (str):
+        fields (str):
+        con_ssh (str):
+        auth_info (dict):
+
+    Returns:
+        A dict with field as key and value as value
+
+    """
     table_ = table_parser.table(cli.cinder('show', vol_id, ssh_client=con_ssh, auth_info=auth_info))
     if isinstance(fields, str):
         fields = [fields]
@@ -157,6 +169,22 @@ def get_volume_states(vol_id, fields, con_ssh=None, auth_info=None):
 
 def _wait_for_volume_status(vol_id, status='available', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
                             check_interval=3, con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        vol_id (str):
+        status (str):
+        timeout (int):
+        fail_ok (bool):
+        check_interval (int):
+        con_ssh (str):
+        auth_info (dict):
+
+    Returns:
+        Return True if the status of the volume is same as the status(str) that was passed into the function
+        Return false if timed out or otherwise
+
+    """
 
     end_time = time.time() + timeout
     current_status = ''
@@ -264,7 +292,6 @@ def delete_volume(volume_id, fail_ok=False, con_ssh=None, auth_info=None):
         fail_ok (bool): True or False
         con_ssh (SSHClient):
         auth_info (dict):
-
     Returns:
 
     """
