@@ -38,6 +38,7 @@ def create_image(name, desc=None, source='image location', format='raw', min_dis
 
 def _wait_for_image_deleted(image_id,column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
                             check_interval=3, con_ssh=None, auth_info=None):
+
     """
 
         check if a specific field still exist in a specified column of glance image-list
