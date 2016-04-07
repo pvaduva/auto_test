@@ -64,7 +64,7 @@ def is_small_footprint(controller_ssh=None):
 
     str_ = 'not' if not combined else ''
 
-    LOG.debug("This is {} small footprint system.".format(str_))
+    LOG.info("This is {} small footprint system.".format(str_))
     return combined
 
 

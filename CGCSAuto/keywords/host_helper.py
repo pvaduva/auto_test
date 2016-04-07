@@ -1,4 +1,5 @@
 import time
+from contextlib import contextmanager
 
 from utils import cli, exceptions, table_parser
 from utils.ssh import ControllerClient, SSHFromSSH
@@ -6,8 +7,46 @@ from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import HostAavailabilityState, HostAdminState
 from consts.timeout import HostTimeout
-from keywords import system_helper
+from keywords import system_helper, nova_helper
 from keywords.security_helper import LinuxUser
+
+
+@contextmanager
+def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=None):
+    """
+    ssh to a host from sshclient.
+
+    Args:
+        hostname (str): host to ssh to
+        username (str):
+        password (str):
+        prompt (str):
+        con_ssh (SSHClient):
+
+    Returns (SSHClient): ssh client of the host
+
+    Examples: with ssh_to_host('controller-1') as host_ssh:
+                  host.exec_cmd(cmd)
+
+    """
+    default_user, default_password = LinuxUser.get_current_user_password()
+    user = username if username else default_user
+    password = password if password else default_password
+    if not prompt:
+        prompt = '.*' + hostname + '\:~\$'
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt)
+    host_ssh.connect()
+    current_host = host_ssh.get_hostname()
+    if not current_host == hostname:
+        raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, hostname))
+    try:
+        yield host_ssh
+    finally:
+        if current_host == hostname:
+            host_ssh.close()
 
 
 def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False):
@@ -173,31 +212,34 @@ def __hosts_in_states(hosts, con_ssh=None, **states):
     return True
 
 
-def lock_host(host, force=False, timeout=HostTimeout.ONLINE_AFTER_LOCK, con_ssh=None, fail_ok=False):
+def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTimeout.ONLINE_AFTER_LOCK, con_ssh=None,
+              fail_ok=False, check_bf_lock=True):
     """
     lock a host.
 
     Args:
-        host:
-        force:
+        host (str): hostname or id in string format
+        force (bool):
         timeout (int): how many seconds to wait for host to go online after lock
-        con_ssh:
-        fail_ok:
+        con_ssh (SSHClient):
+        fail_ok (bool):
+        check_bf_lock (bool):
 
     Returns: [return_code, error_message]  Non-zero return code scenarios only applicable when fail_ok=True
         [0, ''] Successfully locked and host goes online
         [1, stderr] Lock host rejected
-        [2, ''] Successfully locked but host did not become online before timeout
-
+        [2, ''] Successfully locked but host did not become become locked within 10 seconds
+        [3, ]
 
     """
     if get_hostshow_value(host, 'availability') in ['offline', 'failed']:
         LOG.warning("Host in offline or failed state!")
 
-    admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
-    if admin_state == 'locked':
-        LOG.info("Host already locked. Do nothing.")
-        return [-1, 'Host already locked. Do nothing.']
+    if check_bf_lock:
+        admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
+        if admin_state == 'locked':
+            LOG.info("Host already locked. Do nothing.")
+            return [-1, 'Host already locked. Do nothing.']
 
     LOG.info("Locking {}...".format(host))
     positional_arg = host
@@ -213,9 +255,12 @@ def lock_host(host, force=False, timeout=HostTimeout.ONLINE_AFTER_LOCK, con_ssh=
     if exitcode == 1:
         return [1, output]
 
+    # Wait for task complete. If task stucks, fail the test regardless. Perhaps timeout needs to be increased.
+    _wait_for_host_states(host=host, timeout=lock_timeout, task='', fail_ok=False)
+
     if not _wait_for_host_states(host, timeout=10, administrative=HostAdminState.LOCKED, con_ssh=con_ssh):
         if fail_ok:
-            return [3, "Host is not in locked state."]
+            return [2, "Host is not in locked state."]
         else:
             raise exceptions.HostPostCheckFailed("Host is not locked.")
     LOG.info("{} is {}locked.".format(host, extra_msg))
@@ -227,7 +272,7 @@ def lock_host(host, force=False, timeout=HostTimeout.ONLINE_AFTER_LOCK, con_ssh=
             return [0, '']
 
     if fail_ok:
-        return [2, "host state is not online"]
+        return [3, "host state is not online"]
     else:
         raise exceptions.HostPostCheckFailed("Host did not go online within {} seconds after {}lock".
                                              format(timeout, extra_msg))

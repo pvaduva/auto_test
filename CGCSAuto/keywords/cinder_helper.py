@@ -279,7 +279,7 @@ def _wait_for_volume_deleted(volume_id, column='ID', timeout=VolumeTimeout.DELET
                                           "Actual still in column".format(volume_id, column))
 
 
-def volume_exists(volume_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def volume_exists(volume_id, con_ssh=None, auth_info=None):
     """
     Args:
         volume_id:
@@ -311,7 +311,7 @@ def delete_volume(volume_id, fail_ok=False, con_ssh=None, auth_info=None):
     """
     # if volume doesn't exist return [-1,'']
     if volume_id is not None:
-        v_exist = volume_exists(volume_id)
+        v_exist = volume_exists(volume_id, auth_info=auth_info, con_ssh=con_ssh)
         if not v_exist:
             LOG.info("Volume {} does not exist on system. Do nothing".format(volume_id))
             return [-1, '']

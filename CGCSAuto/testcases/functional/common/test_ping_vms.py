@@ -7,8 +7,8 @@ from keywords import vm_helper
 
 @fixture(scope='module')
 def tenants_vms():
-    tenant1_vms = vm_helper.get_any_vm_ids(count=2, auth_info=Tenant.TENANT_1)
-    tenant2_vms = vm_helper.get_any_vm_ids(count=2, auth_info=Tenant.TENANT_2)
+    tenant1_vms = vm_helper.get_any_vms(count=2, auth_info=Tenant.TENANT_1)
+    tenant2_vms = vm_helper.get_any_vms(count=2, auth_info=Tenant.TENANT_2)
     return [tenant1_vms, tenant2_vms]
 
 

@@ -1,10 +1,8 @@
 import random
 import re
-import time
 
 from consts.auth import Tenant, Primary
 from consts.cgcs import BOOT_FROM_VOLUME, UUID
-from consts.timeout import VolumeTimeout
 from keywords.common import Count
 from utils import cli, exceptions
 from utils import table_parser
@@ -330,6 +328,17 @@ def get_vm_info(vm_id, field, strict=False, con_ssh=None, auth_info=Tenant.ADMIN
     return table_parser.get_value_two_col_table(table_, field, strict)
 
 
+def get_vms_info(vm_ids=None, header='Status', con_ssh=None, auth_info=Tenant.ADMIN):
+    table_ = table_parser.table(cli.nova('list --all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+    if vm_ids:
+        table_ = table_parser.filter_table(table_, ID=vm_ids)
+    else:
+        vm_ids = table_parser.get_column(table_, header='ID')
+
+    info = table_parser.get_column(table_, header=header)
+    return dict(zip(vm_ids, info))
+
+
 def get_vm_host(vm_id, con_ssh=None):
     return get_vm_info(vm_id, ':host', strict=False, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
 
@@ -368,39 +377,6 @@ def get_vms_by_hypervisors(con_ssh=None):
         host_vms[host] = get_vms_on_hypervisor(host, con_ssh)
 
     return host_vms
-
-
-def _wait_for_vm_deleted(vm_id, column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
-                              check_interval=3, con_ssh=None, auth_info=None):
-    """
-
-        check if a specific field still exist in a specified column for nova list
-
-    Args:
-        vm_id (str):
-        column (str):
-        timeout (int):
-        fail_ok (bool):
-        check_interval (int):
-        con_ssh:
-        auth_info (dict):
-
-    Returns (bool): Return True if the specific volumn_id is found within the timeout period. False otherwise
-    """
-
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        table_ = table_parser.table(cli.nova('list', ssh_client=con_ssh, auth_info=auth_info))
-        ids_list = table_parser.get_column(table_, column)
-
-        if vm_id not in ids_list:
-            return True
-        time.sleep(check_interval)
-    else:
-        if fail_ok:
-            return False
-        raise exceptions.TimeoutException("Timed out waiting for {} to not be in column {}. "
-                                          "Actual still in column".format(vm_id, column))
 
 
 def vm_exists(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
