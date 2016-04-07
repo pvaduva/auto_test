@@ -106,6 +106,17 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
 
 
 def __hosts_stay_in_states(hosts, duration=10, con_ssh=None, **states):
+    """
+
+    Args:
+        hosts:
+        duration:
+        con_ssh:
+        **states:
+
+    Returns:
+
+    """
     end_time = time.time() + duration
     while time.time() < end_time:
         if not __hosts_in_states(hosts=hosts, con_ssh=con_ssh, **states):
