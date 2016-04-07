@@ -36,6 +36,10 @@ WRSROOT_PATCHES_DIR = WRSROOT_HOME_DIR + "/patches"
 WRSROOT_IMAGES_DIR = WRSROOT_HOME_DIR + "/images"
 JIRA_LOGS_DIR = "/folk/cgts/logs"
 
+BOOT_IMAGE_ISO = "bootimage.iso"
+BOOT_IMAGE_ISO_PATH = "export/" + BOOT_IMAGE_ISO
+BOOT_IMAGE_ISO_TMP_PATH = "/tmp/" + BOOT_IMAGE_ISO
+
 # .ini section and option names
 CFG_PROVISION_SECTION_NAME = "provision"
 CFG_CMD_OPT_NAME = "commands"

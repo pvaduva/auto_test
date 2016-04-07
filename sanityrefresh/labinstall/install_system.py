@@ -91,6 +91,17 @@ def parse_args():
                            action='store_true',help="Run installation"
                            " as small footprint")
 
+    # This option is valid only for small footprint option (--small-feetprint)
+    #  that are bootable from USB.
+    #
+    # Burn boot image into USB if controller-0 is accessible, otherwise
+    # the lab is booted from the existing USB image,
+    # if one is plugged-in.
+    #
+    lab_grp.add_argument('--burn-usb', dest='burn_usb',
+                           action='store_true', help="Burn boot image into USB before install")
+
+
     #TODO: Custom directory path is not supported yet. Need to add code
     #      to rsync files from custom directory path on local PC to controller-0
     #      Can use rsync exec_cmd(...) in common.py to do the transfer locally
@@ -314,6 +325,52 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path):
 
     tuxlab_conn.logout()
 
+def burn_usb_load_image(node,  bld_server_conn, load_path):
+    ''' Burn usb with given load image.
+    '''
+
+    logutils.print_step("Burning USB with load image from {}".format(load_path))
+
+    # Check  if node (controller-0) is accessible.
+    cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, node.host_ip)
+    if (bld_server_conn.exec_cmd(cmd, timeout=PING_TIMEOUT +
+                                  TIMEOUT_BUFFER)[0] != 0):
+        log.info("Node not responding. Skipping USB burning. Installing with existing USB image")
+        return
+    else:
+        node.telnet_conn.login()
+
+    # check if  a USB is plugged in 
+    cmd = "ls -lrtd /dev/disk/by-id/usb*"
+    if (node.telnet_conn.exec_cmd(cmd)[0] != 0):
+        log.info("No USB found in lab node. Please plug in a usb to {}.".format(node.host_ip))
+        sys.exit(1)
+
+    cmd = "test -f " + load_path + "/" + BOOT_IMAGE_ISO_PATH
+    if bld_server_conn.exec_cmd(cmd)[0] != 0:
+        log.error('Boot image iso file \"{}\" not found in {}'.format(
+                  load_path, BOOT_IMAGE_ISO_PATH))
+        sys.exit(1)
+    bld_server_conn.sendline("cd " + load_path)
+    bld_server_conn.find_prompt()
+    pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
+    bld_server_conn.rsync( BOOT_IMAGE_ISO_PATH,  WRSROOT_USERNAME, node.host_ip,
+                           BOOT_IMAGE_ISO_TMP_PATH, pre_opts=pre_opts)
+
+    cmd = "test -f " + BOOT_IMAGE_ISO_TMP_PATH
+    if node.telnet_conn.exec_cmd(cmd)[0] != 0:
+        log.info("Boot image not found in {} : {}".format(node.host_ip, BOOT_IMAGE_ISO_TMP_PATH))
+        sys.exit(1)
+
+    cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S dd if=" + BOOT_IMAGE_ISO_TMP_PATH + " of=/dev/sdc bs=1M oflag=direct; sync"
+    if node.telnet_conn.exec_cmd(cmd, timeout=RSYNC_TIMEOUT)[0] != 0:
+        log.error('Faile to burn Boot image iso file \"{}\"  onto USB'.format(
+                   BOOT_IMAGE_ISO_PATH))
+        sys.exit(1)
+
+
+
+
 def wipe_disk(node):
     ''' Perform a wipedisk operation on the lab before booting a new load into
         it. 
@@ -355,6 +412,7 @@ def wipe_disk(node):
         node.telnet_conn.get_read_until("The disk(s) have been wiped.", WIPE_DISK_TIMEOUT)
 
         log.info("Disk(s) have been wiped on: " + node.name)
+
 
 def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
     ''' Function to wait for the lab to enter a specified state.  
@@ -558,6 +616,7 @@ if __name__ == '__main__':
     tuxlab_server = args.tuxlab_server + HOST_EXT
     run_lab_setup = args.run_lab_setup
     small_footprint = args.small_footprint
+    burn_usb = args.burn_usb
 
     bld_server = args.bld_server + HOST_EXT
 
@@ -656,7 +715,8 @@ if __name__ == '__main__':
 
     executed = False
     if not executed:
-        set_network_boot_feed(controller0.barcode, tuxlab_server, bld_server_conn, load_path)
+        if str(boot_device_dict.get('controller-0')) != "USB":
+            set_network_boot_feed(controller0.barcode, tuxlab_server, bld_server_conn, load_path)
 
     nodes = list(controller_dict.values()) + list(compute_dict.values()) + list(storage_dict.values())
 
@@ -684,6 +744,9 @@ if __name__ == '__main__':
                                               ".telnet.log", debug=False)
         #cont0_telnet_conn.login()
         controller0.telnet_conn = cont0_telnet_conn
+        if burn_usb and small_footprint:
+            burn_usb_load_image(controller0, bld_server_conn, load_path)
+
         #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of
         #      the nodes as the system was left not in an installed state
         #TODO: In this case still need to set the telnet session for controller0
@@ -722,11 +785,16 @@ if __name__ == '__main__':
                 log.error("Warning: Failed to bring up {} interface".format(NIC_INTERFACE))
 
             time.sleep(2)
+
             cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S route add default gw " + controller0.host_gateway
             if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
                 log.error("Warning: Failed to add default gateway: " + controller0.host_gateway)
 
             # Ping the outside network to ensure the above network setup worked as expected
+            # Sometimes the network may take upto a minute to setup. Adding a delay of 60 seconds
+            # before ping
+            #TODO: Change to ping at 15 seconds interval for upto 4 times
+            time.sleep(60)
             cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, DNS_SERVER)
             if controller0.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT + TIMEOUT_BUFFER)[0] != 0:
                 log.error("Failed to ping outside network")
