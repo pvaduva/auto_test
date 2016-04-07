@@ -249,10 +249,20 @@ def get_snapshot_id(status='available', vol_id=None, name=None, size=None, con_s
 def _wait_for_volume_deleted(volume_id, column='ID', timeout=VolumeTimeout.DELETE, fail_ok=True,
                              check_interval=3, con_ssh=None, auth_info=None):
     """
-        check if a specific field still exist in a specified column
-        an id in cinder list's ID column
-        an id in nova list's ID column
-        etc...
+
+        check if a specific field still exist in a specified column for cinder list
+
+    Args:
+        volume_id (str):
+        column (str):
+        timeout (int):
+        fail_ok (bool):
+        check_interval (int):
+        con_ssh:
+        auth_info (dict):
+
+    Returns (bool): Return True if the specific volumn_id is found within the timeout period. False otherwise
+
     """
     end_time = time.time() + timeout
     while time.time() < end_time:
@@ -293,6 +303,10 @@ def delete_volume(volume_id, fail_ok=False, con_ssh=None, auth_info=None):
         con_ssh (SSHClient):
         auth_info (dict):
     Returns:
+        [-1,''] if volume does not exist
+        [0,''] volume is successfully deleted.
+        [1,output] if delete volume cli errored when executing
+        [2,vm_id] if delete volume cli executed but still show up in nova list
 
     """
     # if volume doesn't exist return [-1,'']
