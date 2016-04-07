@@ -7,7 +7,7 @@ from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import HostAavailabilityState, HostAdminState
 from consts.timeout import HostTimeout
-from keywords import system_helper
+from keywords import system_helper, nova_helper
 from keywords.security_helper import LinuxUser
 
 
@@ -220,6 +220,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
     Args:
         host (str): hostname or id in string format
         force (bool):
+        lock_timeout (int): max time in seconds waiting for host to goto locked state after locking attempt.
         timeout (int): how many seconds to wait for host to go online after lock
         con_ssh (SSHClient):
         fail_ok (bool):

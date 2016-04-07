@@ -73,7 +73,10 @@ def __copy_keyfile_to_natbox(natbox_ip):
     if not con_0_ssh.get_exit_code() == 0:
         raise exceptions.CommonError("Failed to copy keyfile to NatBox")
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> Adding lock unlock test for regular and small lab
 def boot_vms():
     con_ssh = ControllerClient.get_active_controller()
     if con_ssh.file_exists('~/instances_group0/launch_tenant1-avp1.sh'):

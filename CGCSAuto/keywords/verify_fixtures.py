@@ -87,8 +87,7 @@ def ping_vms_from_nat(request):
         - if post test ping failed, then compare it with pre test ping to see if it's a okay failure.
         - better to re-utilize the check vm fixture so that we don't need to retrieving the info again.
             i.e., use fixture inside a fixture.
-        - better to re-utilize the check vm fixture so that we don't need to retrieving the info again. i.e.,
-            use fixture inside a fixture.
+
     Args:
         request:
 
@@ -111,7 +110,7 @@ def ping_vms_from_nat(request):
 
 @fixture()
 def ping_vm_from_vm(request):
-    #TODO: Everything below
+    # TODO: Everything below
     LOG.info("Gathering VM ping to other VMs before test begins.")
 
     before_ping_result = vm_helper.ping_vms_from_vm()

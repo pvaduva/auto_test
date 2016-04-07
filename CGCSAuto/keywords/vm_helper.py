@@ -12,6 +12,7 @@ from consts.timeout import VMTimeout
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper
 from keywords.common import Count
 
+
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
     """
     Get a list of vm ids.
@@ -878,8 +879,8 @@ class VMInfo:
         return re.search(r'\((.*)\)', flavor_output).group(1)
 
     def __get_boot_info(self):
-        image = table_parser.get_value_two_col_table(self.table_, 'image')
-        if BOOT_FROM_VOLUME in image:
+        image_ = table_parser.get_value_two_col_table(self.table_, 'image')
+        if BOOT_FROM_VOLUME in image_:
             volumes = self.get_volume_ids()
             if len(volumes) == 0:
                 raise exceptions.VMError("Booted from volume, but no volume id found.")
@@ -887,7 +888,7 @@ class VMInfo:
                 raise exceptions.VMError("VM booted from volume. Multiple volumes found! Did you attach extra volume?")
             return {'type': 'volume', 'id': volumes[0]}
         else:
-            match = re.search(UUID, image)
+            match = re.search(UUID, image_)
             return {'type': 'image', 'id': match.group(0)}
 
     def get_volume_ids(self):
