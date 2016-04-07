@@ -3,7 +3,7 @@ import re
 import time
 from contextlib import contextmanager
 
-from keywords.nova_helper import vm_exists, _wait_for_vm_in_nova_list
+from keywords.nova_helper import vm_exists
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
 from utils.tis_log import LOG
@@ -585,6 +585,20 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
 def _wait_for_vm_status(vm_id, status, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=True,
                         con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        vm_id:
+        status (list or str):
+        timeout:
+        check_interval:
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns: The Status of the vm_id depend on what Status it is looking for
+
+    """
     end_time = time.time() + timeout
     if isinstance(status, str):
         status = [status]
@@ -958,7 +972,7 @@ def delete_vm(vm_id, delete_volumes=True, fail_ok=False, con_ssh=None, auth_info
         return [1, vm_cmd_output]
 
     # check if the vm is deleted
-    vol_status = _wait_for_vm_in_nova_list(vm_id, column='ID', fail_ok=fail_ok)
+    vol_status = nova_helper._wait_for_vm_deleted(vm_id, column='ID', fail_ok=fail_ok)
     if not vol_status:
         if fail_ok:
             LOG.warning("Delete VM {} command is executed but still shows up in nova list".format(vm_id))

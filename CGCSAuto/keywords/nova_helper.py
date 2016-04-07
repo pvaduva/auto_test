@@ -370,10 +370,22 @@ def get_vms_by_hypervisors(con_ssh=None):
     return host_vms
 
 
-def _wait_for_vm_in_nova_list(vm_id, column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
+def _wait_for_vm_deleted(vm_id, column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
                               check_interval=3, con_ssh=None, auth_info=None):
     """
-        similar to _wait_for_volume_in_cinder_list
+
+        check if a specific field still exist in a specified column for nova list
+
+    Args:
+        vm_id (str):
+        column (str):
+        timeout (int):
+        fail_ok (bool):
+        check_interval (int):
+        con_ssh:
+        auth_info (dict):
+
+    Returns (bool): Return True if the specific volumn_id is found within the timeout period. False otherwise
     """
 
     end_time = time.time() + timeout
@@ -461,5 +473,12 @@ def get_vm_image_name(vm_id, auth_info=Tenant.ADMIN, con_ssh=None):
 
 
 def _get_vm_volumes(novashow_table):
+    """
+    Args:
+        novashow_table (dict):
+
+    Returns (list): A nested list for each vm volumes from the novashow_table
+
+    """
     volumes = eval(table_parser.get_value_two_col_table(novashow_table, ':volumes_attached', strict=False))
     return [volume['id'] for volume in volumes]
