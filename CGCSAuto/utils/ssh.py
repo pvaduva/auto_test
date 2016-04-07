@@ -357,6 +357,9 @@ class SSHClient:
         if not index == 0:
             raise exceptions.SSHException("Failed to scp files")
 
+    def file_exists(self, file_path):
+        return self.exec_cmd('stat ' + file_path)[0] == 0
+
     def close(self):
         self._session.close(True)
         LOG.info("ssh session closed. host: {}, user: {}. Object ID: {}".format(self.host, self.user, id(self)))

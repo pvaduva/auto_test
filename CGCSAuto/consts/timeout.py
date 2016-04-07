@@ -7,6 +7,7 @@ class HostTimeout:
     CONTROLLER_UNLOCK = 1360
     REBOOT = 1360
     SWACT = 140
+    LOCK = 720
 
 
 class VMTimeout:
@@ -15,6 +16,7 @@ class VMTimeout:
     LIVE_MIGRATE_COMPLETE = 60
     COLD_MIGRATE_CONFIRM = 120
     BOOT_VM = 60
+    DELETE = 60
     VOL_ATTACH = 60
 
 

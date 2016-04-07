@@ -49,7 +49,7 @@ def test_ping_vms_from_natbox(vm_count):
     if vm_count == 'all':
         vm_ids = None
     else:
-        vm_ids = vm_helper.get_any_vm_ids(count=vm_count)
+        vm_ids = vm_helper.get_any_vms(count=vm_count)
 
     assert vm_ids != []
 
@@ -62,11 +62,11 @@ def test_ping_vms_from_natbox(vm_count):
     'all'
 ])
 def test_ping_vms_from_vm_1(vm_count):
-    from_vm = vm_helper.get_any_vm_ids(count=1)[0]
+    from_vm = vm_helper.get_any_vms(count=1)[0]
     if vm_count == 'all':
         vm_ids = None
     else:
-        vm_ids = vm_helper.get_any_vm_ids(count=vm_count)
+        vm_ids = vm_helper.get_any_vms(count=vm_count)
 
     assert vm_ids != []
 
@@ -94,6 +94,6 @@ def test_ping_vms_from_vm_various_images(vm_image):
 
 
 def test_ping_vms_from_vm_2():
-    to_vms = vm_helper.get_any_vm_ids(auth_info=Tenant.ADMIN, all_tenants=True)
-    for vm in vm_helper.get_any_vm_ids():
+    to_vms = vm_helper.get_any_vms(auth_info=Tenant.ADMIN, all_tenants=True)
+    for vm in vm_helper.get_any_vms():
         vm_helper.ping_vms_from_vm(from_vm=vm, to_vms=to_vms)
