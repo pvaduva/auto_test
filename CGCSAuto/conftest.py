@@ -15,6 +15,7 @@ def setup_test_session(request):
     setups.create_tmp_dir()
     setups.setup_primary_tenant()
     setups.setup_natbox_ssh()
+    setups.boot_vms()
 
     def teardown():
         try:

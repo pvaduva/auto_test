@@ -6,7 +6,7 @@ def collect_tis_logs(con_ssh=None):
     # TODO: lock hosts if hosts are unlocked and not online
     LOG.info("Collecting all logs upon test case fail.")
     con_ssh.send('collect all')
-    expect_list = ['.*\(yes/no\)\?', '.*password:','Compressing Tarball ..: /scratch/ALL_NODES_.*', con_ssh.prompt]
+    expect_list = ['.*\(yes/no\)\?', '.*password:', 'Compressing Tarball ..: /scratch/ALL_NODES_.*', con_ssh.prompt]
     expect_rtn = -1
     while not expect_rtn == 2:
         expect_rtn = con_ssh.expect(expect_list, timeout=60)

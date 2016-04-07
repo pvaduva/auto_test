@@ -324,7 +324,6 @@ def __get_row_indexes_string(table_, header, value, strict=False):
 
 def _get_values(table_, header1, value1, header2, strict=False, regex=False, match=False):
     """
-
     Args:
         table_:
         header1:

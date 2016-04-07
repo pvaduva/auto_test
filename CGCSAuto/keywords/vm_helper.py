@@ -3,18 +3,17 @@ import re
 import time
 from contextlib import contextmanager
 
-from keywords.nova_helper import vm_exists
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
 from utils.tis_log import LOG
 from consts.auth import Tenant, Primary
 from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME
 from consts.timeout import VMTimeout
-from keywords import network_helper, nova_helper, system_helper, cinder_helper
+from keywords import network_helper, nova_helper, system_helper, cinder_helper, host_helper, glance_helper
 from keywords.common import Count
 
 
-def get_any_vm_ids(count=None, con_ssh=None, auth_info=None, all_tenants=False):
+def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
     """
     Get a list of vm ids.
 
@@ -30,14 +29,24 @@ def get_any_vm_ids(count=None, con_ssh=None, auth_info=None, all_tenants=False):
     """
     vms = nova_helper.get_vms(con_ssh=con_ssh, auth_info=auth_info, all_vms=all_tenants)
     if count is None:
+        if rtn_new:
+            vms = [vms, []]
         return vms
     diff = count - len(vms)
     if diff <= 0:
-        return random.sample(vms, count)
+        vms = random.sample(vms, count)
+        if rtn_new:
+            vms = [vms, []]
+        return vms
 
+    new_vms = []
     for i in range(diff):
-        vms.append(boot_vm(con_ssh=con_ssh, auth_info=auth_info)[1])
+        new_vm = boot_vm(con_ssh=con_ssh, auth_info=auth_info)[1]
+        vms.append(new_vm)
+        new_vms.append(new_vm)
 
+    if rtn_new:
+        vms = [vms, new_vms]
     return vms
 
 
@@ -139,14 +148,15 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
     volume_id = image = snapshot_id = None
     if source is None:
         vol_name = 'vol-' + name
-        volume_id = cinder_helper.create_volume(vol_name)[1]
+        volume_id = cinder_helper.create_volume(vol_name, auth_info=auth_info, con_ssh=con_ssh)[1]
     elif source.lower() == 'volume':
-        volume_id = source_id if source_id else cinder_helper.create_volume('vol-' + name)[1]
+        volume_id = source_id if source_id else cinder_helper.create_volume(
+                'vol-' + name, auth_info=auth_info, con_ssh=con_ssh)[1]
     elif source.lower() == 'image':
-        image = source_id if source_id else 'cgcs-guest'
+        image = source_id if source_id else glance_helper.get_any_image(con_ssh=con_ssh, auth_info=auth_info)
     elif source.lower() == 'snapshot':
         if not snapshot_id:
-            snapshot_id = cinder_helper.get_snapshot_id()
+            snapshot_id = cinder_helper.get_snapshot_id(auth_info=auth_info, con_ssh=con_ssh)
             if not snapshot_id:
                 raise ValueError("snapshot id is required to boot vm; however no snapshot exists on the system.")
     # Handle mandatory arg - key_name
@@ -255,13 +265,12 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, tenant_name=None, con_ssh=No
     Returns: (list) - VMs that we try to launch (either already launched, or launched by this script)
 
     """
-
-    # FIXME: Need to adjust if we are not on controller-0
-
     if not tenant_name:
         tenant_name = Primary.get_primary()['tenant']
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
+    if not con_ssh.get_hostname() == 'controller-0':
+        host_helper.swact_host()
 
     vm_ids = []
     vm_names = []
@@ -938,32 +947,34 @@ class VMInfo:
 
 def delete_vm(vm_id, delete_volumes=True, fail_ok=False, con_ssh=None, auth_info=None):
     """
+    Delete given vm (and attached volume(s))
+
     Args:
-        vm_id
-        delete_volumes: (boolean) delete all attached volumes if set to True
-        fail_ok:
-        con_ssh
-        auth_info
+        vm_id (str):
+        delete_volumes (bool): delete attached volume(s) if set to True
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
     Returns:
-        [-1,''] if VM does not exist
-        [0,''] VM is successfully deleted.
-        [1,output] if delete vm cli errored when executing
-        [2,vm_id] if delete vm cli executed but still show up in nova list
+        [-1, ''] VM does not exist. Do nothing.
+        [0, ''] VM is successfully deleted.
+        [1, <stderr>] if delete vm cli failed to execute
+        [2, vm_id] if delete vm cli executed but vm still show up in nova list
 
-
-    [wrsroot@controller-0 ~(keystone_tenant1)]$ nova delete 74e37830-97a2-4d9d-b892-ad58bc4148a7
-    Request to delete server 74e37830-97a2-4d9d-b892-ad58bc4148a7 has been accepted.
-
+    Examples:
+        [wrsroot@controller-0 ~(keystone_tenant1)]$ nova delete 74e37830-97a2-4d9d-b892-ad58bc4148a7
+        Request to delete server 74e37830-97a2-4d9d-b892-ad58bc4148a7 has been accepted.
     """
     # check if vm exist
     if vm_id is not None:
-        vm_exist = vm_exists(vm_id)
+        vm_exist = nova_helper.vm_exists(vm_id, auth_info=auth_info, con_ssh=con_ssh)
         if not vm_exist:
             LOG.info("VM {} does not exists on system. Do nothing".format(vm_id))
             return [-1, '']
 
     # get volumes attached to vm
-    volume_list = cinder_helper.get_volumes(attached_vm=vm_id)
+    volume_list = cinder_helper.get_volumes(attached_vm=vm_id, auth_info=auth_info, con_ssh=con_ssh)
 
     # delete vm
     vm_exit_code, vm_cmd_output = cli.nova('delete', vm_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
@@ -972,18 +983,46 @@ def delete_vm(vm_id, delete_volumes=True, fail_ok=False, con_ssh=None, auth_info
         return [1, vm_cmd_output]
 
     # check if the vm is deleted
-    vol_status = nova_helper._wait_for_vm_deleted(vm_id, column='ID', fail_ok=fail_ok)
-    if not vol_status:
-        if fail_ok:
-            LOG.warning("Delete VM {} command is executed but still shows up in nova list".format(vm_id))
-            return [2, vm_id]
-        raise exceptions.VolumeError("Delete VM {} command is executed but "
-                                     "still shows up in nova list".format(vm_id))
+    vm_deleted = _wait_for_vm_deleted(vm_id, fail_ok=fail_ok, auth_info=auth_info, con_ssh=con_ssh)
+    if not vm_deleted:
+        msg = "VM {} is not removed from nova list".format(vm_id)
+        LOG.warning(msg)
+        return [2, msg]
 
     # delete volumes that were attached to the vm
     if delete_volumes:
         for volume_id in volume_list:
             cinder_helper.delete_volume(volume_id, fail_ok=True, auth_info=auth_info, con_ssh=con_ssh)
 
-    LOG.info("VM is successfully deleted.")
+    LOG.info("VM {} is successfully deleted.".format(vm_id))
     return [0, '']
+
+
+def _wait_for_vm_deleted(vm, header='ID', timeout=VMTimeout.DELETE, fail_ok=True,
+                         check_interval=3, con_ssh=None, auth_info=None):
+    """
+    Wait for specific vm to be removed from nova list
+
+    Args:
+        vm (str):
+        header: ID or Name
+        timeout (int): in seconds
+        fail_ok (bool):
+        check_interval:
+        con_ssh:
+        auth_info:
+
+    Returns:
+
+    """
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        table_ = table_parser.table(cli.nova('list', ssh_client=con_ssh, auth_info=auth_info))
+        vms = table_parser.get_column(table_, header)
+        if vm not in vms:
+            return True
+        time.sleep(check_interval)
+
+    if not fail_ok:
+        return False
+    raise exceptions.VMPostCheckFailed("VM {} is not removed from nova list within {} seconds".format(timeout))
