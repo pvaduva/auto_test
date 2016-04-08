@@ -221,7 +221,8 @@ def get_snapshot_id(status='available', vol_id=None, name=None, size=None, con_s
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (str): snapshot id. Return None if no matching snapshot found.
+    Returns :
+        A string of snapshot id. Return None if no matching snapshot found.
 
     """
     table_ = table_parser.table(cli.cinder('snapshot-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -261,7 +262,8 @@ def _wait_for_volume_deleted(volume_id, column='ID', timeout=VolumeTimeout.DELET
         con_ssh:
         auth_info (dict):
 
-    Returns (bool): Return True if the specific volumn_id is found within the timeout period. False otherwise
+    Returns (bool):
+        Return True if the specific volumn_id is found within the timeout period. False otherwise
 
     """
     end_time = time.time() + timeout
@@ -287,7 +289,7 @@ def volume_exists(volume_id, con_ssh=None, auth_info=None):
         auth_info
 
     Returns:
-        return
+        True if a volume id exist within cinder show, False otherwise
     """
     exit_code, output = cli.cinder('show', volume_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
     return exit_code == 0
@@ -303,10 +305,10 @@ def delete_volume(volume_id, fail_ok=False, con_ssh=None, auth_info=None):
         con_ssh (SSHClient):
         auth_info (dict):
     Returns:
-        [-1,''] if volume does not exist
+        [-1,''] if volume does not exist.
         [0,''] volume is successfully deleted.
-        [1,output] if delete volume cli errored when executing
-        [2,vm_id] if delete volume cli executed but still show up in nova list
+        [1,output] if delete volume cli errored when executing.
+        [2,vm_id] if delete volume cli executed but still show up in nova list.
 
     """
     # if volume doesn't exist return [-1,'']
