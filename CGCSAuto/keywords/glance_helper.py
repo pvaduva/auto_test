@@ -82,6 +82,7 @@ def image_exists(image_id, con_ssh=None, auth_info=Tenant.ADMIN):
         auth_info
 
     Returns:
+
     """
     exit_code, output = cli.glance('image-show', image_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
     return exit_code == 0
