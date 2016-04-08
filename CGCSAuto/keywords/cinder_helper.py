@@ -260,7 +260,8 @@ def _wait_for_volume_deleted(volume_id, column='ID', timeout=VolumeTimeout.DELET
         con_ssh:
         auth_info (dict):
 
-    Returns (bool): Return True if the specific volumn_id is found within the timeout period. False otherwise
+    Returns (bool):
+        Return True if the specific volumn_id is found within the timeout period. False otherwise
 
     """
     end_time = time.time() + timeout
