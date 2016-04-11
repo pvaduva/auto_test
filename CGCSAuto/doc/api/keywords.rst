@@ -1,7 +1,10 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> Added keywords modules to sphinx-doc
+=======
+>>>>>>> 9551b55567ec8f60b831a098dfa92b46a48b6f0b
 keywords package
 ================
 
@@ -97,6 +100,7 @@ keywords.vm_helper module
     :undoc-members:
     :show-inheritance:
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 Core keywords components
@@ -107,5 +111,8 @@ Core keywords components
 =======
 
 >>>>>>> Added keywords modules to sphinx-doc
+=======
+
+>>>>>>> 9551b55567ec8f60b831a098dfa92b46a48b6f0b
 
 

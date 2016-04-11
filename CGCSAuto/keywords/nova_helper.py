@@ -479,8 +479,5 @@ def get_quotas(quotas=None, con_ssh=None, auth_info=None):
     for item in quotas:
         values.append(table_parser.get_value_two_col_table(table_, item))
 
-<<<<<<< HEAD
     return values
-=======
-    return values
->>>>>>> Added evacuate vm test cases.
+
