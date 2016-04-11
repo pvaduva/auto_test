@@ -7,7 +7,7 @@ from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import HostAavailabilityState, HostAdminState
 from consts.timeout import HostTimeout
-from keywords import system_helper, nova_helper
+from keywords import system_helper
 from keywords.security_helper import LinuxUser
 
 
@@ -570,4 +570,8 @@ def get_up_hosts_with_storage_backing(storage_backing, con_ssh=None):
         up_hosts = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
 
     candidate_hosts = list(set(hosts_with_backing) & set(up_hosts))
+<<<<<<< HEAD
     return candidate_hosts
+=======
+    return candidate_hosts
+>>>>>>> Added evacuate vm test cases.

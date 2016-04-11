@@ -12,7 +12,6 @@ from consts.timeout import VMTimeout
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper
 from keywords.common import Count
 
-
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
     """
     Get a list of vm ids.
