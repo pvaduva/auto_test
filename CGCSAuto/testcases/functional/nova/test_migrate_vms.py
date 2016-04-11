@@ -2,10 +2,11 @@ import random
 
 from pytest import fixture, mark, skip
 
+import keywords.host_helper
 from utils.tis_log import LOG
 from consts.auth import Tenant
 from setup_consts import P1, P2, P3
-from keywords import vm_helper, nova_helper, system_helper, cinder_helper
+from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper
 
 
 flavor_params = [
@@ -32,8 +33,8 @@ def flavor_(request):
     """
     param = request.param
     storage = param[2]
-    if len(system_helper.get_hosts_by_storage_aggregate(storage_backing=storage)) < 2:
-        skip("Less than two hosts support {} storage backing".format(storage))
+    if len(keywords.host_helper.get_hosts_by_storage_aggregate(storage_backing=storage)) < 1:
+        skip("No host support {} storage backing".format(storage))
 
     flavor_id = nova_helper.create_flavor(ephemeral=param[0], swap=param[1])[1]
     storage_spec = {'aggregate_instance_extra_specs:storage': storage}
@@ -122,7 +123,8 @@ def test_live_migrate_vm(vm_, block_migrate):
     """
     LOG.tc_step("Calculating expected result...")
     vm_id = vm_['id']
-    live_mig_allowed = vm_helper._is_live_migration_allowed(vm_id=vm_id, block_migrate=block_migrate)
+    live_mig_allowed = vm_helper._is_live_migration_allowed(vm_id=vm_id, block_migrate=block_migrate) \
+                       and vm_helper.get_dest_host_for_live_migrate(vm_id)
     exp_code = 0 if live_mig_allowed else 1
 
     extra_msg = ''
@@ -163,6 +165,18 @@ def test_cold_migrate_vm(vm_, revert):
      - Less than two hypervisor hosts on system
 
     """
+
     vm_id = vm_['id']
+    vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id)
+    hosts_with_backing = keywords.host_helper.get_hosts_by_storage_aggregate(vm_storage_backing)
+    if system_helper.is_small_footprint():
+        up_hosts = host_helper.get_nova_computes()
+    else:
+        up_hosts = host_helper.get_hypervisors(state='up', status='enabled')
+    candidate_hosts = list(set(hosts_with_backing) & set(up_hosts))
+    if len(candidate_hosts) < 2:
+        expt = 1
+    else:
+        expt = 0
     code, msg = vm_helper.cold_migrate_vm(vm_id=vm_id, revert=revert, fail_ok=True)
-    assert code == 0, msg
+    assert code == expt, msg

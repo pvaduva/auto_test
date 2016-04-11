@@ -275,14 +275,18 @@ def __is_table_two_column(table_):
 
 def get_column(table_, header):
     """
-    Get a whole column with certain header as a list. The header itself is excluded.
+    Get a whole column with customized header as a list. The header itself is excluded.
 
-    :param table_: Dictionary of a table parsed by tempest.
-    Example: table {
-    'headers': ["Field", "Value"];
-    'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
-    :param header: header of a column
-    :return:column as a list. Each item is a string.
+    Args:
+        table_ (dict): Dictionary of a table parsed by tempest.
+            Example: table =
+            {
+                'headers': ["Field", "Value"];
+                'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
+        header (str): header of a column
+
+    Returns:column as a list. Each item is a string.
+
     """
     rows = get_all_rows(table_)
     index = get_column_index(table_, header)
@@ -320,7 +324,6 @@ def __get_row_indexes_string(table_, header, value, strict=False):
 
 def _get_values(table_, header1, value1, header2, strict=False, regex=False, match=False):
     """
-
     Args:
         table_:
         header1:
@@ -378,6 +381,10 @@ def get_values(table_, target_header, strict=True, regex=False, match=False, mer
     Returns (list): matching values for target header
 
     """
+    if not kwargs:
+        LOG.debug("kwargs unspecified, returning the whole target column as list.")
+        return get_column(table_, target_header)
+
     row_indexes = []
     for header, value in kwargs.items():
         kwarg_row_indexes = _get_row_indexes(table_, header, value, strict, regex, match)
@@ -482,6 +489,15 @@ def filter_table_single_field(table_, field, value, strict=True, regex=False, ma
 
 
 def __filter_table(table_, row_indexes):
+    """
+
+    Args:
+        table_ (dict):
+        row_indexes:
+
+    Returns:
+
+    """
     all_rows = get_all_rows(table_)
     target_rows = [all_rows[i] for i in row_indexes]
     table_['values'] = target_rows
@@ -511,6 +527,10 @@ def filter_table(table_, strict=True, regex=False, match=False, **kwargs):
 
     Args:
         table_:
+                table_ (dict): Dictionary of a table parsed by tempest.
+            Example: table {
+                'headers': ["Field", "Value"];
+                'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
         strict:
         regex:
         match:
@@ -519,6 +539,7 @@ def filter_table(table_, strict=True, regex=False, match=False, **kwargs):
             values list are 'or' relation
             e.g., if kwargs = {'id':[id_1, id_2], 'name': [name_1, name_3]}, a table with only item_2 will be returned
     Returns:
+        Special table(dict) that made up of rows that specified by **kwargs
 
     """
     if not kwargs:

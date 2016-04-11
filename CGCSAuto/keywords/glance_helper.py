@@ -8,6 +8,18 @@ from consts.timeout import VolumeTimeout
 
 
 def get_image_id_from_name(name=None, strict=False, con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        name (list or str):
+        strict:
+        con_ssh:
+        auth_info (dict:
+
+    Returns:
+        Return a random image_id that match the name. else return an empty string
+
+    """
     table_ = table_parser.table(cli.glance('image-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is None:
         image_id = random.choice(table_parser.get_column(table_, 'ID'))
@@ -24,13 +36,22 @@ def create_image(name, desc=None, source='image location', format='raw', min_dis
     raise NotImplementedError
 
 
-def _wait_for_image_in_glance_list(image_id,column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
-            check_interval=3,con_ssh=None, auth_info=None):
+def _wait_for_image_deleted(image_id,column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
+                            check_interval=3, con_ssh=None, auth_info=None):
     """
-        check if a specific field still exist in a specified column
-        an id in cinder list's ID column
-        an id in nova list's ID column
-        etc...
+        check if a specific field still exist in a specified column of glance image-list
+
+    Args:
+        image_id (str):
+        column (str):
+        timeout (int):
+        fail_ok (bool):
+        check_interval (int):
+        con_ssh:
+        auth_info (dict):
+
+    Returns (bool): Return True if the specific image_id is found within the timeout period. False otherwise
+
     """
     end_time = time.time() + timeout
     while time.time() < end_time:
@@ -55,12 +76,26 @@ def image_exists(image_id, con_ssh=None, auth_info=Tenant.ADMIN):
         auth_info
 
     Returns:
+
     """
     exit_code, output = cli.glance('image-show', image_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
     return exit_code == 0
 
 
 def delete_image(image_id, fail_ok=False, con_ssh=None, auth_info=Tenant.TENANT_1):
+    """
+
+    Args:
+        image_id (str):
+        fail_ok (bool):
+        con_ssh:
+        auth_info (dict):
+    Returns:
+        [-1,''] if image does not exist
+        [0,''] image is successfully deleted.
+        [1,output] if delete image cli errored when executing
+        [2,vm_id] if delete image cli executed but still show up in nova list
+    """
 
     # check if image exist
     if image_id is not None:
@@ -71,13 +106,13 @@ def delete_image(image_id, fail_ok=False, con_ssh=None, auth_info=Tenant.TENANT_
 
     # delete image
     exit_code, cmd_output = cli.glance('image-delete', image_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
-                auth_info=auth_info)
+                                       auth_info=auth_info)
 
     if exit_code == 1:
         return [1, cmd_output]
 
     # check image is successfully deleted
-    vol_status = _wait_for_image_in_glance_list(image_id, column='ID', fail_ok=fail_ok)
+    vol_status = _wait_for_image_deleted(image_id, column='ID', fail_ok=fail_ok)
 
     if not vol_status:
         if fail_ok:

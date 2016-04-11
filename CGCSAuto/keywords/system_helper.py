@@ -1,12 +1,11 @@
 import re
 
+from consts import cgcs
 from utils import cli
 from utils import exceptions
 from utils import table_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
-from consts import cgcs
-from consts.auth import Tenant
 
 
 class System:
@@ -64,7 +63,7 @@ def is_small_footprint(controller_ssh=None):
 
     str_ = 'not' if not combined else ''
 
-    LOG.debug("This is {} small footprint system.".format(str_))
+    LOG.info("This is {} small footprint system.".format(str_))
     return combined
 
 
@@ -192,42 +191,6 @@ def get_storage_monitors_count():
     # Only 2 storage monitor available. At least 2 unlocked and enabled hosts with monitors are required.
     # Please ensure hosts with monitors are unlocked and enabled - candidates: controller-0, controller-1,
     raise NotImplementedError
-
-
-def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
-    """
-    Return a list of hosts that supports the given storage backing
-    Args:
-        storage_backing (str): 'local_image', 'local_lvm', or 'remote'
-        con_ssh (SSHClient):
-
-    Returns: (list)
-        such as ['compute-0', 'compute-2', 'compute-1', 'compute-3']
-        or [] if no host supports this storage backing
-
-    """
-    storage_backing = storage_backing.strip().lower()
-    if 'image' in storage_backing:
-        aggregate = 'local_storage_image_hosts'
-    elif 'lvm' in storage_backing:
-        aggregate = 'local_storage_lvm_hosts'
-    elif 'remote' in storage_backing:
-        aggregate = 'remote_storage_hosts'
-    else:
-        raise ValueError("Invalid storage backing provided. "
-                         "Please use one of these: 'local_image', 'local_lvm', 'remote'")
-
-    table_ = table_parser.table(cli.nova('aggregate-details', aggregate, ssh_client=con_ssh,
-                                         auth_info=Tenant.ADMIN))
-    hosts = table_parser.get_values(table_, 'Hosts', Name=aggregate)[0]
-    hosts = hosts.split(',')
-    if len(hosts) == 0 or hosts == ['']:
-        hosts = []
-    else:
-        hosts = [eval(host) for host in hosts]
-
-    LOG.info("Hosts with {} backing: {}".format(storage_backing, hosts))
-    return hosts
 
 
 def get_local_storage_backing(host, con_ssh=None):

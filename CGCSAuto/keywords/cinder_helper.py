@@ -1,7 +1,6 @@
 import random
 import time
 
-from consts.auth import Tenant
 from consts.timeout import VolumeTimeout
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
@@ -13,19 +12,19 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
     """
     Return a list of volume ids based on the given criteria
     Args:
-        vols:
-        name:
-        name_strict:
-        vol_type:
-        size:
-        status:
-        attached_vm:
-        bootable:
-        auth_info:
-        con_ssh:
+        vols (list or str):
+        name (str):
+        name_strict (bool):
+        vol_type (str):
+        size (str):
+        status:(str)
+        attached_vm (str):
+        bootable (str):
+        auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT_1,Tenant.TENANT_2
+        con_ssh (str):
 
     Returns:
-
+        Return a list of volume ids based on the given criteria
     """
     if bootable is not None:
         bootable = str(bootable).lower()
@@ -144,6 +143,18 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
 
 
 def get_volume_states(vol_id, fields, con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        vol_id (str):
+        fields (str):
+        con_ssh (str):
+        auth_info (dict):
+
+    Returns:
+        A dict with field as key and value as value
+
+    """
     table_ = table_parser.table(cli.cinder('show', vol_id, ssh_client=con_ssh, auth_info=auth_info))
     if isinstance(fields, str):
         fields = [fields]
@@ -157,6 +168,22 @@ def get_volume_states(vol_id, fields, con_ssh=None, auth_info=None):
 
 def _wait_for_volume_status(vol_id, status='available', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
                             check_interval=3, con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        vol_id (str):
+        status (str):
+        timeout (int):
+        fail_ok (bool):
+        check_interval (int):
+        con_ssh (str):
+        auth_info (dict):
+
+    Returns:
+        Return True if the status of the volume is same as the status(str) that was passed into the function
+        Return false if timed out or otherwise
+
+    """
 
     end_time = time.time() + timeout
     current_status = ''
@@ -193,7 +220,8 @@ def get_snapshot_id(status='available', vol_id=None, name=None, size=None, con_s
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (str): snapshot id. Return None if no matching snapshot found.
+    Returns :
+        A string of snapshot id. Return None if no matching snapshot found.
 
     """
     table_ = table_parser.table(cli.cinder('snapshot-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -221,10 +249,20 @@ def get_snapshot_id(status='available', vol_id=None, name=None, size=None, con_s
 def _wait_for_volume_deleted(volume_id, column='ID', timeout=VolumeTimeout.DELETE, fail_ok=True,
                              check_interval=3, con_ssh=None, auth_info=None):
     """
-        check if a specific field still exist in a specified column
-        an id in cinder list's ID column
-        an id in nova list's ID column
-        etc...
+        check if a specific field still exist in a specified column for cinder list
+
+    Args:
+        volume_id (str):
+        column (str):
+        timeout (int):
+        fail_ok (bool):
+        check_interval (int):
+        con_ssh:
+        auth_info (dict):
+
+    Returns (bool):
+        Return True if the specific volumn_id is found within the timeout period. False otherwise
+
     """
     end_time = time.time() + timeout
     while time.time() < end_time:
@@ -241,7 +279,7 @@ def _wait_for_volume_deleted(volume_id, column='ID', timeout=VolumeTimeout.DELET
                                           "Actual still in column".format(volume_id, column))
 
 
-def volume_exists(volume_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def volume_exists(volume_id, con_ssh=None, auth_info=None):
     """
     Args:
         volume_id:
@@ -249,7 +287,7 @@ def volume_exists(volume_id, con_ssh=None, auth_info=Tenant.ADMIN):
         auth_info
 
     Returns:
-        return
+        True if a volume id exist within cinder show, False otherwise
     """
     exit_code, output = cli.cinder('show', volume_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
     return exit_code == 0
@@ -266,11 +304,15 @@ def delete_volume(volume_id, fail_ok=False, con_ssh=None, auth_info=None):
         auth_info (dict):
 
     Returns:
+        [-1, ''] if volume does not exist.
+        [0, ''] volume is successfully deleted.
+        [1, output] if delete volume cli errored when executing.
+        [2, vm_id] if delete volume cli executed but still show up in nova list.
 
     """
     # if volume doesn't exist return [-1,'']
     if volume_id is not None:
-        v_exist = volume_exists(volume_id)
+        v_exist = volume_exists(volume_id, auth_info=auth_info, con_ssh=con_ssh)
         if not v_exist:
             LOG.info("Volume {} does not exist on system. Do nothing".format(volume_id))
             return [-1, '']

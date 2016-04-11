@@ -5,6 +5,7 @@ from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClie
 from consts.auth import Primary, Tenant
 from consts.cgcs import Prompt
 import setup_consts
+from keywords import vm_helper
 
 
 def create_tmp_dir():
@@ -36,6 +37,19 @@ def setup_natbox_ssh():
 def __copy_keyfile_to_natbox(natbox_ip):
     con_ssh = ControllerClient.get_active_controller()
     con_0_ssh = ssh_to_controller0(ssh_client=con_ssh)
+    if not con_0_ssh.file_exists('/home/wrsroot/.ssh/id_rsa'):
+        passphrase_prompt_1 = '.*Enter passphrase.*'
+        passphrase_prompt_2 = '.*Enter same passphrase again.*'
+
+        con_0_ssh.send('ssh-keygen')
+        index = con_0_ssh.expect([passphrase_prompt_1, '.*Enter file in which to save the key.*'])
+        if index == 1:
+            con_0_ssh.send()
+            con_0_ssh.expect(passphrase_prompt_1)
+        con_0_ssh.send()    # Enter empty passphrase
+        con_0_ssh.expect(passphrase_prompt_2)
+        con_0_ssh.send()    # Repeat passphrase
+        con_0_ssh.expect(Prompt.CONTROLLER_0)
 
     keyfile_path = setup_consts.KEYFILE_PATH
     cmd_1 = 'cp /home/wrsroot/.ssh/id_rsa ' + keyfile_path
@@ -57,13 +71,14 @@ def __copy_keyfile_to_natbox(natbox_ip):
     con_0_ssh.send(setup_consts.NATBOX['password'])
     con_0_ssh.expect()
     if not con_0_ssh.get_exit_code() == 0:
-        raise exceptions.CommonError("Failed to copy keyfile to Nat Box")
+        raise exceptions.CommonError("Failed to copy keyfile to NatBox")
 
 
-#__skipsetup_called = False
-#def skipcondition_setup():
-#    global __skipsetup_called
-#    if not __skipsetup_called:
-#        setup_tis_ssh()
-#        setup_primary_tenant()
-#        __skipsetup_called = True
+def boot_vms():
+    con_ssh = ControllerClient.get_active_controller()
+    if con_ssh.file_exists('~/instances_group0/launch_tenant1-avp1.sh'):
+        vm_helper.launch_vms_via_script(vm_type='avp', num_vms=1, tenant_name='tenant1')
+        vm_helper.launch_vms_via_script(vm_type='virtio', num_vms=1, tenant_name='tenant2')
+    else:
+        vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT_1)
+        vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT_2)
