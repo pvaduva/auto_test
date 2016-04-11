@@ -757,7 +757,9 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         fail_ok:  When False, test will stop right away if one ping failed. When True, test will continue to ping
             the rest of the vms and return results even if pinging one vm failed.
 
-    Returns (list): [res (bool), packet_loss_dict (dict)]
+    Returns:
+        A list in the form: [res (bool), packet_loss_dict (dict)]
+
         Packet loss rate dictionary format:
         {
          ip1: packet_loss_percentile1,
@@ -794,10 +796,12 @@ def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, natb
         prompt (str):
         natbox_client (NATBoxClient):
 
-    Returns (SSHClient): ssh client of the vm
+    Returns:
+        ssh client of the vm
 
-    Examples: with ssh_to_vm_from_natbox(vm_id=<id>) as vm_ssh:
-                  vm_ssh.exec_cmd(cmd)
+    Examples:
+        with ssh_to_vm_from_natbox(vm_id=<id>) as vm_ssh:
+        vm_ssh.exec_cmd(cmd)
 
     """
     vm_image_name = (nova_helper.get_vm_image_name(vm_id=vm_id)).strip().lower()
