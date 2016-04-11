@@ -1,5 +1,6 @@
 from pytest import fixture, mark, skip
 
+import keywords.host_helper
 import keywords.system_helper
 from utils import cli
 from utils import table_parser
@@ -120,7 +121,7 @@ def prepare_hosts(request):
         Restore hosts to original state
     """
     expected_storage_backing = request.param
-    avail_hosts = keywords.system_helper.get_hosts_by_storage_aggregate(storage_backing=expected_storage_backing)
+    avail_hosts = keywords.host_helper.get_hosts_by_storage_aggregate(storage_backing=expected_storage_backing)
     all_hosts = nova_helper.get_hypervisor_hosts()
     modified_hosts = {}
     locked_hosts = []
