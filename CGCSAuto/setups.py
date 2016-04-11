@@ -37,6 +37,19 @@ def setup_natbox_ssh():
 def __copy_keyfile_to_natbox(natbox_ip):
     con_ssh = ControllerClient.get_active_controller()
     con_0_ssh = ssh_to_controller0(ssh_client=con_ssh)
+    if not con_0_ssh.file_exists('/home/wrsroot/.ssh/id_rsa'):
+        passphrase_prompt_1 = '.*Enter passphrase.*'
+        passphrase_prompt_2 = '.*Enter same passphrase again.*'
+
+        con_0_ssh.send('ssh-keygen')
+        index = con_0_ssh.expect([passphrase_prompt_1, '.*Enter file in which to save the key.*'])
+        if index == 1:
+            con_0_ssh.send()
+            con_0_ssh.expect(passphrase_prompt_1)
+        con_0_ssh.send()    # Enter empty passphrase
+        con_0_ssh.expect(passphrase_prompt_2)
+        con_0_ssh.send()    # Repeat passphrase
+        con_0_ssh.expect(Prompt.CONTROLLER_0)
 
     keyfile_path = setup_consts.KEYFILE_PATH
     cmd_1 = 'cp /home/wrsroot/.ssh/id_rsa ' + keyfile_path
@@ -59,6 +72,7 @@ def __copy_keyfile_to_natbox(natbox_ip):
     con_0_ssh.expect()
     if not con_0_ssh.get_exit_code() == 0:
         raise exceptions.CommonError("Failed to copy keyfile to NatBox")
+
 
 def boot_vms():
     con_ssh = ControllerClient.get_active_controller()

@@ -381,6 +381,10 @@ def get_values(table_, target_header, strict=True, regex=False, match=False, mer
     Returns (list): matching values for target header
 
     """
+    if not kwargs:
+        LOG.debug("kwargs unspecified, returning the whole target column as list.")
+        return get_column(table_, target_header)
+
     row_indexes = []
     for header, value in kwargs.items():
         kwarg_row_indexes = _get_row_indexes(table_, header, value, strict, regex, match)

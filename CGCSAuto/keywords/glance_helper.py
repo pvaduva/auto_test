@@ -36,11 +36,6 @@ def create_image(name, desc=None, source='image location', format='raw', min_dis
     raise NotImplementedError
 
 
-def get_any_image(con_ssh=None, auth_info=None):
-    table_ = table_parser.table(cli.glance('image-list', ssh_client=con_ssh, auth_info=auth_info))
-    return random.choice(table_parser.get_column(table_, 'ID'))
-
-
 def _wait_for_image_deleted(image_id,column='ID', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
                             check_interval=3, con_ssh=None, auth_info=None):
     """

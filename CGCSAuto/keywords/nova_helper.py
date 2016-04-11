@@ -273,6 +273,15 @@ def get_field_by_vms(vm_ids=None, field="Status", con_ssh=None, auth_info=None):
     return ids_status
 
 
+def get_vm_storage_type(vm_id, con_ssh=None):
+    flavor_output = get_vm_info(vm_id=vm_id, field='flavor', strict=True, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+    flavor_id = re.search(r'\((.*)\)', flavor_output).group(1)
+
+    table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    extra_specs = eval(table_parser.get_value_two_col_table(table_, 'extra_specs'))
+    return extra_specs['aggregate_instance_extra_specs:storage']
+
+
 def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False):
     """
     get a list of VM IDs or Names for given tenant in auth_info param.
@@ -458,3 +467,16 @@ def _get_vm_volumes(novashow_table):
     """
     volumes = eval(table_parser.get_value_two_col_table(novashow_table, ':volumes_attached', strict=False))
     return [volume['id'] for volume in volumes]
+
+
+def get_quotas(quotas=None, con_ssh=None, auth_info=None):
+    if not quotas:
+        quotas = 'instances'
+    if isinstance(quotas, str):
+        quotas = [quotas]
+    table_ = table_parser.table(cli.nova('quota-show', ssh_client=con_ssh, auth_info=auth_info))
+    values = []
+    for item in quotas:
+        values.append(table_parser.get_value_two_col_table(table_, item))
+
+    return values
