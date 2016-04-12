@@ -12,6 +12,7 @@ from consts.timeout import VMTimeout
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper
 from keywords.common import Count
 
+
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
     """
     Get a list of vm ids.
@@ -241,7 +242,7 @@ def get_keypair(auth_info=None, con_ssh=None):
     key_name = 'keypair-' + tenant
 
     if key_name in table_parser.get_column(table_keypairs, 'Name'):
-        LOG.info("{} already exists.".format(key_name))
+        LOG.debug("{} already exists. Return existing key.".format(key_name))
     else:
         args_ = '--pub_key /home/wrsroot/.ssh/id_rsa.pub keypair-' + tenant
         table_ = table_parser.table(cli.nova('keypair-add', args_, auth_info=auth_info, ssh_client=con_ssh))
@@ -785,7 +786,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
 
 
 @contextmanager
-def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, natbox_client=None):
+def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, timeout=10, natbox_client=None):
     """
     ssh to a vm from natbox.
 
@@ -794,6 +795,7 @@ def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, natb
         username (str):
         password (str):
         prompt (str):
+        timeout (int): 
         natbox_client (NATBoxClient):
 
     Returns:
@@ -808,7 +810,7 @@ def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, natb
     vm_name = nova_helper.get_vm_name_from_id(vm_id=vm_id)
     vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id)[0]
     vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_name=vm_name, vm_img_name=vm_image_name,
-                         user=username, password=password, prompt=prompt)
+                         user=username, password=password, prompt=prompt, timeout=timeout)
     try:
         yield vm_ssh
     finally:

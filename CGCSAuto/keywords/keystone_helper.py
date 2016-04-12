@@ -1,6 +1,6 @@
 from utils import cli
 from utils import table_parser
-from consts.auth import Primary
+from consts.auth import Primary, Tenant
 
 
 def get_tenant_ids(tenant_name=None, con_ssh=None):
@@ -16,7 +16,7 @@ def get_tenant_ids(tenant_name=None, con_ssh=None):
     """
     if tenant_name is None:
         tenant_name = Primary.get_primary()['tenant']
-    table_ = table_parser.table(cli.openstack('project list', ssh_client=con_ssh))
+    table_ = table_parser.table(cli.openstack('project list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     return table_parser.get_values(table_, 'ID', Name=tenant_name)
 
 

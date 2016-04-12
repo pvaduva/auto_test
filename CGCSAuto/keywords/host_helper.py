@@ -1,3 +1,4 @@
+import re
 import time
 from contextlib import contextmanager
 
@@ -261,9 +262,15 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
     # TODO: Should this considered as fail??
     #  vim_progress_status | Lock of host compute-0 rejected because there are no other hypervisors available.
-    if _wait_for_host_states(host=host, timeout=5, vim_progress_status='lock host {} rejected'.format(host),
-                             strict=False, fail_ok=True, con_ssh=con_ssh):
-        return [4, "Lock host {} is rejected. Details in host-show vim_process status.".format(host)]
+    if _wait_for_host_states(host=host, timeout=5, vim_progress_status='lock host .* rejected.*',
+                             regex=True, fail_ok=True, con_ssh=con_ssh):
+        return [4, "Lock host {} is rejected due to no other hypervisor. Details in host-show vim_process_status.".
+                format(host)]
+
+    if _wait_for_host_states(host=host, timeout=5, vim_progress_status='Migrate of instance .* from host .* failed.*',
+                             regex=True, fail_ok=True, con_ssh=con_ssh):
+        return [5, "Lock host {} is rejected due to migrate vm failed. Details in host-show vm_process_status.".
+                format(host)]
 
     if not _wait_for_host_states(host, timeout=10, administrative=HostAdminState.LOCKED, con_ssh=con_ssh):
         if fail_ok:
@@ -368,8 +375,8 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=30, fail_ok=False):
                 raise
 
 
-def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, strict=True, fail_ok=True, con_ssh=None,
-                          **states):
+def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, strict=True, regex=False, fail_ok=True,
+                          con_ssh=None, **states):
     if not states:
         raise ValueError("Expected host state(s) has to be specified via keyword argument states")
 
@@ -378,25 +385,44 @@ def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, st
     while time.time() < end_time:
         table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
         for field, val in states.items():
-            actual_val = table_parser.get_value_two_col_table(table_, field, strict=strict)
+            actual_val = table_parser.get_value_two_col_table(table_, field)
+            LOG.error("Actual_val: {}".format(actual_val))
+            actual_val_lower = actual_val.lower()
             if isinstance(val, str):
                 val = [val]
-            LOG.info("Expected val: {}; Actual val: {}".format(val, actual_val))
+            LOG.info("Expected val(s): {}; Actual val: {}".format(val, actual_val))
             for expected_val in val:
-                if actual_val.strip().lower() == expected_val.strip().lower():
-                    LOG.info("Host {} has reached {}".format(field, expected_val))
+                expected_val_lower = expected_val.strip().lower()
+                found_match=False
+                if regex:
+                    if strict:
+                        res_ = re.match(expected_val_lower, actual_val_lower)
+                    else:
+                        res_ = re.search(expected_val_lower, actual_val_lower)
+                    if res_:
+                        found_match = True
+                else:
+                    if strict:
+                        found_match = actual_val_lower == expected_val_lower
+                    else:
+                        found_match = actual_val_lower in expected_val_lower
+
+                if found_match:
+                    LOG.info("{} {} has reached: {}".format(host, field, actual_val))
                     break
             else:   # no match found. run system host-show again
-                LOG.info("Host {} is {}".format(field, actual_val))
+                LOG.info("{} {} is {}".format(host, field, actual_val))
                 break
         else:
             LOG.info("{} is in states: {}".format(host, states))
             return True
         time.sleep(check_interval)
     else:
+        msg = "{} did not reach states - {}".format(host, states)
         if fail_ok:
+            LOG.warning(msg)
             return False
-        raise exceptions.TimeoutException("{} did not reach expected states - {}".format(host, states))
+        raise exceptions.TimeoutException(msg)
 
 
 def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, fail_ok=False, con_ssh=None):

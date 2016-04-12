@@ -1,12 +1,13 @@
 import random
 import re
 
-from consts.auth import Tenant, Primary
-from consts.cgcs import BOOT_FROM_VOLUME, UUID
-from keywords.common import Count
 from utils import cli, exceptions
 from utils import table_parser
 from utils.tis_log import LOG
+from consts.auth import Tenant, Primary
+from consts.cgcs import BOOT_FROM_VOLUME, UUID
+from keywords import keystone_helper
+from keywords.common import Count
 
 
 def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ephemeral=None, swap=None,
@@ -477,7 +478,25 @@ def get_quotas(quotas=None, con_ssh=None, auth_info=None):
     table_ = table_parser.table(cli.nova('quota-show', ssh_client=con_ssh, auth_info=auth_info))
     values = []
     for item in quotas:
-        values.append(table_parser.get_value_two_col_table(table_, item))
+        values.append(int(table_parser.get_value_two_col_table(table_, item)))
 
     return values
 
+
+def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+    if tenant is None:
+        tenant = Primary.get_primary()['tenant']
+
+    tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant, con_ssh=con_ssh)[0]
+    if not kwargs:
+        raise ValueError("Please specify at least one quota=value pair via kwargs.")
+
+    args_ = ''
+    for key in kwargs:
+        args_ += '--{} {} '.format(key, kwargs[key])
+
+    if force:
+        args_ += '--force '
+    args_ += tenant_id
+
+    cli.nova('quota-update', args_, ssh_client=con_ssh, auth_info=auth_info)

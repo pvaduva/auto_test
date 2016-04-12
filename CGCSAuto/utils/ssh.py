@@ -46,7 +46,8 @@ class SSHClient:
             reconnect()         reconnects to session
     """
 
-    def __init__(self, host, user='wrsroot', password='li69nux', force_password=True, initial_prompt=CONTROLLER_PROMPT):
+    def __init__(self, host, user='wrsroot', password='li69nux', force_password=True, initial_prompt=CONTROLLER_PROMPT,
+                 timeout=10):
         """
         Initiate an object for connecting to remote host
         Args:
@@ -67,6 +68,7 @@ class SSHClient:
         self.cmd_sent = ''
         self.cmd_output = ''
         self.force_password = force_password
+        self.timeout = timeout
         self.logpath = self.__get_logpath()
 
     def __get_logpath(self):
@@ -81,7 +83,7 @@ class SSHClient:
         return LOG_DIR + '/ssh_' + lab_name + ".log"
 
     def connect(self, retry=False, retry_interval=3, retry_timeout=300, prompt=None,
-                use_current=True, timeout=3):
+                use_current=True, timeout=None):
 
         # Do nothing if current session is connected and force_close is False:
         if self._is_alive() and use_current and self._is_connected():
@@ -92,6 +94,8 @@ class SSHClient:
         # use original prompt instead of self.prompt when connecting in case of prompt change during a session
         if not prompt:
             prompt = self.initial_prompt
+        if timeout is None:
+            timeout = self.timeout
 
         # Connect to host
         end_time = time.time() + retry_timeout
@@ -369,7 +373,8 @@ class SSHFromSSH(SSHClient):
     """
     Base class for ssh to another node from an existing ssh session
     """
-    def __init__(self, ssh_client, host, user, password, force_password=True, initial_prompt=COMPUTE_PROMPT):
+    def __init__(self, ssh_client, host, user, password, force_password=True, initial_prompt=COMPUTE_PROMPT,
+                 timeout=10):
         """
 
         Args:
@@ -382,12 +387,13 @@ class SSHFromSSH(SSHClient):
 
         """
         super(SSHFromSSH, self).__init__(host=host, user=user, password=password, force_password=force_password,
-                                         initial_prompt=initial_prompt)
+                                         initial_prompt=initial_prompt, timeout=timeout)
         self.parent = ssh_client
         self.ssh_cmd = '/usr/bin/ssh{} {}@{}'.format(_SSH_OPTS, self.user, self.host)
+        self.timeout = timeout
 
     def connect(self, retry=False, retry_interval=3, retry_timeout=300, prompt=None,
-                use_current=True, timeout=10, use_password=True):
+                use_current=True, use_password=True, timeout=None):
         """
 
         Args:
@@ -397,11 +403,14 @@ class SSHFromSSH(SSHClient):
             timeout:
             prompt:
             use_current:
+            use_password
 
         Returns:
             return the ssh client
 
         """
+        if timeout is None:
+            timeout = self.timeout
         if prompt is None:
             prompt = self.initial_prompt
 
@@ -506,7 +515,8 @@ class VMSSHClient(SSHFromSSH):
         }
     }
 
-    def __init__(self, vm_ip, vm_name, vm_img_name='cgcs-guest', user=None, password=None, natbox_client=None, prompt=None):
+    def __init__(self, vm_ip, vm_name, vm_img_name='cgcs-guest', user=None, password=None, natbox_client=None,
+                 prompt=None, timeout=10):
         """
 
         Args:
@@ -543,9 +553,10 @@ class VMSSHClient(SSHFromSSH):
             LOG.warning("User/password are not provided, and VM image type is not in the list: {}. "
                         "Use root/root to login.".format(known_guests))
 
-        prompt = r'.*{}\@{}.*\~.*[$#]'.format(user, vm_name)
+        if prompt is None:
+            prompt = r'.*{}\@{}.*\~.*[$#]'.format(user, vm_name)
         super(VMSSHClient, self).__init__(ssh_client=natbox_client, host=vm_ip, user=user, password=password,
-                                          initial_prompt=prompt)
+                                          initial_prompt=prompt, timeout=timeout)
 
         # This needs to be modified in centos case.
         if not force_password:
