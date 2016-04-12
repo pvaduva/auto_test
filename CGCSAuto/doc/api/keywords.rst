@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> Added keywords modules to sphinx-doc
-=======
->>>>>>> 9551b55567ec8f60b831a098dfa92b46a48b6f0b
 keywords package
 ================
 
@@ -99,20 +92,5 @@ keywords.vm_helper module
     :members:
     :undoc-members:
     :show-inheritance:
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-=======
-Core keywords components
-==============================================
-
-.. automodule:: keywords
->>>>>>> Added sphinx-doc to CGCS Automation
-=======
-
->>>>>>> Added keywords modules to sphinx-doc
-=======
-
->>>>>>> 9551b55567ec8f60b831a098dfa92b46a48b6f0b
 
 

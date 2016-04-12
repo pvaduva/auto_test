@@ -24,7 +24,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         con_ssh (str):
 
     Returns:
-        Return a list of volume ids based on the given criteria
+        A list of volume ids based on the given criteria
     """
     if bootable is not None:
         bootable = str(bootable).lower()
@@ -78,12 +78,15 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
         rtn_exist(bool):
 
     Returns:
-        if fail_ok=False: (str) volume id
-        if fail_ok=True: (list) [return_code, volume_id or err msg]
-        [0, vol_id]: Volume created successfully
-        [1, <stderr>]: cli is rejected with exit_code 1
+        A list in the form of [return_code, volume_id or err msg] \n
+        [0, vol_id]: if Volume created successfully,.\n
+        [1, <output>]: if create volume cli executed with error.\n
+        [2, <output>]: if volume created, but not in available state.\n
+        [3, <output>]: if volume created, but not in bootable state.\n
+        [-1, <output>]: if volume id already exist.
 
-    Notes: snapshot_id > source_vol_id > image_id if more than one source ids are provided.
+    Notes:
+        snapshot_id > source_vol_id > image_id if more than one source ids are provided.
     """
     if rtn_exist and name is not None:
         vol_ids = get_volumes(name=name, status='available', bootable='true')
@@ -180,8 +183,8 @@ def _wait_for_volume_status(vol_id, status='available', timeout=VolumeTimeout.ST
         auth_info (dict):
 
     Returns:
-        Return True if the status of the volume is same as the status(str) that was passed into the function
-        Return false if timed out or otherwise
+        True if the status of the volume is same as the status(str) that was passed into the function \n
+        false if timed out or otherwise
 
     """
 
@@ -304,10 +307,10 @@ def delete_volume(volume_id, fail_ok=False, con_ssh=None, auth_info=None):
         auth_info (dict):
 
     Returns:
-        [-1, ''] if volume does not exist.
-        [0, ''] volume is successfully deleted.
-        [1, output] if delete volume cli errored when executing.
-        [2, vm_id] if delete volume cli executed but still show up in nova list.
+        [-1, ''] if volume does not exist.\n
+        [0, ''] volume is successfully deleted.\n
+        [1, output] if delete volume cli errored when executing.\n
+        [2, vm_id] if delete volume cli executed but still show up in nova list.\n
 
     """
     # if volume doesn't exist return [-1,'']
