@@ -953,9 +953,12 @@ class Telnet:
             #self.write(str.encode("\r\r"))
             if node.name == CONTROLLER0:
                 #TODO: Check time on this
-                self.get_read_until("Kickstart Boot Menu", 120)
-                log.info("Enter second option for Controller Install")
-                self.write_line("2")
+                if boot_device_regex == 'USB':
+                    self.get_read_until("Select kernel options and boot kernel", 120)
+                else:
+                    self.get_read_until("Kickstart Boot Menu", 120)
+                    log.info("Enter second option for Controller Install")
+                    self.write_line("2")
 
             self.get_read_until(LOGIN_PROMPT, install_timeout)
             log.info("Found login prompt. {} installation has completed".format(node.name))
@@ -1033,9 +1036,32 @@ class Telnet:
 #            self.write(str.encode("\r\r"))
             if node.name == CONTROLLER0:
                 #TODO: Check time on this
-                self.get_read_until("Kickstart Boot Menu", 60)
-                log.info("Enter second option for Controller Install")
-                self.write_line("2")
+                # booting device = USB tested only for Ironpass-31_32
+                if boot_device_regex == 'USB':
+                    self.get_read_until("Select kernel options and boot kernel", 120)
+                    if small_footprint:
+                        log.info("Selecting Serial Controller+Compute Node Install")
+                        time.sleep(1)
+                        self.write(str.encode(DOWN))
+                        self.write(str.encode(DOWN))
+                        self.write(str.encode(DOWN))
+                        time.sleep(1)
+                        log.info("Pressing ENTER key")
+                        self.write(str.encode("\r\r"))
+                    else:
+                        time.sleep(1)
+                        log.info("Selecting Serial Controller Node Install")
+                        log.info("Pressing ENTER key")
+                        self.write(str.encode("\r\r"))
+                else:
+                    self.get_read_until("Kickstart Boot Menu", 60)
+                    if small_footprint:
+                        log.info("Enter third option for Controller and Compute Install")
+                        self.write_line("3")
+                    else:
+                        log.info("Enter second option for Controller Install")
+                        self.write_line("2")
+
         elif bios_type == BIOS_TYPES[1]:
             # Hewlett-Packard BIOS
             self.get_read_until("Network Boot", 120)
