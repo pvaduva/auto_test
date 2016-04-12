@@ -29,11 +29,7 @@ def flavor_(request):
     Args:
         request: pytest arg
 
-    Returns: flavor dict as following:
-        {'id': <flavor_id>,
-         'local_disk': <0 or 1>,
-         'storage': <'local_image', 'local_lvm', or 'remote'>
-        }
+    Returns (tuple): (storage (str), flavor_id (str))
     """
     storage = request.param[0]
     ephemeral, swap = request.param[1]
@@ -61,13 +57,7 @@ def vm_(request, flavor_):
         request: pytest arg
         flavor_: flavor_ fixture which passes the created flavor based on ephemeral', 'swap', and 'storage_backing'
 
-    Returns: vm dict as following:
-        {'id': <vm_id>,
-          'boot_source': <image or volume>,
-          'image_with_vol': <True or False>,
-          'storage': <local_image, local_lvm, or remote>,
-          'local_disk': <True or False>,
-          }
+    Returns: (storage_backing, vm_id)
     """
     vm_type = request.param
     storage_type, flavor_id = flavor_
@@ -105,22 +95,21 @@ class TestEvacuateVM:
     @mark.usefixtures('unlock_if_locked')
     def temp_test_lock_with_vms_no_host_to_mig(self, vm_):
         """
-        Test evacuate vm with various configs for: vm boot source, has volume attached, has local disk, storage backing
-
-        Precondition:
-            computes are pre-configured for specific test scenario. e..g, configure storage backing
+        Lock host with one vm under test.
+        Various configs for vm: vm boot source, has volume attached, has local disk, storage backing
 
         Args:
             vm_ (dict): vm created by vm_ fixture
 
+        Prerequisite: computes are pre-configured for specific test scenario. e..g, configure storage backing
         Test Setups:
         - create flavor with specific 'ephemeral', 'swap', and 'storage_backing'
         - boot vm from specific boot source with specific flavor
         - (attach volume to vm in one specific scenario)
 
         Test Steps:
-        - Cold migrate vm created by vm_ fixture
-        - Assert cold migration and confirm/revert succeeded
+        - Lock host with vm created by vm_ fixture
+        - Check lock result and ensure vm still in active state
 
         Skip conditions:
          - Less than two hypervisor hosts on system
@@ -144,7 +133,16 @@ class TestEvacuateVM:
 
 
 def _boot_migrable_vms(storage_backing):
+    """
+    Create vms with specific storage backing that can be live migrated
 
+    Args:
+        storage_backing: 'local_image', 'local_lvm' or 'remote'
+
+    Returns: (vms_info (list), flavors_created (list))
+        vms_info : [(vm_id1, block_mig1), (vm_id2, block_mig2), ...]
+
+    """
     storage_spec = {'aggregate_instance_extra_specs:storage': storage_backing}
     vms_to_test = []
     flavors_created = []
@@ -181,6 +179,21 @@ def _boot_migrable_vms(storage_backing):
 class TestLockWithVMs:
     @fixture()
     def target_hosts(self, request):
+        """
+        Calculate target host(s) to perform lock based on storage backing of vms_to_test, and live migrate suitable vms
+        to target host before test start.
+
+        Args:
+            request: pytest arg
+
+        Returns: (target_hosts, storages_to_test)
+
+        Teardown:
+            - Delete created vms and volumes
+            - Delete create flavors
+            - Unlock host(s) if locked during test.
+
+        """
         self.hosts_locked = []
 
         storages_to_test = []
@@ -231,8 +244,32 @@ class TestLockWithVMs:
         return target_hosts, storages_to_test
 
     @mark.skipif(len(nova_helper.get_hypervisor_hosts()) < 2, reason="Less than 2 hypervisor hosts on the system")
-    #@mark.usefixtures('delete_all_vms')
+    # @mark.usefixtures('delete_all_vms')
     def test_lock_with_vms(self, target_hosts):
+        """
+        Test lock host with vms on it.
+
+        Args:
+            target_hosts:
+
+        Prerequisites: hosts storage backing are pre-configured to storage backing under test
+        Test Setups:
+            - Set instances quota to 10 if it was less than 8
+            - Determine storage backing(s) under test. i.e.,storage backings supported by at least 2 hosts on the system
+            - Create flavors with storage extra specs set based on storage backings under test
+            - Create vms_to_test that can be live migrated using created flavors
+            - Determine target host(s) to perform lock based on which host(s) have the most vms_to_test
+            - Live migrate vms to target host(s)
+        Test Steps:
+            - Lock target host
+            - Verify lock succeeded and vms status unchanged
+            - Repeat above steps if more than one target host
+        Test Teardown:
+            - Delete created vms and volumes
+            - Delete created flavors
+            - Unlock locked target host(s)
+
+        """
         target_hosts_, storages_to_test = target_hosts
         LOG.info("Negative test: host-lock attempt on host(s) with {} storage backing(s). \n"
                  "Host(s) to attempt lock: {}".format(storages_to_test, target_hosts_))
@@ -290,6 +327,30 @@ class TestLockWithVMsNegative:
         return target_hosts, storages_to_test
 
     def test_lock_with_vms_mig_fail(self, target_hosts_negative):
+        """
+        Test lock host with vms on it - Negative test. i.e., lock should be rejected
+
+        Args:
+            target_hosts_negative: target host(s) to perform lock
+
+        Prerequisites: hosts storage backing are pre-configured to storage backing under test.
+            ie., only 1 host should support the storage backing under test.
+        Test Setups:
+            - Set instances quota to 10 if it was less than 8
+            - Determine storage backing(s) under test, i.e., storage backings supported by only 1 host on the system
+            - Create flavors with storage extra specs set based on storage backings under test
+            - Create vms_to_test that can be live migrated using created flavors
+            - Determine target host(s) to perform lock based on which host(s) have the most vms_to_test
+        Test Steps:
+            - Lock target host
+            - Verify lock rejected and vms status unchanged
+            - Repeat above steps if more than one target host
+        Test Teardown:
+            - Delete created vms and volumes
+            - Delete created flavors
+            - Unlock locked target host(s)
+
+        """
         target_hosts, storages_to_test = target_hosts_negative
         LOG.info("Negative test: host-lock attempt on host(s) with {} storage backing(s). \n"
                  "Host(s) to attempt lock: {}".format(storages_to_test, target_hosts_negative))
