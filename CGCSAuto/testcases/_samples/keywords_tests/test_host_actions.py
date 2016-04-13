@@ -1,11 +1,9 @@
 from pytest import fixture, mark, skip, raises
 
 import keywords.system_helper
-from utils import cli, exceptions
-from utils import table_parser
+from utils import exceptions
 from utils.tis_log import LOG
-from keywords import nova_helper, vm_helper, host_helper, system_helper
-from setup_consts import P1, P2, P3
+from keywords import host_helper, system_helper
 
 _skip = False
 

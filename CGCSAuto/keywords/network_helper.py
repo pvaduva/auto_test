@@ -3,7 +3,7 @@ import re
 
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
-from consts.auth import Tenant, Primary
+from consts.auth import Tenant
 from consts.cgcs import MGMT_IP
 from keywords import common
 
@@ -29,7 +29,7 @@ def get_mgmt_net_id(con_ssh=None, auth_info=None):
 
     """
     if auth_info is None:
-        auth_info = Primary.get_primary()
+        auth_info = Tenant.get_primary()
 
     tenant = auth_info['tenant']
     mgmt_net_name = '-'.join([tenant, 'mgmt', 'net'])

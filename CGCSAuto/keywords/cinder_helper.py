@@ -1,9 +1,9 @@
 import random
 import time
 
-from consts.timeout import VolumeTimeout
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
+from consts.timeout import VolumeTimeout
 from keywords import glance_helper
 
 

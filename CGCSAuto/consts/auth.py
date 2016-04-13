@@ -1,6 +1,7 @@
 class Tenant:
     __REGION = 'RegionOne'
     __URL = 'http://192.168.204.2:5000/v2.0/'
+
     ADMIN = {
         'user': 'admin',
         'password': 'admin',
@@ -37,9 +38,7 @@ class Tenant:
         cls.TENANT_1['region'] = region
         cls.TENANT_2['region'] = region
 
-
-class Primary:
-    __primary = Tenant.ADMIN
+    __primary = TENANT_1
 
     @classmethod
     def set_primary(cls, tenant):

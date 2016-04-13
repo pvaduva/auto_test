@@ -1,5 +1,5 @@
 from utils.tis_log import LOG
-from consts.auth import Primary
+from consts.auth import Tenant
 
 
 def collect_tis_logs(con_ssh=None):
@@ -21,7 +21,7 @@ def collect_tis_logs(con_ssh=None):
 
 def get_tenant_name(auth_info=None):
     if auth_info is None:
-        auth_info = Primary.get_primary()
+        auth_info = Tenant.get_primary()
     return auth_info['tenant']
 
 

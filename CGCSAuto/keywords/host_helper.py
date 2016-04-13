@@ -214,7 +214,7 @@ def __hosts_in_states(hosts, con_ssh=None, **states):
 
 
 def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTimeout.ONLINE_AFTER_LOCK, con_ssh=None,
-              fail_ok=False, check_bf_lock=True):
+              fail_ok=False, check_first=True):
     """
     lock a host.
 
@@ -225,7 +225,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         timeout (int): how many seconds to wait for host to go online after lock
         con_ssh (SSHClient):
         fail_ok (bool):
-        check_bf_lock (bool):
+        check_first (bool):
 
     Returns: [return_code, error_message]  Non-zero return code scenarios only applicable when fail_ok=True
         [0, ''] Successfully locked and host goes online
@@ -237,7 +237,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
     if get_hostshow_value(host, 'availability') in ['offline', 'failed']:
         LOG.warning("Host in offline or failed state!")
 
-    if check_bf_lock:
+    if check_first:
         admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
         if admin_state == 'locked':
             LOG.info("Host already locked. Do nothing.")
@@ -393,7 +393,7 @@ def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, st
             LOG.info("Expected val(s): {}; Actual val: {}".format(val, actual_val))
             for expected_val in val:
                 expected_val_lower = expected_val.strip().lower()
-                found_match=False
+                found_match = False
                 if regex:
                     if strict:
                         res_ = re.match(expected_val_lower, actual_val_lower)
@@ -504,33 +504,6 @@ def get_hosts(hosts=None, con_ssh=None, **states):
     return table_parser.get_values(table_, 'hostname', **states)
 
 
-def get_hypervisors(state=None, status=None, con_ssh=None):
-    """
-    Return a list of hypervisors names in specified state and status. If None is set to state and status,
-    all hypervisors will be returned.
-
-    System: Regular
-
-    Args:
-        state (str): e.g., 'up', 'down'
-        status (str): e.g., 'enabled', 'disabled'
-        con_ssh (SSHClient):
-
-    Returns (list):
-        List of hypervisor names. Return [] if no match found.
-        Always return [] for small footprint lab. i.e., do not work with small footprint lab
-    """
-    table_ = table_parser.table(cli.nova('hypervisor-list', auth_info=Tenant.ADMIN, ssh_client=con_ssh))
-
-    target_header = 'Hypervisor hostname'
-    params = {}
-    if state:
-        params['State'] = state
-    if status:
-        params['Status'] = status
-    return table_parser.get_values(table_, target_header=target_header, **params)
-
-
 def get_nova_computes(con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get nova computes listed in nova host-list.
@@ -598,3 +571,32 @@ def get_up_hosts_with_storage_backing(storage_backing, con_ssh=None):
     candidate_hosts = list(set(hosts_with_backing) & set(up_hosts))
     return candidate_hosts
 
+
+def get_hypervisors(state=None, status=None, con_ssh=None):
+    """
+    Return a list of hypervisors names in specified state and status. If None is set to state and status,
+    all hypervisors will be returned.
+
+    System: Regular
+
+    Args:
+        state (str): e.g., 'up', 'down'
+        status (str): e.g., 'enabled', 'disabled'
+        con_ssh (SSHClient):
+
+    Returns (list):
+        List of hypervisor names. Return [] if no match found.
+        Always return [] for small footprint lab. i.e., do not work with small footprint lab
+    """
+    table_ = table_parser.table(cli.nova('hypervisor-list', auth_info=Tenant.ADMIN, ssh_client=con_ssh))
+    target_header = 'Hypervisor hostname'
+
+    if state is None and status is None:
+        return table_parser.get_column(table_, target_header)
+
+    params = {}
+    if state is not None:
+        params['State'] = state
+    if status is not None:
+        params['Status'] = status
+    return table_parser.get_values(table_, target_header=target_header, **params)

@@ -6,8 +6,8 @@ from utils.tis_log import LOG
 
 # RENAME this function to reflect the actual check item
 def skip_condition_met():
-    setups.skipcondition_setup()
-    return False
+    # check system to decide whether skip condition is met
+    return True
 
 @mark.skipif(skip_condition_met, reason="reason for skipping the test function")
 @mark.usefixtures('check_alarms')

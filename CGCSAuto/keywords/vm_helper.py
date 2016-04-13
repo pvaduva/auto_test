@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
 from utils.tis_log import LOG
-from consts.auth import Tenant, Primary
+from consts.auth import Tenant
 from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME
 from consts.timeout import VMTimeout
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper
@@ -22,9 +22,10 @@ def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn
         con_ssh (SSHClient):
         auth_info (dict):
         all_tenants (bool): whether to get any vms from all tenants or just admin tenant if auth_info is set to Admin
+        rtn_new (bool): whether to return an extra list containing only the newly created vms
 
-    Returns:
-        a list of vm ids
+    Returns (list):
+        a list of vm ids, or two lists of vms_ids if rtn_new is set to True
 
     """
     vms = nova_helper.get_vms(con_ssh=con_ssh, auth_info=auth_info, all_vms=all_tenants)
@@ -112,7 +113,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
     LOG.info("Processing boot_vm args...")
     # Handle mandatory arg - name
     if auth_info is None:
-        auth_info = Primary.get_primary()
+        auth_info = Tenant.get_primary()
     tenant = auth_info['tenant']
     vm_num = Count.get_vm_count()
     if name is None:
@@ -121,7 +122,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
 
     # Handle mandatory arg - flavor
     if flavor is None:
-        flavor = nova_helper.get_flavor()
+        flavor = nova_helper.get_flavor_id()
 
     # Handle mandatory arg - nics
     if not nics:
@@ -236,7 +237,7 @@ def get_keypair(auth_info=None, con_ssh=None):
 
     """
     if auth_info is None:
-        auth_info = Primary.get_primary()
+        auth_info = Tenant.get_primary()
     tenant = auth_info['tenant']
     table_keypairs = table_parser.table(cli.nova('keypair-list', ssh_client=con_ssh, auth_info=auth_info))
     key_name = 'keypair-' + tenant
@@ -271,7 +272,7 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
 
     """
     if not tenant_name:
-        tenant_name = Primary.get_primary()['tenant']
+        tenant_name = Tenant.get_primary()['tenant']
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
     if not con_ssh.get_hostname() == 'controller-0':

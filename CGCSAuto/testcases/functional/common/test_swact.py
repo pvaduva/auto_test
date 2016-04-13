@@ -1,21 +1,17 @@
 from pytest import fixture, mark, skip
 
-from utils import cli
-from utils import table_parser
 from utils.tis_log import LOG
-from keywords import nova_helper, vm_helper, host_helper, system_helper
+from keywords import host_helper
 from setup_consts import P1, P2, P3
 
 
 # @mark.usefixtures('check_vms', 'ping_vms_from_nat', 'ping_vm_from_vm')
 @mark.usefixtures('check_vms')
 def test_swact_with_vms():
-
-    LOG.tc_start('swact_test')
-
     LOG.tc_step('retrieve active and available controllers')
     num_controllers = len(host_helper.get_hosts(availability='available', personality='controller',
                                                 administrative='unlocked', operational='enabled'))
+
     LOG.tc_step('execute swact cli')
     exit_code, output = host_helper.swact_host(fail_ok=True)
 
@@ -25,5 +21,3 @@ def test_swact_with_vms():
         assert exit_code == 1, "Controllers less than TWO: expect FAIL but PASSED "
     else:
         assert exit_code == 0
-
-    # tc end

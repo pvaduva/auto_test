@@ -11,7 +11,7 @@ from setup_consts import P1, P2, P3
 
 # overall skip condition
 def less_than_two_hypervisors():
-    return len(nova_helper.get_hypervisor_hosts()) < 2
+    return len(keywords.host_helper.get_hypervisors()) < 2
 
 
 # skip condition based on specific data set
@@ -55,7 +55,10 @@ def test_live_migrate_v1(vm_boot_type, vm_storage, vm_interface, block_migrate, 
         specify_host (bool): Whether to specify host in live-migration request
 
     =====
-    Prerequisites (skip test if not met):
+    Prerequisites (requirement for the system):
+        - system is preconfigured to test scenario under test
+
+    Skip conditions:
         - at least two hypervisor hosts on the system
 
     Test Steps:
@@ -122,7 +125,7 @@ def prepare_hosts(request):
     """
     expected_storage_backing = request.param
     avail_hosts = keywords.host_helper.get_hosts_by_storage_aggregate(storage_backing=expected_storage_backing)
-    all_hosts = nova_helper.get_hypervisor_hosts()
+    all_hosts = keywords.host_helper.get_hypervisors()
     modified_hosts = {}
     locked_hosts = []
     avail_num = len(avail_hosts)

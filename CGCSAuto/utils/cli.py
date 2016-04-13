@@ -4,7 +4,7 @@ from utils import exceptions
 from utils import ssh
 from utils.ssh import ControllerClient
 from consts.timeout import CLI_TIMEOUT
-from consts.auth import Primary, Tenant
+from consts.auth import Tenant, Tenant
 
 
 def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
@@ -40,7 +40,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
         ssh_client = ControllerClient.get_active_controller()
 
     if auth_info is None:
-        auth_info = Primary.get_primary()
+        auth_info = Tenant.get_primary()
 
     positional_args = __convert_args(positional_args)
     flags = __convert_args(flags)

@@ -1,11 +1,12 @@
 import os
 
 from utils import exceptions
+from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, ssh_to_controller0
-from consts.auth import Primary, Tenant
+from consts.auth import Tenant
 from consts.cgcs import Prompt
-import setup_consts
 from keywords import vm_helper
+import setup_consts
 
 
 def create_tmp_dir():
@@ -25,7 +26,9 @@ def setup_tis_ssh():
 
 
 def setup_primary_tenant():
-    Primary.set_primary(setup_consts.PRIMARY_TENANT)
+    primary_tenant = setup_consts.PRIMARY_TENANT
+    Tenant.set_primary(primary_tenant)
+    LOG.info("Primary Tenant for test session is set to {}".format(primary_tenant['tenant']))
 
 
 def setup_natbox_ssh():

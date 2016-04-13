@@ -4,9 +4,9 @@ import re
 from utils import cli, exceptions
 from utils import table_parser
 from utils.tis_log import LOG
-from consts.auth import Tenant, Primary
+from consts.auth import Tenant
 from consts.cgcs import BOOT_FROM_VOLUME, UUID
-from keywords import keystone_helper
+from keywords import keystone_helper, host_helper
 from keywords.common import Count
 
 
@@ -131,8 +131,8 @@ def delete_flavors(flavor_ids, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
     return [0, {}]
 
 
-def get_flavor(name=None, memory=None, disk=None, ephemeral=None, swap=None, vcpu=None, rxtx=None, is_public=None,
-               con_ssh=None, auth_info=None):
+def get_flavor_id(name=None, memory=None, disk=None, ephemeral=None, swap=None, vcpu=None, rxtx=None, is_public=None,
+                  con_ssh=None, auth_info=None):
     req_dict = {'Name': name,
                 'Memory_MB': memory,
                 'Disk': disk,
@@ -299,7 +299,7 @@ def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False):
     positional_args = ''
     if all_vms is True:
         if auth_info is None:
-            auth_info = Primary.get_primary()
+            auth_info = Tenant.get_primary()
         if auth_info['tenant'] == 'admin':
             positional_args = '--all-tenant'
     table_ = table_parser.table(cli.nova('list', positional_args=positional_args, ssh_client=con_ssh,
@@ -353,15 +353,11 @@ def get_vm_host(vm_id, con_ssh=None):
     return get_vm_info(vm_id, ':host', strict=False, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
 
 
-def get_hypervisor_hosts(con_ssh=None):
-    table_ = table_parser.table(cli.nova('hypervisor-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    return table_parser.get_column(table_, 'Hypervisor hostname')
-
-
-def get_vms_on_hypervisor(hostname, con_ssh=None):
+def get_vms_on_hypervisor(hostname, con_ssh=None, rtn_val='ID'):
     """
 
     Args:
+        rtn_val: ID or Name
         hostname (str):Name of a compute node
         con_ssh:
 
@@ -369,22 +365,23 @@ def get_vms_on_hypervisor(hostname, con_ssh=None):
 
     """
     table_ = table_parser.table(cli.nova('hypervisor-servers', hostname, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    return table_parser.get_column(table_, 'ID')
+    return table_parser.get_column(table_, rtn_val)
 
 
-def get_vms_by_hypervisors(con_ssh=None):
+def get_vms_by_hypervisors(con_ssh=None, rtn_val='ID'):
     """
 
     Args:
-        con_ssh:
+        con_ssh (SSHClient):
+        rtn_val (str): ID or Name. Whether to return Names or IDs
 
     Returns (dict):return a dictionary where the host(hypervisor) is the key
     and value are a list of VMs under the host
 
     """
     host_vms = {}
-    for host in get_hypervisor_hosts(con_ssh=con_ssh):
-        host_vms[host] = get_vms_on_hypervisor(host, con_ssh)
+    for host in host_helper.get_hypervisors(con_ssh=con_ssh):
+        host_vms[host] = get_vms_on_hypervisor(host, con_ssh, rtn_val=rtn_val)
 
     return host_vms
 
@@ -485,7 +482,7 @@ def get_quotas(quotas=None, con_ssh=None, auth_info=None):
 
 def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     if tenant is None:
-        tenant = Primary.get_primary()['tenant']
+        tenant = Tenant.get_primary()['tenant']
 
     tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant, con_ssh=con_ssh)[0]
     if not kwargs:

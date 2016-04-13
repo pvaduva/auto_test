@@ -35,7 +35,6 @@ class TestLockUnlock:
     @mark.skipif(system_helper.is_small_footprint(), reason="Skip for small footprint lab")
     @mark.usefixtures('vms_', 'unlock_if_locked')
     def test_lock_unlock_vm_host(self):
-
         # Gather system info to determine expected result:
         # has_vm = bool(nova_helper.get_all_vms())
         table_hypervisors = table_parser.table(cli.nova('hypervisor-list', auth_info=Tenant.ADMIN))
@@ -62,7 +61,7 @@ class TestLockUnlock:
             expt = 0
 
         LOG.tc_step("Attempt to lock {}. Expected return code: {}".format(target_host, expt))
-        code, output = host_helper.lock_host(host=target_host, fail_ok=True, check_bf_lock=False)
+        code, output = host_helper.lock_host(host=target_host, fail_ok=True, check_first=False)
         self.lock_rtn_code = code
         self.target_host = target_host
 
@@ -88,6 +87,26 @@ class TestLockUnlock:
         'standby'
     ])
     def test_lock_unlock_small_footprint(self, host):
+        """
+        Test lock host on small footprint system
+
+        Args:
+            host: host to lock
+
+        Skip Conditions:
+            - skip if standard system is discovered
+        Test Setup:
+            - Create a few vms for both tenant1 and tenant2
+            - Record the status of VMs
+        Test Steps:
+            - Check whether lock request should be accepted.
+                i.e., lock should be accepted for standby controller and rejected for active controller
+            - Verify lock is rejected for active controller and accepted for standby controller
+        Test Teardown:
+            - Check VMs status did not change
+            - Unlock the host if host was locked successfully
+
+        """
         LOG.tc_step("Calculate expected result...")
         hosts = ['controller-0', 'controller-1']
         active_con = system_helper.get_active_controller_name()
@@ -104,7 +123,7 @@ class TestLockUnlock:
             expt = [1]
 
         LOG.tc_step("Attempt to lock {}...".format(target_host))
-        code, output = host_helper.lock_host(host=target_host, fail_ok=True, check_bf_lock=False)
+        code, output = host_helper.lock_host(host=target_host, fail_ok=True, check_first=False)
 
         self.lock_rtn_code = code
         self.target_host = target_host

@@ -13,14 +13,14 @@ class System:
         if controller_ssh is None:
             controller_ssh = ControllerClient.get_active_controller()
         self.CON_SSH = controller_ssh
-        self.SMALL_SYS = is_small_footprint(controller_ssh)
+        self.IS_SMALL_SYS = is_small_footprint(controller_ssh)
         nodes = _get_nodes(controller_ssh)
         self.CONTROLLERS = nodes['controllers']
         self.COMPUTES = nodes['computes']
         self.STORAGES = nodes['storages']
         LOG.info(("Information for system {}: "
                   "\nSmall footprint: {}\nController nodes: {}\nCompute nodes: {}\nStorage nodes: {}").
-                 format(controller_ssh.host, self.SMALL_SYS, self.CONTROLLERS, self.COMPUTES, self.STORAGES))
+                 format(controller_ssh.host, self.IS_SMALL_SYS, self.CONTROLLERS, self.COMPUTES, self.STORAGES))
 
     def get_system_info(self):
         system = {}

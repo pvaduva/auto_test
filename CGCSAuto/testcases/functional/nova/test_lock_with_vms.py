@@ -3,9 +3,8 @@ import random
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
-from consts.auth import Tenant
 from setup_consts import P1, P2, P3
-from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper
+from keywords import vm_helper, nova_helper, host_helper
 
 
 @fixture(scope='module', autouse=True)
@@ -80,7 +79,7 @@ def vm_(request, flavor_):
     return storage_type, vm_id
 
 
-class TestEvacuateVM:
+class TestLockWithVM:
     @fixture()
     def unlock_if_locked(self, request):
         self.lock_rtn_code = None
@@ -91,7 +90,7 @@ class TestEvacuateVM:
                 host_helper.unlock_host(self.target_host)
         request.addfinalizer(unlock)
 
-    @mark.skipif(len(nova_helper.get_hypervisor_hosts()) < 2, reason="Less than 2 hypervisor hosts on the system")
+    @mark.skipif(len(host_helper.get_hypervisors()) < 2, reason="Less than 2 hypervisor hosts on the system")
     @mark.usefixtures('unlock_if_locked')
     def temp_test_lock_with_vms_no_host_to_mig(self, vm_):
         """
@@ -123,7 +122,7 @@ class TestEvacuateVM:
 
         target_host = nova_helper.get_vm_host(vm_id=vm_id)
 
-        code, msg = host_helper.lock_host(host=target_host, fail_ok=True, check_bf_lock=False)
+        code, msg = host_helper.lock_host(host=target_host, fail_ok=True, check_first=False)
         self.lock_rtn_code = code
         self.target_host = target_host
 
@@ -180,6 +179,7 @@ class TestLockWithVMs:
     @fixture()
     def target_hosts(self, request):
         """
+        Test fixture for test_lock_with_vms().
         Calculate target host(s) to perform lock based on storage backing of vms_to_test, and live migrate suitable vms
         to target host before test start.
 
@@ -243,16 +243,21 @@ class TestLockWithVMs:
 
         return target_hosts, storages_to_test
 
-    @mark.skipif(len(nova_helper.get_hypervisor_hosts()) < 2, reason="Less than 2 hypervisor hosts on the system")
+    @mark.skipif(len(host_helper.get_hypervisors()) < 2, reason="Less than 2 hypervisor hosts on the system")
     # @mark.usefixtures('delete_all_vms')
     def test_lock_with_vms(self, target_hosts):
         """
         Test lock host with vms on it.
 
         Args:
-            target_hosts:
+            target_hosts (list): targeted host(s) to lock that was prepared by the target_hosts test fixture.
 
-        Prerequisites: hosts storage backing are pre-configured to storage backing under test
+        Skip Conditions:
+            - Less than 2 hypervisor hosts on the system
+
+        Prerequisites:
+            - Hosts storage backing are pre-configured to storage backing under test
+                ie., 2 or more hosts should support the storage backing under test.
         Test Setups:
             - Set instances quota to 10 if it was less than 8
             - Determine storage backing(s) under test. i.e.,storage backings supported by at least 2 hosts on the system
@@ -278,7 +283,7 @@ class TestLockWithVMs:
             pre_vms_status = nova_helper.get_vms_info(vm_ids=vms_on_host, header='Status')
 
             LOG.tc_step("Lock target host {}...".format(host))
-            lock_code, lock_output = host_helper.lock_host(host=host, check_bf_lock=False, fail_ok=True)
+            lock_code, lock_output = host_helper.lock_host(host=host, check_first=False, fail_ok=True)
 
             # Add locked host to cleanup list
             if lock_code in [0, 3]:
@@ -359,7 +364,7 @@ class TestLockWithVMsNegative:
             pre_vms_status = nova_helper.get_vms_info(vm_ids=vms_on_host, header='Status')
 
             LOG.tc_step("Lock target host {}...".format(host))
-            lock_code, lock_output = host_helper.lock_host(host=host, check_bf_lock=False, fail_ok=True)
+            lock_code, lock_output = host_helper.lock_host(host=host, check_first=False, fail_ok=True)
 
             # Add locked host to cleanup list
             if lock_code in [0, 3]:

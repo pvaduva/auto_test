@@ -14,6 +14,10 @@ def delete_created_flavors(request):
 def test_flavor_default_specs():
     """
     Test "aggregate_instance_extra_specs:storage": "local_image" is by default included in newly created flavor
+
+    Test Steps:
+       - Create a new flavor
+       - Check "aggregate_instance_extra_specs:storage": "local_image" is included in extra specs of the flavor
     """
     LOG.tc_step("Create flavor with minimal input.")
     flavor = nova_helper.create_flavor()[1]
