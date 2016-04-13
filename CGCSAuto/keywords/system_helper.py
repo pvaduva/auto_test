@@ -178,6 +178,11 @@ def get_alarms(con_ssh=None):
     return table_
 
 
+def get_events(cli_args=' --limit 5', con_ssh=None):
+    table_ = table_parser.table(cli.system('event-list ' + cli_args, ssh_client=con_ssh))
+    return  table_
+
+
 def host_exists(host, field='hostname', con_ssh=None):
     if not field.lower() in ['hostname', 'id']:
         raise ValueError("field has to be either \'hostname\' or \'id\'")
