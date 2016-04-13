@@ -374,6 +374,9 @@ def get_values(table_, target_header, strict=True, regex=False, match=False, mer
 
             if field has space in it, such as 'Tenant ID', replace space with underscore, such as Tenant_ID=id;
             or compose the complete **kwargs like this: **{'Tenant ID': 123, 'Name': 'my name'}
+
+    Returns:
+        object: 
             Examples:
                 get_values(table_, 'ID', Tenant_ID=123, Name='my name')
                 get_values(table_, 'ID', **{'Tenant ID': 123, 'Name': 'my name'})

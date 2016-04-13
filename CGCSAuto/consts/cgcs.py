@@ -17,6 +17,11 @@ NAME_UUID = r'(.*) \((' + UUID + r')\)'
 BOOT_FROM_VOLUME = 'Attempt to boot from volume - no image supplied'
 
 
+class SystemType:
+    CPE = 'CPE'
+    STANDARD = 'Standard'
+
+
 class HostStorageBacking:
     LOCAL_LVM = 'local_storage_lvm_hosts'
     LOCAL_IMAGE = 'local_storage_image_hosts'
@@ -64,3 +69,4 @@ class Prompt:
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     PASSWORD_PROMPT = '.*assword\:.*'
     ADD_HOST = '.*\(yes/no\).*'
+

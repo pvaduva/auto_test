@@ -31,6 +31,7 @@ class Labs:
         'floating ip': '128.224.150.158',
         'controller-0 ip': '128.224.150.168',
         'controller-1 ip': '128.224.150.169',
+        'system_type': 'CPE',
     }
 
     PV0 = {
@@ -64,6 +65,7 @@ class Labs:
         'floating ip': '128.224.150.141',
         'controller-0 ip': '128.224.150.130',
         'controller-1 ip': '128.224.150.106',
+        'system_type': 'CPE',
     }
 
     R720_3_7 = {
