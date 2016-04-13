@@ -957,8 +957,14 @@ class Telnet:
                     self.get_read_until("Select kernel options and boot kernel", 120)
                 else:
                     self.get_read_until("Kickstart Boot Menu", 120)
+                    selection_menu_option = '2'
+                    if hasattr(node, "host_kickstart_menu_selection"):
+                        selection_menu_option =  getattr(node, "host_kickstart_menu_selection")
+
+                    log.info(" Kickstart boot  menu selection = {}".format(selection_menu_option))
+
                     log.info("Enter second option for Controller Install")
-                    self.write_line("2")
+                    self.write_line(selection_menu_option)
 
             self.get_read_until(LOGIN_PROMPT, install_timeout)
             log.info("Found login prompt. {} installation has completed".format(node.name))
@@ -990,7 +996,7 @@ class Telnet:
                 sys.exit(1)
             log.info("Boot device is: " + str(boot_device_regex))
 
-            self.get_read_until("Boot Menu", 100)
+            self.get_read_until("Boot Menu", 200)
             log.info("Pressing BIOS key " + bios_key_hr)
             self.write(str.encode(bios_key))
 
@@ -1055,12 +1061,21 @@ class Telnet:
                         self.write(str.encode("\r\r"))
                 else:
                     self.get_read_until("Kickstart Boot Menu", 60)
+                    log.info("Searching Kickstart boot device menu for ...")
+                    # Some labs like IP-28_30 has kickstart boot menu selection as 0,1,2
+                    # other have selection of 1,2,3. Need to determine menu options:
+                    selection_menu_option = '2'
+                    if hasattr(node, "host_kickstart_menu_selection"):
+                        selection_menu_option =  getattr(node, "host_kickstart_menu_selection")
+
+                    log.info(" Kickstart boot  menu slection = {}".format(selection_menu_option))
                     if small_footprint:
                         log.info("Enter third option for Controller and Compute Install")
                         self.write_line("3")
+
                     else:
                         log.info("Enter second option for Controller Install")
-                        self.write_line("2")
+                        self.write_line(selection_menu_option)
 
         elif bios_type == BIOS_TYPES[1]:
             # Hewlett-Packard BIOS

@@ -99,7 +99,9 @@ def parse_args():
     # if one is plugged-in.
     #
     lab_grp.add_argument('--burn-usb', dest='burn_usb',
-                           action='store_true', help="Burn boot image into USB before install")
+                         action='store_true',
+                         help="Burn boot image into USB before install. Valid"
+                         " only with --small-footprint option")
 
 
     #TODO: Custom directory path is not supported yet. Need to add code
@@ -725,15 +727,18 @@ if __name__ == '__main__':
     executed = False
     if not executed:
         # Reserve the nodes via VLM
-        #check first if nodes already reserved by user
+        # Unreserve first to close any opened telnet sessions.
         reservedbyme = vlm_findmine()
-        barcodesForReserve = []
+        barcodesAlreadyReserved = []
         for item in barcodes:
-            if item not in reservedbyme:
-                barcodesForReserve.append(item)
+            if item in reservedbyme:
+                barcodesAlreadyReserved.append(item)
+        if len(barcodesAlreadyReserved) > 0:
+            for bcode in barcodesAlreadyReserved:
+                vlm_exec_cmd(VLM_UNRESERVE, bcode)
 
-        vlm_reserve(barcodesForReserve, note=INSTALLATION_RESERVE_NOTE)
-        #vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
+        #vlm_reserve(barcodesForReserve, note=INSTALLATION_RESERVE_NOTE)
+        vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
         # Open a telnet session for controller0.
         cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, 
@@ -1014,6 +1019,7 @@ if __name__ == '__main__':
                     # corrected by re-boot.
                     log.info("Controller1 is in degraded state. Attempting to reset")
                     vlm_exec_cmd(VLM_REBOOT, node.barcode)
+                    time.sleep(5)
                     wait_state(node, OPERATIONAL, ENABLED)
 
                 if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
