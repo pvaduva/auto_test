@@ -24,7 +24,7 @@ utils.table_parser module
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: utils.table_parser
-    :members:
+    :members: get_value_two_col_table, get_values, filter_table
     :undoc-members:
     :show-inheritance:
 

@@ -7,6 +7,10 @@ from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 from setup_consts import P1, P2, P3
 
+###
+#us63135_tc11: validate_heartbeat_works_after_controller_swact
+###
+
 # heartbeat Type
 flavor_params = ['True', 'False']
 
@@ -60,8 +64,8 @@ def test_heartbeat(heartbeat_flavor_vm):
     LOG.tc_step("Wait a few seconds before SSH into VM instance")
     sleep(10)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        # Even when heartbeat set to False in flavor. a 'heartbeat' process would show up for a few seconds in VM
-        # depend on reply from DE may increase the sleep timer for VM to settle
+        # Even when heartbeat set to False in flavor. a 'heartbeat' process would show up in VM for a few seconds
+        # depend on reply from DE may increase the sleep timer for VM process to settle
         sleep(30)
         LOG.tc_step("check heartbeat before swact")
         cmd = "ps -ef | grep [h]eartbeat | awk '{print $10}' "
@@ -81,8 +85,10 @@ def test_heartbeat(heartbeat_flavor_vm):
 
     LOG.tc_step("check heartbeat after swact")
     if heartbeat_type == "True":
+        LOG.tc_step("heartbeat process exist and after swact")
         assert before_heartbeat == after_heartbeat == '/dev/virtio-ports/cgcs.heartbeat'
     else:
+        LOG.tc_step("heartbeat process does not exist and after swact")
         assert before_heartbeat == after_heartbeat == ''
 
     # tc end
