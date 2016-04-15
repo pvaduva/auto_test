@@ -194,8 +194,8 @@ Other Conventions
 Things to Avoid
 ----------------------------------------------
 
- * Avoid using `TAB` unless TAB is set to 4 spaces in your editor
- * Avoid `from my_package.my_module import *.` Reasons:
+ * Avoid using **TAB** unless TAB is set to 4 spaces in your editor
+ * Avoid ``from my_package.my_module import *.`` Reasons:
 
    * Hides the origin of the imported variables/functions
    * Might unintentionally override the variable/function

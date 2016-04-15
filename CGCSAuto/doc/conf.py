@@ -161,7 +161,7 @@ html_static_path = ['_static']
 #html_sidebars = {}
 
 #remove permalink from links
-html_add_permalinks = ''
+#html_add_permalinks = ''
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.

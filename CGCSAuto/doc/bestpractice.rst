@@ -7,19 +7,21 @@ Test Function Decorators
 Test Function Level Skip Conditions (if applicable)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Add @pytest.mark.skipif() decorator to test function to skip the whole test function when skip condition met
+Add ``@pytest.mark.skipif()`` decorator to test function to skip the whole test function when skip condition met
  * E.g., Test function is only applicable to small system
 
 ::
 
  # Example
  @mark.skipif(not system_helper.is_small_footprint(), reason="Only applies to small footprint lab.")
+ def test_something():
+ ...
 
 System Verifications (if applicable)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Definition of System Verifiy Fixtures: system verifications that are not directly related to the test case. E.g., check system alarms, check hosts are in good states.
- * Add @pytest.mark.usefixtures() decorator to test function
+ * Add ``@pytest.mark.usefixtures()`` decorator to test function
  * Choose system verify fixtures from keywords/verify_fixtures.py
  * How does it work: compare results before and after running the test case. Test will be marked as fail if the post test check failed, e.g, If a new alarm is raised after the test case run, then this test case will be marked as fail.
 
@@ -27,6 +29,8 @@ Definition of System Verifiy Fixtures: system verifications that are not directl
 
  # Example
  @mark.usefixtures('check_vms', 'check_hosts')
+ def test_something():
+ ...
 
 Test Function Arguments
 -----------------------------------------------
