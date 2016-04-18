@@ -206,25 +206,40 @@ def get_local_storage_backing(host, con_ssh=None):
 
 def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     """
+    Modify the System Information.
 
     Args:
-        fail_ok: (bool)
-        **kwargs:   key-value pairs, currently the following keys (attributes of the system) are suppported:
-                    name,description,location,contact                           --mutable
-                    system_type,software_version, uuid, created_at, updated_at  --readonly by CLI
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+        **kwargs:   attribute-value pairs
 
     Returns: (int, str)
          0  - success
          1  - error
 
-         #MUTTABLE_ATTRS = ['descriptions', 'name', 'location', 'contact']
+    Test Steps:
+        - Set the value via system modify <attr>=<value> [,<attr>=<value]
+
+    Notes:
+        Currently only the following are allowed to change:
+        name
+        description
+        location
+        contact
+
+        The following attributes are readonly and not allowed CLI user to change:
+            system_type
+            software_version
+            uuid
+            created_at
+            updated_at
     """
     if not kwargs:
-        raise ValueError("Please specify at least one systeminfo=value pair via kwargs.")
+        raise ValueError("Please specify at least one systeminfo_attr=value pair via kwargs.")
 
-    args_ = ''
-    for key in kwargs:
-        args_ += ' {}={}'.format(key, kwargs[key])
+    attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
+    args_ = ' '.join(attr_values_)
 
     code, output = cli.system('modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
 
@@ -237,4 +252,37 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
         pass
 
 
+def set_retention_period(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, retention_period=None):
+    """
+    Modify the Retention Period of the system performance manager.
 
+    Args:
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+        retention_period (int):   retention period in seconds
+
+    Returns: (int, str)
+         0  - success
+         1  - error
+
+    Test Steps:
+        - Set the value via system pm_modify retention_secs=<new_retention_period_in_seconds
+
+    Notes:
+        -
+    """
+    if retention_period is None:
+        raise ValueError("Please specify the Retention Period.")
+
+    args_ = ' retention_secs="{}"'.format(int(retention_period))
+    code, output = cli.system('pm-modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                              rtn_list=True)
+
+    if code == 1:
+        return 1, output
+    elif code == 0:
+        return 0, output
+    else:
+        # should not get here: cli.system() should already have been handled these cases
+        pass
