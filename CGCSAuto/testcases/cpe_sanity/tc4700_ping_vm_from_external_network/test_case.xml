@@ -25,10 +25,11 @@ Modification history
 
 FAILIF Fail
 PASSIF Pass
+SET PYTHON /home/svc-cgcsauto/wassp-repos/.venv_wassp/bin/python3
 
-CALL export PYTHONPATH=${PYTHONPATH}:/home/amcfarla/wassp-repos/testcases/cgcs/CGCSAuto
+CALL export PYTHONPATH=${PYTHONPATH}:/home/svc-cgcsauto/wassp-repos/testcases/cgcs/CGCSAuto
 
-CALL /usr/bin/python3 -m py.test -v -s  --junit-xml=${WASSP_TC_RUN_LOG}/result.xml --result-log=${WASSP_TC_RUN_LOG}/test.log ${WASSP_TESTCASE_DIR}/../_samples/keywords_tests/test_vm_operations.py::test_ping_vms_from_natbox['all']
+CALL ${PYTHON} -m pytest -v -s  --junit-xml=${WASSP_TC_RUN_LOG}/result.xml --result-log=${WASSP_TC_RUN_LOG}/test.log ${WASSP_TESTCASE_DIR}/../_samples/keywords_tests/test_vm_operations.py::test_ping_vms_from_natbox['all']
 
 PASS
 

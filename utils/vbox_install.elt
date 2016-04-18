@@ -623,7 +623,7 @@ $node_list=
 	=$boot_image_dir;(/.+/)\w.+;\1;
 	$drivec=/drives/c
 	#adjust max wait time for windows
-	$max=125
+	$max=300
 	$ping_opt= -n 5 
 ]::[
 	; === using linux host
@@ -835,6 +835,7 @@ $part=1
 
 @1500
 *FORK serial
+>>^M
 ; === protect against blue screen of death
 #>socat UNIX-CONNECT:$serial_pipe - | egrep -i 'restarting system'
 >$console_connect | egrep -i 'restarting system'
@@ -914,7 +915,7 @@ $install_tenant_files=yes
 	#$url=128.224.150.21
 	>cd
 	; === place install files/images on controller
-	@45
+	@100
 #	>time wget -r --no-parent  -nd -nH  --reject "index.html*" --reject "*new_query_string" http://$url:$proxy_port/files/install/
 #	<real
 
@@ -1097,6 +1098,8 @@ $install_tenant_files=yes
 <NTP server 3
 >>^M
 <License File
+>>^M
+<wrsroot password age
 >>^M
 ?if $https == no? [ 
 	<Use secure
@@ -1552,7 +1555,7 @@ $node_computes=$node_list
 	@5
 
 	#----------- 3 of 3 Lab_setup
-	@400
+	@800
 	>time ./lab_setup.sh
 	<real
 	>echo $?
