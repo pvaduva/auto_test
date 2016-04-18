@@ -322,7 +322,7 @@ def __get_row_indexes_string(table_, header, value, strict=False):
     return row_index
 
 
-def _get_values(table_, header1, value1, header2, strict=False, regex=False, match=False):
+def _get_values(table_, header1, value1, header2, strict=False, regex=False):
     """
     Args:
         table_:
@@ -339,7 +339,7 @@ def _get_values(table_, header1, value1, header2, strict=False, regex=False, mat
     row_indexes = []
     if regex:
         for i in range(len(column1)):
-            if match:
+            if strict:
                 res_ = re.match(value1, column1[i])
             else:
                 res_ = re.search(value1, column1[i])
@@ -354,23 +354,35 @@ def _get_values(table_, header1, value1, header2, strict=False, regex=False, mat
     return value2
 
 
-def get_values(table_, target_header, strict=True, regex=False, match=False, merge_lines=False, **kwargs):
+def get_values(table_, target_header, strict=True, regex=False, merge_lines=False, **kwargs):
     """
-
+    Return a list of cell(s) that matches the given criteria. Criteria were given via kwargs.
     Args:
-        table_:
-        target_header:
-        strict: for string value in kwargs
-        regex: whether value in kwargs are regular string or regex
-        match: if true, match from the beginning of the cell; otherwise, search anywhere in the cell
+        table_ (dict): cli output table in dict format
+        target_header: target header to return value(s) for. Used to filter out the target column.
+        regex (bool): whether value(s) in kwargs are regular string or regex pattern
+
+        strict (bool): this param applies to value(s) in kwargs. (i.e., does not apply to the header(s))
+            For string operation:
+                strict True will attempt to match the whole string of the given value to actual value,
+                strict False will attempt to match the given value to any substring of the actual value
+            For regex operation:
+                strict True will attempt to match from the start of the value
+                strict False will attempt to search for a match from anywhere of the actual value
+
         merge_lines:
             when True: if a value spread into multiple lines, merge them into one line string
                 Examples: 'capabilities' field in system host-show
             when False, if a value spread into multiple lines, this value will be presented as a list with
                         each line being a string item in this list
                 Examples: 'subnets' in neutron net-list
-        **kwargs:
-            such as personality='controller', networks=r'192.168.\d{1-3}.\d{1-3}'
+
+        **kwargs: header/value pair(s) as search criteria. Used to filter out the target row(s).
+            When multiple header/value pairs are given, they will be in 'AND' relation.
+            i.e., only table cell(s) that matches all the criteria will be returned.
+
+            Examples of criteria:
+            personality='controller', networks=r'192.168.\d{1-3}.\d{1-3}'
 
             if field has space in it, such as 'Tenant ID', replace space with underscore, such as Tenant_ID=id;
             or compose the complete **kwargs like this: **{'Tenant ID': 123, 'Name': 'my name'}
@@ -387,7 +399,7 @@ def get_values(table_, target_header, strict=True, regex=False, match=False, mer
 
     row_indexes = []
     for header, value in kwargs.items():
-        kwarg_row_indexes = _get_row_indexes(table_, header, value, strict, regex, match)
+        kwarg_row_indexes = _get_row_indexes(table_, header, value, strict=strict, regex=regex)
         if kwarg_row_indexes:
             row_indexes.append(kwarg_row_indexes)
 
@@ -424,15 +436,16 @@ def get_values(table_, target_header, strict=True, regex=False, match=False, mer
     return target_values
 
 
-def get_value_two_col_table(table_, field, strict=True, regex=False, match=False, merge_lines=False):
+def get_value_two_col_table(table_, field, strict=True, regex=False, merge_lines=False):
     """
 
     Args:
-        table_:
-        field:
-        strict:
-        regex:
-        match:
+        table_ (dict): cli output table in dict format
+        field (str): target field to return value for
+        regex (bool): When True, regex will be used for field name matching, else string operation will be performed
+        strict (bool): If string operation, strict match will attempt to match the whole string, while non-strict match
+            will attempt match substring. If regex, strict match will attempt to find match from the beginning of the
+            field name, while non-strict match will attempt to search a match anywhere in the field name.
         merge_lines:
             when True: if the value spread into multiple lines, merge them into one line string
                 Examples: 'capabilities' field in system host-show
@@ -448,7 +461,7 @@ def get_value_two_col_table(table_, field, strict=True, regex=False, match=False
         target_field = field.strip().lower()
         actual_field = row[0].strip().lower()
         if regex:
-            if match:
+            if strict:
                 res_ = re.match(target_field, actual_field)
             else:
                 res_ = re.search(target_field, actual_field)
@@ -505,12 +518,12 @@ def __filter_table(table_, row_indexes):
     return table_
 
 
-def _get_row_indexes(table_, field, value, strict=True, regex=False, match=False):
+def _get_row_indexes(table_, field, value, strict=True, regex=False):
     row_indexes = []
     column = get_column(table_, field)
     if regex:
         for j in range(len(column)):
-            if match:
+            if strict:
                 res_ = re.match(value, column[j])
             else:
                 res_ = re.search(value, column[j])
@@ -522,7 +535,7 @@ def _get_row_indexes(table_, field, value, strict=True, regex=False, match=False
     return row_indexes
 
 
-def filter_table(table_, strict=True, regex=False, match=False, **kwargs):
+def filter_table(table_, strict=True, regex=False, **kwargs):
     """
 
     Args:
@@ -532,8 +545,7 @@ def filter_table(table_, strict=True, regex=False, match=False, **kwargs):
                 'headers': ["Field", "Value"];
                 'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
         strict:
-        regex:
-        match:
+        regex (bool): Whether to use regex to find matching value(s)
         **kwargs: header_1 = [value1, value2, value3], header_2 = value_2
             fielders are 'and' relation
             values list are 'or' relation
@@ -551,8 +563,7 @@ def filter_table(table_, strict=True, regex=False, match=False, **kwargs):
             values = [values]
         row_indexes_for_field = []
         for value in values:
-            row_indexes_for_value = _get_row_indexes(table_, field=header, value=value, strict=strict, regex=regex,
-                                                     match=match)
+            row_indexes_for_value = _get_row_indexes(table_, field=header, value=value, strict=strict, regex=regex)
             row_indexes_for_field = set(row_indexes_for_field) | set(row_indexes_for_value)
 
         if row_indexes_for_field is []:

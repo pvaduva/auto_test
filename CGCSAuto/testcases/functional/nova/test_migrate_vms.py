@@ -85,7 +85,7 @@ def vm_(request, flavor_):
           }
 
     def delete_vm():
-        vm_helper.delete_vm(vm_id=vm_id, delete_volumes=True)
+        vm_helper.delete_vms(vm_id, delete_volumes=True)
     request.addfinalizer(delete_vm)
 
     return vm

@@ -9,7 +9,7 @@ class LinuxUser:
         self.user = user
         self.password = password
         self.added = False
-        LinuxUser.con_ssh = con_ssh if con_ssh else ControllerClient.get_active_controller()
+        self.con_ssh = con_ssh if con_ssh is not None else ControllerClient.get_active_controller()
 
     def add_user(self):
         self.added = True
@@ -31,6 +31,8 @@ class LinuxUser:
 
     @classmethod
     def get_current_user_password(cls):
+        if not cls.con_ssh:
+            cls.con_ssh = ControllerClient.get_active_controller()
         output = cls.con_ssh.exec_cmd('whoami')[1]
         user = output.splitlines()[1]
         return user, cls.users[user]

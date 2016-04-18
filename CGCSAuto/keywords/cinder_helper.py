@@ -1,6 +1,7 @@
 import random
 import time
 
+from consts.auth import Tenant
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from consts.timeout import VolumeTimeout
@@ -8,7 +9,7 @@ from keywords import glance_helper
 
 
 def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=None, status=None, attached_vm=None,
-                bootable='true', auth_info=None, con_ssh=None):
+                bootable=None, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Return a list of volume ids based on the given criteria
     Args:
@@ -19,7 +20,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         size (str):
         status:(str)
         attached_vm (str):
-        bootable (str):
+        bootable (str): true or false
         auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT_1,Tenant.TENANT_2
         con_ssh (str):
 
@@ -42,7 +43,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         if value is not None:
             criteria[key] = value
 
-    table_ = table_parser.table(cli.cinder('list', auth_info=auth_info, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.cinder('list --all-tenant', auth_info=auth_info, ssh_client=con_ssh))
 
     if name is not None:
         table_ = table_parser.filter_table(table_, strict=name_strict, **{'Display Name': name})
@@ -52,6 +53,35 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
 
     if name is None and not criteria:
         LOG.warning("No criteria specified, return a full list of volume ids for a tenant")
+
+    return table_parser.get_column(table_, 'ID')
+
+
+def get_volumes_attached_to_vms(volumes=None, vms=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Filter out the volumes that are attached to a vm.
+    Args:
+        volumes (list or str): list of volumes ids to filter out from. When None, filter from all volumes
+        vms (list or str): get volumes attached to given vm(s). When None, filter volumes attached to any vm
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns(list):
+        list of volumes ids or [] if no match found
+
+    """
+    table_ = table_parser.table(cli.cinder('list --all-tenant', auth_info=auth_info, ssh_client=con_ssh))
+
+    # Filter from given volumes if provided
+    if volumes is not None:
+        table_ = table_parser.filter_table(table_, ID=volumes)
+
+    # Filter from given vms if provided
+    if vms is not None:
+        table_ = table_parser.filter_table(table_, **{'Attached to': vms})
+    # Otherwise filter out volumes attached to any vm
+    else:
+        table_ = table_parser.filter_table(table_, strict=False, regex=True, **{'Attached to': '.*\S.*'})
 
     return table_parser.get_column(table_, 'ID')
 
@@ -145,12 +175,12 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     return [0, volume_id]
 
 
-def get_volume_states(vol_id, fields, con_ssh=None, auth_info=None):
+def get_volume_states(vol_id, fields, con_ssh=None, auth_info=Tenant.ADMIN):
     """
 
     Args:
         vol_id (str):
-        fields (str):
+        fields (list or str):
         con_ssh (str):
         auth_info (dict):
 
@@ -249,14 +279,13 @@ def get_snapshot_id(status='available', vol_id=None, name=None, size=None, con_s
     return random.choice(ids)
 
 
-def _wait_for_volume_deleted(volume_id, column='ID', timeout=VolumeTimeout.DELETE, fail_ok=True,
-                             check_interval=3, con_ssh=None, auth_info=None):
+def _wait_for_volumes_deleted(volumes, timeout=VolumeTimeout.DELETE, fail_ok=True,
+                              check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
     """
         check if a specific field still exist in a specified column for cinder list
 
     Args:
-        volume_id (str):
-        column (str):
+        volumes(list or str): ids of volumes
         timeout (int):
         fail_ok (bool):
         check_interval (int):
@@ -267,22 +296,33 @@ def _wait_for_volume_deleted(volume_id, column='ID', timeout=VolumeTimeout.DELET
         Return True if the specific volumn_id is found within the timeout period. False otherwise
 
     """
+    if isinstance(volumes, str):
+        volumes = [volumes]
+
+    vols_to_check = list(volumes)
+    vols_deleted = []
     end_time = time.time() + timeout
     while time.time() < end_time:
-        table_ = table_parser.table(cli.cinder('list', ssh_client=con_ssh, auth_info=auth_info))
-        ids_list = table_parser.get_column(table_, column)
+        table_ = table_parser.table(cli.cinder('list --all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+        existing_vols = table_parser.get_column(table_, 'ID')
 
-        if volume_id not in ids_list:
-            return True
+        for vol in vols_to_check:
+            if vol not in existing_vols:
+                vols_to_check.remove(vol)
+                vols_deleted.append(vol)
+
+        if not vols_to_check:
+            return [True, 'all']
+
         time.sleep(check_interval)
     else:
         if fail_ok:
-            return False
-        raise exceptions.TimeoutException("Timed out waiting for {} to not be in column {}. "
-                                          "Actual still in column".format(volume_id, column))
+            return [False, vols_deleted]
+        raise exceptions.TimeoutException("Timed out waiting for all given volumes to be removed from cinder list. "
+                                          "Given volumes: {}. Volumes still exist: {}.".format(volumes, vols_to_check))
 
 
-def volume_exists(volume_id, con_ssh=None, auth_info=None):
+def volume_exists(volume_id, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Args:
         volume_id:
@@ -296,13 +336,17 @@ def volume_exists(volume_id, con_ssh=None, auth_info=None):
     return exit_code == 0
 
 
-def delete_volume(volume_id, fail_ok=False, con_ssh=None, auth_info=None):
+def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, check_first=True, con_ssh=None,
+                   auth_info=Tenant.ADMIN):
     """
-    Delete given volume
+    Delete volume(s).
 
     Args:
-        volume_id (str): id of the volume
+        volumes (list or str): ids of the volumes to delete. If None, all available volumes under given Tenant will be
+            deleted. If given Tenant is admin, available volumes for all tenants will be deleted.
         fail_ok (bool): True or False
+        timeout (int): CLI timeout and waiting for volumes disappear timeout in seconds.
+        check_first (bool): Whether to check volumes existence before attempt to delete
         con_ssh (SSHClient):
         auth_info (dict):
 
@@ -313,29 +357,64 @@ def delete_volume(volume_id, fail_ok=False, con_ssh=None, auth_info=None):
         [2, vm_id] if delete volume cli executed but still show up in nova list.\n
 
     """
-    # if volume doesn't exist return [-1,'']
-    if volume_id is not None:
-        v_exist = volume_exists(volume_id, auth_info=auth_info, con_ssh=con_ssh)
-        if not v_exist:
-            LOG.info("Volume {} does not exist on system. Do nothing".format(volume_id))
-            return [-1, '']
+    if volumes is None:
+        volumes = get_volumes(status='available', auth_info=auth_info, con_ssh=con_ssh)
+    if not volumes:
+        msg = "No volume to delete. Do nothing."
+        LOG.info(msg)
+        return [-1, msg]
 
-    # execute the delete command
-    exit_code, cmd_output = cli.cinder('delete', volume_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
-                                       auth_info=auth_info)
+    if isinstance(volumes, str):
+        volumes = [volumes]
+
+    if check_first:
+        vols_to_del = get_volumes(vols=volumes, auth_info=auth_info, con_ssh=con_ssh)
+        if not vols_to_del:
+            msg = "None of the given volume(s) exist on system. Do nothing."
+            LOG.info(msg)
+            return [-1, msg]
+
+        if not vols_to_del == volumes:
+            LOG.info("Some volume(s) don't exist. Given volumes: {}. Volumes to delete: {}.".format(volumes, vols_to_del))
+    else:
+        vols_to_del = volumes
+
+    vols_to_del_str = ' '.join(vols_to_del)
+    LOG.info("Deleting volume(s): {}".format(vols_to_del))
+    exit_code, cmd_output = cli.cinder('delete', vols_to_del_str, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
+                                       auth_info=auth_info, timeout=timeout)
+
+    vols_to_check = []
+    if exit_code == 1:
+        for vol in vols_to_del:
+            # if cinder delete on a specific volume ran successfully, then it has no output regarding that vol
+            if vol not in cmd_output:
+                vols_to_check.append(vol)
+    else:
+        vols_to_check = vols_to_del
+
+    LOG.info("Waiting for volumes to be removed from cinder list: {}".format(vols_to_check))
+    all_deleted, vols_deleted = _wait_for_volumes_deleted(vols_to_check, fail_ok=True, con_ssh=con_ssh,
+                                                          auth_info=auth_info, timeout=timeout)
 
     if exit_code == 1:
-        return [1, cmd_output]
+        if all_deleted:
+            if fail_ok:
+                return [1, cmd_output]
+            raise exceptions.CLIRejected(cmd_output)
+        else:
+            msg = "Delete request(s) rejected and post check failed for accepted request(s). \nCLI error: {}".\
+                  format(cmd_output)
+            if fail_ok:
+                return [3, msg]
+            raise exceptions.VolumeError(msg)
 
-    # check if the volume is deleted
-    vol_deleted = _wait_for_volume_deleted(volume_id, column='ID', fail_ok=fail_ok)
-
-    if not vol_deleted:
-        msg = "Volume {} did not disappear within {} seconds".format(volume_id, VolumeTimeout.DELETE)
+    if not all_deleted:
+        msg = "Delete request(s) accepted but some volume(s) did not disappear within {} seconds".format(timeout)
         if fail_ok:
             LOG.warning(msg)
-            return [2, volume_id]
+            return [2, msg]
         raise exceptions.VolumeError(msg)
 
-    LOG.info("Volume {} is deleted .".format(volume_id))
+    LOG.info("Volume(s) are successfully deleted: {}".format(vols_to_check))
     return [0, '']

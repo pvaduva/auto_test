@@ -18,6 +18,7 @@ class VMTimeout:
     BOOT_VM = 60
     DELETE = 60
     VOL_ATTACH = 60
+    SSH_LOGIN = 20
 
 
 class VolumeTimeout:

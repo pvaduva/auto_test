@@ -10,6 +10,7 @@ from consts.auth import Tenant
 LAB = Labs.R720_3_7
 PRIMARY_TENANT = Tenant.TENANT_2
 NATBOX = NatBox.NAT_BOX_HW
+BOOT_VMS = True
 
 #########################################
 # End of Test Session Params            #

@@ -4,11 +4,16 @@ from keywords import nova_helper
 
 created_flavors = []
 @fixture(scope='module', autouse=True)
-def delete_created_flavors(request):
+def flavor_to_test(request):
+    flavor_id = nova_helper.create_flavor()[1]
+    created_flavors.append(flavor_id)
+
     def delete():
         if created_flavors:
             nova_helper.delete_flavors(created_flavors)
     request.addfinalizer(delete)
+
+    return flavor_id
 
 
 def test_flavor_default_specs():
@@ -29,7 +34,7 @@ def test_flavor_default_specs():
         "Flavor {} extra specs does not include: {}".format(flavor, expected_spec)
 
 
-def test_flavor_set_storage():
+def obsolete_test_flavor_set_storage(flavor_to_test):
     """
     Test set flavor storage specs
 
@@ -39,23 +44,50 @@ def test_flavor_set_storage():
         - Set flavor storage spec to local_image and check it is set successfully
 
     """
-    LOG.tc_step("Create basic flavor.")
-    flavor = nova_helper.create_flavor()[1]
-    created_flavors.append(flavor)
     LOG.tc_step("Set flavor storage spec to local_lvm and check it is set successfully")
     local_lvm_spec = {"aggregate_instance_extra_specs:storage": "local_lvm"}
-    nova_helper.set_flavor_extra_specs(flavor=flavor, **local_lvm_spec)
-    extra_spec_storage_1 = nova_helper.get_flavor_extra_specs(flavor=flavor)["aggregate_instance_extra_specs:storage"]
+    nova_helper.set_flavor_extra_specs(flavor=flavor_to_test, **local_lvm_spec)
+    extra_spec_storage_1 = nova_helper.get_flavor_extra_specs(flavor=flavor_to_test)["aggregate_instance_extra_specs:storage"]
     assert extra_spec_storage_1 == 'local_lvm', "Actual storage spec: {}".format(extra_spec_storage_1)
 
     LOG.tc_step("Set flavor storage spec to remote and check it is set successfully")
     local_lvm_spec = {"aggregate_instance_extra_specs:storage": "remote"}
-    nova_helper.set_flavor_extra_specs(flavor=flavor, **local_lvm_spec)
-    extra_spec_storage_2 = nova_helper.get_flavor_extra_specs(flavor=flavor)["aggregate_instance_extra_specs:storage"]
+    nova_helper.set_flavor_extra_specs(flavor=flavor_to_test, **local_lvm_spec)
+    extra_spec_storage_2 = nova_helper.get_flavor_extra_specs(flavor=flavor_to_test)["aggregate_instance_extra_specs:storage"]
     assert extra_spec_storage_2 == 'remote',  "Actual storage spec: {}".format(extra_spec_storage_2)
 
     LOG.tc_step("Set flavor storage spec to local_image and check it is set successfully")
     local_lvm_spec = {"aggregate_instance_extra_specs:storage": "local_image"}
-    nova_helper.set_flavor_extra_specs(flavor=flavor, **local_lvm_spec)
-    extra_spec_storage_3 = nova_helper.get_flavor_extra_specs(flavor=flavor)["aggregate_instance_extra_specs:storage"]
+    nova_helper.set_flavor_extra_specs(flavor=flavor_to_test, **local_lvm_spec)
+    extra_spec_storage_3 = nova_helper.get_flavor_extra_specs(flavor=flavor_to_test)["aggregate_instance_extra_specs:storage"]
     assert extra_spec_storage_3 == 'local_image', "Actual storage spec: {}".format(extra_spec_storage_3)
+
+
+@mark.sanity
+@mark.parametrize(('extra_spec_name', 'values'), [
+    ('aggregate_instance_extra_specs:storage', ['local_lvm', 'remote', 'local_image']),
+    ('hw:cpu_model', ['Nehalem', 'SandyBridge', 'Westmere', 'Haswell']),
+])
+def test_set_flavor_extra_specs(flavor_to_test, extra_spec_name, values):
+    """
+    Args:
+        flavor_to_test:
+        extra_spec_name:
+        values:
+
+    Setups:
+        - Create a basic flavor
+    Test Steps:
+        - Set specific extra spec to given values for the basic flavor
+        - Check extra spec is now included in the flavor
+    Teardown:
+        - Delete the basic flavor
+    """
+    for value in values:
+        extra_spec = {extra_spec_name: value}
+
+        LOG.tc_step("Set flavor extra spec to: {} and verify extra spec is set successfully.".format(extra_spec))
+        nova_helper.set_flavor_extra_specs(flavor=flavor_to_test, **extra_spec)
+
+        post_extra_spec = nova_helper.get_flavor_extra_specs(flavor=flavor_to_test)
+        assert post_extra_spec[extra_spec_name] == value, "Actual flavor extra specs: {}".format(post_extra_spec)

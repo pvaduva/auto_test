@@ -13,9 +13,9 @@ def vms_(request):
 
     def delete_vms():
         for vm in vms_tenant1[1]:
-            vm_helper.delete_vm(vm, fail_ok=True, auth_info=Tenant.TENANT_1)
+            vm_helper.delete_vms(vm, fail_ok=True, auth_info=Tenant.TENANT_1)
         for vm in vms_tenant2[1]:
-            vm_helper.delete_vm(vm, fail_ok=True, auth_info=Tenant.TENANT_2)
+            vm_helper.delete_vms(vm, fail_ok=True, auth_info=Tenant.TENANT_2)
     request.addfinalizer(delete_vms)
 
     return [vms_tenant1[0], vms_tenant2[0]]

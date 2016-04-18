@@ -7,8 +7,8 @@ from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
 from utils.tis_log import LOG
 from consts.auth import Tenant
-from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME
 from consts.timeout import VMTimeout
+from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper
 from keywords.common import Count
 
@@ -104,10 +104,11 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
         fail_ok (bool):
 
     Returns (list): [rtn_code (int), vm_id or message (str)]
-        [0, vm_id]: vm is created successfully and in Active state.
-        [1, vm_id]: create vm cli command failed.
-        [2, vm_id]: create vm cli accepted, but vm building is not 100% completed.
-        [3, vm_id]: vm is not in Active state after created.
+        [0, vm_id, '']: vm is created successfully and in Active state.
+        [1, vm_id, <stderr>]: create vm cli command failed, but vm is still created
+        [2, vm_id, "VM building is not 100% complete."]: create vm cli accepted, but vm building is not 100% completed.
+        [3, vm_id, "VM <uuid> did not reach ACTIVE state within <seconds>. VM status: <status>"]:
+            vm is not in Active state after created.
 
     """
     LOG.info("Processing boot_vm args...")
@@ -191,13 +192,13 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
     vm_id = table_parser.get_value_two_col_table(table_, 'id')
 
     if exitcode == 1:
-        return [1, vm_id]
+        return [1, vm_id, output]
 
     if "100% complete" not in output:
-        message = "VM building is not 100% complete. Output: {}".format(output)
+        message = "VM building is not 100% complete."
         if fail_ok:
             LOG.warning(message)
-            return [2, vm_id]
+            return [2, vm_id, "VM building is not 100% complete."]
         else:
             raise exceptions.VMOperationFailed(message)
 
@@ -208,12 +209,12 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
         message = "VM {} did not reach ACTIVE state within {}. VM status: {}".format(vm_id, tmout, vm_status)
         if fail_ok:
             LOG.warning(message)
-            return [3, vm_id]
+            return [3, vm_id, message]
         else:
             raise exceptions.VMPostCheckFailed(message)
 
     LOG.info("VM {} is booted successfully.".format(vm_id))
-    return [0, vm_id]
+    return [0, vm_id, '']
 
 
 def __compose_args(optional_args_dict):
@@ -607,6 +608,60 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     return [0, '']
 
 
+def wait_for_vm_values(vm_id, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=True, strict=True,
+                       regex=False, con_ssh=None, auth_info=None, **kwargs):
+    """
+    Wait for vm to reach given states.
+
+    Args:
+        vm_id (str): vm id
+        timeout (int): in seconds
+        check_interval (int): in seconds
+        fail_ok (bool): whether to return result or raise exception when vm did not reach expected value(s).
+        strict (bool): whether to perform strict search(match) for the value(s)
+            For regular string: if True, match the whole string; if False, find any substring match
+            For regex: if True, match from start of the value string; if False, search anywhere of the value string
+        regex (bool): whether to use regex to find matching value(s)
+        con_ssh (SSHClient):
+        auth_info (dict):
+        **kwargs: field/value pair(s) to identify the waiting criteria.
+
+    Returns (list): [result(bool), actual_vals(dict)]
+
+    """
+
+    end_time = time.time() + timeout
+    if not kwargs:
+        raise ValueError("No field/value pair is passed via kwargs")
+
+    fields_to_check = list(kwargs.keys())
+    results = {}
+    while time.time() < end_time:
+        table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+        for field in fields_to_check:
+            expt_val = kwargs[field]
+            actual_val = table_parser.get_value_two_col_table(table_, field)
+            results[field] = actual_val
+            if regex:
+                match_found = re.match(expt_val, actual_val) if strict else re.search(expt_val, actual_val)
+            else:
+                match_found = expt_val == actual_val if strict else expt_val in actual_val
+
+            if match_found:
+                fields_to_check.remove(field)
+
+            if not fields_to_check:
+                # LOG.info("VM has reached states: {}".format(results))
+                return [True, results]
+
+        time.sleep(check_interval)
+
+    if fail_ok:
+        return [False, results]
+    else:
+        raise exceptions.VMTimeout("VM {} did not reach expected states within timeout.".format(vm_id))
+
+
 def _wait_for_vm_status(vm_id, status, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=True,
                         con_ssh=None, auth_info=Tenant.ADMIN):
     """
@@ -787,7 +842,8 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
 
 
 @contextmanager
-def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, timeout=10, natbox_client=None):
+def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, timeout=VMTimeout.SSH_LOGIN,
+                          natbox_client=None):
     """
     ssh to a vm from natbox.
 
@@ -965,12 +1021,15 @@ class VMInfo:
         cls.__instances.pop(vm_id, default="No instance found")
 
 
-def delete_vm(vm_id, delete_volumes=True, fail_ok=False, con_ssh=None, auth_info=None):
+def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeout.DELETE, fail_ok=False, con_ssh=None,
+               auth_info=Tenant.ADMIN):
     """
     Delete given vm (and attached volume(s))
 
     Args:
-        vm_id (str):
+        vms (list|str): list of vm ids to be deleted. If string input, assume only one vm id is provided.
+        check_first (bool): Whether to check if given vm(s) exist on system before attempt to delete
+        timeout (int): Max time to wait for delete cli finish and wait for vms actually disappear from system
         delete_volumes (bool): delete attached volume(s) if set to True
         fail_ok (bool):
         con_ssh (SSHClient):
@@ -979,52 +1038,92 @@ def delete_vm(vm_id, delete_volumes=True, fail_ok=False, con_ssh=None, auth_info
     Returns:
         [-1, ''] VM does not exist. Do nothing.
         [0, ''] VM is successfully deleted.
-        [1, <stderr>] if delete vm cli failed to execute
-        [2, vm_id] if delete vm cli executed but vm still show up in nova list
+        [1, <stderr>] delete vm cli failed to execute
+        [2, vm_id] delete vm cli executed but vm still show up in nova list
 
     Examples:
         [wrsroot@controller-0 ~(keystone_tenant1)]$ nova delete 74e37830-97a2-4d9d-b892-ad58bc4148a7
         Request to delete server 74e37830-97a2-4d9d-b892-ad58bc4148a7 has been accepted.
     """
     # check if vm exist
-    if vm_id is not None:
-        vm_exist = nova_helper.vm_exists(vm_id, auth_info=auth_info, con_ssh=con_ssh)
-        if not vm_exist:
-            LOG.info("VM {} does not exists on system. Do nothing".format(vm_id))
-            return [-1, '']
+    if vms is None:
+        vms = nova_helper.get_vms(con_ssh=con_ssh, auth_info=auth_info, all_vms=True)
 
-    # get volumes attached to vm
-    volume_list = cinder_helper.get_volumes(attached_vm=vm_id, auth_info=auth_info, con_ssh=con_ssh)
+    if not vms:
+        LOG.warning("Empty vm list/string provided or no vm exist on system. Do Nothing")
+        return [-1, 'No vm(s) provided to attempt delete.']
 
-    # delete vm
-    vm_exit_code, vm_cmd_output = cli.nova('delete', vm_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
-                                           auth_info=auth_info)
-    if vm_exit_code == 1:
-        return [1, vm_cmd_output]
+    if isinstance(vms, str):
+        vms = [vms]
 
-    # check if the vm is deleted
-    vm_deleted = _wait_for_vm_deleted(vm_id, fail_ok=fail_ok, auth_info=auth_info, con_ssh=con_ssh)
-    if not vm_deleted:
-        msg = "VM {} is not removed from nova list".format(vm_id)
-        LOG.warning(msg)
-        return [2, msg]
+    if check_first:
+        vms_to_del = []
+        for vm in vms:
+            vm_exist = nova_helper.vm_exists(vm, con_ssh=con_ssh)
+            if vm_exist:
+                vms_to_del.append(vm)
+        if not vms_to_del:
+            LOG.info("None of these vms exist on system: {}. Do nothing".format(vms))
+            return [-1, 'None of the provided vm(s) exist on system.']
+    else:
+        vms_to_del = vms
 
-    # delete volumes that were attached to the vm
+    vms_to_del_str = ' '.join(vms_to_del)
+
     if delete_volumes:
-        for volume_id in volume_list:
-            cinder_helper.delete_volume(volume_id, fail_ok=True, auth_info=auth_info, con_ssh=con_ssh)
+        vols_to_del = cinder_helper.get_volumes_attached_to_vms(vms=vms_to_del, auth_info=auth_info, con_ssh=con_ssh)
 
-    LOG.info("VM {} is successfully deleted.".format(vm_id))
+    code, output = cli.nova('delete', vms_to_del_str, ssh_client=con_ssh, timeout=timeout, fail_ok=True, rtn_list=True,
+                            auth_info=auth_info)
+
+    if code == 1:
+        vms_del_accepted = re.findall(NovaCLIOutput.VM_DELETE_ACCEPTED, output)
+        vms_del_rejected = list(set(vms_to_del)-set(vms_del_accepted))
+    else:
+        vms_del_accepted = vms_to_del
+        vms_del_rejected = []
+
+    # check if vms are actually removed from nova list
+    all_deleted, vms_deleted = _wait_for_vms_deleted(vms_del_accepted, fail_ok=True, auth_info=auth_info,
+                                                     timeout=timeout, con_ssh=con_ssh)
+
+    # Delete volumes results will not be returned. Best effort only.
+    if delete_volumes:
+        cinder_helper.delete_volumes(vols_to_del, fail_ok=True, auth_info=auth_info, con_ssh=con_ssh)
+
+    # Process returns
+    if code == 1:
+        if all_deleted:
+            if fail_ok:
+                return [1, output]
+            else:
+                raise exceptions.CLIRejected(output)
+        else:
+            msg = "Some vm(s) deletion request is rejected : {}; and some vm(s) still exist after deleting: {}".\
+                  format(vms_del_rejected, vms_del_accepted)
+            if not fail_ok:
+                return [3, msg]
+            else:
+                raise exceptions.VMPostCheckFailed(msg)
+
+    if not all_deleted:
+        msg = "VMs deletion reject all accepted, but some vms still exist in nova list."
+        if fail_ok:
+            return [2, msg]
+        else:
+            raise exceptions.VMPostCheckFailed(msg)
+
+    LOG.info("VM(s) are successfully deleted: {}".format(vms_to_del))
     return [0, '']
 
 
-def _wait_for_vm_deleted(vm, header='ID', timeout=VMTimeout.DELETE, fail_ok=True,
-                         check_interval=3, con_ssh=None, auth_info=None):
+def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=True,
+                          check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Wait for specific vm to be removed from nova list
 
     Args:
-        vm (str):
+        vms (list or str): list of vms ids
         header: ID or Name
         timeout (int): in seconds
         fail_ok (bool):
@@ -1035,14 +1134,25 @@ def _wait_for_vm_deleted(vm, header='ID', timeout=VMTimeout.DELETE, fail_ok=True
     Returns:
 
     """
+    if isinstance(vms, str):
+        vms = [vms]
+
+    vms_to_check = list(vms)
+    vms_deleted = []
     end_time = time.time() + timeout
     while time.time() < end_time:
-        table_ = table_parser.table(cli.nova('list', ssh_client=con_ssh, auth_info=auth_info))
-        vms = table_parser.get_column(table_, header)
-        if vm not in vms:
-            return True
+        table_ = table_parser.table(cli.nova('list --all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+        existing_vms = table_parser.get_column(table_, header)
+        for vm in vms_to_check:
+            if vm not in existing_vms:
+                vms_to_check.remove(vm)
+                vms_deleted.append(vm)
+
+        if not vms_to_check:
+            return [True, vms]
         time.sleep(check_interval)
 
     if not fail_ok:
-        return False
-    raise exceptions.VMPostCheckFailed("VM {} is not removed from nova list within {} seconds".format(timeout))
+        return [False, vms_deleted]
+    raise exceptions.VMPostCheckFailed("Some vm(s) are not removed from nova list within {} seconds".
+                                       format(vms_to_check, timeout))

@@ -11,10 +11,11 @@ def tenants_vms(request):
     tenant2_vms, new_t2_vms = vm_helper.get_any_vms(count=2, auth_info=Tenant.TENANT_2, rtn_new=True)
 
     def delete():
-        for vm in tenant1_vms:
-            vm_helper.delete_vm(vm_id=vm, auth_info=Tenant.TENANT_1)
-        for vm in tenant2_vms:
-            vm_helper.delete_vm(vm_id=vm, auth_info=Tenant.TENANT_2)
+        vm_helper.delete_vms(new_t1_vms + new_t2_vms)
+        # for vm in tenant1_vms:
+        #    vm_helper.delete_vms(vm, auth_info=Tenant.TENANT_1)
+        #for vm in tenant2_vms:
+        #    vm_helper.delete_vms(vm, auth_info=Tenant.TENANT_2)
     request.addfinalizer(delete)
 
     return [tenant1_vms, tenant2_vms]

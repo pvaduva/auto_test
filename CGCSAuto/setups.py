@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, ssh_to_controller0
 from consts.auth import Tenant
 from consts.cgcs import Prompt
-from keywords import vm_helper
+from keywords import vm_helper, security_helper
 import setup_consts
 
 
@@ -78,6 +78,10 @@ def __copy_keyfile_to_natbox(natbox_ip):
 
 
 def boot_vms():
+    # boot some vms for the whole test session if boot_vms flag is set to True
+    if not setup_consts.BOOT_VMS:
+        return
+
     con_ssh = ControllerClient.get_active_controller()
     if con_ssh.file_exists('~/instances_group0/launch_tenant1-avp1.sh'):
         vm_helper.launch_vms_via_script(vm_type='avp', num_vms=1, tenant_name='tenant1')

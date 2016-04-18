@@ -64,3 +64,15 @@ class Prompt:
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     PASSWORD_PROMPT = '.*assword\:.*'
     ADD_HOST = '.*\(yes/no\).*'
+
+
+class NovaCLIOutput:
+    VM_DELETE_REJECTED_NOT_EXIST = "No server with a name or ID of '(.*)' exists."
+    VM_DELETE_ACCEPTED = "Request to delete server () has been accepted."
+
+
+class FlavorSpec:
+    VCPU_MODEL = 'hw:cpu_model'
+    STORAGE_BACKING = 'aggregate_instance_extra_specs:localstorage'
+    NUMA_0 = 'hw:numa_node.0'
+    NUMA_NODES = 'hw:numa_nodes'

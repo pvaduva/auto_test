@@ -73,7 +73,7 @@ def vm_(request, flavor_):
         vm_helper.attach_vol_to_vm(vm_id=vm_id)
 
     def delete_vms():
-        vm_helper.delete_vm(vm_id=vm_id, delete_volumes=True)
+        vm_helper.delete_vms(vm_id, delete_volumes=True)
     request.addfinalizer(delete_vms)
 
     return storage_type, vm_id
@@ -235,7 +235,7 @@ class TestLockWithVMs:
         def teardown():
             LOG.info("Delete all created vms and unlock target host(s)...")
             for vm_to_del in all_vms:
-                vm_helper.delete_vm(vm_id=vm_to_del)
+                vm_helper.delete_vms(vm_to_del)
             nova_helper.delete_flavors(all_new_flavors)
             for host_to_unlock in self.hosts_locked:
                 host_helper.unlock_host(host_to_unlock)
@@ -323,7 +323,7 @@ class TestLockWithVMsNegative:
         def teardown():
             LOG.info("Delete all created vms and unlock target host(s)...")
             for vm_to_del in all_vms:
-                vm_helper.delete_vm(vm_id=vm_to_del)
+                vm_helper.delete_vms(vm_to_del)
             nova_helper.delete_flavors(all_new_flavors)
             for host_to_unlock in self.hosts_locked:
                 host_helper.unlock_host(host_to_unlock)
