@@ -27,6 +27,10 @@ def test_system_type():
 
     Test Teardown:
 
+    Notes:
+        - Covers SysInv test-cases:
+            66) Query the product type on CPE system using CLI
+            67) Query the product type on STD system using CLI
     """
 
     LOG.tc_step('Determine the real System Type for {}'.format(LAB_NAME))
@@ -63,6 +67,9 @@ def test_system_type_is_readonly():
 
     Test Teardown:
 
+    Notes:
+        - Covers SysInv test-case
+            71) Verify the system type is read-only and cannot be changed via CLI
     """
 
     LOG.tc_step('Determine the real System Type for {}'.format(LAB_NAME))
@@ -149,8 +156,10 @@ class TestRetentionPeriod:
             before test
 
         Notes:
+            - Cover SysInv test-case
+                38) Change the retention period via CLI
             - We can determine the range of accepted values on the running system in stead of parameterizing
-            on hardcoded values
+                on hardcoded values
         """
 
         LOG.tc_step('Check if the modification attempt will fail based on the input value')
@@ -161,4 +170,7 @@ class TestRetentionPeriod:
         code, msg = system_helper.set_retention_period(fail_ok=expect_fail, con_ssh=None, auth_info=Tenant.ADMIN,
                                                        retention_period=new_retention_period)
 
-
+        if expect_fail:
+            assert code == 1, msg
+        else:
+            assert code == 0, ''
