@@ -1,6 +1,7 @@
 import re
 
 from consts import cgcs
+from consts.auth import Tenant
 from utils import cli
 from utils import exceptions
 from utils import table_parser
@@ -177,6 +178,11 @@ def get_alarms(con_ssh=None):
     return table_
 
 
+def get_events(cli_args=' --limit 5', con_ssh=None):
+    table_ = table_parser.table(cli.system('event-list ' + cli_args, ssh_client=con_ssh))
+    return  table_
+
+
 def host_exists(host, field='hostname', con_ssh=None):
     if not field.lower() in ['hostname', 'id']:
         raise ValueError("field has to be either \'hostname\' or \'id\'")
@@ -196,3 +202,39 @@ def get_storage_monitors_count():
 def get_local_storage_backing(host, con_ssh=None):
     table_ = table_parser.table(cli.system('host-lvg-show', host + ' nova-local', ssh_client=con_ssh))
     return eval(table_parser.get_value_two_col_table(table_, 'parameters'))['instance_backing']
+
+
+def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+    """
+
+    Args:
+        fail_ok: (bool)
+        **kwargs:   key-value pairs, currently the following keys (attributes of the system) are suppported:
+                    name,description,location,contact                           --mutable
+                    system_type,software_version, uuid, created_at, updated_at  --readonly by CLI
+
+    Returns: (int, str)
+         0  - success
+         1  - error
+
+         #MUTTABLE_ATTRS = ['descriptions', 'name', 'location', 'contact']
+    """
+    if not kwargs:
+        raise ValueError("Please specify at least one systeminfo=value pair via kwargs.")
+
+    args_ = ''
+    for key in kwargs:
+        args_ += ' {}={}'.format(key, kwargs[key])
+
+    code, output = cli.system('modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
+
+    if code == 1:
+        return [1, output]
+    elif code == 0:
+        return [0, '']
+    else:
+        # should not get here; cli.system() should already handle these cases
+        pass
+
+
+

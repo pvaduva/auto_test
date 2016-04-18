@@ -84,9 +84,9 @@ def vm_(request, flavor_):
           'local_disk': request.param == 'image' or bool(flavor_['local_disk']),
           }
 
-    def delete_vm():
+    def delete():
         vm_helper.delete_vms(vm_id, delete_volumes=True)
-    request.addfinalizer(delete_vm)
+    request.addfinalizer(delete)
 
     return vm
 

@@ -66,7 +66,7 @@ def vm_(request, flavor_):
     # existing_vms = nova_helper.get_vms()
     # new_vms_allowed = instance_quota - len(existing_vms)
     # if new_vms_allowed < 1:
-    #    vm_helper.delete_vm(existing_vms[0])
+    #    vm_helper.delete_vms(existing_vms[0])
 
     vm_id = vm_helper.boot_vm(flavor=flavor_id, source=source)[1]
     if vm_type == 'image_with_vol':

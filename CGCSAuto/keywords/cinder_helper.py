@@ -253,7 +253,7 @@ def get_snapshot_id(status='available', vol_id=None, name=None, size=None, con_s
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns :
+    Returns:
         A string of snapshot id. Return None if no matching snapshot found.
 
     """

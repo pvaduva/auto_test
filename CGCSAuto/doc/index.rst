@@ -16,8 +16,11 @@ Contents:
    install
    overview
    develop
+   conventions
+   bestpractice
    api/index
    examples
+   
 
 
 Indices and tables

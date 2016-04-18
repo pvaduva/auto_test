@@ -45,9 +45,9 @@ If you decide not to use IDE, please either enable PEP-8 check on your editor or
 
 Installation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Official Installation instruction: ``https://www.jetbrains.com/pycharm/download/#section=linux``
+Official Installation instruction: https://www.jetbrains.com/pycharm/download/#section=linux
 
-Install with PPA or umake: ``http://itsfoss.com/install-pycharm-ubuntu/``
+Install with PPA or umake: http://itsfoss.com/install-pycharm-ubuntu/
 
 Setup
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

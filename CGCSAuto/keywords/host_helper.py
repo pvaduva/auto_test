@@ -386,7 +386,7 @@ def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, st
         table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
         for field, val in states.items():
             actual_val = table_parser.get_value_two_col_table(table_, field)
-            LOG.error("Actual_val: {}".format(actual_val))
+            LOG.warning("Actual_val: {}".format(actual_val))
             actual_val_lower = actual_val.lower()
             if isinstance(val, str):
                 val = [val]

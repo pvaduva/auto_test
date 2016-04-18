@@ -1,0 +1,39 @@
+# Imports for this test module
+from pytest import fixture
+from utils.tis_log import LOG
+from keywords import nova_helper
+
+# A test fixture that is auto used! If autouse param is unspecified, by default the scope will be test function, and autouse will be False.
+# This fixture will delete the flavors created by the test functions as part of the test teardown.
+# This fixture will only be run once for all test cases in this module, because the scope is set to module. 
+# i.e., if there are 5 test cases inside this module, then all flavors created by these 5 test cases will be deleted at once after the last test case is executed.
+
+created_flavors = []
+@fixture(scope='module', autouse=True)
+def delete_created_flavors(request):
+    def delete():
+        if created_flavors:
+            nova_helper.delete_flavors(created_flavors, fail_ok=True)
+    request.addfinalizer(delete)
+
+
+def test_flavor_default_specs():
+    """
+    Test "aggregate_instance_extra_specs:storage": "local_image" is by default included in newly created flavor
+
+    Test Steps:
+       - Create a new flavor
+       - Check "aggregate_instance_extra_specs:storage": "local_image" is included in extra specs of the flavor
+    """
+    LOG.tc_step("Create flavor with minimal input.")
+    flavor = nova_helper.create_flavor()[1]
+    # Add new flavor to cleanup list
+    created_flavors.append(flavor)
+    # Retrieving info of this flavor
+    extra_specs = nova_helper.get_flavor_extra_specs(flavor=flavor)
+    expected_spec = '"aggregate_instance_extra_specs:storage": "local_image"'
+    # Log a test step
+    LOG.tc_step("Check local_image storage is by default included in flavor extra specs")
+    # Verify test result, and add an error message in case of assert fail
+    assert extra_specs["aggregate_instance_extra_specs:storage"] == 'local_image', \
+        "Flavor {} extra specs does not include: {}".format(flavor, expected_spec)

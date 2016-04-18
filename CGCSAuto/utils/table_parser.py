@@ -374,7 +374,7 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
             when True: if a value spread into multiple lines, merge them into one line string
                 Examples: 'capabilities' field in system host-show
             when False, if a value spread into multiple lines, this value will be presented as a list with
-                        each line being a string item in this list
+                each line being a string item in this list
                 Examples: 'subnets' in neutron net-list
 
         **kwargs: header/value pair(s) as search criteria. Used to filter out the target row(s).
@@ -386,11 +386,15 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
 
             if field has space in it, such as 'Tenant ID', replace space with underscore, such as Tenant_ID=id;
             or compose the complete **kwargs like this: **{'Tenant ID': 123, 'Name': 'my name'}
+
+    Returns:
+        object: 
             Examples:
                 get_values(table_, 'ID', Tenant_ID=123, Name='my name')
                 get_values(table_, 'ID', **{'Tenant ID': 123, 'Name': 'my name'})
 
-    Returns (list): matching values for target header
+    Returns (list):
+        matching values for target header
 
     """
     if not kwargs:
@@ -453,7 +457,8 @@ def get_value_two_col_table(table_, field, strict=True, regex=False, merge_lines
                         each line being a string item in this list
                 Examples: 'subnets' field in neutron net-show
 
-    Returns (str): empty string if field not found, otherwise return the value of given field
+    Returns (str):
+        empty string if field not found, otherwise return the value of given field
 
     """
     rows = get_all_rows(table_)
