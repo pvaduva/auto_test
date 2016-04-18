@@ -20,6 +20,7 @@ Host must be locked.
 
 '''
 
+
 # overall skip condition
 def less_than_two_hypervisors():
     return len(host_helper.get_hypervisors()) < 2

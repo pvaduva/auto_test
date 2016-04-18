@@ -24,4 +24,4 @@ def test_swact_with_vms():
     if num_controllers < 2:
         assert exit_code == 1, "Controllers less than TWO: expect FAIL but PASSED "
     else:
-        assert exit_code == 0
+        assert exit_code == 0, "Swact FAIL with output {}".format(output)
