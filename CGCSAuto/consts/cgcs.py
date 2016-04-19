@@ -65,6 +65,7 @@ class HostTask:
 class Prompt:
     CONTROLLER_0 = '.*controller\-0\:~\$ '
     CONTROLLER_1 = '.*controller\-1\:~\$ '
+    CONTROLLER_PROMPT = '.*controller\-[01]\:~\$ '
     ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     PASSWORD_PROMPT = '.*assword\:.*'

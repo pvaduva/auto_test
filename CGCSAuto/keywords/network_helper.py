@@ -1,11 +1,23 @@
 import random
 import re
+import ipaddress
+#import socket
 
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import MGMT_IP
 from keywords import common
+
+
+def get_ipaddress_str(ip=None):
+    try:
+        ipaddr = ipaddress.ip_address(ip)
+        return str(ipaddr)
+    except ValueError as e:
+        # invalid IPv4 or IPv6 address
+        return None
+    # Other exceptions will be passed along the calling-stack
 
 
 def create_network(name, admin_state='up', qos_policy=None, vlan_transparent=None, **subnet):

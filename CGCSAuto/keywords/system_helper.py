@@ -8,7 +8,6 @@ from utils import table_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 
-
 class System:
     def __init__(self, controller_ssh=None):
         if controller_ssh is None:
@@ -241,12 +240,12 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
     attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
     args_ = ' '.join(attr_values_)
 
-    code, output = cli.system('modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
+    code, output = cli.system('modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
 
     if code == 1:
-        return [1, output]
+        return 1, output
     elif code == 0:
-        return [0, '']
+        return 0, ''
     else:
         # should not get here; cli.system() should already handle these cases
         pass
@@ -282,7 +281,72 @@ def set_retention_period(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, ret
     if code == 1:
         return 1, output
     elif code == 0:
-        return 0, output
+        return 0, ''
     else:
         # should not get here: cli.system() should already have been handled these cases
         pass
+
+
+def get_dns_servers(con_ssh=None):
+    """
+    Get the DNS servers currently in-use in the System
+
+
+    Returns: (int, list)
+        0   -   success, and the list of DNS servers will be returned
+
+
+    """
+    table_ = table_parser.table(cli.system('dns-show', ssh_client=con_ssh))
+    return table_parser.get_value_two_col_table(table_, 'nameservers').strip().split(sep=',')
+
+
+def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, nameservers=None):
+    """
+    Set the DNS servers
+
+
+    Args:
+        fail_ok:
+        con_ssh:
+        auth_info:
+        nameservers(list): list of IP addresses (in plain text) of new DNS servers to change to
+
+
+    Returns:
+
+    Skip Conditions:
+
+    Prerequisites:
+
+    Test Setups:
+        - Do nothing and delegate to the class fixture to save the currently in-use DNS servers for restoration
+            after testing
+
+    Test Steps:
+        - Set the DNS severs
+        - Check if the DNS servers are changed correctly
+        - Verify the DNS servers are working (assuming valid DNS are input for testing purpose)
+        - Check if new DNS are saved to the persistent storage
+
+    Test Teardown:
+        - Do nothing and delegate to the class fixture for restoring the original DNS servers after testing
+
+    """
+    if not nameservers or len(nameservers) < 1:
+        raise ValueError("Please specify DNS server(s).")
+
+    args_ = 'nameservers="{}" action=apply'.format(','.join(nameservers))
+
+    LOG.info('args_:{}'.format(args_))
+    code, output = cli.system('dns-modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                              rtn_list=True)
+
+    if code == 1:
+        return 1, output
+    elif code == 0:
+        return 0, ''
+    else:
+        # should not get here: cli.system() should already have been handled these cases
+        pass
+
