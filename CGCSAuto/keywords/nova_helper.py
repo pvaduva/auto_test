@@ -182,13 +182,14 @@ def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok
 
     extra_specs_args = ''
     for key, value in extra_specs.items():
-        extra_specs_args = extra_specs_args + ' ' + key.strip() + '=' + value.strip()
+        extra_specs_args += " {}={}".format(key, value)
     exit_code, output = cli.nova('flavor-key', '{} set {}'.format(flavor, extra_specs_args),
                                  ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
 
     if exit_code == 1:
         LOG.warning("Set extra specs request rejected.")
         # if exit_code = 1, means fail_ok is set to True, thus no need to check fail_ok flag again
+        return [1, output]
 
     extra_specs = get_flavor_extra_specs(flavor, con_ssh=con_ssh, auth_info=auth_info)
     for key, value in extra_specs.items():
@@ -199,11 +200,57 @@ def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok
             rtn = [3, "Extra spec value for {} is not {}".format(key, value)]
             break
     else:
-        LOG.info("Flavor {} extra specs set: {}".format(flavor, extra_specs))
+        LOG.info("Flavor {} extra specs set successfully: {}".format(flavor, extra_specs))
         rtn = [0, '']
 
     if not fail_ok and rtn[0] != 0:
-        raise exceptions.HostPostCheckFailed(rtn[1])
+        raise exceptions.FlavorError(rtn[1])
+
+    return rtn
+
+
+def unset_flavor_extra_specs(flavor, *extra_specs, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+    """
+    Unset specific extra spec(s) from given flavor.
+
+    Args:
+        flavor (str): id of the flavor
+        con_ssh (SSHClient):
+        auth_info (dict):
+        fail_ok (bool):
+        *extra_specs: extra spec(s) to be removed. At least one should be provided.
+
+    Returns (list): [rtn_code (int), message (str)]
+        [0, '']: required extra spec(s) removed successfully
+        [1, <stderr>]: unset extra spec cli rejected
+        [2, '<spec_name> is still in the extra specs list']: post action check failed
+
+    """
+
+    LOG.info("Unsetting flavor extra specs...")
+    if not extra_specs:
+        raise ValueError("No extra_specs is provided. At least one extra spec key is required.")
+
+    extra_specs_args = ''
+    for key in extra_specs:
+        extra_specs_args += " {}".format(key)
+    exit_code, output = cli.nova('flavor-key', '{} unset {}'.format(flavor, extra_specs_args),
+                                 ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+    if exit_code == 1:
+        LOG.warning("Unset extra specs request rejected.")
+        return [1, output]
+
+    post_extra_specs = get_flavor_extra_specs(flavor, con_ssh=con_ssh, auth_info=auth_info)
+    for key in extra_specs:
+        if key in post_extra_specs:
+            rtn = [2, "{} is still in the extra specs list".format(key)]
+            break
+    else:
+        LOG.info("Flavor {} extra specs unset successfully: {}".format(flavor, extra_specs))
+        rtn = [0, '']
+
+    if not fail_ok and rtn[0] != 0:
+        raise exceptions.FlavorError(rtn[1])
 
     return rtn
 

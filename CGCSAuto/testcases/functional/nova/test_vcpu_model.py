@@ -44,11 +44,24 @@ def delete_vm(request):
 ])
 def test_vm_vcpu_model(flavor_and_volume, vcpu_model):
     """
-    Test "aggregate_instance_extra_specs:storage": "local_image" is by default included in newly created flavor
+    Test vcpu model specified in flavor will be applied to vm. In case host does not support specified vcpu model,
+    proper error message should be displayed in nova show.
 
+    Args:
+        flavor_and_volume (tuple): flavor and volume to create vm from
+        vcpu_model (str): vcpu model under test
+
+    Setup:
+        - Create a basic flavor and volume (module level)
     Test Steps:
-       - Create a new flavor
-       - Check "aggregate_instance_extra_specs:storage": "local_image" is included in extra specs of the flavor
+        - Set flavor extra spec to given vcpu model
+        - Boot a vm from volume using the flavor
+        - Verify vcpu model specified in flavor is used by vm. Or proper error message is included if host does not
+            support specified vcpu model.
+    Teardown:
+        - Delete created vm
+        - Delete created volume and flavor (module level)
+
     """
     flavor_id, volume_id = flavor_and_volume
     LOG.tc_step("Set flavor extra specs to given vcpu model.")

@@ -1,5 +1,6 @@
 from pytest import fixture, mark
 from utils.tis_log import LOG
+from consts.cgcs import FlavorSpec
 from keywords import nova_helper
 
 created_flavors = []
@@ -65,8 +66,10 @@ def obsolete_test_flavor_set_storage(flavor_to_test):
 
 @mark.sanity
 @mark.parametrize(('extra_spec_name', 'values'), [
-    ('aggregate_instance_extra_specs:storage', ['local_lvm', 'remote', 'local_image']),
-    ('hw:cpu_model', ['Nehalem', 'SandyBridge', 'Westmere', 'Haswell']),
+    (FlavorSpec.STORAGE_BACKING, ['local_lvm', 'remote', 'local_image']),
+    (FlavorSpec.VCPU_MODEL, ['Nehalem', 'SandyBridge', 'Westmere', 'Haswell']),
+    (FlavorSpec.CPU_POLICY, ['dedicated', 'shared']),
+    (FlavorSpec.NUMA_NODES, [1])
 ])
 def test_set_flavor_extra_specs(flavor_to_test, extra_spec_name, values):
     """
@@ -84,6 +87,7 @@ def test_set_flavor_extra_specs(flavor_to_test, extra_spec_name, values):
         - Delete the basic flavor
     """
     for value in values:
+        value = str(value)
         extra_spec = {extra_spec_name: value}
 
         LOG.tc_step("Set flavor extra spec to: {} and verify extra spec is set successfully.".format(extra_spec))

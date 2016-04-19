@@ -77,7 +77,9 @@ class NovaCLIOutput:
 
 
 class FlavorSpec:
+    CPU_POLICY = 'hw:cpu_policy'
     VCPU_MODEL = 'hw:cpu_model'
     STORAGE_BACKING = 'aggregate_instance_extra_specs:localstorage'
-    NUMA_0 = 'hw:numa_node.0'
     NUMA_NODES = 'hw:numa_nodes'
+    NUMA_0 = 'hw:numa_node.0'
+    NUMA_1 = 'hw:numa_node.1'
