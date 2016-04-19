@@ -283,7 +283,6 @@ class TestDnsSettings:
             if line.strip().startswith('nameserver'):
                 saved_dns.append(line.strip().split()[1])
 
-        if not expect_fail:
-            LOG.info('Verify all input DNS servers are saved')
-            assert set(ip_addr_list).issubset(set(saved_dns)), \
-                'Saved DNS servers are different from the input DNS servers'
+        LOG.info('Verify all input DNS servers are saved')
+        assert set(ip_addr_list).issubset(set(saved_dns)), \
+            'Saved DNS servers are different from the input DNS servers'
