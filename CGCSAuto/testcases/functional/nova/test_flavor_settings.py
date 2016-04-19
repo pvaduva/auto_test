@@ -80,9 +80,11 @@ def test_set_flavor_extra_specs(flavor_to_test, extra_spec_name, values):
 
     Setups:
         - Create a basic flavor
+
     Test Steps:
         - Set specific extra spec to given values for the basic flavor
         - Check extra spec is now included in the flavor
+
     Teardown:
         - Delete the basic flavor
     """

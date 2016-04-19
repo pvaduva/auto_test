@@ -101,6 +101,7 @@ class TestLockWithVM:
             vm_ (dict): vm created by vm_ fixture
 
         Prerequisite: computes are pre-configured for specific test scenario. e..g, configure storage backing
+
         Test Setups:
         - create flavor with specific 'ephemeral', 'swap', and 'storage_backing'
         - boot vm from specific boot source with specific flavor
