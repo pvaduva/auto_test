@@ -209,7 +209,7 @@ def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok
     return rtn
 
 
-def unset_flavor_extra_specs(flavor, *extra_specs, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+def unset_flavor_extra_specs(flavor, extra_specs, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
     """
     Unset specific extra spec(s) from given flavor.
 
@@ -218,7 +218,7 @@ def unset_flavor_extra_specs(flavor, *extra_specs, con_ssh=None, auth_info=Tenan
         con_ssh (SSHClient):
         auth_info (dict):
         fail_ok (bool):
-        *extra_specs: extra spec(s) to be removed. At least one should be provided.
+        extra_specs (str or list): extra spec(s) to be removed. At least one should be provided.
 
     Returns (list): [rtn_code (int), message (str)]
         [0, '']: required extra spec(s) removed successfully
@@ -228,12 +228,10 @@ def unset_flavor_extra_specs(flavor, *extra_specs, con_ssh=None, auth_info=Tenan
     """
 
     LOG.info("Unsetting flavor extra specs...")
-    if not extra_specs:
-        raise ValueError("No extra_specs is provided. At least one extra spec key is required.")
+    if isinstance(extra_specs, str):
+        extra_specs = [extra_specs]
 
-    extra_specs_args = ''
-    for key in extra_specs:
-        extra_specs_args += " {}".format(key)
+    extra_specs_args = ' '.join(extra_specs)
     exit_code, output = cli.nova('flavor-key', '{} unset {}'.format(flavor, extra_specs_args),
                                  ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
     if exit_code == 1:

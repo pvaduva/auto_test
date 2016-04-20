@@ -2,6 +2,7 @@ import pytest
 
 import setups
 from keywords.verify_fixtures import *
+from testfixtures.resource_cleanup import *
 
 con_ssh = None
 

@@ -80,7 +80,15 @@ class NovaCLIOutput:
 class FlavorSpec:
     CPU_POLICY = 'hw:cpu_policy'
     VCPU_MODEL = 'hw:cpu_model'
-    STORAGE_BACKING = 'aggregate_instance_extra_specs:localstorage'
+    STORAGE_BACKING = 'aggregate_instance_extra_specs:storage'
     NUMA_NODES = 'hw:numa_nodes'
     NUMA_0 = 'hw:numa_node.0'
     NUMA_1 = 'hw:numa_node.1'
+    LOCAL_STORAGE = 'aggregate_instance_extra_specs:localstorage'
+
+class INSTANCE_TOPOLOGY:
+    NODE = 'node:(\d),'
+    PGSIZE = 'pgsize:(\d{1,3})M,'
+    VCPUS = 'vcpus:(\d{1,2}),'
+    PCPUS = 'pcpus:(.*),\s'     # find a string separated by ',' if multiple numa nodes
+    CPU_POLICY = 'pol:(.*),'
