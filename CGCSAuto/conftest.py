@@ -1,8 +1,7 @@
 import pytest
 
 import setups
-from keywords.verify_fixtures import *
-from testfixtures.resource_cleanup import *
+from testfixtures.verify_fixtures import *
 
 con_ssh = None
 

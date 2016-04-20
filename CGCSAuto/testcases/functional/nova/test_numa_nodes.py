@@ -2,11 +2,11 @@ import re
 
 from pytest import fixture, mark
 
-from utils import table_parser, cli
+from utils import table_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, INSTANCE_TOPOLOGY
-from keywords import nova_helper, vm_helper, host_helper, cinder_helper
+from keywords import nova_helper, vm_helper
 from testfixtures.resource_cleanup import ResourceCleanup
 
 
@@ -240,6 +240,7 @@ def test_0_node_unset_numa_nodes_reject(flavor_0_node):
     (2, 2, 1, 0),
     (1, 1, 1, None),
 ])
+# @mark.usefixtures('delete_resources_func')    # This fixture is auto-used by nova test cases
 def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
     """
     Test NUMA nodes settings in flavor extra specs are successfully applied to a vm

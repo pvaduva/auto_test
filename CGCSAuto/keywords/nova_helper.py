@@ -35,7 +35,6 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
         [1, <stderr>]: create flavor cli rejected
 
     """
-    LOG.info("Processing create flavor arguments...")
     candidate_args = {
         '--ephemeral': ephemeral,
         '--swap': swap,
@@ -66,7 +65,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
             optional_args = ' '.join([optional_args.strip(), key, str(value)])
     subcmd = ' '.join([optional_args, mandatory_args])
 
-    LOG.info("Creating flavor...")
+    LOG.info("Creating flavor {}...".format(flavor_name))
     exit_code, output = cli.nova('flavor-create', subcmd, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
                                  rtn_list=True)
 

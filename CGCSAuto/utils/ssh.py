@@ -21,6 +21,7 @@ CONTROLLER_PROMPT = '.*controller\-[01]\:~\$ '
 ADMIN_PROMPT = Prompt.ADMIN_PROMPT
 COMPUTE_PROMPT = Prompt.COMPUTE_PROMPT
 PASSWORD_PROMPT = Prompt.PASSWORD_PROMPT
+ROOT_PROMPT = Prompt.ROOT_PROMPT
 CONNECTION_REFUSED = '.*Connection refused.*'
 
 _SSH_OPTS = (' -o RSAAuthentication=no' + ' -o PubkeyAuthentication=no' + ' -o StrictHostKeyChecking=no' +
@@ -299,8 +300,10 @@ class SSHClient:
             cmd += ' 1> /dev/null'          # remove stdout
         self.send(cmd, reconnect, reconnect_timeout)
         self.expect(timeout=expect_timeout)
+        return self.__process_exec_result(cmd)
 
-        cmd_output_list = self.cmd_output.split('\n')[0:-1]             # exclude prompt
+    def __process_exec_result(self, cmd):
+        cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
         # LOG.debug("cmd output list: {}".format(cmd_output_list))
         # cmd_output_list[0] = ''                                       # exclude command, already done in expect
         cmd_output = '\n'.join(cmd_output_list)
@@ -364,10 +367,42 @@ class SSHClient:
     def file_exists(self, file_path):
         return self.exec_cmd('stat ' + file_path)[0] == 0
 
+    @contextmanager
+    def login_as_root(self):
+        self.send('sudo su -')
+        self.expect(PASSWORD_PROMPT)
+        self.send(self.password)
+        self.expect(ROOT_PROMPT)
+        original_prompt = self.get_prompt()
+        self.set_prompt(ROOT_PROMPT)
+        self.set_session_timeout(timeout=0)
+        try:
+            yield self
+        finally:
+            if self.get_current_user() == 'root':
+                self.set_prompt(original_prompt)
+                self.send('exit')
+                self.expect()
+
+    def exec_sudo_cmd(self, cmd, expect_timeout=10):
+        cmd = 'sudo ' + cmd
+        self.send(cmd)
+        self.expect(PASSWORD_PROMPT)
+        self.send(self.password)
+        self.expect(timeout=expect_timeout)
+        return self.__process_exec_result(cmd)
+
+    def get_current_user(self):
+        output = self.exec_cmd('whoami')[1]
+        return output.splitlines()[1]
+
     def close(self):
         self._session.close(True)
         LOG.info("ssh session closed. host: {}, user: {}. Object ID: {}".format(self.host, self.user, id(self)))
 
+    def set_session_timeout(self, timeout=0):
+        self.send('TMOUT={}'.format(timeout))
+        self.expect()
 
 class SSHFromSSH(SSHClient):
     """

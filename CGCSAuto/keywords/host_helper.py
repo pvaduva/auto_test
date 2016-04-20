@@ -11,7 +11,6 @@ from consts.timeout import HostTimeout
 from keywords import system_helper
 from keywords.security_helper import LinuxUser
 
-
 @contextmanager
 def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=None):
     """
