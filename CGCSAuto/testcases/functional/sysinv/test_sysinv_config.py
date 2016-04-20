@@ -99,6 +99,7 @@ class TestRetentionPeriod:
     Test modification of Retention Period of the TiS system
     """
 
+    PM_SETTING_FILE = '/etc/ceilometer/ceilometer.conf'  # file where the Retention Period is stored
     MIN_RETENTION_PERIOD = 3600  # seconds of 1 hour
     MAX_RETENTION_PERIOD = 31536000  # seconds of 1 year
 
@@ -171,13 +172,22 @@ class TestRetentionPeriod:
             expect_fail = True
         else:
             expect_fail = False
+        LOG.tc_step('Attempt to change to new value:{}'.format(new_retention_period))
         code, msg = system_helper.set_retention_period(fail_ok=expect_fail, con_ssh=None, auth_info=Tenant.ADMIN,
                                                        retention_period=new_retention_period)
-
+        LOG.tc_step('Check return code')
         if expect_fail:
             assert code == 1, msg
         else:
             assert code == 0, ''
+
+        LOG.tc_step('Verify the new value is saved into correct file:{}'.format(self.PM_SETTING_FILE))
+        controller_ssh = ControllerClient.get_active_controller()
+
+        cmd_get_retention_periods = 'sudo grep _to_live {}'.format(self.DNS_SETTING_FILE)
+        code, output = controller_ssh.exec_cmd(cmd_get_retention_periods, expect_timeout=20)
+        assert code == 0, 'Failed to save Retention Period to file: {}'.format(self.PM_SETTING_FILE)
+
 
 
 class TestDnsSettings:
@@ -244,7 +254,10 @@ class TestDnsSettings:
             - Check the changes are saved to persistent storage
 
         Test Teardown:
-            - Do nothing, and delegate to the class-scope fixture to save the currently in-use DNS servers
+            - Do nothing, and delegate to the class-scope fixture to restore the original DNS servers
+
+        Notes:
+            - This TC covers SysInv 5) Change the DNS server IP addresses using CLI
         """
 
         LOG.tc_step('Validate the input IPs')
@@ -270,7 +283,7 @@ class TestDnsSettings:
         else:
             assert code == 0, ''
 
-        LOG.tc_step('Check if the changes are saved for persistence')
+        LOG.tc_step('Check if the changes are saved into persistent storage')
         controller_ssh = ControllerClient.get_active_controller()
 
         cmd_get_saved_dns = 'cat {}'.format(self.DNS_SETTING_FILE)
