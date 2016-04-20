@@ -30,18 +30,39 @@ def less_than_two_hypervisors():
 @mark.parametrize('hostname', [
                   'compute-0 ',
                   'compute-1 '])
-def test_modify_memory_when_locked(hostname):
-    # nothing to setup
+def test_modify_memory_when_unlocked(hostname):
+    """
+    Attempt to modify memory when it's unlocked, and ensure it's rejected.
+
+    Args:
+        modify_huge_page (str): compute nodes
+
+    Setup:
+        - check if there is at least two compute nodes
+        - check if the compute node is in unlocked state (TODO)
+
+    Test Steps:
+        - modify the huge page on the unlocked compute node
+        - make sure it fail as expected
+
+    Teardown:
+        - Nothing
+
+    """
+
+    # Check if the node is locked
+    LOG.tc_step("Verify that the host is in unlocked state and unlock it if it's not")
+    host_helper.unlock_host(hostname,fail_ok=False)
 
     # execute command
-    LOG.tc_step('Try to modify host memory without locking the host')
+    LOG.tc_step("Try to the modify memory of unlocked host")
     processor = "1 "
     opt_arg = "-2M 4 "
     args = hostname + processor + opt_arg
     exit_code, output = cli.system('host-memory-modify', args, auth_info=Tenant.ADMIN, fail_ok=True)
 
     # verify result
-    LOG.tc_step('Verify host-memory-modify command failed as expected')
+    LOG.tc_step("Verify host-memory-modify command failed as expected")
     assert exit_code == 1, "Modify host memory before locking the host. expect Fail but Passed"
 
     # nothing to teardown

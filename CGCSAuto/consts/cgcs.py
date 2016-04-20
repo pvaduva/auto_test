@@ -70,6 +70,7 @@ class Prompt:
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     PASSWORD_PROMPT = '.*assword\:.*'
     ADD_HOST = '.*\(yes/no\).*'
+    ROOT_PROMPT = '.*root@.*'
 
 
 class NovaCLIOutput:

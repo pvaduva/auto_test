@@ -52,7 +52,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'CGCS Automation'
-copyright = '2016, Yang Liu,Will J'
+copyright = '2002-2016 by Wind River'
 author = 'Yang Liu,Will J'
 
 # The version info for the project you're documenting, acts as replacement for

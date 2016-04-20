@@ -33,6 +33,5 @@ class LinuxUser:
     def get_current_user_password(cls):
         if not cls.con_ssh:
             cls.con_ssh = ControllerClient.get_active_controller()
-        output = cls.con_ssh.exec_cmd('whoami')[1]
-        user = output.splitlines()[1]
+        user = cls.con_ssh.get_current_user()
         return user, cls.users[user]

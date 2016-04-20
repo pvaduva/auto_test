@@ -11,7 +11,6 @@ from consts.timeout import HostTimeout
 from keywords import system_helper
 from keywords.security_helper import LinuxUser
 
-
 @contextmanager
 def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=None):
     """
@@ -37,6 +36,7 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
         prompt = '.*' + hostname + '\:~\$'
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
+    original_host = con_ssh.get_hostname()
 
     host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt)
     host_ssh.connect()
@@ -46,7 +46,7 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
     try:
         yield host_ssh
     finally:
-        if current_host == hostname:
+        if current_host != original_host:
             host_ssh.close()
 
 
@@ -339,6 +339,16 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
 
 
 def get_hostshow_value(host, field, con_ssh=None):
+    """
+        Retrieve the value of certain field in the system host-show from get_hostshow_values()
+        Examples: Example: admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
+        would return if host is 'locked' or 'unlocked'
+    Args:
+        field: The field of the table that user want
+
+    Returns:
+        The value of the field from host
+    """
     return get_hostshow_values(host, con_ssh, field)[field]
 
 
