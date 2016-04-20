@@ -27,7 +27,7 @@ def test_delete_alarm():
 
     Test Steps:
         - delete the sample alarm with the 'system alarm-delete'
-        - make surethe alarm was deleted as expected
+        - make sure the alarm was deleted as expected
 
     Teardown:
         - Nothing

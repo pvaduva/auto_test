@@ -43,9 +43,7 @@ def modify_mtu_on_oam_interface(hostname, mtu):
     host_helper.unlock_host(hostname)
 
 
-@mark.parametrize('mtu', ['1500',
-                          '1700',
-                          '1500'])
+@mark.parametrize('mtu', ['1700','1500'])
 def test_mtu_modified(mtu):
     """
     Verify that MTU on oam interfaces on both standby and active controller can be modified by cli
