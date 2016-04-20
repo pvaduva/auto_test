@@ -21,6 +21,7 @@ def less_than_two_hypervisors():
 @fixture(scope='module')
 def modify_huge_page(request):
     # setup up 3 1G huge page on compute-1
+    # this can be parametreized in the future to accept other values
     LOG.info('This Test will take 10min+ to execute as it lock, modify and unlock a compute node. ')
     hostname = 'compute-1 '
     processor = "1 "
@@ -45,6 +46,7 @@ def modify_huge_page(request):
 
     # have a section that set huge_page memory back to where it was before
     # but it's gonna double the running time due to lock/edit/unlock host
+    # TODO: possibly create a retrieve memory function inside host_helper
     # def reset_huge_page():
     #    host_helper.lock_host(hostname)
     #    # a way to find how many huge page was there before
@@ -57,12 +59,31 @@ def modify_huge_page(request):
 
 
 def test_huge_page_created(modify_huge_page):
+    """
+    change huge page number in a compute node and verify that it show up correctly after modification
+
+    Args:
+        modify_huge_page (dict): A host that contain infos on name,processor and hugepage.
+
+    Setup:
+        - check if there is at least two compute nodes
+
+    Test Steps:
+        - lock compute node
+        - modify the huge page on the locked compute node
+        - unlock the compute node
+        - compare the huge page number with the the expected huge page number
+
+    Teardown:
+        - Might be good idea to reset the host memory to what it was before
+
+    """
 
     hostname = modify_huge_page['hostname']
     processor = modify_huge_page['processor']
     expected_huge_page = modify_huge_page['huge_page']
     args = hostname+''+processor
-    # args = 'compute-2 0'
+
     LOG.tc_step("Using system host-memory-show to retrieve update Hugepage infos")
     table_ = table_parser.table(cli.system('host-memory-show', args, auth_info=Tenant.ADMIN, fail_ok=False))
     actual_huge_page = table_parser.get_value_two_col_table(table_, 'VM  Huge Pages (1G): Total')

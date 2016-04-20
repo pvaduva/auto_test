@@ -1,5 +1,5 @@
 ###
-# Verify that alarm can be deleted using CLI
+# TC2196 Verify that alarm can be deleted using CLI
 ###
 
 from pytest import fixture, mark, skip
@@ -8,23 +8,32 @@ from utils import cli
 from utils.ssh import ControllerClient
 from utils import table_parser
 from consts.auth import Tenant
+from consts.timeout import CLI_TIMEOUT
 from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper
-from setup_consts import P1, P2, P3
-from consts.timeout import CLI_TIMEOUT
-
-'''
-
-
-'''
 
 
 def test_delete_alarm():
+    """
+    Attempt to delete system alarm with 'system alarm-delete' cli and verify it's working
+    sample cli:
+        fmClientCli -c "### ###600.005###alarm###system.vm###host=compute-0.vm=$i### ###critical###'oam' port
+        ###processing-error###cpu-cycles-limit-exceeded### ###True###True###"
+    Args:
+        - Nothing
 
+    Setup:
+        - setup a sample alarm using fmClientCli command
+
+    Test Steps:
+        - delete the sample alarm with the 'system alarm-delete'
+        - make surethe alarm was deleted as expected
+
+    Teardown:
+        - Nothing
+
+    """
     # create an alarm using fmClientCli
-
-    # fmClientCli -c "### ###600.005###alarm###system.vm###host=compute-0.vm=$i### ###critical###'oam' port
-    # ###processing-error###cpu-cycles-limit-exceeded### ###True###True###"
     cmd = "fmClientCli -c '### ###600.005###alarm###system.vm###host=compute-0.vm=$i### ###critical###'oam' port" \
           "###processing-error###cpu-cycles-limit-exceeded### ###True###True###'"
 
