@@ -1,14 +1,16 @@
 from random import choice
+import time
 
 from pytest import mark
 from pytest import fixture
 
 from utils import cli, table_parser
 from utils.tis_log import LOG
+from utils.ssh import SSHClient
+from utils.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.cgcs import SystemType
 from setup_consts import LAB_NAME
-from utils.ssh import ControllerClient
 from keywords import system_helper
 from keywords import network_helper
 
@@ -100,8 +102,10 @@ class TestRetentionPeriod:
     """
 
     PM_SETTING_FILE = '/etc/ceilometer/ceilometer.conf'  # file where the Retention Period is stored
-    MIN_RETENTION_PERIOD = 3600  # seconds of 1 hour
-    MAX_RETENTION_PERIOD = 31536000  # seconds of 1 year
+    MIN_RETENTION_PERIOD = 3600  # seconds of 1 hour, minimum value allowed
+    MAX_RETENTION_PERIOD = 31536000  # seconds of 1 year, maximum value allowed
+    SEARCH_KEY_FOR_RENTION_PERIOD = r'_time_to_live'
+    WAIT_FOR_SAVING = 30  # Retention Period takes some time to populate into PM_SETTING_FILE, wait 30 second for safe
 
     @fixture(scope='class', autouse=True)
     def backup_restore_rention_period(self, request):
@@ -175,19 +179,33 @@ class TestRetentionPeriod:
         LOG.tc_step('Attempt to change to new value:{}'.format(new_retention_period))
         code, msg = system_helper.set_retention_period(fail_ok=expect_fail, con_ssh=None, auth_info=Tenant.ADMIN,
                                                        retention_period=new_retention_period)
-        LOG.tc_step('Check return code')
+        LOG.tc_step('Check if CLI succeeded')
         if expect_fail:
             assert code == 1, msg
+            return  # we're done here when expecting failing
         else:
-            assert code == 0, ''
+            assert code == 0, 'Failed to change Retention Period to {}'.format(new_retention_period)
+
+        LOG.tc_step('Wait for {} seconds'.format(self.WAIT_FOR_SAVING))
+        time.sleep(self.WAIT_FOR_SAVING)
 
         LOG.tc_step('Verify the new value is saved into correct file:{}'.format(self.PM_SETTING_FILE))
         controller_ssh = ControllerClient.get_active_controller()
 
-        cmd_get_retention_periods = 'sudo grep _to_live {}'.format(self.DNS_SETTING_FILE)
-        code, output = controller_ssh.exec_cmd(cmd_get_retention_periods, expect_timeout=20)
-        assert code == 0, 'Failed to save Retention Period to file: {}'.format(self.PM_SETTING_FILE)
+        cmd_get_saved_retention_periods = 'fgrep {} {}'.\
+            format(self.SEARCH_KEY_FOR_RENTION_PERIOD, self.PM_SETTING_FILE)
+        code, output = controller_ssh.exec_sudo_cmd(cmd_get_saved_retention_periods, expect_timeout=20)
 
+        LOG.info('Cmd={}\nRetention periods in-use:\n{}'.format(cmd_get_saved_retention_periods, output))
+        assert code == 0, 'Failed to get Retention Period from file: {}'.format(self.PM_SETTING_FILE)
+
+        for line in output.splitlines():
+            rec = line.strip()
+            if rec and not rec.startswith('#'):
+                saved_period = int(rec.split('=')[1])
+                assert new_retention_period == saved_period, \
+                    'Failed to update Retention Period for {}, expected:{}, saved in file:{} '.\
+                        format(rec.split('=')[0], new_retention_period, saved_period)
 
 
 class TestDnsSettings:
@@ -222,6 +240,7 @@ class TestDnsSettings:
                                           #nameservers=','.join(self.dns_servers))
 
         request.addfinalizer(restore_dns_settings)
+
 
     @mark.parametrize(
         'new_dns_servers', [
