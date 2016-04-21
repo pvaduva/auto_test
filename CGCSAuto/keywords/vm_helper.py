@@ -24,8 +24,9 @@ def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn
         all_tenants (bool): whether to get any vms from all tenants or just admin tenant if auth_info is set to Admin
         rtn_new (bool): whether to return an extra list containing only the newly created vms
 
-    Returns (list):
-        a list of vm ids, or two lists of vms_ids if rtn_new is set to True
+    Returns (tuple):
+        vms(tuple)  # rtn_new=False
+        (vms(tuple), new_vms(tuple)) # rtn_new=True
 
     """
     vms = nova_helper.get_vms(con_ssh=con_ssh, auth_info=auth_info, all_vms=all_tenants)
@@ -47,7 +48,7 @@ def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn
         new_vms.append(new_vm)
 
     if rtn_new:
-        vms = [vms, new_vms]
+        vms = (tuple(vms), tuple(new_vms))
     return vms
 
 
@@ -103,12 +104,13 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
         nics (list): [{'net-id1': <net_id1>, 'vif-model1': <vif1>}, {'net-id2': <net_id2>, 'vif-model2': <vif2>}, ...]
         fail_ok (bool):
 
-    Returns (list): [rtn_code (int), vm_id or message (str)]
-        [0, vm_id, '']: vm is created successfully and in Active state.
-        [1, vm_id, <stderr>]: create vm cli command failed, but vm is still created
-        [2, vm_id, "VM building is not 100% complete."]: create vm cli accepted, but vm building is not 100% completed.
-        [3, vm_id, "VM <uuid> did not reach ACTIVE state within <seconds>. VM status: <status>"]:
+    Returns (tuple): (rtn_code (int), vm_id or message (str))
+        (0, vm_id, 'VM is booted successfully'): vm is created successfully and in Active state.
+        (1, vm_id, <stderr>): boot vm cli command failed, but vm is still booted
+        (2, vm_id, "VM building is not 100% complete."): boot vm cli accepted, but vm building is not 100% completed.
+        (3, vm_id, "VM <uuid> did not reach ACTIVE state within <seconds>. VM status: <status>"):
             vm is not in Active state after created.
+        (4, '', <stderr>): create vm cli command failed, vm is not booted
 
     """
     LOG.info("Processing boot_vm args...")
@@ -187,18 +189,20 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
     exitcode, output = cli.nova('boot --poll', positional_args=args_, ssh_client=con_ssh,
                                 fail_ok=fail_ok, rtn_list=True, timeout=VMTimeout.BOOT_VM, auth_info=auth_info)
 
-    LOG.info("Post action check...")
     table_ = table_parser.table(output)
     vm_id = table_parser.get_value_two_col_table(table_, 'id')
 
     if exitcode == 1:
-        return [1, vm_id, output]
+        if vm_id:
+            return 1, vm_id, output       # vm_id = '' if cli is rejected without vm created
+        return 4, '', output
 
+    LOG.info("Post action check...")
     if "100% complete" not in output:
         message = "VM building is not 100% complete."
         if fail_ok:
             LOG.warning(message)
-            return [2, vm_id, "VM building is not 100% complete."]
+            return 2, vm_id, "VM building is not 100% complete."
         else:
             raise exceptions.VMOperationFailed(message)
 
@@ -209,12 +213,12 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
         message = "VM {} did not reach ACTIVE state within {}. VM status: {}".format(vm_id, tmout, vm_status)
         if fail_ok:
             LOG.warning(message)
-            return [3, vm_id, message]
+            return 3, vm_id, message
         else:
             raise exceptions.VMPostCheckFailed(message)
 
     LOG.info("VM {} is booted successfully.".format(vm_id))
-    return [0, vm_id, '']
+    return 0, vm_id, 'VM is booted successfully'
 
 
 def __compose_args(optional_args_dict):
@@ -269,7 +273,7 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
         launch_timeout (int): timeout waiting for vm to be launched via script in seconds.
         con_ssh:
 
-    Returns: (list) - VMs that we try to launch (either already launched, or launched by this script)
+    Returns (tuple): ids for launched vms. (Either already launched, or launched by this script)
 
     """
     if not tenant_name:
@@ -316,7 +320,7 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
 
         vm_ids.append(vm_id)
 
-    return vm_ids
+    return tuple(vm_ids)
 
 
 def launch_vm_custom_script(script, con_ssh=None):
@@ -327,7 +331,7 @@ def launch_vm_custom_script(script, con_ssh=None):
         script:
         con_ssh:
 
-    Returns:
+    Returns (tuple):
 
     """
     LOG.info("Launching VM(s) from custom script...")
@@ -349,7 +353,7 @@ def launch_vm_custom_script(script, con_ssh=None):
     vms_launched = [vm_id for vm_id in after_vm_ids if vm_id not in before_vm_ids]
 
     LOG.info("New VM(s) launched: {}".format(vms_launched))
-    return vms_launched
+    return tuple(vms_launched)
 
 
 def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=False, fail_ok=False,
@@ -366,18 +370,18 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=Fals
                 be incorrect. In this case CLICommandFailed exception will be thrown regardless of the fail_ok flag.
         auth_info (dict):
 
-    Returns (list): [return_code (int), error_msg_if_migration_rejected (str)]
-        [0, 'Live migration is successful.']:
+    Returns (tuple): (return_code (int), error_msg_if_migration_rejected (str))
+        (0, 'Live migration is successful.'):
             live migration succeeded and post migration checking passed
-        [1, <cli stderr>]:
+        (1, <cli stderr>):
             live migration request rejected as expected. e.g., no available destination host,
             or live migrate a vm with block migration
-        [2, <cli stderr>]: live migration request rejected due to unknown reason.
-        [3, 'Post action check failed: VM is in ERROR state.']:
+        (2, <cli stderr>): live migration request rejected due to unknown reason.
+        (3, 'Post action check failed: VM is in ERROR state.'):
             live migration command executed successfully, but VM is in Error state after migration
-        [4, 'Post action check failed: VM is not in original state.']:
+        (4, 'Post action check failed: VM is not in original state.'):
             live migration command executed successfully, but VM is not in before-migration-state
-        [5, 'Post action check failed: VM host did not change!']:
+        (5, 'Post action check failed: VM host did not change!'):
             live migration command executed successfully, but VM is still on the same host after migration
 
     For the first two scenarios, results will be returned regardless of the fail_ok flag.
@@ -418,12 +422,12 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=Fals
         if _is_live_migration_allowed(vm_id, block_migrate=block_migrate) and \
                 (destination_host or get_dest_host_for_live_migrate(vm_id)):
             if fail_ok:
-                return [2, output]
+                return 2, output
             else:
                 raise exceptions.VMPostCheckFailed("Unexpected failure of live migration!")
         else:
             LOG.debug("System does not allow live migrating vm {} as expected.".format(vm_id))
-            return [1, output]
+            return 1, output
     elif exit_code > 1:             # this is already handled by CLI module
         raise exceptions.CLIRejected("Live migration command rejected.")
 
@@ -436,14 +440,14 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=Fals
             break
         elif status == VMStatus.ERROR:
             if fail_ok:
-                return [3, "Post action check failed: VM is in ERROR state."]
+                return 3, "Post action check failed: VM is in ERROR state."
             raise exceptions.VMPostCheckFailed(
                 "VM {} is in {} state after live migration. Original state before live migration is: {}".
                 format(vm_id, VMStatus.ERROR, before_status))
         time.sleep(2)
     else:
         if fail_ok:
-            return [4, "Post action check failed: VM is not in original state."]
+            return 4, "Post action check failed: VM is not in original state."
         else:
             raise exceptions.TimeoutException(
                 "VM {} did not reach original state within {} seconds after live migration".
@@ -453,13 +457,13 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=Fals
 
     if before_host == after_host:
         if fail_ok:
-            return [5, "Post action check failed: VM host did not change!"]
+            return 5, "Post action check failed: VM host did not change!"
         else:
             raise exceptions.VMPostCheckFailed("VM did not migrate to other host! VM: {}, Status:{}, Host: {}".
                                                format(vm_id, before_status, after_host))
 
     LOG.info("VM {} successfully migrated from {} to {}".format(vm_id, before_host, after_host))
-    return [0, "Live migration is successful."]
+    return 0, "Live migration is successful."
 
 
 def _is_live_migration_allowed(vm_id, con_ssh=None, block_migrate=False):
@@ -526,17 +530,17 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
         fail_ok (bool): True if fail ok. Default to False, ie., throws exception upon cold migration fail.
         auth_info (dict):
 
-    Returns: [rtn_code, message]
-        [0, ''] Cold migration and confirm/revert succeeded. VM is back to original state or Active state.
-        [1, <stderr>] cold migration cli rejected as expected
-        [2, <stderr>] Cold migration cli command rejected. <stderr> is the err message returned by cli cmd.
-        [3, <stdout>] Cold migration cli accepted, but not finished. <stdout> is the output of cli cmd.
-        [4, timeout_message] Cold migration command ran successfully, but timed out waiting for VM to reach
+    Returns (tuple): (rtn_code, message)
+        (0, success_msg) # Cold migration and confirm/revert succeeded. VM is back to original state or Active state.
+        (1, <stderr>) # cold migration cli rejected as expected
+        (2, <stderr>) # Cold migration cli command rejected. <stderr> is the err message returned by cli cmd.
+        (3, <stdout>) # Cold migration cli accepted, but not finished. <stdout> is the output of cli cmd.
+        (4, timeout_message] # Cold migration command ran successfully, but timed out waiting for VM to reach
             'Verify Resize' state or Error state.
-        [5, err_msg] Cold migration command ran successfully, but VM is in Error state.
-        [6, err_msg] Cold migration command ran successfully, and resize confirm/revert performed. But VM is not in
+        (5, err_msg) # Cold migration command ran successfully, but VM is in Error state.
+        (6, err_msg) # Cold migration command ran successfully, and resize confirm/revert performed. But VM is not in
             Active state after confirm/revert.
-        [7, err_msg] Cold migration and resize confirm/revert ran successfully, and vm in active state. But host for vm
+        (7, err_msg) # Cold migration and resize confirm/revert ran successfully and vm in active state. But host for vm
             is not as expected. i.e., still the same host after confirm resize, or different host after revert resize.
 
     """
@@ -548,21 +552,23 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     LOG.info("Colding migrating VM {} from {}...".format(vm_id, before_host))
     exitcode, output = cli.nova('migrate --poll', vm_id, ssh_client=con_ssh, auth_info=auth_info,
                                 timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=True, rtn_list=True)
+
     if exitcode == 1:
         vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
         if len(host_helper.get_up_hosts_with_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
             LOG.info("Cold migration of vm {} rejected as expected due to no valid host to cold migrate to.".
                      format(vm_id))
-            return [1, output]
+            return 1, output
         elif fail_ok:
             LOG.warning("Cold migration of vm {} is rejected.".format(vm_id))
-            return [2, output]
+            return 2, output
         else:
             raise exceptions.VMOperationFailed(output)
 
     if 'Finished' not in output:
         if fail_ok:
-            return [3, output]
+            LOG.warning("Cold migration is not finished.")
+            return 3, output
         raise exceptions.VMPostCheckFailed("Failed to cold migrate vm. Output: {}".format(output))
 
     LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
@@ -571,7 +577,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
                                     con_ssh=con_ssh)
 
     if vm_status is None:
-        return [4, 'Timed out waiting for Error or Active status for VM {}'.format(vm_id)]
+        return 4, 'Timed out waiting for Error or Active status for VM {}'.format(vm_id)
 
     verify_resize_str = 'Revert' if revert else 'Confirm'
     if vm_status == VMStatus.VERIFY_RESIZE:
@@ -581,7 +587,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     elif vm_status == VMStatus.ERROR:
         err_msg = "VM {} in Error state after cold migrate. {} resize is not reached.".format(vm_id, verify_resize_str)
         if fail_ok:
-            return [5, err_msg]
+            return 5, err_msg
         raise exceptions.VMPostCheckFailed(err_msg)
 
     post_confirm_state = _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM,
@@ -589,7 +595,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
     if post_confirm_state is None:
         err_msg = "VM {} is not in Active state after {} Resize".format(vm_id, verify_resize_str)
-        return [6, err_msg]
+        return 6, err_msg
 
     # Process results
     after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
@@ -601,11 +607,12 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
         err_msg = ("VM {} host {} after {} Resize. Before host: {}. After host: {}".
                    format(vm_id, host_change_str, verify_resize_str, before_host, after_host))
         if fail_ok:
-            return [7, err_msg]
+            return 7, err_msg
         raise exceptions.VMPostCheckFailed(err_msg)
 
-    LOG.info("VM {} successfully cold migrated and {}ed Resize.".format(vm_id, verify_resize_str))
-    return [0, '']
+    success_msg = "VM {} successfully cold migrated and {}ed Resize.".format(vm_id, verify_resize_str)
+    LOG.info(success_msg)
+    return 0, success_msg
 
 
 def wait_for_vm_values(vm_id, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=True, strict=True,
@@ -626,7 +633,7 @@ def wait_for_vm_values(vm_id, timeout=VMTimeout.STATUS_CHANGE, check_interval=3,
         auth_info (dict):
         **kwargs: field/value pair(s) to identify the waiting criteria.
 
-    Returns (list): [result(bool), actual_vals(dict)]
+    Returns (tuple): (result(bool), actual_vals(dict))
 
     """
 
@@ -652,12 +659,12 @@ def wait_for_vm_values(vm_id, timeout=VMTimeout.STATUS_CHANGE, check_interval=3,
 
             if not fields_to_check:
                 # LOG.info("VM has reached states: {}".format(results))
-                return [True, results]
+                return True, results
 
         time.sleep(check_interval)
 
     if fail_ok:
-        return [False, results]
+        return False, results
     else:
         raise exceptions.VMTimeout("VM {} did not reach expected states within timeout.".format(vm_id))
 
@@ -748,7 +755,7 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         timeout (int): timeout waiting for response of ping messages in seconds
         fail_ok (bool): Whether it's okay to have 100% packet loss rate.
 
-    Returns (list): [res (bool), packet_loss_dict (dict)]
+    Returns (tuple): (res (bool), packet_loss_dict (dict))
         Packet loss rate dictionary format:
         {
          ip1: packet_loss_percentile1,
@@ -782,7 +789,7 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
         fail_ok (bool): When False, test will stop right away if one ping failed. When True, test will continue to ping
             the rest of the vms and return results even if pinging one vm failed.
 
-    Returns (list): [res (bool), packet_loss_dict (dict)]
+    Returns (tuple): (res (bool), packet_loss_dict (dict))
         Packet loss rate dictionary format:
         {
          ip1: packet_loss_percentile1,
@@ -803,7 +810,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
 
     Args:
         from_vm:
-        to_vms:
+        to_vms (str|list|None):
         user:
         password:
         prompt:
@@ -814,8 +821,8 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         fail_ok:  When False, test will stop right away if one ping failed. When True, test will continue to ping
             the rest of the vms and return results even if pinging one vm failed.
 
-    Returns:
-        A list in the form: [res (bool), packet_loss_dict (dict)]
+    Returns (tuple):
+        A tuple in form: (res (bool), packet_loss_dict (dict))
 
         Packet loss rate dictionary format:
         {
@@ -952,11 +959,11 @@ class VMInfo:
     def get_volume_ids(self):
         """
 
-        Returns:(list) such as [{'id': volume_id1}, {'id': 'volume_id2'}]
+        Returns (tuple): such as (volume_id1, 'volume_id2', ...)
 
         """
         volumes = eval(table_parser.get_value_two_col_table(self.table_, ':volumes_attached', strict=False))
-        return [volume['id'] for volume in volumes]
+        return tuple([volume['id'] for volume in volumes])
 
     def get_image_name(self):
         if self.boot_info['type'] == 'image':
@@ -973,7 +980,7 @@ class VMInfo:
     def get_vcpus(self):
         """
 
-        Returns: (list) such as [1, 1, 1]
+        Returns: (tuple) such as (1, 1, 1)
 
         """
         # self.refresh_table()
@@ -1003,7 +1010,7 @@ class VMInfo:
 
     @classmethod
     def get_vms_info(cls):
-        return cls.__instances
+        return tuple(cls.__instances)
 
     @classmethod
     def get_vm_info(cls, vm_id, con_ssh=None):
@@ -1035,26 +1042,27 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns:
-        [-1, ''] VM does not exist. Do nothing.
-        [0, ''] VM is successfully deleted.
-        [1, <stderr>] delete vm cli failed to execute
-        [2, vm_id] delete vm cli executed but vm still show up in nova list
+    Returns (tuple): (rtn_code(int), msg(str))  # rtn_code 1,2,3 only returns when fail_ok=True
+        (-1, 'No vm(s) to delete.')     # "Empty vm list/string provided and no vm exist on system.
+        (-1, 'None of the given vm(s) exists on system.')
+        (0, "VM(s) deleted successfully.")
+        (1, <stderr>)   # delete vm(s) cli returns stderr, some or all vms failed to delete.
+        (2, "VMs deletion reject all accepted, but some vms still exist in nova list: <vms>")
+        (3, "Some vm(s) deletion request is rejected : <vms>; and some vm(s) still exist after deletion: <vms>")
 
-    Examples:
-        [wrsroot@controller-0 ~(keystone_tenant1)]$ nova delete 74e37830-97a2-4d9d-b892-ad58bc4148a7
-        Request to delete server 74e37830-97a2-4d9d-b892-ad58bc4148a7 has been accepted.
     """
-    # check if vm exist
     if vms is None:
         vms = nova_helper.get_vms(con_ssh=con_ssh, auth_info=auth_info, all_vms=True)
 
-    if not vms:
-        LOG.warning("Empty vm list/string provided or no vm exist on system. Do Nothing")
-        return [-1, 'No vm(s) provided to attempt delete.']
-
     if isinstance(vms, str):
         vms = [vms]
+
+    for vm in vms:
+        if vm:
+            break
+    else:
+        LOG.warning("Empty vm list/string provided and no vm exist on system. Do Nothing")
+        return -1, 'No vm(s) to delete.'
 
     if check_first:
         vms_to_del = []
@@ -1064,7 +1072,7 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
                 vms_to_del.append(vm)
         if not vms_to_del:
             LOG.info("None of these vms exist on system: {}. Do nothing".format(vms))
-            return [-1, 'None of the provided vm(s) exist on system.']
+            return -1, 'None of the given vm(s) exists on system.'
     else:
         vms_to_del = vms
 
@@ -1084,8 +1092,8 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
         vms_del_rejected = []
 
     # check if vms are actually removed from nova list
-    all_deleted, vms_deleted = _wait_for_vms_deleted(vms_del_accepted, fail_ok=True, auth_info=auth_info,
-                                                     timeout=timeout, con_ssh=con_ssh)
+    all_deleted, vms_deleted, vms_undeleted = _wait_for_vms_deleted(vms_del_accepted, fail_ok=True, auth_info=auth_info,
+                                                                    timeout=timeout, con_ssh=con_ssh)
 
     # Delete volumes results will not be returned. Best effort only.
     if delete_volumes:
@@ -1095,26 +1103,23 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
     if code == 1:
         if all_deleted:
             if fail_ok:
-                return [1, output]
-            else:
-                raise exceptions.CLIRejected(output)
+                return 1, output
+            raise exceptions.CLIRejected(output)
         else:
-            msg = "Some vm(s) deletion request is rejected : {}; and some vm(s) still exist after deleting: {}".\
-                  format(vms_del_rejected, vms_del_accepted)
+            msg = "Some vm(s) deletion request is rejected : {}; and some vm(s) still exist after deletion: {}".\
+                  format(vms_del_rejected, vms_undeleted)
             if not fail_ok:
-                return [3, msg]
-            else:
-                raise exceptions.VMPostCheckFailed(msg)
-
-    if not all_deleted:
-        msg = "VMs deletion reject all accepted, but some vms still exist in nova list."
-        if fail_ok:
-            return [2, msg]
-        else:
+                return 3, msg
             raise exceptions.VMPostCheckFailed(msg)
 
+    if not all_deleted:
+        msg = "VMs deletion reject all accepted, but some vms still exist in nova list: {}".format(vms_undeleted)
+        if fail_ok:
+            return 2, msg
+        raise exceptions.VMPostCheckFailed(msg)
+
     LOG.info("VM(s) are successfully deleted: {}".format(vms_to_del))
-    return [0, '']
+    return 0, "VM(s) deleted successfully."
 
 
 def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=True,
@@ -1123,15 +1128,15 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
     Wait for specific vm to be removed from nova list
 
     Args:
-        vms (list or str): list of vms ids
+        vms (str|list): list of vms ids
         header: ID or Name
         timeout (int): in seconds
         fail_ok (bool):
-        check_interval:
-        con_ssh:
-        auth_info:
+        check_interval (int):
+        con_ssh (SSHClient|None):
+        auth_info (dict|None):
 
-    Returns:
+    Returns (tuple): (result(bool), vms_deleted(tuple), vms_failed_to_delete(tuple))
 
     """
     if isinstance(vms, str):
@@ -1149,10 +1154,10 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
                 vms_deleted.append(vm)
 
         if not vms_to_check:
-            return [True, vms]
+            return True, tuple(vms), ()
         time.sleep(check_interval)
 
     if not fail_ok:
-        return [False, vms_deleted]
+        return False, tuple(vms_deleted), tuple(vms_to_check)
     raise exceptions.VMPostCheckFailed("Some vm(s) are not removed from nova list within {} seconds".
                                        format(vms_to_check, timeout))

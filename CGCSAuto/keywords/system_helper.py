@@ -292,13 +292,11 @@ def get_dns_servers(con_ssh=None):
     Get the DNS servers currently in-use in the System
 
 
-    Returns: (int, list)
-        0   -   success, and the list of DNS servers will be returned
-
+    Returns (tuple): a list of DNS servers will be returned
 
     """
     table_ = table_parser.table(cli.system('dns-show', ssh_client=con_ssh))
-    return table_parser.get_value_two_col_table(table_, 'nameservers').strip().split(sep=',')
+    return tuple(table_parser.get_value_two_col_table(table_, 'nameservers').strip().split(sep=','))
 
 
 def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, nameservers=None):
@@ -310,7 +308,7 @@ def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, nameserv
         fail_ok:
         con_ssh:
         auth_info:
-        nameservers(list): list of IP addresses (in plain text) of new DNS servers to change to
+        nameservers (list): list of IP addresses (in plain text) of new DNS servers to change to
 
 
     Returns:

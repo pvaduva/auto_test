@@ -97,3 +97,4 @@ def test_set_flavor_extra_specs(flavor_to_test, extra_spec_name, values):
 
         post_extra_spec = nova_helper.get_flavor_extra_specs(flavor=flavor_to_test)
         assert post_extra_spec[extra_spec_name] == value, "Actual flavor extra specs: {}".format(post_extra_spec)
+

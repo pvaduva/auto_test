@@ -30,9 +30,9 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
         auth_info (dict): This is set to Admin by default. Can be set to other tenant for negative test.
         con_ssh (SSHClient):
 
-    Returns (list): [rtn_code (int), flavor_id/err_msg (str)]
-        [0, <flavor_id>]: flavor created successfully
-        [1, <stderr>]: create flavor cli rejected
+    Returns (tuple): (rtn_code (int), flavor_id/err_msg (str))
+        (0, <flavor_id>): flavor created successfully
+        (1, <stderr>): create flavor cli rejected
 
     """
     candidate_args = {
@@ -70,13 +70,12 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
                                  rtn_list=True)
 
     if exit_code == 1:
-        LOG.warning("Create flavor request rejected.")
-        return [1, output]
+        return 1, output
 
     table_ = table_parser.table(output)
     flavor_id = table_parser.get_column(table_, 'ID')[0]
     LOG.info("Flavor {} created successfully.".format(flavor_name))
-    return [0, flavor_id]
+    return 0, flavor_id
 
 
 def flavor_exists(flavor, header='ID', con_ssh=None, auth_info=None):
@@ -98,10 +97,10 @@ def delete_flavors(flavor_ids, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
     if not flavors_to_del:
         msg = "None of the flavor(s) provided exist on system: {}. Do nothing.".format(flavor_ids)
         LOG.info(msg)
-        return [-1, {}]
+        return -1, 'None of the flavor(s) exists. Do nothing.'
 
     if flavors_deleted:
-        LOG.warning("Some flavor(s) do no exist on system: {}".format(flavors_deleted))
+        LOG.warning("Some flavor(s) do no exist on system. Skip them: {}".format(flavors_deleted))
 
     LOG.info("Flavor(s) to delete: {}".format(flavors_to_del))
     results = {}
@@ -112,22 +111,22 @@ def delete_flavors(flavor_ids, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
         # right away upon one failure
         rtn_code, output = cli.nova('flavor-delete', flavor, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
         if rtn_code == 1:
-            result = [1, output]
+            result = (1, output)
             fail = True
         elif flavor_exists(flavor, con_ssh=con_ssh, auth_info=auth_info):
-            result = [2, "Flavor {} still exists on system after deleted.".format(flavor)]
+            result = (2, "Flavor {} still exists on system after deleted.".format(flavor))
             fail = True
         else:
-            result = [0, '']
+            result = (0, 'Flavor is successfully deleted')
         results[flavor] = result
     if fail:
         if fail_ok:
-            return [1, results]
+            return 1, results
         raise exceptions.FlavorError("Failed to delete flavor(s). Details: {}".format(results))
 
-    LOG.info("Flavor(s) deleted successfully: {}".format(flavor_ids))
-    # Return empty dict upon successfully deleting all flavors
-    return [0, {}]
+    success_msg = "Flavor(s) deleted successfully."
+    LOG.info(success_msg)
+    return 0, success_msg
 
 
 def get_flavor_id(name=None, memory=None, disk=None, ephemeral=None, swap=None, vcpu=None, rxtx=None, is_public=None,
@@ -168,17 +167,17 @@ def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok
         fail_ok:
         **extra_specs:
 
-    Returns (list): [rtn_code (int), message (str)]
-        [0, '']: required extra spec(s) added successfully
-        [1, <stderr>]: add extra spec cli rejected
-        [2, 'Required extra spec <spec_name> is not found in the extra specs list']: post action check failed
-        [3, 'Extra spec value for <spec_name> is not <spec_value>']: post action check failed
+    Returns (tuple): (rtn_code (int), message (str))
+        (0, 'Flavor extra specs set successfully.'): required extra spec(s) added successfully
+        (1, <stderr>): add extra spec cli rejected
+        (2, 'Required extra spec <spec_name> is not found in the extra specs list'): post action check failed
+        (3, 'Extra spec value for <spec_name> is not <spec_value>'): post action check failed
 
     """
-    LOG.info("Setting flavor extra specs...")
     if not extra_specs:
         raise ValueError("extra_specs is not provided. At least one name=value pair is required.")
 
+    LOG.info("Setting flavor extra specs: {}".format(extra_specs))
     extra_specs_args = ''
     for key, value in extra_specs.items():
         extra_specs_args += " {}={}".format(key, value)
@@ -186,26 +185,31 @@ def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok
                                  ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
 
     if exit_code == 1:
-        LOG.warning("Set extra specs request rejected.")
-        # if exit_code = 1, means fail_ok is set to True, thus no need to check fail_ok flag again
-        return [1, output]
+        return 1, output
 
     extra_specs = get_flavor_extra_specs(flavor, con_ssh=con_ssh, auth_info=auth_info)
     for key, value in extra_specs.items():
         if key not in extra_specs:
-            rtn = [2, "Required extra spec {} is not found in the extra specs list".format(key)]
+            code = 2
+            msg = "Required extra spec {} is not found in the extra specs list".format(key)
             break
         if extra_specs[key] != value:
-            rtn = [3, "Extra spec value for {} is not {}".format(key, value)]
+            code = 3
+            msg = "Extra spec value for {} is not {}".format(key, value)
             break
     else:
-        LOG.info("Flavor {} extra specs set successfully: {}".format(flavor, extra_specs))
-        rtn = [0, '']
+        code = 0
+        msg = "Flavor extra specs set successfully."
 
-    if not fail_ok and rtn[0] != 0:
-        raise exceptions.FlavorError(rtn[1])
+    if code > 0:
+        if fail_ok:
+            LOG.warning(msg)
+        else:
+            raise exceptions.FlavorError(msg)
+    else:
+        LOG.info(msg)
 
-    return rtn
+    return code, msg
 
 
 def unset_flavor_extra_specs(flavor, extra_specs, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
@@ -217,16 +221,16 @@ def unset_flavor_extra_specs(flavor, extra_specs, con_ssh=None, auth_info=Tenant
         con_ssh (SSHClient):
         auth_info (dict):
         fail_ok (bool):
-        extra_specs (str or list): extra spec(s) to be removed. At least one should be provided.
+        extra_specs (str|list): extra spec(s) to be removed. At least one should be provided.
 
-    Returns (list): [rtn_code (int), message (str)]
-        [0, '']: required extra spec(s) removed successfully
-        [1, <stderr>]: unset extra spec cli rejected
-        [2, '<spec_name> is still in the extra specs list']: post action check failed
+    Returns (tuple): (rtn_code (int), message (str))
+        (0, 'Flavor extra specs unset successfully.'): required extra spec(s) removed successfully
+        (1, <stderr>): unset extra spec cli rejected
+        (2, '<spec_name> is still in the extra specs list'): post action check failed
 
     """
 
-    LOG.info("Unsetting flavor extra specs...")
+    LOG.info("Unsetting flavor extra spec(s): {}".format(extra_specs))
     if isinstance(extra_specs, str):
         extra_specs = [extra_specs]
 
@@ -234,22 +238,20 @@ def unset_flavor_extra_specs(flavor, extra_specs, con_ssh=None, auth_info=Tenant
     exit_code, output = cli.nova('flavor-key', '{} unset {}'.format(flavor, extra_specs_args),
                                  ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
     if exit_code == 1:
-        LOG.warning("Unset extra specs request rejected.")
-        return [1, output]
+        return 1, output
 
     post_extra_specs = get_flavor_extra_specs(flavor, con_ssh=con_ssh, auth_info=auth_info)
     for key in extra_specs:
         if key in post_extra_specs:
-            rtn = [2, "{} is still in the extra specs list".format(key)]
-            break
+            err_msg = "{} is still in the extra specs list after unset.".format(key)
+            if fail_ok:
+                LOG.warning(err_msg)
+                return 2, err_msg
+            raise exceptions.FlavorError(err_msg)
     else:
-        LOG.info("Flavor {} extra specs unset successfully: {}".format(flavor, extra_specs))
-        rtn = [0, '']
-
-    if not fail_ok and rtn[0] != 0:
-        raise exceptions.FlavorError(rtn[1])
-
-    return rtn
+        success_msg = "Flavor extra specs unset successfully."
+        LOG.info(success_msg)
+        return 0, success_msg
 
 
 def get_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN):
@@ -281,7 +283,7 @@ def get_all_vms(return_val='ID', con_ssh=None):
         return_val:
         con_ssh:
 
-    Returns:
+    Returns (tuple): list of all vms on the system
 
     """
     table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
@@ -297,7 +299,7 @@ def get_field_by_vms(vm_ids=None, field="Status", con_ssh=None, auth_info=None):
         field (str): A specific field header Such as Name,Status,Power State
         con_ssh (str):
         auth_info (dict):
-    Returns:
+    Returns (dict):
         A dict with vm_ids as key and an field's value as value.
         If the list is Empty return all the Ids with their status
 
@@ -337,7 +339,7 @@ def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False):
         auth_info (dict): such as ones in auth.py: auth.ADMIN, auth.TENANT1
         all_vms (bool): whether to return VMs for all tenants if admin auth_info is given
 
-    Returns: list of VMs for tenant(s).
+    Returns (tuple): list of VMs for tenant(s).
 
     """
     positional_args = ''
@@ -370,7 +372,7 @@ def get_vm_volumes(vm_id, con_ssh=None, auth_info=None):
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (list): list of volume ids attached to specific vm
+    Returns (tuple): list of volume ids attached to specific vm
 
     """
     table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
@@ -405,7 +407,7 @@ def get_vms_on_hypervisor(hostname, con_ssh=None, rtn_val='ID'):
         hostname (str):Name of a compute node
         con_ssh:
 
-    Returns (list): A list of VMs' ID under a hypervisor
+    Returns (tuple): A list of VMs' ID under a hypervisor
 
     """
     table_ = table_parser.table(cli.nova('hypervisor-servers', hostname, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
@@ -504,11 +506,11 @@ def _get_vm_volumes(novashow_table):
     Args:
         novashow_table (dict):
 
-    Returns (list): A nested list for each vm volumes from the novashow_table
+    Returns (tuple): A list of volume ids from the novashow_table.
 
     """
     volumes = eval(table_parser.get_value_two_col_table(novashow_table, ':volumes_attached', strict=False))
-    return [volume['id'] for volume in volumes]
+    return tuple([volume['id'] for volume in volumes])
 
 
 def get_quotas(quotas=None, con_ssh=None, auth_info=None):
@@ -521,7 +523,7 @@ def get_quotas(quotas=None, con_ssh=None, auth_info=None):
     for item in quotas:
         values.append(int(table_parser.get_value_two_col_table(table_, item)))
 
-    return values
+    return tuple(values)
 
 
 def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):

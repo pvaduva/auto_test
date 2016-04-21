@@ -11,7 +11,7 @@ def get_tenant_ids(tenant_name=None, con_ssh=None):
         tenant_name (str): openstack tenant name. e.g., 'admin', 'tenant1'. If None, the primary tenant will be used.
         con_ssh (SSHClient): If None, active controller client will be used, assuming set_active_controller was called.
 
-    Returns (list): list of tenant id(s)
+    Returns (tuple): list of tenant id(s)
 
     """
     if tenant_name is None:
@@ -28,7 +28,7 @@ def get_user_ids(user_name=None, con_ssh=None):
         user_name (str): openstack user name. If None, the current user for primary tenant will be used
         con_ssh (SSHClient):
 
-    Returns (list): list of user id(s)
+    Returns (tuple): list of user id(s)
 
     """
     if user_name is None:

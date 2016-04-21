@@ -18,7 +18,7 @@ def vms_(request):
             vm_helper.delete_vms(vm, fail_ok=True, auth_info=Tenant.TENANT_2)
     request.addfinalizer(delete_vms)
 
-    return [vms_tenant1[0], vms_tenant2[0]]
+    return vms_tenant1[0], vms_tenant2[0]
 
 
 class TestLockUnlock:

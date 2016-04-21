@@ -285,7 +285,7 @@ def get_column(table_, header):
                 'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
         header (str): header of a column
 
-    Returns:column as a list. Each item is a string.
+    Returns (tuple): target column. Each item is a string.
 
     """
     rows = get_all_rows(table_)
@@ -294,7 +294,7 @@ def get_column(table_, header):
     for row in rows:
         column.append(row[index])
 
-    return column
+    return tuple(column)
 
 
 def __get_row_indexes_string(table_, header, value, strict=False):
@@ -319,7 +319,7 @@ def __get_row_indexes_string(table_, header, value, strict=False):
             row_index.append(i)
 
     LOG.debug("row index list for {}: {}: {}".format(header, value, row_index))
-    return row_index
+    return tuple(row_index)
 
 
 def _get_values(table_, header1, value1, header2, strict=False, regex=False):
@@ -330,7 +330,7 @@ def _get_values(table_, header1, value1, header2, strict=False, regex=False):
         value1:
         header2:
 
-    Returns:list
+    Returns (tuple):
 
     """
 
@@ -351,7 +351,7 @@ def _get_values(table_, header1, value1, header2, strict=False, regex=False):
     column2 = get_column(table_, header2)
     value2 = [column2[i] for i in row_indexes]
     LOG.debug("Returning matching {} value(s): {}".format(header2, value2))
-    return value2
+    return tuple(value2)
 
 
 def get_values(table_, target_header, strict=True, regex=False, merge_lines=False, **kwargs):
@@ -393,7 +393,7 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
                 get_values(table_, 'ID', Tenant_ID=123, Name='my name')
                 get_values(table_, 'ID', **{'Tenant ID': 123, 'Name': 'my name'})
 
-    Returns (list):
+    Returns (tuple):
         matching values for target header
 
     """
@@ -437,7 +437,7 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
         target_values.append(target_value)
 
     LOG.debug("Returning matching {} value(s): {}".format(target_header, target_values))
-    return target_values
+    return tuple(target_values)
 
 
 def get_value_two_col_table(table_, field, strict=True, regex=False, merge_lines=False):
@@ -498,7 +498,7 @@ def __get_values(table_, header1, value1, header2):
     column = get_column(table_, header2)
     value2 = [column[i] for i in row_indexes]
     LOG.debug("Returning matching {} value(s): {}".format(header2, value2))
-    return value2
+    return tuple(value2)
 
 
 def filter_table_single_field(table_, field, value, strict=True, regex=False, match=False):
@@ -537,7 +537,7 @@ def _get_row_indexes(table_, field, value, strict=True, regex=False):
     else:
         row_indexes = __get_row_indexes_string(table_, field, value, strict)
 
-    return row_indexes
+    return tuple(row_indexes)
 
 
 def filter_table(table_, strict=True, regex=False, **kwargs):
@@ -582,4 +582,4 @@ def filter_table(table_, strict=True, regex=False, **kwargs):
 
         first_iteration = False
 
-    return __filter_table(table_, list(row_indexes))
+    return __filter_table(table_, row_indexes)

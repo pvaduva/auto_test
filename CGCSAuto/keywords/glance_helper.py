@@ -82,44 +82,46 @@ def image_exists(image_id, con_ssh=None, auth_info=Tenant.ADMIN):
     return exit_code == 0
 
 
-def delete_image(image_id, fail_ok=False, con_ssh=None, auth_info=Tenant.TENANT_1):
+def delete_image(image_id, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """
-
+    Delete given image
     Args:
         image_id (str):
         fail_ok (bool):
         con_ssh:
         auth_info (dict):
-    Returns:
-        [-1,''] if image does not exist
-        [0,''] image is successfully deleted.
-        [1,output] if delete image cli errored when executing
-        [2,vm_id] if delete image cli executed but still show up in nova list
+    Returns (tuple):
+        (-1, "Image <id> does not exist. Do nothing.")
+        (0, "Image is deleted")
+        (1, <stderr>)    # if delete image cli returns stderr
+        (2, "Image <id> still exists in cinder-list after deletion.")
     """
 
     # check if image exist
     if image_id is not None:
         v_exist = image_exists(image_id)
         if not v_exist:
-            LOG.info("To be deleted Image: {} does not exists.".format(image_id))
-            return [-1, '']
+            msg = "Image {} does not exist. Do nothing.".format(image_id)
+            LOG.info(msg)
+            return -1, msg
 
-    # delete image
+    LOG.info("Deleting image {}".format(image_id))
     exit_code, cmd_output = cli.glance('image-delete', image_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
                                        auth_info=auth_info)
 
     if exit_code == 1:
-        return [1, cmd_output]
+        return 1, cmd_output
 
     # check image is successfully deleted
     vol_status = _wait_for_image_deleted(image_id, column='ID', fail_ok=fail_ok)
 
     if not vol_status:
+        msg = "Image {} still exists in cinder-list after deletion.".format(image_id)
         if fail_ok:
-            LOG.warning("deletion command is executed but '{}' still show up within glance image-list".format(image_id))
-            return [2, image_id]
-        raise exceptions.ImageError("deletion command is executed but '{}' "
-                                    "still show up within glance image-list".format(image_id))
+            LOG.warning(msg)
+            return 2, msg
+        raise exceptions.ImageError(msg)
 
-    LOG.info("Image {} is deleted .".format(image_id))
-    return [0, '']
+    msg = "Image is deleted"
+    LOG.info(msg)
+    return 0, msg

@@ -18,7 +18,7 @@ def tenants_vms(request):
         #    vm_helper.delete_vms(vm, auth_info=Tenant.TENANT_2)
     request.addfinalizer(delete)
 
-    return [tenant1_vms, tenant2_vms]
+    return tenant1_vms, tenant2_vms
 
 
 def test_ping_vms_from_natbox(tenants_vms):

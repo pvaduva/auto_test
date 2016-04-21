@@ -12,6 +12,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
                 bootable=None, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Return a list of volume ids based on the given criteria
+
     Args:
         vols (list or str):
         name (str):
@@ -24,8 +25,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT_1,Tenant.TENANT_2
         con_ssh (str):
 
-    Returns:
-        A list of volume ids based on the given criteria
+    Returns (tuple): a list of volume ids based on the given criteria
     """
     if bootable is not None:
         bootable = str(bootable).lower()
@@ -52,7 +52,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         table_ = table_parser.filter_table(table_, **criteria)
 
     if name is None and not criteria:
-        LOG.warning("No criteria specified, return a full list of volume ids for a tenant")
+        LOG.warning("No criteria specified, return ids for all volumes for specific tenant")
 
     return table_parser.get_column(table_, 'ID')
 
@@ -66,8 +66,8 @@ def get_volumes_attached_to_vms(volumes=None, vms=None, con_ssh=None, auth_info=
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns(list):
-        list of volumes ids or [] if no match found
+    Returns (tuple):
+        list of volumes ids or () if no match found
 
     """
     table_ = table_parser.table(cli.cinder('list --all-tenant', auth_info=auth_info, ssh_client=con_ssh))
@@ -90,6 +90,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
                   avail_zone=None, metadata=None, bootable=True, fail_ok=False, auth_info=None, con_ssh=None,
                   rtn_exist=True):
     """
+    Create a volume with given criteria.
 
     Args:
         name (str): display name of the volume
@@ -105,25 +106,26 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
         fail_ok (bool):
         auth_info (dict):
         con_ssh (SSHClient):
-        rtn_exist(bool):
+        rtn_exist(bool): whether to return an existing available volume with matching name and bootable state.
 
-    Returns:
-        A list in the form of [return_code, volume_id or err msg] \n
-        [0, vol_id]: if Volume created successfully,.\n
-        [1, <output>]: if create volume cli executed with error.\n
-        [2, <output>]: if volume created, but not in available state.\n
-        [3, <output>]: if volume created, but not in bootable state.\n
-        [-1, <output>]: if volume id already exist.
+    Returns (tuple):  (return_code, volume_id or err msg)
+        (-1, existing_vol_id)   # returns existing volume_id instead of creating a new one. Applies when rtn_exist=True.
+        (0, vol_id)     # Volume created successfully and in available state.
+        (1, <stderr>)   # Create volume cli rejected with sterr
+        (2, vol_id)   # volume created, but not in available state.
+        (3, vol_id]: if volume created, but not in given bootable state.
 
     Notes:
         snapshot_id > source_vol_id > image_id if more than one source ids are provided.
     """
+    bootable = str(bootable).lower()
+
     if rtn_exist and name is not None:
-        vol_ids = get_volumes(name=name, status='available', bootable='true')
+        vol_ids = get_volumes(name=name, status='available', bootable=bootable)
         if vol_ids:
-            LOG.info('Bootable volume(s) with name {} exists and in available state, return an existing volume.'.
-                     format(name))
-            return [-1, vol_ids[0]]
+            LOG.info('Volume(s) with name {} and bootable state {} exists and in available state, return an existing '
+                     'volume.'.format(name, bootable))
+            return -1, vol_ids[0]
 
     subcmd = ''
     source_arg = ''
@@ -150,30 +152,28 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     LOG.info("Creating volume: {}".format(name))
     exit_code, cmd_output = cli.cinder('create', subcmd, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                                        rtn_list=True)
+    if exit_code == 1:
+        return 1, cmd_output
 
     LOG.info("Post action check started for create volume.")
-    if exit_code == 1:
-        return [1, cmd_output]
 
     table_ = table_parser.table(cmd_output)
     volume_id = table_parser.get_value_two_col_table(table_, 'id')
 
     if not _wait_for_volume_status(vol_id=volume_id, status='available', fail_ok=fail_ok):
         LOG.warning("Volume is created, but not in available state.")
-        return [2, volume_id]
+        return 2, volume_id
 
-    bootable = str(bootable).lower()
     actual_bootable = get_volume_states(volume_id, fields='bootable', con_ssh=con_ssh, auth_info=auth_info)['bootable']
     if bootable != actual_bootable:
         if fail_ok:
             LOG.warning("Volume bootable state is not {}".format(bootable))
-            return [3, volume_id]
-        else:
-            raise exceptions.VolumeError("Volume {} bootable value should be {} instead of {}".
+            return 3, volume_id
+        raise exceptions.VolumeError("Volume {} bootable value should be {} instead of {}".
                                          format(volume_id, bootable, actual_bootable))
 
     LOG.info("Volume is created and in available state: {}".format(volume_id))
-    return [0, volume_id]
+    return 0, volume_id
 
 
 def get_volume_states(vol_id, fields, con_ssh=None, auth_info=Tenant.ADMIN):
@@ -185,7 +185,7 @@ def get_volume_states(vol_id, fields, con_ssh=None, auth_info=Tenant.ADMIN):
         con_ssh (str):
         auth_info (dict):
 
-    Returns:
+    Returns (dict):
         A dict with field as key and value as value
 
     """
@@ -293,8 +293,7 @@ def _wait_for_volumes_deleted(volumes, timeout=VolumeTimeout.DELETE, fail_ok=Tru
         con_ssh:
         auth_info (dict):
 
-    Returns (bool):
-        Return True if the specific volumn_id is found within the timeout period. False otherwise
+    Returns (tuple):    (result(boot), volumes_deleted(tuple))
 
     """
     if isinstance(volumes, str):
@@ -313,12 +312,12 @@ def _wait_for_volumes_deleted(volumes, timeout=VolumeTimeout.DELETE, fail_ok=Tru
                 vols_deleted.append(vol)
 
         if not vols_to_check:
-            return [True, 'all']
+            return True, tuple(vols_deleted)
 
         time.sleep(check_interval)
     else:
         if fail_ok:
-            return [False, vols_deleted]
+            return False, tuple(vols_deleted)
         raise exceptions.TimeoutException("Timed out waiting for all given volumes to be removed from cinder list. "
                                           "Given volumes: {}. Volumes still exist: {}.".format(volumes, vols_to_check))
 
@@ -351,11 +350,14 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns:
-        [-1, ''] if volume does not exist.\n
-        [0, ''] volume is successfully deleted.\n
-        [1, output] if delete volume cli errored when executing.\n
-        [2, vm_id] if delete volume cli executed but still show up in nova list.\n
+    Returns (tuple): (rtn_code (int), msg (str))
+        (-1, "No volume to delete. Do nothing.") # No volume given and no volume exists on system for given tenant
+        (-1, ""None of the given volume(s) exist on system. Do nothing."")    # None of the given volume(s) exists on
+            system for given tenant
+        (0, "Volume(s) deleted successfully")   # volume is successfully deleted.
+        (1, <stderr>)   # Delete volume cli returns stderr
+        (2, "Delete request(s) accepted but some volume(s) did not disappear within <timeout> seconds".)
+        (3, "Delete request(s) rejected and post check failed for accepted request(s). \nCLI error: <stderr>"
 
     """
     if volumes is None:
@@ -363,7 +365,7 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
     if not volumes:
         msg = "No volume to delete. Do nothing."
         LOG.info(msg)
-        return [-1, msg]
+        return -1, msg
 
     if isinstance(volumes, str):
         volumes = [volumes]
@@ -373,7 +375,7 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
         if not vols_to_del:
             msg = "None of the given volume(s) exist on system. Do nothing."
             LOG.info(msg)
-            return [-1, msg]
+            return -1, msg
 
         if not vols_to_del == volumes:
             LOG.info("Some volume(s) don't exist. Given volumes: {}. Volumes to delete: {}.".format(volumes, vols_to_del))
@@ -401,21 +403,22 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
     if exit_code == 1:
         if all_deleted:
             if fail_ok:
-                return [1, cmd_output]
+                return 1, cmd_output
             raise exceptions.CLIRejected(cmd_output)
         else:
             msg = "Delete request(s) rejected and post check failed for accepted request(s). \nCLI error: {}".\
                   format(cmd_output)
             if fail_ok:
-                return [3, msg]
+                LOG.warning(msg)
+                return 3, msg
             raise exceptions.VolumeError(msg)
 
     if not all_deleted:
         msg = "Delete request(s) accepted but some volume(s) did not disappear within {} seconds".format(timeout)
         if fail_ok:
             LOG.warning(msg)
-            return [2, msg]
+            return 2, msg
         raise exceptions.VolumeError(msg)
 
     LOG.info("Volume(s) are successfully deleted: {}".format(vols_to_check))
-    return [0, '']
+    return 0, "Volume(s) deleted successfully"

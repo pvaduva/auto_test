@@ -292,7 +292,7 @@ class SSHClient:
             reconnect_timeout:
             err_only: if true, stdout will not be included in output
 
-        Returns (list): exit code (int), command output (str)
+        Returns (tuple): (exit code (int), command output (str))
 
         """
         LOG.debug("Executing command...")
@@ -368,11 +368,12 @@ class SSHClient:
         return self.exec_cmd('stat ' + file_path)[0] == 0
 
     @contextmanager
-    def login_as_root(self):
+    def login_as_root(self, timeout=10):
         self.send('sudo su -')
-        self.expect(PASSWORD_PROMPT)
-        self.send(self.password)
-        self.expect(ROOT_PROMPT)
+        index = self.expect([ROOT_PROMPT, PASSWORD_PROMPT], timeout=timeout)
+        if index == 1:
+            self.send(self.password)
+            self.expect(ROOT_PROMPT)
         original_prompt = self.get_prompt()
         self.set_prompt(ROOT_PROMPT)
         self.set_session_timeout(timeout=0)
@@ -387,9 +388,11 @@ class SSHClient:
     def exec_sudo_cmd(self, cmd, expect_timeout=10):
         cmd = 'sudo ' + cmd
         self.send(cmd)
-        self.expect(PASSWORD_PROMPT)
-        self.send(self.password)
-        self.expect(timeout=expect_timeout)
+        index = self.expect([self.prompt, PASSWORD_PROMPT], timeout=expect_timeout)
+        if index == 1:
+            self.send(self.password)
+            self.expect(timeout=expect_timeout)
+
         return self.__process_exec_result(cmd)
 
     def get_current_user(self):
@@ -403,6 +406,7 @@ class SSHClient:
     def set_session_timeout(self, timeout=0):
         self.send('TMOUT={}'.format(timeout))
         self.expect()
+
 
 class SSHFromSSH(SSHClient):
     """

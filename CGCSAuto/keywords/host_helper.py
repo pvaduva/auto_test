@@ -60,9 +60,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         con_ssh (SSHClient): Active controller ssh
         fail_ok (bool): Whether it is okay or not for rebooting to fail on any host
 
-    Returns (list): [rtn_code, message]
-        [0, ''] hosts are successfully rebooted and back to available/degraded or online state.
-
+    Returns (tuple): (rtn_code, message)
+        (0, "Host(s) state(s) - <states_dict>.") hosts rebooted and back to available/degraded or online state.
+        (1, "Host(s) not in expected availability states or task unfinished. (<states>) (<task>)" )
     """
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
@@ -126,21 +126,21 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
                                                           con_ssh=con_ssh, availability=['available', 'degraded'])
 
     states_vals = {}
-    task_unfinished_msg = ''
+    task_unfinished_msg = ' '
     for host in hostnames:
         vals = get_hostshow_values(host, con_ssh, 'task', 'availability')
         if not vals['task'] == '':
-            task_unfinished_msg = "{}{} still in task: {}. ".format(task_unfinished_msg, host, vals['task'])
+            task_unfinished_msg = " {}{} still in task: {}. ".format(task_unfinished_msg, host, vals['task'])
         states_vals[host] = vals
 
-    message = "Host(s) state(s) - {}. ".format(states_vals)
+    message = "Host(s) state(s) - {}.".format(states_vals)
 
     if locked_hosts_in_states and unlocked_hosts_in_states and task_unfinished_msg == '':
-        return [0, message]
+        return 0, message
 
-    err_msg = "Host(s) not in expected availability states or task unfinished. " + message + task_unfinished_msg
+    err_msg = "Host(s) not in expected states or task unfinished. " + message + task_unfinished_msg
     if fail_ok:
-        return [1, err_msg]
+        return 1, err_msg
     else:
         raise exceptions.HostPostCheckFailed(err_msg)
 
@@ -227,11 +227,14 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         fail_ok (bool):
         check_first (bool):
 
-    Returns: [return_code, error_message]  Non-zero return code scenarios only applicable when fail_ok=True
-        [0, ''] Successfully locked and host goes online
-        [1, stderr] Lock host rejected
-        [2, ''] Successfully locked but host did not become become locked within 10 seconds
-        [3, ]
+    Returns: (return_code(int), msg(str))   # 1, 2, 3 only returns when fail_ok=True
+        (-1, "Host already locked. Do nothing.")
+        (0, "Host is locked and in online state."]
+        (1, <stderr>)   # Lock host cli rejected
+        (2, "Host is not in locked state")  # cli ran okay, but host did not reach locked state within timeout
+        (3, "Host state is not online")     # Locked but did not go Online within timeout
+        (4, "Lock host <host> is rejected due to no other hypervisor. Details in host-show vim_process_status.")
+        (5, "Lock host <host> is rejected due to migrate vm failed. Details in host-show vm_process_status.")
 
     """
     if get_hostshow_value(host, 'availability') in ['offline', 'failed']:
@@ -241,7 +244,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
         if admin_state == 'locked':
             LOG.info("Host already locked. Do nothing.")
-            return [-1, 'Host already locked. Do nothing.']
+            return -1, "Host already locked. Do nothing."
 
     LOG.info("Locking {}...".format(host))
     positional_arg = host
@@ -255,7 +258,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
                                   auth_info=Tenant.ADMIN, rtn_list=True)
 
     if exitcode == 1:
-        return [1, output]
+        return 1, output
 
     # Wait for task complete. If task stucks, fail the test regardless. Perhaps timeout needs to be increased.
     _wait_for_host_states(host=host, timeout=lock_timeout, task='', fail_ok=False)
@@ -264,29 +267,30 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
     #  vim_progress_status | Lock of host compute-0 rejected because there are no other hypervisors available.
     if _wait_for_host_states(host=host, timeout=5, vim_progress_status='lock host .* rejected.*',
                              regex=True, fail_ok=True, con_ssh=con_ssh):
-        return [4, "Lock host {} is rejected due to no other hypervisor. Details in host-show vim_process_status.".
-                format(host)]
+        return 4, "Lock host {} is rejected due to no other hypervisor. Details in host-show vim_process_status.".\
+            format(host)
 
     if _wait_for_host_states(host=host, timeout=5, vim_progress_status='Migrate of instance .* from host .* failed.*',
                              regex=True, fail_ok=True, con_ssh=con_ssh):
-        return [5, "Lock host {} is rejected due to migrate vm failed. Details in host-show vm_process_status.".
-                format(host)]
+        return 5, "Lock host {} is rejected due to migrate vm failed. Details in host-show vm_process_status.".\
+            format(host)
 
     if not _wait_for_host_states(host, timeout=10, administrative=HostAdminState.LOCKED, con_ssh=con_ssh):
+        msg = "Host is not in locked state"
         if fail_ok:
-            return [2, "Host is not in locked state."]
-        else:
-            raise exceptions.HostPostCheckFailed("Host is not locked.")
-    LOG.info("{} is {}locked.".format(host, extra_msg))
+            return 2, msg
+        raise exceptions.HostPostCheckFailed(msg)
+
+    LOG.info("{} is {}locked. Waiting for it to go Online...".format(host, extra_msg))
 
     if _wait_for_host_states(host, timeout=timeout, availability='online'):
         # ensure the online status lasts for more than 5 seconds. Sometimes host goes online then offline to reboot..
         time.sleep(5)
         if _wait_for_host_states(host, timeout=timeout, availability='online'):
-            return [0, '']
+            return 0, "Host is locked and in online state."
 
     if fail_ok:
-        return [3, "host state is not online"]
+        return 3, "Host state is not online"
     else:
         raise exceptions.HostPostCheckFailed("Host did not go online within {} seconds after {}lock".
                                              format(timeout, extra_msg))
@@ -301,12 +305,13 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
         fail_ok (bool):
         con_ssh:
 
-    Returns:
-        [0, '']
-        [1, <stderr>]                                   ---only applicable if fail_ok
-        [2, "Host is not in unlocked state"]            ---only applicable if fail_ok
-        [3, "Host state did not change to available or degraded within timeout"]        --only applicable if fail_ok
-        [4, "Host is in degraded state after unlocked."]
+    Returns (tuple):
+        (-1, "Host already unlocked. Do nothing")
+        (0, "Host is unlocked and in available state.")
+        (1, <stderr>)   # cli returns stderr. only applicable if fail_ok
+        (2, "Host is not in unlocked state")    # only applicable if fail_ok
+        (3, "Host state did not change to available or degraded within timeout")    # only applicable if fail_ok
+        (4, "Host is in degraded state after unlocked.")
 
     """
     if get_hostshow_value(host, 'availability') == 'offline':
@@ -316,26 +321,26 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
     if get_hostshow_value(host, 'administrative', con_ssh=con_ssh) == HostAdminState.UNLOCKED:
         message = "Host already unlocked. Do nothing"
         LOG.info(message)
-        return [-1, message]
+        return -1, message
 
     exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, auth_info=Tenant.ADMIN, rtn_list=True,
                                   fail_ok=fail_ok, timeout=60)
     if exitcode == 1:
-        return [1, output]
+        return 1, output
 
     if not _wait_for_host_states(host, timeout=30, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
                                  fail_ok=fail_ok):
-        return [2, "Host is not in unlocked state"]
+        return 2, "Host is not in unlocked state"
 
     if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
                                  availability=[HostAavailabilityState.AVAILABLE, HostAavailabilityState.DEGRADED]):
-        return [3, "Host state did not change to available or degraded within timeout"]
+        return 3, "Host state did not change to available or degraded within timeout"
 
     if get_hostshow_value(host, 'availability') == HostAavailabilityState.DEGRADED:
         LOG.warning("Host is in degraded state after unlocked.")
-        return [4, "Host is in degraded state after unlocked."]
+        return 4, "Host is in degraded state after unlocked."
 
-    return [0, '']
+    return 0, "Host is unlocked and in available state."
 
 
 def get_hostshow_value(host, field, con_ssh=None):
@@ -435,7 +440,26 @@ def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, st
         raise exceptions.TimeoutException(msg)
 
 
-def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, fail_ok=False, con_ssh=None):
+def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_complete_timeout=HostTimeout.SWACT,
+               fail_ok=False, con_ssh=None):
+    """
+    Swact active controller from given hostname.
+
+    Args:
+        hostname (str|None): When None, active controller will be used for swact.
+        swact_start_timeout (int): Max time to wait between cli executs and swact starts
+        swact_complete_timeout (int): Max time to wait for swact to complete after swact started
+        fail_ok (bool):
+        con_ssh (SSHClient):
+
+    Returns (tuple): (rtn_code(int), msg(str))      # 1, 3, 4 only returns when fail_ok=True
+        (0, "Active controller is successfully swacted.")
+        (1, <stderr>)   # swact host cli rejected
+        (2, "<hostname> is not active controller host, thus swact request failed as expected.")
+        (3, "Swact did not start within <swact_start_timeout>")
+        (4, "Active controller did not change after swact within <swact_complete_timeou>")
+
+    """
     active_host = system_helper.get_active_controller_name(con_ssh=con_ssh)
     if hostname is None:
         hostname = active_host
@@ -443,12 +467,14 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, fail_ok=Fal
     exitcode, msg = cli.system('host-swact', hostname, ssh_client=con_ssh, auth_info=Tenant.ADMIN, fail_ok=fail_ok,
                                rtn_list=True)
     if exitcode == 1:
-        return [1, msg]
+        return 1, msg
 
     if hostname != active_host:
         _wait_for_host_states(hostname, timeout=swact_start_timeout, fail_ok=False, con_ssh=con_ssh, task='')
-        return [2, "{} is not active controller host, thus swact request failed as expected.".format(hostname)]
-    return _wait_for_swact_complete(hostname, con_ssh, swact_start_timeout=swact_start_timeout, fail_ok=fail_ok)
+        return 2, "{} is not active controller host, thus swact request failed as expected.".format(hostname)
+
+    return _wait_for_swact_complete(hostname, con_ssh, swact_start_timeout=swact_start_timeout,
+                                    swact_complete_timeout=swact_complete_timeout, fail_ok=fail_ok)
 
 
 def _wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=30, swact_complete_timeout=30,
@@ -458,13 +484,16 @@ def _wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=30, 
     NOTE: This function assumes swact command was run from ssh session using floating ip!!
 
     Args:
-        before_host:
-        con_ssh:
-        swact_start_timeout:
-        swact_complete_timeout:
+        before_host (str): Active controller name before swact request
+        con_ssh (SSHClient):
+        swact_start_timeout (int): Max time to wait between cli executs and swact starts
+        swact_complete_timeout (int): Max time to wait for swact to complete after swact started
 
-    Returns:
-        [0,''] if swact complete pass
+    Returns (tuple):
+        (0, "Active controller is successfully swacted.")
+        (3, "Swact did not start within <swact_start_timeout>")     # returns when fail_ok=True
+        (4, "Active controller did not change after swact within <swact_complete_timeou>")  # returns when fail_ok=True
+
     """
     start = time.time()
     end_swact_start = start + swact_start_timeout
@@ -473,7 +502,7 @@ def _wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=30, 
     while con_ssh._is_connected(fail_ok=True):
         if time.time() > end_swact_start:
             if fail_ok:
-                return [3, "Swact did not start within {}".format(swact_start_timeout)]
+                return 3, "Swact did not start within {}".format(swact_start_timeout)
             raise exceptions.HostPostCheckFailed("Timed out waiting for swact. SSH to {} is still alive.".
                                                  format(con_ssh.host))
     LOG.info("ssh to {} disconnected, indicating swacting initiated.".format(con_ssh.host))
@@ -488,10 +517,10 @@ def _wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=30, 
 
     if before_host == after_host:
         if fail_ok:
-            return [4, "Active controller did not change after swact within {}".format(swact_complete_timeout)]
+            return 4, "Active controller did not change after swact within {}".format(swact_complete_timeout)
         raise exceptions.HostPostCheckFailed("Swact failed. Active controller host did not change")
 
-    return [0, '']
+    return 0, "Active controller is successfully swacted."
 
 
 def get_hosts(hosts=None, con_ssh=None, **states):
@@ -504,7 +533,7 @@ def get_hosts(hosts=None, con_ssh=None, **states):
         **states: fields that customized a host. for instance avaliability='available', personality='controller'
         will make sure that a list of host that are available and controller to be returned by the function.
 
-    Returns (list):A list of host specificed by the **states
+    Returns (tuple):A list of host specificed by the **states
 
     """
     # get_hosts(availability='available', personality='controller')
@@ -524,8 +553,7 @@ def get_nova_computes(con_ssh=None, auth_info=Tenant.ADMIN):
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (list):
-        List of nova computes
+    Returns (tuple): a list of nova computes
     """
 
     table_ = table_parser.table(cli.nova('host-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -542,9 +570,9 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
         storage_backing (str): 'local_image', 'local_lvm', or 'remote'
         con_ssh (SSHClient):
 
-    Returns: (list)
-        such as ['compute-0', 'compute-2', 'compute-1', 'compute-3']
-        or [] if no host supports this storage backing
+    Returns (tuple):
+        such as ('compute-0', 'compute-2', 'compute-1', 'compute-3')
+        or () if no host supports this storage backing
 
     """
     storage_backing = storage_backing.strip().lower()
@@ -568,7 +596,7 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
         hosts = [eval(host) for host in hosts]
 
     LOG.info("Hosts with {} backing: {}".format(storage_backing, hosts))
-    return hosts
+    return tuple(hosts)
 
 
 def get_up_hosts_with_storage_backing(storage_backing, con_ssh=None):
@@ -578,7 +606,7 @@ def get_up_hosts_with_storage_backing(storage_backing, con_ssh=None):
     else:
         up_hosts = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
 
-    candidate_hosts = list(set(hosts_with_backing) & set(up_hosts))
+    candidate_hosts = tuple(set(hosts_with_backing) & set(up_hosts))
     return candidate_hosts
 
 
@@ -594,9 +622,8 @@ def get_hypervisors(state=None, status=None, con_ssh=None):
         status (str): e.g., 'enabled', 'disabled'
         con_ssh (SSHClient):
 
-    Returns (list):
-        List of hypervisor names. Return [] if no match found.
-        Always return [] for small footprint lab. i.e., do not work with small footprint lab
+    Returns (tuple): a list of hypervisor names. Return () if no match found.
+        Always return () for small footprint lab. i.e., do not work with small footprint lab
     """
     table_ = table_parser.table(cli.nova('hypervisor-list', auth_info=Tenant.ADMIN, ssh_client=con_ssh))
     target_header = 'Hypervisor hostname'

@@ -68,7 +68,7 @@ def test_ping_vms_from_vm_1(vm_count):
     else:
         vm_ids = vm_helper.get_any_vms(count=vm_count)
 
-    assert vm_ids != []
+    assert vm_ids != ()
 
     vm_helper.ping_vms_from_vm(to_vms=vm_ids, from_vm=from_vm, fail_ok=False)
 

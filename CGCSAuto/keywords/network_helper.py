@@ -80,7 +80,7 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
         con_ssh (SSHClient):
         auth_info (dict): If None, primary tenant will be used
 
-    Returns (list): list of tenant nets. such as [<id for tenant2-net1>, <id for tenant2-net8>]
+    Returns (tuple): list of tenant nets. such as (<id for tenant2-net1>, <id for tenant2-net8>)
 
     """
     table_ = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -100,15 +100,15 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
     This function returns the management IPs for all VMs on the system.
     We make the assumption that the management IPs start with "192".
     Args:
-        vms (str or list): vm ids list. If None, management ips for ALL vms with given Tenant(via auth_info) will be
+        vms (str|tuple|None): vm ids list. If None, management ips for ALL vms with given Tenant(via auth_info) will be
             returned.
         con_ssh (SSHClient): active controller SSHClient object
         auth_info (dict): use admin by default unless specified
-        rtn_dict (bool): return list if False, return dict if True
+        rtn_dict (bool): return tuple if False, return dict if True
 
-    Returns:
-        list of all VM management IPs
-        if rtn_dict is True: return a dictionary with vm IDs as the keys, and mgmt ips as values.
+    Returns (tuple|dict):
+        a list of all VM management IPs   # rtn_dict=False
+        dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
 
     table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=auth_info))
@@ -126,7 +126,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
 
     for i in range(len(vm_ids)):
         vm_id = vm_ids[i]
-        mgmt_ips_for_vm = mgmt_ip_reg.findall(vm_nets[i])
+        mgmt_ips_for_vm = tuple(mgmt_ip_reg.findall(vm_nets[i]))
         if not mgmt_ips_for_vm:
             LOG.warning("No management ip found for vm {}".format(vm_id))
         else:
@@ -141,4 +141,4 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
     if rtn_dict:
         return all_ips_dict
     else:
-        return all_ips
+        return tuple(all_ips)
