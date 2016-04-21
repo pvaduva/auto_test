@@ -51,7 +51,7 @@ class TestLockUnlock:
         # TODO: what if target_host is not one of the up_hypervisors??
 
         LOG.tc_step("Gather vms info and calculate expected result...")
-        pre_vms_status = nova_helper.get_vms_info(header='Status')
+        pre_vms_status = nova_helper.get_vms_info(field='Status')
 
         if len(all_hypervisors) < 2:
             expt = 1
@@ -68,7 +68,7 @@ class TestLockUnlock:
         assert code == expt, output
 
         LOG.tc_step("Verify vms status after lock attempt...")
-        post_vms_status = nova_helper.get_vms_info(header='Status')
+        post_vms_status = nova_helper.get_vms_info(field='Status')
 
         failure_msgs = []
         if not pre_vms_status == post_vms_status:

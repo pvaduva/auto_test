@@ -321,7 +321,7 @@ def get_field_by_vms(vm_ids=None, field="Status", con_ssh=None, auth_info=None):
 
 
 def get_vm_storage_type(vm_id, con_ssh=None):
-    flavor_output = get_vm_info(vm_id=vm_id, field='flavor', strict=True, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+    flavor_output = get_vm_nova_show_value(vm_id=vm_id, field='flavor', strict=True, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
     flavor_id = re.search(r'\((.*)\)', flavor_output).group(1)
 
     table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
@@ -353,6 +353,15 @@ def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False):
     return table_parser.get_column(table_, return_val)
 
 
+def get_vm_nova_show_values(vm_id, fields, strict=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+    values = []
+    for field in fields:
+        value = table_parser.get_value_two_col_table(table_, field, strict)
+        values.append(value)
+    return values
+
+
 def get_vm_id_from_name(vm_name, con_ssh=None):
     table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     return table_parser.get_values(table_, 'ID', Name=vm_name.strip())[0]
@@ -379,24 +388,29 @@ def get_vm_volumes(vm_id, con_ssh=None, auth_info=None):
     return _get_vm_volumes(table_)
 
 
-def get_vm_info(vm_id, field, strict=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=Tenant.ADMIN):
     table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_value_two_col_table(table_, field, strict)
 
 
-def get_vms_info(vm_ids=None, header='Status', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADMIN):
     table_ = table_parser.table(cli.nova('list --all-tenant', ssh_client=con_ssh, auth_info=auth_info))
     if vm_ids:
         table_ = table_parser.filter_table(table_, ID=vm_ids)
     else:
         vm_ids = table_parser.get_column(table_, header='ID')
 
-    info = table_parser.get_column(table_, header=header)
+    info = table_parser.get_column(table_, header=field)
     return dict(zip(vm_ids, info))
 
 
+def get_vm_flavor(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+    flavor_output = get_vm_nova_show_value(vm_id, field='flavor', strict=True, con_ssh=con_ssh, auth_info=auth_info)
+    return re.search(r'\((.*)\)', flavor_output).group(1)
+
+
 def get_vm_host(vm_id, con_ssh=None):
-    return get_vm_info(vm_id, ':host', strict=False, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+    return get_vm_nova_show_value(vm_id, ':host', strict=False, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
 
 
 def get_vms_on_hypervisor(hostname, con_ssh=None, rtn_val='ID'):

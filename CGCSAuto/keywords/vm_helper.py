@@ -119,10 +119,18 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
     if auth_info is None:
         auth_info = Tenant.get_primary()
     tenant = auth_info['tenant']
+
     if name is None:
-        vm_num = Count.get_vm_count()
-        name = 'vm-{}'.format(str(vm_num))
-    name = '-'.join([tenant, name])
+        existing_names = nova_helper.get_all_vms('Name')
+        for i in range(20):
+            tmp_name = '-'.join([tenant, 'vm', str(i+1)])
+            if tmp_name not in existing_names:
+                name = tmp_name
+                break
+        else:
+            exceptions.VMError("Unable to get a proper name for booting new vm.")
+    else:
+        name = '-'.join([tenant, name])
 
     # Handle mandatory arg - flavor
     if flavor is None:
@@ -215,7 +223,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
     tmout = VMTimeout.STATUS_CHANGE
     if not _wait_for_vm_status(vm_id=vm_id, status=VMStatus.ACTIVE, timeout=tmout, con_ssh=con_ssh,
                                auth_info=auth_info, fail_ok=True):
-        vm_status = nova_helper.get_vm_info(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)
+        vm_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)
         message = "VM {} did not reach ACTIVE state within {}. VM status: {}".format(vm_id, tmout, vm_status)
         if fail_ok:
             LOG.warning(message)
@@ -411,7 +419,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=Fals
         optional_arg = ''
 
     before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
-    before_status = nova_helper.get_vm_info(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+    before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
     if not before_status == VMStatus.ACTIVE:
         LOG.warning("Non-active VM status before live migrate: {}".format(before_status))
 
@@ -440,7 +448,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=Fals
     LOG.info("Waiting for VM status change to original state {}".format(before_status))
     end_time = time.time() + VMTimeout.LIVE_MIGRATE_COMPLETE
     while time.time() < end_time:
-        status = nova_helper.get_vm_info(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+        status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
         if status == before_status:
             LOG.info("Live migrate vm {} completed".format(vm_id))
             break
@@ -551,7 +559,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
     """
     before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
-    before_status = nova_helper.get_vm_info(vm_id, 'status', strict=True, con_ssh=con_ssh)
+    before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh)
     if not before_status == VMStatus.ACTIVE:
         LOG.warning("Non-active VM status before cold migrate: {}".format(before_status))
 
@@ -583,7 +591,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
                                     con_ssh=con_ssh)
 
     if vm_status is None:
-        return 4, 'Timed out waiting for Error or Active status for VM {}'.format(vm_id)
+        return 4, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
 
     verify_resize_str = 'Revert' if revert else 'Confirm'
     if vm_status == VMStatus.VERIFY_RESIZE:
@@ -617,6 +625,63 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
         raise exceptions.VMPostCheckFailed(err_msg)
 
     success_msg = "VM {} successfully cold migrated and {}ed Resize.".format(vm_id, verify_resize_str)
+    LOG.info(success_msg)
+    return 0, success_msg
+
+
+def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN):
+    before_flavor = nova_helper.get_vm_flavor(vm_id, con_ssh=con_ssh)
+    before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh)
+    if not before_status == VMStatus.ACTIVE:
+        LOG.warning("Non-active VM status before cold migrate: {}".format(before_status))
+
+    LOG.info("Resizing VM {} to flavor {}...".format(vm_id, flavor_id))
+    exitcode, output = cli.nova('resize --poll', ' '.join([vm_id, flavor_id]), ssh_client=con_ssh, auth_info=auth_info,
+                                timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=fail_ok, rtn_list=True)
+    if exitcode == 1:
+        return [exitcode, output]
+
+    LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
+    vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], fail_ok=fail_ok,
+                                    con_ssh=con_ssh)
+
+    if vm_status is None:
+        return 2, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
+
+    verify_resize_str = 'Revert' if revert else 'Confirm'
+    if vm_status == VMStatus.VERIFY_RESIZE:
+        LOG.info("{}ing resize..".format(verify_resize_str))
+        _confirm_or_revert_resize(vm=vm_id, revert=revert, con_ssh=con_ssh)
+
+    elif vm_status == VMStatus.ERROR:
+        err_msg = "VM {} in Error state after resizing. {} resize is not reached.".format(vm_id, verify_resize_str)
+        if fail_ok:
+            return 3, err_msg
+        raise exceptions.VMPostCheckFailed(err_msg)
+
+    post_confirm_state = _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM,
+                                             fail_ok=fail_ok, con_ssh=con_ssh)
+
+    if post_confirm_state is None:
+        err_msg = "VM {} is not in Active state after {} Resize".format(vm_id, verify_resize_str)
+        return 4, err_msg
+
+    after_flavor = nova_helper.get_vm_flavor(vm_id)
+    if revert and after_flavor != before_flavor:
+        err_msg = "Flavor is changed after revert resizing. Before flavor: {}, after flavor: {}".format(
+                before_flavor, after_flavor)
+        if fail_ok:
+            return 5, err_msg
+        raise exceptions.VMPostCheckFailed(err_msg)
+
+    if not revert and after_flavor != flavor_id:
+        err_msg = "VM flavor is not changed to expected after resizing. Before flavor: {}, after flavor: {}".format(
+                flavor_id, before_flavor, after_flavor)
+        if fail_ok:
+            return 6, err_msg
+        raise exceptions.VMPostCheckFailed(err_msg)
+
+    success_msg = "VM {} successfully resized and {}ed.".format(vm_id, verify_resize_str)
     LOG.info(success_msg)
     return 0, success_msg
 
@@ -695,15 +760,18 @@ def _wait_for_vm_status(vm_id, status, timeout=VMTimeout.STATUS_CHANGE, check_in
     if isinstance(status, str):
         status = [status]
 
+    current_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)
     while time.time() < end_time:
-        current_status = nova_helper.get_vm_info(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)
         for expected_status in status:
             if current_status == expected_status:
                 LOG.info("VM status has reached {}".format(expected_status))
                 return expected_status
+
         time.sleep(check_interval)
+        current_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)
 
     if fail_ok:
+        LOG.warning("Timed out waiting for vm status: {}. Actual vm status: {}".format(status, current_status))
         return None
     else:
         raise exceptions.VMTimeout
@@ -1126,7 +1194,7 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
             return 2, msg
         raise exceptions.VMPostCheckFailed(msg)
 
-    LOG.info("VM(s) are successfully deleted: {}".format(vms_to_del))
+    LOG.info("VM(s) deleted successfully: {}".format(vms_to_del))
     return 0, "VM(s) deleted successfully."
 
 

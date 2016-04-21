@@ -281,7 +281,7 @@ class TestLockWithVMs:
                  "Host(s) to attempt lock: {}".format(storages_to_test, target_hosts_))
         for host in target_hosts_:
             vms_on_host = nova_helper.get_vms_on_hypervisor(hostname=host)
-            pre_vms_status = nova_helper.get_vms_info(vm_ids=vms_on_host, header='Status')
+            pre_vms_status = nova_helper.get_vms_info(vm_ids=vms_on_host, field='Status')
 
             LOG.tc_step("Lock target host {}...".format(host))
             lock_code, lock_output = host_helper.lock_host(host=host, check_first=False, fail_ok=True)
@@ -290,7 +290,7 @@ class TestLockWithVMs:
             if lock_code in [0, 3]:
                 self.hosts_locked.append(host)
 
-            post_vms_status = nova_helper.get_vms_info(vm_ids=vms_on_host, header='Status')
+            post_vms_status = nova_helper.get_vms_info(vm_ids=vms_on_host, field='Status')
 
             LOG.tc_step("Verify lock succeeded and vms status unchanged.")
             assert lock_code == 0, "Failed to lock {}. Details: {}".format(host, lock_output)
@@ -362,7 +362,7 @@ class TestLockWithVMsNegative:
                  "Host(s) to attempt lock: {}".format(storages_to_test, target_hosts_negative))
         for host in target_hosts:
             vms_on_host = nova_helper.get_vms_on_hypervisor(hostname=host)
-            pre_vms_status = nova_helper.get_vms_info(vm_ids=vms_on_host, header='Status')
+            pre_vms_status = nova_helper.get_vms_info(vm_ids=vms_on_host, field='Status')
 
             LOG.tc_step("Lock target host {}...".format(host))
             lock_code, lock_output = host_helper.lock_host(host=host, check_first=False, fail_ok=True)
@@ -371,7 +371,7 @@ class TestLockWithVMsNegative:
             if lock_code in [0, 3]:
                 self.hosts_locked.append(host)
 
-            post_vms_status = nova_helper.get_vms_info(vm_ids=vms_on_host, header='Status')
+            post_vms_status = nova_helper.get_vms_info(vm_ids=vms_on_host, field='Status')
 
             LOG.tc_step("Verify lock rejected and vms status unchanged.")
             assert lock_code in [1, 4, 5], "Unexpected result: {}".format(lock_output)
