@@ -133,6 +133,7 @@ class TestRetentionPeriod:
 
         request.addfinalizer(restore_rention_period)
 
+
     @mark.parametrize(
         "new_retention_period", [
             -1,
@@ -240,6 +241,7 @@ class TestDnsSettings:
 
         request.addfinalizer(restore_dns_settings)
 
+
     @mark.parametrize(
         'new_dns_servers', [
             ('128.224.144.130', '147.11.57.128', '147.11.57.133'),
@@ -298,7 +300,7 @@ class TestDnsSettings:
             assert 1 == code, msg
             return
         else:
-            assert 0 == code, 'Failed to DNS setting, msg={}'.format(msg)
+            assert 0 == code, 'Failed to change DNS setting, msg={}'.format(msg)
 
         LOG.tc_step('Check if the changes are saved into persistent storage')
         controller_ssh = ControllerClient.get_active_controller()

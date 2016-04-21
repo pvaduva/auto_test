@@ -9,6 +9,11 @@ from consts.auth import Tenant
 from consts.cgcs import MGMT_IP
 from keywords import common
 
+def is_valid_ipaddress(ip=None):
+    if get_ipaddress_str(ip):
+        return True
+    else:
+        return False
 
 def get_ipaddress_str(ip=None):
     try:
