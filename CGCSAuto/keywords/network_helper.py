@@ -81,7 +81,7 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
         con_ssh (SSHClient):
         auth_info (dict): If None, primary tenant will be used
 
-    Returns (tuple): list of tenant nets. such as (<id for tenant2-net1>, <id for tenant2-net8>)
+    Returns (list): list of tenant nets. such as (<id for tenant2-net1>, <id for tenant2-net8>)
 
     """
     table_ = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=auth_info))

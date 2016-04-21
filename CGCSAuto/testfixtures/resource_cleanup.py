@@ -1,4 +1,4 @@
-from pytest import fixture
+from pytest import fixture, mark
 from keywords import nova_helper, vm_helper, cinder_helper
 
 
@@ -29,17 +29,20 @@ def delete_resources_module(request):
 class ResourceCleanup:
     __resources_to_cleanup = {
         'function': {
-            'vms': [],
+            'vms_with_vols': [],
+            'vms_no_vols': [],
             'volumes': [],
             'flavors': [],
         },
         'class': {
-            'vms': [],
+            'vms_with_vols': [],
+            'vms_no_vols': [],
             'volumes': [],
             'flavors': [],
         },
         'module': {
-            'vms': [],
+            'vms_with_vols': [],
+            'vms_no_vols': [],
             'volumes': [],
             'flavors': [],
         }
@@ -70,11 +73,14 @@ class ResourceCleanup:
 
     @staticmethod
     def _delete(resources):
-        vms = resources['vms']
+        vms_with_vols = resources['vms_with_vols']
+        vms_no_vols = resources['vms_no_vols']
         volumes = resources['volumes']
         flavors = resources['flavors']
-        if vms:
-            vm_helper.delete_vms(vms)
+        if vms_with_vols:
+            vm_helper.delete_vms(vms_with_vols)
+        if vms_no_vols:
+            vm_helper.delete_vms(vms_no_vols, delete_volumes=False)
         if volumes:
             cinder_helper.delete_volumes(volumes)
         if flavors:
@@ -83,13 +89,14 @@ class ResourceCleanup:
     @classmethod
     def _reset(cls, scope):
         cls.__resources_to_cleanup[scope] = {
-            'vms': [],
+            'vms_with_vols': [],
+            'vms_no_vols': [],
             'volumes': [],
             'flavors': [],
         }
 
     @classmethod
-    def add(cls, resource_type, resource_id, scope='function'):
+    def add(cls, resource_type, resource_id, scope='function', del_vm_vols=True):
         """
         Add resource to cleanup list.
 
@@ -97,6 +104,7 @@ class ResourceCleanup:
             resource_type (str): one of these: 'vm', 'volume', 'flavor
             resource_id (str): id of the resource to add to cleanup list
             scope (str): when the cleanup should be done. Valid value is one of these: 'function', 'class', 'module'
+            del_vm_vols (bool): whether to delete attached volume(s) if given resource is vm.
 
         """
         scope == scope.lower()
@@ -108,5 +116,12 @@ class ResourceCleanup:
         if resource_type not in valid_types:
             raise ValueError("'resouce_type' param value has to be one of the: {}".format(valid_types))
 
-        key = resource_type + 's'
+        if resource_type == 'vm':
+            if del_vm_vols:
+                key = 'vms_with_vols'
+            else:
+                key = 'vms_no_vols'
+        else:
+            key = resource_type + 's'
+
         cls.__resources_to_cleanup[scope][key].append(resource_id)

@@ -533,7 +533,7 @@ def get_hosts(hosts=None, con_ssh=None, **states):
         **states: fields that customized a host. for instance avaliability='available', personality='controller'
         will make sure that a list of host that are available and controller to be returned by the function.
 
-    Returns (tuple):A list of host specificed by the **states
+    Returns (list):A list of host specificed by the **states
 
     """
     # get_hosts(availability='available', personality='controller')
@@ -553,7 +553,7 @@ def get_nova_computes(con_ssh=None, auth_info=Tenant.ADMIN):
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (tuple): a list of nova computes
+    Returns (list): a list of nova computes
     """
 
     table_ = table_parser.table(cli.nova('host-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -622,7 +622,7 @@ def get_hypervisors(state=None, status=None, con_ssh=None):
         status (str): e.g., 'enabled', 'disabled'
         con_ssh (SSHClient):
 
-    Returns (tuple): a list of hypervisor names. Return () if no match found.
+    Returns (list): a list of hypervisor names. Return () if no match found.
         Always return () for small footprint lab. i.e., do not work with small footprint lab
     """
     table_ = table_parser.table(cli.nova('hypervisor-list', auth_info=Tenant.ADMIN, ssh_client=con_ssh))

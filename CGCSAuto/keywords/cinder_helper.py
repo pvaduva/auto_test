@@ -25,7 +25,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT_1,Tenant.TENANT_2
         con_ssh (str):
 
-    Returns (tuple): a list of volume ids based on the given criteria
+    Returns (list): a list of volume ids based on the given criteria
     """
     if bootable is not None:
         bootable = str(bootable).lower()
@@ -66,8 +66,7 @@ def get_volumes_attached_to_vms(volumes=None, vms=None, con_ssh=None, auth_info=
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (tuple):
-        list of volumes ids or () if no match found
+    Returns (list): a list of volumes ids or [] if no match found
 
     """
     table_ = table_parser.table(cli.cinder('list --all-tenant', auth_info=auth_info, ssh_client=con_ssh))
@@ -342,7 +341,7 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
     Delete volume(s).
 
     Args:
-        volumes (list or str): ids of the volumes to delete. If None, all available volumes under given Tenant will be
+        volumes (list|str): ids of the volumes to delete. If None, all available volumes under given Tenant will be
             deleted. If given Tenant is admin, available volumes for all tenants will be deleted.
         fail_ok (bool): True or False
         timeout (int): CLI timeout and waiting for volumes disappear timeout in seconds.
@@ -369,6 +368,7 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
 
     if isinstance(volumes, str):
         volumes = [volumes]
+    volumes = list(volumes)
 
     if check_first:
         vols_to_del = get_volumes(vols=volumes, auth_info=auth_info, con_ssh=con_ssh)
@@ -378,7 +378,8 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
             return -1, msg
 
         if not vols_to_del == volumes:
-            LOG.info("Some volume(s) don't exist. Given volumes: {}. Volumes to delete: {}.".format(volumes, vols_to_del))
+            LOG.info("Some volume(s) don't exist. Given volumes: {}. Volumes to delete: {}.".
+                     format(volumes, vols_to_del))
     else:
         vols_to_del = volumes
 

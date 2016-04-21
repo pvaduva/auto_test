@@ -104,13 +104,14 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
         nics (list): [{'net-id1': <net_id1>, 'vif-model1': <vif1>}, {'net-id2': <net_id2>, 'vif-model2': <vif2>}, ...]
         fail_ok (bool):
 
-    Returns (tuple): (rtn_code (int), vm_id or message (str))
-        (0, vm_id, 'VM is booted successfully'): vm is created successfully and in Active state.
-        (1, vm_id, <stderr>): boot vm cli command failed, but vm is still booted
-        (2, vm_id, "VM building is not 100% complete."): boot vm cli accepted, but vm building is not 100% completed.
-        (3, vm_id, "VM <uuid> did not reach ACTIVE state within <seconds>. VM status: <status>"):
-            vm is not in Active state after created.
-        (4, '', <stderr>): create vm cli command failed, vm is not booted
+    Returns (tuple): (rtn_code(int), new_vm_id_if_any(str), message(str), new_vol_id_if_any(str))
+        (0, vm_id, 'VM is booted successfully', <new_vol_id>)   # vm is created successfully and in Active state.
+        (1, vm_id, <stderr>, <new_vol_id_if_any>)      # boot vm cli command failed, but vm is still booted
+        (2, vm_id, "VM building is not 100% complete.", <new_vol_id>)   # boot vm cli accepted, but vm building is not
+            100% completed.
+        (3, vm_id, "VM <uuid> did not reach ACTIVE state within <seconds>. VM status: <status>", <new_vol_id>)
+            # vm is not in Active state after created.
+        (4, '', <stderr>, <new_vol_id>): create vm cli command failed, vm is not booted
 
     """
     LOG.info("Processing boot_vm args...")
@@ -118,10 +119,10 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
     if auth_info is None:
         auth_info = Tenant.get_primary()
     tenant = auth_info['tenant']
-    vm_num = Count.get_vm_count()
     if name is None:
-        name = 'vm'
-    name = '-'.join([tenant, name, str(vm_num)])
+        vm_num = Count.get_vm_count()
+        name = 'vm-{}'.format(str(vm_num))
+    name = '-'.join([tenant, name])
 
     # Handle mandatory arg - flavor
     if flavor is None:
@@ -153,13 +154,18 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
     nics_args = ' '.join(nics_args_list)
 
     # Handle mandatory arg - boot source id
+    new_vol = ''
     volume_id = image = snapshot_id = None
     if source is None:
         vol_name = 'vol-' + name
         volume_id = cinder_helper.create_volume(vol_name, auth_info=auth_info, con_ssh=con_ssh)[1]
+        new_vol = volume_id
     elif source.lower() == 'volume':
-        volume_id = source_id if source_id else cinder_helper.create_volume(
-                'vol-' + name, auth_info=auth_info, con_ssh=con_ssh)[1]
+        if source_id:
+            volume_id = source_id
+        else:
+            volume_id = cinder_helper.create_volume('vol-' + name, auth_info=auth_info, con_ssh=con_ssh)[1]
+            new_vol = volume_id
     elif source.lower() == 'image':
         image = source_id if source_id else glance_helper.get_image_id_from_name('cgcs-guest')
     elif source.lower() == 'snapshot':
@@ -194,15 +200,15 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
 
     if exitcode == 1:
         if vm_id:
-            return 1, vm_id, output       # vm_id = '' if cli is rejected without vm created
-        return 4, '', output
+            return 1, vm_id, output, new_vol       # vm_id = '' if cli is rejected without vm created
+        return 4, '', output, new_vol     # new_vol = '' if no new volume created. Pass this to test for proper teardown
 
     LOG.info("Post action check...")
     if "100% complete" not in output:
         message = "VM building is not 100% complete."
         if fail_ok:
             LOG.warning(message)
-            return 2, vm_id, "VM building is not 100% complete."
+            return 2, vm_id, "VM building is not 100% complete.", new_vol
         else:
             raise exceptions.VMOperationFailed(message)
 
@@ -213,12 +219,12 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
         message = "VM {} did not reach ACTIVE state within {}. VM status: {}".format(vm_id, tmout, vm_status)
         if fail_ok:
             LOG.warning(message)
-            return 3, vm_id, message
+            return 3, vm_id, message, new_vol
         else:
             raise exceptions.VMPostCheckFailed(message)
 
     LOG.info("VM {} is booted successfully.".format(vm_id))
-    return 0, vm_id, 'VM is booted successfully'
+    return 0, vm_id, 'VM is booted successfully', new_vol
 
 
 def __compose_args(optional_args_dict):
@@ -979,8 +985,9 @@ class VMInfo:
 
     def get_vcpus(self):
         """
+        Get vcpus info as a list
 
-        Returns: (tuple) such as (1, 1, 1)
+        Returns (list): [min(int), current(int), max(int)]     # such as [1, 1, 1]
 
         """
         # self.refresh_table()
@@ -1056,6 +1063,7 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
 
     if isinstance(vms, str):
         vms = [vms]
+    vms = list(vms)
 
     for vm in vms:
         if vm:

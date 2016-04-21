@@ -283,7 +283,7 @@ def get_all_vms(return_val='ID', con_ssh=None):
         return_val:
         con_ssh:
 
-    Returns (tuple): list of all vms on the system
+    Returns (list): list of all vms on the system
 
     """
     table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
@@ -339,7 +339,7 @@ def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False):
         auth_info (dict): such as ones in auth.py: auth.ADMIN, auth.TENANT1
         all_vms (bool): whether to return VMs for all tenants if admin auth_info is given
 
-    Returns (tuple): list of VMs for tenant(s).
+    Returns (list): list of VMs for tenant(s).
 
     """
     positional_args = ''
@@ -407,7 +407,7 @@ def get_vms_on_hypervisor(hostname, con_ssh=None, rtn_val='ID'):
         hostname (str):Name of a compute node
         con_ssh:
 
-    Returns (tuple): A list of VMs' ID under a hypervisor
+    Returns (list): A list of VMs' ID under a hypervisor
 
     """
     table_ = table_parser.table(cli.nova('hypervisor-servers', hostname, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
