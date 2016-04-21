@@ -93,11 +93,13 @@ def test_launch_vm_shared_cpu_setting_negative(vcpus, cpu_policy, numa_nodes, nu
     nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.NUMA_NODES: numa_nodes, FlavorSpec.NUMA_0: numa_node0})
     nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.SHARED_VCPU: shared_vcpu})
 
-    code, vm_id, output = vm_helper.boot_vm(flavor=flavor, fail_ok=True)
-    ResourceCleanup.add('vm', vm_id, scope='function')
+    code, vm_id, output, vol_id = vm_helper.boot_vm(name='shared_cpu', flavor=flavor, fail_ok=True)
+    if vm_id:
+        ResourceCleanup.add('vm', vm_id, scope='function')
+    if vol_id:
+        ResourceCleanup.add('volume', vol_id, scope='module')
 
     cores_quota = int(nova_helper.get_quotas('cores')[0])
-
     if vcpus >= cores_quota:
         assert 4 == code, 'Expect boot vm cli rejected and no vm is booted. Actual: {}'.format(output)
         expt_err = 'Quota exceeded for cores: '
