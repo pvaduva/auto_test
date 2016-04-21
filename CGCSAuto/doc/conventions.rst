@@ -5,9 +5,12 @@ Naming
 ----------------------------------------------
 
 General Naming Conventions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 module_name, package_name, ClassName, method_name, ExceptionName, function_name, GLOBAL_CONSTANT_NAME, global_var_name, instance_var_name, function_parameter_name, local_var_name
+
 Function Naming Conventions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In general, function name should be Verb + Noun. (Some exceptions: test fixtures with return values, function with bool return value)
 Naming convention for function with bool return value:
@@ -36,8 +39,9 @@ Functions retrieving host(s) info by default should return hostname unless speci
  get_controllers() 
  # Return host id as specified in the func name
  get_host_id()
- Functions retrieving info other than host(s) by default should return ID(s) unless specified.
- This is due to 1) Duplicated name is allowed for most items, such as VM, Volume, Network, etc. 2) Some cli commands only accept ID as positional arg.
+
+Functions retrieving info other than host(s) by default should return ID(s) unless specified.
+This is due to 1) Duplicated name is allowed for most items, such as VM, Volume, Network, etc. 2) Some cli commands only accept ID as positional arg.
 
 .. code-block:: python
 
@@ -194,7 +198,7 @@ Other Conventions
 Things to Avoid
 ----------------------------------------------
 
- * Avoid using **TAB** unless TAB is set to 4 spaces in your editor
+ * Avoid using **TAB** unless it's set to 4 spaces in your editor
  * Avoid ``from my_package.my_module import *.`` Reasons:
 
    * Hides the origin of the imported variables/functions
@@ -202,14 +206,14 @@ Things to Avoid
    * Messes up global variables
  * Avoid catching exception in a test function
 
-   * Action Keywords should define proper return code, with a fail_ok flag
+   * Action Keywords should define proper return code, with a **fail_ok** flag
  * Avoid writing very long function
 
    * Usually should be within the height of your computer monitor excluding doc strings, i.e., 55 - 60 lines. Or page-down once should bring you to the end of the function.
    * Extract some contents out to reduce the length and increase the readability of a function
  * Avoid nested function (func inside a func)
 
-   * Except Test Fixtures! Test teardown should be written as a nested function of a test fixture.
+   * Except ``@pytest.fixture()``. Test teardown should be written as a nested function of a ``@pytest.fixture()``.
    * For keyword function, create another assisting function instead, such as:
 
      * _func_name(): Similar to public func - can be used by any other functions.
@@ -218,5 +222,5 @@ Things to Avoid
    * For test function:
 
      * Create a new keyword or update existing keyword if possible
-     * See if any content can/should be extracted out to test setups by creating a test fixture function (fuction decorated with @pytest.fixture())
+     * See if any content can/should be extracted out to test setups by creating a test fixture function (fuction decorated with ``@pytest.fixture()``)
 

@@ -2,7 +2,6 @@
 # TC2196 Verify that alarm can be deleted using CLI
 ###
 
-from pytest import fixture, mark, skip
 
 from utils import cli
 from utils.ssh import ControllerClient
