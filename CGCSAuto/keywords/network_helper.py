@@ -1,25 +1,26 @@
 import random
 import re
 import ipaddress
-#import socket
 
-from utils import table_parser, cli, exceptions
+from utils import table_parser, cli
 from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import MGMT_IP
 from keywords import common
 
-def is_valid_ipaddress(ip=None):
-    if get_ipaddress_str(ip):
+
+def is_valid_ip_address(ip=None):
+    if get_ip_address_str(ip):
         return True
     else:
         return False
 
-def get_ipaddress_str(ip=None):
+
+def get_ip_address_str(ip=None):
     try:
         ipaddr = ipaddress.ip_address(ip)
         return str(ipaddr)
-    except ValueError as e:
+    except ValueError:
         # invalid IPv4 or IPv6 address
         return None
     # Other exceptions will be passed along the calling-stack

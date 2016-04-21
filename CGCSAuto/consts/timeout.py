@@ -28,3 +28,4 @@ class VolumeTimeout:
 
 class SysInvTimeout:
     RETENTION_PERIOD_SAVED = 30
+    DNS_SERVERS_SAVED = 5

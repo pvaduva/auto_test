@@ -283,7 +283,7 @@ class TestDnsSettings:
         ip_addr_list = []
         expect_fail = False
         for server in new_dns_servers:
-            ip_addr = network_helper.get_ipaddress_str(server)
+            ip_addr = network_helper.get_ip_address_str(server)
             if not ip_addr:
                 # we know it will fail, for invalid IPs will be rejected
                 LOG.info('Found invalid IP:{}'.format(server))
@@ -301,6 +301,9 @@ class TestDnsSettings:
             return
         else:
             assert 0 == code, 'Failed to change DNS setting, msg={}'.format(msg)
+
+        LOG.tc_step('Wait {} seconds'.format(SysInvTimeout.DNS_SERVERS_SAVED))
+        time.sleep(SysInvTimeout.DNS_SERVERS_SAVED)
 
         LOG.tc_step('Check if the changes are saved into persistent storage')
         controller_ssh = ControllerClient.get_active_controller()
