@@ -24,3 +24,7 @@ class VMTimeout:
 class VolumeTimeout:
     STATUS_CHANGE = 720
     DELETE = 60
+
+
+class SysInvTimeout:
+    RETENTION_PERIOD_SAVED = 30
