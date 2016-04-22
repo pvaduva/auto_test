@@ -506,7 +506,7 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
         count += 1
     if count == MAX_SEARCH_ATTEMPTS:
         msg = 'Waited {} seconds and {} did not become \"{}\"'.format(str(REBOOT_TIMEOUT), node_names, expected_state)
-        log.error()
+        log.error(msg)
         wr_exit()._exit(1, msg)
 
 def get_availability_controller1():
@@ -1143,8 +1143,8 @@ if __name__ == '__main__':
                 cmd = "source /etc/nova/openrc; system host-unlock " + node.name
                 if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
                     msg = "Failed to unlock: " + node.name
-                    log.error()
-                    wr_exit()._exit(1, "Failed to unlock: " + node.name)
+                    log.error(msg)
+                    wr_exit()._exit(1, msg)
 
         # Wait for computes to become enabled before we run lab_setup again
         wait_state(nodes, OPERATIONAL, ENABLED)
