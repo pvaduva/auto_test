@@ -10,6 +10,16 @@ from keywords import common
 
 
 def is_valid_ip_address(ip=None):
+    """
+    Validate the input IP address
+
+    Args:
+        ip:  IPv4 or IPv6 address
+
+    Returns:
+        True: valid IPv4 or IPv6 address
+        False: otherwise
+    """
     if get_ip_address_str(ip):
         return True
     else:
@@ -17,13 +27,22 @@ def is_valid_ip_address(ip=None):
 
 
 def get_ip_address_str(ip=None):
+    """
+    Get the representation of the input IP address
+
+    Args:
+        ip:  IPv4 or IPv6 address
+
+    Returns:
+        str: string representation of the input IP address if it's valid
+        None: otherwise
+    """
     try:
         ipaddr = ipaddress.ip_address(ip)
         return str(ipaddr)
     except ValueError:
         # invalid IPv4 or IPv6 address
         return None
-    # Other exceptions will be passed along the calling-stack
 
 
 def create_network(name, admin_state='up', qos_policy=None, vlan_transparent=None, **subnet):
