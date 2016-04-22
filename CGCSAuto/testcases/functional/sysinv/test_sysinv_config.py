@@ -19,20 +19,10 @@ def test_system_type():
     """
     Verify the System Type can be retrieved from SysInv and is correct
 
-    Args:
-
-    Skip conditions:
-
-    Prerequisites:
-
-    Test Setups:
-
     Test Steps:
         - Determine the System Type based on whether the system is CPE or not
         - Retrieve the System Type information from SystInv
         - Compare the types and verify they are the same, fail the test case otherwise
-
-    Test Teardown:
 
     Notes:
         - Covers SysInv test-cases:
@@ -59,20 +49,10 @@ def test_system_type_is_readonly():
     """
     Verify System Type is readonly
 
-    Args:
-
-    Skip conditions:
-
-    Prerequisites:
-
-    Test Setups:
-
     Test Steps:
         - Determine the System Type based on whether the system is CPE or not
         - Attempt to modify the System Type to a different type
         - Compare the types and verify they are the same, fail the test case otherwise
-
-    Test Teardown:
 
     Notes:
         - Covers SysInv test-case
@@ -114,12 +94,6 @@ class TestRetentionPeriod:
         Args:
             request: request passed in to the fixture.
 
-        Test Steps:
-            - Retrieve and save the Retention Period value during setup
-
-        Test Teardown:
-            - Restore the Retention Period to the saved (orignal) value during teardown
-
         """
 
         LOG.info('Backup Retention Period')
@@ -147,12 +121,6 @@ class TestRetentionPeriod:
 
         Args:
             new_retention_period(int):
-
-        Skip Conditions:
-            -
-
-        Prerequisites:
-            -
 
         Test Setups:
             - Do nothing, and delegate to the class-scope fixture to save the currently in-use Retention Period
@@ -223,12 +191,6 @@ class TestDnsSettings:
         Args:
             request: request passed in by py.test system
 
-        Test Steps:
-            - Retrieve and save the DNS settings during setup
-
-        Test Teardown:
-            - Restore the DNS settings to the saved (original) values during teardown
-
         """
         self.dns_servers = system_helper.get_dns_servers(con_ssh=None)
         LOG.info('Save current DNS-servers:{}'.format(self.dns_servers))
@@ -259,10 +221,6 @@ class TestDnsSettings:
         Args:
             - new_dns_servers(list): IP addresses of new DNS servers to change to.
                 Both IPv4 and IPv6 are supported.
-
-        Skip Conditions:
-
-        Prerequisites:
 
         Test Setups:
             - Do nothing, and delegate to the class-scope fixture to save the currently in-use DNS servers
