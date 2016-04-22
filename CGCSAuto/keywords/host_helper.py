@@ -7,9 +7,10 @@ from utils.ssh import ControllerClient, SSHFromSSH
 from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import HostAavailabilityState, HostAdminState
-from consts.timeout import HostTimeout
+from consts.timeout import HostTimeout, CMDTimeout
 from keywords import system_helper
 from keywords.security_helper import LinuxUser
+
 
 @contextmanager
 def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=None):
@@ -227,14 +228,14 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         fail_ok (bool):
         check_first (bool):
 
-    Returns: (return_code(int), msg(str))   # 1, 2, 3 only returns when fail_ok=True
+    Returns: (return_code(int), msg(str))   # 1, 2, 3, 4, 5 only returns when fail_ok=True
         (-1, "Host already locked. Do nothing.")
         (0, "Host is locked and in online state."]
         (1, <stderr>)   # Lock host cli rejected
         (2, "Host is not in locked state")  # cli ran okay, but host did not reach locked state within timeout
         (3, "Host state is not online")     # Locked but did not go Online within timeout
-        (4, "Lock host <host> is rejected due to no other hypervisor. Details in host-show vim_process_status.")
-        (5, "Lock host <host> is rejected due to migrate vm failed. Details in host-show vm_process_status.")
+        (4, "Lock host <host> is rejected. Details in host-show vim_process_status.")
+        (5, "Lock host <host> failed due to migrate vm failed. Details in host-show vm_process_status.")
 
     """
     if get_hostshow_value(host, 'availability') in ['offline', 'failed']:
@@ -265,15 +266,19 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
     # TODO: Should this considered as fail??
     #  vim_progress_status | Lock of host compute-0 rejected because there are no other hypervisors available.
-    if _wait_for_host_states(host=host, timeout=5, vim_progress_status='lock host .* rejected.*',
+    if _wait_for_host_states(host=host, timeout=5, vim_progress_status='ock .* host .* rejected.*',
                              regex=True, fail_ok=True, con_ssh=con_ssh):
-        return 4, "Lock host {} is rejected due to no other hypervisor. Details in host-show vim_process_status.".\
-            format(host)
+        msg = "Lock host {} is rejected. Details in host-show vim_process_status.".format(host)
+        if fail_ok:
+            return 4, msg
+        raise exceptions.HostPostCheckFailed(msg)
 
     if _wait_for_host_states(host=host, timeout=5, vim_progress_status='Migrate of instance .* from host .* failed.*',
                              regex=True, fail_ok=True, con_ssh=con_ssh):
-        return 5, "Lock host {} is rejected due to migrate vm failed. Details in host-show vm_process_status.".\
-            format(host)
+        msg = "Lock host {} failed due to migrate vm failed. Details in host-show vm_process_status.".format(host)
+        if fail_ok:
+            return 5, msg
+        exceptions.HostPostCheckFailed(msg)
 
     if not _wait_for_host_states(host, timeout=10, administrative=HostAdminState.LOCKED, con_ssh=con_ssh):
         msg = "Host is not in locked state"
@@ -401,6 +406,10 @@ def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, st
         table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
         for field, val in states.items():
             actual_val = table_parser.get_value_two_col_table(table_, field)
+            # ['Lock of host compute-0 rejected because instance vm-from-vol-t1 is', 'suspended.']
+            if isinstance(actual_val, list):
+                actual_val = ' '.join(actual_val)
+
             LOG.warning("Actual_val: {}".format(actual_val))
             actual_val_lower = actual_val.lower()
             if isinstance(val, str):
@@ -543,9 +552,9 @@ def get_hosts(hosts=None, con_ssh=None, **states):
     return table_parser.get_values(table_, 'hostname', **states)
 
 
-def get_nova_computes(con_ssh=None, auth_info=Tenant.ADMIN):
+def get_nova_hosts(con_ssh=None, auth_info=Tenant.ADMIN):
     """
-    Get nova computes listed in nova host-list.
+    Get nova hosts listed in nova host-list.
 
     System: Regular, Small footprint
 
@@ -599,15 +608,37 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
     return tuple(hosts)
 
 
-def get_up_hosts_with_storage_backing(storage_backing, con_ssh=None):
+def get_nova_hosts_with_storage_backing(storage_backing, con_ssh=None):
     hosts_with_backing = get_hosts_by_storage_aggregate(storage_backing, con_ssh=con_ssh)
-    if system_helper.is_small_footprint(controller_ssh=con_ssh):
-        up_hosts = get_nova_computes(con_ssh=con_ssh)
-    else:
-        up_hosts = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
+    up_hosts = get_nova_hosts(con_ssh=con_ssh)
 
     candidate_hosts = tuple(set(hosts_with_backing) & set(up_hosts))
     return candidate_hosts
+
+
+def get_nova_host_with_min_or_max_vms(rtn_max=True, con_ssh=None):
+    """
+    Get name of a compute host with least of most vms.
+
+    Args:
+        rtn_max (bool): when True, return hostname with the most number of vms on it; otherwise return hostname with
+            least number of vms on it.
+        con_ssh (SSHClient):
+
+    Returns (str): hostname
+
+    """
+    hosts = get_nova_hosts(con_ssh=con_ssh)
+    table_ = system_helper.get_vm_topology_tables('computes')[0]
+
+    vms_nums = [int(table_parser.get_values(table_, 'servers', Host=host)[0]) for host in hosts]
+
+    if rtn_max:
+        index = vms_nums.index(max(vms_nums))
+    else:
+        index = vms_nums.index(min(vms_nums))
+
+    return hosts[index]
 
 
 def get_hypervisors(state=None, status=None, con_ssh=None):
@@ -637,3 +668,38 @@ def get_hypervisors(state=None, status=None, con_ssh=None):
     if status is not None:
         params['Status'] = status
     return table_parser.get_values(table_, target_header=target_header, **params)
+
+
+def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=False, con_ssh=None,
+                    auth_info=Tenant.ADMIN, **kwargs):
+    LOG.info("Modifying host {} CPU function {} to {}".format(host, function, kwargs))
+
+    proc_args = ''
+    for proc, cores in kwargs.items():
+        cores = str(cores)
+        proc_args = ' '.join([proc_args, '-'+proc.lower().strip(), cores])
+
+    subcmd = ' '.join(['host-cpu-modify', '-f', function.lower().strip(), proc_args])
+    code, output = cli.system(subcmd, host, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info, timeout=timeout,
+                              rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    LOG.info("Post action check for host-cpu-modify...")
+    table_ = table_parser.table(output)
+    table_ = table_parser.filter_table(table_, assigned_function=function)
+    for proc, expt_cores in kwargs.items():
+        proc_id = re.findall('\d+', proc)[0]
+        actual_cores = len(table_parser.get_values(table_, 'log_core', processor=proc_id))
+        if int(expt_cores) != actual_cores:
+            msg = "Number of actual log_cores for {} is different than number set. Actual: {}, expect: {}". \
+                format(proc, actual_cores, expt_cores)
+            if fail_ok:
+                LOG.warning(msg)
+                return 2, msg
+            raise exceptions.HostPostCheckFailed(msg)
+
+    msg = "Host cpu function modified successfully"
+    LOG.info(msg)
+    return 0, msg

@@ -118,7 +118,7 @@ class TestLockWithVM:
         storage, vm_id = vm_
 
         LOG.tc_step("Calculating expected result...")
-        candidate_hosts = host_helper.get_up_hosts_with_storage_backing(storage)
+        candidate_hosts = host_helper.get_nova_hosts_with_storage_backing(storage)
         exp_codes = [0] if len(candidate_hosts) > 1 else [1, 4]
 
         target_host = nova_helper.get_vm_host(vm_id=vm_id)
@@ -304,7 +304,7 @@ class TestLockWithVMsNegative:
 
         storages_to_test = []
         for storage_backing in ['local_image', 'local_lvm', 'remote']:
-            hosts = host_helper.get_up_hosts_with_storage_backing(storage_backing=storage_backing)
+            hosts = host_helper.get_nova_hosts_with_storage_backing(storage_backing=storage_backing)
             if len(hosts) == 1:
                 storages_to_test.append(storage_backing)
 

@@ -176,7 +176,7 @@ def test_cold_migrate_vm(vm_, revert):
     vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id)
     hosts_with_backing = keywords.host_helper.get_hosts_by_storage_aggregate(vm_storage_backing)
     if system_helper.is_small_footprint():
-        up_hosts = host_helper.get_nova_computes()
+        up_hosts = host_helper.get_nova_hosts()
     else:
         up_hosts = host_helper.get_hypervisors(state='up', status='enabled')
     candidate_hosts = list(set(hosts_with_backing) & set(up_hosts))

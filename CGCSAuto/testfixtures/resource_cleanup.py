@@ -1,4 +1,4 @@
-from pytest import fixture, mark
+from pytest import fixture
 from keywords import nova_helper, vm_helper, cinder_helper
 
 

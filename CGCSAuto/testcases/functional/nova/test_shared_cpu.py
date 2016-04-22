@@ -2,12 +2,12 @@ from pytest import fixture, mark
 
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
-from keywords import nova_helper, vm_helper, host_helper, cinder_helper
+from keywords import nova_helper, vm_helper
 from testfixtures.resource_cleanup import ResourceCleanup
 
 
 @fixture(scope='module')
-def flavor_64_vcpus(request):
+def flavor_64_vcpus():
     """
     Create basic flavor and volume to be used by test cases as test setup, at the beginning of the test module.
     Delete the created flavor and volume as test teardown, at the end of the test module.
@@ -30,7 +30,7 @@ def test_set_shared_vcpu_spec(flavor_64_vcpus, vcpu_id):
     nova_helper.set_flavor_extra_specs(flavor_64_vcpus, **{FlavorSpec.SHARED_VCPU: vcpu_id})
 
 
-@mark.parametrize(('vcpus', 'cpu_policy', 'vcpu_id'),[
+@mark.parametrize(('vcpus', 'cpu_policy', 'vcpu_id'), [
     mark.p2((4, 'shared', 3)),
     mark.p3((4, 'dedicated', 5)),
     mark.p3((4, 'dedicated', -1)),

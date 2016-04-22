@@ -387,8 +387,6 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
             if field has space in it, such as 'Tenant ID', replace space with underscore, such as Tenant_ID=id;
             or compose the complete **kwargs like this: **{'Tenant ID': 123, 'Name': 'my name'}
 
-    Returns:
-        object: 
             Examples:
                 get_values(table_, 'ID', Tenant_ID=123, Name='my name')
                 get_values(table_, 'ID', **{'Tenant ID': 123, 'Name': 'my name'})
@@ -441,14 +439,17 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
 
 def get_value_two_col_table(table_, field, strict=True, regex=False, merge_lines=False):
     """
+    Get value of specified field from a two column table.
 
     Args:
-        table_ (dict): cli output table in dict format
+        table_ (dict): two column table in dictionary format. Such as 'nova show' table.
         field (str): target field to return value for
         regex (bool): When True, regex will be used for field name matching, else string operation will be performed
+
         strict (bool): If string operation, strict match will attempt to match the whole string, while non-strict match
             will attempt match substring. If regex, strict match will attempt to find match from the beginning of the
             field name, while non-strict match will attempt to search a match anywhere in the field name.
+
         merge_lines:
             when True: if the value spread into multiple lines, merge them into one line string
                 Examples: 'capabilities' field in system host-show
@@ -456,8 +457,7 @@ def get_value_two_col_table(table_, field, strict=True, regex=False, merge_lines
                         each line being a string item in this list
                 Examples: 'subnets' field in neutron net-show
 
-    Returns (str):
-        empty string if field not found, otherwise return the value of given field
+    Returns (str): Value of specified filed. Return '' if field not found in table.
 
     """
     rows = get_all_rows(table_)
@@ -512,7 +512,7 @@ def __filter_table(table_, row_indexes):
         table_ (dict):
         row_indexes:
 
-    Returns:
+    Returns (dict):
 
     """
     all_rows = get_all_rows(table_)
@@ -541,21 +541,24 @@ def _get_row_indexes(table_, field, value, strict=True, regex=False):
 
 def filter_table(table_, strict=True, regex=False, **kwargs):
     """
-
+    Filter out rows of a table with given criteria (via kwargs)
     Args:
-        table_:
-                table_ (dict): Dictionary of a table parsed by tempest.
+        table_ (dict): Dictionary of a table parsed by tempest.
             Example: table {
                 'headers': ["Field", "Value"];
                 'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
-        strict:
+        strict (bool):
         regex (bool): Whether to use regex to find matching value(s)
-        **kwargs: header_1 = [value1, value2, value3], header_2 = value_2
-            fielders are 'and' relation
-            values list are 'or' relation
+
+        **kwargs: header/value pair(s) as search criteria. Used to filter out the target row(s).
+            Examples: header_1 = [value1, value2, value3], header_2 = value_2
+            - fields are 'and' relation
+            - values list are 'or' relation
             e.g., if kwargs = {'id':[id_1, id_2], 'name': [name_1, name_3]}, a table with only item_2 will be returned
-    Returns:
-        Special table(dict) that made up of rows that specified by **kwargs
+            - See more details from **kwargs in get_values()
+
+    Returns (dict):
+        A table dictionary with original headers and filtered values(rows)
 
     """
     if not kwargs:
