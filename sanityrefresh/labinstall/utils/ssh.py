@@ -26,7 +26,7 @@ from pexpect import pxssh
 import sys
 import os
 import re
-
+from utils.common import wr_exit
 log = getLogger(__name__)
 
 class SSHClient(pxssh.pxssh):
@@ -71,9 +71,10 @@ class SSHClient(pxssh.pxssh):
             self.login(hostname, username, password, auto_prompt_reset=False, quiet=False)
 
         except (pxssh.ExceptionPxssh, pexpect.EOF):
-            log.error("Failed to login to SSH session: {}@{}".format(username, hostname))
+            msg = "Failed to login to SSH session: {}@{}".format(username, hostname)
+            log.error(msg)
             self.close()
-            sys.exit(1)
+            wr_exit()._exit(1, msg)
 
     def disconnect(self):
         self.logout()
@@ -82,15 +83,17 @@ class SSHClient(pxssh.pxssh):
     def find_prompt(self, timeout=SSH_EXPECT_TIMEOUT):
         matched = self.prompt(timeout)
         if not matched:
-            log.error("Timeout occurred: Failed to find prompt")
-            sys.exit(1)
+            msg = "Timeout occurred: Failed to find prompt"
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
     def get_after(self):
         output = None
         after = self.after
         if after is pexpect.TIMEOUT:
-            log.exception("Timeout occurred: Failed to find text after executing command")
-            sys.exit(1)
+            msg = "Timeout occurred: Failed to find text after executing command"
+            log.exception(msg)
+            wr_exit()._exit(1, msg)
 
         lines = after.splitlines()
         if len(lines) >= 2:
@@ -111,14 +114,15 @@ class SSHClient(pxssh.pxssh):
             try:
                 self.expect(expect_pattern, timeout)
             except pexpect.EOF:
-                log.exception("Connection closed: "
-                              "Reached EOF in SSH session:"
-                              " {}@{}".format(self.username, self.hostname))
-                sys.exit(1)
+                msg = "Connection closed: Reached EOF in SSH session:" \
+                      " {}@{}".format(self.username, self.hostname)
+                log.exception(msg)
+                wr_exit()._exit(1, msg)
             except pexpect.TIMEOUT as ex:
-                log.exception('Timeout occurred: Failed to find "{}" in output:'
-                              "\n{}".format(expect_pattern, self.before))
-                sys.exit(1)
+                msg = 'Timeout occurred: Failed to find "{}" in output:'\
+                      "\n{}".format(expect_pattern, self.before)
+                log.exception(msg)
+                wr_exit()._exit(1, msg)
 
             output = self.match.group().strip()
             log.info("Match: " + output)
@@ -155,8 +159,9 @@ class SSHClient(pxssh.pxssh):
         cmd = "{} rsync -ave {} {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
         if self.exec_cmd(cmd, RSYNC_TIMEOUT, show_output=False)[0] != 0:
-            log.error("Rsync failed")
-            sys.exit(1)
+            msg = "Rsync failed"
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
     def collect_logs(self):
         cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S collect all"
@@ -180,11 +185,12 @@ class SSHClient(pxssh.pxssh):
                 log.exception("Connection closed: "
                               "Reached EOF in SSH session:"
                               " {}@{}".format(self.username, self.hostname))
-                sys.exit(1)
+                wr_exit()._exit(1, msg)
             except pexpect.TIMEOUT as ex:
-                log.exception('Timeout occurred: Failed to find "{}" in output:'
-                              "\n{}".format(expect_pattern, self.before))
-                sys.exit(1)
+                msg = 'Timeout occurred: Failed to find "{}" in output:' \
+                      '\n{}'.format(expect_pattern, self.before)
+                log.exception(msg)
+                wr_exit()._exit(1, msg)
         return tarball
 
     def get_ssh_key(self):
@@ -192,8 +198,9 @@ class SSHClient(pxssh.pxssh):
         if rc != 0:
 #            self.sendline(CREATE_PUBLIC_SSH_KEY_CMD)
             if self.exec_cmd(CREATE_PUBLIC_SSH_KEY_CMD.format(SSH_KEY_FPATH))[0] != 0:
-                log.error("Failed to create public ssh key for user")
-                sys.exit(1)
+                msg = "Failed to create public ssh key for user"
+                log.error(msg)
+                wr_exit()._exit(1, msg)
         ssh_key = self.exec_cmd(GET_PUBLIC_SSH_KEY_CMD.format(SSH_KEY_FPATH))[1]
         return ssh_key
 

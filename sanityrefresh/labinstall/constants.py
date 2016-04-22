@@ -164,3 +164,10 @@ RETURN_CODE_CMD = "echo {}$?{}".format(OPEN_MARKER, CLOSE_MARKER)
 # e.g. Tue Nov 24 15:52:39 UTC 2015
 DATE_TIMESTAMP_REGEX = r"\w{3} \w{3} \d{2} \d{2}:\d{2}:\d{2} \w{3} \d{4}"
 TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
+
+# Email notification constants
+EMAIL_SERVER = 'prod-webmail.corp.ad.wrs.com'
+EMAIL_FROM = 'no_reply_automated_labinstall@wrs.com'
+EMAIL_SUBJECT = 'Automated Lab Install: '
+EMAIL_ERROR_MSG = "Automated lab install has encountered problem." \
+    "\nReason: "
