@@ -55,29 +55,31 @@ Imports
 
 Order for imports
 
- * System imports
- * Third party imports
- * CGCSAuto utils imports
- * CGCSAuto consts and keywords
-
 .. code-block:: python
+
+ #1. System imports
 
  # Typical keyword module imports:
  import re
  import time
  from contextlib import contextmanager
 
+ #2. Third party imports
+ # Typical test case module imports:
+ from pytest import fixture, mark, skip
+ from setup_consts import P1, P2, P3
+
+ #3. CGCSAuto utils imports
  from utils import cli, exceptions, table_parser
  from utils.ssh import ControllerClient, SSHFromSSH
  from utils.tis_log import LOG
+
+ #4. CGCSAuto consts and keywords
  from consts.auth import Tenant
  from consts.cgcs import HostAavailabilityState, HostAdminState
  from consts.timeout import HostTimeout
  from keywords import nova_helper, vm_helper, host_helper, system_helper
  from keywords.security_helper import LinuxUser
- # Typical test case module imports:
- from pytest import fixture, mark, skip
- from setup_consts import P1, P2, P3
 
 
 Test Function

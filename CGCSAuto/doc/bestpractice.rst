@@ -4,43 +4,77 @@ Automation Best Practices
 Test Function Decorators
 -----------------------------------------------
 
-Test Function Level Skip Conditions (if applicable)
+Skip Conditions (if applicable)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Add ``@pytest.mark.skipif()`` decorator to test function to skip the whole test function when skip condition met
+Add ``@pytest.mark.skipif()`` decorator to test function 
+ * to skip the whole test function when skip condition met
  * E.g., Test function is only applicable to small system
 
-::
+.. code-block:: python
 
  # Example
- @mark.skipif(not system_helper.is_small_footprint(), reason="Only applies to small footprint lab.")
+ # In our example system_helper.is_small_footprint() return True
+ @mark.skipif(not system_helper.is_small_footprint(), reason="Only test small footprint")
  def test_something():
  ...
+
+ #when the above executed on the commandline using py.test. the test will be skipped.
 
 System Verifications (if applicable)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Definition of System Verifiy Fixtures: system verifications that are not directly related to the test case. E.g., check system alarms, check hosts are in good states.
- * Add ``@pytest.mark.usefixtures()`` decorator to test function
- * Choose system verify fixtures from keywords/verify_fixtures.py
- * How does it work: compare results before and after running the test case. Test will be marked as fail if the post test check failed, e.g, If a new alarm is raised after the test case run, then this test case will be marked as fail.
+Add ``@pytest.mark.usefixtures()`` decorator to test function 
+ * for system verifications that are not directly related to the test case. E.g., check system alarms, check hosts are in good states.
+ * verify fixtures are stored under testfixtures/verify_fixtures.py
+ * How does it work: It trys to setup an eonvironment where a test can be run or verify certain critieria is same before and after the test. Test will be marked as fail if the post test check failed, e.g, A new alarm is raised only after the test case run but not before, then this test case will be marked as fail.
 
-::
+.. code-block:: python
 
  # Example
+ # @fixture check_vms and check_hosts was defined under testfixtures/verify_fixtures.py
+ # they verify the statue of the vms/hosts is same before and after the testcase. 
+ # An error will be raised otherwise.
  @mark.usefixtures('check_vms', 'check_hosts')
  def test_something():
  ...
 
-Test Function Arguments
------------------------------------------------
-
-Test params
- * Add parametrize decorator to test function: @pytest.mark.parametrize(test_data_matrix)
- * Purpose: parametrize the test function to generate multiple test cases using the same test function
-Test Function Specific Fixtures
- * Defined in seperate test fixture function(s) with fixture decorator: @pytest.fixture
+Add ``@pytest.fixture`` to Test Function Specific Fixtures
+ * A fixture can also be defined within the test.py itself. If it's only needed for specific testcases.
+ * Defined in seperate test fixture function(s) with fixture decorator: @pytest.fixture()
  * A test fixture function can be parametrized by passing parameters via params argument to fixture function
+
+.. code-block:: python
+
+ # under testcase.py
+
+ # a local fixture
+ @pytest.fixture()
+ def local_fixture(request):
+    if a_condition_met() :
+	return True
+
+ #Do something with local fixture
+ def test_something(local_fixture):
+    if local_fixture:
+ 	#do something...
+ 
+Test parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Add ``@pytest.mark.parametrize(test_data_matrix)`` to parametrize decorator to test function
+ * Purpose: parametrize the test function to generate multiple test cases using the same test function
+
+.. code-block:: python
+
+ @mark.parametrize(('vcpus', 'cpu_policy', 'vcpu_id'),[
+     mark.p2((4, 'shared', 3)),
+     mark.p3((4, 'dedicated', 5)),
+     mark.p3((4, 'dedicated', -1)),
+     mark.p3((64, 'dedicated', 64)),
+ ])
+ def test_something(cpu_policy, vcpus, vcpu_id):
+ ...
 
 Components Inside Test Function
 -----------------------------------------------
