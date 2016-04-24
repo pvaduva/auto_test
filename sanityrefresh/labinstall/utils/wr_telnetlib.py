@@ -929,9 +929,7 @@ class Telnet:
             while count < MAX_SEARCH_ATTEMPTS:
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
                 #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
-                #regex = re.compile(b"\x1b\[\d+;22(.*)\x1b")
-                #regex = re.compile(b"\[\d+;22(.*)\x1b")
-                regex = re.compile(b"\[\d+;22H(.*)")
+                regex = re.compile(b"\[\d+;22(.*?)\x1b")
 
                 try:
                     index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
@@ -961,7 +959,7 @@ class Telnet:
                 wr_exit()._exit(1, msg)
 
             log.info("Waiting for ESC to exit")
-            self.get_read_until("ESC to exit")
+            #self.get_read_until("ESC to exit")
             # Sleep is required before pressing enter
             #time.sleep(5)
             #for i in range(0, down_press_count):
@@ -972,7 +970,7 @@ class Telnet:
                 if boot_device_regex == 'USB':
                     self.get_read_until("Select kernel options and boot kernel", 120)
                 else:
-                    self.get_read_until("Kickstart Boot Menu", 120)
+                    self.get_read_until("Kickstart Boot Menu", 240)
                     selection_menu_option = '2'
                     if hasattr(node, "host_kickstart_menu_selection"):
                         selection_menu_option =  getattr(node, "host_kickstart_menu_selection")

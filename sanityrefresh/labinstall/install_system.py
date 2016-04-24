@@ -1181,7 +1181,7 @@ if __name__ == '__main__':
 
         # If we made it this far, we probably had a successful install
         log.info("Terminating storage system install")
-        wr_exit._exit(0, "Terminating storage system install.\n"
+        wr_exit()._exit(0, "Terminating storage system install.\n"
                       + installed_load_info)
         # COMMON CODE TO MOVE OUT END
 

@@ -35,6 +35,8 @@ WRSROOT_HOME_DIR = "/home/wrsroot"
 WRSROOT_PATCHES_DIR = WRSROOT_HOME_DIR + "/patches"
 WRSROOT_IMAGES_DIR = WRSROOT_HOME_DIR + "/images"
 JIRA_LOGS_DIR = "/folk/cgts/logs"
+CERTIFICATE_FILE_PATH = "/folk/cgts/lab/server-with-key-with-passwd.pem"
+CERTIFICATE_FILE_NAME = "server-with-key.pem"
 
 BOOT_IMAGE_ISO = "bootimage.iso"
 BOOT_IMAGE_ISO_PATH = "export/" + BOOT_IMAGE_ISO
