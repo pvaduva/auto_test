@@ -956,6 +956,15 @@ if __name__ == '__main__':
             cmd = "test -f " + cfgpath
             if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
                 cfg_found = True
+                # check if HTTPS is enabled and if yes get the certification file
+                cmd = " grep ENABLE_HTTPS " + cfgpath + " | awk '{print $3}' "
+                if controller0.ssh_conn.exec_cmd(cmd)[1] == 'Y':
+                    bld_server_conn.rsync(CERTIFICATE_FILE_PATH,
+                                          WRSROOT_USERNAME, controller0.host_ip,
+                                          os.path.join(WRSROOT_HOME_DIR,
+                                          CERTIFICATE_FILE_NAME),
+                                          pre_opts=pre_opts)
+
                 cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
                 cmd += " config_controller --config-file " + cfgfile
                 #rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
