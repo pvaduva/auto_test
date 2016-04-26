@@ -2,6 +2,7 @@ import pytest
 
 import setups
 from testfixtures.verify_fixtures import *
+from setup_consts import TC_LIST_FILE_PATH
 
 con_ssh = None
 
@@ -99,6 +100,16 @@ def pytest_runtest_makereport(item, call, __multicall__):
             test_res = 'Test Failed at {}'.format(fail_at)
 
         testcase_log(msg=test_res, nodeid=item.nodeid, log_type='tc_end')
+
+        pass_or_fail = ''
+        if 'Test Passed' in test_res:
+            pass_or_fail = 'Passed'
+        elif 'Test Failed' in test_res:
+            pass_or_fail = 'Failed'
+
+        if pass_or_fail:
+            with open(TC_LIST_FILE_PATH, mode='a') as f:
+                f.write('{}\t{}\n'.format(pass_or_fail, item.nodeid))
 
     return report
 

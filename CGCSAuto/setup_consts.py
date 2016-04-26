@@ -24,6 +24,9 @@ TEMP_DIR = LOG_DIR + '/tmp_files'
 KEYFILE_NAME = 'keyfile_{}.pem'.format(LAB_NAME)
 KEYFILE_PATH = '/home/wrsroot/.ssh/' + KEYFILE_NAME
 
+TC_LIST_FILE_NAME = 'testcases.lst'
+TC_LIST_FILE_PATH = LOG_DIR + '/' + TC_LIST_FILE_NAME
+
 # Test priority marker
 P1 = mark.p1
 P2 = mark.p2
