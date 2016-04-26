@@ -87,11 +87,17 @@ class FlavorSpec:
     NUMA_NODES = 'hw:numa_nodes'
     NUMA_0 = 'hw:numa_node.0'
     NUMA_1 = 'hw:numa_node.1'
+    MEM_PAGE_SIZE = 'hw:mem_page_size'
 
 
-class INSTANCE_TOPOLOGY:
+class ImageMetadata:
+    MEM_PAGE_SIZE = 'hw_mem_page_size'
+
+
+class InstanceTopology:
     NODE = 'node:(\d),'
     PGSIZE = 'pgsize:(\d{1,3})M,'
     VCPUS = 'vcpus:(\d{1,2}),'
     PCPUS = 'pcpus:(.*),\s'     # find a string separated by ',' if multiple numa nodes
     CPU_POLICY = 'pol:(.*),'
+

@@ -77,14 +77,22 @@ class ResourceCleanup:
         vms_no_vols = resources['vms_no_vols']
         volumes = resources['volumes']
         flavors = resources['flavors']
-        if vms_with_vols:
-            vm_helper.delete_vms(vms_with_vols)
-        if vms_no_vols:
-            vm_helper.delete_vms(vms_no_vols, delete_volumes=False)
-        if volumes:
-            cinder_helper.delete_volumes(volumes)
-        if flavors:
-            nova_helper.delete_flavors(flavors)
+        exceptions = []
+        try:
+            if vms_with_vols:
+                vm_helper.delete_vms(vms_with_vols)
+            if vms_no_vols:
+                vm_helper.delete_vms(vms_no_vols, delete_volumes=False)
+            if volumes:
+                cinder_helper.delete_volumes(volumes)
+            if flavors:
+                nova_helper.delete_flavors(flavors)
+        except Exception as e:
+            exceptions.append(e)
+
+        # Attempt all deletions before raising exception.
+        if exceptions:
+            raise exceptions[0]
 
     @classmethod
     def _reset(cls, scope):
@@ -125,3 +133,16 @@ class ResourceCleanup:
             key = resource_type + 's'
 
         cls.__resources_to_cleanup[scope][key].append(resource_id)
+
+
+@fixture(scope='module')
+def flavor_id_module():
+    """
+    Create basic flavor and volume to be used by test cases as test setup, at the beginning of the test module.
+    Delete the created flavor and volume as test teardown, at the end of the test module.
+    """
+    flavor = nova_helper.create_flavor()[1]
+    ResourceCleanup.add('flavor', resource_id=flavor, scope='module')
+
+    return flavor
+

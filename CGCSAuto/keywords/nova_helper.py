@@ -212,7 +212,7 @@ def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok
     return code, msg
 
 
-def unset_flavor_extra_specs(flavor, extra_specs, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+def unset_flavor_extra_specs(flavor, extra_specs, check_first=True, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
     """
     Unset specific extra spec(s) from given flavor.
 
@@ -231,8 +231,22 @@ def unset_flavor_extra_specs(flavor, extra_specs, con_ssh=None, auth_info=Tenant
     """
 
     LOG.info("Unsetting flavor extra spec(s): {}".format(extra_specs))
+
     if isinstance(extra_specs, str):
         extra_specs = [extra_specs]
+
+    if check_first:
+        keys_to_del = []
+        existing_specs = get_flavor_extra_specs(flavor, con_ssh=con_ssh, auth_info=auth_info)
+        for key in extra_specs:
+            if key in existing_specs:
+                keys_to_del.append(key)
+        if not keys_to_del:
+            msg = "Extra spec(s) {} not exist in flavor. Do nothing.".format(extra_specs)
+            LOG.info(msg)
+            return -1, msg
+
+        extra_specs = keys_to_del
 
     extra_specs_args = ' '.join(extra_specs)
     exit_code, output = cli.nova('flavor-key', '{} unset {}'.format(flavor, extra_specs_args),
@@ -520,11 +534,11 @@ def _get_vm_volumes(novashow_table):
     Args:
         novashow_table (dict):
 
-    Returns (tuple): A list of volume ids from the novashow_table.
+    Returns (list: A list of volume ids from the novashow_table.
 
     """
     volumes = eval(table_parser.get_value_two_col_table(novashow_table, ':volumes_attached', strict=False))
-    return tuple([volume['id'] for volume in volumes])
+    return [volume['id'] for volume in volumes]
 
 
 def get_quotas(quotas=None, con_ssh=None, auth_info=None):
@@ -537,7 +551,7 @@ def get_quotas(quotas=None, con_ssh=None, auth_info=None):
     for item in quotas:
         values.append(int(table_parser.get_value_two_col_table(table_, item)))
 
-    return tuple(values)
+    return values
 
 
 def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
@@ -557,3 +571,127 @@ def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN
     args_ += tenant_id
 
     cli.nova('quota-update', args_, ssh_client=con_ssh, auth_info=auth_info)
+
+
+def set_image_metadata(image, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None, **kwargs):
+
+    LOG.info("Setting image {} metadata to: {}".format(image, kwargs))
+    if not kwargs:
+        raise ValueError("At least one key-value pair")
+
+    meta_args = ''
+    args_dict = {}
+    for key, value in kwargs.items():
+        key = key.lower().strip()
+        value = str(value).strip()
+        args_dict[key] = value
+        meta_data = "{}={}".format(key, value)
+        meta_args = ' '.join([meta_args, meta_data])
+
+    positional_args = ' '.join([image, 'set', meta_args])
+    code, output = cli.nova('image-meta', positional_args, ssh_client=con_ssh, auth_info=auth_info,
+                            fail_ok=fail_ok, rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    LOG.info("Checking image {} metadata is set to {}".format(image, kwargs))
+    actual_metadata = get_image_metadata(image, list(args_dict.keys()), con_ssh=con_ssh)
+    for key, value in args_dict.items():
+        if key not in actual_metadata:
+            msg = "Expected metadata {} is not listed in nova image-show {}".format(key, image)
+            if fail_ok:
+                LOG.warning(msg)
+                return 2, msg
+            raise exceptions.ImageError(msg)
+
+        if actual_metadata[key] != value:
+            msg = "Metadata {} value is not set to {} in nova image-show {}".format(key, value, image)
+            if fail_ok:
+                LOG.warning(msg)
+                return 3, msg
+            raise exceptions.ImageError(msg)
+
+    msg = "Image metadata is successfully set."
+    LOG.info(msg)
+    return 0, msg
+
+
+def get_image_metadata(image, meta_keys, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+
+    Args:
+        image (str): id of image
+        meta_keys (str|list): list of metadata key(s) to get value(s) for
+        auth_info (dict): Admin by default
+        con_ssh (SSHClient):
+
+    Returns (dict): image metadata in a dictionary.
+        Examples: {'hw_mem_page_size': any}
+    """
+    if isinstance(meta_keys, str):
+        meta_keys = [meta_keys]
+
+    for meta_key in meta_keys:
+        str(meta_key).replace(':', '_')
+
+    table_ = table_parser.table(cli.nova('image-show', image, ssh_client=con_ssh, auth_info=auth_info))
+    results = {}
+    for meta_key in meta_keys:
+        meta_key = meta_key.strip()
+        value = table_parser.get_value_two_col_table(table_, 'metadata '+meta_key, strict=False)
+        if value:
+            results[meta_key] = value
+
+    return results
+
+
+def delete_image_metadata(image, meta_keys, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+     Unset specific extra spec(s) from given flavor.
+
+     Args:
+         image (str): id of the flavor
+         con_ssh (SSHClient):
+         auth_info (dict):
+         fail_ok (bool):
+         meta_keys (str|list): metadata(s) to be removed. At least one should be provided.
+
+     Returns (tuple): (rtn_code (int), message (str))
+         (0, 'Image metadata unset successfully.'): required extra spec(s) removed successfully
+         (1, <stderr>): unset image metadata cli rejected
+         (2, '<metadata> is still in the extra specs list'): post action check failed
+
+     """
+
+    LOG.info("Deleting image metadata: {}".format(meta_keys))
+    if check_first:
+        if not get_image_metadata(image, meta_keys, auth_info=auth_info, con_ssh=con_ssh):
+            msg = "Metadata {} not exist in nova image-show. Do nothing.".format(meta_keys)
+            LOG.info(msg)
+            return -1, msg
+
+    if isinstance(meta_keys, str):
+        meta_keys = [meta_keys]
+
+    for meta_key in meta_keys:
+        str(meta_key).replace(':', '_')
+
+    meta_keys_args = ' '.join(meta_keys)
+    exit_code, output = cli.nova('image-meta', '{} delete {}'.format(image, meta_keys_args), fail_ok=fail_ok,
+                                 ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
+    if exit_code == 1:
+        return 1, output
+
+    post_meta_keys = get_image_metadata(image, meta_keys, con_ssh=con_ssh, auth_info=auth_info)
+    for key in meta_keys:
+        if key in post_meta_keys:
+            err_msg = "{} is still in the image metadata after deletion.".format(key)
+            if fail_ok:
+                LOG.warning(err_msg)
+                return 2, err_msg
+            raise exceptions.ImageError(err_msg)
+    else:
+        success_msg = "Image metadata unset successfully."
+        LOG.info(success_msg)
+        return 0, success_msg

@@ -1133,6 +1133,8 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
         vms = [vms]
     vms = list(vms)
 
+    LOG.info("Deleting vm(s): {}".format(vms))
+
     for vm in vms:
         if vm:
             break

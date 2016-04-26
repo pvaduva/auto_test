@@ -5,9 +5,9 @@ from pytest import fixture, mark
 from utils import table_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec, INSTANCE_TOPOLOGY
+from consts.cgcs import FlavorSpec, InstanceTopology
 from keywords import nova_helper, vm_helper
-from testfixtures.resource_cleanup import ResourceCleanup
+from testfixtures.resource_mgmt import ResourceCleanup
 
 
 ########################################
@@ -61,7 +61,21 @@ def test_2_nodes_set_guest_numa_node_value(flavor_2_nodes, cpu_policy, numa_0, n
 
     args = {FlavorSpec.NUMA_0: numa_0, FlavorSpec.NUMA_1: numa_1}
     LOG.tc_step("Set flavor numa_node spec(s) to {} and verify setting succeeded".format(args))
-    nova_helper.set_flavor_extra_specs(flavor=flavor_2_nodes, fail_ok=True, **args)
+    nova_helper.set_flavor_extra_specs(flavor=flavor_2_nodes, **args)
+
+
+@mark.parametrize(('cpu_policy', 'numa_0', 'numa_1'), [
+    mark.p2(('dedicated', 1, 1)),
+    mark.p2(('dedicated', 0, 0)),
+])
+def test_2_nodes_set_numa_node_values_reject(flavor_2_nodes, cpu_policy, numa_0, numa_1):
+    LOG.tc_step("Set flavor cpu_policy spec to {}.".format(cpu_policy))
+    nova_helper.set_flavor_extra_specs(flavor=flavor_2_nodes, **{FlavorSpec.CPU_POLICY: cpu_policy})
+
+    args = {FlavorSpec.NUMA_0: numa_0, FlavorSpec.NUMA_1: numa_1}
+    LOG.tc_step("Attempt set flavor numa_node spec(s) to {} and verify setting rejected".format(args))
+    code, msg = nova_helper.set_flavor_extra_specs(flavor=flavor_2_nodes, fail_ok=True, **args)
+    assert 1 == code
 
 
 @fixture(scope='module')
@@ -304,7 +318,7 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
     expected_node_vals = [int(val) for val in [numa_node0, numa_node1] if val is not None]
     actual_node_vals = []
     for actual_node_info in instance_topology:
-        actual_node_val = int(re.findall(INSTANCE_TOPOLOGY.NODE, actual_node_info)[0])
+        actual_node_val = int(re.findall(InstanceTopology.NODE, actual_node_info)[0])
         actual_node_vals.append(actual_node_val)
 
     assert actual_node_vals == expected_node_vals, \

@@ -2,14 +2,14 @@ import re
 import time
 from contextlib import contextmanager
 
+from consts.auth import Tenant
+from consts.cgcs import HostAavailabilityState, HostAdminState
+from consts.timeout import HostTimeout
+from keywords import system_helper
+from keywords.security_helper import LinuxUser
 from utils import cli, exceptions, table_parser
 from utils.ssh import ControllerClient, SSHFromSSH
 from utils.tis_log import LOG
-from consts.auth import Tenant
-from consts.cgcs import HostAavailabilityState, HostAdminState
-from consts.timeout import HostTimeout, CMDTimeout
-from keywords import system_helper
-from keywords.security_helper import LinuxUser
 
 
 @contextmanager
@@ -127,11 +127,11 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
                                                           con_ssh=con_ssh, availability=['available', 'degraded'])
 
     states_vals = {}
-    task_unfinished_msg = ' '
+    task_unfinished_msg = ''
     for host in hostnames:
         vals = get_hostshow_values(host, con_ssh, 'task', 'availability')
         if not vals['task'] == '':
-            task_unfinished_msg = " {}{} still in task: {}. ".format(task_unfinished_msg, host, vals['task'])
+            task_unfinished_msg = ' '.join([task_unfinished_msg, "{} still in task: {}.".format(host, vals['task'])])
         states_vals[host] = vals
 
     message = "Host(s) state(s) - {}.".format(states_vals)
@@ -141,6 +141,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
 
     err_msg = "Host(s) not in expected states or task unfinished. " + message + task_unfinished_msg
     if fail_ok:
+        LOG.warning(err_msg)
         return 1, err_msg
     else:
         raise exceptions.HostPostCheckFailed(err_msg)
@@ -233,13 +234,14 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         (0, "Host is locked and in online state."]
         (1, <stderr>)   # Lock host cli rejected
         (2, "Host is not in locked state")  # cli ran okay, but host did not reach locked state within timeout
-        (3, "Host state is not online")     # Locked but did not go Online within timeout
+        (3, "Host did not go online within <timeout> seconds after (force) lock")   # Locked but didn't go online
         (4, "Lock host <host> is rejected. Details in host-show vim_process_status.")
         (5, "Lock host <host> failed due to migrate vm failed. Details in host-show vm_process_status.")
 
     """
+    LOG.info("Locking {}...".format(host))
     if get_hostshow_value(host, 'availability') in ['offline', 'failed']:
-        LOG.warning("Host in offline or failed state!")
+        LOG.warning("Host in offline or failed state before locking!")
 
     if check_first:
         admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
@@ -247,7 +249,6 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
             LOG.info("Host already locked. Do nothing.")
             return -1, "Host already locked. Do nothing."
 
-    LOG.info("Locking {}...".format(host))
     positional_arg = host
     extra_msg = ''
     if force:
@@ -264,7 +265,6 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
     # Wait for task complete. If task stucks, fail the test regardless. Perhaps timeout needs to be increased.
     _wait_for_host_states(host=host, timeout=lock_timeout, task='', fail_ok=False)
 
-    # TODO: Should this considered as fail??
     #  vim_progress_status | Lock of host compute-0 rejected because there are no other hypervisors available.
     if _wait_for_host_states(host=host, timeout=5, vim_progress_status='ock .* host .* rejected.*',
                              regex=True, fail_ok=True, con_ssh=con_ssh):
@@ -292,13 +292,14 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         # ensure the online status lasts for more than 5 seconds. Sometimes host goes online then offline to reboot..
         time.sleep(5)
         if _wait_for_host_states(host, timeout=timeout, availability='online'):
+            LOG.info("Host is successfully locked and in online state.")
             return 0, "Host is locked and in online state."
 
+    msg = "Host did not go online within {} seconds after {}lock".format(timeout, extra_msg)
     if fail_ok:
-        return 3, "Host state is not online"
+        return 3, msg
     else:
-        raise exceptions.HostPostCheckFailed("Host did not go online within {} seconds after {}lock".
-                                             format(timeout, extra_msg))
+        raise exceptions.HostPostCheckFailed(msg)
 
 
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_ssh=None):
@@ -319,8 +320,11 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
         (4, "Host is in degraded state after unlocked.")
 
     """
-    if get_hostshow_value(host, 'availability') == 'offline':
-        _wait_for_host_states(host, availability=[HostAavailabilityState.AVAILABLE, HostAavailabilityState.ONLINE],
+    LOG.info("Unlocking {}...".format(host))
+    if get_hostshow_value(host, 'availability') in [HostAavailabilityState.OFFLINE, HostAavailabilityState.FAILED]:
+        LOG.info("Host is offline or failed, waiting for it to go online, available or degraded first...")
+        _wait_for_host_states(host, availability=[HostAavailabilityState.AVAILABLE, HostAavailabilityState.ONLINE,
+                                                  HostAavailabilityState.DEGRADED],
                               fail_ok=False)
 
     if get_hostshow_value(host, 'administrative', con_ssh=con_ssh) == HostAdminState.UNLOCKED:
@@ -345,6 +349,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
         LOG.warning("Host is in degraded state after unlocked.")
         return 4, "Host is in degraded state after unlocked."
 
+    LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
 
 
@@ -669,37 +674,3 @@ def get_hypervisors(state=None, status=None, con_ssh=None):
         params['Status'] = status
     return table_parser.get_values(table_, target_header=target_header, **params)
 
-
-def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=False, con_ssh=None,
-                    auth_info=Tenant.ADMIN, **kwargs):
-    LOG.info("Modifying host {} CPU function {} to {}".format(host, function, kwargs))
-
-    proc_args = ''
-    for proc, cores in kwargs.items():
-        cores = str(cores)
-        proc_args = ' '.join([proc_args, '-'+proc.lower().strip(), cores])
-
-    subcmd = ' '.join(['host-cpu-modify', '-f', function.lower().strip(), proc_args])
-    code, output = cli.system(subcmd, host, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info, timeout=timeout,
-                              rtn_list=True)
-
-    if code == 1:
-        return 1, output
-
-    LOG.info("Post action check for host-cpu-modify...")
-    table_ = table_parser.table(output)
-    table_ = table_parser.filter_table(table_, assigned_function=function)
-    for proc, expt_cores in kwargs.items():
-        proc_id = re.findall('\d+', proc)[0]
-        actual_cores = len(table_parser.get_values(table_, 'log_core', processor=proc_id))
-        if int(expt_cores) != actual_cores:
-            msg = "Number of actual log_cores for {} is different than number set. Actual: {}, expect: {}". \
-                format(proc, actual_cores, expt_cores)
-            if fail_ok:
-                LOG.warning(msg)
-                return 2, msg
-            raise exceptions.HostPostCheckFailed(msg)
-
-    msg = "Host cpu function modified successfully"
-    LOG.info(msg)
-    return 0, msg

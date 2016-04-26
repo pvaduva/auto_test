@@ -2,11 +2,11 @@ import re
 
 from consts import cgcs
 from consts.auth import Tenant
-from utils import cli
-from utils import exceptions
-from utils import table_parser
+from consts.timeout import CMDTimeout
+from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
+
 
 class System:
     def __init__(self, controller_ssh=None):
@@ -32,11 +32,11 @@ class System:
 
 
 def get_hostname(con_ssh=None):
-    return _get_info_non_cli(r'cat /etc/hostname')
+    return _get_info_non_cli(r'cat /etc/hostname', con_ssh=con_ssh)
 
 
 def get_buildinfo(con_ssh=None):
-    return _get_info_non_cli(r'cat /etc/build.info')
+    return _get_info_non_cli(r'cat /etc/build.info', con_ssh=con_ssh)
 
 
 def _get_info_non_cli(cmd, con_ssh=None):
@@ -124,9 +124,9 @@ def _get_nodes(con_ssh=None):
             mgmt_ip = table_parser.get_values(host_table, 'Value', Property='mgmt_ip')[0]
             mgmt_mac = table_parser.get_values(host_table, 'Value', Property='mgmt_mac')[0]
             nodes[personality+'s'][hostname] = {'id': id_,
-                                                     'uuid': uuid,
-                                                     'mgmt_ip': mgmt_ip,
-                                                     'mgmt_mac': mgmt_mac}
+                                                'uuid': uuid,
+                                                'mgmt_ip': mgmt_ip,
+                                                'mgmt_mac': mgmt_mac}
 
     return nodes
 
@@ -168,7 +168,7 @@ def _get_active_standby(controller='active', con_ssh=None):
 
 
 def get_interfaces(host, con_ssh=None):
-    table_ = table_parser.table(cli.system('host-if-list', host))
+    table_ = table_parser.table(cli.system('host-if-list', host, ssh_client=con_ssh))
     return table_
 
 
@@ -186,7 +186,7 @@ def host_exists(host, field='hostname', con_ssh=None):
     if not field.lower() in ['hostname', 'id']:
         raise ValueError("field has to be either \'hostname\' or \'id\'")
 
-    table_ = table_parser.table(cli.system('host-list', ssh_client=None))
+    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
 
     hosts = table_parser.get_column(table_, field)
     return host in hosts
@@ -357,3 +357,178 @@ def get_vm_topology_tables(*table_names, con_ssh=None):
 
     tables_ = table_parser.tables(con_ssh.exec_cmd('vm-topology -s {}'.format(show_args), expect_timeout=30)[1])
     return tables_
+
+
+def get_host_threads_number(host, con_ssh=None):
+    """
+    Return number of threads for specific host.
+    Notes: when hyperthreading is disabled, the number is usually 1; when enabled, the number is usually 2.
+
+    Args:
+        host (str): hostname
+        con_ssh (SSHClient):
+
+    Returns (int): number of threads
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    code, output = con_ssh.exec_cmd('vm-topology -s topology | grep "{}.*Threads/Core="'.format(host))
+    if code != 0:
+        raise exceptions.SSHExecCommandFailed("CMD stderr: {}".format(output))
+
+    pattern = "Threads/Core=(\d),"
+    return int(re.findall(pattern, output)[0])
+
+
+def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Modify host memory on given processor to specified value(s).
+
+    Args:
+        host (str): hostname
+        proc_id (int): such as 0, 1
+        hugepage_num (int): such as 0, 4. When None is set, the MAX hugepage number will be calculated and used.
+        fail_ok:
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+
+    """
+    LOG.info("Setting 1G memory to: {}".format(hugepage_num))
+    mem_vals = get_host_mem_values(
+            host, ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'vm_hp_avail_2M', 'mem_avail(MiB)', ],
+            proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)
+
+    pre_4k_total, pre_2m_total, pre_1g_total, pre_2m_avail, pre_mem_avail = [int(val) for val in mem_vals]
+
+    # set max hugepage num if hugepage_num is unset
+    if hugepage_num is None:
+        hugepage_num = int(pre_mem_avail/1024)
+
+    diff = hugepage_num - pre_1g_total
+
+    expt_2m = None
+    expt_4k = None
+    if diff > 0:
+        num_2m_reduce_max = int(pre_2m_avail/512)
+        if num_2m_reduce_max < diff:
+            expt_2m = pre_2m_total - num_2m_reduce_max * 512
+            expt_4k = pre_4k_total - (diff - num_2m_reduce_max) * 512 * 512
+        else:
+            expt_2m = pre_2m_total - diff * 512
+
+    args_dict = {
+        '-m': expt_4k,
+        '-2M': expt_2m,
+        '-1G': hugepage_num,
+    }
+    args_str = ''
+    for key, value in args_dict.items():
+        if value is not None:
+            args_str = ' '.join([args_str, key, str(value)])
+
+    code, output = cli.system('host-memory-modify {}'.format(args_str), "{} {}".format(host, proc_id),
+                              ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+
+    if code == 1:
+        return 1, output
+    else:
+        LOG.info("system host-memory-modify ran successfully.")
+        return 0, "1G memory is modified to {} in pending.".format(hugepage_num)
+
+
+def get_host_mem_values(host, headers, proc_id, con_ssh=None, auth_info=Tenant.ADMIN):
+    table_ = table_parser.table(cli.system('host-memory-list', host, ssh_client=con_ssh, auth_info=auth_info))
+
+    res = []
+    for header in headers:
+        value = table_parser.get_values(table_, header, strict=False, **{'processor': str(proc_id)})[0]
+        res.append(value)
+
+    return res
+
+
+def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=False, con_ssh=None,
+                    auth_info=Tenant.ADMIN, **kwargs):
+    """
+    Modify host cpu to given key-value pairs. i.e., system host-cpu-modify -f <function> -p<id> <num of cores> <host>
+    Notes: This assumes given host is already locked.
+
+    Args:
+        host (str): hostname of host to be modified
+        function (str): cpu function to modify. e.g., 'shared'
+        timeout (int): Timeout waiting for system host-cpu-modify cli to return
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+        **kwargs: processor id and number of cores pair(s). e.g., p0=1, p1=1
+
+    Returns (tuple): (rtn_code(int), message(str))
+        (0, "Host cpu function modified successfully")
+        (1, <stderr>)   # cli rejected
+        (2, "Number of actual log_cores for <proc_id> is different than number set. Actual: <num>, expect: <num>")
+
+    """
+    LOG.info("Modifying host {} CPU function {} to {}".format(host, function, kwargs))
+
+    proc_args = ''
+    for proc, cores in kwargs.items():
+        cores = str(cores)
+        proc_args = ' '.join([proc_args, '-'+proc.lower().strip(), cores])
+
+    subcmd = ' '.join(['host-cpu-modify', '-f', function.lower().strip(), proc_args])
+    code, output = cli.system(subcmd, host, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info, timeout=timeout,
+                              rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    LOG.info("Post action check for host-cpu-modify...")
+    table_ = table_parser.table(output)
+    table_ = table_parser.filter_table(table_, assigned_function=function)
+
+    threads = get_host_threads_number(host, con_ssh=con_ssh)
+
+    for proc, num in kwargs.items():
+        num = int(num)
+        proc_id = re.findall('\d+', proc)[0]
+        expt_cores = threads*num
+        actual_cores = len(table_parser.get_values(table_, 'log_core', processor=proc_id))
+        if expt_cores != actual_cores:
+            msg = "Number of actual log_cores for {} is different than number set. Actual: {}, expect: {}". \
+                format(proc, actual_cores, expt_cores)
+            if fail_ok:
+                LOG.warning(msg)
+                return 2, msg
+            raise exceptions.HostPostCheckFailed(msg)
+
+    msg = "Host cpu function modified successfully"
+    LOG.info(msg)
+    return 0, msg
+
+
+def get_processors_shared_cpu_nums(host, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get number of shared cores for each processor of given host.
+
+    Args:
+        host (str): hostname
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (dict): proc_id(str) and num_of_cores(int) pairs. e.g.,: {'0': 1, '1': 1}
+
+    """
+    table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh, auth_info=auth_info))
+    proc_ids = set(table_parser.get_column(table_, 'processor'))
+    table_ = table_parser.filter_table(table_, assigned_function='Shared')
+
+    results = {}
+    for proc_id in proc_ids:
+        cores = len(table_parser.get_values(table_, 'log_core', processor=proc_id))
+        results[proc_id] = cores
+
+    return results

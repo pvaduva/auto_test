@@ -5,7 +5,7 @@ from consts.auth import Tenant
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from consts.timeout import VolumeTimeout
-from keywords import glance_helper
+from keywords import glance_helper, keystone_helper
 
 
 def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=None, status=None, attached_vm=None,
@@ -423,3 +423,39 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
 
     LOG.info("Volume(s) are successfully deleted: {}".format(vols_to_check))
     return 0, "Volume(s) deleted successfully"
+
+
+def get_quotas(quotas=None, con_ssh=None, auth_info=None):
+    if auth_info is None:
+        auth_info = Tenant.get_primary()
+    tenant_id = keystone_helper.get_tenant_ids(auth_info['tenant'], con_ssh=con_ssh)[0]
+
+    if not quotas:
+        quotas = 'volumes'
+    if isinstance(quotas, str):
+        quotas = [quotas]
+
+    table_ = table_parser.table(cli.cinder('quota-show', tenant_id, ssh_client=con_ssh, auth_info=auth_info))
+
+    values = []
+    for item in quotas:
+        values.append(int(table_parser.get_value_two_col_table(table_, item)))
+
+    return values
+
+
+def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+    if tenant is None:
+        tenant = Tenant.get_primary()['tenant']
+    tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant, con_ssh=con_ssh)[0]
+
+    if not kwargs:
+        raise ValueError("Please specify at least one quota=value pair via kwargs.")
+
+    args_ = ''
+    for key in kwargs:
+        args_ += '--{} {} '.format(key, kwargs[key])
+
+    args_ += tenant_id
+
+    cli.cinder('quota-update', args_, ssh_client=con_ssh, auth_info=auth_info)
