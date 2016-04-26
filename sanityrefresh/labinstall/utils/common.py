@@ -128,7 +128,7 @@ def get_ssh_key():
         if exec_cmd(CREATE_PUBLIC_SSH_KEY_CMD)[0] != 0:
             msg = "Failed to create public ssh key for current user"
             log.error(msg)
-            wr_exit._exit(1, msg)
+            wr_exit()._exit(1, msg)
 
     ssh_key = exec_cmd(GET_PUBLIC_SSH_KEY_CMD.format(ssh_key_fpath).split())[1]
     return ssh_key
@@ -164,7 +164,7 @@ def vlm_reserve(barcodes, note=None):
         msg = "Only reserved {} of {}".format(total_barcodes, barcodes)
         msg += ". Remaining barcode(s) are already reserved"
         log.error(msg)
-        wr_exit._exit(1, msg)
+        wr_exit()._exit(1, msg)
 
 
 def vlm_getattr(barcodes):
