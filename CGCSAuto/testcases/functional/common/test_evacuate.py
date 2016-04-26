@@ -59,4 +59,3 @@ def test_reboot_with_vms(vms_):
         assert nova_helper.get_vm_host(vm) != target_host, "VM {} is not evacuated to other host.".format(vm)
         assert status.lower() != 'active' or status != pre_vms_status[vm], \
             "VM {} status changed and not in Active state. VMs status post reboot: {}".format(vm, post_vms_status)
-
