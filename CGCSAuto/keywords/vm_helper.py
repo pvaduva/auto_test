@@ -1186,13 +1186,15 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
         else:
             msg = "Some vm(s) deletion request is rejected : {}; and some vm(s) still exist after deletion: {}".\
                   format(vms_del_rejected, vms_undeleted)
-            if not fail_ok:
+            if fail_ok:
+                LOG.warning(msg)
                 return 3, msg
             raise exceptions.VMPostCheckFailed(msg)
 
     if not all_deleted:
-        msg = "VMs deletion reject all accepted, but some vms still exist in nova list: {}".format(vms_undeleted)
+        msg = "VMs deletion request all accepted, but some vms still exist in nova list: {}".format(vms_undeleted)
         if fail_ok:
+            LOG.warning(msg)
             return 2, msg
         raise exceptions.VMPostCheckFailed(msg)
 
