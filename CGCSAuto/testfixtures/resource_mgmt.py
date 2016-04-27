@@ -1,4 +1,6 @@
 from pytest import fixture
+
+from utils import exceptions
 from keywords import nova_helper, vm_helper, cinder_helper
 
 
@@ -77,22 +79,30 @@ class ResourceCleanup:
         vms_no_vols = resources['vms_no_vols']
         volumes = resources['volumes']
         flavors = resources['flavors']
-        exceptions = []
-        try:
-            if vms_with_vols:
-                vm_helper.delete_vms(vms_with_vols)
-            if vms_no_vols:
-                vm_helper.delete_vms(vms_no_vols, delete_volumes=False)
-            if volumes:
-                cinder_helper.delete_volumes(volumes)
-            if flavors:
-                nova_helper.delete_flavors(flavors)
-        except Exception as e:
-            exceptions.append(e)
+        err_msgs = []
+        if vms_with_vols:
+            code, msg = vm_helper.delete_vms(vms_with_vols, fail_ok=True)
+            if code not in [0, -1]:
+                err_msgs.append(msg)
+
+        if vms_no_vols:
+            code, msg = vm_helper.delete_vms(vms_no_vols, delete_volumes=False, fail_ok=True)
+            if code not in [0, -1]:
+                err_msgs.append(msg)
+
+        if volumes:
+            code, msg = cinder_helper.delete_volumes(volumes, fail_ok=True)
+            if code > 0:
+                err_msgs.append(msg)
+
+        if flavors:
+            code, msg = nova_helper.delete_flavors(flavors, fail_ok=True)
+            if code > 0:
+                err_msgs.append(msg)
 
         # Attempt all deletions before raising exception.
-        if exceptions:
-            raise exceptions[0]
+        if err_msgs:
+            raise exceptions.CommonError("Failed to delete resource(s). Details: {}".format(err_msgs))
 
     @classmethod
     def _reset(cls, scope):

@@ -15,7 +15,7 @@ from utils.tis_log import LOG
 from utils import cli, exceptions
 
 CONTROLLER_PROMPT = '.*controller\-[01].*\$ '
-
+allowable_alarms=['100.104', '100.114', '400.001']
 
 
 def cmd_execute(action, param=''):
@@ -34,7 +34,8 @@ def cmd_execute(action, param=''):
         ('minor' in output) or 
         ('major' in output) or 
         ('critical' in output)):
-        alarms_found = True
+        if not(any(val in output for val in allowable_alarms)):
+            alarms_found = True
 
     return alarms_found
 

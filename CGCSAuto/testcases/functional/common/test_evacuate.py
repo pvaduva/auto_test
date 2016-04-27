@@ -13,9 +13,13 @@ def vms_():
         cinder_helper.update_quotas(volumes=20)
 
     flavor_1 = nova_helper.create_flavor('vol_nolocal')[1]
+    ResourceCleanup.add('flavor', flavor_1, scope='module')
     flavor_2 = nova_helper.create_flavor('vol_local', ephemeral=1)[1]
+    ResourceCleanup.add('flavor', flavor_2, scope='module')
     flavor_3 = nova_helper.create_flavor('image_novol')[1]
+    ResourceCleanup.add('flavor', flavor_3, scope='module')
     flavor_4 = nova_helper.create_flavor('image_vol')[1]
+    ResourceCleanup.add('flavor', flavor_4, scope='module')
 
     vm1 = vm_helper.boot_vm('vol_nolocal', flavor=flavor_1, source='volume')[1]
     ResourceCleanup.add('vm', vm1, scope='module')
@@ -32,8 +36,8 @@ def vms_():
 def test_reboot_with_vms(vms_):
     vm1, vm2, vm3, vm4 = vms_
 
-    LOG.tc_step("Live migrate vms to target host.")
     target_host = nova_helper.get_vm_host(vm2)
+    LOG.tc_step("Live migrate following vms to target host {}: {}".format(target_host, vms_))
 
     if nova_helper.get_vm_host(vm1) != target_host:
         vm_helper.live_migrate_vm(vm1, destination_host=target_host, block_migrate=False)
@@ -43,7 +47,7 @@ def test_reboot_with_vms(vms_):
         if nova_helper.get_vm_host(vm) != target_host:
             vm_helper.live_migrate_vm(vm, destination_host=target_host, block_migrate=True)
 
-    LOG.tc_step("Attach volume to one vm that was booted from image.")
+    LOG.tc_step("Attach volume to vm that was booted from image: {}.".format(vm4))
     vm_helper.attach_vol_to_vm(vm4)
 
     vms_on_target = nova_helper.get_vms_on_hypervisor(target_host)
@@ -55,7 +59,8 @@ def test_reboot_with_vms(vms_):
 
     post_vms_status = nova_helper.get_vms_info(vms_to_check, field='Status')
 
+    LOG.tc_step("Check vms are evacuated to different host and vms are in Active state or original state.")
     for vm, status in post_vms_status.items():
         assert nova_helper.get_vm_host(vm) != target_host, "VM {} is not evacuated to other host.".format(vm)
-        assert status.lower() != 'active' or status != pre_vms_status[vm], \
-            "VM {} status changed and not in Active state. VMs status post reboot: {}".format(vm, post_vms_status)
+        assert status.lower() == 'active' or status == pre_vms_status[vm], \
+            "VM {} status changed and is not in Active state. VMs status post reboot: {}".format(vm, post_vms_status)

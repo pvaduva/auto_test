@@ -361,6 +361,9 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
     """
     if volumes is None:
         volumes = get_volumes(status='available', auth_info=auth_info, con_ssh=con_ssh)
+
+    LOG.info("Deleting volume(s): {}".format(volumes))
+
     if not volumes:
         msg = "No volume to delete. Do nothing."
         LOG.info(msg)
@@ -384,7 +387,8 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
         vols_to_del = volumes
 
     vols_to_del_str = ' '.join(vols_to_del)
-    LOG.info("Deleting volume(s): {}".format(vols_to_del))
+
+    LOG.debug("Volumes to delete: {}".format(vols_to_del))
     exit_code, cmd_output = cli.cinder('delete', vols_to_del_str, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
                                        auth_info=auth_info, timeout=timeout)
 

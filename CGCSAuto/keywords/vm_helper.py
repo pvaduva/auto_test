@@ -1186,13 +1186,15 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
         else:
             msg = "Some vm(s) deletion request is rejected : {}; and some vm(s) still exist after deletion: {}".\
                   format(vms_del_rejected, vms_undeleted)
-            if not fail_ok:
+            if fail_ok:
+                LOG.warning(msg)
                 return 3, msg
             raise exceptions.VMPostCheckFailed(msg)
 
     if not all_deleted:
-        msg = "VMs deletion reject all accepted, but some vms still exist in nova list: {}".format(vms_undeleted)
+        msg = "VMs deletion request all accepted, but some vms still exist in nova list: {}".format(vms_undeleted)
         if fail_ok:
+            LOG.warning(msg)
             return 2, msg
         raise exceptions.VMPostCheckFailed(msg)
 
@@ -1214,7 +1216,7 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
         con_ssh (SSHClient|None):
         auth_info (dict|None):
 
-    Returns (tuple): (result(bool), vms_deleted(tuple), vms_failed_to_delete(tuple))
+    Returns (tuple): (result(bool), vms_deleted(list), vms_failed_to_delete(list))
 
     """
     if isinstance(vms, str):
@@ -1232,10 +1234,10 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
                 vms_deleted.append(vm)
 
         if not vms_to_check:
-            return True, tuple(vms), ()
+            return True, vms, []
         time.sleep(check_interval)
 
-    if not fail_ok:
-        return False, tuple(vms_deleted), tuple(vms_to_check)
-    raise exceptions.VMPostCheckFailed("Some vm(s) are not removed from nova list within {} seconds".
-                                       format(vms_to_check, timeout))
+    if fail_ok:
+        return False, vms_deleted, vms_to_check
+    raise exceptions.VMPostCheckFailed("Some vm(s) are not removed from nova list within {} seconds: {}".
+                                       format(timeout, vms_to_check))
