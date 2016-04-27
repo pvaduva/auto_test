@@ -27,7 +27,11 @@ import subprocess
 import configparser
 import pexpect
 
+import smtplib
+from email.mime.text import MIMEText
+
 log = getLogger(__name__)
+
 
 #TODO: Would be nice to have a common function which can perform an
 #      action on a node (e.g. lock, unlock)
@@ -55,8 +59,10 @@ def create_node_dict(nodes, personality):
             node_file = open(node_filepath, 'r')
             config.read_file(node_file)
         except Exception:
-            log.exception('Failed to read \"{}\"'.format(node_filepath))
-            sys.exit(1)
+            msg = 'Failed to read \"{}\"'.format(node_filepath)
+            log.exception(msg)
+
+            wr_exit()._exit(1, msg)
 
         node_info_dict = {}
         for section in config.sections():
@@ -120,8 +126,10 @@ def get_ssh_key():
     if not os.path.isfile(ssh_key_fpath):
         print("CMD = " + CREATE_PUBLIC_SSH_KEY_CMD.format(ssh_key_fpath))
         if exec_cmd(CREATE_PUBLIC_SSH_KEY_CMD)[0] != 0:
-            log.error("Failed to create public ssh key for current user")
-            sys.exit(1)
+            msg = "Failed to create public ssh key for current user"
+            log.error(msg)
+            wr_exit._exit(1, msg)
+
     ssh_key = exec_cmd(GET_PUBLIC_SSH_KEY_CMD.format(ssh_key_fpath).split())[1]
     return ssh_key
 
@@ -147,14 +155,17 @@ def vlm_reserve(barcodes, note=None):
             #reserved_barcodes = exec_cmd(cmd)
             reserved_barcodes = exec_cmd(cmd)[1]
             if not reserved_barcodes or "Error" in reserved_barcodes:
-                log.error("Failed to reserve target(s): " + str(chunk))
-                sys.exit(1)
+                msg = "Failed to reserve target(s): " + str(chunk)
+                log.error(msg)
+                wr_exit()._exit(1, msg)
+
         total_barcodes.extend(reserved_barcodes.split())
     if any(barcode not in total_barcodes for barcode in barcodes):
         msg = "Only reserved {} of {}".format(total_barcodes, barcodes)
         msg += ". Remaining barcode(s) are already reserved"
         log.error(msg)
-        sys.exit(1)
+        wr_exit._exit(1, msg)
+
 
 def vlm_getattr(barcodes):
     attr_values = []
@@ -168,7 +179,8 @@ def vlm_getattr(barcodes):
         output = exec_cmd(cmd)[1]
         if not output or "Error" in output:
             log.error("Failed to get attributes for target(s): {}".format(barcodes))
-            sys.exit(1)
+            wr_exit()._exit(1, "Failed to get attributes for target(s): {}".format(barcodes))
+
         for line in output.splitlines():
             if line:
                 attr, val = re.split("\s*:\s+", line)
@@ -196,11 +208,72 @@ def vlm_exec_cmd(action, barcode):
         log.error(msg)
         return 1
     elif barcode not in vlm_findmine():
-        log.error("Failed to {} target {}. Target is not reserved by user".format(action, barcode))
-        sys.exit(1)
+        msg = "Failed to {} target {}. Target is not reserved by user".format(action, barcode)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
     else:
         cmd = [VLM, action, "-t", barcode]
         output = exec_cmd(cmd)[1]
         if output != "1":
-            log.error('Failed to execute "{}" on target'.format(barcode))
-            sys.exit(1)
+            msg = 'Failed to execute "{}" on target'.format(barcode)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+
+
+class wr_exit(object):
+
+    class _wr_exit():
+        """Exit utility.
+
+        Wr_Exit contains various attributes  such exit status, error messages and methods
+        for  Email notification of lab install status before exit.
+        """
+        def __init__(self):
+
+            self.status = 0
+            self.email_server = None
+            self.email_subject = None
+            self.email_from = None
+            self.email_to = None
+            self.status_msg = ''
+            self.lab_name = ''
+
+        def _set_email_attr(self, **kwargs):
+            for key in kwargs:
+                setattr(self, key, kwargs[key])
+
+        def _exit(self, status, msg=None):
+            #check if we need to send email
+            if self.email_to is not None:
+                _msg = ''
+                if status is not 0:
+                    self.email_subject += " failed"
+                    _msg += self.lab_name + "\n" +  EMAIL_ERROR_MSG + msg
+                else:
+                    self.email_subject += " completed"
+                    _msg += self.lab_name + "\n" + msg
+                self._send_email(_msg)
+
+            sys.exit(status)
+
+        def _send_email(self, msg):
+            msg_body = MIMEText(msg)
+            msg_body['subject'] = self.email_subject
+            msg_body['From'] = self.email_from
+            msg_body['To'] = self.email_to
+            s = smtplib.SMTP(self.email_server)
+            s.send_message(msg_body)
+            s.quit()
+
+    instance = None
+
+    def __new__(cls):
+        if not wr_exit.instance:
+            wr_exit.instance = wr_exit._wr_exit()
+        return wr_exit.instance
+
+    def __getattr__(self, name):
+        return getattr(self.instance, name)
+
+    def __setattr__(self, name):
+        return setattr(self.instance, name)

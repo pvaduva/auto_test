@@ -37,7 +37,7 @@ import configparser
 from constants import *
 from utils.ssh import SSHClient
 import utils.log as logutils
-from utils.common import create_node_dict, vlm_reserve, vlm_findmine, vlm_exec_cmd, find_error_msg, get_ssh_key
+from utils.common import create_node_dict, vlm_reserve, vlm_findmine, vlm_exec_cmd, find_error_msg, get_ssh_key, wr_exit
 from utils.classes import Host
 import utils.wr_telnetlib as telnetlib
 
@@ -99,7 +99,9 @@ def parse_args():
     # if one is plugged-in.
     #
     lab_grp.add_argument('--burn-usb', dest='burn_usb',
-                           action='store_true', help="Burn boot image into USB before install")
+                         action='store_true',
+                         help="Burn boot image into USB before install. Valid"
+                         " only with --small-footprint option")
 
 
     #TODO: Custom directory path is not supported yet. Need to add code
@@ -160,6 +162,13 @@ def parse_args():
                              -> /folk/cgts/patches-to-verify/ZTE/'
                              -> /folk/cgts/patches-to-verify/15.05'
                              -> /folk/cgts/rel-ops/Titanium-Server-15/15.05'''))
+    bld_grp.add_argument('--email-address', metavar='EMAILADDRESS',
+                         dest='email_address',
+                         default=None,
+                         help="Comma-separated list of email addresses to which  "
+                              " lab install status notification is sent"
+                         "\n(default: %(default)s)")
+
 
     other_grp = parser.add_argument_group("Other options:")
     other_grp.add_argument('--output-dir', metavar='DIR_PATH',
@@ -191,8 +200,9 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir, tis_bld_dir)
     load_path += "/" + tis_bld_dir
     cmd = "test -d " + load_path
     if bld_server_conn.exec_cmd(cmd)[0] != 0:
-        log.error("Load path {} not found".format(load_path))
-        sys.exit(1)
+        msg = "Load path {} not found".format(load_path)
+        log.error(msg)
+        wr_exit()._exit(1,msg)
 
     return load_path
 
@@ -215,10 +225,12 @@ def verify_custom_lab_cfg_location(lab_cfg_location):
         elif file == CUSTOM_LAB_SETTINGS_FILENAME:
              found_lab_settings_file = True
     if not (found_bulk_cfg_file and found_system_cfg_file):
-        log.error('Failed to find \"{}\" or \"{}\" in {}'.format(
+        msg = 'Failed to find \"{}\" or \"{}\" in {}'.format(
                   BULK_CFG_FILENAME, SYSTEM_CFG_FILENAME,
-                  lab_cfg_location))
-        sys.exit(1)
+                  lab_cfg_location)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
     if found_lab_settings_file:
         lab_settings_filepath = lab_cfg_location + "/"\
                                 + CUSTOM_LAB_SETTINGS_FILENAME
@@ -235,9 +247,10 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path):
 
     cmd = "test -d " + lab_cfg_path
     if bld_server_conn.exec_cmd(cmd)[0] != 0:
-        log.error('Lab config directory \"{}\" not found in {}'.format(
-                  lab_cfg_location, lab_cfg_rel_path))
-        sys.exit(1)
+        msg = 'Lab config directory \"{}\" not found in {}'.format(
+                  lab_cfg_location, lab_cfg_rel_path)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
 
     lab_settings_rel_path = LAB_SETTINGS_DIR + "/{}.ini".format(
                             lab_cfg_location)
@@ -256,7 +269,7 @@ def deploy_key(conn):
         ssh_key = (open(os.path.expanduser(SSH_KEY_FPATH)).read()).rstrip()
     except FileNotFoundError:
         log.exception("User must have a public key {} defined".format(SSH_KEY_FPATH))
-        sys.exit(1)
+        wr_exit()._exit(1, msg)
     else:
         log.info("User has public key defined: " + SSH_KEY_FPATH)
 
@@ -291,8 +304,9 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path):
     tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + "/" + barcode
 
     if tuxlab_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
-        log.error("Failed to cd to: " + tuxlab_barcode_dir)
-        sys.exit(1)
+        msg = "Failed to cd to: " + tuxlab_barcode_dir
+        log.error(msg)
+        wr_exit()._exit(1, msg)
 
     log.info("Copy load into feed directory")
     if tuxlab_conn.exec_cmd("test -d " + tuxlab_sub_dir)[0] != 0:
@@ -316,12 +330,14 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path):
 
     log.info("Create new symlink to feed directory")
     if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:
-        log.error("Failed to remove feed")
-        sys.exit(1)
+        msg = "Failed to remove feed"
+        log.error(msg)
+        wr_exit()._exit(1, msg)
 
     if tuxlab_conn.exec_cmd("ln -s " + tuxlab_sub_dir + "/" + " feed")[0] != 0:
-        log.error("Failed to set VLM target {} feed symlink to: " + tuxlab_sub_dir)
-        sys.exit(1)
+        msg = "Failed to set VLM target {} feed symlink to: " + tuxlab_sub_dir
+        log.error(msg)
+        wr_exit()._exit(1, msg)
 
     tuxlab_conn.logout()
 
@@ -343,14 +359,17 @@ def burn_usb_load_image(node,  bld_server_conn, load_path):
     # check if  a USB is plugged in 
     cmd = "ls -lrtd /dev/disk/by-id/usb*"
     if (node.telnet_conn.exec_cmd(cmd)[0] != 0):
-        log.info("No USB found in lab node. Please plug in a usb to {}.".format(node.host_ip))
-        sys.exit(1)
+        msg = "No USB found in lab node. Please plug in a usb to {}.".format(node.host_ip)
+        log.info(msg)
+        wr_exit()._exit(1, msg)
 
     cmd = "test -f " + load_path + "/" + BOOT_IMAGE_ISO_PATH
     if bld_server_conn.exec_cmd(cmd)[0] != 0:
-        log.error('Boot image iso file \"{}\" not found in {}'.format(
-                  load_path, BOOT_IMAGE_ISO_PATH))
-        sys.exit(1)
+        msg = 'Boot image iso file \"{}\" not found in {}'.format(
+                  load_path, BOOT_IMAGE_ISO_PATH)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
     bld_server_conn.sendline("cd " + load_path)
     bld_server_conn.find_prompt()
     pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
@@ -359,14 +378,16 @@ def burn_usb_load_image(node,  bld_server_conn, load_path):
 
     cmd = "test -f " + BOOT_IMAGE_ISO_TMP_PATH
     if node.telnet_conn.exec_cmd(cmd)[0] != 0:
-        log.info("Boot image not found in {} : {}".format(node.host_ip, BOOT_IMAGE_ISO_TMP_PATH))
-        sys.exit(1)
+        msg = "Boot image not found in {} : {}".format(node.host_ip, BOOT_IMAGE_ISO_TMP_PATH)
+        log.info(msg)
+        wr_exit()._exit(1, msg)
 
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S dd if=" + BOOT_IMAGE_ISO_TMP_PATH + " of=/dev/sdc bs=1M oflag=direct; sync"
     if node.telnet_conn.exec_cmd(cmd, timeout=RSYNC_TIMEOUT)[0] != 0:
-        log.error('Faile to burn Boot image iso file \"{}\"  onto USB'.format(
-                   BOOT_IMAGE_ISO_PATH))
-        sys.exit(1)
+        msg = 'Faile to burn Boot image iso file \"{}\"  onto USB'.format(
+                   BOOT_IMAGE_ISO_PATH)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
 
 
 
@@ -426,13 +447,15 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
         nodes = copy.copy(nodes)
     count = 0
     if type not in STATE_TYPE_DICT:
-        log.error("Type of state can only be one of: " + \
-                   str(list(STATE_TYPE_DICT.keys())))
-        sys.exit(1)
+        msg = "Type of state can only be one of: " + \
+                   str(list(STATE_TYPE_DICT.keys()))
+        log.error(msg)
+        wr_exit()._exit(1, msg)
     if expected_state not in STATE_TYPE_DICT[type]:
-        log.error("Expected {} state can only be on one of: {}"\
-                   .format(type, str(STATE_TYPE_DICT[type])))
-        sys.exit(1)
+        msg = "Expected {} state can only be on one of: {}"\
+                   .format(type, str(STATE_TYPE_DICT[type]))
+        log.error(msg)
+        wr_exit()._exit(1, msg)
 
     expected_state_count = 0
     sleep_secs = int(REBOOT_TIMEOUT/MAX_SEARCH_ATTEMPTS)
@@ -482,8 +505,9 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
             time.sleep(sleep_secs)
         count += 1
     if count == MAX_SEARCH_ATTEMPTS:
-        log.error('Waited {} seconds and {} did not become \"{}\"'.format(str(REBOOT_TIMEOUT), node_names, expected_state))
-        sys.exit(1)
+        msg = 'Waited {} seconds and {} did not become \"{}\"'.format(str(REBOOT_TIMEOUT), node_names, expected_state)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
 
 def get_availability_controller1():
     ## Todo: Make this generic for any node
@@ -492,6 +516,18 @@ def get_availability_controller1():
     cmd = "source /etc/nova/openrc; system host-show controller-1 | awk ' / availability / { print $4}'"
     output = controller0.ssh_conn.exec_cmd(cmd)[1]
     return output
+
+def get_system_name(bld_server_conn, lab_cfg_path):
+    '''
+    Args: Gets the lab system name from lab_setup.conf file
+        bld_server_conn:
+        lab_cfg_path:
+
+    Returns: system name
+
+    '''
+    cmd = "grep SYSTEM_NAME " + lab_cfg_path + "/" + LAB_SETUP_CFG_FILENAME
+    return bld_server_conn.exec_cmd(cmd)[1]
 
 def bring_up(node, boot_device_dict, small_footprint, close_telnet_conn=True):
     ''' Initiate the boot and installation operation.
@@ -519,17 +555,20 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
 
     for dir_path in patch_dir_paths.split(","):
         if bld_server_conn.exec_cmd("test -d " + dir_path)[0] != 0:
-            log.error("Patch directory path {} not found".format(dir_path))
-            sys.exit(1)
+            msg = "Patch directory path {} not found".format(dir_path)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
         if bld_server_conn.exec_cmd("cd " + dir_path)[0] != 0:
-            log.error("Failed to cd to: " + dir_path)
-            sys.exit(1)
+            msg = "Failed to cd to: " + dir_path
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
         rc, output = bld_server_conn.exec_cmd("ls -1 --color=none *.patch")
         if rc != 0:
-            log.error("Failed to list patches in: " + dir_path)
-            sys.exit(1)
+            msg = "Failed to list patches in: " + dir_path
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
         for item in output.splitlines():
             # Remove ".patch" extension
@@ -543,41 +582,48 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
 
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S sw-patch query"
     if node.telnet_conn.exec_cmd(cmd)[0] != 0:
-        log.error("Failed to query patches")
-        sys.exit(1)
+        msg = "Failed to query patches"
+        log.error(msg)
+        wr_exit()._exit(1, msg)
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S sw-patch upload-dir " + WRSROOT_PATCHES_DIR
     output = node.telnet_conn.exec_cmd(cmd)[1]
     if find_error_msg(output):
-        log.error("Failed to upload entire patch directory: " + WRSROOT_PATCHES_DIR)
-        sys.exit(1)
+        msg = "Failed to upload entire patch directory: " + WRSROOT_PATCHES_DIR
+        log.error(msg)
+        wr_exit()._exit(1, msg)
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S sw-patch query"
     rc, output = node.telnet_conn.exec_cmd(cmd)
     if rc != 0:
-        log.error("Failed to query patches")
-        sys.exit(1)
+        msg = "Failed to query patches"
+        log.error(msg)
+        wr_exit()._exit(1, msg)
 
     # Remove table header
     output = "\n".join(output.splitlines()[2:])
     for patch in patch_names:
         #TODO: Should use table_parser here instead
         if not re.search("^{}.*{}.*$".format(patch, AVAILABLE), output, re.MULTILINE|re.IGNORECASE):
-            log.error('Patch \"{}\" is not in list or in {} state'.format(patch, AVAILABLE))
-            sys.exit(1)
+            msg = 'Patch \"{}\" is not in list or in {} state'.format(patch, AVAILABLE)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S sw-patch apply --all"
     if node.telnet_conn.exec_cmd(cmd)[0] != 0:
-        log.error("Failed to apply patches")
-        sys.exit(1)
+        msg = "Failed to apply patches"
+        log.error(msg)
+        wr_exit()._exit(1, msg)
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S sw-patch install-local"
 
     output = node.telnet_conn.exec_cmd(cmd)[1]
     if not find_error_msg(output):
-        log.error("Failed to install patches")
-        sys.exit(1)
+        msg = "Failed to install patches"
+        log.error(msg)
+        wr_exit()._exit(1, msg)
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S sw-patch query"
     if node.telnet_conn.exec_cmd(cmd)[0] != 0:
-        log.error("Failed to query patches")
-        sys.exit(1)
+        msg = "Failed to query patches"
+        log.error(msg)
+        wr_exit()._exit(1, msg)
 
     node.telnet_conn.exec_cmd("echo " + WRSROOT_PASSWORD + " | sudo -S reboot")
     node.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
@@ -662,7 +708,21 @@ if __name__ == '__main__':
     logutils.print_name_value("Output directory", output_dir)
     logutils.print_name_value("Log level", log_level)
 
+
+    email_info = {}
+    email_info['email_server'] = EMAIL_SERVER
+    email_info['email_from'] = EMAIL_FROM
+    email_info['email_to'] =  args.email_address
+    email_info['email_subject'] =  EMAIL_SUBJECT
+
+    installer_exit = wr_exit()
+    installer_exit._set_email_attr(**email_info)
+
+    # installed load info for email message
+    installed_load_info = ''
+
     print("\nRunning as user: " + USERNAME + "\n")
+
 
     controller_dict = create_node_dict(controller_nodes, CONTROLLER)
     controller0 = controller_dict[CONTROLLER0]
@@ -697,8 +757,10 @@ if __name__ == '__main__':
             lab_settings_file = open(lab_settings_filepath, 'r')
             config.read_file(lab_settings_file)
         except Exception:
-            log.exception("Failed to read file: " + lab_settings_filepath)
-            sys.exit(1)
+            msg = "Failed to read file: " + lab_settings_filepath
+            log.exception(msg)
+            wr_exit._exit(1,msg)
+
 
         for section in config.sections():
             try:
@@ -713,6 +775,11 @@ if __name__ == '__main__':
             except configparser.NoSectionError:
                 pass
 
+    # get lab name from config file
+    lab_name = get_system_name(bld_server_conn, lab_cfg_path)
+    if lab_name is not None:
+        installer_exit.lab_name = lab_name
+
     executed = False
     if not executed:
         if str(boot_device_dict.get('controller-0')) != "USB":
@@ -725,15 +792,18 @@ if __name__ == '__main__':
     executed = False
     if not executed:
         # Reserve the nodes via VLM
-        #check first if nodes already reserved by user
+        # Unreserve first to close any opened telnet sessions.
         reservedbyme = vlm_findmine()
-        barcodesForReserve = []
+        barcodesAlreadyReserved = []
         for item in barcodes:
-            if item not in reservedbyme:
-                barcodesForReserve.append(item)
+            if item in reservedbyme:
+                barcodesAlreadyReserved.append(item)
+        if len(barcodesAlreadyReserved) > 0:
+            for bcode in barcodesAlreadyReserved:
+                vlm_exec_cmd(VLM_UNRESERVE, bcode)
 
-        vlm_reserve(barcodesForReserve, note=INSTALLATION_RESERVE_NOTE)
-        #vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
+        #vlm_reserve(barcodesForReserve, note=INSTALLATION_RESERVE_NOTE)
+        vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
         # Open a telnet session for controller0.
         cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, 
@@ -774,7 +844,8 @@ if __name__ == '__main__':
     # Configure networking interfaces
     executed = False
     if not executed:
-        if small_footprint:
+        if small_footprint and burn_usb:
+
             # Setup network access on the running controller0
             cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip addr add " + controller0.host_ip + controller0.host_routing_prefix + " dev " + NIC_INTERFACE
             if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
@@ -797,12 +868,10 @@ if __name__ == '__main__':
             time.sleep(60)
             cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, DNS_SERVER)
             if controller0.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT + TIMEOUT_BUFFER)[0] != 0:
-                log.error("Failed to ping outside network")
-                sys.exit(1)
+                msg = "Failed to ping outside network"
+                log.error(msg)
+                wr_exit()._exit(1,msg)
 
-        if patch_dir_paths != None:
-            controller0.telnet_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
-            apply_patches(controller0, bld_server_conn, patch_dir_paths)
 
     # Open an ssh session
     cont0_ssh_conn = SSHClient(log_path=output_dir + "/" + CONTROLLER0 + ".ssh.log")
@@ -811,6 +880,13 @@ if __name__ == '__main__':
     controller0.ssh_conn = cont0_ssh_conn
 
     controller0.ssh_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
+
+    # Apply patches if patch dir is not none
+    executed = False
+    if not executed:
+        if patch_dir_paths != None:
+            apply_patches(controller0, bld_server_conn, patch_dir_paths)
+
 
     # Download configuration files
     executed = False
@@ -880,19 +956,31 @@ if __name__ == '__main__':
             cmd = "test -f " + cfgpath
             if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
                 cfg_found = True
+                # check if HTTPS is enabled and if yes get the certification file
+                cmd = " grep ENABLE_HTTPS " + cfgpath + " | awk '{print $3}' "
+                if controller0.ssh_conn.exec_cmd(cmd)[1] == 'Y':
+                    bld_server_conn.rsync(CERTIFICATE_FILE_PATH,
+                                          WRSROOT_USERNAME, controller0.host_ip,
+                                          os.path.join(WRSROOT_HOME_DIR,
+                                          CERTIFICATE_FILE_NAME),
+                                          pre_opts=pre_opts)
+
                 cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
                 cmd += " config_controller --config-file " + cfgfile
                 #rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
                 # Switching to ssh due to CGTS-4051
                 rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
                 if rc != 0 or find_error_msg(output, "Configuration failed"):
-                    log.error("config_controller failed")
-                    sys.exit(1)
+                    msg = "config_controller failed"
+                    log.error(msg)
+                    wr_exit()._exit(1, msg)
                 break
 
         if not cfg_found:
-            log.error("Configuration failed: No configuration files found")
-            sys.exit(1)
+            msg = "Configuration failed: No configuration files found"
+            log.error(msg)
+            installer_exit._exit(1, msg)
+
 
     cmd = "source /etc/nova/openrc"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
@@ -911,13 +999,15 @@ if __name__ == '__main__':
                 cmd = "system host-bulk-add " + bulkfile
                 rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
                 if rc != 0 or find_error_msg(output, "Configuration failed"):
-                    log.error("system host-bulk-add failed")
-                    sys.exit(1)
+                    msg = "system host-bulk-add failed"
+                    log.error(msg)
+                    installer_exit._exit(1, msg)
                 break
 
         if not bulkfile_found:
-            log.error("Configuration failed: No host-bulk-add file was found.")
-            sys.exit(1)
+            msg = "Configuration failed: No host-bulk-add file was found."
+            log.error(msg)
+            installer_exit._exit(1, msg)
 
 
     # Complete controller0 configuration either as a regular host 
@@ -927,13 +1017,15 @@ if __name__ == '__main__':
         if small_footprint:
             cmd = './lab_setup.sh'
             if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-                log.error("lab_setup failed in small footprint configuration")
-                sys.exit(1)
+                msg = "lab_setup failed in small footprint configuration."
+                log.error(msg)
+                installer_exit._exit(1, msg)
 
             cmd = 'source /etc/nova/openrc; system compute-config-complete'
             if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
                 log.error("compute-config-complete failed in small footprint configuration")
-                sys.exit(1)
+                installer_exit._exit(1, "compute-config-complete failed in small footprint configuration.")
+
 
             # The controller0 will restart. Need to login after reset is 
             # complete before we can continue.
@@ -959,8 +1051,9 @@ if __name__ == '__main__':
             # Run lab_setup again to setup controller-1 interfaces
             cmd = './lab_setup.sh'
             if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-                log.error("lab_setup failed in small footprint configuration")
-                sys.exit(1)
+                msg = "lab_setup failed in small footprint configuration"
+                log.error(msg)
+                wr_exit()._exit(1, msg)
 
     # Bring up other hosts
     executed = False
@@ -972,6 +1065,7 @@ if __name__ == '__main__':
                 threads.append(node_thread)
                 log.info("Starting thread for {}".format(node_thread.name))
                 node_thread.start()
+
 
         for thread in threads:
             thread.join()
@@ -992,21 +1086,25 @@ if __name__ == '__main__':
         # Run lab setup
         lab_setup_cmd = WRSROOT_HOME_DIR + "/" + LAB_SETUP_SCRIPT
         if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
-            log.error("Failed during lab setup")
-            sys.exit(1)
+            msg = "Failed during lab setup"
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
         # Storage nodes are online so run lab_setup again
         if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
-            log.error("Failed during lab setup")
-            sys.exit(1)
+            msg = "Failed during lab setup"
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+
 
         # Unlock controller-1 and then run lab_setup
         for node in nodes:
             if node.name == "controller-1":
                 cmd = "source /etc/nova/openrc; system host-unlock " + node.name
                 if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-                    log.error("Failed to unlock: " + node.name)
-                    sys.exit(1)
+                    msg = "Failed to unlock: " + node.name
+                    log.error(msg)
+                    wr_exit._exit(1, msg)
 
                 wait_state(node, OPERATIONAL, ENABLED)
                 if get_availability_controller1() == "degraded":
@@ -1014,11 +1112,13 @@ if __name__ == '__main__':
                     # corrected by re-boot.
                     log.info("Controller1 is in degraded state. Attempting to reset")
                     vlm_exec_cmd(VLM_REBOOT, node.barcode)
+                    time.sleep(5)
                     wait_state(node, OPERATIONAL, ENABLED)
 
                 if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
-                    log.error("Failed during lab setup")
-                    sys.exit(1)
+                    msg = "Failed during lab setup"
+                    log.error(msg)
+                    wr_exit._exit(1, msg)
                 nodes.remove(node)
 
                 break
@@ -1028,8 +1128,9 @@ if __name__ == '__main__':
             if node.name.startswith("storage"):
                 cmd = "source /etc/nova/openrc; system host-unlock " + node.name
                 if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-                    log.error("Failed to unlock: " + node.name)
-                    sys.exit(1)
+                    msg = "Failed to unlock: " + node.name
+                    log.error(msg)
+                    wr_exit()._exit(1, "Failed to unlock: " + node.name)
 
         # Wait for storage nodes to be enabled and computes to be online before
         # running lab_setup again
@@ -1041,24 +1142,27 @@ if __name__ == '__main__':
 
         # Run lab_setup
         if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
-            log.error("Failed during lab setup")
-            sys.exit(1)
+            msg = "Failed during lab setup"
+            log.error(msg)
+            wr_exit()._exit(1, "Failed during lab setup")
 
         # Unlock computes
         for node in nodes:
             if node.name.startswith("compute"):
                 cmd = "source /etc/nova/openrc; system host-unlock " + node.name
                 if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-                    log.error("Failed to unlock: " + node.name)
-                    sys.exit(1)
+                    msg = "Failed to unlock: " + node.name
+                    log.error(msg)
+                    wr_exit()._exit(1, msg)
 
         # Wait for computes to become enabled before we run lab_setup again
         wait_state(nodes, OPERATIONAL, ENABLED)
 
         # Run lab_setup again
         if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
-            log.error("Failed during lab setup")
-            sys.exit(1)
+            msg = "Failed during lab setup"
+            log.error(msg)
+            wr_exit()._exit(1, "Failed during lab setup")
 
         # Check that the computes and storage nodes are available
         wait_state(nodes, AVAILABILITY, AVAILABLE)
@@ -1067,14 +1171,18 @@ if __name__ == '__main__':
         # Get alarms
         cmd = "source /etc/nova/openrc; system alarm-list"
         if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-            log.error("Failed to get alarm list")
-            sys.exit(1)
+            msg = "Failed to get alarm list"
+            log.error(msg)
+            wr_exit()._exit(1, "Failed to get alarm list")
 
         # Get build info
         cmd = "cat /etc/build.info"
-        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-            log.error("Failed to get build info")
-            sys.exit(1)
+        rc, installed_load_info = controller0.ssh_conn.exec_cmd(cmd)
+        #if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+        if rc != 0:
+            msg = "Failed to get build info"
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
         # Unreserve targets
         for barcode in barcodes:
@@ -1082,7 +1190,8 @@ if __name__ == '__main__':
 
         # If we made it this far, we probably had a successful install
         log.info("Terminating storage system install")
-        sys.exit(0)
+        wr_exit()._exit(0, "Terminating storage system install.\n"
+                      + installed_load_info)
         # COMMON CODE TO MOVE OUT END
 
     # REGULAR LAB PROCEDURE
@@ -1101,12 +1210,12 @@ if __name__ == '__main__':
         lab_setup_cmd = WRSROOT_HOME_DIR + "/" + LAB_SETUP_SCRIPT
         if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
             log.error("Failed during lab setup")
-            sys.exit(1)
+            wr_exit()._exit(1, "Failed during lab setup")
 
         # Run lab_setup again
         if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
             log.error("Failed during lab setup")
-            sys.exit(1)
+            wr_exit()._exit(1, "Failed during lab setup")
 
         # Unlock computes and then run lab_setup
         for node in nodes:
@@ -1114,7 +1223,7 @@ if __name__ == '__main__':
                 cmd = "source /etc/nova/openrc; system host-unlock " + node.name
                 if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
                     log.error("Failed to unlock: " + node.name)
-                    sys.exit(1)
+                    wr_exit()._exit(1, "Failed to unlock: " + node.name)
 
         # Wait until computes are enabled
         for node in nodes:
@@ -1124,7 +1233,7 @@ if __name__ == '__main__':
         # Run lab_setup again
         if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
             log.error("Failed during lab setup")
-            sys.exit(1)
+            wr_exit()._exit(1, "Failed during lab setup")
 
         # Unlock controller-1
         for node in nodes:
@@ -1132,9 +1241,10 @@ if __name__ == '__main__':
                 cmd = "source /etc/nova/openrc; system host-unlock " + node.name
                 if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
                     log.error("Failed to unlock: " + node.name)
-                    sys.exit(1)
+                    wr_exit()._exit(1, "Failed to unlock: " + node.name)
 
                 wait_state(node, OPERATIONAL, ENABLED)
+                """
                 controller1_state = get_availability_controller1()
                 if re.search('degraded', controller1_state):
                     # Controler1 is in degraded state. Sometimes the fault could be
@@ -1142,11 +1252,12 @@ if __name__ == '__main__':
                     log.info("Controller1 is in degraded state. Attempting to reset")
                     vlm_exec_cmd(VLM_REBOOT, node.barcode)
                     wait_state(node, OPERATIONAL, ENABLED)
+                """
 
         # Run lab_setup again
         if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
             log.error("Failed during lab setup")
-            sys.exit(1)
+            wr_exit()._exit(1, "Failed during lab setup")
 
         # Check that the nodes are available
         wait_state(nodes, AVAILABILITY, AVAILABLE)
@@ -1156,13 +1267,15 @@ if __name__ == '__main__':
         cmd = "source /etc/nova/openrc; system alarm-list"
         if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
             log.error("Failed to get alarm list")
-            sys.exit(1)
+            wr_exit()._exit(1, "Failed to get alarm list")
 
         # Get build info
         cmd = "cat /etc/build.info"
-        if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+        rc, installed_load_info = controller0.ssh_conn.exec_cmd(cmd)
+        #if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+        if rc != 0:
             log.error("Failed to get build info")
-            sys.exit(1)
+            wr_exit()._exit(1, "Failed to get build info")
 
         # Unreserve targets
         for barcode in barcodes:
@@ -1170,7 +1283,8 @@ if __name__ == '__main__':
 
         # If we made it this far, we probably had a successful install
         log.info("Terminating regular system install")
-        sys.exit(0)
+        wr_exit._exit(0, "Terminating regular system install.\n"
+                      + installed_load_info)
         # COMMON CODE TO MOVE OUT END
 
 
@@ -1198,8 +1312,9 @@ if __name__ == '__main__':
             for node in nodes:
                 cmd = "source /etc/nova/openrc; system host-unlock " + node.name
                 if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-                    log.error("Failed to unlock: " + node.name)
-                    sys.exit(1)
+                    msg = "Failed to unlock: " + node.name
+                    log.error(msg)
+                    wr_exit()._exit(1, msg)
 
         wait_state(nodes, ADMINISTRATIVE, UNLOCKED)
         wait_state(nodes, OPERATIONAL, ENABLED)
@@ -1208,22 +1323,25 @@ if __name__ == '__main__':
     for node in nodes:
         cmd = "source /etc/nova/openrc; system host-if-list {} -a".format(node.name)
         if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-            log.error("Failed to get list of interfaces for node: " + node.name)
-            sys.exit(1)
+            msg = "Failed to get list of interfaces for node: " + node.name
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
     cmd = "source /etc/nova/openrc; system alarm-list"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to get alarm list")
-        sys.exit(1)
+        wr_exit()._exit(1, msg)
 
     cmd = "cat /etc/build.info"
-    if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+    rc, installed_load_info = controller0.ssh_conn.exec_cmd(cmd)
+    #if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+    if rc != 0:
         log.error("Failed to get build info")
-        sys.exit(1)
+        wr_exit()._exit(1, msg)
 
     #TODO: Add unreserving of targets if you exit early for some reason
     #      This needs to be in the exception error handling for failure cases
     for barcode in barcodes:
         vlm_exec_cmd(VLM_UNRESERVE, barcode)
 
-    sys.exit(0)
+    wr_exit()._exit(0, "Installer completed.\n" + installed_load_info)
