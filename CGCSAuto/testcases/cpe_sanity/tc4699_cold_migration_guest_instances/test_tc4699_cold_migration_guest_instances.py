@@ -160,7 +160,7 @@ class LaunchInstances():
 
         while True:
             if time.time() < end_time:
-                time.sleep(5)
+                time.sleep(15)
                 table_to_check = self.table(self.sys_execute(cmd))
                 cell_status = self.get_column_value_from_multiple_columns(table_to_check,
                                                                      ref_header,

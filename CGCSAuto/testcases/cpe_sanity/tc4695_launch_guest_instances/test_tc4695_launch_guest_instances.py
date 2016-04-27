@@ -131,19 +131,19 @@ def test_tc4695_launch_guest_instances():
     """
 
     test_res = True
+    instance_list = ['tenant1-avp1', 'tenant1-avp2', 'tenant1-avp3', 'tenant1-avp4',
+                     'tenant1-virtio1', 'tenant1-virtio2', 'tenant1-virtio3', 'tenant1-virtio4',
+                     'tenant1-vswitch1', 'tenant1-vswitch2']
 
-    cmd = ("sh /home/wrsroot/instances_group0/launch_instances.sh")  
-    print ("Command executed: %s" % cmd)
-    result, output = cmd_execute(cmd)
+    for name in instance_list:
+        cmd = ("sh /home/wrsroot/instances_group0/launch_%s.sh" % name)
+        print ("Command executed: %s" % cmd)
+        result, output = cmd_execute(cmd)
 
     # Verify that all the instances were successfully launched
     res, out = cmd_execute('source /etc/nova/openrc; /usr/bin/nova list --all')
     instance_table = table(out)
-    instance_list = ['tenant1-avp1', 'tenant1-avp2', 'tenant1-avp3', 'tenant1-avp4',
-                     'tenant1-virtio1', 'tenant1-virtio2', 'tenant1-virtio3', 'tenant1-virtio4',
-                      'tenant1-vswitch1', 'tenant1-vswitch2', 'tenant2-avp1', 'tenant2-avp2',
-                      'tenant2-avp3', 'tenant2-avp4', 'tenant2-virtio1', 'tenant2-virtio2', 
-                      'tenant2-vswitch1', 'tenant2-vswitch2']
+
 
     for name in instance_list:
         instance_status = get_column_value_from_multiple_columns(instance_table,
