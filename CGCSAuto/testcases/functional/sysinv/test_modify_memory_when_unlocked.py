@@ -32,6 +32,9 @@ def less_than_two_hypervisors():
                   'compute-1 '])
 def test_modify_memory_when_unlocked(hostname):
     """
+
+    US51396_tc04_cannt_modify_unlocked (53 Cannot modify memory setting when unlocked using CLI)
+
     Attempt to modify memory when it's unlocked, and ensure it's rejected.
 
     Args:

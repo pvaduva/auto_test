@@ -1,6 +1,3 @@
-###
-# US51396_tc02_setting_num_hugepages_cli
-###
 
 from pytest import fixture, mark, skip
 
@@ -23,11 +20,10 @@ def modify_huge_page(request):
     # setup up 3 1G huge page on compute-1
     # this can be parametreized in the future to accept other values
 
-    hostname = 'compute-1 '
-    processor = "1 "
-    page_config = "-2M 0 -1G 4"
+    hostname = request.param[0]
+    processor = request.param[1]
+    page_config = request.param[2]
     host_processor = hostname + processor
-    #arg = hostname + processor + page_config
 
     # get info before huge page changes
     table_ = table_parser.table(cli.system('host-memory-show', host_processor))
@@ -36,7 +32,7 @@ def modify_huge_page(request):
 
     host = {'hostname': hostname,
             'processor': processor,
-            'huge_page': page_config
+            'huge_page': page_config,
             }
 
     # have a section that set huge_page memory back to where it was before
@@ -52,12 +48,14 @@ def modify_huge_page(request):
     return host
 
 
-def test_huge_page_created(modify_huge_page):
+@mark.parametrize('modify_huge_page', [["compute-1 ", "1 ", "-2M 0 -1G 4"]], indirect=True)
+def test_valid_huge_page_input(modify_huge_page):
     """
+    US51396_tc02_setting_num_hugepages_cli (50 Modify number of hugepages using CLI in sysinv testplan)
     change huge page number in a compute node and verify that it show up correctly after modification
 
     Args:
-        modify_huge_page (dict): A host that contain infos on name,processor and hugepage.
+        modify_huge_page (list): A host that takes in infos on [name,processor and hugepage]
 
     Setup:
         - check if there is at least two compute nodes
@@ -101,4 +99,56 @@ def test_huge_page_created(modify_huge_page):
         expected_huge_page[-1], actual_huge_page)
 
     # end tc
+
+
+@mark.parametrize('modify_huge_page', [["compute-1 ", "0 ", "-2M 999999 -1G 99999"],
+                                       ["compute-1 ", "0 ", "-2M asdf -1G asdf"]], indirect=True)
+def test_invalid_huge_page_input(modify_huge_page):
+    """
+    (55 Invalid inputs for number of hugepages will be rejected GUI in sysinv testplan)
+    given invalid huge page number in a compute node and verify that it failed after modification
+
+    Args:
+        modify_huge_page (list): A host that takes in infos on [name,processor and hugepage]
+
+    Setup:
+        - check if there is at least two compute nodes
+
+    Test Steps:
+        - lock compute node
+        - modify the huge page on the locked compute node
+        - unlock the compute node
+        - compare the huge page number with the the expected huge page number
+
+    Teardown:
+        - Might be good idea to reset the host memory to what it was before
+
+    """
+    hostname = modify_huge_page['hostname']
+    processor = modify_huge_page['processor']
+    expected_huge_page = modify_huge_page['huge_page']
+    args = hostname + processor + expected_huge_page
+
+    print(modify_huge_page)
+
+    LOG.tc_step('This Test will take 10min+ to execute as it lock, modify and unlock a compute node. ')
+    # lock the node
+    LOG.tc_step('Try to lock the host')
+    host_helper.lock_host(hostname)
+
+    # config the page number after lock the compute node
+    LOG.tc_step('Try to modify host memory after locking the host')
+    err,output = cli.system('host-memory-modify', args, auth_info=Tenant.ADMIN, fail_ok=True)
+
+    # unlock the node
+    LOG.tc_step('Try to unlock the host')
+    host_helper.unlock_host(hostname)
+
+    LOG.tc_step("Verify actual HugePage number failed")
+    assert err == 1, "Expected Huge Page CLI to Fail. However, it passed"
+
+    # end tc
+
+
+
 

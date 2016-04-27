@@ -26,7 +26,7 @@ System Verifications (if applicable)
 
 Add ``@pytest.mark.usefixtures()`` decorator to test function 
  * for system verifications that are not directly related to the test case. E.g., check system alarms, check hosts are in good states.
- * verify fixtures are stored under testfixtures/verify_fixtures.py
+ * All default fixtures are stored under :ref:`testfixtures-ref-label`.
  * How does it work: It trys to setup an eonvironment where a test can be run or verify certain critieria is same before and after the test. Test will be marked as fail if the post test check failed, e.g, A new alarm is raised only after the test case run but not before, then this test case will be marked as fail.
 
 .. code-block:: python
@@ -39,7 +39,7 @@ Add ``@pytest.mark.usefixtures()`` decorator to test function
  def test_something():
  ...
 
-Add ``@pytest.fixture`` to Test Function Specific Fixtures
+Add ``@pytest.fixture()`` to Test Function Specific Fixtures
  * A fixture can also be defined within the test.py itself. If it's only needed for specific testcases.
  * Defined in seperate test fixture function(s) with fixture decorator: @pytest.fixture()
  * A test fixture function can be parametrized by passing parameters via params argument to fixture function

@@ -155,8 +155,8 @@ def table(output_lines):
     """
     Tempest table does not take into account when multiple lines are used for one entry. Such as neutron net-list -- if
     a net has multiple subnets, then tempest table will create multiple entries in table_['values']
-    :param output_lines: output from cli command
-    :return: Dictionary of a table with.multi-line entry taken into account.table_['values'] is list of entries. If
+    param output_lines: output from cli command
+    return: Dictionary of a table with.multi-line entry taken into account.table_['values'] is list of entries. If
     multi-line entry, then this entry itself is a list.
     """
     table_ = __table(output_lines)
@@ -195,12 +195,13 @@ def table(output_lines):
 
 def get_all_rows(table_):
     """
-    Get the list of rows of a table with headers (first line) excluded
-    :param table_: Dictionary of a table parsed by tempest.
-    Example: table_ = {
-    'headers': ["Field", "Value"];
-    'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
-    :return:
+    Args:
+        table_ (dict): Dictionary of a table parsed by tempest.
+            Example: table =
+            {
+                'headers': ["Field", "Value"];
+                'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
+    Return:
         Return rows as a list. Each row itself is an sub-list.
         e.g.,[['name', 'internal-subnet0'], ['id', '36864844783']]
     """
@@ -240,17 +241,22 @@ def __get_id(table_, row_index=None):
 def __get_value(table_, field, row_index=None):
     """
 
-    :param table_: output table as dictionary parsed by tempest
-    :param field: field of the item. such as id, name, gateway_ip, etc
-    :param row_index: row_index for a multi-column table. This is not required for a two-column table. Following table
-    is considered to have only one row, and the row_index for that row is 0.
-    +--------------------------------------+------------+--------+--------------------------------------------------------------+
-    | ID                                   | Name       | Status | Networks                                                     |
-    +--------------------------------------+------------+--------+--------------------------------------------------------------+
-    | 1ab2c401-7863-42ab-8d2b-c2b7e8fa3adb | wrl5-avp-0 | ACTIVE | internal-net0=10.10.1.2, 10.10.0.2;public-net0=192.168.101.3 |
-    +--------------------------------------+------------+--------+--------------------------------------------------------------+
-    :return: return the value for a specific field (on a specific row if it's a multi-column table_)
+    Args:
+        table_:  output table as dictionary parsed by tempest
+        field: field of the item. such as id, name, gateway_ip, etc
+        row_index: row_index for a multi-column table. This is not required for a two-column table. Following table
+            is considered to have only one row, and the row_index for that row is 0.
+            +--------------------------------------+------------+--------+--------------------------------------------------------------+
+            | ID                                   | Name       | Status | Networks                                                     |
+            +--------------------------------------+------------+--------+--------------------------------------------------------------+
+            | 1ab2c401-7863-42ab-8d2b-c2b7e8fa3adb | wrl5-avp-0 | ACTIVE | internal-net0=10.10.1.2, 10.10.0.2;public-net0=192.168.101.3 |
+            +--------------------------------------+------------+--------+--------------------------------------------------------------+
+
+    Returns:
+        return the value for a specific field (on a specific row if it's a multi-column table_)
+
     """
+
     if __is_table_two_column(table_):
         if row_index is not None:
             LOG.warn("Two-column table found, row_index {} will not be used to locate {} field".

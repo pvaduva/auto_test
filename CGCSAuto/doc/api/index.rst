@@ -5,8 +5,9 @@ API documentation [#f1]_
    :maxdepth: 4
 
    keywords
+   testfixtures
    utils
-
+   
 
 .. rubric:: Footnotes
 

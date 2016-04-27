@@ -77,14 +77,6 @@ keywords.system_helper module
     :undoc-members:
     :show-inheritance:
 
-keywords.verify_fixtures module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. automodule:: keywords.verify_fixtures
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 keywords.vm_helper module
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

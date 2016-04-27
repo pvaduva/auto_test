@@ -47,6 +47,10 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
 @mark.parametrize('mtu', ['1700', '1500'])
 def test_oam_intf_mtu_modified(mtu):
     """
+
+    of the 2016-04-04 sysinv_test_plan.pdf
+    20) Change the MTU value of the OAM interface using CLI
+
     Verify that MTU on oam interfaces on both standby and active controller can be modified by cli
 
     Args:
@@ -99,6 +103,7 @@ def test_oam_intf_mtu_modified(mtu):
 @mark.parametrize('mtu', ['1700', '1500'])
 def test_data_intf_mtu_modified(mtu):
     """
+    23) Change the MTU value of the data interface using CLI
     Verify that MTU on data interfaces on all compute node can be modified by cli
 
     Args:
