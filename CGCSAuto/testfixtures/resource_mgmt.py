@@ -102,7 +102,7 @@ class ResourceCleanup:
 
         # Attempt all deletions before raising exception.
         if err_msgs:
-            raise exceptions.CommonError("Failed to delete resource(s). Details: ".format(err_msgs))
+            raise exceptions.CommonError("Failed to delete resource(s). Details: {}".format(err_msgs))
 
     @classmethod
     def _reset(cls, scope):
