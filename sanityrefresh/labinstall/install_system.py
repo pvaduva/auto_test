@@ -193,7 +193,7 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir, tis_bld_dir)
 
     load_path = "{}/{}".format(bld_server_wkspce, tis_blds_dir)
 
-    if tis_bld_dir == LATEST_BUILD_DIR:
+    if tis_bld_dir == LATEST_BUILD_DIR or not tis_bld_dir:
         cmd = "readlink " + load_path + "/" + LATEST_BUILD_DIR
         tis_bld_dir = bld_server_conn.exec_cmd(cmd, expect_pattern=TIS_BLD_DIR_REGEX)
 
@@ -1106,14 +1106,20 @@ if __name__ == '__main__':
                     log.error(msg)
                     wr_exit._exit(1, msg)
 
-                wait_state(node, OPERATIONAL, ENABLED)
-                if get_availability_controller1() == "degraded":
+                #wait_state(node, OPERATIONAL, ENABLED)
+                # Commented out since degraded state is acceptable during drbd
+                # sync
+                #if get_availability_controller1() == "degraded":
                     # Controler1 is in degraded state. Sometimes the fault could be
                     # corrected by re-boot.
-                    log.info("Controller1 is in degraded state. Attempting to reset")
-                    vlm_exec_cmd(VLM_REBOOT, node.barcode)
-                    time.sleep(5)
-                    wait_state(node, OPERATIONAL, ENABLED)
+                #    log.info("Controller1 is in degraded state. Attempting to reset")
+                #    vlm_exec_cmd(VLM_REBOOT, node.barcode)
+                #    time.sleep(5)
+                #    wait_state(node, OPERATIONAL, ENABLED)
+        
+                # Wait for controller-1 to be available, otherwise we can't add OSDs to
+                # storage nodes via lab_setup.sh if controller-1 is still degraded.
+                wait_state(node, AVAILABILITY, AVAILABLE)
 
                 if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
                     msg = "Failed during lab setup"
