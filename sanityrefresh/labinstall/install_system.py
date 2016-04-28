@@ -13,6 +13,7 @@ of an applicable Wind River license agreement.
 '''
 modification history:
 ---------------------
+27apr16,amf  small footprint: handle drbd data-sync and custom configs
 08mar16,mzy  Inserting steps for storage lab installation
 25feb16,amf  Inserting steps for small footprint installations
 22feb16,mzy  Add sshpass support
@@ -193,7 +194,7 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir, tis_bld_dir)
 
     load_path = "{}/{}".format(bld_server_wkspce, tis_blds_dir)
 
-    if tis_bld_dir == LATEST_BUILD_DIR:
+    if tis_bld_dir == LATEST_BUILD_DIR or not tis_bld_dir:
         cmd = "readlink " + load_path + "/" + LATEST_BUILD_DIR
         tis_bld_dir = bld_server_conn.exec_cmd(cmd, expect_pattern=TIS_BLD_DIR_REGEX)
 
@@ -628,6 +629,33 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
     node.telnet_conn.exec_cmd("echo " + WRSROOT_PASSWORD + " | sudo -S reboot")
     node.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
 
+def wait_until_drbd_sync_complete(controller0, timeout=600, check_interval=180):
+    '''
+    Function for waiting until the drbd alarm is cleared
+    '''
+
+    sync_complete = False
+    end_time = time.time() + timeout
+
+    while True:
+        if time.time() < end_time:
+            time.sleep(15)
+            cmd = "source /etc/nova/openrc; system alarm-list"
+            output = controller0.ssh_conn.exec_cmd(cmd)[1]
+            print('Waiting for data sync to complete')
+
+            if not find_error_msg(output, "data-syncing"):
+                print('Data sync is complete')
+                sync_complete = True
+                break
+            time.sleep(check_interval)
+        else:
+            message = "FAIL: DRBD data sysnc was not completed in expected time."
+            print(message)
+            break
+
+        return sync_complete
+
 if __name__ == '__main__':
 
     boot_device_dict = DEFAULT_BOOT_DEVICE_DICT
@@ -912,7 +940,6 @@ if __name__ == '__main__':
                               controller0.host_ip, 
                               os.path.join(WRSROOT_HOME_DIR, "license.lic"),
                               pre_opts=pre_opts)
-            """
             bld_server_conn.rsync(controller0.host_config_filename, 
                               WRSROOT_USERNAME, controller0.host_ip, 
                               os.path.join(WRSROOT_HOME_DIR, SYSTEM_CFG_FILENAME),
@@ -925,8 +952,6 @@ if __name__ == '__main__':
                               WRSROOT_USERNAME, controller0.host_ip,
                               os.path.join(WRSROOT_HOME_DIR, BULK_CFG_FILENAME),
                               pre_opts=pre_opts)
-            """
-
 
         cmd = 'grep -q "TMOUT=" ' + WRSROOT_ETC_PROFILE
         cmd += " && echo " + WRSROOT_PASSWORD + " | sudo -S"
@@ -1106,14 +1131,20 @@ if __name__ == '__main__':
                     log.error(msg)
                     wr_exit._exit(1, msg)
 
-                wait_state(node, OPERATIONAL, ENABLED)
-                if get_availability_controller1() == "degraded":
+                #wait_state(node, OPERATIONAL, ENABLED)
+                # Commented out since degraded state is acceptable during drbd
+                # sync
+                #if get_availability_controller1() == "degraded":
                     # Controler1 is in degraded state. Sometimes the fault could be
                     # corrected by re-boot.
-                    log.info("Controller1 is in degraded state. Attempting to reset")
-                    vlm_exec_cmd(VLM_REBOOT, node.barcode)
-                    time.sleep(5)
-                    wait_state(node, OPERATIONAL, ENABLED)
+                #    log.info("Controller1 is in degraded state. Attempting to reset")
+                #    vlm_exec_cmd(VLM_REBOOT, node.barcode)
+                #    time.sleep(5)
+                #    wait_state(node, OPERATIONAL, ENABLED)
+        
+                # Wait for controller-1 to be available, otherwise we can't add OSDs to
+                # storage nodes via lab_setup.sh if controller-1 is still degraded.
+                wait_state(node, AVAILABILITY, AVAILABLE)
 
                 if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
                     msg = "Failed during lab setup"
@@ -1295,7 +1326,6 @@ if __name__ == '__main__':
         log.info("Waiting for controller0 come online")
         wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
         wait_state(controller0, OPERATIONAL, ENABLED)
-        wait_state(controller0, AVAILABILITY, AVAILABLE)
 
         nodes.remove(controller0)
 
@@ -1318,7 +1348,7 @@ if __name__ == '__main__':
 
         wait_state(nodes, ADMINISTRATIVE, UNLOCKED)
         wait_state(nodes, OPERATIONAL, ENABLED)
-        wait_state(nodes, AVAILABILITY, AVAILABLE)
+        wait_until_drbd_sync_complete(controller0, timeout=1800, check_interval=180)
 
     for node in nodes:
         cmd = "source /etc/nova/openrc; system host-if-list {} -a".format(node.name)

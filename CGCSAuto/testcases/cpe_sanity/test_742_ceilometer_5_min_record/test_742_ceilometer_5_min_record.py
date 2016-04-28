@@ -4,29 +4,25 @@
 # of this software may be licensed only pursuant to the terms
 # of an applicable Wind River license agreement.
 
-
-import sys
 import copy
 import datetime
 import time
 import re
 from pytest import fixture, mark, skip, raises, fail
 from utils.tis_log import LOG
-from utils import cli, exceptions
 from utils.ssh import ControllerClient
-from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper
-
 
 CONTROLLER_PROMPT = '.*controller\-[01].*\$ '
 PROMPT = '.* '
 
-
 def get_column_value_from_multiple_columns(table, match_header_key,
                                            match_col_value, search_header_key):
-    """
-    Function for getting column value from multiple columns
+
 
     """
+    Function for getting column value from multiple columns
+    """
+
     column_value = None
     col_index = None
     match_index = None
@@ -42,6 +38,7 @@ def get_column_value_from_multiple_columns(table, match_header_key,
             if match_col_value == col_value[match_index]:
                 column_value = col_value[col_index]
     return column_value
+
 
 def get_column_value(table, search_value):
     """
@@ -118,7 +115,7 @@ def cmd_execute(action, param='', check_params=''):
 
     controller_ssh = ControllerClient.get_active_controller()
     controller_ssh.set_prompt(CONTROLLER_PROMPT)
-    exitcode, output = controller_ssh.exec_cmd('%s %s' % (action, param), expect_timeout=900)
+    exitcode, output = controller_ssh.exec_cmd('%s %s' % (action, param), expect_timeout=20)
     print("Output: %s" % output)
     if any (val in output for val in check_params):
         param_found = True
@@ -126,37 +123,43 @@ def cmd_execute(action, param='', check_params=''):
     return param_found, output
 
 
-def test_tc4695_launch_guest_instances():
-    """Method to list a host subfunctions
+
+def test_742_ceilometer_5_min_record():
+    """Verify that ceilometer records 5 minute pm
+        Scenario:
+        1. Get last ceilometer statistic
+        2. Get list id from two last statistic rows
+        3. Get statistic table by given id
+        4. Assert numbers of rows in given table with expected
     """
+    action = 'source /etc/nova/openrc; ceilometer sample-list'
+    params = '-m vswitch.port.transmit.util'
+    params_id = '-m vswitch.port.transmit.util -q resource='
+    last_row_idxs = -2
+    last_row_id_index = 0
+    expected_id_stat_rows = 10
 
-    test_res = True
-    instance_list = ['tenant1-avp1', 'tenant1-avp2', 'tenant1-avp3', 'tenant1-avp4',
-                     'tenant1-virtio1', 'tenant1-virtio2', 'tenant1-virtio3', 'tenant1-virtio4',
-                     'tenant1-vswitch1', 'tenant1-vswitch2']
-
-    for name in instance_list:
-        cmd = ("sh /home/wrsroot/instances_group0/launch_%s.sh" % name)
-        print ("Command executed: %s" % cmd)
-        result, output = cmd_execute(cmd)
-
-    # Verify that all the instances were successfully launched
-    res, out = cmd_execute('source /etc/nova/openrc; /usr/bin/nova list --all')
-    instance_table = table(out)
+    # Get last ceilometer statistic:
+    LOG.info('Get last ceilometer statistic')
+    res, out = cmd_execute(action, param=params)
+    statistic = table(out)
 
 
-    for name in instance_list:
-        instance_status = get_column_value_from_multiple_columns(instance_table,
-                                                                     "Name",
-                                                                      name,
-                                                                     'Status')
-        if instance_status != 'ACTIVE':
-            test_res = False
-            break
+    # Get list id from two last statistic rows:
+    LOG.info('Get list id from two last statistic rows')
 
-    if test_res == True:
-        print ('Test case: Passed')
-    else:
-        print ('Test case: Failed')
-        assert 1==2
+    def last_rows_id():
+        return [row[last_row_id_index]
+                for row in statistic['values'][last_row_idxs:]]
+
+    for ids in last_rows_id():
+        param_id = ''.join([params_id, ids])
+        # Get statistic table by given id:
+        LOG.info(' Get statistic table by given id')
+        res, id_stat = cmd_execute(action, param=param_id)
+        id_statistic = table(id_stat)
+
+        # Assert numbers of rows in given table with expected:
+        LOG.info('Assert numbers of rows in given table with expected')
+        assert(len(id_statistic['values']) == expected_id_stat_rows)
 

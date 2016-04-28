@@ -4,29 +4,25 @@
 # of this software may be licensed only pursuant to the terms
 # of an applicable Wind River license agreement.
 
-
-import sys
 import copy
 import datetime
 import time
 import re
 from pytest import fixture, mark, skip, raises, fail
 from utils.tis_log import LOG
-from utils import cli, exceptions
 from utils.ssh import ControllerClient
-from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper
-
 
 CONTROLLER_PROMPT = '.*controller\-[01].*\$ '
 PROMPT = '.* '
 
-
 def get_column_value_from_multiple_columns(table, match_header_key,
                                            match_col_value, search_header_key):
-    """
-    Function for getting column value from multiple columns
+
 
     """
+    Function for getting column value from multiple columns
+    """
+
     column_value = None
     col_index = None
     match_index = None
@@ -42,6 +38,7 @@ def get_column_value_from_multiple_columns(table, match_header_key,
             if match_col_value == col_value[match_index]:
                 column_value = col_value[col_index]
     return column_value
+
 
 def get_column_value(table, search_value):
     """
@@ -118,7 +115,7 @@ def cmd_execute(action, param='', check_params=''):
 
     controller_ssh = ControllerClient.get_active_controller()
     controller_ssh.set_prompt(CONTROLLER_PROMPT)
-    exitcode, output = controller_ssh.exec_cmd('%s %s' % (action, param), expect_timeout=900)
+    exitcode, output = controller_ssh.exec_cmd('%s %s' % (action, param), expect_timeout=20)
     print("Output: %s" % output)
     if any (val in output for val in check_params):
         param_found = True
@@ -126,37 +123,30 @@ def cmd_execute(action, param='', check_params=''):
     return param_found, output
 
 
-def test_tc4695_launch_guest_instances():
-    """Method to list a host subfunctions
+
+def test_402_validate_statistics_for_one_meter():
     """
+    Validate statistics for one meter
 
-    test_res = True
-    instance_list = ['tenant1-avp1', 'tenant1-avp2', 'tenant1-avp3', 'tenant1-avp4',
-                     'tenant1-virtio1', 'tenant1-virtio2', 'tenant1-virtio3', 'tenant1-virtio4',
-                     'tenant1-vswitch1', 'tenant1-vswitch2']
+    """
+    # List with column names
+    column_names_list = ['Count', 'Min', 'Max', 'Avg']
 
-    for name in instance_list:
-        cmd = ("sh /home/wrsroot/instances_group0/launch_%s.sh" % name)
-        print ("Command executed: %s" % cmd)
-        result, output = cmd_execute(cmd)
-
+    LOG.debug('Get ceilometer statistics table')
     # Verify that all the instances were successfully launched
-    res, out = cmd_execute('source /etc/nova/openrc; /usr/bin/nova list --all')
-    instance_table = table(out)
+    res, out = cmd_execute('source /etc/nova/openrc; ceilometer statistics -m image.size')
+    stats_table = table(out)
 
+    # Get first table value in first column
+    first_value = stats_table["values"][0][0]
 
-    for name in instance_list:
-        instance_status = get_column_value_from_multiple_columns(instance_table,
-                                                                     "Name",
-                                                                      name,
-                                                                     'Status')
-        if instance_status != 'ACTIVE':
-            test_res = False
-            break
-
-    if test_res == True:
-        print ('Test case: Passed')
-    else:
-        print ('Test case: Failed')
-        assert 1==2
+    LOG.debug('Check that count, min, max, avg values are non-zero')
+    for column_name in column_names_list:
+        column_value = get_column_value_from_multiple_columns(stats_table,
+                                                               'Period',
+                                                               first_value,
+                                                               column_name)
+        if (float(column_value) == 0.0):
+            print("Parameter %s value is equal to 0" % column_name)
+            assert(not(float(column_value) == 0.0))
 

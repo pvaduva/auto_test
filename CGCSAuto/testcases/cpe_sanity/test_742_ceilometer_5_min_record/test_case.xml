@@ -29,7 +29,7 @@ SET PYTHON /home/svc-cgcsauto/wassp-repos/.venv_wassp/bin/python3
 
 CALL export PYTHONPATH=${PYTHONPATH}:/home/svc-cgcsauto/wassp-repos/testcases/cgcs/CGCSAuto
 
-CALL ${PYTHON} -m pytest -v -s  --junit-xml=${WASSP_TC_RUN_LOG}/result.xml --result-log=${WASSP_TC_RUN_LOG}/test.log ${WASSP_TESTCASE_DIR}/../_samples/keywords_tests/test_vm_operations.py::test_ping_vms_from_vm_1['2']
+CALL ${PYTHON} -m pytest -v -s  --junit-xml=${WASSP_TC_RUN_LOG}/result.xml --result-log=${WASSP_TC_RUN_LOG}/test.log ${WASSP_TESTCASE_DIR}/${WASSP_TC_NAME}/${WASSP_TC_NAME}.py::${WASSP_TC_NAME}
 
 PASS
 
