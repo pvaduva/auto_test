@@ -19,6 +19,7 @@ class VMTimeout:
     DELETE = 60
     VOL_ATTACH = 60
     SSH_LOGIN = 20
+    AUTO_RECOVERY = 600
 
 
 class VolumeTimeout:
@@ -33,3 +34,9 @@ class SysInvTimeout:
 
 class CMDTimeout:
     HOST_CPU_MODIFY = 30
+
+
+class ImageTimeout:
+    CREATE = 600
+    STATUS_CHANGE = 30
+    DELETE = 120

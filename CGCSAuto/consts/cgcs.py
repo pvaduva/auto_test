@@ -17,6 +17,9 @@ NAME_UUID = r'(.*) \((' + UUID + r')\)'
 BOOT_FROM_VOLUME = 'Attempt to boot from volume - no image supplied'
 
 
+IMAGE_DIR = '/home/wrsroot/images'
+
+
 class SystemType:
     CPE = 'CPE'
     STANDARD = 'Standard'
@@ -88,10 +91,13 @@ class FlavorSpec:
     NUMA_0 = 'hw:numa_node.0'
     NUMA_1 = 'hw:numa_node.1'
     MEM_PAGE_SIZE = 'hw:mem_page_size'
+    AUTO_RECOVERY = 'sw:wrs:auto_recovery'
 
 
 class ImageMetadata:
     MEM_PAGE_SIZE = 'hw_mem_page_size'
+    AUTO_RECOVERRY = 'sw_wrs_auto_recovery'
+    VIF_MODEL = 'hw_vif_model'
 
 
 class InstanceTopology:

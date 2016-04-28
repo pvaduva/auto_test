@@ -558,8 +558,8 @@ def filter_table(table_, strict=True, regex=False, **kwargs):
 
         **kwargs: header/value pair(s) as search criteria. Used to filter out the target row(s).
             Examples: header_1 = [value1, value2, value3], header_2 = value_2
-            - fields are 'and' relation
-            - values list are 'or' relation
+            - kwargs are 'and' relation
+            - values for the same key are 'or' relation
             e.g., if kwargs = {'id':[id_1, id_2], 'name': [name_1, name_3]}, a table with only item_2 will be returned
             - See more details from **kwargs in get_values()
 

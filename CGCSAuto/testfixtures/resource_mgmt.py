@@ -1,11 +1,25 @@
 from pytest import fixture
 
 from utils import exceptions
-from keywords import nova_helper, vm_helper, cinder_helper
+from keywords import nova_helper, vm_helper, cinder_helper, glance_helper
 
 
 @fixture(scope='function', autouse=True)
 def delete_resources_func(request):
+    """
+    Function level fixture to delete created resources after each caller testcase.
+
+    Notes: Auto used fixture - import it to a conftest.py file under a feature directory to auto use it on all children
+        testcases.
+
+    Examples:
+        - see nova/conftest.py for importing
+        - see ResourceCleanup.add function usages in nova/test_shared_cpu_enabled.py for adding resources to cleanups
+
+    Args:
+        request: pytest param present caller test function
+
+    """
     def delete_():
         ResourceCleanup._delete(ResourceCleanup._get_resources('function'))
         ResourceCleanup._reset('function')
@@ -14,6 +28,20 @@ def delete_resources_func(request):
 
 @fixture(scope='class', autouse=True)
 def delete_resources_class(request):
+    """
+    Class level fixture to delete created resources after each caller testcase.
+
+    Notes: Auto used fixture - import it to a conftest.py file under a feature directory to auto use it on all children
+        testcases.
+
+    Examples:
+        - see nova/conftest.py for importing
+        - see ResourceCleanup.add function usages in nova/test_shared_cpu_enabled.py for adding resources to cleanups
+
+    Args:
+        request: pytest param present caller test function
+
+    """
     def delete_():
         ResourceCleanup._delete(ResourceCleanup._get_resources('class'))
         ResourceCleanup._reset('class')
@@ -22,6 +50,20 @@ def delete_resources_class(request):
 
 @fixture(scope='module', autouse=True)
 def delete_resources_module(request):
+    """
+    Module level fixture to delete created resources after each caller testcase.
+
+    Notes: Auto used fixture - import it to a conftest.py file under a feature directory to auto use it on all children
+        testcases.
+
+    Examples:
+        - see nova/conftest.py for importing
+        - see ResourceCleanup.add function usages in nova/test_shared_cpu_enabled.py for adding resources to cleanups
+
+    Args:
+        request: pytest param present caller test function
+
+    """
     def delete_():
         ResourceCleanup._delete(ResourceCleanup._get_resources('module'))
         ResourceCleanup._reset('module')
@@ -29,24 +71,30 @@ def delete_resources_module(request):
 
 
 class ResourceCleanup:
+    """
+    Class to hold the cleanup list and related functions.
+    """
     __resources_to_cleanup = {
         'function': {
             'vms_with_vols': [],
             'vms_no_vols': [],
             'volumes': [],
             'flavors': [],
+            'images': [],
         },
         'class': {
             'vms_with_vols': [],
             'vms_no_vols': [],
             'volumes': [],
             'flavors': [],
+            'images': [],
         },
         'module': {
             'vms_with_vols': [],
             'vms_no_vols': [],
             'volumes': [],
             'flavors': [],
+            'images': [],
         }
     }
 
@@ -54,31 +102,13 @@ class ResourceCleanup:
     def _get_resources(cls, scope):
         return cls.__resources_to_cleanup[scope]
 
-    #
-    # @fixture(scope='function', autouse=False)
-    # def delete_resources_func(self, request):
-    #     def delete_():
-    #         self.__delete_resources(self.__resources_to_cleanup['function'])
-    #     request.addfinalizer(delete_)
-    #
-    # @fixture(scope='class', autouse=False)
-    # def delete_resources_class(self, request):
-    #     def delete_():
-    #         self.__delete_resources(self.__resources_to_cleanup['class'])
-    #     request.addfinalizer(delete_)
-    #
-    # @fixture(scope='module', autouse=False)
-    # def delete_resources_module(self, request):
-    #     def delete_():
-    #         self.__delete_resources(self.__resources_to_cleanup['module'])
-    #     request.addfinalizer(delete_)
-
     @staticmethod
     def _delete(resources):
         vms_with_vols = resources['vms_with_vols']
         vms_no_vols = resources['vms_no_vols']
         volumes = resources['volumes']
         flavors = resources['flavors']
+        images = resources['images']
         err_msgs = []
         if vms_with_vols:
             code, msg = vm_helper.delete_vms(vms_with_vols, fail_ok=True)
@@ -100,6 +130,11 @@ class ResourceCleanup:
             if code > 0:
                 err_msgs.append(msg)
 
+        if images:
+            code, msg = glance_helper.delete_images(images, fail_ok=True)
+            if code > 0:
+                err_msgs.append(msg)
+
         # Attempt all deletions before raising exception.
         if err_msgs:
             raise exceptions.CommonError("Failed to delete resource(s). Details: {}".format(err_msgs))
@@ -111,6 +146,7 @@ class ResourceCleanup:
             'vms_no_vols': [],
             'volumes': [],
             'flavors': [],
+            'images': [],
         }
 
     @classmethod
@@ -128,7 +164,7 @@ class ResourceCleanup:
         scope == scope.lower()
         resource_type = resource_type.lower()
         valid_scopes = ['function', 'class', 'module']
-        valid_types = ['vm', 'volume', 'flavor']
+        valid_types = ['vm', 'volume', 'flavor', 'image']
         if scope not in valid_scopes:
             raise ValueError("'scope' param value has to be one of the: {}".format(valid_scopes))
         if resource_type not in valid_types:

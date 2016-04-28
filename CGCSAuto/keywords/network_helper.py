@@ -120,7 +120,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
     This function returns the management IPs for all VMs on the system.
     We make the assumption that the management IPs start with "192".
     Args:
-        vms (str|tuple|None): vm ids list. If None, management ips for ALL vms with given Tenant(via auth_info) will be
+        vms (str|list|None): vm ids list. If None, management ips for ALL vms with given Tenant(via auth_info) will be
             returned.
         con_ssh (SSHClient): active controller SSHClient object
         auth_info (dict): use admin by default unless specified

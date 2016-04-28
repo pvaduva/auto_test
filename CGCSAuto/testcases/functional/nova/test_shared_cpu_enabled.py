@@ -50,12 +50,16 @@ def test_launch_vm_with_shared_cpu(vcpus, cpu_policy, numa_nodes, numa_node0, sh
         - Set shared cpus to 0 (default setting) on the compute node under test (module)
 
     """
+    LOG.tc_step("Create a flavor with given number of vcpus")
     flavor = nova_helper.create_flavor(vcpus=vcpus)[1]
     ResourceCleanup.add('flavor', flavor, scope='function')
+
+    LOG.tc_step("Add specific cpu_policy, number_of_numa_nodes, numa_node0, and shared_vcpu to flavor extra specs")
     nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: cpu_policy})
     nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.NUMA_NODES: numa_nodes, FlavorSpec.NUMA_0: numa_node0})
     nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.SHARED_VCPU: shared_vcpu})
 
+    LOG.tc_step("Boot a vm with above flavor, and ensure vm is booted successfully")
     code, vm_id, output, vol_id = vm_helper.boot_vm(name='shared_cpu', flavor=flavor, fail_ok=True)
     if vm_id:
         ResourceCleanup.add('vm', vm_id, scope='function')

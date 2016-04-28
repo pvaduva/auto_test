@@ -5,7 +5,29 @@ from keywords import host_helper
 @mark.tryfirst
 @fixture(scope='module')
 def config_host(request):
+    """
+    Module level fixture to configure a host.
 
+    Setup:
+        - Lock a host
+        - Configure host
+        - Unlock host
+
+    Teardown (if revert_func is given):
+        - Lock host
+        - Run revert_func
+        - Unlock host
+
+    Args:
+        request: pytest param. caller of this func.
+
+    Returns (function): config_host_func.
+        Test or another fixture can execute it to pass the hostname, modify_func, and revert_func
+
+    Examples:
+        see 'add_shared_cpu' fixture in nova/test_shared_cpu_enabled.py for usage.
+
+    """
     def config_host_func(host, modify_func, revert_func=None, *args, **kwargs):
         host_helper.lock_host(host=host)
 

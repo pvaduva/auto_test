@@ -695,3 +695,4 @@ def delete_image_metadata(image, meta_keys, check_first=True, fail_ok=False, aut
         success_msg = "Image metadata unset successfully."
         LOG.info(success_msg)
         return 0, success_msg
+

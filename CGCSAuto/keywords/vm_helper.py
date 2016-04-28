@@ -707,13 +707,13 @@ def wait_for_vm_values(vm_id, timeout=VMTimeout.STATUS_CHANGE, check_interval=3,
     Returns (tuple): (result(bool), actual_vals(dict))
 
     """
-
-    end_time = time.time() + timeout
     if not kwargs:
         raise ValueError("No field/value pair is passed via kwargs")
+    LOG.info("Waiting for vm to reach state(s): {}".format(kwargs))
 
     fields_to_check = list(kwargs.keys())
     results = {}
+    end_time = time.time() + timeout
     while time.time() < end_time:
         table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
         for field in fields_to_check:
@@ -729,15 +729,17 @@ def wait_for_vm_values(vm_id, timeout=VMTimeout.STATUS_CHANGE, check_interval=3,
                 fields_to_check.remove(field)
 
             if not fields_to_check:
-                # LOG.info("VM has reached states: {}".format(results))
+                LOG.info("VM has reached states: {}".format(results))
                 return True, results
 
         time.sleep(check_interval)
 
+    msg = "VM {} did not reach expected states within timeout. Actual state(s): {}".format(vm_id, results)
     if fail_ok:
+        LOG.warning(msg)
         return False, results
     else:
-        raise exceptions.VMTimeout("VM {} did not reach expected states within timeout.".format(vm_id))
+        raise exceptions.VMTimeout(msg)
 
 
 def _wait_for_vm_status(vm_id, status, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=True,
@@ -822,7 +824,7 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     """
 
     Args:
-        vm_ids (list): list of vms to ping
+        vm_ids (list|str): list of vms to ping
         ssh_client (SSHClient): ping from this ssh client. Usually a natbox' ssh client or another vm's ssh client
         con_ssh (SSHClient): active controller ssh client to run cli command to get all the management ips
         num_pings (int): number of pings to send
@@ -1241,3 +1243,48 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
         return False, vms_deleted, vms_to_check
     raise exceptions.VMPostCheckFailed("Some vm(s) are not removed from nova list within {} seconds: {}".
                                        format(timeout, vms_to_check))
+
+
+def set_vm_state(vm_id, check_first=False, error_state=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Set vm state to error or active via nova reset-state.
+
+    Args:
+        vm_id:
+        check_first:
+        error_state:
+        fail_ok:
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+
+    """
+    expt_vm_status = VMStatus.ERROR if error_state else VMStatus.ACTIVE
+    LOG.info("Setting vm {} state to: {}".format(vm_id, expt_vm_status))
+
+    if check_first:
+        pre_vm_status = nova_helper.get_vm_nova_show_value(vm_id, field='status', con_ssh=con_ssh, auth_info=auth_info)
+        if pre_vm_status.lower() == expt_vm_status.lower():
+            msg = "VM {} already in {} state. Do nothing.".format(vm_id, pre_vm_status)
+            LOG.info(msg)
+            return -1, msg
+
+    cmd = 'reset-state'
+    if not error_state:
+        cmd += ' --active'
+
+    code, output = cli.nova(cmd, vm_id, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True, fail_ok=fail_ok)
+    if code == 1:
+        return 1, output
+
+    result = _wait_for_vm_status(vm_id, expt_vm_status, fail_ok=fail_ok)
+
+    if result is None:
+        msg = "VM {} did not reach expected state - {} after reset-state.".format(vm_id, expt_vm_status)
+        LOG.warning(msg)
+        return 2, msg
+
+    msg = "VM state is successfully set to: {}".format(expt_vm_status)
+    LOG.info(msg)
+    return 0, msg

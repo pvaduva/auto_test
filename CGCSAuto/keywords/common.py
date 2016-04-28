@@ -29,6 +29,7 @@ class Count:
     __vm_count = 0
     __flavor_count = 0
     __volume_count = 0
+    __image_count = 0
 
     @classmethod
     def get_vm_count(cls):
@@ -39,3 +40,8 @@ class Count:
     def get_flavor_count(cls):
         cls.__flavor_count += 1
         return cls.__flavor_count
+
+    @classmethod
+    def get_image_count(cls):
+        cls.__image_count += 1
+        return cls.__image_count
