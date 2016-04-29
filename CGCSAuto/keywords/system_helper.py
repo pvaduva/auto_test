@@ -385,15 +385,15 @@ def get_host_threads_number(host, con_ssh=None):
 
 def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
     """
-    Modify host memory on given processor to specified value(s).
+    Modify host memory to given number of 1G hugepages on specified processor.
 
     Args:
         host (str): hostname
         proc_id (int): such as 0, 1
         hugepage_num (int): such as 0, 4. When None is set, the MAX hugepage number will be calculated and used.
-        fail_ok:
-        auth_info:
-        con_ssh:
+        fail_ok (bool): whether to raise exception when fails to modify
+        auth_info (dict):
+        con_ssh (SSHClient):
 
     Returns (tuple):
 
@@ -412,17 +412,12 @@ def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_in
     diff = hugepage_num - pre_1g_total
 
     expt_2m = None
-    expt_4k = None
+    # expt_4k = None
     if diff > 0:
-        num_2m_reduce_max = int(pre_2m_avail/512)
-        if num_2m_reduce_max < diff:
-            expt_2m = pre_2m_total - num_2m_reduce_max * 512
-            expt_4k = pre_4k_total - (diff - num_2m_reduce_max) * 512 * 512
-        else:
-            expt_2m = pre_2m_total - diff * 512
+        expt_2m = min(diff * 512, pre_2m_avail)
 
     args_dict = {
-        '-m': expt_4k,
+        # '-m': expt_4k,
         '-2M': expt_2m,
         '-1G': hugepage_num,
     }

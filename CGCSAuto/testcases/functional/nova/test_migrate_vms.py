@@ -1,12 +1,8 @@
-import random
-
 from pytest import fixture, mark, skip
 
 import keywords.host_helper
 from utils.tis_log import LOG
-from consts.auth import Tenant
-from setup_consts import P1, P2, P3
-from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper
+from keywords import vm_helper, nova_helper, system_helper, host_helper
 
 
 flavor_params = [
@@ -123,8 +119,8 @@ def test_live_migrate_vm(vm_, block_migrate):
     """
     LOG.tc_step("Calculate expected result...")
     vm_id = vm_['id']
-    live_mig_allowed = vm_helper._is_live_migration_allowed(vm_id=vm_id, block_migrate=block_migrate) \
-                       and vm_helper.get_dest_host_for_live_migrate(vm_id)
+    live_mig_allowed = vm_helper._is_live_migration_allowed(vm_id=vm_id, block_migrate=block_migrate) and \
+                       vm_helper.get_dest_host_for_live_migrate(vm_id)
     exp_code = 0 if live_mig_allowed else 1
 
     extra_msg = ''

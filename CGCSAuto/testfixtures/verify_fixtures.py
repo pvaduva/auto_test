@@ -1,4 +1,4 @@
-from pytest import fixture
+from pytest import fixture, mark
 
 from consts.auth import Tenant
 from utils import table_parser

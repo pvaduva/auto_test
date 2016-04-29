@@ -67,12 +67,12 @@ def test_boot_vm_mem_page_size(flavor_1g, flavor_mem_page_size, image_cgcsguest,
         image_mem_page_size (str): memory page metadata value to set in image
 
     Setup:
-        - Create a flavor with 2G RAM (module)
+        - Create a flavor with 1G RAM (module)
         - Get image id of cgcs-guest image (module)
 
     Test Steps:
         - Set/Unset flavor memory page size extra spec with given value (unset if None is given)
-        - Set/Unset memory page size metadata with given value (unset if None if given)
+        - Set/Unset image memory page size metadata with given value (unset if None if given)
         - Attempt to boot a vm with above flavor and image
         - Verify boot result based on the mem page size values in the flavor and image
 
@@ -127,6 +127,33 @@ def volume_():
     '1048576',
 ])
 def test_vm_mem_pool(flavor_1g, mem_page_size, volume_):
+    """
+    Test memory used by vm is taken from the expected memory pool
+
+    Args:
+        flavor_2g (str): flavor id of a flavor with ram set to 2G
+        mem_page_size (str): mem page size setting in flavor
+        volume_ (str): id of the volume to boot vm from
+
+    Setup:
+        - Create a flavor with 2G RAM (module)
+        - Create a volume with default values (module)
+
+    Test Steps:
+        - Set memory page size flavor spec to given value
+        - Attempt to boot a vm with above flavor and a basic volume
+        - Verify the system is taking memory from the expected memory pool:
+            - If boot vm succeeded:
+                - Calculate the available/used memory change on the vm host
+                - Verify the memory is taken from 1G hugepage memory pool
+            - If boot vm failed:
+                - Verify system attempted to take memory from expected pool, but insufficient memory is available
+
+    Teardown:
+        - Delete created vm
+        - Delete created volume and flavor (module)
+
+    """
     LOG.tc_step("Set memory page size extra spec in flavor")
     nova_helper.set_flavor_extra_specs(flavor_1g, **{FlavorSpec.CPU_POLICY: 'dedicated', 
                                                      FlavorSpec.MEM_PAGE_SIZE: mem_page_size})

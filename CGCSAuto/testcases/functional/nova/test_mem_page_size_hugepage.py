@@ -1,5 +1,3 @@
-import re
-
 from pytest import fixture, mark
 
 from utils import table_parser
@@ -57,6 +55,35 @@ def image_cgcsguest(request):
     ('2048', '1048576'),
 ])
 def test_boot_vm_hugepage(flavor_2g, flavor_mem_page_size, image_cgcsguest, image_mem_page_size):
+    """
+    Test boot vm with various memory page size setting in flavor and image.
+    This specific test function is to test with at least one compute that supports 1G hugepages.
+
+    Notes: Tests with default compute config (0 1G pages) are in test_mem_page_size_default.py.
+
+    Args:
+        flavor_2g (str): flavor id of a flavor with ram set to 2G
+        flavor_mem_page_size (str): memory page size extra spec value to set in flavor
+        image_cgcsguest (str): image id for cgcs-guest image
+        image_mem_page_size (str): memory page metadata value to set in image
+
+    Setup:
+        - Configure a compute to have 4 1G hugepages (module)
+        - Create a flavor with 2G RAM (module)
+        - Get image id of cgcs-guest image (module)
+
+    Test Steps:
+        - Set/Unset flavor memory page size extra spec with given value (unset if None is given)
+        - Set/Unset image memory page size metadata with given value (unset if None if given)
+        - Attempt to boot a vm with above flavor and image
+        - Verify boot result based on the mem page size values in the flavor and image
+
+    Teardown:
+        - Delete vm if booted
+        - Delete created flavor (module)
+        - Re-Configure the compute to have 0 hugepages (module)
+
+    """
 
     if flavor_mem_page_size is None:
         nova_helper.unset_flavor_extra_specs(flavor_2g, FlavorSpec.MEM_PAGE_SIZE)
@@ -105,6 +132,31 @@ def volume_():
     'large',
 ])
 def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_):
+    """
+    Test memory used by vm is taken from the expected memory pool
+
+    Args:
+        flavor_2g (str): flavor id of a flavor with ram set to 2G
+        mem_page_size (str): mem page size setting in flavor
+        volume_ (str): id of the volume to boot vm from
+
+    Setup:
+        - Configure a compute to have 4 1G hugepages (module)
+        - Create a flavor with 2G RAM (module)
+        - Create a volume with default values (module)
+
+    Test Steps:
+        - Set memory page size flavor spec to given value
+        - Boot a vm with above flavor and a basic volume
+        - Calculate the available/used memory change on the vm host
+        - Verify the memory is taken from 1G hugepage memory pool
+
+    Teardown:
+        - Delete created vm
+        - Delete created volume and flavor (module)
+        - Re-Configure the compute to have 0 hugepages (module)
+
+    """
     LOG.tc_step("Set memory page size extra spec in flavor")
     nova_helper.set_flavor_extra_specs(flavor_2g, **{FlavorSpec.CPU_POLICY: 'dedicated', 
                                                      FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
