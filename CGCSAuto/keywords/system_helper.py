@@ -1,4 +1,5 @@
 import re
+import math
 
 from consts import cgcs
 from consts.auth import Tenant
@@ -438,6 +439,64 @@ def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_in
     else:
         LOG.info("system host-memory-modify ran successfully.")
         return 0, "1G memory is modified to {} in pending.".format(hugepage_num)
+
+
+def set_host_4k_pages(host, proc_id=0, smallpage_num=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Modify host memory on given processor to the closest 4k pages value
+
+    Args:
+        host (str): hostname
+        proc_id (int): such as 0, 1
+        smallpage_num (int): such as 0, 4. When None is set, the MAX small number will be calculated and used.
+        fail_ok:
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+
+    """
+    LOG.info("Setting 4k memory to: {}".format(smallpage_num))
+    mem_vals = get_host_mem_values(
+            host, ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'vm_hp_avail_2M', 'mem_avail(MiB)', ],
+            proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)
+
+    page_4k_total, page_2m_total, page_1g_total, page_2m_avail, mem_avail = [int(val) for val in mem_vals]
+
+    # set max smallpage num if smallpage_num is unset
+    if smallpage_num is None:
+        smallpage_num = int(mem_avail*1024/4)
+
+    diff_page = smallpage_num - page_4k_total
+
+    new_2m = None
+    new_1g = None
+
+    if diff_page > 0:
+        num_2m_avail_to_4k_page = int(page_2m_avail*2*256)
+        if num_2m_avail_to_4k_page < diff_page:
+            new_2m = 0
+            new_1g = page_1g_total - math.ceil((diff_page - num_2m_avail_to_4k_page) * 4 / 1024 / 1024)
+        else:
+            new_2m = page_2m_total - math.ceil(diff_page * 4 / 1024 / 2)
+
+    args_dict = {
+        '-2M': new_2m,
+        '-1G': new_1g,
+    }
+    args_str = ''
+    for key, value in args_dict.items():
+        if value is not None:
+            args_str = ' '.join([args_str, key, str(value)])
+
+    code, output = cli.system('host-memory-modify {}'.format(args_str), "{} {}".format(host, proc_id),
+                              ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+
+    if code == 1:
+        return 1, output
+    else:
+        LOG.info("system host-memory-modify ran successfully.")
+        return 0, "4k memory is modified to {} in pending.".format(smallpage_num)
 
 
 def get_host_mem_values(host, headers, proc_id, con_ssh=None, auth_info=Tenant.ADMIN):
