@@ -230,6 +230,17 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
             return 3, vm_id, message, new_vol
         else:
             raise exceptions.VMPostCheckFailed(message)
+    #
+    # for i in range(5):
+    #     if ping_vms_from_natbox(vm_ids=vm_id, fail_ok=True)[0]:
+    #         break
+    # else:
+    #     msg = "Ping from NatBox to vm {} failed.".format(vm_id)
+    #     if fail_ok:
+    #         LOG.warning(msg)
+    #         return 6, vm_id, msg, new_vol
+    #     else:
+    #         raise exceptions.VMPostCheckFailed(msg)
 
     LOG.info("VM {} is booted successfully.".format(vm_id))
     return 0, vm_id, 'VM is booted successfully', new_vol
@@ -925,20 +936,21 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
 
 
 @contextmanager
-def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, timeout=VMTimeout.SSH_LOGIN,
-                          natbox_client=None):
+def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
+                          timeout=VMTimeout.SSH_LOGIN, natbox_client=None):
     """
     ssh to a vm from natbox.
 
     Args:
         vm_id (str): vm to ssh to
+        vm_image_name (str): such as cgcs-guest
         username (str):
         password (str):
         prompt (str):
         timeout (int): 
         natbox_client (NATBoxClient):
 
-    Returns:
+    Yields (VMSSHClient):
         ssh client of the vm
 
     Examples:
@@ -946,7 +958,9 @@ def ssh_to_vm_from_natbox(vm_id, username=None, password=None, prompt=None, time
         vm_ssh.exec_cmd(cmd)
 
     """
-    vm_image_name = (nova_helper.get_vm_image_name(vm_id=vm_id)).strip().lower()
+    if vm_image_name is None:
+        vm_image_name = nova_helper.get_vm_image_name(vm_id=vm_id).strip().lower()
+
     vm_name = nova_helper.get_vm_name_from_id(vm_id=vm_id)
     vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id)[0]
     vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_name=vm_name, vm_img_name=vm_image_name,

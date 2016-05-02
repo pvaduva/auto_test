@@ -40,3 +40,8 @@ class ImageTimeout:
     CREATE = 600
     STATUS_CHANGE = 30
     DELETE = 120
+
+
+class EventLogTimeout:
+    HEARTBEAT_ESTABLISH = 120
+    HEALTH_CHECK_FAIL = 30

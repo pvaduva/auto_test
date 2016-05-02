@@ -1,6 +1,8 @@
 import re
 import math
 
+import time
+
 from consts import cgcs
 from consts.auth import Tenant
 from consts.timeout import CMDTimeout
@@ -173,14 +175,97 @@ def get_interfaces(host, con_ssh=None):
     return table_
 
 
-def get_alarms(con_ssh=None):
-    table_ = table_parser.table(cli.system('alarm-list', ssh_client=con_ssh))
+def get_alarms(uuid=False, con_ssh=None):
+    args = '--nowrap'
+    if uuid:
+        args += ' --uuid'
+
+    table_ = table_parser.table(cli.system('alarm-list', args, ssh_client=con_ssh), multiline_val_in_str=True)
     return table_
 
 
-def get_events(cli_args=' --limit 5', con_ssh=None):
-    table_ = table_parser.table(cli.system('event-list ' + cli_args, ssh_client=con_ssh))
+def get_events(num=5, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None, con_ssh=None,
+               auth_info=Tenant.ADMIN):
+    """
+    Get a list of events with given criteria.
+    Args:
+        num (int): max number of event logs to return
+        uuid (bool): whether to show uuid
+        show_only (str): 'alarms' or 'logs' to return only alarms or logs
+        query_key (str): one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
+        query_value (str): expected value for given key
+        query_type (str): data type of value. one of these: 'string', 'integer', 'float', 'boolean'
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns:
+        dict: events table in format: {'headers': <headers list>, 'values': <list of table rows>}
+    """
+
+    args = '-l {}'.format(num)
+    if query_key:
+        if not query_value:
+            raise ValueError("Query value is not supplied for key - {}".format(query_key))
+        data_type_arg = '' if not query_type else "{}::".format(query_type.lower())
+        args += ' -q {}={}{}'.format(query_key.lower(), data_type_arg, query_value.lower())
+    args += ' --nowrap'
+    if uuid:
+        args += ' --uuid'
+    if show_only:
+        args += ' --{}'.format(show_only.lower())
+
+    table_ = table_parser.table(cli.system('event-list ', args, ssh_client=con_ssh, auth_info=auth_info))
     return table_
+
+
+def wait_for_events(timeout=30, num=5, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,
+                    fail_ok=True, rtn_val='Event Log ID', con_ssh=None, auth_info=Tenant.ADMIN, regex=False,
+                    strict=True, check_interval=3, **kwargs):
+    """
+    Wait for event(s) to appear in system event-list
+    Args:
+        timeout (int): max time to wait in seconds
+        num (int): max number of event logs to return
+        uuid (bool): whether to show uuid
+        show_only (str): 'alarms' or 'logs' to return only alarms or logs
+        query_key (str): one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
+        query_value (str): expected value for given key
+        query_type (str): data type of value. one of these: 'string', 'integer', 'float', 'boolean'
+        fail_ok (bool): whether to return False if event(s) did not appear within timeout
+        rtn_val (str): list of values to return. Defaults to 'Event Log ID'
+        con_ssh (SSHClient):
+        auth_info (dict):
+        regex (bool): Whether to use regex or string operation to search/match the value in kwargs
+        strict (bool): whether it's a strict match (case is always ignored regardless of this flag)
+        check_interval (int): how often to check the event logs
+        **kwargs: criteria to filter out event(s) from the events list table
+
+    Returns:
+        list: list of event log ids (or whatever specified in rtn_value) for matching events.
+
+    """
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        events_tab = get_events(num=num, uuid=uuid, show_only=show_only, query_key=query_key, query_value=query_value,
+                                query_type=query_type, con_ssh=con_ssh, auth_info=auth_info)
+        events_tab = table_parser.filter_table(events_tab, strict=strict, regex=regex, **kwargs)
+        events = table_parser.get_column(events_tab, rtn_val)
+        if events:
+            LOG.info("Event(s) appeared in event-list: {}".format(events))
+            return events
+
+        time.sleep(check_interval)
+
+    criteria = ['{}={}'.format(key, value) for key, value in kwargs.items()]
+    criteria = ';'.join(criteria)
+    criteria += ";{}={}".format(query_key, query_value) if query_key else ''
+
+    msg = "Event(s) did not appear in system event-list within timeout. Criteria: {}".format(criteria)
+    if fail_ok:
+        LOG.warning(msg)
+        return []
+    else:
+        raise exceptions.TimeoutException(msg)
 
 
 def host_exists(host, field='hostname', con_ssh=None):

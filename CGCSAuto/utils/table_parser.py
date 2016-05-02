@@ -151,7 +151,7 @@ def __table_columns(first_table_row):
 TWO_COLUMN_TABLE_HEADERS = [['Field', 'Value'], ['Property', 'Value']]
 
 
-def table(output_lines):
+def table(output_lines, multiline_val_in_str=False):
     """
     Tempest table does not take into account when multiple lines are used for one entry. Such as neutron net-list -- if
     a net has multiple subnets, then tempest table will create multiple entries in table_['values']
@@ -183,9 +183,13 @@ def table(output_lines):
                 entry_lines = [rows[index] for index in range(start_index, end_index+1)]
                 # each column value is a list
                 entry_combined = [list(filter(None, list(t))) for t in zip(*entry_lines)]
-                # convert column value to string if list len is 1
-                entry = [item if len(item) > 1 else ''.join(item) for item in entry_combined]
+                if multiline_val_in_str:
+                    entry = [''.join(item) for item in entry_combined]
+                else:
+                    # convert column value to string if list len is 1
+                    entry = [item if len(item) > 1 else ''.join(item) for item in entry_combined]
                 LOG.debug("Multi-row entry found: {}".format(entry))
+
             entries.append(entry)
             start_index = i + 1  # start_index for next entry
 
@@ -304,9 +308,13 @@ def get_column(table_, header):
 
 
 def __get_row_indexes_string(table_, header, value, strict=False):
-    header = header.strip().lower()
+    if isinstance(value, list):
+        value = ''.join(value)
     value = value.strip().lower()
+
+    header = header.strip().lower()
     column = get_column(table_, header)
+
     row_index = []
     for i in range(len(column)):
         item = column[i].strip().lower()
@@ -533,6 +541,8 @@ def _get_row_indexes(table_, field, value, strict=True, regex=False):
     column = get_column(table_, field)
     if regex:
         for j in range(len(column)):
+            if isinstance(value, list):
+                value = ''.join(value)
             if strict:
                 res_ = re.match(value, column[j])
             else:

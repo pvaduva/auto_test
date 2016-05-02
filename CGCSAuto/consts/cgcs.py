@@ -92,6 +92,7 @@ class FlavorSpec:
     NUMA_1 = 'hw:numa_node.1'
     MEM_PAGE_SIZE = 'hw:mem_page_size'
     AUTO_RECOVERY = 'sw:wrs:auto_recovery'
+    GUEST_HEARTBEAT = 'sw:wrs:guest:heartbeat'
 
 
 class ImageMetadata:
@@ -107,3 +108,15 @@ class InstanceTopology:
     PCPUS = 'pcpus:(.*),\s'     # find a string separated by ',' if multiple numa nodes
     CPU_POLICY = 'pol:(.*),'
 
+
+class EventLogID:
+    HEARTBEAT_ENABLED = '700.211'
+    HEARTBEAT_DISABLED = '700.015'
+    HEARTBEAT_CHECK_FAILED = '700.215'
+    SOFT_REBOOT_BY_VM = '700.181'
+    REBOOT_VM_INPROGRESS = '700.182'
+    REBOOT_VM_COMPLETE = '700.186'
+    GUEST_HEALTH_CHECK_FAILED = '700.215'
+    VM_DELETING = '700.110'
+    VM_DELETED = '700.114'
+    VM_CREATED = '700.108'

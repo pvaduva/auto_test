@@ -1,3 +1,4 @@
+import re
 import time
 from contextlib import contextmanager
 
@@ -258,7 +259,7 @@ class SSHClient:
             else:
                 LOG.warning("No match found for {}!".format(blob_list))
                 LOG.debug("Before: {}; After:{}".format(self._parse_output(self._session.before),
-                                                    self._parse_output(self._session.after)))
+                                                        self._parse_output(self._session.after)))
                 raise
 
         # Match found, reformat the outputs
@@ -407,6 +408,55 @@ class SSHClient:
         self.send('TMOUT={}'.format(timeout))
         self.expect()
 
+    def wait_for_cmd_output(self, cmd, content, timeout, strict=False, regex=False, expt_timeout=10,
+                            check_interval=3, disappear=False, non_zero_rtn_ok=False):
+        """
+        Wait for given content to appear or disappear in cmd output.
+
+        Args:
+            cmd (str): cmd to run repeatedly until given content appears|disappears or timeout reaches
+            content (str): string expected to appear|disappear in cmd output
+            timeout (int): max seconds to wait for the expected content
+            strict (bool): whether to perform strict search  (search is NOT case sensitive even if strict=True)
+            regex (bool): whether given content is regex pattern
+            expt_timeout (int): max time to wait for cmd to return
+            check_interval (int): how long to wait to execute the cmd again in seconds.
+            disappear (bool): whether to wait for content appear or disappear
+            non_zero_rtn_ok (bool): whether it's okay for cmd to have none-zero return code. Raise exception if False.
+
+        Returns (bool): True if content appears in cmd output within max wait time.
+
+        """
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            code, output = self.exec_cmd(cmd, expect_timeout=expt_timeout)
+            if not non_zero_rtn_ok and code > 0:
+                raise exceptions.SSHExecCommandFailed("Get non-zero return code for command: {}".format(cmd))
+
+            content_exists = False
+            if regex:
+                if strict:
+                    if re.match(content, output):
+                        content_exists = True
+                else:
+                    if re.search(content, output):
+                        content_exists = True
+            else:
+                if strict:
+                    if content.lower() == output.lower():
+                        content_exists = True
+                else:
+                    if content.lower() in output.lower():
+                        content_exists = True
+
+            if (content_exists and not disappear) or (not content_exists and disappear):
+                return True
+
+            time.sleep(check_interval)
+
+        else:
+            return False
+
 
 class SSHFromSSH(SSHClient):
     """
@@ -496,7 +546,7 @@ class SSHFromSSH(SSHClient):
             raise exceptions.SSHRetryTimeout("Host: {}, User: {}, Password: {}".
                                              format(self.host, self.user, self.password))
 
-    def expect(self, blob=None, timeout=10, fail_ok=False):
+    def expect(self, blob_list=None, timeout=10, fail_ok=False):
         """
         Look for match in the output. Stop if 1) match is found, 2) match is not found and prompt is reached, 3) match
         is not found and timeout is reached. For scenario 2 and 3, either throw timeout exception or return False based
@@ -515,10 +565,10 @@ class SSHFromSSH(SSHClient):
             expect(['good', 'bad'], 10, False): to wait for a match start with 'good' or 'bad' with 10seconds timeout
 
         """
-        if not blob:
-            blob = self.prompt
+        if not blob_list:
+            blob_list = self.prompt
 
-        response = self.parent.expect(blob, timeout, fail_ok)
+        response = self.parent.expect(blob_list, timeout, fail_ok)
         self.cmd_output = self.parent.cmd_output
         return response
 
@@ -539,23 +589,23 @@ class SSHFromSSH(SSHClient):
 
 
 class VMSSHClient(SSHFromSSH):
-    VM_AUTH_MAP = {
-        'cgcs_guest': {
-            'user': 'root',
-            'password': 'root'
-        },
-        'ubuntu':{
-            'user': 'ubuntu',
-            'password': 'ubuntu'
-        },
-        'cirros': {
-            'user': '',
-            'password': ''
-        }
-    }
+    # VM_AUTH_MAP = {
+    #     'cgcs_guest': {
+    #         'user': 'root',
+    #         'password': 'root'
+    #     },
+    #     'ubuntu':{
+    #         'user': 'ubuntu',
+    #         'password': 'ubuntu'
+    #     },
+    #     'cirros': {
+    #         'user': '',
+    #         'password': ''
+    #     }
+    # }
 
     def __init__(self, vm_ip, vm_name, vm_img_name='cgcs-guest', user=None, password=None, natbox_client=None,
-                 prompt=None, timeout=10):
+                 prompt=None, timeout=20):
         """
 
         Args:
@@ -577,23 +627,26 @@ class VMSSHClient(SSHFromSSH):
         if user:
             if not password:
                 password = user
-        elif vm_img_name in Guest.CREDS:
-            vm_creds = Guest.CREDS[vm_img_name]
-            user = vm_creds['user']
-            password = vm_creds['password']
         elif 'centos' in vm_img_name:
             user = 'centos'
             force_password = False
         else:
-            user = 'root'
-            password = 'root'
-            known_guests = list(Guest.CREDS.keys())
-            known_guests.append('centos')
-            LOG.warning("User/password are not provided, and VM image type is not in the list: {}. "
-                        "Use root/root to login.".format(known_guests))
+            for image_name in Guest.CREDS:
+                if image_name in vm_img_name:
+                    vm_creds = Guest.CREDS[vm_img_name]
+                    user = vm_creds['user']
+                    password = vm_creds['password']
+                    break
+            else:
+                user = 'root'
+                password = 'root'
+                known_guests = list(Guest.CREDS.keys())
+                known_guests.append('centos')
+                LOG.warning("User/password are not provided, and VM image type is not in the list: {}. "
+                            "Use root/root to login.".format(known_guests))
 
         if prompt is None:
-            prompt = r'.*{}\@{}.*\~.*[$#]'.format(user, vm_name)
+            prompt = r'.*{}\@{}.*\~.*[$#]'.format(user, str(vm_name).replace('_', '-'))
         super(VMSSHClient, self).__init__(ssh_client=natbox_client, host=vm_ip, user=user, password=password,
                                           initial_prompt=prompt, timeout=timeout)
 
@@ -633,6 +686,14 @@ class NATBoxClient:
 
     @classmethod
     def get_natbox_client(cls, natbox_ip=None):
+        """
+
+        Args:
+            natbox_ip (str): natbox ip
+
+        Returns (SSHClient): natbox ssh client
+
+        """
         if not natbox_ip:
             num_natbox = len(cls.__natbox_ssh_map)
             if num_natbox == 0:

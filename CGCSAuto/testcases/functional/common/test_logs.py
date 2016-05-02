@@ -10,14 +10,15 @@ from keywords import system_helper
 
 @mark.parametrize(
     ("event_option", "severity"), [
-        ('--alarms', 'critical'),
-        ('--alarms', 'major'),
-        ('--alarms', 'minor'),
-        ('--logs', 'minor'),
-        ('--logs', 'not-applicable'),
-        ('--logs', 'critical')])
+        ('alarms', 'critical'),
+        ('alarms', 'major'),
+        ('alarms', 'minor'),
+        ('logs', 'minor'),
+        ('logs', 'not-applicable'),
+        ('logs', 'critical')])
 def test_event_list_vms(event_option, severity):
-    limit = '5'
+    limit = 5
+    LOG.tc_step('Generate alarms.')
     if event_option == '--alarms':
         alarm_log_generate_str = "fmClientCli -c  \"### ###300.005###set###system.vm###host=compute-0.vm=$i### ###" + \
                          severity + "### ###processing-error###Automation Generate### ###True###True###\""
@@ -27,13 +28,13 @@ def test_event_list_vms(event_option, severity):
                                    "exceeded### ###True###True### \""
     alarm_generate_succ = generate_alarm_log(alarm_log_generate_str, int(limit))
     assert alarm_generate_succ, "Alarm / LOG Generated"
-    cli_cmd = "{} -q  severity={} --limit {}".format(event_option, severity, limit)
-    query_ouput = system_helper.get_events(cli_args=cli_cmd)
+
     LOG.tc_step('Query ' + event_option + ' ' + severity)
-    check_flag = query_check(len(query_ouput['values']), int(limit) - 1)
-    assert check_flag != 1, " Test Failed "
+    query_tab = system_helper.get_events(num=limit, show_only=event_option, query_key='severity', query_value=severity)
+
     LOG.tc_step('Verify test result')
-    # tc end
+    check_flag = query_check(len(query_tab['values']), int(limit) - 1)
+    assert check_flag != 1, " Test Failed "
 
 
 def query_check(length, local_limit):

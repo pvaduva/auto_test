@@ -1,11 +1,10 @@
 from pytest import fixture, mark, skip
 from time import sleep
 
-from utils import cli
-from utils import table_parser
 from utils.tis_log import LOG
+from consts.cgcs import EventLogID, FlavorSpec
+from consts.timeout import EventLogTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
-from setup_consts import P1, P2, P3
 
 ###
 #us63135_tc11: validate_heartbeat_works_after_controller_swact
@@ -30,11 +29,19 @@ def heartbeat_flavor_vm(request):
     heartbeat = request.param
 
     flavor_id = nova_helper.create_flavor()[1]
-    heartbeat_spec = {'sw:wrs:guest:heartbeat': heartbeat}
+    heartbeat_spec = {FlavorSpec.GUEST_HEARTBEAT: heartbeat}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
 
     boot_source = 'image'
     vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
+    events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
+                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
+                                              EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
+    if heartbeat == 'True':
+        assert events, "VM heartbeat is not enabled."
+        assert EventLogID.HEARTBEAT_ENABLED == events[0], "VM heartbeat failed to establish."
+    else:
+        assert not events, "Heartbeat event generated unexpectedly: {}".format(events)
 
     vm = {'id': vm_id,
           'boot_source': boot_source,
@@ -50,7 +57,7 @@ def heartbeat_flavor_vm(request):
     return vm
 
 
-def test_heartbeat(heartbeat_flavor_vm):
+def test_heartbeat_after_swact(heartbeat_flavor_vm):
     """
     check the heartbeat of a given vm
 
@@ -60,35 +67,29 @@ def test_heartbeat(heartbeat_flavor_vm):
     """
     vm_id = heartbeat_flavor_vm['id']
     heartbeat_type = heartbeat_flavor_vm['heartbeat']
-    # check before swact
-    LOG.tc_step("Wait a few seconds before SSH into VM instance")
-    sleep(10)
-    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        # Even when heartbeat set to False in flavor. a 'heartbeat' process would show up in VM for a few seconds
-        # depend on reply from DE may increase the sleep timer for VM process to settle
-        sleep(30)
-        LOG.tc_step("check heartbeat before swact")
-        cmd = "ps -ef | grep [h]eartbeat | awk '{print $10}' "
-        before_ssh_output = vm_ssh.exec_cmd(cmd)
-        before_heartbeat = before_ssh_output[1].lstrip()
 
     LOG.tc_step("execute swact")
-    exit_code, output = host_helper.swact_host(fail_ok=True)
+    host_helper.swact_host()
 
-    # check after swact
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        sleep(10)
+
         LOG.tc_step("check heartbeat after swact")
         cmd = "ps -ef | grep [h]eartbeat | awk '{print $10}' "
-        after_ssh_output = vm_ssh.exec_cmd(cmd)
-        after_heartbeat = after_ssh_output[1].lstrip()
+        heartbeat_proc_shown = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False, expt_timeout=3,
+                                                          check_interval=2)
 
-    LOG.tc_step("check heartbeat after swact")
-    if heartbeat_type == "True":
-        LOG.tc_step("heartbeat process exist and after swact")
-        assert before_heartbeat == after_heartbeat == '/dev/virtio-ports/cgcs.heartbeat'
-    else:
-        LOG.tc_step("heartbeat process does not exist and after swact")
-        assert before_heartbeat == after_heartbeat == ''
+        if heartbeat_proc_shown:
+            heartbeat_proc_disappear = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False,
+                                                                  expt_timeout=3, disappear=True, check_interval=2)
+            if heartbeat_type == 'False':
+                assert heartbeat_proc_disappear, "Heartbeat process is running after swact."
+            else:
+                assert not heartbeat_proc_disappear, "Heartbeat process is not running after swact."
 
-    # tc end
+        else:
+            heartbeat_proc_appear = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False,
+                                                               expt_timeout=3, check_interval=2)
+            if heartbeat_type == 'True':
+                assert heartbeat_proc_appear, "Heartbeat process is not running after swact."
+            else:
+                assert not heartbeat_proc_appear, "Heartbeat process is running after swact."
