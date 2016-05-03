@@ -6,7 +6,7 @@ import pexpect
 from pexpect import pxssh
 
 from consts.auth import Guest, Host
-from consts.cgcs import Prompt
+from consts.cgcs import Prompt, DATE_OUTPUT
 from consts.lab import Labs, NatBox
 from setup_consts import LOG_DIR, TEMP_DIR, KEYFILE_NAME
 from utils import exceptions, local_host
@@ -220,7 +220,7 @@ class SSHClient:
         self.expect(fail_ok=True, timeout=3)
         LOG.debug("Buffer is flushed by reading out the rest of the output")
 
-    def expect(self, blob_list=None, timeout=10, fail_ok=False):
+    def expect(self, blob_list=None, timeout=10, fail_ok=False, rm_date=False):
         """
         Look for match in the output. Stop if 1) match is found, 2) match is not found and prompt is reached, 3) match
         is not found and timeout is reached. For scenario 2 and 3, either throw timeout exception or return False based
@@ -229,7 +229,8 @@ class SSHClient:
             blob_list: pattern(s) to find match for
             timeout: max timeout value to wait for pattern(s)
             fail_ok: True or False. When False: throws exception if match not found. When True: return -1 when match not
-            found.
+                found.
+            rm_date (bool): Whether to remove the date output before expecting
 
         Returns: the index of the pattern matched in the output, assuming that blob can be a list.
 
@@ -270,6 +271,11 @@ class SSHClient:
         if not self.cmd_sent == '':
             output_list = output.split('\r\n')
             output_list[0] = ''        # do not display the sent command
+
+            if rm_date:     # remove date output if any
+                if re.search(DATE_OUTPUT, output_list[-1]):
+                    output_list = output_list[:-1]
+
             output = '\n'.join(output_list)
         self.cmd_sent = ''              # Make sure sent line is only removed once
 
@@ -283,7 +289,7 @@ class SSHClient:
 
         return index
 
-    def exec_cmd(self, cmd, expect_timeout=10, reconnect=False, reconnect_timeout=300, err_only=False):
+    def exec_cmd(self, cmd, expect_timeout=10, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True):
         """
 
         Args:
@@ -292,6 +298,7 @@ class SSHClient:
             reconnect:
             reconnect_timeout:
             err_only: if true, stdout will not be included in output
+            rm_date (bool): weather to remove date output from cmd output before returning
 
         Returns (tuple): (exit code (int), command output (str))
 
@@ -301,12 +308,17 @@ class SSHClient:
             cmd += ' 1> /dev/null'          # remove stdout
         self.send(cmd, reconnect, reconnect_timeout)
         self.expect(timeout=expect_timeout)
-        return self.__process_exec_result(cmd)
+        return self.__process_exec_result(cmd, rm_date)
 
-    def __process_exec_result(self, cmd):
+    def __process_exec_result(self, cmd, rm_date):
         cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
         # LOG.debug("cmd output list: {}".format(cmd_output_list))
         # cmd_output_list[0] = ''                                       # exclude command, already done in expect
+
+        if rm_date:  # remove date output if any
+            if re.search(DATE_OUTPUT, cmd_output_list[-1]):
+                cmd_output_list = cmd_output_list[:-1]
+
         cmd_output = '\n'.join(cmd_output_list)
 
         exit_code = self.get_exit_code()
@@ -316,6 +328,7 @@ class SSHClient:
             LOG.warning('Issue occurred when executing \'{}\'. Exit_code: {}. Output: {}'.
                         format(cmd, exit_code, cmd_output))
 
+        cmd_output = cmd_output.strip()
         return exit_code, cmd_output
 
     @staticmethod
@@ -336,7 +349,7 @@ class SSHClient:
         return int(self.cmd_output.splitlines()[1])
 
     def get_hostname(self):
-        return self.exec_cmd('hostname')[1].splitlines()[1]
+        return self.exec_cmd('hostname')[1].splitlines()[0]
 
     def scp_files_to_local_host(self, source_file, dest_password, dest_user=None, dest_folder_name=None, timeout=10):
 
@@ -386,7 +399,7 @@ class SSHClient:
                 self.send('exit')
                 self.expect()
 
-    def exec_sudo_cmd(self, cmd, expect_timeout=10):
+    def exec_sudo_cmd(self, cmd, expect_timeout=10, rm_date=True):
         cmd = 'sudo ' + cmd
         self.send(cmd)
         index = self.expect([self.prompt, PASSWORD_PROMPT], timeout=expect_timeout)
@@ -394,11 +407,11 @@ class SSHClient:
             self.send(self.password)
             self.expect(timeout=expect_timeout)
 
-        return self.__process_exec_result(cmd)
+        return self.__process_exec_result(cmd, rm_date)
 
     def get_current_user(self):
         output = self.exec_cmd('whoami')[1]
-        return output.splitlines()[1]
+        return output.splitlines()[0]
 
     def close(self):
         self._session.close(True)
@@ -546,7 +559,7 @@ class SSHFromSSH(SSHClient):
             raise exceptions.SSHRetryTimeout("Host: {}, User: {}, Password: {}".
                                              format(self.host, self.user, self.password))
 
-    def expect(self, blob_list=None, timeout=10, fail_ok=False):
+    def expect(self, blob_list=None, timeout=10, fail_ok=False, rm_date=False):
         """
         Look for match in the output. Stop if 1) match is found, 2) match is not found and prompt is reached, 3) match
         is not found and timeout is reached. For scenario 2 and 3, either throw timeout exception or return False based
@@ -555,7 +568,8 @@ class SSHFromSSH(SSHClient):
             blob: pattern to match
             timeout: max timeout value to wait for pattern
             fail_ok: True or False. When False: throws exception if match not found. When True: return -1 when match not
-            found.
+                found.
+            rm_date (bool): Weather to remove the date output before expecting
 
         Returns: the index of the pattern matched in the output, assuming that blob can be a list.
 
@@ -568,7 +582,7 @@ class SSHFromSSH(SSHClient):
         if not blob_list:
             blob_list = self.prompt
 
-        response = self.parent.expect(blob_list, timeout, fail_ok)
+        response = self.parent.expect(blob_list, timeout, fail_ok, rm_date=rm_date)
         self.cmd_output = self.parent.cmd_output
         return response
 

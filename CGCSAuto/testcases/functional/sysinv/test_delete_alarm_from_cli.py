@@ -1,11 +1,12 @@
 ###
 # TC2196 Verify that alarm can be deleted using CLI
 ###
-
+import re
 
 from utils import cli
 from utils.ssh import ControllerClient
 from utils import table_parser
+from consts.cgcs import UUID
 from consts.auth import Tenant
 from consts.timeout import CLI_TIMEOUT
 from utils.tis_log import LOG
@@ -39,7 +40,7 @@ def test_delete_alarm():
     ssh_client = ControllerClient.get_active_controller()
     LOG.tc_step("Create an critical alarm 600.005")
     exit_code, cmd_output = ssh_client.exec_cmd(cmd, err_only=False, expect_timeout=CLI_TIMEOUT)
-    uuid = cmd_output.split('\n')[2]
+    uuid = re.findall(pattern=UUID, string=cmd_output)[0]
 
     # delete alarm
     LOG.tc_step("Execute alarm-delete command to delete the alarm created above")

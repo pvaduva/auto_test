@@ -45,15 +45,9 @@ def get_buildinfo(con_ssh=None):
 def _get_info_non_cli(cmd, con_ssh=None):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
-    exitcode, output = con_ssh.exec_cmd(cmd)
+    exitcode, output = con_ssh.exec_cmd(cmd, rm_date=True)
     if not exitcode == 0:
         raise exceptions.SSHExecCommandFailed("Command failed to execute.")
-
-    # remove date output if any
-    output = output.splitlines()
-    if re.search(cgcs.DATE_OUTPUT, output[-1]):
-        output = output[:-1]
-    output = ''.join(output)
 
     return output
 

@@ -15,6 +15,7 @@ def setup_test_session(request):
     """
     setups.create_tmp_dir()
     setups.setup_primary_tenant()
+    setups.set_env_vars(con_ssh)
     setups.setup_natbox_ssh()
     setups.boot_vms()
 
@@ -31,8 +32,8 @@ def reconnect_before_test():
     """
     Before each test function start, Reconnect to TIS via ssh if disconnection is detected
     """
-    con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
     con_ssh.flush()
+    con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
 
 
 @pytest.fixture(scope='function', autouse=False)

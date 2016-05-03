@@ -25,6 +25,31 @@ def setup_tis_ssh():
     return con_ssh
 
 
+def set_env_vars(con_ssh):
+    prompt_cmd = con_ssh.exec_cmd("echo $PROMPT_COMMAND")[1]
+    tmout_val = con_ssh.exec_cmd("echo $TMOUT")[1]
+    hist_time = con_ssh.exec_cmd("echo $HISTTIMEFORMAT")[1]
+    source = False
+    if not prompt_cmd:
+        con_ssh.exec_cmd('''echo 'export PROMPT_COMMAND="date"' >> ~/.bashrc''')
+        source = True
+    elif prompt_cmd != 'date':
+        con_ssh.exec_cmd('''sed -i 's#PROMPT_COMMAND=.*#PROMPT_COMMAND="date"#' ~/.bashrc''')
+        source = True
+
+    if tmout_val != '0':
+        con_ssh.exec_cmd("echo 'export TMOUT=0' >> ~/.bashrc")
+        source = True
+
+    if '%Y-%m-%d %T' not in hist_time:
+        con_ssh.exec_cmd('''echo 'export HISTTIMEFORMAT="%Y-%m-%d %T "' >> ~/.bashrc''')
+        source = True
+
+    if source:
+        con_ssh.exec_cmd("source ~/.bashrc")
+        LOG.debug("Environment variable(s) updated.")
+
+
 def setup_primary_tenant():
     primary_tenant = setup_consts.PRIMARY_TENANT
     Tenant.set_primary(primary_tenant)
