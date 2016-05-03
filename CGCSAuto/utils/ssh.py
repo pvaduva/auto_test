@@ -89,7 +89,7 @@ class SSHClient:
 
         # Do nothing if current session is connected and force_close is False:
         if self._is_alive() and use_current and self._is_connected():
-            LOG.info("Already connected to {}. Do nothing.".format(self.host))
+            LOG.debug("Already connected to {}. Do nothing.".format(self.host))
             # LOG.debug("ID of the session: {}".format(id(self)))
             return
 

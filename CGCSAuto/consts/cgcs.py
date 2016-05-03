@@ -1,5 +1,5 @@
 # output of date. such as: Tue Mar  1 18:20:29 UTC 2016
-DATE_OUTPUT = r'[01]\d:[0-5]\d:[0-5]\d\s[A-Z]{3}\s\d{4}$'
+DATE_OUTPUT = r'[0-2]\d:[0-5]\d:[0-5]\d\s[A-Z]{3}\s\d{4}$'
 
 # such as 192.168.11.6
 MGMT_IP = r'mgmt-net\d?=.*(192.168\.\d{1,3}\.\d{1,3})'
