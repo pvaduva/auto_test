@@ -549,6 +549,7 @@ def set_host_4k_pages(host, proc_id=0, smallpage_num=None, fail_ok=False, auth_i
     if diff_page > 0:
         num_2m_avail_to_4k_page = int(page_2m_avail*2*256)
         if num_2m_avail_to_4k_page < diff_page:
+            # change all 2M page to smallpage and available 1G hugepage
             new_2m = 0
             new_1g = page_1g_total - math.ceil((diff_page - num_2m_avail_to_4k_page) * 4 / 1024 / 1024)
         else:
@@ -582,6 +583,18 @@ def get_host_mem_values(host, headers, proc_id, con_ssh=None, auth_info=Tenant.A
         res.append(value)
 
     return res
+
+
+def get_host_used_mem_values(host, proc_id=0, auth_info=Tenant.ADMIN, con_ssh=None):
+    mem_vals = get_host_mem_values(
+        host, ['mem_total(MiB)','mem_avail(MiB)','avs_hp_size(MiB)', 'avs_hp_total'],
+        proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)
+
+    mem_total, mem_avail, avs_hp_size, avs_hp_total = [int(val) for val in mem_vals]
+
+    used_mem = mem_total - mem_avail - avs_hp_size * avs_hp_total
+
+    return used_mem
 
 
 def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=False, con_ssh=None,

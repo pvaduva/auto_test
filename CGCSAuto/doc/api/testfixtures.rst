@@ -15,10 +15,10 @@ testfixtures.config_host module
     :undoc-members:
     :show-inheritance:
 
-testfixtures.resource_cleanup module
+testfixtures.resource_mgmt module
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. automodule:: testfixtures.resource_cleanup
+.. automodule:: testfixtures.resource_mgmt
     :members:
     :undoc-members:
     :show-inheritance:

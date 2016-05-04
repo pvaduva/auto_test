@@ -17,7 +17,8 @@ def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn
     Get a list of vm ids.
 
     Args:
-        count (int): number of vms ids to return. If None, all vms for specific tenant will be returned.
+        count (int): number of vms ids to return. If None, all vms for specific tenant will be returned. If num of
+        existing vm is less than count additional vm will be created to match the count
         con_ssh (SSHClient):
         auth_info (dict):
         all_tenants (bool): whether to get any vms from all tenants or just admin tenant if auth_info is set to Admin
@@ -977,6 +978,19 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
 
 
 def get_vm_ids(image=None, status=VMStatus.ACTIVE, flavor=None, host=None, tenant=None, delete=False):
+    """
+        Retrieve a list of vm_id based on list of critieria
+    Args:
+        image:
+        status:
+        flavor:
+        host:
+        tenant:
+        delete:
+
+    Returns:
+
+    """
     raise NotImplementedError
 
 
