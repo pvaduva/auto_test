@@ -2,7 +2,7 @@ import pytest
 
 import setups
 from testfixtures.verify_fixtures import *
-from setup_consts import TC_LIST_FILE_PATH
+from setup_consts import TCLIST_PATH, LOG_DIR, PYTESTLOG_PATH
 
 con_ssh = None
 
@@ -48,6 +48,10 @@ def tis_ssh():
     return con_ssh
 
 
+################################
+# Process and log test results #
+################################
+
 class MakeReport:
     nodeid = None
     instances = {}
@@ -64,7 +68,10 @@ class MakeReport:
             LOG.debug("\n***Details: {}".format(report.longrepr))
             self.test_results[call.when] = ['Failed', call.excinfo]
         elif report.skipped:
-            self.test_results[call.when] = ['Skipped', call.excinfo]
+            sep = 'Skipped: '
+            skipreason_list = str(call.excinfo).split(sep=sep)[1:]
+            skipreason_str = sep.join(skipreason_list)
+            self.test_results[call.when] = ['Skipped', skipreason_str]
         elif report.passed:
             self.test_results[call.when] = ['Passed', '']
 
@@ -82,35 +89,38 @@ class MakeReport:
 @pytest.mark.tryfirst
 def pytest_runtest_makereport(item, call, __multicall__):
     report = __multicall__.execute()
-
     my_rep = MakeReport.get_report(item)
     my_rep.update_results(call, report)
 
+    test_name = item.nodeid
+    res_in_tests = ''
     if report.when == 'teardown':
-        test_res = 'Test Passed'
+        res_in_log = 'Test Passed'
         fail_at = []
         res = my_rep.get_results()
         for key, val in res.items():
             if val[0] == 'Failed':
                 fail_at.append('test ' + key)
             elif val[0] == 'Skipped':
-                test_res = "Test Skipped\nReason: {}".format(val[1])
+                res_in_log = 'Test Skipped\nReason: {}'.format(val[1])
+                res_in_tests = 'Skipped'
                 break
         if fail_at:
             fail_at = ', '.join(fail_at)
-            test_res = 'Test Failed at {}'.format(fail_at)
+            res_in_log = 'Test Failed at {}'.format(fail_at)
 
-        testcase_log(msg=test_res, nodeid=item.nodeid, log_type='tc_end')
+        testcase_log(msg=res_in_log, nodeid=test_name, log_type='tc_end')
 
-        pass_or_fail = ''
-        if 'Test Passed' in test_res:
-            pass_or_fail = 'Passed'
-        elif 'Test Failed' in test_res:
-            pass_or_fail = 'Failed'
+        if 'Test Passed' in res_in_log:
+            res_in_tests = 'Passed'
+        elif 'Test Failed' in res_in_log:
+            res_in_tests = 'Failed'
 
-        if pass_or_fail:
-            with open(TC_LIST_FILE_PATH, mode='a') as f:
-                f.write('{}\t{}\n'.format(pass_or_fail, item.nodeid))
+        if not res_in_tests:
+            res_in_tests = 'Unknow!'
+
+        with open(TCLIST_PATH, mode='a') as f:
+            f.write('{}\t{}\n'.format(res_in_tests, test_name))
 
     return report
 
@@ -143,9 +153,6 @@ def pytest_runtest_teardown(item):
     con_ssh.flush()
 
 
-# TODO: add support for feature marks
-
-
 def testcase_log(msg, nodeid, separator=None, log_type=None):
     if separator is None:
         separator = '-----------'
@@ -163,3 +170,15 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
         LOG.tc_teardown(nodeid)
     else:
         LOG.debug(logging_msg)
+
+
+########################
+# Command line options #
+########################
+
+def pytest_cmdline_preparse(args):
+    pytestlog_opt = "--resultlog={}".format(PYTESTLOG_PATH)
+    args.append(pytestlog_opt)
+
+
+# TODO: add support for feature marks

@@ -10,7 +10,6 @@ from consts.auth import Tenant
 from consts.timeout import VMTimeout
 from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper
-from keywords.common import Count
 
 
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
@@ -223,7 +222,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
     tmout = VMTimeout.STATUS_CHANGE
     if not _wait_for_vm_status(vm_id=vm_id, status=VMStatus.ACTIVE, timeout=tmout, con_ssh=con_ssh,
                                auth_info=auth_info, fail_ok=True):
-        vm_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)
+        vm_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
+                                                       auth_info=auth_info)
         message = "VM {} did not reach ACTIVE state within {}. VM status: {}".format(vm_id, tmout, vm_status)
         if fail_ok:
             LOG.warning(message)
@@ -430,7 +430,8 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=Fals
         optional_arg = ''
 
     before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
-    before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+    before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
+                                                       auth_info=Tenant.ADMIN)
     if not before_status == VMStatus.ACTIVE:
         LOG.warning("Non-active VM status before live migrate: {}".format(before_status))
 
@@ -459,7 +460,8 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=Fals
     LOG.info("Waiting for VM status change to original state {}".format(before_status))
     end_time = time.time() + VMTimeout.LIVE_MIGRATE_COMPLETE
     while time.time() < end_time:
-        status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+        status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
+                                                    auth_info=Tenant.ADMIN)
         if status == before_status:
             LOG.info("Live migrate vm {} completed".format(vm_id))
             break
@@ -531,7 +533,8 @@ def get_dest_host_for_live_migrate(vm_id, con_ssh=None):
     vm_info = VMInfo.get_vm_info(vm_id, con_ssh=con_ssh)
     vm_storage_backing = vm_info.get_storage_type()
     current_host = vm_info.get_host_name()
-    candidate_hosts = host_helper.get_nova_hosts_with_storage_backing(storage_backing=vm_storage_backing, con_ssh=con_ssh)
+    candidate_hosts = host_helper.get_nova_hosts_with_storage_backing(storage_backing=vm_storage_backing,
+                                                                      con_ssh=con_ssh)
 
     hosts_table_ = table_parser.table(cli.system('host-list'))
     for host in candidate_hosts:
@@ -773,7 +776,8 @@ def _wait_for_vm_status(vm_id, status, timeout=VMTimeout.STATUS_CHANGE, check_in
     if isinstance(status, str):
         status = [status]
 
-    current_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)
+    current_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
+                                                        auth_info=auth_info)
     while time.time() < end_time:
         for expected_status in status:
             if current_status == expected_status:
@@ -781,7 +785,8 @@ def _wait_for_vm_status(vm_id, status, timeout=VMTimeout.STATUS_CHANGE, check_in
                 return expected_status
 
         time.sleep(check_interval)
-        current_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)
+        current_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
+                                                            auth_info=auth_info)
 
     if fail_ok:
         LOG.warning("Timed out waiting for vm status: {}. Actual vm status: {}".format(status, current_status))

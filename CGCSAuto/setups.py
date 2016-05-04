@@ -2,7 +2,7 @@ import os
 
 from utils import exceptions
 from utils.tis_log import LOG
-from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, ssh_to_controller0
+from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient
 from consts.auth import Tenant
 from consts.cgcs import Prompt
 from keywords import vm_helper, host_helper

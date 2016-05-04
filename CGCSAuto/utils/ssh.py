@@ -565,7 +565,7 @@ class SSHFromSSH(SSHClient):
         is not found and timeout is reached. For scenario 2 and 3, either throw timeout exception or return False based
         on the 'fail' argument.
         Args:
-            blob: pattern to match
+            blob_list(list|str): pattern(s) to expect
             timeout: max timeout value to wait for pattern
             fail_ok: True or False. When False: throws exception if match not found. When True: return -1 when match not
                 found.
@@ -727,7 +727,6 @@ class NATBoxClient:
             ip = natbox['ip']
             if ip == natbox_ip.strip():
                 user = natbox['user']
-                prompt = user+r'\@.*\:\~[$#]'
                 nat_ssh = SSHClient(ip, user, natbox['password'], initial_prompt=user + cls._PROMPT)
                 nat_ssh.connect()
                 nat_ssh.exec_cmd(cmd='TMOUT=0')
