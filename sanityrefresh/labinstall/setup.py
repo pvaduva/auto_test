@@ -1,4 +1,4 @@
-#
+
 # Copyright (c) 2016 Wind River Systems, Inc.
 #
 # The right to copy, distribute, modify, or otherwise make use
@@ -9,11 +9,11 @@
 import setuptools
 
 setuptools.setup(
-    name='install_system',
+    name='labinstall',
     description='Automated lab install',
     version='1.0.0',
     license='windriver',
-    packages=['labinstall', 'labinstall.utils'],
+    packages=['', 'utils'],
     package_data={'labinstall': ['node_info/*.ini', 'lab_settings/*.ini']},
 
 )
