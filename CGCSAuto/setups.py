@@ -56,13 +56,13 @@ def setup_primary_tenant():
     LOG.info("Primary Tenant for test session is set to {}".format(primary_tenant['tenant']))
 
 
-def setup_natbox_ssh():
+def setup_natbox_ssh(keyfile_path):
     natbox_ip = setup_consts.NatBox.NAT_BOX_HW['ip']
     NATBoxClient.set_natbox_client(natbox_ip)
-    __copy_keyfile_to_natbox(natbox_ip)
+    __copy_keyfile_to_natbox(natbox_ip, keyfile_path)
 
 
-def __copy_keyfile_to_natbox(natbox_ip):
+def __copy_keyfile_to_natbox(natbox_ip, keyfile_path):
     # con_ssh = ControllerClient.get_active_controller()
     with host_helper.ssh_to_host('controller-0') as con_0_ssh:
         # con_0_ssh = ssh_to_controller0(ssh_client=con_ssh)
@@ -80,7 +80,7 @@ def __copy_keyfile_to_natbox(natbox_ip):
             con_0_ssh.send()    # Repeat passphrase
             con_0_ssh.expect(Prompt.CONTROLLER_0)
 
-        keyfile_path = setup_consts.KEYFILE_PATH
+        # keyfile_path = setup_consts.KEYFILE_PATH
         cmd_1 = 'cp /home/wrsroot/.ssh/id_rsa ' + keyfile_path
         cmd_2 = 'chmod 600 ' + keyfile_path
         cmd_3 = 'scp {} {}@{}:~/'.format(keyfile_path, setup_consts.NATBOX['user'], natbox_ip)

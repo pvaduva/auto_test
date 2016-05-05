@@ -8,7 +8,8 @@ from pexpect import pxssh
 from consts.auth import Guest, Host
 from consts.cgcs import Prompt, DATE_OUTPUT
 from consts.lab import Labs, NatBox
-from setup_consts import LOG_DIR, TEMP_DIR, KEYFILE_NAME
+# from setup_consts import LOG_DIR, TEMP_DIR, KEYFILE_NAME
+# from conftest import GlobVar
 from utils import exceptions, local_host
 from utils.tis_log import LOG
 
@@ -81,8 +82,9 @@ class SSHClient:
                 break
         else:
             lab_name = self.host
-
-        return LOG_DIR + '/ssh_' + lab_name + ".log"
+        conftest = __import__("conftest")
+        print(dir(conftest.GlobVar))
+        return GlobVar.get_glob_var('LOG_DIR') + '/ssh_' + lab_name + ".log"
 
     def connect(self, retry=False, retry_interval=3, retry_timeout=300, prompt=None,
                 use_current=True, timeout=None):
@@ -359,7 +361,7 @@ class SSHClient:
         else:
             dest_folder_name = ''
 
-        dest_path = TEMP_DIR + dest_folder_name
+        dest_path = GlobVar.get_glob_var('TEMP_DIR') + dest_folder_name
 
         to_host = local_host.get_host_ip() + ':'
         to_user = (dest_user if dest_user is not None else local_host.get_user()) + '@'
@@ -666,7 +668,8 @@ class VMSSHClient(SSHFromSSH):
 
         # This needs to be modified in centos case.
         if not force_password:
-            ssh_options = " -i {}".format(KEYFILE_NAME)
+
+            ssh_options = " -i {}".format(GlobVar.get_glob_var('KEYFILE_NAME'))
         else:
             ssh_options = _SSH_OPTS
         self.ssh_cmd = '/usr/bin/ssh{} {}@{}'.format(ssh_options, self.user, self.host)
