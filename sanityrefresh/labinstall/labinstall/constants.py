@@ -11,6 +11,7 @@ EXPORT_LAB_REL_PATH = "export/lab"
 LAB_YOW_REL_PATH = EXPORT_LAB_REL_PATH + "/yow"
 LAB_SCRIPTS_REL_PATH = EXPORT_LAB_REL_PATH + "/scripts"
 
+
 #TODO: Not all labs define their config_controller file as "system_config"
 #      E.g. some refer to it as cgcs_config or TiS_config.ini
 #      Need this filename to be ORed with other options or standardize naming
@@ -38,9 +39,15 @@ JIRA_LOGS_DIR = "/folk/cgts/logs"
 CERTIFICATE_FILE_PATH = "/folk/cgts/lab/server-with-key-with-passwd.pem"
 CERTIFICATE_FILE_NAME = "server-with-key.pem"
 
+# Cumulus TiS on TiS setup
+CUMULUS_SERVER_IP="128.224.151.50"
 BOOT_IMAGE_ISO = "bootimage.iso"
 BOOT_IMAGE_ISO_PATH = "export/" + BOOT_IMAGE_ISO
 BOOT_IMAGE_ISO_TMP_PATH = "/tmp/" + BOOT_IMAGE_ISO
+CUMULUS_CLEANUP_SCRIPT = "cumulus_cleanup.sh"
+CUMULUS_SETUP_SCRIPT = "cumulus_setup.sh"
+CUMULUS_SETUP_CFG_FILENAME = "cumulus_setup.conf"
+CUMULUS_TMP_TIS_IMAGE_PATH = "/opt/backups/public"
 
 # .ini section and option names
 CFG_PROVISION_SECTION_NAME = "provision"
@@ -120,6 +127,7 @@ WRSROOT_PASSWORD = "li69nux"
 #Telnet expect
 TELNET_EXPECT_TIMEOUT = 3600
 MAX_SEARCH_ATTEMPTS = 20
+MAX_LOGIN_ATTEMPTS = 5
 
 # SSH expect
 SSH_EXPECT_TIMEOUT = 3600
@@ -134,6 +142,8 @@ SSH_KEY_FPATH = SSH_DIR + "/id_rsa"
 AUTHORIZED_KEYS_FPATH = SSH_DIR + "/authorized_keys"
 GET_PUBLIC_SSH_KEY_CMD = "ssh-keygen -y -f {}"
 CREATE_PUBLIC_SSH_KEY_CMD = "ssh-keygen -f {} -t rsa -N ''"
+KNOWN_HOSTS_PATH = SSH_DIR + "/known_hosts"
+REMOVE_HOSTS_SSH_KEY_CMD = "ssh-keygen -f {} -R {}"
 #TODO: Remove this after verified that above command works
 #CREATE_PUBLIC_SSH_KEY_CMD = GET_PUBLIC_SSH_KEY_CMD + ' -q -P ""'
 
