@@ -41,6 +41,7 @@ import utils.log as logutils
 from utils.common import create_node_dict, vlm_reserve, vlm_findmine, vlm_exec_cmd, find_error_msg, get_ssh_key, wr_exit
 from utils.classes import Host
 import utils.wr_telnetlib as telnetlib
+from install_cumulus import Cumulus_TiS, create_cumulus_node_dict
 
 LOGGER_NAME = os.path.splitext(__name__)[0]
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -57,7 +58,8 @@ def parse_args():
                                      description="Script to install Titanium"
                                      " Server load on specified configuration.")
     node_grp = parser.add_argument_group('Nodes')
-    node_grp.add_argument('--controller', metavar='LIST', required=True,
+
+    node_grp.add_argument('--controller', metavar='LIST',
                           help="Comma-separated list of VLM barcodes"
                           " for controllers")
     #TODO: Removed required here, this should be mutually-exclusive with running
@@ -68,12 +70,16 @@ def parse_args():
     #      controller and compute, it will try to get reserved twice and fail
     node_grp.add_argument('--compute', metavar='LIST',
                           help="Comma-separated list of VLM barcodes"
-                          " for computes")
+                          " for computes. Ignored if --tis-on-tis option"
+                          " is specified")
     node_grp.add_argument('--storage', metavar='LIST',
                           help="Comma-separated list of VLM barcodes"
-                          " for storage nodes")
+                          " for storage nodes. Ignored if --tis-on-tis"
+                          " options is specified")
 
     lab_grp = parser.add_argument_group("Lab setup")
+
+
     lab_grp.add_argument('--tuxlab', dest='tuxlab_server',
                          choices=TUXLAB_SERVERS,
                          default=DEFAULT_TUXLAB_SERVER,
@@ -90,7 +96,20 @@ def parse_args():
     #TODO: Have an if for this and say it is not supported yet
     lab_grp.add_argument('--small-footprint', dest='small_footprint',
                            action='store_true',help="Run installation"
-                           " as small footprint")
+                           " as small footprint. Not applicable"
+                           " for ts-on-tis install")
+
+    lab_grp.add_argument('--tis-on-tis', dest='tis_on_tis', action='store_true',
+                         help=" Run installation for Cumulus TiS on TiS. ")
+
+    lab_grp.add_argument('--cumulus-userid', dest='cumulus_userid',
+                         help="Tenant's login userid of linux account in Cumulus "
+                         "Server. This is mandatory if --tis-on-tis is "
+                         "specified.")
+
+    lab_grp.add_argument('--cumulus-password', metavar='CUMULUS_PASSWORD',
+                         dest='cumulus_password', help="Tenant's login "
+                         "password to Cumulus Server.")
 
     # This option is valid only for small footprint option (--small-feetprint)
     #  that are bootable from USB.
@@ -171,6 +190,8 @@ def parse_args():
                          "\n(default: %(default)s)")
 
 
+
+
     other_grp = parser.add_argument_group("Other options:")
     other_grp.add_argument('--output-dir', metavar='DIR_PATH',
                            dest='output_dir', help="Directory path"
@@ -184,6 +205,10 @@ def parse_args():
                            help="Show this help message and exit")
 
     args = parser.parse_args()
+    if not args.tis_on_tis and args.controller is None:
+        parser.error('--controller is required')
+    if args.tis_on_tis and args.cumulus_userid is None:
+        parser.error('--cumulus-userid is required if --tis-on-tis is specified.')
     return args
 
 def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir, tis_bld_dir):
@@ -461,6 +486,7 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
     expected_state_count = 0
     sleep_secs = int(REBOOT_TIMEOUT/MAX_SEARCH_ATTEMPTS)
     node_count = len(nodes)
+    reboot_done = False
     while count < MAX_SEARCH_ATTEMPTS:
         output = controller0.ssh_conn.exec_cmd("source /etc/nova/openrc; system host-list")[1]
         # Remove table header and footer
@@ -499,6 +525,21 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
                 # Remove matched line from output
                 output = re.sub(re.escape(match.group(0)), "", output)
                 nodes.remove(node)
+
+            '''
+            # TODO: host-reboot does not fix the problem. Users need to hard reboot from
+            # horizon manually until it is fixed (CGTS-3964)
+
+            if not reboot_done and len(nodes) == 1 and str(node_names[0]) == "controller-1" \
+                and str(nodes[0].barcode) == "tis_on_tis" and \
+                        expected_state == 'online':
+                # Due two some bug in culumuls, controller-1 sometimes does
+                #  not come online in first reboot. The work around is
+                #  to hard reboot the node.
+                cmd = "source /etc/nova/openrc; system host-reboot 2"
+                controller0.ssh_conn.exec_cmd(cmd)
+                reboot_done = True
+            '''
         if expected_state_count == node_count:
             break
         else:
@@ -673,9 +714,19 @@ if __name__ == '__main__':
     PASSWORD = args.password or getpass.getpass()
     PUBLIC_SSH_KEY = get_ssh_key()
 
-    lab_cfg_location = args.lab_config_location
+    tis_on_tis = args.tis_on_tis
+    if tis_on_tis:
+        print("\nRunning Tis-on-TiS lab install ...")
+        cumulus_password = args.cumulus_password or \
+                           getpass.getpass("CUMULUS_PASSWORD: ")
+        #lab_cfg_location = "cgcs-tis_on_tis"
+        lab_cfg_location = args.lab_config_location
+    else:
+        lab_cfg_location = args.lab_config_location
 
-    controller_nodes = tuple(args.controller.split(','))
+    if not tis_on_tis:
+        controller_nodes = tuple(args.controller.split(','))
+
 
     if args.compute != None:
         compute_nodes = tuple(args.compute.split(','))
@@ -720,13 +771,21 @@ if __name__ == '__main__':
     log = logutils.getLogger(LOGGER_NAME)
 
     logutils.print_step("Arguments:")
+    if tis_on_tis:
+        logutils.print_name_value("TiS-on-TiS", tis_on_tis)
+
     logutils.print_name_value("Lab config location", lab_cfg_location)
-    logutils.print_name_value("Controller", controller_nodes)
-    logutils.print_name_value("Compute", compute_nodes)
-    logutils.print_name_value("Storage", storage_nodes)
-    logutils.print_name_value("Run lab setup", run_lab_setup)
-    logutils.print_name_value("Tuxlab server", tuxlab_server)
-    logutils.print_name_value("Small footprint", small_footprint)
+
+    if not tis_on_tis:
+
+        logutils.print_name_value("Controller", controller_nodes)
+        logutils.print_name_value("Compute", compute_nodes)
+        logutils.print_name_value("Storage", storage_nodes)
+
+        logutils.print_name_value("Run lab setup", run_lab_setup)
+        logutils.print_name_value("Tuxlab server", tuxlab_server)
+        logutils.print_name_value("Small footprint", small_footprint)
+
     logutils.print_name_value("Build server", bld_server)
     logutils.print_name_value("Build server workspace", bld_server_wkspce)
     logutils.print_name_value("TiS builds directory", tis_blds_dir)
@@ -752,7 +811,12 @@ if __name__ == '__main__':
     print("\nRunning as user: " + USERNAME + "\n")
 
 
-    controller_dict = create_node_dict(controller_nodes, CONTROLLER)
+    if tis_on_tis:
+        controller_dict = create_cumulus_node_dict((0, 1), CONTROLLER)
+        compute_dict = create_cumulus_node_dict((0, 1), COMPUTE)
+    else:
+        controller_dict = create_node_dict(controller_nodes, CONTROLLER)
+
     controller0 = controller_dict[CONTROLLER0]
 
     if compute_nodes is not None:
@@ -769,6 +833,7 @@ if __name__ == '__main__':
 
     load_path = get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
                               tis_bld_dir)
+
 
     if os.path.isdir(lab_cfg_location):
         custom_lab_setup = True
@@ -787,7 +852,7 @@ if __name__ == '__main__':
         except Exception:
             msg = "Failed to read file: " + lab_settings_filepath
             log.exception(msg)
-            wr_exit._exit(1,msg)
+            wr_exit()._exit(1,msg)
 
 
         for section in config.sections():
@@ -808,66 +873,86 @@ if __name__ == '__main__':
     if lab_name is not None:
         installer_exit.lab_name = lab_name
 
+    if tis_on_tis:
+
+        tis_on_tis_info = {'userid': args.cumulus_userid,
+                            'password': cumulus_password,
+                            'server': CUMULUS_SERVER_IP,
+                            'log': log, 'bld_server_conn': bld_server_conn,
+                            'load_path': load_path,
+                            'guest_load_path': guest_load_path,
+                            'output_dir': output_dir,
+                            'lab_cfg_path': lab_cfg_path}
+
+        cumulus = Cumulus_TiS(**tis_on_tis_info)
+
+
     executed = False
     if not executed:
-        if str(boot_device_dict.get('controller-0')) != "USB":
+        if str(boot_device_dict.get('controller-0')) != "USB" \
+                and not tis_on_tis:
             set_network_boot_feed(controller0.barcode, tuxlab_server, bld_server_conn, load_path)
 
     nodes = list(controller_dict.values()) + list(compute_dict.values()) + list(storage_dict.values())
+    if not tis_on_tis:
+        [barcodes.append(node.barcode) for node in nodes]
 
-    [barcodes.append(node.barcode) for node in nodes]
+        executed = False
+        if not executed:
+            # Reserve the nodes via VLM
+            # Unreserve first to close any opened telnet sessions.
+            reservedbyme = vlm_findmine()
+            barcodesAlreadyReserved = []
+            for item in barcodes:
+                if item in reservedbyme:
+                    barcodesAlreadyReserved.append(item)
+            if len(barcodesAlreadyReserved) > 0:
+                for bcode in barcodesAlreadyReserved:
+                    vlm_exec_cmd(VLM_UNRESERVE, bcode)
 
-    executed = False
-    if not executed:
-        # Reserve the nodes via VLM
-        # Unreserve first to close any opened telnet sessions.
-        reservedbyme = vlm_findmine()
-        barcodesAlreadyReserved = []
-        for item in barcodes:
-            if item in reservedbyme:
-                barcodesAlreadyReserved.append(item)
-        if len(barcodesAlreadyReserved) > 0:
-            for bcode in barcodesAlreadyReserved:
-                vlm_exec_cmd(VLM_UNRESERVE, bcode)
+            #vlm_reserve(barcodesForReserve, note=INSTALLATION_RESERVE_NOTE)
+            vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
-        #vlm_reserve(barcodesForReserve, note=INSTALLATION_RESERVE_NOTE)
-        vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
+            # Open a telnet session for controller0.
+            cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip,
+                                                  int(controller0.telnet_port),
+                                                  negotiate=controller0.telnet_negotiate,
+                                                  vt100query=controller0.telnet_vt100query,\
+                                                  log_path=output_dir + "/" + CONTROLLER0 +\
+                                                  ".telnet.log", debug=False)
+            #cont0_telnet_conn.login()
+            controller0.telnet_conn = cont0_telnet_conn
+            if burn_usb and small_footprint:
+                burn_usb_load_image(controller0, bld_server_conn, load_path)
 
-        # Open a telnet session for controller0.
-        cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip, 
-                                              int(controller0.telnet_port), 
-                                              negotiate=controller0.telnet_negotiate, 
-                                              vt100query=controller0.telnet_vt100query,\
-                                              log_path=output_dir + "/" + CONTROLLER0 +\
-                                              ".telnet.log", debug=False)
-        #cont0_telnet_conn.login()
-        controller0.telnet_conn = cont0_telnet_conn
-        if burn_usb and small_footprint:
-            burn_usb_load_image(controller0, bld_server_conn, load_path)
+            #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of
+            #      the nodes as the system was left not in an installed state
+            #TODO: In this case still need to set the telnet session for controller0
+            #      so consider keeping this outside of the wipe_disk method
 
-        #TODO: Must add option NOT to wipedisk, e.g. if cannot login to any of
-        #      the nodes as the system was left not in an installed state
-        #TODO: In this case still need to set the telnet session for controller0
-        #      so consider keeping this outside of the wipe_disk method
+            # Run the wipedisk utility if the nodes are accessible
+            for node in nodes:
+                node_thread = threading.Thread(target=wipe_disk,name=node.name,args=(node,))
+                threads.append(node_thread)
+                log.info("Starting thread for {}".format(node_thread.name))
+                node_thread.start()
 
-        # Run the wipedisk utility if the nodes are accessible
-        for node in nodes:
-            node_thread = threading.Thread(target=wipe_disk,name=node.name,args=(node,))
-            threads.append(node_thread)
-            log.info("Starting thread for {}".format(node_thread.name))
-            node_thread.start()
+            for thread in threads:
+                thread.join()
 
-        for thread in threads:
-            thread.join()
+            # Power down all the nodes via VLM (note: this can also be done via board management control)
+            for barcode in barcodes:
+                vlm_exec_cmd(VLM_TURNOFF, barcode)
 
-        # Power down all the nodes via VLM (note: this can also be done via board management control)
-        for barcode in barcodes:
-            vlm_exec_cmd(VLM_TURNOFF, barcode)
-
-        # Boot up controller0
-        bring_up(controller0, boot_device_dict, small_footprint, close_telnet_conn=False)
-        logutils.print_step("Initial login and password set for " + controller0.name)
-        controller0.telnet_conn.login(reset=True)
+            # Boot up controller0
+            bring_up(controller0, boot_device_dict, small_footprint, close_telnet_conn=False)
+            logutils.print_step("Initial login and password set for " + controller0.name)
+            controller0.telnet_conn.login(reset=True)
+    else:
+        cumulus.tis_install()
+        controller0.host_ip = cumulus.get_floating_ip("EXTERNALOAMC0")
+        #Boot up controller0
+        cumulus.launch_controller0()
 
     # Configure networking interfaces
     executed = False
@@ -982,8 +1067,11 @@ if __name__ == '__main__':
             if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
                 cfg_found = True
                 # check if HTTPS is enabled and if yes get the certification file
-                cmd = " grep ENABLE_HTTPS " + cfgpath + " | awk '{print $3}' "
-                if controller0.ssh_conn.exec_cmd(cmd)[1] == 'Y':
+                cmd = " grep ENABLE_HTTPS " + cfgpath + " | awk \'{print $3}\' "
+                rc, output = controller0.ssh_conn.exec_cmd(cmd)
+                match = re.compile('(^\s*)Y(\s*?)$')
+                if rc == 0 and match.match(output):
+                    log.info("Getting certificate file")
                     bld_server_conn.rsync(CERTIFICATE_FILE_PATH,
                                           WRSROOT_USERNAME, controller0.host_ip,
                                           os.path.join(WRSROOT_HOME_DIR,
@@ -992,6 +1080,7 @@ if __name__ == '__main__':
 
                 cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
                 cmd += " config_controller --config-file " + cfgfile
+                #cmd += " config_controller --default"
                 #rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
                 # Switching to ssh due to CGTS-4051
                 rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
@@ -1014,25 +1103,26 @@ if __name__ == '__main__':
     # Run host bulk add 
     executed = False
     if not executed:
-        # No consistency in naming of hosts file
-        bulkfile_found = False
-        for bulkfile in BULKCFG_LIST: 
-            bulkpath = WRSROOT_HOME_DIR + "/" + bulkfile
-            cmd = "test -f " + bulkpath
-            if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
-                bulkfile_found = True
-                cmd = "system host-bulk-add " + bulkfile
-                rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
-                if rc != 0 or find_error_msg(output, "Configuration failed"):
-                    msg = "system host-bulk-add failed"
-                    log.error(msg)
-                    installer_exit._exit(1, msg)
-                break
+        if not tis_on_tis:
+            # No consistency in naming of hosts file
+            bulkfile_found = False
+            for bulkfile in BULKCFG_LIST:
+                bulkpath = WRSROOT_HOME_DIR + "/" + bulkfile
+                cmd = "test -f " + bulkpath
+                if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
+                    bulkfile_found = True
+                    cmd = "system host-bulk-add " + bulkfile
+                    rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+                    if rc != 0 or find_error_msg(output, "Configuration failed"):
+                        msg = "system host-bulk-add failed"
+                        log.error(msg)
+                        installer_exit._exit(1, msg)
+                    break
 
-        if not bulkfile_found:
-            msg = "Configuration failed: No host-bulk-add file was found."
-            log.error(msg)
-            installer_exit._exit(1, msg)
+            if not bulkfile_found:
+                msg = "Configuration failed: No host-bulk-add file was found."
+                log.error(msg)
+                installer_exit._exit(1, msg)
 
 
     # Complete controller0 configuration either as a regular host 
@@ -1083,17 +1173,62 @@ if __name__ == '__main__':
     # Bring up other hosts
     executed = False
     if not executed:
-        threads.clear()
-        for node in nodes:
-            if node.name != CONTROLLER0:
-                node_thread = threading.Thread(target=bring_up,name=node.name,args=(node, boot_device_dict, small_footprint))
-                threads.append(node_thread)
-                log.info("Starting thread for {}".format(node_thread.name))
-                node_thread.start()
+        if not tis_on_tis:
+            threads.clear()
+            for node in nodes:
+                if node.name != CONTROLLER0:
+                    node_thread = threading.Thread(target=bring_up,name=node.name,args=(node, boot_device_dict, small_footprint))
+                    threads.append(node_thread)
+                    log.info("Starting thread for {}".format(node_thread.name))
+                    node_thread.start()
 
 
-        for thread in threads:
-            thread.join()
+            for thread in threads:
+                thread.join()
+        else:
+            cumulus.launch_controller1()
+            # Set controller-1 personality after virtual controller finish spawning
+            time.sleep(60)
+            cmd =  "source /etc/nova/openrc; system host-list | grep None"
+            rc, ouput = controller0.ssh_conn.exec_cmd(cmd)
+            if rc is 0:
+                cmd = "source /etc/nova/openrc; system host-update 2 " \
+                      "personality=controller rootfs_device=vda boot_device=vda"
+                if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+                    wr_exit()._exit(1, msg)
+                    msg = "Failed to set personality for controller-1"
+                    log.error(msg)
+            else:
+                msg = "Launching controller-1 failed"
+                log.error(msg)
+                wr_exit()._exit(1, msg)
+
+            cumulus.launch_computes()
+            time.sleep(60)
+            cmd =  "source /etc/nova/openrc; system host-list | awk \'/None/ { print $2 }\'"
+            rc, ids = controller0.ssh_conn.exec_cmd(cmd)
+            if rc is 0:
+                cmd0 = "source /etc/nova/openrc;system host-update 3 " \
+                       "personality=compute hostname=compute-0 " \
+                       "rootfs_device=vda boot_device=vda"
+                cmd1 = "source /etc/nova/openrc;system host-update 4 " \
+                       "personality=compute hostname=compute-1 " \
+                       "rootfs_device=vda boot_device=vda"
+
+                rc0 = controller0.ssh_conn.exec_cmd(cmd0)[0]
+                rc1 = controller0.ssh_conn.exec_cmd(cmd1)[0]
+                if rc0 is not 0 or rc1 is not 0:
+                    msg = "Failed to set compute personality"
+                    log.error(msg)
+                    wr_exit()._exit(1, msg)
+
+            else:
+                msg = "Launching computes failed"
+                log.error(msg)
+                wr_exit()._exit(1, msg)
+
+
+
 
     # STORAGE LAB INSTALL
     executed = False
@@ -1129,7 +1264,7 @@ if __name__ == '__main__':
                 if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
                     msg = "Failed to unlock: " + node.name
                     log.error(msg)
-                    wr_exit._exit(1, msg)
+                    wr_exit()._exit(1, msg)
 
                 #wait_state(node, OPERATIONAL, ENABLED)
                 # Commented out since degraded state is acceptable during drbd
@@ -1149,7 +1284,7 @@ if __name__ == '__main__':
                 if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:
                     msg = "Failed during lab setup"
                     log.error(msg)
-                    wr_exit._exit(1, msg)
+                    wr_exit()._exit(1, msg)
                 nodes.remove(node)
 
                 break
@@ -1314,7 +1449,7 @@ if __name__ == '__main__':
 
         # If we made it this far, we probably had a successful install
         log.info("Terminating regular system install")
-        wr_exit._exit(0, "Terminating regular system install.\n"
+        wr_exit()._exit(0, "Terminating regular system install.\n"
                       + installed_load_info)
         # COMMON CODE TO MOVE OUT END
 
@@ -1375,3 +1510,6 @@ if __name__ == '__main__':
         vlm_exec_cmd(VLM_UNRESERVE, barcode)
 
     wr_exit()._exit(0, "Installer completed.\n" + installed_load_info)
+
+
+
