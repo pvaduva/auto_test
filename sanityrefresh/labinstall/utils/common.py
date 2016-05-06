@@ -51,6 +51,7 @@ def create_node_dict(nodes, personality):
     i = 0
     
     for node in nodes:
+
         config = configparser.ConfigParser()
         try:
             local_path = os.path.dirname(__file__)
@@ -69,11 +70,11 @@ def create_node_dict(nodes, personality):
             for opt in config.items(section):
                 key, value = opt
                 node_info_dict[section + '_' + key] = value
+
         name = personality + "-{}".format(i)
         node_info_dict['name'] = name
         node_info_dict['personality'] = personality
         node_info_dict['barcode'] = node
-
         node_dict[name]=Host(**node_info_dict)
         i += 1
 
@@ -83,6 +84,7 @@ def create_node_dict(nodes, personality):
         print()
 
     return node_dict
+
 
 def remove_markers(str):
     return str.translate({ord(OPEN_MARKER): '', ord(CLOSE_MARKER): ''})

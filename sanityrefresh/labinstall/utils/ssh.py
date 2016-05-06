@@ -57,7 +57,7 @@ class SSHClient(pxssh.pxssh):
         # Chain to parent constructor
         pxssh.pxssh.__init__(self, timeout=tmout, logfile=logf, echo=echo_flag, encoding=encode)
 
-    def connect(self, hostname, username, password, prompt=PROMPT):
+    def connect(self, hostname, username, password, prompt=PROMPT, exit_on_error=1):
         """Establish ssh connection to host."""
         try:
             log.info("Open SSH connection to {}@{}".format(username, hostname))
@@ -74,7 +74,10 @@ class SSHClient(pxssh.pxssh):
             msg = "Failed to login to SSH session: {}@{}".format(username, hostname)
             log.error(msg)
             self.close()
-            wr_exit()._exit(1, msg)
+            if exit_on_error:
+                wr_exit()._exit(1, msg)
+            else:
+                return 1, msg
 
     def disconnect(self):
         self.logout()
@@ -108,7 +111,11 @@ class SSHClient(pxssh.pxssh):
 
     def exec_cmd(self, cmd, timeout=SSH_EXPECT_TIMEOUT, expect_pattern=None, show_output=True):
         output = None
-        log.info(cmd)
+        # hide the password if
+        if cmd.startswith("sshpass"):
+            log.info(cmd.split(" ", 3)[3])
+        else:
+            log.info(cmd)
         self.sendline(cmd)
         if expect_pattern:
             try:
