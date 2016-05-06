@@ -978,19 +978,6 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
 
 
 def get_vm_ids(image=None, status=VMStatus.ACTIVE, flavor=None, host=None, tenant=None, delete=False):
-    """
-        Retrieve a list of vm_id based on list of critieria
-    Args:
-        image:
-        status:
-        flavor:
-        host:
-        tenant:
-        delete:
-
-    Returns:
-
-    """
     raise NotImplementedError
 
 
