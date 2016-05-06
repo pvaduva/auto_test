@@ -17,8 +17,6 @@ from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 
 
-
-
 @fixture(scope='module')
 def smallpage_flavor_vm(request):
     """
@@ -45,8 +43,8 @@ def smallpage_flavor_vm(request):
     vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
 
     vm = {'id': vm_id,
+          'pagesize': pagesize,
           'boot_source': boot_source,
-          'pagesize': pagesize
           }
 
     def delete_flavor_vm():
@@ -82,10 +80,25 @@ def is_enough_4k_page_memory():
 
 def test_4k_page_vm(smallpage_flavor_vm):
     """
-    check the heartbeat of a given vm
+    58) Launch VMs using 4k-memory-pages from sysinv_test_plan.pdf
+
+    Verify the version number (or str) exist for the system when execute the "system show" cli
 
     Args:
-        smallpage_flavor_vm: vm_ fixture which passes the created vm based on  <local_image, local_lvm, or remote>,
+        - Nothing
+
+    Setup:
+        - Setup flavor with mem_page_size to small
+        - Setup enough 4k page if there isnt enough inany of the compute nodes
+        - Setup vm with 4k page
+
+    Test Steps:
+        -execute "vm-topology" cli
+        -verify the vm from the table generated contain 'pgsize:4K'
+
+    Teardown:
+        - delete created 4k page vm
+        - delete created 4k page flavor
 
     """
     vm_id = smallpage_flavor_vm['id']
@@ -100,14 +113,7 @@ def test_4k_page_vm(smallpage_flavor_vm):
     vm_row = [row for row in nova_tab['values'] if row[1] == vm_id][0]
     attribute = vm_row[11].split(', ')
 
-    assert attribute[2] == 'pgsize:4K',"expected result to be pgsize:4K. " \
-                                    "However, output is {} ".format(attribute[2])
+    assert attribute[2] == 'pgsize:4K', "expected result to be pgsize:4K. " \
+                                        "However, output is {} ".format(attribute[2])
 
 
-
-    # tc end
-
-    # create flavour
-    # set flavour
-    # create vm from flavour
-    # check vm-topology that is created

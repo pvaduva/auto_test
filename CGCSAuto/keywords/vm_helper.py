@@ -17,7 +17,8 @@ def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn
     Get a list of vm ids.
 
     Args:
-        count (int): number of vms ids to return. If None, all vms for specific tenant will be returned.
+        count (int): number of vms ids to return. If None, all vms for specific tenant will be returned. If num of
+        existing vm is less than count additional vm will be created to match the count
         con_ssh (SSHClient):
         auth_info (dict):
         all_tenants (bool): whether to get any vms from all tenants or just admin tenant if auth_info is set to Admin

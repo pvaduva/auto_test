@@ -1,21 +1,21 @@
 import logging
 import os
 
-from setup_consts import LOG_DIR
+# from setup_consts import LOG_DIR
 from utils import exceptions
 
 FORMAT = "'%(asctime)s %(levelname)-5s %(filename)-10s %(funcName)-10s: %(message)s'"
 # TEST_LOG_LEVEL = 21
 # TODO: determine the name based on which lab to use
-FILE_NAME = LOG_DIR + '/TIS_AUTOMATION.log'
+# FILE_NAME = LOG_DIR + '/TIS_AUTOMATION.log'
 
 
 class TisLogger(logging.getLoggerClass()):
     def __init__(self, name='', level=logging.NOTSET):
         super().__init__(name, level)
 
-        os.makedirs(LOG_DIR, exist_ok=True)
-        logging.basicConfig(level=level, format=FORMAT, filename=FILE_NAME, filemode='w')
+        # os.makedirs(LOG_DIR, exist_ok=True)
+        # logging.basicConfig(level=level, format=FORMAT, filename=FILE_NAME, filemode='w')
         # reset test_step number when creating a logger instance
         self.test_step = -1
         self.show_log = self.isEnabledFor(logging.INFO)
@@ -73,10 +73,10 @@ class TisLogger(logging.getLoggerClass()):
 logging.setLoggerClass(TisLogger)
 LOG = logging.getLogger('testlog')
 
-# screen output handler
-handler = logging.StreamHandler()
-formatter = logging.Formatter('%(lineno)-4d%(levelname)-5s %(module)s.%(funcName)-8s: %(message)s')
-handler.setFormatter(formatter)
-handler.setLevel(logging.INFO)
-LOG.addHandler(handler)
+# # screen output handler
+# handler = logging.StreamHandler()
+# formatter = logging.Formatter('%(lineno)-4d%(levelname)-5s %(module)s.%(funcName)-8s: %(message)s')
+# handler.setFormatter(formatter)
+# handler.setLevel(logging.INFO)
+# LOG.addHandler(handler)
 

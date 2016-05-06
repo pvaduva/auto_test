@@ -5,12 +5,13 @@ from contextlib import contextmanager
 import pexpect
 from pexpect import pxssh
 
-from consts.auth import Guest, Host
-from consts.cgcs import Prompt, DATE_OUTPUT
-from consts.lab import Labs, NatBox
-from setup_consts import LOG_DIR, TEMP_DIR, KEYFILE_NAME
 from utils import exceptions, local_host
 from utils.tis_log import LOG
+
+from consts.auth import Guest, Host
+from consts.cgcs import Prompt, DATE_OUTPUT
+from consts.proj_vars import ProjVar
+from consts.lab import Labs, NatBoxes
 
 # setup color.format strings
 colorred = "\033[1;31m{0}\033[00m"
@@ -71,7 +72,7 @@ class SSHClient:
         self.cmd_output = ''
         self.force_password = force_password
         self.timeout = timeout
-        self.logpath = self.__get_logpath()
+        self.logpath = None
 
     def __get_logpath(self):
         lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith('__')]
@@ -82,7 +83,7 @@ class SSHClient:
         else:
             lab_name = self.host
 
-        return LOG_DIR + '/ssh_' + lab_name + ".log"
+        return ProjVar.get_var('LOG_DIR') + '/ssh_' + lab_name + ".log"
 
     def connect(self, retry=False, retry_interval=3, retry_timeout=300, prompt=None,
                 use_current=True, timeout=None):
@@ -110,6 +111,7 @@ class SSHClient:
                 # set to ignore ssh host fingerprinting
                 self._session.SSH_OPTS = _SSH_OPTS
                 self._session.force_password = self.force_password
+                self.logpath = self.__get_logpath()
                 self._session.logfile = open(self.logpath, 'w+')
 
                 # Login
@@ -359,7 +361,7 @@ class SSHClient:
         else:
             dest_folder_name = ''
 
-        dest_path = TEMP_DIR + dest_folder_name
+        dest_path = ProjVar.get_var('TEMP_DIR') + dest_folder_name
 
         to_host = local_host.get_host_ip() + ':'
         to_user = (dest_user if dest_user is not None else local_host.get_user()) + '@'
@@ -666,7 +668,8 @@ class VMSSHClient(SSHFromSSH):
 
         # This needs to be modified in centos case.
         if not force_password:
-            ssh_options = " -i {}".format(KEYFILE_NAME)
+
+            ssh_options = " -i {}".format(ProjVar.get_var('KEYFILE_NAME'))
         else:
             ssh_options = _SSH_OPTS
         self.ssh_cmd = '/usr/bin/ssh{} {}@{}'.format(ssh_options, self.user, self.host)
@@ -691,7 +694,7 @@ class FloatingClient(SSHClient):
 
 class NATBoxClient:
     # a list of natbox dicts from lab.NatBox class
-    __natbox_list = [getattr(NatBox, attr) for attr in dir(NatBox) if not attr.startswith('__')]
+    __natbox_list = [getattr(NatBoxes, attr) for attr in dir(NatBoxes) if not attr.startswith('__')]
 
     # internal dict that holds the natbox client if set_natbox_client was called
     __natbox_ssh_map = {}
@@ -722,7 +725,7 @@ class NATBoxClient:
         return cls.__natbox_ssh_map[natbox_ip]   # KeyError will be thrown if not exist
 
     @classmethod
-    def set_natbox_client(cls, natbox_ip=NatBox.NAT_BOX_HW['ip']):
+    def set_natbox_client(cls, natbox_ip=NatBoxes.NAT_BOX_HW['ip']):
         for natbox in cls.__natbox_list:
             ip = natbox['ip']
             if ip == natbox_ip.strip():

@@ -1,7 +1,7 @@
 class Labs:
     HP380 = {
         'short_name': 'hp380',
-        'name': 'yow-cgcs-hp380-1-4',
+        'name': 'yow-cgcs-hp380-1_4',
         'floating ip': '128.224.150.189',
         'controller-0 ip': '128.224.150.199',
         'controller-1 ip': '128.224.150.129',
@@ -86,7 +86,7 @@ class Labs:
 
     WCP_7_12 = {
         'short_name': 'wcp_7_12',
-        'name': 'yow-cgcs-wildcat-7-12',
+        'name': 'yow-cgcs-wildcat-7_12',
         'floating ip': '128.224.151.228',
         'controller-0 ip': '128.224.150.220',
         'controller-1 ip': '128.224.150.231',
@@ -94,7 +94,7 @@ class Labs:
 
     WCP_13_14 = {
         'short_name': 'wcp_13_14',
-        'name': 'yow-cgcs-wildcat-13-14',
+        'name': 'yow-cgcs-wildcat-13_14',
         'floating ip': '128.224.151.229',
         'controller-0 ip': '128.224.150.133',
         'controller-1 ip': '128.224.150.136',
@@ -102,7 +102,7 @@ class Labs:
 
     WCP_15_22 = {
         'short_name': 'wcp_15_22',
-        'name': 'yow-cgcs-wildcat-15-22',
+        'name': 'yow-cgcs-wildcat-15_22',
         'floating ip': '128.224.151.230',
         'controller-0 ip': '128.224.150.140',
         'controller-1 ip': '128.224.150.180',
@@ -127,7 +127,7 @@ def edit_lab_entry():
     raise NotImplementedError
 
 
-def add_lab_entry(dict_name, lab_name=None, **kwargs):
+def add_lab_entry(floating_ip, dict_name=None, short_name=None, name=None, **kwargs):
     """
     Add a new lab dictionary to Labs class
     Args:
@@ -138,26 +138,44 @@ def add_lab_entry(dict_name, lab_name=None, **kwargs):
     Returns:
 
     """
-    dict_name = dict_name.upper()
-    if dict_name in dir(Labs):
+    for attr in dir(Labs):
+        lab = getattr(Labs, attr)
+        if isinstance(lab, dict):
+            if lab['floating ip'] == floating_ip:
+                raise ValueError("Entry for {} already exists in Labs class!".format(floating_ip))
+
+    if dict_name and dict_name in dir(Labs):
         raise ValueError("Entry for {} already exists in Labs class!".format(dict_name))
 
-    if lab_name is None:
-        lab_name = dict_name.lower()
+    if not short_name:
+        short_name = floating_ip
 
-    lab_dict = {'name': lab_name}
+    if not name:
+        name = floating_ip
+
+    if not dict_name:
+        dict_name = floating_ip
+
+    lab_dict = {'name': name,
+                'short_name': short_name,
+                'floating ip': floating_ip,
+                }
+
     lab_dict.update(kwargs)
     setattr(Labs, dict_name, lab_dict)
+    return lab_dict
 
 
-class NatBox:
+class NatBoxes:
     NAT_BOX_HW = {
+        'name': 'nat_hw',
         'ip': '128.224.150.11',
         'user': 'cgcs',
         'password': 'li69nux'
     }
 
     NAT_BOX_CUMULUS = {
+        'name': 'nat_cumulus',
         'ip': '',
         'user': '',
         'password': ''
