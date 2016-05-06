@@ -38,6 +38,15 @@ class Tenant:
         cls.TENANT_1['region'] = region
         cls.TENANT_2['region'] = region
 
+    @classmethod
+    def add_tenant(cls, tenantname, dictname=None, username=None, password=None):
+        tenant_dict = dict(tenant=tenantname)
+        tenant_dict['user'] = username if username else tenantname
+        tenant_dict['password'] = password if password else tenant_dict['user']
+
+        dict_name = dictname.upper() if dictname else tenantname.upper()
+        setattr(cls, dict_name, tenant_dict)
+
     __primary = TENANT_1
 
     @classmethod

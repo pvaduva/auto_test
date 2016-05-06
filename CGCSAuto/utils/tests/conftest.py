@@ -1,6 +1,6 @@
 import pytest
 from consts.lab import Labs
-from consts.lab import NatBox
+from consts.lab import NatBoxes
 
 from consts.auth import Tenant
 from utils.ssh import ControllerClient, SSHClient, CONTROLLER_PROMPT
@@ -24,7 +24,7 @@ def setup_primary_tenant():
 
 @pytest.fixture(scope='session', autouse=True)
 def setup_natbox_ssh():
-    NATBoxClient.set_natbox_client(NatBox.NAT_BOX_HW['ip'])
+    NATBoxClient.set_natbox_client(NatBoxes.NAT_BOX_HW['ip'])
 
 
 @pytest.fixture(scope='function', autouse=True)

@@ -1,21 +1,15 @@
-import os
-
+from consts.lab import Labs, add_lab_entry, NatBoxes
 from utils import exceptions
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient
 from consts.auth import Tenant
 from consts.cgcs import Prompt
 from keywords import vm_helper, host_helper
-import setup_consts
 
 
-def create_tmp_dir():
-    os.makedirs(setup_consts.TEMP_DIR, exist_ok=True)
-
-
-def setup_tis_ssh():
+def setup_tis_ssh(lab):
     con_ssh = ControllerClient.get_active_controller(fail_ok=True)
-    lab = setup_consts.LAB
+
     if con_ssh is None:
         con_ssh = SSHClient(lab['floating ip'], 'wrsroot', 'li69nux', CONTROLLER_PROMPT)
         con_ssh.connect()
@@ -50,19 +44,18 @@ def set_env_vars(con_ssh):
         LOG.debug("Environment variable(s) updated.")
 
 
-def setup_primary_tenant():
-    primary_tenant = setup_consts.PRIMARY_TENANT
-    Tenant.set_primary(primary_tenant)
-    LOG.info("Primary Tenant for test session is set to {}".format(primary_tenant['tenant']))
+def setup_primary_tenant(tenant):
+    Tenant.set_primary(tenant)
+    LOG.info("Primary Tenant for test session is set to {}".format(tenant['tenant']))
 
 
-def setup_natbox_ssh(keyfile_path):
-    natbox_ip = setup_consts.NatBox.NAT_BOX_HW['ip']
+def setup_natbox_ssh(keyfile_path, natbox):
+    natbox_ip = natbox['ip']
     NATBoxClient.set_natbox_client(natbox_ip)
-    __copy_keyfile_to_natbox(natbox_ip, keyfile_path)
+    __copy_keyfile_to_natbox(natbox, keyfile_path)
 
 
-def __copy_keyfile_to_natbox(natbox_ip, keyfile_path):
+def __copy_keyfile_to_natbox(natbox, keyfile_path):
     # con_ssh = ControllerClient.get_active_controller()
     with host_helper.ssh_to_host('controller-0') as con_0_ssh:
         # con_0_ssh = ssh_to_controller0(ssh_client=con_ssh)
@@ -80,10 +73,9 @@ def __copy_keyfile_to_natbox(natbox_ip, keyfile_path):
             con_0_ssh.send()    # Repeat passphrase
             con_0_ssh.expect(Prompt.CONTROLLER_0)
 
-        # keyfile_path = setup_consts.KEYFILE_PATH
         cmd_1 = 'cp /home/wrsroot/.ssh/id_rsa ' + keyfile_path
         cmd_2 = 'chmod 600 ' + keyfile_path
-        cmd_3 = 'scp {} {}@{}:~/'.format(keyfile_path, setup_consts.NATBOX['user'], natbox_ip)
+        cmd_3 = 'scp {} {}@{}:~/'.format(keyfile_path, natbox['user'], natbox['ip'])
 
         rtn_1 = con_0_ssh.exec_cmd(cmd_1)[0]
         if not rtn_1 == 0:
@@ -97,21 +89,57 @@ def __copy_keyfile_to_natbox(natbox_ip, keyfile_path):
         if rtn_3_index == 0:
             con_0_ssh.send('yes')
             con_0_ssh.expect(Prompt.PASSWORD_PROMPT)
-        con_0_ssh.send(setup_consts.NATBOX['password'])
+        con_0_ssh.send(natbox['password'])
         con_0_ssh.expect()
         if not con_0_ssh.get_exit_code() == 0:
             raise exceptions.CommonError("Failed to copy keyfile to NatBox")
 
 
-def boot_vms():
+def boot_vms(is_boot):
     # boot some vms for the whole test session if boot_vms flag is set to True
-    if not setup_consts.BOOT_VMS:
-        return
+    if is_boot:
+        con_ssh = ControllerClient.get_active_controller()
+        if con_ssh.file_exists('~/instances_group0/launch_tenant1-avp1.sh'):
+            vm_helper.launch_vms_via_script(vm_type='avp', num_vms=1, tenant_name='tenant1')
+            vm_helper.launch_vms_via_script(vm_type='virtio', num_vms=1, tenant_name='tenant2')
+        else:
+            vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT_1)
+            vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT_2)
 
-    con_ssh = ControllerClient.get_active_controller()
-    if con_ssh.file_exists('~/instances_group0/launch_tenant1-avp1.sh'):
-        vm_helper.launch_vms_via_script(vm_type='avp', num_vms=1, tenant_name='tenant1')
-        vm_helper.launch_vms_via_script(vm_type='virtio', num_vms=1, tenant_name='tenant2')
+
+def get_lab_dict(labname):
+    labname = labname.strip().lower()
+    labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
+
+    for lab in labs:
+        if labname.replace('-', '_') in lab['name'].replace('-', '_').lower().strip() or labname == lab['floating ip']:
+            return lab
     else:
-        vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT_1)
-        vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT_2)
+        if labname.startswith('128.224'):
+            return add_lab_entry(labname)
+
+        lab_dict_names = [item for item in dir(Labs) if not item.startswith('__')]
+        raise ValueError("{} is not found! All labs: {}".format(labname, lab_dict_names))
+
+
+def get_natbox_dict(natboxname):
+    natboxname = natboxname.lower().strip()
+    natboxes = [getattr(NatBoxes, item) for item in dir(NatBoxes) if not item.startswith('__')]
+
+    for natbox in natboxes:
+        if natboxname.replace('-', '_') in natbox['name'].replace('-', '_') or natboxname == natbox['ip']:
+            return natbox
+    else:
+        raise ValueError("{} is not a valid input.".format(natboxname))
+
+
+def get_tenant_dict(tenantname):
+    tenantname = tenantname.lower().strip().replace('_', '').replace('-', '')
+    tenants = [getattr(Tenant, item) for item in dir(Tenant) if not (item.startswith('__') or callable(item))]
+    print(tenants)
+
+    for tenant in tenants:
+        if tenantname == tenant['tenant'].replace('_', '').replace('-', ''):
+            return tenant
+    else:
+        raise ValueError("{} is not a valid input".format(tenantname))

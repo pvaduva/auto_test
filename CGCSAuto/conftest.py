@@ -1,21 +1,16 @@
-import os
 import logging
-import importlib
-from os.path import expanduser
+import os
 from time import strftime
 
 import pytest
 
 import setups
 import setup_consts
-from consts.lab import Labs
-# from testfixtures.verify_fixtures import *
 from utils.tis_log import LOG
-# LOG_DIR = setup_consts.LOG_DIR
-# TCLIST_PATH = setup_consts.TCLIST_PATH
-# PYTESTLOG_PATH = setup_consts.PYTESTLOG_PATH
+from consts.proj_vars import ProjVar
 
 con_ssh = None
+
 
 @pytest.fixture(scope='session', autouse=True)
 def setup_test_session(request):
@@ -23,11 +18,11 @@ def setup_test_session(request):
     Setup primary tenant and Nax Box ssh before the first test gets executed.
     TIS ssh was already set up at collecting phase.
     """
-    setups.create_tmp_dir()
-    setups.setup_primary_tenant()
+    os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
+    setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     setups.set_env_vars(con_ssh)
-    setups.setup_natbox_ssh(GlobVar.KEYFILE_PATH)
-    setups.boot_vms()
+    setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'))
+    setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
     def teardown():
         try:
@@ -129,7 +124,7 @@ def pytest_runtest_makereport(item, call, __multicall__):
         if not res_in_tests:
             res_in_tests = 'Unknow!'
 
-        with open(GlobVar.TCLIST_PATH, mode='a') as f:
+        with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
             f.write('{}\t{}\n'.format(res_in_tests, test_name))
 
     return report
@@ -140,7 +135,7 @@ def pytest_collectstart():
     Set up the ssh session at collectstart. Because skipif condition is evaluated at the collecting test cases phase.
     """
     global con_ssh
-    con_ssh = setups.setup_tis_ssh()
+    con_ssh = setups.setup_tis_ssh(ProjVar.get_var("LAB"))
 
 
 def pytest_runtest_setup(item):
@@ -186,72 +181,57 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
 # Command line options #
 ########################
 
-def pytest_cmdline_preparse(args):
-    pytestlog_opt = "--resultlog={}".format(GlobVar.PYTESTLOG_PATH)
-    args.append(pytestlog_opt)
+def pytest_configure(config):
+    lab_arg = config.getoption('lab')
+    natbox_arg = config.getoption('natbox')
+    tenant_arg = config.getoption('tenant')
+    bootvms_arg = config.getoption('bootvms')
+
+    # decide on the values of custom options based on cmdline inputs or values in setup_consts
+    lab = setups.get_lab_dict(lab_arg) if lab_arg else setup_consts.LAB
+    natbox = setups.get_natbox_dict(natbox_arg) if natbox_arg else setup_consts.NATBOX
+    tenant = setups.get_tenant_dict(tenant_arg) if tenant_arg else setup_consts.PRIMARY_TENANT
+    is_boot = True if bootvms_arg else setup_consts.BOOT_VMS
+
+    # compute directory for all logs based on the lab and timestamp on local machine
+    log_dir = os.path.expanduser("~") + "/AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
+
+    # set project constants, which will be used when scp keyfile, and save ssh log, etc
+    ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot)
+
+    os.makedirs(log_dir, exist_ok=True)
+    config_logger(log_dir)
+
+    # set resultlog save location
+    resultlog = config.getoption('resultlog')
+    if not resultlog:
+        config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
+
 
 def pytest_addoption(parser):
-    config_logger_and_path()
+    lab_help = "Lab to connect to. Valid input: lab name such as 'cgcs-r720-3_7', or floating ip such as " \
+               "'128.224.150.142'. If it's a new lab, use floating ip before it is added to the automation framework."
+    tenant_help = "Default tenant to use when unspecified. Valid values: tenant1, tenant2, or admin"
+    natbox_help = "NatBox to use. Valid values: nat_hw, or nat_cumulus."
+    bootvm_help = "Boot 2 vms at the beginning of the test session as background VMs."
+    parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
+    parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
+    parser.addoption('--natbox', action='store', metavar='natboxname', default=None, help=natbox_help)
+    parser.addoption('--bootvms', '--boot_vms', dest='bootvms', action='store_true', help=bootvm_help)
 
 
-def config_logger_and_path():
-    # if lab is passed via cmdline: do following
-    # global LOG_DIR, TEMP_DIR, KEYFILE_NAME, KEYFILE_PATH, TCLIST_PATH, PYTESTLOG_PATH, LAB_NAME
-    LAB = Labs.IP_1_4
-    # setup_consts.set_lab(LAB)
-    importlib.reload(setup_consts)
-    print("HEY ADD OPTION is here")
-    print("HHHHHH CREATING DIRECTORY")
-    # print(FILE_NAME)
-    # LAB_NAME = LAB['short_name']
+def config_logger(log_dir):
+    # logger for log saved in file
+    file_name = log_dir + '/TIS_AUTOMATION.log'
+    formatter_file = "'%(asctime)s %(levelname)-5s %(filename)-10s %(funcName)-10s: %(message)s'"
+    logging.basicConfig(level=logging.NOTSET, format=formatter_file, filename=file_name, filemode='w')
 
-    GlobVar.set_vars(LAB)
-    LOG_DIR = expanduser("~") + "/AUTOMATION_LOGS/" + LAB['short_name'] + '/' + strftime('%Y%m%d%H%M')
-    #
-    # TCLIST_PATH = LOG_DIR + '/testcases.lst'
-    # PYTESTLOG_PATH = LOG_DIR + '/pytestlog.log'
-    # TEMP_DIR = LOG_DIR + '/tmp_files'
-    #
-    # KEYFILE_NAME = 'keyfile_{}.pem'.format(LAB_NAME)
-    # KEYFILE_PATH = '/home/wrsroot/.ssh/' + KEYFILE_NAME
-    # print(TCLIST_PATH)
-    # print(PYTESTLOG_PATH)
-    # print(LOG_DIR)
-    FILE_NAME = LOG_DIR + '/TIS_AUTOMATION.log'
-    os.makedirs(LOG_DIR, exist_ok=True)
-    FORMAT = "'%(asctime)s %(levelname)-5s %(filename)-10s %(funcName)-10s: %(message)s'"
-    logging.basicConfig(level=logging.NOTSET, format=FORMAT, filename=FILE_NAME, filemode='w')
-    # handler = logging.FileHandler(FILE_NAME, 'w')
-    print("are you there1....")
+    # logger for stream output
+    stream_hdler = logging.StreamHandler()
+    formatter_stream = logging.Formatter('%(lineno)-4d%(levelname)-5s %(module)s.%(funcName)-8s: %(message)s')
+    stream_hdler.setFormatter(formatter_stream)
+    stream_hdler.setLevel(logging.INFO)
+    LOG.addHandler(stream_hdler)
 
-    # LOG.addHandler(handler)
-    # screen output handler
-    handler2 = logging.StreamHandler()
-    formatter = logging.Formatter('%(lineno)-4d%(levelname)-5s %(module)s.%(funcName)-8s: %(message)s')
-    handler2.setFormatter(formatter)
-    handler2.setLevel(logging.INFO)
-    LOG.addHandler(handler2)
 
 # TODO: add support for feature marks
-class GlobVar:
-    # KEYFILE_PATH = KEYFILE_NAME = LOG_DIR = TCLIST_PATH = PYTESTLOG_PATH = LAB_NAME = TEMP_DIR = None
-
-    @classmethod
-    def set_vars(cls, lab):
-        print("SET VARSSSSSSSS")
-        cls.LAB_NAME = lab['short_name']
-
-        cls.LOG_DIR = expanduser("~") + "/AUTOMATION_LOGS/" + cls.LAB_NAME + '/' + strftime('%Y%m%d%H%M')
-
-        cls.TCLIST_PATH = cls.LOG_DIR + '/testcases.lst'
-        cls.PYTESTLOG_PATH = cls.LOG_DIR + '/pytestlog.log'
-        cls.TEMP_DIR = cls.LOG_DIR + '/tmp_files'
-
-        cls.KEYFILE_NAME = 'keyfile_{}.pem'.format(cls.LAB_NAME)
-        cls.KEYFILE_PATH = '/home/wrsroot/.ssh/' + cls.KEYFILE_NAME
-        print(dir(cls))
-        print(getattr(cls, "LOG_DIR"))
-
-    @classmethod
-    def get_glob_var(cls, var_name):
-        return getattr(cls, var_name)
