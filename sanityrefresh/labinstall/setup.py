@@ -6,14 +6,19 @@
 # of an applicable Wind River license agreement.
 #
 
-import setuptools
+from setuptools import setup, find_packages
 
-setuptools.setup(
+setup(
     name='labinstall',
     description='Automated lab install',
     version='1.0.0',
     license='windriver',
-    packages=['', 'utils'],
-    package_data={'labinstall': ['node_info/*.ini', 'lab_settings/*.ini']},
+    packages = ['.', 'node_info', 'lab_settings','utils'],
+    package_data = {'node_info': ['*.ini'],
+                    'lab_settings': ['*.ini']},
+    entry_points={
+        'console_scripts': [
+            'install_system = install_system:main',
+        ]}
 
 )

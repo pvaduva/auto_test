@@ -43,11 +43,18 @@ from utils.classes import Host
 import utils.wr_telnetlib as telnetlib
 from install_cumulus import Cumulus_TiS, create_cumulus_node_dict
 
+"""----------------------------------------------------------------------------
+Global definitions
+----------------------------------------------------------------------------"""
+
 LOGGER_NAME = os.path.splitext(__name__)[0]
+log = logutils.getLogger(LOGGER_NAME)
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 PUBLIC_SSH_KEY = None
-USERNAME = None
+USERNAME =  getpass.getuser()
 PASSWORD = None
+controller0 = None
+
 
 def parse_args():
     ''' Get commandline options. '''
@@ -314,7 +321,7 @@ def deploy_key(conn):
             conn.write_line('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
             conn.write_line("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
 
-def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path):
+def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, output_dir):
     ''' Transfer the load and set the feed on the tuxlab server in preparation
         for booting up the lab. 
     '''
@@ -418,7 +425,7 @@ def burn_usb_load_image(node,  bld_server_conn, load_path):
 
 
 
-def wipe_disk(node):
+def wipe_disk(node, output_dir):
     ''' Perform a wipedisk operation on the lab before booting a new load into
         it. 
     '''
@@ -466,7 +473,7 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
         If the expected state is not entered, the boot operation will be 
         terminated.
     '''
-
+    global controller0
     if isinstance(nodes, Host):
         nodes = [nodes]
     else:
@@ -555,6 +562,7 @@ def get_availability_controller1():
     ## Todo: Make this generic for any node
     ''' Gets the availablity state of a node after unlock
     '''
+    global controller0
     cmd = "source /etc/nova/openrc; system host-show controller-1 | awk ' / availability / { print $4}'"
     output = controller0.ssh_conn.exec_cmd(cmd)[1]
     return output
@@ -571,7 +579,7 @@ def get_system_name(bld_server_conn, lab_cfg_path):
     cmd = "grep SYSTEM_NAME " + lab_cfg_path + "/" + LAB_SETUP_CFG_FILENAME
     return bld_server_conn.exec_cmd(cmd)[1]
 
-def bring_up(node, boot_device_dict, small_footprint, close_telnet_conn=True):
+def bring_up(node, boot_device_dict, small_footprint, output_dir, close_telnet_conn=True):
     ''' Initiate the boot and installation operation.
     '''
 
@@ -697,7 +705,7 @@ def wait_until_drbd_sync_complete(controller0, timeout=600, check_interval=180):
 
         return sync_complete
 
-if __name__ == '__main__':
+def main():
 
     boot_device_dict = DEFAULT_BOOT_DEVICE_DICT
     custom_lab_setup = False
@@ -710,7 +718,8 @@ if __name__ == '__main__':
 
     args = parse_args()
 
-    USERNAME = getpass.getuser()
+    global PASSWORD
+
     PASSWORD = args.password or getpass.getpass()
     PUBLIC_SSH_KEY = get_ssh_key()
 
@@ -817,6 +826,7 @@ if __name__ == '__main__':
     else:
         controller_dict = create_node_dict(controller_nodes, CONTROLLER)
 
+    global controller0
     controller0 = controller_dict[CONTROLLER0]
 
     if compute_nodes is not None:
@@ -891,7 +901,7 @@ if __name__ == '__main__':
     if not executed:
         if str(boot_device_dict.get('controller-0')) != "USB" \
                 and not tis_on_tis:
-            set_network_boot_feed(controller0.barcode, tuxlab_server, bld_server_conn, load_path)
+            set_network_boot_feed(controller0.barcode, tuxlab_server, bld_server_conn, load_path, output_dir)
 
     nodes = list(controller_dict.values()) + list(compute_dict.values()) + list(storage_dict.values())
     if not tis_on_tis:
@@ -932,7 +942,7 @@ if __name__ == '__main__':
 
             # Run the wipedisk utility if the nodes are accessible
             for node in nodes:
-                node_thread = threading.Thread(target=wipe_disk,name=node.name,args=(node,))
+                node_thread = threading.Thread(target=wipe_disk,name=node.name,args=(node, output_dir,))
                 threads.append(node_thread)
                 log.info("Starting thread for {}".format(node_thread.name))
                 node_thread.start()
@@ -945,7 +955,7 @@ if __name__ == '__main__':
                 vlm_exec_cmd(VLM_TURNOFF, barcode)
 
             # Boot up controller0
-            bring_up(controller0, boot_device_dict, small_footprint, close_telnet_conn=False)
+            bring_up(controller0, boot_device_dict, small_footprint, output_dir, close_telnet_conn=False)
             logutils.print_step("Initial login and password set for " + controller0.name)
             controller0.telnet_conn.login(reset=True)
     else:
@@ -1177,7 +1187,7 @@ if __name__ == '__main__':
             threads.clear()
             for node in nodes:
                 if node.name != CONTROLLER0:
-                    node_thread = threading.Thread(target=bring_up,name=node.name,args=(node, boot_device_dict, small_footprint))
+                    node_thread = threading.Thread(target=bring_up,name=node.name,args=(node, boot_device_dict, small_footprint, output_dir))
                     threads.append(node_thread)
                     log.info("Starting thread for {}".format(node_thread.name))
                     node_thread.start()
@@ -1512,4 +1522,5 @@ if __name__ == '__main__':
     wr_exit()._exit(0, "Installer completed.\n" + installed_load_info)
 
 
-
+if __name__ == '__main__':
+    main()
