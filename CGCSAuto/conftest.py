@@ -27,6 +27,8 @@ def setup_test_session(request):
 
     def teardown():
         if has_fail and ProjVar.get_var('COLLECT_ALL'):
+            # Collect tis logs if collect all required upon test(s) failure
+            # Failure on collect all would not change the result of the last test case.
             setups.collect_tis_logs(con_ssh)
 
         try:

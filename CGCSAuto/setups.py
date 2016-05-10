@@ -1,4 +1,5 @@
 import re
+import traceback
 
 from utils import exceptions
 from utils.tis_log import LOG
@@ -175,8 +176,8 @@ def collect_tis_logs(con_ssh=None):
     dest_path = ProjVar.get_var('LOG_DIR')
     try:
         LOG.info("Copying log file from lab {} to local {}".format(lab_ip, dest_path))
-        scp_to_local(logpath, lab_ip, dest_path=dest_path)
-        LOG.info("CGCS logs {} are successfully copied to local directory: {}".format(logpath, dest_path))
+        scp_to_local(source_path=logpath, source_ip=lab_ip,dest_path=dest_path)
+        LOG.info("{} is successfully copied to local directory: {}".format(logpath, dest_path))
     except Exception as e:
-        raise
-        # LOG.error("Failed to copy log file to localhost. Details: {}".format(e))
+        LOG.warning("Failed to copy log file to localhost.")
+        LOG.error(e, exc_info=True)
