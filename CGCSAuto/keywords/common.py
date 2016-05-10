@@ -10,7 +10,7 @@ def scp_from_local(source_path, dest_ip, dest_user='wrsroot', dest_password='li6
     __scp_base(cmd, remote_password=dest_password, logdir=dest_path, timeout=timeout)
 
 
-def scp_to_local(source_path, dest_path, source_ip, source_user='wrsroot', source_password='li69nux', is_dir=False,
+def scp_to_local(source_path, source_ip, dest_path, source_user='wrsroot', source_password='li69nux', is_dir=False,
                  timeout=60):
     dir_option = '-r ' if is_dir else ''
     cmd = 'scp {}{}@{}:{} {}'.format(dir_option, source_user, source_ip, source_path, dest_path)
