@@ -289,6 +289,7 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path):
     lab_settings_filepath = SCRIPT_DIR + "/" + lab_settings_rel_path
     if not os.path.isfile(lab_settings_filepath):
         log.error('Lab settings filepath was not found.')
+        lab_settings_filepath = None
 
     return lab_cfg_path, lab_settings_filepath
 
