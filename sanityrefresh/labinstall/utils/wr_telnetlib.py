@@ -1025,7 +1025,8 @@ class Telnet:
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
                 #regex = re.compile(b"\\x1b\[1;37;44m.*\|\s(.*)\s+\**\|")
                 #regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s*(.*)\s+(.*)\|")
-                regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)(\s+?)\|")
+                #regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)(\s+?)\|")
+                regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)\s+(.*?)\|")
                 #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
                 try:
                     index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
