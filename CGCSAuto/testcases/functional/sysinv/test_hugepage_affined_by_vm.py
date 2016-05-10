@@ -59,12 +59,18 @@ def test_hugepage_affined_by_vm(create_vm_):
     The test assume there us no other VMs running
 
     Args:
-        create_vm_:
+        an VM created to test memory are been cosumed by NUMA node
 
-    Returns:
-        if correct number big page is used by vm
+    Setup:
+        - create a simple VM object with 2M hugepages
+
+    Test Steps:
+        - check the memory of the node where the VM is created
+        - compare it with the memory of the VM to see if they are the same
+
+    Teardown:
+        - remove VM and it's flavours
     """
-    # need to make sure this is the only vm created
 
     vm_id = create_vm_['id']
     LOG.tc_step("Verify memory info for vm {} via vm-topology.".format(vm_id))

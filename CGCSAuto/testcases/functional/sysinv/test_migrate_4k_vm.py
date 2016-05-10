@@ -11,6 +11,8 @@ flavor_params = [
     # 'ephemeral', 'swap', 'storage_backing'
     (0, 0, 'local_image'),
 ]
+
+
 @fixture(scope='module', params=flavor_params)
 def flavor_(request):
     """
@@ -54,21 +56,18 @@ def flavor_(request):
 def vm_(request, flavor_):
 
     storage = flavor_['storage']
-    boot_source = 'image' if 'image' in request.param else 'volume'
+    boot_source = 'volume'
 
     vm_id = vm_helper.boot_vm(flavor=flavor_['id'], source=boot_source)[1]
 
-    image_with_vol = request.param == 'image_with_vol'
-    pagesize=flavor_['page_size']
-    if image_with_vol:
-        vm_helper.attach_vol_to_vm(vm_id=vm_id)
+    page_size=flavor_['page_size']
 
     vm = {'id': vm_id,
           'boot_source': boot_source,
-          'image_with_vol': image_with_vol,
+          'image_with_vol': False,
           'storage': storage,
           'local_disk': request.param == 'image' or bool(flavor_['local_disk']),
-          'page_size': flavor_['page_size'],
+          'page_size': page_size
           }
 
     def delete_vm():
@@ -88,7 +87,7 @@ def is_enough_4k_page_memory():
     # check if any 4k pages greater than 60000 means more than 2G total.
     check = False
     for host in host_helper.get_hypervisors():
-        for proc_id in [0,1]:
+        for proc_id in [0, 1]:
             num_4k_page = system_helper.get_host_mem_values(host, ['vm_total_4K'], proc_id=proc_id)
             if int(num_4k_page[0]) > 600000:
                 check = True

@@ -463,3 +463,69 @@ def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     args_ += tenant_id
 
     cli.cinder('quota-update', args_, ssh_client=con_ssh, auth_info=auth_info)
+
+
+def create_qos_specs(vol_name, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+
+    if not kwargs:
+        raise ValueError("Please specify at least one quota=value pair via kwargs.")
+
+    args_ = ''
+    args_ += vol_name
+
+    for key in kwargs:
+        args_ += '--{} {} '.format(key, kwargs[key])
+
+    table_ = table_parser.table(cli.cinder('qos-create', args_, ssh_client=con_ssh, auth_info=auth_info))
+    qos_specs_id = table_parser.get_value_two_col_table(table_, 'id')
+
+    return qos_specs_id
+
+
+    # return the ID of the created qos_specs
+
+def create_volume_type(vol_type_id, con_ssh=None, auth_info=Tenant.ADMIN):
+
+    # option to make vol_type_name an optional variable and create arbitrary volume type?
+
+    cli.cinder('type-create', vol_type_id, ssh_client=con_ssh, auth_info=auth_info)
+
+
+def delete_volume_type(vol_type_id, con_ssh=None, auth_info=Tenant.ADMIN):
+
+    # option to make vol_type_name an optional variable and create arbitrary volume type?
+
+    cli.cinder('type-delete', vol_type_id, ssh_client=con_ssh, auth_info=auth_info)
+
+
+def get_qos_list(con_ssh=None, auth_info=None):
+
+    table_ = table_parser.table(cli.cinder('qos-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    return table_
+
+
+def associate_volume_type_to_qos(qos_spec_id, vol_type_id, fail_ok=False, con_ssh=None, auth_info=None):
+    """
+    Associates qos specs with specified volume type.
+
+    """
+    # TODO a check for volume type
+    # TODO a check qos spec
+
+    args_ = qos_spec_id + ' ' + vol_type_id
+    exit_code, cmd_output = cli.cinder('qos-associate', args_, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+
+    if exit_code == 1:
+        if fail_ok:
+            return 1, cmd_output
+        raise exceptions.CLIRejected(cmd_output)
+
+    return 0, "Volume type is associated to qos spec"
+
+
+def get_qos_association(qos_spec_id, con_ssh=None, auth_info=None):
+
+    table_ = table_parser.table(cli.cinder('qos-get-association', qos_spec_id, ssh_client=con_ssh, auth_info=auth_info))
+
+    return table_

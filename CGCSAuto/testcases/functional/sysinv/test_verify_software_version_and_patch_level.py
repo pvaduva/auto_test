@@ -27,10 +27,11 @@ def test_verify_software_version():
         - Nothing
 
     """
-    LOG.tc_step("Verify the software_version row exist under 'system show' cli with none empty string")
+    LOG.tc_step("Verify the software_version row exist under 'system show' cli with none empty string of digits")
     table_ = table_parser.table(cli.system('show'))
     sys_version = table_parser.get_value_two_col_table(table_, 'software_version')
-    assert sys_version, "Expect system version to be a string but is actually Empty"
+    assert sys_version[0:2].isdigit() == sys_version[3:5].isdigit(),"Expect system version to start with xx.xx digit." \
+                                                                    " But it's actually {}".format(sys_version)
 
 
 def test_verify_patch_level():

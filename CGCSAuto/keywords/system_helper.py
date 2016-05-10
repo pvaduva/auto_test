@@ -586,6 +586,17 @@ def get_host_mem_values(host, headers, proc_id, con_ssh=None, auth_info=Tenant.A
 
 
 def get_host_used_mem_values(host, proc_id=0, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Return number of MiB used by a specific host
+    Args:
+        host:
+        proc_id:
+        auth_info:
+        con_ssh:
+
+    Returns:
+
+    """
     mem_vals = get_host_mem_values(
         host, ['mem_total(MiB)','mem_avail(MiB)','avs_hp_size(MiB)', 'avs_hp_total'],
         proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)
