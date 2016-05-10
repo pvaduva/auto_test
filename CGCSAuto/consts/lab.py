@@ -131,11 +131,14 @@ def add_lab_entry(floating_ip, dict_name=None, short_name=None, name=None, **kwa
     """
     Add a new lab dictionary to Labs class
     Args:
+        floating_ip (str): floating ip of a lab to be added
         dict_name: name of the entry, such as 'PV0'
-        lab_name: name of the TiS system, such as 'yow-cgcs-pv-0'
-        **kwargs: other information of the lab such as floating ip, controller ip, etc
+        short_name: short name of the TiS system, such as ip_1_4
+        name: name of the TiS system, such as 'yow-cgcs-pv-0'
+        **kwargs: other information of the lab such as controllers' ips, etc
 
     Returns:
+        dict: lab dict added to Labs class
 
     """
     for attr in dir(Labs):
@@ -180,5 +183,4 @@ class NatBoxes:
         'user': '',
         'password': ''
     }
-
 

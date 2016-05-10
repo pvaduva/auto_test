@@ -1,21 +1,8 @@
 class ProjVar:
     __var_dict = {}
-    # __var_dict = {
-    #     'KEYFILE_PATH': None,
-    #     'KEYFILE_NAME': None,
-    #     'LOG_DIR': None,
-    #     'TCLIST_PATH': None,
-    #     'PYTESTLOG_PATH': None,
-    #     'LAB_NAME': None,
-    #     'TEMP_DIR': None,
-    #     'PRIMARY_TENANT': None,
-    #     'LAB': None,
-    #     'BOOT_VMS': None,
-    #     'NATBOX': None
-    # }
 
     @classmethod
-    def set_vars(cls, lab, natbox, logdir, tenant, is_boot):
+    def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all):
         labname = lab['short_name']
 
         cls.__var_dict = {
@@ -30,10 +17,17 @@ class ProjVar:
             'LAB': lab,
             'BOOT_VMS': is_boot,
             'NATBOX': natbox,
+            'COLLECT_ALL': collect_all
         }
 
     @classmethod
+    def set_var(cls, **kwargs):
+        for key, val in kwargs.items():
+            cls.__var_dict[key.upper()] = val
+
+    @classmethod
     def get_var(cls, var_name):
+        var_name = var_name.upper()
         valid_vars = cls.__var_dict.keys()
         if var_name not in valid_vars:
             raise ValueError("Invalid var_name. Valid vars: {}".format(valid_vars))

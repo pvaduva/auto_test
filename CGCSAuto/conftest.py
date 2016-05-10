@@ -10,6 +10,7 @@ from utils.tis_log import LOG
 from consts.proj_vars import ProjVar
 
 con_ssh = None
+has_fail = False
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -25,6 +26,9 @@ def setup_test_session(request):
     setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
     def teardown():
+        if has_fail and ProjVar.get_var('COLLECT_ALL'):
+            setups.collect_tis_logs(con_ssh)
+
         try:
             con_ssh.close()
         except:
@@ -119,6 +123,8 @@ def pytest_runtest_makereport(item, call, __multicall__):
         if 'Test Passed' in res_in_log:
             res_in_tests = 'Passed'
         elif 'Test Failed' in res_in_log:
+            global has_fail
+            has_fail = True
             res_in_tests = 'Failed'
 
         if not res_in_tests:
@@ -186,18 +192,20 @@ def pytest_configure(config):
     natbox_arg = config.getoption('natbox')
     tenant_arg = config.getoption('tenant')
     bootvms_arg = config.getoption('bootvms')
+    collect_all = config.getoption('collectall')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
     lab = setups.get_lab_dict(lab_arg) if lab_arg else setup_consts.LAB
     natbox = setups.get_natbox_dict(natbox_arg) if natbox_arg else setup_consts.NATBOX
     tenant = setups.get_tenant_dict(tenant_arg) if tenant_arg else setup_consts.PRIMARY_TENANT
     is_boot = True if bootvms_arg else setup_consts.BOOT_VMS
+    collect_all = True if collect_all else setup_consts.COLLECT_ALL
 
     # compute directory for all logs based on the lab and timestamp on local machine
     log_dir = os.path.expanduser("~") + "/AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
 
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
-    ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot)
+    ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all)
 
     os.makedirs(log_dir, exist_ok=True)
     config_logger(log_dir)
@@ -214,10 +222,13 @@ def pytest_addoption(parser):
     tenant_help = "Default tenant to use when unspecified. Valid values: tenant1, tenant2, or admin"
     natbox_help = "NatBox to use. Valid values: nat_hw, or nat_cumulus."
     bootvm_help = "Boot 2 vms at the beginning of the test session as background VMs."
+    collect_all_help = "Run collect all on TiS server at the end of test session if any test fails."
     parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
     parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
     parser.addoption('--natbox', action='store', metavar='natboxname', default=None, help=natbox_help)
-    parser.addoption('--bootvms', '--boot_vms', dest='bootvms', action='store_true', help=bootvm_help)
+    parser.addoption('--bootvms', '--boot_vms', '--boot-vms', dest='bootvms', action='store_true', help=bootvm_help)
+    parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
+                     help=collect_all_help)
 
 
 def config_logger(log_dir):

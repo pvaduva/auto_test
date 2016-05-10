@@ -1,22 +1,43 @@
-from utils.tis_log import LOG
+import pexpect
 from consts.auth import Tenant
 
 
-def collect_tis_logs(con_ssh=None):
-    # TODO: lock hosts if hosts are unlocked and not online
-    LOG.info("Collecting all logs upon test case fail.")
-    con_ssh.send('collect all')
-    expect_list = ['.*\(yes/no\)\?', '.*password:', 'Compressing Tarball ..: /scratch/ALL_NODES_.*', con_ssh.prompt]
-    expect_rtn = -1
-    while not expect_rtn == 2:
-        expect_rtn = con_ssh.expect(expect_list, timeout=60)
-        if expect_rtn == 0:
-            con_ssh.send('yes')
-        elif expect_rtn == 1:
-            con_ssh.send(con_ssh.password)
-        elif expect_rtn == 3:
-            LOG.error("Collecting logs failed. No ALL_NODES logs found.")
-            return
+def scp_from_local(source_path, dest_ip, dest_user='wrsroot', dest_password='li69nux', dest_path='/home/wrsroot',
+                   timeout=60, is_dir=False):
+    dir_option = '-r ' if is_dir else ''
+    cmd = 'scp {}{} {}@{}:{}'.format(dir_option, source_path, dest_user, dest_ip, dest_path)
+
+    __scp_base(cmd, remote_password=dest_password, logdir=dest_path, timeout=timeout)
+
+
+def scp_to_local(source_path, dest_path, source_ip, source_user='wrsroot', source_password='li69nux', is_dir=False,
+                 timeout=60):
+    dir_option = '-r ' if is_dir else ''
+    cmd = 'scp {}{}@{}:{} {}'.format(dir_option, source_user, source_ip, source_path, dest_path)
+
+    __scp_base(cmd, remote_password=source_password, logdir=dest_path, timeout=timeout)
+
+
+def __scp_base(cmd, remote_password, logdir=None, timeout=60):
+    if logdir:
+        logfilepath = logdir + '/scp_files.log'
+        logfile = open(logfilepath, 'w+')
+    else:
+        logfile = None
+
+    local_child = pexpect.spawn(command=cmd, encoding='utf-8', logfile=logfile)
+    index = local_child.expect([pexpect.EOF, 'assword:', 'yes/no'], timeout=timeout)
+
+    if index == 2:
+        local_child.sendline('yes')
+        index = local_child.expect(pexpect.EOF, 'assword:')
+
+    if index == 1:
+        local_child.sendline(remote_password)
+        local_child.expect(pexpect.EOF)
+
+    if logfile:
+        logfile.close()
 
 
 def get_tenant_name(auth_info=None):

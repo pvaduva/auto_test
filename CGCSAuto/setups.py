@@ -1,10 +1,14 @@
-from consts.lab import Labs, add_lab_entry, NatBoxes
+import re
+
 from utils import exceptions
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient
 from consts.auth import Tenant
 from consts.cgcs import Prompt
+from consts.lab import Labs, add_lab_entry, NatBoxes
+from consts.proj_vars import ProjVar
 from keywords import vm_helper, host_helper
+from keywords.common import scp_to_local
 
 
 def setup_tis_ssh(lab):
@@ -124,7 +128,7 @@ def get_lab_dict(labname):
 
 def get_natbox_dict(natboxname):
     natboxname = natboxname.lower().strip()
-    natboxes = [getattr(NatBoxes, item) for item in dir(NatBoxes) if not item.startswith('__')]
+    natboxes = [getattr(NatBoxes, item) for item in dir(NatBoxes) if not item.startswith('_')]
 
     for natbox in natboxes:
         if natboxname.replace('-', '_') in natbox['name'].replace('-', '_') or natboxname == natbox['ip']:
@@ -135,11 +139,44 @@ def get_natbox_dict(natboxname):
 
 def get_tenant_dict(tenantname):
     tenantname = tenantname.lower().strip().replace('_', '').replace('-', '')
-    tenants = [getattr(Tenant, item) for item in dir(Tenant) if not (item.startswith('__') or callable(item))]
-    print(tenants)
+    tenants = [getattr(Tenant, item) for item in dir(Tenant) if not item.startswith('_') and item.isupper()]
 
     for tenant in tenants:
         if tenantname == tenant['tenant'].replace('_', '').replace('-', ''):
             return tenant
     else:
         raise ValueError("{} is not a valid input".format(tenantname))
+
+
+def collect_tis_logs(con_ssh=None):
+    LOG.info("Collecting all hosts logs...")
+    con_ssh.send('collect all')
+
+    expect_list = ['.*password for wrsroot:', 'collecting data.', con_ssh.prompt]
+    index_1 = con_ssh.expect(expect_list, timeout=10)
+    if index_1 == 2:
+        LOG.error("Something is wrong with collect all. Check ssh console log for detail.")
+        return
+    elif index_1 == 0:
+        con_ssh.send(con_ssh.password)
+        con_ssh.expect('collecting data')
+
+    index_2 = con_ssh.expect(['/scratch/ALL_NODES.*', con_ssh.prompt], timeout=900)
+    if index_2 == 0:
+        output = con_ssh.cmd_output
+        con_ssh.expect()
+        logpath = re.findall('.*(/scratch/ALL_NODES_.*.tar).*', output)[0]
+        LOG.info("\n################### TiS server log path: {} #######################".format(logpath))
+    else:
+        LOG.error("Collecting logs failed. No ALL_NODES logs found.")
+        return
+
+    lab_ip = ProjVar.get_var('LAB')['floating ip']
+    dest_path = ProjVar.get_var('LOG_DIR')
+    try:
+        LOG.info("Copying log file from lab {} to local {}".format(lab_ip, dest_path))
+        scp_to_local(logpath, lab_ip, dest_path=dest_path)
+        LOG.info("CGCS logs {} are successfully copied to local directory: {}".format(logpath, dest_path))
+    except Exception as e:
+        raise
+        # LOG.error("Failed to copy log file to localhost. Details: {}".format(e))

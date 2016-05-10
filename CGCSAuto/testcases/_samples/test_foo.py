@@ -1,15 +1,13 @@
 from pytest import fixture, mark, skip
 
-from utils import cli
-from utils import table_parser
 from utils.tis_log import LOG
-from keywords import nova_helper, vm_helper, host_helper
+from keywords import nova_helper
 from setup_consts import P1, P2, P3
 
 _skip = True
 
 # @mark.skipif(_skip, reason='test skip if')
-@mark.usefixtures('check_alarms')
+# @mark.usefixtures('check_alarms')
 @mark.parametrize(('param1', 'param2', 'param3'), [
     P1(('val1', 1, True)),
     P2(('val2', 2, False)),
@@ -27,7 +25,7 @@ def test_dummy1(param1, param2, param3):
 
     assert 0, 'dummy test failed ~~~~~~'
 
-
+@mark.usefixtures('check_alarms')
 def test_dummy2():
     LOG.tc_step("test dummy 2 step~~")
     pass
