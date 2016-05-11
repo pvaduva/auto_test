@@ -1036,18 +1036,19 @@ def main():
                               controller0.host_ip, 
                               os.path.join(WRSROOT_HOME_DIR, "license.lic"),
                               pre_opts=pre_opts)
-            bld_server_conn.rsync(controller0.host_config_filename, 
-                              WRSROOT_USERNAME, controller0.host_ip, 
-                              os.path.join(WRSROOT_HOME_DIR, SYSTEM_CFG_FILENAME),
-                              pre_opts=pre_opts)
-            bld_server_conn.rsync(controller0.host_lab_filename,
-                              WRSROOT_USERNAME, controller0.host_ip,
-                              os.path.join(WRSROOT_HOME_DIR, "lab_setup.conf"),
-                              pre_opts=pre_opts)
-            bld_server_conn.rsync(controller0.host_hosts_filename,
-                              WRSROOT_USERNAME, controller0.host_ip,
-                              os.path.join(WRSROOT_HOME_DIR, BULK_CFG_FILENAME),
-                              pre_opts=pre_opts)
+            # COMMENTING OUT WORKAROUND FOR R720-1/2 NO LONGER NEEDED
+            #bld_server_conn.rsync(controller0.host_config_filename, 
+            #                  WRSROOT_USERNAME, controller0.host_ip, 
+            #                  os.path.join(WRSROOT_HOME_DIR, SYSTEM_CFG_FILENAME),
+            #                  pre_opts=pre_opts)
+            #bld_server_conn.rsync(controller0.host_lab_filename,
+            #                  WRSROOT_USERNAME, controller0.host_ip,
+            #                  os.path.join(WRSROOT_HOME_DIR, "lab_setup.conf"),
+            #                  pre_opts=pre_opts)
+            #bld_server_conn.rsync(controller0.host_hosts_filename,
+            #                  WRSROOT_USERNAME, controller0.host_ip,
+            #                  os.path.join(WRSROOT_HOME_DIR, BULK_CFG_FILENAME),
+            #                  pre_opts=pre_opts)
 
         cmd = 'grep -q "TMOUT=" ' + WRSROOT_ETC_PROFILE
         cmd += " && echo " + WRSROOT_PASSWORD + " | sudo -S"
