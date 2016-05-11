@@ -174,7 +174,7 @@ def get_alarms(uuid=False, con_ssh=None):
     if uuid:
         args += ' --uuid'
 
-    table_ = table_parser.table(cli.system('alarm-list', args, ssh_client=con_ssh), multiline_val_in_str=True)
+    table_ = table_parser.table(cli.system('alarm-list', args, ssh_client=con_ssh), combine_multiline_entry=True)
     return table_
 
 
@@ -202,7 +202,7 @@ def get_events(num=5, uuid=False, show_only=None, query_key=None, query_value=No
             raise ValueError("Query value is not supplied for key - {}".format(query_key))
         data_type_arg = '' if not query_type else "{}::".format(query_type.lower())
         args += ' -q {}={}{}'.format(query_key.lower(), data_type_arg, query_value.lower())
-    args += ' --nowrap'
+    args += ' --nowrap --nopaging'
     if uuid:
         args += ' --uuid'
     if show_only:
@@ -435,7 +435,8 @@ def get_vm_topology_tables(*table_names, con_ssh=None):
 
     show_args = ','.join(table_names)
 
-    tables_ = table_parser.tables(con_ssh.exec_cmd('vm-topology -s {}'.format(show_args), expect_timeout=30)[1])
+    tables_ = table_parser.tables(con_ssh.exec_cmd('vm-topology -s {}'.format(show_args), expect_timeout=30)[1],
+                                  combine_multiline_entry=False)
     return tables_
 
 
@@ -515,7 +516,7 @@ def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_in
         return 0, "1G memory is modified to {} in pending.".format(hugepage_num)
 
 
-def set_host_4k_pages(host, proc_id=0, smallpage_num=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Modify host memory on given processor to the closest 4k pages value
 
@@ -575,7 +576,7 @@ def set_host_4k_pages(host, proc_id=0, smallpage_num=None, fail_ok=False, auth_i
 
 
 def get_host_mem_values(host, headers, proc_id, con_ssh=None, auth_info=Tenant.ADMIN):
-    table_ = table_parser.table(cli.system('host-memory-list', host, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.system('host-memory-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
 
     res = []
     for header in headers:

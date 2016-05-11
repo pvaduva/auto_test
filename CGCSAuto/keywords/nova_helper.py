@@ -222,8 +222,10 @@ def unset_flavor_extra_specs(flavor, extra_specs, check_first=True, con_ssh=None
         auth_info (dict):
         fail_ok (bool):
         extra_specs (str|list): extra spec(s) to be removed. At least one should be provided.
+        check_first (bool): Whether to check if extra spec exists in flavor before attempt to unset
 
     Returns (tuple): (rtn_code (int), message (str))
+        (-1, 'Extra spec(s) <specs> not exist in flavor. Do nothing.')
         (0, 'Flavor extra specs unset successfully.'): required extra spec(s) removed successfully
         (1, <stderr>): unset extra spec cli rejected
         (2, '<spec_name> is still in the extra specs list'): post action check failed

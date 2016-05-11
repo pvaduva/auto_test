@@ -108,7 +108,8 @@ def test_4k_page_vm(smallpage_flavor_vm):
     LOG.tc_step("Verify cpu info for vm {} via vm-topology.".format(vm_id))
     con_ssh = ControllerClient.get_active_controller()
     # retrieve the correct table from the vm-topology
-    nova_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers',expect_timeout=30)[1])[0]
+    nova_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers',expect_timeout=30)[1],
+                                   combine_multiline_entry=False)[0]
 
     vm_row = [row for row in nova_tab['values'] if row[1] == vm_id][0]
     attribute = vm_row[11].split(', ')

@@ -24,7 +24,7 @@ def test_set_mem_page_size_extra_specs(flavor_id_module, mem_page_size):
 #####################################################################################################################
 
 @fixture(scope='module')
-def flavor_1g(request):
+def flavor_1g():
     flavor = nova_helper.create_flavor(name='flavor-1g', ram=1024)[1]
     ResourceCleanup.add('flavor', resource_id=flavor, scope='module')
 
@@ -43,27 +43,24 @@ def flavor_mem_page_size(request, flavor_1g):
     return mem_page_size
 
 @fixture(scope='module')
-def image_cgcsguest(request):
-    image_id = glance_helper.get_image_id_from_name(name='cgcs-guest')
-
-    def delete_metadata():
-        nova_helper.delete_image_metadata(image_id, ImageMetadata.MEM_PAGE_SIZE)
-    request.addfinalizer(delete_metadata)
+def image_mempage():
+    image_id = glance_helper.create_image(name='mempage_cgcs-guest')
+    ResourceCleanup.add('image', image_id, scope='module')
 
     return image_id
 
 
 @mark.p1
 @mark.parametrize('image_mem_page_size', testdata)
-def test_boot_vm_mem_page_size(flavor_1g, flavor_mem_page_size, image_cgcsguest, image_mem_page_size):
+def test_boot_vm_mem_page_size(flavor_1g, flavor_mem_page_size, image_mempage, image_mem_page_size):
     """
     Test boot vm with various memory page size setting in flavor and image.
-    Notes: 1G huge page related tests are in test_mem_page_size_hugepage.py, as they require reconfigure the host.
+    Notes: 1G huge page related tests are in test_mem_page_size_config.py, as they require reconfigure the host.
     
     Args:
         flavor_1g (str): flavor id of a flavor with ram set to 2G
         flavor_mem_page_size (str): memory page size extra spec value to set in flavor
-        image_cgcsguest (str): image id for cgcs-guest image
+        image_mempage (str): image id for cgcs-guest image
         image_mem_page_size (str): memory page metadata value to set in image
 
     Setup:
@@ -83,11 +80,11 @@ def test_boot_vm_mem_page_size(flavor_1g, flavor_mem_page_size, image_cgcsguest,
     """
 
     if image_mem_page_size is None:
-        nova_helper.delete_image_metadata(image_cgcsguest, ImageMetadata.MEM_PAGE_SIZE)
+        nova_helper.delete_image_metadata(image_mempage, ImageMetadata.MEM_PAGE_SIZE)
         expt_code = 0
 
     else:
-        nova_helper.set_image_metadata(image_cgcsguest, **{ImageMetadata.MEM_PAGE_SIZE: image_mem_page_size})
+        nova_helper.set_image_metadata(image_mempage, **{ImageMetadata.MEM_PAGE_SIZE: image_mem_page_size})
         if flavor_mem_page_size is None:
             expt_code = 4
 
@@ -101,7 +98,7 @@ def test_boot_vm_mem_page_size(flavor_1g, flavor_mem_page_size, image_cgcsguest,
                 "code is {}.".format(flavor_mem_page_size, image_mem_page_size, expt_code))
 
     actual_code, vm_id, msg, vol_id = vm_helper.boot_vm(name='mem_page_size', flavor=flavor_1g, source='image',
-                                                        source_id=image_cgcsguest, fail_ok=True)
+                                                        source_id=image_mempage, fail_ok=True)
 
     if vm_id:
         ResourceCleanup.add('vm', vm_id, scope='function', del_vm_vols=False)
@@ -161,8 +158,8 @@ def test_vm_mem_pool(flavor_1g, mem_page_size, volume_):
     pre_computes_tab = system_helper.get_vm_topology_tables('computes')[0]
 
     LOG.tc_step("Boot a vm with mem page size spec - {}".format(mem_page_size))
-    code, vm_id, msg, vol_id = vm_helper.boot_vm('mempool_'+mem_page_size, flavor_1g, source='volume', source_id=volume_,
-                                                 fail_ok=True)
+    code, vm_id, msg, vol_id = vm_helper.boot_vm('mempool_'+mem_page_size, flavor_1g, source='volume',
+                                                 source_id=volume_, fail_ok=True)
     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
     LOG.tc_step("Check memory is taken from expected pool that matches mem page size - {}, or vm is not "

@@ -56,7 +56,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     Reboot one or multiple host(s)
 
     Args:
-        hostnames (list): list of hostnames to reboot. str input is also acceptable when only one host to be rebooted
+        hostnames (list|str): hostname(s) to reboot. str input is also acceptable when only one host to be rebooted
         timeout (int): timeout waiting for reboot to complete in seconds
         con_ssh (SSHClient): Active controller ssh
         fail_ok (bool): Whether it is okay or not for rebooting to fail on any host
@@ -149,14 +149,17 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
 
 def __hosts_stay_in_states(hosts, duration=10, con_ssh=None, **states):
     """
+    Check if hosts stay in specified state(s) for given duration.
 
     Args:
-        hosts:
-        duration:
-        con_ssh:
-        **states:
+        hosts (list|str): hostname(s)
+        duration (int): duration to check for in seconds
+        con_ssh (SSHClient):
+        **states: such as availability=[online, available]
 
     Returns:
+        bool: True if host stayed in specified states for given duration; False if host is not in specified states
+            anytime in the duration.
 
     """
     end_time = time.time() + duration
@@ -169,16 +172,19 @@ def __hosts_stay_in_states(hosts, duration=10, con_ssh=None, **states):
 
 def _wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, duration=3, con_ssh=None, **states):
     """
+    Wait for hosts to go in specified states
 
     Args:
-        hosts:
-        timeout:
-        check_interval:
+        hosts (str|list):
+        timeout (int):
+        check_interval (int):
         duration (int): wait for a host to be in given state(s) for at least <duration> seconds
-        con_ssh:
-        **states:
+        con_ssh (SSHClient):
+        **states: such as availability=[online, available]
 
     Returns:
+        bool: True if host reaches specified states within timeout, and stays in states for given duration;
+            False otherwise
 
     """
     if isinstance(hosts, str):
@@ -355,30 +361,41 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
 
 def get_hostshow_value(host, field, con_ssh=None):
     """
-        Retrieve the value of certain field in the system host-show from get_hostshow_values()
-        Examples: Example: admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
+    Retrieve the value of certain field in the system host-show from get_hostshow_values()
+
+    Examples:
+        admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
         would return if host is 'locked' or 'unlocked'
+
     Args:
-        field: The field of the table that user want
+        host (str): hostname to check for
+        field (str): The field of the host-show table
+        con_ssh (SSHClient)
 
     Returns:
-        The value of the field from host
+        The value of the specified field for given host
+
     """
     return get_hostshow_values(host, con_ssh, field)[field]
 
 
 def get_hostshow_values(host, con_ssh=None, *fields):
     """
+    Get values of specified fields for given host
 
     Args:
-        host:
-        con_ssh:
-        *fields:
+        host (str):
+        con_ssh (SSHClient):
+        *fields: field names
 
     Returns (dict): {field1: value1, field2: value2, ...}
 
     """
+
     table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
+    if not fields:
+        raise ValueError("At least one field name needs to provided via *fields")
+
     rtn = {}
     for field in fields:
         val = table_parser.get_value_two_col_table(table_, field)

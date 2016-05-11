@@ -76,7 +76,8 @@ def test_hugepage_affined_by_vm(create_vm_):
     LOG.tc_step("Verify memory info for vm {} via vm-topology.".format(vm_id))
     con_ssh = ControllerClient.get_active_controller()
     # retrieve the correct table from the vm-topology
-    nova_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers', expect_timeout=30)[1])[0]
+    nova_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers', expect_timeout=30)[1],
+                                   combine_multiline_entry=False)[0]
 
     vm_row = [row for row in nova_tab['values'] if row[1] == vm_id][0]
     host_name = vm_row[4]

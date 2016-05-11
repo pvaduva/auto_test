@@ -1,8 +1,10 @@
+import re
+
 from pytest import fixture, mark
 
 from utils import table_parser
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec, ImageMetadata
+from consts.cgcs import FlavorSpec, ImageMetadata, NovaCLIOutput
 from keywords import nova_helper, vm_helper, glance_helper, host_helper, system_helper, cinder_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
@@ -17,6 +19,7 @@ def flavor_2g():
 
 def _modify(host):
     system_helper.set_host_1g_pages(host=host, proc_id=0, hugepage_num=4)
+    system_helper.set_host_4k_pages(host=host, proc_id=1, smallpage_num=2048*2*1024/4)
 
 
 def _revert(host):
@@ -29,46 +32,39 @@ def add_huge_page_mem(config_host):
     config_host(host=host, modify_func=_modify, revert_func=_revert)
 
 
-@fixture(scope='module')
-def image_cgcsguest(request):
-    image_id = glance_helper.get_image_id_from_name(name='cgcs-guest')
+testdata = [None, 'any', 'large', 'small', '2048', '1048576']
+@fixture(params=testdata)
+def flavor_mem_page_size(request, flavor_2g):
+    mem_page_size = request.param
 
-    def delete_metadata():
-        nova_helper.delete_image_metadata(image_id, ImageMetadata.MEM_PAGE_SIZE)
-    request.addfinalizer(delete_metadata)
+    if mem_page_size is None:
+        nova_helper.unset_flavor_extra_specs(flavor_2g, FlavorSpec.MEM_PAGE_SIZE)
+    else:
+        nova_helper.set_flavor_extra_specs(flavor_2g, **{FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
+
+    return mem_page_size
+
+@fixture(scope='module')
+def image_mempage():
+    image_id = glance_helper.create_image(name='mempage')[1]
+    ResourceCleanup.add('image', image_id, scope='module')
 
     return image_id
 
 
 @mark.p1
-@mark.parametrize(('flavor_mem_page_size', 'image_mem_page_size'), [
-    ('1048576', None),
-    ('1048576', 'any'),
-    ('1048576', 'large'),
-    ('1048576', 'small'),
-    ('1048576', '2048'),
-    ('1048576', '1048576'),
-    (None, '1048576'),
-    ('any', '1048576'),
-    ('large', '1048576'),
-    ('small', '1048576'),
-    ('2048', '1048576'),
-])
-def test_boot_vm_hugepage(flavor_2g, flavor_mem_page_size, image_cgcsguest, image_mem_page_size):
+@mark.parametrize('image_mem_page_size', testdata)
+def test_boot_vm_mem_page_size(flavor_2g, flavor_mem_page_size, image_mempage, image_mem_page_size):
     """
     Test boot vm with various memory page size setting in flavor and image.
-    This specific test function is to test with at least one compute that supports 1G hugepages.
-
-    Notes: Tests with default compute config (0 1G pages) are in test_mem_page_size_default.py.
 
     Args:
         flavor_2g (str): flavor id of a flavor with ram set to 2G
         flavor_mem_page_size (str): memory page size extra spec value to set in flavor
-        image_cgcsguest (str): image id for cgcs-guest image
+        image_mempage (str): image id for cgcs-guest image
         image_mem_page_size (str): memory page metadata value to set in image
 
     Setup:
-        - Configure a compute to have 4 1G hugepages (module)
         - Create a flavor with 2G RAM (module)
         - Get image id of cgcs-guest image (module)
 
@@ -81,21 +77,15 @@ def test_boot_vm_hugepage(flavor_2g, flavor_mem_page_size, image_cgcsguest, imag
     Teardown:
         - Delete vm if booted
         - Delete created flavor (module)
-        - Re-Configure the compute to have 0 hugepages (module)
 
     """
 
-    if flavor_mem_page_size is None:
-        nova_helper.unset_flavor_extra_specs(flavor_2g, FlavorSpec.MEM_PAGE_SIZE)
-    else:
-        nova_helper.set_flavor_extra_specs(flavor_2g, **{FlavorSpec.MEM_PAGE_SIZE: flavor_mem_page_size})
-
     if image_mem_page_size is None:
-        nova_helper.delete_image_metadata(image_cgcsguest, ImageMetadata.MEM_PAGE_SIZE)
+        nova_helper.delete_image_metadata(image_mempage, ImageMetadata.MEM_PAGE_SIZE)
         expt_code = 0
 
     else:
-        nova_helper.set_image_metadata(image_cgcsguest, **{ImageMetadata.MEM_PAGE_SIZE: image_mem_page_size})
+        nova_helper.set_image_metadata(image_mempage, **{ImageMetadata.MEM_PAGE_SIZE: image_mem_page_size})
         if flavor_mem_page_size is None:
             expt_code = 4
 
@@ -108,8 +98,8 @@ def test_boot_vm_hugepage(flavor_2g, flavor_mem_page_size, image_cgcsguest, imag
     LOG.tc_step("Attempt to boot a vm with flavor_mem_page_size: {}, and image_mem_page_size: {}. And check return "
                 "code is {}.".format(flavor_mem_page_size, image_mem_page_size, expt_code))
 
-    actual_code, vm_id, msg, vol_id = vm_helper.boot_vm(name='huge_page', flavor=flavor_2g, source='image',
-                                                        source_id=image_cgcsguest, fail_ok=True)
+    actual_code, vm_id, msg, vol_id = vm_helper.boot_vm(name='mem_page_size', flavor=flavor_2g, source='image',
+                                                        source_id=image_mempage, fail_ok=True)
 
     if vm_id:
         ResourceCleanup.add('vm', vm_id, scope='function', del_vm_vols=False)
@@ -118,7 +108,7 @@ def test_boot_vm_hugepage(flavor_2g, flavor_mem_page_size, image_cgcsguest, imag
             expt_code, actual_code, msg)
 
     if expt_code != 0:
-        assert "Page size" in msg
+        assert re.search(NovaCLIOutput.VM_BOOT_REJECT_MEM_PAGE_SIZE_FORBIDDEN, msg)
 
 
 @fixture(scope='module')
@@ -164,8 +154,9 @@ def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_):
     pre_computes_tab = system_helper.get_vm_topology_tables('computes')[0]
 
     LOG.tc_step("Boot a vm with mem page size spec - {}".format(mem_page_size))
-    vm_id = vm_helper.boot_vm('mempool_1g', flavor_2g, source='volume', source_id=volume_)[1]
+    code, vm_id, msg, vo = vm_helper.boot_vm('mempool_1g', flavor_2g, source='volume', source_id=volume_, fail_ok=True)
     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+    assert 0 == code, "VM is not successfully booted."
 
     vm_host = nova_helper.get_vm_host(vm_id)
     LOG.tc_step("Calculate memory change on vm host - {}".format(vm_host))

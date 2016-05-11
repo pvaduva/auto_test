@@ -79,6 +79,7 @@ class Prompt:
 class NovaCLIOutput:
     VM_DELETE_REJECTED_NOT_EXIST = "No server with a name or ID of '(.*)' exists."
     VM_DELETE_ACCEPTED = "Request to delete server () has been accepted."
+    VM_BOOT_REJECT_MEM_PAGE_SIZE_FORBIDDEN = "Page size .* forbidden against .*"
 
 
 class FlavorSpec:

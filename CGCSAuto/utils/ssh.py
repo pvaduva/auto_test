@@ -121,7 +121,7 @@ class SSHClient:
                 # Set prompt for matching
                 self.set_prompt(prompt)
 
-                # try to goto next line to ensure login really succeeded. pxssh login method has a big bug where it
+                # try to goto next line to ensure login really succeeded. pxssh login method has a bug where it
                 # almost won't report any login failures.
                 # Login successful if prompt matching is found
                 if self._is_connected(fail_ok=False):
@@ -135,8 +135,8 @@ class SSHClient:
                     raise exceptions.SSHException("Unable to connect to host")
 
             # pxssh has a bug where the TIMEOUT exception during pxssh.login is completely eaten. i.e., it will still
-            # pretend login passed even timeout exception was thrown.So below exceptions are unlikely to be received at
-            # all. But leave as is in case pxssh fix it in future releases.
+            # pretend login passed even if timeout exception was thrown. So below exceptions are unlikely to be received
+            # at all. But leave as is in case pxssh fix it in future releases.
             except (OSError, pexpect.TIMEOUT, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh) as e:
                 # fail login if retry=False
                 if not retry:
@@ -148,8 +148,8 @@ class SSHClient:
                         self.host, self.user, self.password))
                     raise
 
-                # print out traceback for more info before retrying
-                LOG.info("Login failed due to a known exception.\n{}".format(e))
+                # print out error for more info before retrying
+                LOG.info("Login failed due to error: {}".format(e))
 
             except:
                 LOG.error("Login failed due to unknown exception!")
@@ -605,20 +605,6 @@ class SSHFromSSH(SSHClient):
 
 
 class VMSSHClient(SSHFromSSH):
-    # VM_AUTH_MAP = {
-    #     'cgcs_guest': {
-    #         'user': 'root',
-    #         'password': 'root'
-    #     },
-    #     'ubuntu':{
-    #         'user': 'ubuntu',
-    #         'password': 'ubuntu'
-    #     },
-    #     'cirros': {
-    #         'user': '',
-    #         'password': ''
-    #     }
-    # }
 
     def __init__(self, vm_ip, vm_name, vm_img_name='cgcs-guest', user=None, password=None, natbox_client=None,
                  prompt=None, timeout=20):

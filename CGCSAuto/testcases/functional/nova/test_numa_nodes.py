@@ -193,7 +193,8 @@ def test_2_nodes_unset_numa_nodes_reject(flavor_unset):
                                        **{FlavorSpec.NUMA_NODES: 2, FlavorSpec.NUMA_0: 0, FlavorSpec.NUMA_1: 1})
 
     LOG.tc_step("Attempt to unset numa_nodes extra spec with guest numa node extra spec, and verify cli is rejected.")
-    code, output = nova_helper.unset_flavor_extra_specs(flavor_2_nodes, fail_ok=True, extra_specs=FlavorSpec.NUMA_NODES)
+    code, output = nova_helper.unset_flavor_extra_specs(flavor_2_nodes, fail_ok=True, extra_specs=FlavorSpec.NUMA_NODES,
+                                                        check_first=False)
     assert code == 1, "Expect nova flavor-key unset cli to be rejected. Actual: {}".format(output)
 
 
@@ -236,13 +237,14 @@ def test_0_node_set_guest_numa_node_value_reject(flavor_0_node):
 
     LOG.tc_step("Attempt to set guest numa node extra spec without numa_nodes extra spec, and verify cli is rejected.")
     code, output = nova_helper.set_flavor_extra_specs(flavor=flavor_0_node, fail_ok=True, **numa_node_spec_0)
-    assert code == 1, "Expect nova flavor-key set cli to be rejected. Actual: {}".format(output)
+    assert 1 == code, "Expect nova flavor-key set cli to be rejected. Actual: {}".format(output)
 
 
 def test_0_node_unset_numa_nodes_reject(flavor_0_node):
     LOG.tc_step("Attempt to unset numa nodes spec when it's not in the spec, and verify cli is rejected.")
-    code, output = nova_helper.unset_flavor_extra_specs(flavor_0_node, FlavorSpec.NUMA_NODES, fail_ok=True)
-    assert code == 1, "Expect nova flavor-key unset cli to be rejected. Actual: {}".format(output)
+    code, output = nova_helper.unset_flavor_extra_specs(flavor_0_node, FlavorSpec.NUMA_NODES, fail_ok=True,
+                                                        check_first=False)
+    assert 1 == code, "Expect nova flavor-key unset cli to be rejected. Actual: {}".format(output)
 
 
 ################################
@@ -297,13 +299,18 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
     LOG.tc_step("Verify cpu info for vm {} via vm-topology.".format(vm_id))
     con_ssh = ControllerClient.get_active_controller()
     nova_tab, libvert_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers,libvirt',
-                                                                 expect_timeout=30)[1])
+                                                                 expect_timeout=30)[1], combine_multiline_entry=False)
     # Filter out the line for vm under test
     nova_tab = table_parser.filter_table(nova_tab, ID=vm_id)
     libvert_tab = table_parser.filter_table(libvert_tab, uuid=vm_id)
 
     instance_topology = table_parser.get_column(nova_tab, 'instance_topology')[0]
-    cpulist = table_parser.get_column(libvert_tab, 'cpulist')[0].split(sep=',')
+    cpulist = table_parser.get_column(libvert_tab, 'cpulist')[0]
+    if '-' in cpulist:
+        cpulist = cpulist.split(sep='-')
+        cpulist_len = int(cpulist[1]) - int(cpulist[0]) + 1
+    else:
+        cpulist_len = len(cpulist.split(sep=','))
     vcpus_libvert = int(table_parser.get_column(libvert_tab, 'vcpus')[0])
     nodelist = table_parser.get_column(libvert_tab, 'nodelist')[0]
 
@@ -324,12 +331,18 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
     assert actual_node_vals == expected_node_vals, \
         "Individual NUMA node value(s) for vm {} is different than numa_node setting in flavor".format(vm_id)
 
-    assert vcpus_libvert == vcpus, \
+    assert vcpus == vcpus_libvert, \
         "Number of vcpus for vm {} in libvert view is different than what's set in flavor.".format(vm_id)
 
-    assert len(cpulist) == vcpus, \
+    assert vcpus == cpulist_len, \
         "Number of entries in cpulist for vm {} in libvirt view is different than number of vcpus set in flavor".format(
                 vm_id)
 
-    assert nodelist == '0-1' if numa_nodes == 2 else '0', \
+    if '-' in nodelist:
+        nodelist = nodelist.split(sep='-')
+        nodelist_len = int(nodelist[1]) - int(nodelist[0]) + 1
+    else:
+        nodelist_len = 1 if nodelist else 0
+
+    assert numa_nodes == nodelist_len, \
         "nodelist for vm {} in libvert view does not match number of numa nodes set in flavor".format(vm_id)

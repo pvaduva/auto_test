@@ -9,7 +9,6 @@ from consts.auth import Tenant
 #########################################
 
 LAB = Labs.R720_3_7
-# LAB = Labs.IP_1_4
 PRIMARY_TENANT = Tenant.TENANT_2
 NATBOX = NatBoxes.NAT_BOX_HW
 BOOT_VMS = False

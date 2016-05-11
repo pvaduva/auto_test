@@ -46,7 +46,7 @@ def listing(output_lines):
     return items
 
 
-def tables(output_lines):
+def tables(output_lines, combine_multiline_entry=True):
     """Find all ascii-tables in output and parse them.
     Return list of tables parsed from cli output as dicts.
     (see OutputParser.table())
@@ -76,7 +76,7 @@ def tables(output_lines):
                 start = header = None
                 table_.append(line)
 
-                parsed = table(table_)
+                parsed = table(table_, combine_multiline_entry=combine_multiline_entry)
                 parsed['label'] = label
                 tables_.append(parsed)
 
@@ -102,7 +102,7 @@ def __table(output_lines):
     rows in 'values' key.
     """
     table_ = {'headers': [], 'values': []}
-    columns = None
+    columns = []
 
     if not isinstance(output_lines, list):
         output_lines = output_lines.split('\n')
@@ -111,9 +111,12 @@ def __table(output_lines):
         # skip last line if empty (just newline at the end)
         output_lines = output_lines[:-1]
 
+    delimiter_line_num = 0
+    header_rows = []
     for line in output_lines:
         if delimiter_line.match(line):
             columns = __table_columns(line)
+            delimiter_line_num += 1
             continue
         if '|' not in line:
             LOG.debug('skipping invalid table line: %s' % line)
@@ -121,10 +124,19 @@ def __table(output_lines):
         row = []
         for col in columns:
             row.append(line[col[0]:col[1]].strip())
-        if table_['headers']:
+        if table_['values']:
             table_['values'].append(row)
         else:
-            table_['headers'] = row
+            if not header_rows:
+                header_rows.append(row)
+                continue
+            if row[0] == '':
+                header_rows.append(row)
+            else:
+                table_['values'].append(row)
+
+    headers_ = [list(filter(None, list(t))) for t in zip(*header_rows)]
+    table_['headers'] = [''.join(item) for item in headers_]
 
     return table_
 
@@ -151,7 +163,7 @@ def __table_columns(first_table_row):
 TWO_COLUMN_TABLE_HEADERS = [['Field', 'Value'], ['Property', 'Value']]
 
 
-def table(output_lines, multiline_val_in_str=False):
+def table(output_lines, combine_multiline_entry=True):
     """
     Tempest table does not take into account when multiple lines are used for one entry. Such as neutron net-list -- if
     a net has multiple subnets, then tempest table will create multiple entries in table_['values']
@@ -183,7 +195,7 @@ def table(output_lines, multiline_val_in_str=False):
                 entry_lines = [rows[index] for index in range(start_index, end_index+1)]
                 # each column value is a list
                 entry_combined = [list(filter(None, list(t))) for t in zip(*entry_lines)]
-                if multiline_val_in_str:
+                if not combine_multiline_entry:
                     entry = [''.join(item) for item in entry_combined]
                 else:
                     # convert column value to string if list len is 1
