@@ -71,7 +71,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
         else:
             return cmd_output
 
-    raise exceptions.CLIRejected("CLI command failed to execute.".format(cmd_output))
+    raise exceptions.CLIRejected("CLI command failed to execute: {}".format(cmd_output))
 
 
 def __convert_args(args):

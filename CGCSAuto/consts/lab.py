@@ -17,6 +17,15 @@ class Labs:
         'auth_url': 'http://192.168.204.2:5000/v2.0/',
     }
 
+    IP_5_6 = {
+        'short_name': 'ip_5_6',
+        'name': 'cgcs-ironpass-5_6',
+        'floating ip': '128.224.151.216',
+        'controller-0 ip': '128.224.151.196',
+        'controller-1 ip': '128.224.151.197',
+        'auth_url': 'http://192.168.204.2:5000/v2.0/',
+    }
+
     IP_14_17 = {
         'short_name': 'ip_14_17',
         'name': 'cgcs-ironpass-14_17',

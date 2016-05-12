@@ -29,7 +29,7 @@ disk_spec_params = [
 
 
 @fixture(scope='module', params=disk_spec_params )
-def volume_with_disk_spec(request):
+def flavor_with_disk_spec(request):
     """
     Text fixture to create flavor with specific 'ephemeral', 'swap', and 'mem_page_size'
     Args:
@@ -57,7 +57,25 @@ def volume_with_disk_spec(request):
 
 
 def test_disk_extra_spec(flavor_with_disk_spec):
+    """
+    Storage_Flavor_US77170_Diskquota_14.1 from us77170_StorageTestPlan.pdf
 
+    Verify the version number (or str) exist for the system when execute the "system show" cli
+
+    Args:
+        - Nothing
+
+    Setup:
+        - Setup flavor with specific bytes per second extra specs
+
+
+    Test Steps:
+        -verify the extra spec is set and match to expected specs
+
+    Teardown:
+        - delete specific bytes per second extra specs
+
+    """
     flavor_id = flavor_with_disk_spec['id']
     extra_spec = flavor_with_disk_spec['extra_spec']
 
@@ -69,6 +87,26 @@ def test_disk_extra_spec(flavor_with_disk_spec):
 
 
 def test_verify_disk_extra_on_vm(flavor_with_disk_spec):
+    """
+    Storage_Flavor_ US77170_Diskquota_14.2.1 from us77170_StorageTestPlan.pdf
+
+    Verify the version number (or str) exist for the system when execute the "system show" cli
+
+    Args:
+        - Nothing
+
+    Setup:
+        - Setup flavor with specific bytes per second extra specs
+        - create a vm using the created flavor
+
+    Test Steps:
+        -verify the extra spec used by vm is set and match to expected specs
+
+    Teardown:
+        - delete vm
+        -delete specific bytes per second extra specs
+
+    """
 
     flavor_id = flavor_with_disk_spec['id']
     extra_spec = flavor_with_disk_spec['extra_spec']
@@ -87,5 +125,5 @@ def test_verify_disk_extra_on_vm(flavor_with_disk_spec):
                                                                                        vm_flavor_extra_specs[extra_spec])
     vm_helper.delete_vms(vm_id, delete_volumes=True)
 
-    # test it with virsh as well. add virsh parsing
+    #TODO test it with virsh as well. add virsh parsing
 

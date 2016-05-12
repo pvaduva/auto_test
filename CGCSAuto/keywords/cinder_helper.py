@@ -465,67 +465,111 @@ def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     cli.cinder('quota-update', args_, ssh_client=con_ssh, auth_info=auth_info)
 
 
-def create_qos_specs(vol_name, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+def create_qos_specs(qos_specs_name, con_ssh=None, **kwargs):
 
     if not kwargs:
-        raise ValueError("Please specify at least one quota=value pair via kwargs.")
+        raise ValueError("Please specify at least one key=value pair via kwargs.")
 
     args_ = ''
-    args_ += vol_name
+    args_ += qos_specs_name
 
     for key in kwargs:
-        args_ += '--{} {} '.format(key, kwargs[key])
+        args_ += ' {}={} '.format(key, kwargs[key])
 
-    table_ = table_parser.table(cli.cinder('qos-create', args_, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.cinder('qos-create', args_, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     qos_specs_id = table_parser.get_value_two_col_table(table_, 'id')
+    qos_specs_name = table_parser.get_value_two_col_table(table_, 'name')
 
-    return qos_specs_id
+    return [qos_specs_id, qos_specs_name]
 
 
-    # return the ID of the created qos_specs
+def delete_qos_specs(qos_specs_id, force=False, con_ssh=None):
 
-def create_volume_type(vol_type_id, con_ssh=None, auth_info=Tenant.ADMIN):
+    args_ = ''
+    args_ += ' --force {} '.format(force)
+    args_ += qos_specs_id
 
+    exit_code, cmd_output = cli.cinder('qos-delete', args_, fail_ok=True, ssh_client=con_ssh, auth_info=Tenant.ADMIN,
+                                       rtn_list=True)
+
+    return [exit_code, cmd_output]
+
+
+def create_volume_type(vol_type_name, con_ssh=None):
+    # must be an ADMIN to use volume type create
     # option to make vol_type_name an optional variable and create arbitrary volume type?
 
-    cli.cinder('type-create', vol_type_id, ssh_client=con_ssh, auth_info=auth_info)
+    table_ = table_parser.table(cli.cinder('type-create', vol_type_name, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    vol_type_id = table_parser.get_values(table_, 'ID')[0]
+    vol_type_name = table_parser.get_values(table_, 'Name')[0]
+
+    return [vol_type_id, vol_type_name]
 
 
-def delete_volume_type(vol_type_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def delete_volume_type(vol_type_id, con_ssh=None):
+    # must be an ADMIN to use volume type delete
+    # option to make vol_type_name an optional variable and delete all volume type?
 
-    # option to make vol_type_name an optional variable and create arbitrary volume type?
-
-    cli.cinder('type-delete', vol_type_id, ssh_client=con_ssh, auth_info=auth_info)
+    cli.cinder('type-delete', vol_type_id, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
 
 
-def get_qos_list(con_ssh=None, auth_info=None):
-
-    table_ = table_parser.table(cli.cinder('qos-list', ssh_client=con_ssh, auth_info=auth_info))
+def get_type_list(con_ssh=None):
+    # return a table of volume type list
+    table_ = table_parser.table(cli.cinder('type-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
 
     return table_
 
 
-def associate_volume_type_to_qos(qos_spec_id, vol_type_id, fail_ok=False, con_ssh=None, auth_info=None):
+def get_qos_list(con_ssh=None):
+    # must be an admin to perform cinder qos-list
+    table_ = table_parser.table(cli.cinder('qos-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+
+    return table_
+
+
+def associate_qos_to_volume_type(qos_spec_id, vol_type_id, fail_ok=False, con_ssh=None):
     """
     Associates qos specs with specified volume type.
-
+    # must be an admin to perform cinder qos-associate
     """
     # TODO a check for volume type
     # TODO a check qos spec
 
     args_ = qos_spec_id + ' ' + vol_type_id
-    exit_code, cmd_output = cli.cinder('qos-associate', args_, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+
+    exit_code, cmd_output = cli.cinder('qos-associate', args_, fail_ok=fail_ok, ssh_client=con_ssh, rtn_list=True,
+                                       auth_info=Tenant.ADMIN)
 
     if exit_code == 1:
         if fail_ok:
-            return 1, cmd_output
+            return [1, cmd_output]
         raise exceptions.CLIRejected(cmd_output)
 
-    return 0, "Volume type is associated to qos spec"
+    return [0, "Volume type is associated to qos spec"]
 
 
-def get_qos_association(qos_spec_id, con_ssh=None, auth_info=None):
+def disassociate_qos_to_volume_type(qos_spec_id, vol_type_id, fail_ok=False, con_ssh=None):
+    """
+    disassociates qos specs with specified volume type.
+    # must be an admin to perform cinder qos-associate
+    """
 
-    table_ = table_parser.table(cli.cinder('qos-get-association', qos_spec_id, ssh_client=con_ssh, auth_info=auth_info))
+    args_ = qos_spec_id + ' ' + vol_type_id
+
+    exit_code, cmd_output = cli.cinder('qos-disassociate', args_, fail_ok=fail_ok, ssh_client=con_ssh, rtn_list=True,
+                                       auth_info=Tenant.ADMIN)
+
+    if exit_code == 1:
+        if fail_ok:
+            return [1, cmd_output]
+        raise exceptions.CLIRejected(cmd_output)
+
+    return [0, "Volume type is associated to qos spec"]
+
+
+def get_qos_association(qos_spec_id, con_ssh=None):
+
+    table_ = table_parser.table(cli.cinder('qos-get-association', qos_spec_id, ssh_client=con_ssh,
+                                           auth_info=Tenant.ADMIN))
 
     return table_
