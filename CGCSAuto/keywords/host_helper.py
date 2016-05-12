@@ -261,7 +261,6 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         positional_arg += ' --force'
         extra_msg = 'force '
 
-    # TODO: add check for storage monitors count?
     exitcode, output = cli.system('host-lock', positional_arg, ssh_client=con_ssh, fail_ok=fail_ok,
                                   auth_info=Tenant.ADMIN, rtn_list=True)
 
@@ -308,14 +307,15 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         raise exceptions.HostPostCheckFailed(msg)
 
 
-def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_ssh=None):
+def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """
 
     Args:
         host (str):
         timeout (int): MAX seconds to wait for host to become available or degraded after unlocking
         fail_ok (bool):
-        con_ssh:
+        con_ssh (SSHClient):
+        auth_info (dict)
 
     Returns (tuple):
         (-1, "Host already unlocked. Do nothing")
@@ -338,7 +338,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
         LOG.info(message)
         return -1, message
 
-    exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, auth_info=Tenant.ADMIN, rtn_list=True,
+    exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
                                   fail_ok=fail_ok, timeout=60)
     if exitcode == 1:
         return 1, output
@@ -357,6 +357,93 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
 
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
+
+
+def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        hosts (list|str): Host(s) to unlock
+        timeout (int): MAX seconds to wait for host to become available or degraded after unlocking
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (dict): {host_0: res_0, host_1: res_1, ...}
+        where res is a tuple as below, and scenario 1, 2, 3 only applicable if fail_ok=True
+        (-1, "Host already unlocked. Do nothing")
+        (0, "Host is unlocked and in available state.")
+        (1, <stderr>)
+        (2, "Host is not in unlocked state")
+        (3, "Host is not in available or degraded state.")
+        (4, "Host is in degraded state after unlocked.")
+
+    """
+    LOG.info("Unlocking {}...".format(hosts))
+
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    res = {}
+    hosts_to_unlock = list(set(hosts))
+    for host in hosts:
+        if get_hostshow_value(host, 'administrative', con_ssh=con_ssh) == HostAdminState.UNLOCKED:
+            message = "Host already unlocked. Do nothing"
+
+            res[host] = -1, message
+            hosts_to_unlock.remove(host)
+
+    if not hosts_to_unlock:
+        LOG.info("Host(s) already unlocked. Do nothing.")
+        return res
+
+    if len(hosts_to_unlock) != len(hosts):
+        LOG.info("Some host(s) already unlocked. Unlocking the rest: {}".format(hosts_to_unlock))
+
+    hosts_to_check = []
+    for host in hosts_to_unlock:
+        exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                                      fail_ok=fail_ok, timeout=60)
+        if exitcode == 1:
+            res[host] = 1, output
+        else:
+            hosts_to_check.append(host)
+
+    if not _wait_for_hosts_states(hosts_to_check, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh):
+        LOG.warning("Some host(s) not in unlocked states after 60 seconds.")
+
+    if not _wait_for_hosts_states(hosts_to_check, timeout=timeout, check_interval=10, con_ssh=con_ssh,
+                                  availability=[HostAavailabilityState.AVAILABLE, HostAavailabilityState.DEGRADED]):
+        LOG.warning("Some host(s) state did not change to available or degraded within timeout")
+
+    hosts_tab = table_parser.table(cli.system('host-list --nowrap', ssh_client=con_ssh))
+    hosts_to_check_tab = table_parser.filter_table(hosts_tab, hostname=hosts_to_check)
+    hosts_unlocked = table_parser.get_values(hosts_to_check_tab, target_header='hostname', administrative='unlocked')
+    hosts_not_unlocked = list(set(hosts_to_check) - set(hosts_unlocked))
+    hosts_unlocked_tab = table_parser.filter_table(hosts_to_check_tab, hostname=hosts_unlocked)
+    hosts_avail = table_parser.get_values(hosts_unlocked_tab, 'hostname', availability=HostAavailabilityState.AVAILABLE)
+    hosts_degrd = table_parser.get_values(hosts_unlocked_tab, 'hostname', availability=HostAavailabilityState.DEGRADED)
+    hosts_other = list(set(hosts_unlocked) - set(hosts_avail) - set(hosts_degrd))
+
+    for host in hosts_not_unlocked:
+        res[host] = 2, "Host is not in unlocked state."
+    for host in hosts_degrd:
+        res[host] = 4, "Host is in degraded state after unlocked."
+    for host in hosts_other:
+        res[host] = 3, "Host is not in available or degraded state."
+    for host in hosts_avail:
+        res[host] = 0, "Host is unlocked and in available state."
+
+    if not len(res) == len(hosts):
+        raise exceptions.CommonError("Something wrong with the keyword. Number of hosts in result is incorrect.")
+
+    if not fail_ok:
+        for host in res:
+            if res[host][0] not in [0, 4]:
+                raise exceptions.HostPostCheckFailed(" Not all host(s) unlocked successfully. Detail: {}".format(res))
+
+    LOG.info("Results for unlocking hosts: {}".format(res))
+    return res
 
 
 def get_hostshow_value(host, field, con_ssh=None):

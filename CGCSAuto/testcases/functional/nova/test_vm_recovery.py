@@ -1,9 +1,8 @@
 import re
 
-import time
 from pytest import fixture, mark
 
-from utils import table_parser
+from utils import table_parser, exceptions
 from utils.ssh import NATBoxClient
 from utils.tis_log import LOG
 from consts.timeout import VMTimeout, EventLogTimeout
@@ -272,3 +271,56 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
         assert EventLogID.HEARTBEAT_CHECK_FAILED in events_2, "VM heartbeat failure is not logged."
     else:
         assert not events_2, "VM heartbeat failure is logged while heartbeat is set to False."
+
+
+@mark.parametrize(('heartbeat'), [
+    (True),
+    (False)
+])
+def test_vm_autorecovery_kill_host_kvm(heartbeat):
+    """
+    Test vm auto recovery by killing the host kvm.
+
+    Args:
+        heartbeat (bool): Weather or not to have heartbeat enabled in extra spec
+
+    Test Steps:
+        - Create a default flavor (auto recovery should be enabled by default)
+        - Set guest-heartbeat extra spec to specified value
+        - Boot a vm with above flavor
+        - Kill the kvm processes on vm host
+        - Verify auto recovery is triggered to reboot vm
+        - Verify vm reaches Active state
+
+    Teardown:
+        - Delete created vm and flavor
+
+    """
+    LOG.tc_step("Create a flavor and set guest-heartbeat to {} in extra spec.".format(heartbeat))
+    flavor_id = nova_helper.create_flavor(name='ar_default_hb_{}'.format(heartbeat))[1]
+    ResourceCleanup.add('flavor', flavor_id)
+
+    extra_specs = {FlavorSpec.GUEST_HEARTBEAT: str(heartbeat)}
+    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+
+    LOG.tc_step("Boot a vm with above flavor")
+    vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
+    ResourceCleanup.add('vm', vm_id)
+
+    target_host = nova_helper.get_vm_host(vm_id)
+
+    LOG.tc_step("Kill the kvm processes on vm host: {}".format(target_host))
+    with host_helper.ssh_to_host(target_host) as host_ssh:
+        exit_code, output = host_ssh.exec_sudo_cmd('killall -s KILL kvm')
+        if not exit_code == 0:
+            raise exceptions.SSHExecCommandFailed("Failed to kill host kvm processes. Details: {}".format(output))
+
+    LOG.tc_step("Verify vm failed via event log")
+    system_helper.wait_for_events(30, strict=False, fail_ok=False,
+                                  **{'Entity Instance ID': vm_id, 'Event Log ID': EventLogID.VM_FAILED})
+
+    LOG.tc_step("Verify vm auto rebooted to recover via event log, and reached Active state")
+    system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, strict=False, fail_ok=False,
+                                  **{'Entity Instance ID': vm_id, 'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
+
+    vm_helper.wait_for_vm_values(vm_id, timeout=30, status=VMStatus.ACTIVE)

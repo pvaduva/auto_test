@@ -125,3 +125,16 @@ def test_get_active_con():
 
     LOG.tc_step("Active: {}; Standby: {}".format(active, standby))
     assert 'controller-' in active
+
+
+def test_unlock_hosts():
+    active = system_helper.get_active_controller_name()
+    standby = 'controller-1' if active == 'controller-0' else 'controller-0'
+    host_helper._wait_for_hosts_states([standby, 'compute-1'], availability='available')
+    LOG.tc_step("Lock hosts.")
+    host_helper.lock_host(standby)
+    host_helper.lock_host('compute-1')
+    LOG.tc_step("Unlock hosts")
+    res = host_helper.unlock_hosts([standby, 'compute-1'])
+    LOG.tc_step("Show results")
+    LOG.info("Unlock hosts result: {}".format(res))

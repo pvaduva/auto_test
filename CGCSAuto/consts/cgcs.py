@@ -40,6 +40,7 @@ class VMStatus:
     SUSPENDED = 'SUSPENDED'
     PAUSED = 'PAUSED'
     NO_STATE = 'NO STATE'
+    HARD_REBOOT = 'HARD REBOOT'
 
 
 class HostAdminState:
@@ -121,3 +122,4 @@ class EventLogID:
     VM_DELETING = '700.110'
     VM_DELETED = '700.114'
     VM_CREATED = '700.108'
+    VM_FAILED = '700.001'
