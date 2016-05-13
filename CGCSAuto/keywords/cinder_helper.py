@@ -8,6 +8,30 @@ from consts.timeout import VolumeTimeout
 from keywords import glance_helper, keystone_helper
 
 
+def get_any_volume(status='available', bootable=True, auth_info=None, con_ssh=None, new_name=None):
+    """
+    Get an id of any volume that meets the criteria. Create one if none exists.
+
+    Args:
+        vols (list|None): volumes list to get volume from. All volumes for given tenant if None.
+        status (str):
+        bootable (str|bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+        new_name (str): This is only used if no existing volume found and new volume needs to be created
+
+    Returns:
+        str: volume id
+
+    """
+    volumes = get_volumes(status=status, bootable=bootable, auth_info=auth_info, con_ssh=con_ssh)
+    if volumes:
+        return 0, random.choice(volumes)
+    else:
+        return 1, create_volume(bootable=bootable, auth_info=auth_info, con_ssh=con_ssh, name=new_name,
+                                rtn_exist=False)[1]
+
+
 def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=None, status=None, attached_vm=None,
                 bootable=None, auth_info=Tenant.ADMIN, con_ssh=None):
     """
@@ -21,7 +45,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         size (str):
         status:(str)
         attached_vm (str):
-        bootable (str): true or false
+        bootable (str|bool): true or false
         auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT_1,Tenant.TENANT_2
         con_ssh (str):
 

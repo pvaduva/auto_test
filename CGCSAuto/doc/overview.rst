@@ -1,10 +1,11 @@
+########
 Overview
-===============================================
+########
 
 
 
 Design Goals
------------------------
+------------
  * Low Maintenance 
 
    * Keywords to wrap one or multiple actions
@@ -22,7 +23,7 @@ Design Goals
    * Ignore central configs
 
 Automation Framework
------------------------
+--------------------
 .. image:: /images/auto_framework.png
     :width: 500px
     :align: center

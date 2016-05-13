@@ -1,30 +1,30 @@
 .. _testfixtures-ref-label:
 
 testfixtures package
-================================
+====================
 
 comment 
 
 
 
-testfixtures.config_host module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test fixtures to configure a host with lock/unlock
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: testfixtures.config_host
     :members:
     :undoc-members:
     :show-inheritance:
 
-testfixtures.resource_mgmt module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Text fixtures to cleanup created resources as test teardown
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: testfixtures.resource_mgmt
     :members:
     :undoc-members:
     :show-inheritance:
 
-testfixtures.verify_fixtures module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Common system verification test fixtures
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: testfixtures.verify_fixtures
     :members:

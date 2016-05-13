@@ -1,6 +1,6 @@
 import re
 
-from pytest import fixture, mark
+from pytest import mark
 
 from utils import table_parser, exceptions
 from utils.ssh import NATBoxClient
@@ -237,10 +237,8 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
 
     if heartbeat_enabled:
         step_str = ''
-        err_str = 'not '
     else:
         step_str = 'not '
-        err_str = ''
 
     LOG.tc_step("Verify vm heartbeat is {}established via event logs".format(step_str))
     hb_tmout=EventLogTimeout.HEARTBEAT_ESTABLISH
@@ -250,8 +248,7 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
 
     if heartbeat_enabled:
         assert events_1, "Heartbeat establish event is not displayed within {} seconds".format(hb_tmout)
-        assert EventLogID.HEARTBEAT_ENABLED == events_1[0], "VM {} heartbeat failed to establish".format(
-                vm_id)
+        assert EventLogID.HEARTBEAT_ENABLED == events_1[0], "VM {} heartbeat failed to establish".format(vm_id)
     else:
         assert not events_1, "Heartbeat event generated unexpectedly: {}".format(events_1)
 
@@ -273,9 +270,9 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
         assert not events_2, "VM heartbeat failure is logged while heartbeat is set to False."
 
 
-@mark.parametrize(('heartbeat'), [
-    (True),
-    (False)
+@mark.parametrize('heartbeat', [
+    mark.p1(True),
+    mark.p1(False)
 ])
 def test_vm_autorecovery_kill_host_kvm(heartbeat):
     """

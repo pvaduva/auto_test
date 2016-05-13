@@ -32,12 +32,8 @@ def target_host(request):
     return target_host
 
 
-@mark.slow
-@mark.parametrize(('heartbeat'), [
-    (True),
-    (False)
-])
-def test_vm_autorecovery_reboot_host(heartbeat, target_host):
+@mark.p1
+def test_vm_autorecovery_reboot_host(target_host):
     """
     Test vm auto recovery by rebooting the host while the rest of the nova hosts are locked.
 
@@ -60,26 +56,31 @@ def test_vm_autorecovery_reboot_host(heartbeat, target_host):
         - Unlock hosts that were locked in setup (module)
 
     """
-    LOG.tc_step("Create a flavor and set guest heartbeat to {}".format(heartbeat))
-    flavor_id = nova_helper.create_flavor(name='ar_default_hb_{}'.format(heartbeat))[1]
-    ResourceCleanup.add('flavor', flavor_id)
+    vms = []
+    for heartbeat in [True, False]:
+        LOG.tc_step("Create a flavor and set guest heartbeat to {}".format(heartbeat))
+        flavor_id = nova_helper.create_flavor(name='ar_default_hb_{}'.format(heartbeat))[1]
+        ResourceCleanup.add('flavor', flavor_id)
 
-    extra_specs = {FlavorSpec.GUEST_HEARTBEAT: str(heartbeat)}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+        extra_specs = {FlavorSpec.GUEST_HEARTBEAT: str(heartbeat)}
+        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
-    LOG.tc_step("Boot a vm with above flavor")
-    vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
-    ResourceCleanup.add('vm', vm_id)
+        LOG.tc_step("Boot a vm with above flavor")
+        vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
+        vms.append(vm_id)
+        ResourceCleanup.add('vm', vm_id)
 
     LOG.tc_step("Reboot the only nova host")
     host_helper.reboot_hosts(target_host)
 
-    LOG.tc_step("Verify vm failed event is logged")
-    system_helper.wait_for_events(30, num=50, strict=False, fail_ok=False,
-                                  **{'Entity Instance ID': vm_id, 'Event Log ID': EventLogID.VM_FAILED})
+    for vm_id_ in vms:
+        LOG.tc_step("Verify vm failure event is logged for vm {}".format(vm_id_))
+        system_helper.wait_for_events(30, num=50, strict=False, fail_ok=False,
+                                      **{'Entity Instance ID': vm_id_, 'Event Log ID': EventLogID.VM_FAILED})
 
-    LOG.tc_step("Verify vm auto recovery: ensure vm reboot complete event is logged and vm in Active state.")
-    system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, num=50, strict=False, fail_ok=False,
-                                  **{'Entity Instance ID': vm_id, 'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
+        LOG.tc_step("Verify auto recovery for vm {}: ensure vm reboot complete event is logged and vm in Active state.".
+                    format(vm_id_))
+        system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, num=50, strict=False, fail_ok=False,
+                                      **{'Entity Instance ID': vm_id_, 'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
 
-    vm_helper.wait_for_vm_values(vm_id, timeout=30, status=VMStatus.ACTIVE)
+        vm_helper.wait_for_vm_values(vm_id_, timeout=30, status=VMStatus.ACTIVE)

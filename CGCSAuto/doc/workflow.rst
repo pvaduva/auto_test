@@ -1,8 +1,10 @@
-Automated Test Development
-===============================================
+########
+Workflow
+########
+
 
 Create Local Work Branch
------------------------------------------------
+------------------------
 Goto automation repo. If you haven't checked out any branch, it will be under master by default.
 ::
 
@@ -32,8 +34,9 @@ Work off a local branch that was checked out from develop branch
 
 Now you can start make code changes on the local branch, make sure your TEST your change before next step. If your code is not testable yet, make sure you inform the reviewers about the situation and run a sample test case just to ensure the framework is not broken.
 
+
 Code Review
------------------------------------------------
+-----------
 After you've made your code changes, you'll need to commit them locally, and send them for code review using Code Collaborator
 
 * Note that normally we should do code review **before** push to remote branch.
@@ -55,8 +58,9 @@ After you've made your code changes, you'll need to commit them locally, and sen
    * Reviewers should include at least one automation specialist and one domain specialist
 * More info about: Code Collaborator: http://twiki.wrs.com/Main/CCollabQuickstart
 
-Push Your Change to Remote Repo
------------------------------------------------
+
+Push Change to Remote
+---------------------
 ::
 
  # pull changes from lastest develop branch
@@ -72,8 +76,9 @@ You should receive an email indicating your change is pushed to the develop bran
 
 Check on git that your change is there. ``http://git/cgi-bin/cgit.cgi/projects/wassp-repos/testcases/cgcs/commit/?h=develop``
 
-Automated Test Execution
------------------------------------------------
+
+Test Execution
+--------------
 
 * Scheduled formal sanity/reregression test should be excuted on master branch.
 * develop branch will be merged with master branch on a regular basis or on demand by automation specialist.

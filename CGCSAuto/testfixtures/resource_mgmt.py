@@ -111,7 +111,7 @@ class ResourceCleanup:
         images = resources['images']
         err_msgs = []
         if vms_with_vols:
-            code, msg = vm_helper.delete_vms(vms_with_vols, fail_ok=True)
+            code, msg = vm_helper.delete_vms(vms_with_vols, delete_volumes=True, fail_ok=True)
             if code not in [0, -1]:
                 err_msgs.append(msg)
 
@@ -150,7 +150,7 @@ class ResourceCleanup:
         }
 
     @classmethod
-    def add(cls, resource_type, resource_id, scope='function', del_vm_vols=True):
+    def add(cls, resource_type, resource_id, scope='function', del_vm_vols=False):
         """
         Add resource to cleanup list.
 

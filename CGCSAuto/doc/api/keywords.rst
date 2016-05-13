@@ -6,79 +6,79 @@ comment
 
 
 keywords.cinder_helper module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.cinder_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-keywords.common module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Common keywords
+^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.common
     :members:
     :undoc-members:
     :show-inheritance:
 
-keywords.glance_helper module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Image related keywords
+^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.glance_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-keywords.host_helper module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Host action and info retrieving keywords
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.host_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-keywords.keystone_helper module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Keystone keywords
+^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.keystone_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-keywords.network_helper module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Networking keywords
+^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.network_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-keywords.nova_helper module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Nova keywords
+^^^^^^^^^^^^^
 
 .. automodule:: keywords.nova_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-keywords.security_helper module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Security keywords
+^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.security_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-keywords.system_helper module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+System information (relatively static info)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.system_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-keywords.vm_helper module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+VM action and info retrieving keywords
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.vm_helper
     :members:

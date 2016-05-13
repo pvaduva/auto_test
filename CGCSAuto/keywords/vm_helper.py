@@ -73,8 +73,7 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
     LOG.info("Attaching volume {} to vm {}".format(vol_id, vm_id))
     cli.nova('volume-attach', ' '.join([vm_id, vol_id]))
-    # volumes = cinder_helper.get_volumes(attached_vm=vm_id, con_ssh=con_ssh, auth_info=auth_info)
-    # LOG.warning('vol_id: {}. all_vols: {}'.format(vm_id, volumes))
+
     if not wait_for_vol_attach(vm_id=vm_id, vol_id=vol_id, con_ssh=con_ssh, auth_info=auth_info):
         raise exceptions.VMPostCheckFailed("Volume {} is not attached to vm {} within {} seconds".
                                            format(vol_id, vm_id, VMTimeout.VOL_ATTACH))
@@ -162,18 +161,19 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
     nics_args = ' '.join(nics_args_list)
 
     # Handle mandatory arg - boot source id
-    new_vol = ''
     volume_id = image = snapshot_id = None
     if source is None:
-        vol_name = 'vol-' + name
-        volume_id = cinder_helper.create_volume(vol_name, auth_info=auth_info, con_ssh=con_ssh)[1]
-        new_vol = volume_id
-    elif source.lower() == 'volume':
+        source = 'volume'
+
+    new_vol = ''
+    if source.lower() == 'volume':
         if source_id:
             volume_id = source_id
         else:
-            volume_id = cinder_helper.create_volume('vol-' + name, auth_info=auth_info, con_ssh=con_ssh)[1]
-            new_vol = volume_id
+            vol_name = 'vol-' + name
+            is_new, volume_id = cinder_helper.get_any_volume(new_name=vol_name, auth_info=auth_info, con_ssh=con_ssh)
+            if is_new:
+                new_vol = volume_id
     elif source.lower() == 'image':
         image = source_id if source_id else glance_helper.get_image_id_from_name('cgcs-guest')
     elif source.lower() == 'snapshot':

@@ -3,8 +3,9 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
+########################################
 Welcome to CGCS Automation documentation
-===============================================
+########################################
 
 The Goal of the framework is to create low maintenance and scalable Testcases that is easy to use and can be flexible when needed it.
 
@@ -13,14 +14,13 @@ Contents:
 .. toctree::
    :maxdepth: 2
    
-   install
-   overview
-   develop
-   conventions
+   setups
+   workflow
    bestpractice
+   testdev
    api/index
    examples
-   
+   overview
 
 
 Indices and tables
