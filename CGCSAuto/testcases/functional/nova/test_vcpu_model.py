@@ -7,7 +7,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 
 @fixture(scope='module', autouse=True)
-def flavor_and_volume(request):
+def flavor_and_volume():
     """
     Create basic flavor and volume to be used by test cases as test setup, at the beginning of the test module.
     Delete the created flavor and volume as test teardown, at the end of the test module.

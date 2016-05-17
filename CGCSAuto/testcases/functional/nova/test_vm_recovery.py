@@ -57,15 +57,17 @@ def test_image_metadata_in_volume(auto_recovery, disk_format, container_format):
     assert container_format == vol_image_metadata_dict['container_format']
 
 
-@mark.parametrize(('flavor_auto_recovery', 'image_auto_recovery', 'disk_format', 'container_format', 'expt_result'), [
-    mark.p1((None, None, 'raw', 'bare', True)),
-    mark.p1(('false', 'true', 'qcow2', 'bare', False)),
-    mark.p1(('true', 'false', 'raw', 'bare', True)),
-    mark.p1(('false', None, 'raw', 'bare', False)),
-    mark.p1((None, 'false', 'qcow2', 'bare', False)),
+@mark.parametrize(('cpu_policy', 'flavor_auto_recovery', 'image_auto_recovery', 'disk_format', 'container_format', 'expt_result'), [
+    mark.p1((None, None, None, 'raw', 'bare', True)),
+    mark.p1((None, 'false', 'true', 'qcow2', 'bare', False)),
+    mark.p1((None, 'true', 'false', 'raw', 'bare', True)),
+    mark.p1(('dedicated', 'false', None, 'raw', 'bare', False)),
+    mark.p1(('dedicated', None, 'false', 'qcow2', 'bare', False)),
+    mark.p1(('shared', None, 'true', 'raw', 'bare', True)),
+    mark.p1(('shared', 'false', None, 'raw', 'bare', False)),
 ])
-def test_vm_autorecovery_without_heartbeat(flavor_auto_recovery, image_auto_recovery, disk_format, container_format,
-                                           expt_result):
+def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, image_auto_recovery, disk_format,
+                                           container_format, expt_result):
     """
     Test auto recovery setting in vm with various auto recovery settings in flavor and image.
 
@@ -77,7 +79,7 @@ def test_vm_autorecovery_without_heartbeat(flavor_auto_recovery, image_auto_reco
         expt_result (bool): Expected vm auto recovery behavior. False > disabled, True > enabled.
 
     Test Steps:
-        - Create a flavor with auto recovery set to given value in extra spec
+        - Create a flavor with auto recovery and cpu policy set to given values in extra spec
         - Create an image with auto recovery set to given value in metadata
         - Create a volume from above image
         - Boot a vm with the flavor and from the volume
@@ -89,10 +91,19 @@ def test_vm_autorecovery_without_heartbeat(flavor_auto_recovery, image_auto_reco
 
     """
 
-    LOG.tc_step("Create a flavor with auto_recovery set to {} in extra spec".format(flavor_auto_recovery))
+    LOG.tc_step("Create a flavor with cpu_policy set to {} and auto_recovery set to {} in extra spec".format(
+            cpu_policy, flavor_auto_recovery))
     flavor_id = nova_helper.create_flavor(name='auto_recover_'+str(flavor_auto_recovery))[1]
     ResourceCleanup.add('flavor', flavor_id)
+
+    # Add extra specs as specified
+    extra_specs = {}
+    if cpu_policy is not None:
+        extra_specs[FlavorSpec.CPU_POLICY] = cpu_policy
     if flavor_auto_recovery is not None:
+        extra_specs[FlavorSpec.AUTO_RECOVERY] = flavor_auto_recovery
+
+    if extra_specs:
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **{FlavorSpec.AUTO_RECOVERY: flavor_auto_recovery})
 
     property_key = ImageMetadata.AUTO_RECOVERRY
@@ -123,16 +134,19 @@ def test_vm_autorecovery_without_heartbeat(flavor_auto_recovery, image_auto_reco
             expt_result, actual_val)
 
 
-@mark.parametrize(('auto_recovery', 'autorecovery_enabled'), [
-    mark.p1(('true', True)),
-    mark.p1((None, True)),
-    mark.p1(('false', False)),
+@mark.parametrize(('cpu_policy', 'auto_recovery', 'autorecovery_enabled'), [
+    mark.p1((None, 'true', True)),
+    mark.p1(('dedicated', None, True)),
+    mark.p1((None, 'false', False)),
+    mark.p1(('shared', None, True)),
+    mark.p1(('shared', 'false', False)),
 ])
-def test_vm_autorecovery_with_heartbeat(auto_recovery, autorecovery_enabled):
+def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, autorecovery_enabled):
     """
     Test auto recovery with guest heartbeat enabled
 
     Args:
+        cpu_policy (str|None): shared, dedicated or None (unset)
         auto_recovery (str|None): None (unset) or true or false. Auto recovery setting in flavor
         autorecovery_enabled (bool): Expected vm auto recovery behavior. False > disabled, True > enabled.
 
@@ -155,6 +169,8 @@ def test_vm_autorecovery_with_heartbeat(auto_recovery, autorecovery_enabled):
     ResourceCleanup.add('flavor', flavor_id)
 
     extra_specs = {FlavorSpec.GUEST_HEARTBEAT: 'True'}
+    if cpu_policy is not None:
+        extra_specs[FlavorSpec.CPU_POLICY] = cpu_policy
     if auto_recovery is not None:
         extra_specs[FlavorSpec.AUTO_RECOVERY] = auto_recovery
 

@@ -95,6 +95,7 @@ class FlavorSpec:
     MEM_PAGE_SIZE = 'hw:mem_page_size'
     AUTO_RECOVERY = 'sw:wrs:auto_recovery'
     GUEST_HEARTBEAT = 'sw:wrs:guest:heartbeat'
+    VCPU_SCHEDULER = 'hw:wrs:vcpu:scheduler'
 
 
 class ImageMetadata:

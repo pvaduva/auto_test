@@ -118,3 +118,6 @@ Other
     * Try to avoid writing big long helper functions inside a test module, or even worse, inside a test function itself
     * Instead, create the helper function under automation/keywords, so it can be shared by other tests
 
+
+Pytest
+------

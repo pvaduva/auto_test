@@ -1,0 +1,151 @@
+from pytest import mark
+
+from utils.tis_log import LOG
+
+from consts.cgcs import FlavorSpec
+from consts.cli_errs import SetFlavorVcpuScheduler
+from keywords import nova_helper, vm_helper, host_helper
+from testfixtures.resource_mgmt import ResourceCleanup
+
+
+@mark.parametrize(('vcpu_num', 'vcpu_schedulers'), [
+    mark.p2((4, ["fifo:98:3;fifo:99:1;rr:1:2", "fifo:98:3;fifo:99:1;fifo:97:2"])),
+    mark.p1((2, ["fifo:9:1", "rr:19:1", "other:2:1"])),
+])
+def test_flavor_vcpu_scheduler_valid(vcpu_num, vcpu_schedulers):
+    """
+    Test valid settings of vcpu scheduler flavor specs.
+
+    Args:
+        vcpu_num (int): number of vcpus to set when creating flavor
+        vcpu_schedulers (list|str): vpu schedulers to set in flavor extra specs
+
+    Test Steps:
+        - Create a flavor with given number of vcpus
+        - Set vcpu_scheduler extra specs to given values
+        - Check vcpu_scheduler setting is included in the flavor
+
+    Teardown:
+        - Delete flavor
+    """
+    LOG.tc_step("Create flavor with {} vcpus".format(vcpu_num))
+    flavor_id = nova_helper.create_flavor('vcpu_scheduler_valid', vcpus=vcpu_num)[1]
+    ResourceCleanup.add('flavor', flavor_id)
+
+    if isinstance(vcpu_schedulers, str):
+        vcpu_schedulers = [vcpu_schedulers]
+
+    for vcpu_scheduler in vcpu_schedulers:
+        vcpu_scheduler = '''"{}"'''.format(vcpu_scheduler)
+        extra_spec = {FlavorSpec.VCPU_SCHEDULER: vcpu_scheduler}
+
+        LOG.tc_step("Set flavor extra spec to: {} and verify extra spec is set successfully.".format(extra_spec))
+        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_spec)
+
+        post_extra_spec = nova_helper.get_flavor_extra_specs(flavor=flavor_id)
+        assert post_extra_spec[FlavorSpec.VCPU_SCHEDULER] == eval(vcpu_scheduler), "Actual flavor extra specs: {}".\
+            format(post_extra_spec)
+
+@mark.sanity
+@mark.parametrize(('vcpu_num', 'vcpu_schedulers', 'expected_err'), [
+    mark.p2((1, "fifo:9:1", None)),    # CGTS-2462
+    mark.p2((4, ["fifo:20:1;rr:4-6:4", "fifo:20:1;rr:6:4"], SetFlavorVcpuScheduler.VCPU_VAL_OUT_OF_RANGE)),
+    mark.p2((3, ["fifo:20:1;rr:-1:2"], SetFlavorVcpuScheduler.INVALID_PRIORITY)),
+    mark.p3((3, "fifo:20:1;rr:10:0", SetFlavorVcpuScheduler.CANNOT_SET_VCPU0)),
+    mark.p3((4, ["fifo:20:1;rr:4-6:2", "fifo:20:1;rr:4-6", "fifo:"], SetFlavorVcpuScheduler.PRIORITY_NOT_INTEGER)),
+    mark.p3((3, "fifo:20:1;rr:4-6:3'", SetFlavorVcpuScheduler.INVALID_FORMAT)),
+    mark.p3((3, "fifo:20:1;roarr:10:2", SetFlavorVcpuScheduler.UNSUPPORTED_POLICY)),
+    mark.p3((3, "fifo:20;rr:10:1", SetFlavorVcpuScheduler.POLICY_MUST_SPECIFIED_LAST)),
+    mark.p3((3, "fifo", SetFlavorVcpuScheduler.MISSING_PARAMETER)),
+    mark.p3((3, "fifo:20:1_roarr:10", SetFlavorVcpuScheduler.TOO_MANY_PARAMETERS)),
+    mark.p3((3, "fifo:20:1;roarr:10:1", SetFlavorVcpuScheduler.VCPU_MULTIPLE_ASSIGNMENT)),
+])
+def test_flavor_vcpu_scheduler_invalid(vcpu_num, vcpu_schedulers, expected_err):
+    """
+    Test invalid settings of vcpu scheduler flavor specs.
+
+    Args:
+        vcpu_num (int): number of vcpus to set when creating flavor
+        vcpu_schedulers (list|str): vpu schedulers to set in flavor extra specs
+
+    Test Steps:
+        - Create a flavor with given number of vcpus
+        - Attempt to set vcpu_scheduler extra specs to given invalid values
+        - Check cli is rejected with valid reason
+    Teardown:
+        - Delete flavor
+    """
+    LOG.tc_step("Create flavor with {} vcpus".format(vcpu_num))
+    flavor_id = nova_helper.create_flavor('vcpu_scheduler_invalid', vcpus=vcpu_num)[1]
+    ResourceCleanup.add('flavor', flavor_id)
+
+    if isinstance(vcpu_schedulers, str):
+        vcpu_schedulers = [vcpu_schedulers]
+
+    for vcpu_scheduler in vcpu_schedulers:
+        vcpu_scheduler = '''"{}"'''.format(vcpu_scheduler)
+        extra_spec = {FlavorSpec.VCPU_SCHEDULER: vcpu_scheduler}
+
+        LOG.tc_step("Attempt to set vcpu_scheduler to invalid value - {} in extra specs, and verify it is rejected".
+                    format(vcpu_scheduler))
+        code, output = nova_helper.set_flavor_extra_specs(flavor=flavor_id, fail_ok=True, **extra_spec)
+
+        assert 1 == code, "Set flavor extra spec request is not rejected."
+
+        if expected_err:
+            assert expected_err in output, "Expected error string is not found in CLI output."
+
+
+@mark.parametrize(('vcpu_num', 'vcpu_scheduler'), [
+    mark.p1((2, "fifo:99:1")),
+    mark.p2((3, "fifo:3:1;rr:1:2"))
+])
+def test_boot_vm_vcpu_scheduler(vcpu_num, vcpu_scheduler):
+    """
+    Test that vm is created with the expected VCPU Scheduler Policy settings using the virsh command
+
+    Args:
+        vcpu_num (int):
+        vcpu_scheduler (str):
+
+    Test Steps:
+        - Create a flavor with given number of vcpus
+        - Set flavor extra specs with given vcpu_scheduler setting
+        - Boot a vm with above flavor
+        - Verify vm is created with the expected VCPU Scheduler Policy settings via virsh command on nova host
+    Teardowns;
+        - Delete created vm
+        - Delete created flavor
+    """
+    LOG.tc_step("Create flavor with {} vcpus".format(vcpu_num))
+    flavor_id = nova_helper.create_flavor('vcpu_scheduler', vcpus=vcpu_num)[1]
+    ResourceCleanup.add('flavor', flavor_id)
+
+    LOG.tc_step("Set flavor vcpu_scheduler spec to: {}".format(vcpu_scheduler))
+    vcpu_scheduler_flavor = '''"{}"'''.format(vcpu_scheduler)
+    extra_spec = {FlavorSpec.VCPU_SCHEDULER: vcpu_scheduler_flavor}
+    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_spec)
+
+    LOG.tc_step("Boot a vm with above flavor.")
+    vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
+    ResourceCleanup.add('vm', vm_id)
+
+    instance_name, host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"], strict=False)
+
+    with host_helper.ssh_to_host(host) as host_ssh:
+        actual_vcpus = host_helper.get_values_virsh_xmldump(instance_name, host_ssh, 'cputune/vcpupin',
+                                                            target_type='dict')
+
+    vcpus_scheduler = vcpu_scheduler.split(sep=';')
+    for item in vcpus_scheduler:
+        expt_policy, expt_priority, expt_vcpu_id = item.split(':')
+        LOG.tc_step("Check vcpu policy is {}, priority is {} for vcpu {}".format(
+                expt_policy, expt_priority, expt_vcpu_id))
+
+        for actual_vcpu_dict in actual_vcpus:
+            if expt_vcpu_id == actual_vcpu_dict['vcpu']:
+                assert expt_policy == actual_vcpu_dict['policy'], "CPU policy for vcpu {} does not match the setting".\
+                    format(expt_vcpu_id)
+                assert expt_priority == actual_vcpu_dict['priority'], "Priority for vcpu {} does not match the setting"\
+                    .format(expt_vcpu_id)
+                break

@@ -1,3 +1,7 @@
+##########################################################################
+# Memory page size tests with host configured to support 1g and 4k pages #
+##########################################################################
+
 import re
 
 from pytest import fixture, mark
@@ -23,11 +27,12 @@ def _modify(host):
 
 
 def _revert(host):
+    # Assume 1g page number is 0 by default
     system_helper.set_host_1g_pages(host, proc_id=0, hugepage_num=0)
 
 
 @fixture(scope='module', autouse=True)
-def add_huge_page_mem(config_host):
+def add_1g_and_4k_pages(config_host):
     host = host_helper.get_nova_host_with_min_or_max_vms(rtn_max=False)
     config_host(host=host, modify_func=_modify, revert_func=_revert)
 
@@ -117,6 +122,8 @@ def volume_():
     ResourceCleanup.add('volume', vol_id, scope='module')
     return vol_id
 
+
+@mark.p1
 @mark.parametrize('mem_page_size', [
     '1048576',
     'large',

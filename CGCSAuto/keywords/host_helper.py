@@ -1,6 +1,7 @@
 import re
 import time
 from contextlib import contextmanager
+from xml.etree import ElementTree
 
 from consts.auth import Tenant
 from consts.cgcs import HostAavailabilityState, HostAdminState
@@ -778,3 +779,50 @@ def get_hypervisors(state=None, status=None, con_ssh=None):
         params['Status'] = status
     return table_parser.get_values(table_, target_header=target_header, **params)
 
+
+def _get_element_tree_virsh_xmldump(instance_name, host_ssh):
+    code, output = host_ssh.exec_sudo_cmd(cmd='virsh dumpxml {}'.format(instance_name))
+    if not 0 == code:
+        raise exceptions.SSHExecCommandFailed("virsh dumpxml failed to execute.")
+
+    element_tree = ElementTree.fromstring(output)
+    return element_tree
+
+
+def get_values_virsh_xmldump(instance_name, host_ssh, tag_path, target_type='element'):
+    """
+
+    Args:
+        instance_name (str): instance_name of a vm. Such as 'instance-00000002'
+        host_ssh (SSHFromSSH): ssh of the host that hosting the given instance
+        tag_path (str): the tag path to reach to the target element. such as 'memoryBacking/hugepages/page'
+        target_type (str): 'element', 'dict', 'text'
+
+    Returns (list): list of Elements, dictionaries, or strings based on the target_type param.
+
+    """
+    target_type = target_type.lower().strip()
+    root_element = _get_element_tree_virsh_xmldump(instance_name, host_ssh)
+    elements = root_element.findall(tag_path)
+
+    if 'dict' in target_type:
+        dics = []
+        for element in elements:
+            dics.append(element.attrib)
+        return dics
+
+    elif 'text' in target_type:
+        texts = []
+        for element in elements:
+            text_list = element.itertext()
+            if not text_list:
+                LOG.warning("No text found under tag: {}.".format(tag_path))
+            else:
+                texts.append(text_list[0])
+                if len(text_list) > 1:
+                    LOG.warning(("More than one text found under tag: {}, returning the first one.".format(tag_path)))
+
+        return texts
+
+    else:
+        return elements
