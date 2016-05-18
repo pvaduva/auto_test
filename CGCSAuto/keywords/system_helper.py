@@ -169,23 +169,13 @@ def get_interfaces(host, con_ssh=None):
     return table_
 
 
-def get_alarms(uuid=False, con_ssh=None):
-    args = '--nowrap'
-    if uuid:
-        args += ' --uuid'
-
-    table_ = table_parser.table(cli.system('alarm-list', args, ssh_client=con_ssh), combine_multiline_entry=True)
-    return table_
-
-
-def get_events(num=5, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None, con_ssh=None,
+def get_alarms(uuid=False, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
                auth_info=Tenant.ADMIN):
     """
-    Get a list of events with given criteria.
+    Get active alarms dictionary with given criteria
     Args:
-        num (int): max number of event logs to return
         uuid (bool): whether to show uuid
-        show_only (str): 'alarms' or 'logs' to return only alarms or logs
+        show_suppress (bool): whether to show suppressed alarms
         query_key (str): one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
         query_value (str): expected value for given key
         query_type (str): data type of value. one of these: 'string', 'integer', 'float', 'boolean'
@@ -195,21 +185,77 @@ def get_events(num=5, uuid=False, show_only=None, query_key=None, query_value=No
     Returns:
         dict: events table in format: {'headers': <headers list>, 'values': <list of table rows>}
     """
+    args = '--nowrap'
+    args = __process_query_args(args, query_key, query_value, query_type)
+    if uuid:
+        args += ' --uuid'
+    if show_suppress:
+        args += ' --include_suppress'
 
+    table_ = table_parser.table(cli.system('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info),
+                                combine_multiline_entry=True)
+    return table_
+
+
+def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
+
+    """
+    Get suppressed alarms as dictionary
+    Args:
+        uuid (bool): whether to show uuid
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns:
+        dict: events table in format: {'headers': <headers list>, 'values': <list of table rows>}
+    """
+    args = ''
+    if uuid:
+        args += ' --uuid'
+    args += ' --nowrap --nopaging'
+    table_ = table_parser.table(cli.system('alarm-suppress-list', args, ssh_client=con_ssh, auth_info=auth_info))
+    return table_
+
+
+def get_events(num=5, uuid=False, show_only=None, show_suppress=False, query_key=None, query_value=None,
+               query_type=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get a list of events with given criteria as dictionary
+    Args:
+        num (int): max number of event logs to return
+        uuid (bool): whether to show uuid
+        show_only (str): 'alarms' or 'logs' to return only alarms or logs
+        show_suppress (bool): whether or not to show suppressed alarms
+        query_key (str): one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
+        query_value (str): expected value for given key
+        query_type (str): data type of value. one of these: 'string', 'integer', 'float', 'boolean'
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns:
+        dict: events table in format: {'headers': <headers list>, 'values': <list of table rows>}
+    """
     args = '-l {}'.format(num)
-    if query_key:
-        if not query_value:
-            raise ValueError("Query value is not supplied for key - {}".format(query_key))
-        data_type_arg = '' if not query_type else "{}::".format(query_type.lower())
-        args += ' -q {}={}{}'.format(query_key.lower(), data_type_arg, query_value.lower())
+    args = __process_query_args(args, query_key, query_value, query_type)
     args += ' --nowrap --nopaging'
     if uuid:
         args += ' --uuid'
     if show_only:
         args += ' --{}'.format(show_only.lower())
+    if show_suppress:
+        args += ' --include_suppress'
 
     table_ = table_parser.table(cli.system('event-list ', args, ssh_client=con_ssh, auth_info=auth_info))
     return table_
+
+
+def __process_query_args(args, query_key, query_value, query_type):
+    if query_key:
+        if not query_value:
+            raise ValueError("Query value is not supplied for key - {}".format(query_key))
+        data_type_arg = '' if not query_type else "{}::".format(query_type.lower())
+        args += ' -q {}={}{}'.format(query_key.lower(), data_type_arg, query_value.lower())
+    return args
 
 
 def wait_for_events(timeout=30, num=5, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,

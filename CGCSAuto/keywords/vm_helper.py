@@ -981,6 +981,25 @@ def get_vm_ids(image=None, status=VMStatus.ACTIVE, flavor=None, host=None, tenan
     raise NotImplementedError
 
 
+def get_vm_pid(instance_name, host_ssh):
+    """
+    Get instance pid on its host.
+
+    Args:
+        instance_name: instance name of a vm
+        host_ssh: ssh for the host of the given instance
+
+    Returns (str): pid of a instance on its host
+
+    """
+    code, vm_pid = host_ssh.exec_sudo_cmd(cmd="""ps aux | grep {} | awk '{{if ($11=="/usr/bin/kvm") print $2}}'""".
+                                          format(instance_name))
+    if code != 0:
+        raise exceptions.SSHExecCommandFailed("Failed to get pid for vm: {}".format(instance_name))
+
+    return vm_pid
+
+
 class VMInfo:
     """
     class for storing and retrieving information for specific VM using openstack admin.

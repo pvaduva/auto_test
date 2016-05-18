@@ -97,8 +97,9 @@ def test_flavor_vcpu_scheduler_invalid(vcpu_num, vcpu_schedulers, expected_err):
 
 
 @mark.parametrize(('vcpu_num', 'vcpu_scheduler'), [
-    mark.p1((2, "fifo:99:1")),
-    mark.p2((3, "fifo:3:1;rr:1:2"))
+    # Note: Don't use same priority number for different vcpus in one testcase. e.g., Don't: "fifo:66:1;rr:66:2"
+    mark.sanity((2, "fifo:99:1")),
+    mark.p1((3, "fifo:3:1;rr:1:2"))
 ])
 def test_boot_vm_vcpu_scheduler(vcpu_num, vcpu_scheduler):
     """
@@ -113,6 +114,7 @@ def test_boot_vm_vcpu_scheduler(vcpu_num, vcpu_scheduler):
         - Set flavor extra specs with given vcpu_scheduler setting
         - Boot a vm with above flavor
         - Verify vm is created with the expected VCPU Scheduler Policy settings via virsh command on nova host
+        - Verify vm vcpu policy and priority in real-time process attributes via chrt cmd
     Teardowns;
         - Delete created vm
         - Delete created flavor
@@ -135,17 +137,27 @@ def test_boot_vm_vcpu_scheduler(vcpu_num, vcpu_scheduler):
     with host_helper.ssh_to_host(host) as host_ssh:
         actual_vcpus = host_helper.get_values_virsh_xmldump(instance_name, host_ssh, 'cputune/vcpupin',
                                                             target_type='dict')
+        vm_pid = vm_helper.get_vm_pid(instance_name, host_ssh)
 
-    vcpus_scheduler = vcpu_scheduler.split(sep=';')
-    for item in vcpus_scheduler:
-        expt_policy, expt_priority, expt_vcpu_id = item.split(':')
-        LOG.tc_step("Check vcpu policy is {}, priority is {} for vcpu {}".format(
-                expt_policy, expt_priority, expt_vcpu_id))
+        vcpus_scheduler = vcpu_scheduler.split(sep=';')
+        for item in vcpus_scheduler:
+            expt_policy, expt_priority, expt_vcpu_id = item.split(':')
+            LOG.tc_step("Check vcpu {} has policy set to {} and priority set to {} for vm {} via virsh cmd".format(
+                        expt_vcpu_id, expt_policy, expt_priority, vm_id))
 
-        for actual_vcpu_dict in actual_vcpus:
-            if expt_vcpu_id == actual_vcpu_dict['vcpu']:
-                assert expt_policy == actual_vcpu_dict['policy'], "CPU policy for vcpu {} does not match the setting".\
-                    format(expt_vcpu_id)
-                assert expt_priority == actual_vcpu_dict['priority'], "Priority for vcpu {} does not match the setting"\
-                    .format(expt_vcpu_id)
-                break
+            for actual_vcpu_dict in actual_vcpus:
+                if expt_vcpu_id == actual_vcpu_dict['vcpu']:
+                    assert expt_policy == actual_vcpu_dict['policy'], "CPU policy for vcpu {} does not match the " \
+                                                                      "setting".format(expt_vcpu_id)
+                    assert expt_priority == actual_vcpu_dict['priority'], "Priority for vcpu {} does not match the " \
+                                                                          "setting".format(expt_vcpu_id)
+                    break
+
+            LOG.tc_step("Check vcpu policy and priority in real-time process attributes via chrt cmd")
+            code, output = host_ssh.exec_sudo_cmd('''sudo chrt -ap {} | grep -B1 "priority: {}$"'''.
+                                                  format(vm_pid, expt_priority))
+            assert 0 == code, "Expected priority {} is not found in chrt output".format(expt_priority)
+
+            expt_policy_in_chrt = "SCHED_{}".format(expt_policy.upper())
+            assert expt_policy_in_chrt in output, "Expected policy string {} is not found with priority {}".format(
+                    expt_policy_in_chrt, expt_priority)
