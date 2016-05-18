@@ -402,7 +402,7 @@ def set_retention_period(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, ret
 
     args_ = ' retention_secs="{}"'.format(int(retention_period))
     code, output = cli.system('pm-modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_list=True)
+                              rtn_list=True, timeout=60)
 
     if code == 1:
         return 1, output

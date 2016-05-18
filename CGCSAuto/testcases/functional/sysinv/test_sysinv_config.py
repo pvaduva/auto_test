@@ -1,4 +1,4 @@
-from random import choice
+from random import randrange
 import time
 
 from pytest import mark
@@ -10,7 +10,6 @@ from utils.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.cgcs import SystemType
 from consts.timeout import SysInvTimeout
-from setup_consts import LAB
 from keywords import system_helper
 from keywords import network_helper
 
@@ -30,7 +29,7 @@ def test_system_type():
             67) Query the product type on STD system using CLI
     """
 
-    LOG.tc_step('Determine the real System Type for {}'.format(LAB))
+    LOG.tc_step('Determine the real System Type the lab')
     if system_helper.is_small_footprint():
         expt_system_type = SystemType.CPE
     else:
@@ -59,7 +58,7 @@ def test_system_type_is_readonly():
             71) Verify the system type is read-only and cannot be changed via CLI
     """
 
-    LOG.tc_step('Determine the real System Type for {}'.format(LAB))
+    LOG.tc_step('Determine the real System Type for the lab')
     if system_helper.is_small_footprint():
         cur_system_type = SystemType.CPE
     else:
@@ -112,7 +111,7 @@ class TestRetentionPeriod:
         "new_retention_period", [
             -1,
             MIN_RETENTION_PERIOD - 1,
-            choice(range(MIN_RETENTION_PERIOD, MAX_RETENTION_PERIOD + 1)),
+            randrange(MIN_RETENTION_PERIOD, MAX_RETENTION_PERIOD + 1),
             MAX_RETENTION_PERIOD + 1,
         ])
     def test_modify_retention_period(self, new_retention_period):

@@ -8,7 +8,7 @@ from consts.auth import Tenant
 # Start of Test session params          #
 #########################################
 
-LAB = Labs.R720_3_7
+LAB = Labs.HP380
 PRIMARY_TENANT = Tenant.TENANT_2
 NATBOX = NatBoxes.NAT_BOX_HW
 BOOT_VMS = False
