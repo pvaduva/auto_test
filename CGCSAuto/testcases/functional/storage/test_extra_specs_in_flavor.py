@@ -12,20 +12,21 @@ from setup_consts import P1, P2, P3
 #delete the specs and verfiy its deleted
 
 disk_spec_params = [
-        ('quota:disk_read_bytes_sec', 10485769),
-        ('quota:disk_read_bytes_sec', 419430400),
-        ('quota:disk_read_iops_sec', 200),
-        ('quota:disk_read_iops_sec', 5000),
-        ('quota:disk_write_bytes_sec', 10485769),
-        ('quota:disk_write_bytes_sec', 419430400),
-        ('quota:disk_write_iops_sec', 200),
-        ('quota:disk_write_iops_sec', 5000),
-        ('quota:disk_total_bytes_sec', 10485769),
-        ('quota:disk_total_bytes_sec', 419430400),
-        ('quota:disk_total_iops_sec', 200),
-        ('quota:disk_total_iops_sec', 419430400)
+        ('quota:disk_read_bytes_sec',   10485769,   'local_image'),
+        ('quota:disk_read_bytes_sec',   419430400,  'local_image'),
+        ('quota:disk_read_iops_sec',    5000,       'local_image'),
+        ('quota:disk_write_bytes_sec',  419430400,  'local_image'),
+        ('quota:disk_write_iops_sec',   5000,       'local_image'),
+        ('quota:disk_total_bytes_sec',  419430400,  'local_image'),
+        ('quota:disk_total_iops_sec',   419430400,  'local_image'),
+        ('quota:disk_read_bytes_sec',   10485769,   'local_lvm'),
+        ('quota:disk_read_bytes_sec',   419430400,  'local_lvm'),
+        ('quota:disk_read_iops_sec',    5000,       'local_lvm'),
+        ('quota:disk_write_bytes_sec',  419430400,  'local_lvm'),
+        ('quota:disk_write_iops_sec',   5000,       'local_lvm'),
+        ('quota:disk_total_bytes_sec',  419430400,  'local_lvm'),
+        ('quota:disk_total_iops_sec',   419430400,  'local_lvm')
     ]
-
 
 
 @fixture(scope='module', params=disk_spec_params )
@@ -41,12 +42,19 @@ def flavor_with_disk_spec(request):
          'pagesize': pagesize
         }
     """
+    storage = request.param[2]
+    if len(host_helper.get_hosts_by_storage_aggregate(storage_backing=storage)) < 1:
+        skip("No host support {} storage backing".format(storage))
 
-    flavor_id = nova_helper.create_flavor()[1]
-    quota_disk_spec = {request.param[0]: request.param[1]}
+    flavor_id = nova_helper.create_flavor(vcpus=4, ram=1024, root_disk=2)[1]
+    quota_disk_spec = {request.param[0]: request.param[1],
+                       'aggregate_instance_extra_specs:storage': request.param[2]
+                       }
+
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **quota_disk_spec)
     flavor = {'id': flavor_id,
-              'extra_spec': [request.param[0], request.param[1]]
+              'disk_spec': [request.param[0], request.param[1]],
+              'storage_spec': storage
               }
 
     def delete_flavor():
@@ -56,7 +64,29 @@ def flavor_with_disk_spec(request):
     return flavor
 
 
-def test_disk_extra_spec(flavor_with_disk_spec):
+@fixture(scope='module')
+def vm_with_disk_spec(request, flavor_with_disk_spec):
+
+    flavor_id = flavor_with_disk_spec['id']
+    disk_extra_spec = flavor_with_disk_spec['disk_spec']
+    storage_extra_spec = flavor_with_disk_spec['storage_spec']
+
+    boot_source = 'image'
+    vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
+
+    vm = {'id': vm_id,
+          'disk_spec':disk_extra_spec,
+          'storage_spec': storage_extra_spec
+          }
+
+    def delete_disk_spec_vm():
+        vm_helper.delete_vms(vm_id, delete_volumes=True)
+    request.addfinalizer(delete_disk_spec_vm)
+
+    return vm
+
+
+def _test_disk_extra_spec(flavor_with_disk_spec):
     """
     Storage_Flavor_US77170_Diskquota_14.1 from us77170_StorageTestPlan.pdf
 
@@ -77,7 +107,7 @@ def test_disk_extra_spec(flavor_with_disk_spec):
 
     """
     flavor_id = flavor_with_disk_spec['id']
-    extra_spec = flavor_with_disk_spec['extra_spec']
+    extra_spec = flavor_with_disk_spec['disk_spec']
 
     flavor_extra_specs = nova_helper.get_flavor_extra_specs(flavor_id)
 
@@ -86,7 +116,7 @@ def test_disk_extra_spec(flavor_with_disk_spec):
                                                                                        flavor_extra_specs[extra_spec])
 
 
-def test_verify_disk_extra_on_vm(flavor_with_disk_spec):
+def _test_verify_disk_extra_on_vm( vm_with_disk_spec):
     """
     Storage_Flavor_ US77170_Diskquota_14.2.1 from us77170_StorageTestPlan.pdf
 
@@ -103,16 +133,12 @@ def test_verify_disk_extra_on_vm(flavor_with_disk_spec):
         -verify the extra spec used by vm is set and match to expected specs
 
     Teardown:
-        - delete vm
+        -delete vm
         -delete specific bytes per second extra specs
 
     """
-
-    flavor_id = flavor_with_disk_spec['id']
-    extra_spec = flavor_with_disk_spec['extra_spec']
-
-    boot_source = 'image'
-    vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
+    disk_spec = vm_with_disk_spec['disk_spec']
+    vm_id = vm_with_disk_spec['id']
 
     # check vm using nova list then verfiy the flavour is added to vm
     vm_flavour_id = nova_helper.get_vm_flavor(vm_id)
@@ -120,10 +146,47 @@ def test_verify_disk_extra_on_vm(flavor_with_disk_spec):
     print(vm_flavour_id)
     vm_flavor_extra_specs = nova_helper.get_flavor_extra_specs(vm_flavour_id)
 
-    assert vm_flavor_extra_specs[extra_spec[0]] == str(extra_spec[1]), "Expected extra_spec {} to be {}. However, it " \
-                                                                       "was {}".format(extra_spec, str(extra_spec[1]),
-                                                                                       vm_flavor_extra_specs[extra_spec])
-    vm_helper.delete_vms(vm_id, delete_volumes=True)
+    assert vm_flavor_extra_specs[disk_spec[0]] == str(disk_spec[1]), "Expected extra_spec {} to be {}. However, it " \
+                                                                     "was {}".format(disk_spec, str(disk_spec[1]),
+                                                                                     vm_flavor_extra_specs[disk_spec])
 
-    #TODO test it with virsh as well. add virsh parsing
+
+def test_verify_disk_extra_on_virsh(vm_with_disk_spec):
+
+    vm_id = vm_with_disk_spec['id']
+    disk_extra_spec = vm_with_disk_spec['disk_spec']
+    virsh_tag = disk_extra_spec[0].split('quota:disk_')[1]
+    expected_disk_spec_val = disk_extra_spec[1]
+
+    vm_host_table = system_helper.get_vm_topology_tables('servers')[0]
+    print(vm_host_table,"ha")
+    vm_host = table_parser.get_values(vm_host_table,'host', ID=vm_id)[0]
+    print(vm_host,"hb")
+    instance_name = table_parser.get_values(vm_host_table, 'instance_name', ID=vm_id)[0]
+
+    LOG.tc_step("SSH to the {} where VM is located".format(vm_host))
+
+    with host_helper.ssh_to_host(vm_host) as comp_ssh:
+        #code, virsh_list_output = comp_ssh.exec_sudo_cmd(cmd="sudo virsh list | grep -o 'instance[^ ]*' ")
+        #print(virsh_list_output,"hc")
+
+        LOG.tc_step("Extract the correct bytes value from virsh dumpxml")
+
+        sed_cmd = "sed -n 's:.*<"+virsh_tag+">\(.*\)</"+virsh_tag+">.*:\\1:p' "
+
+        dump_xml_cmd = "virsh dumpxml "+ instance_name + " | " + sed_cmd
+        code, dump_xml_output = comp_ssh.exec_sudo_cmd(cmd=dump_xml_cmd)
+        print(dump_xml_output,"hd")
+
+    LOG.tc_step("Compare the expected bytes with the bytes from the xmldump")
+    assert int(dump_xml_output) == expected_disk_spec_val
+
+
+
+    # find which compute node vm is on
+    # ssh to vm's compute node
+
+    # sudo virsh list and extract the instance id
+    # sudo virsh dump xml and grip for the bytes and ids.
+
 

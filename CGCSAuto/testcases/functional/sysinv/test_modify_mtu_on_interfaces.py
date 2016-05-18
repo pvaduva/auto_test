@@ -6,7 +6,7 @@
 
 from pytest import fixture, mark, skip
 import ast
-import time
+from time import sleep
 
 from utils import cli
 from utils.ssh import ControllerClient
@@ -23,7 +23,7 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
 
     # get the port_uuid for oam type interface only
     table_ = system_helper.get_interfaces(hostname, con_ssh=None)
-    port_uuid_list = table_parser.get_values(table_, 'uuid', network_type=network_type)
+    port_uuid_list = table_parser.get_values(table_, 'uuid', networktype=network_type)
     imtu = " --imtu "+mtu
 
     # lock the node
@@ -79,6 +79,7 @@ def test_oam_intf_mtu_modified(mtu):
     # modify mtu on standby controller
     modify_mtu_on_interface(first_host, mtu, 'oam')
     # swact active and standby controller
+    sleep(10)
     host_helper.swact_host(fail_ok=False)
     # modify mtu on new standby controller
     second_host = system_helper.get_standby_controller_name()
@@ -87,12 +88,12 @@ def test_oam_intf_mtu_modified(mtu):
 
     # check mtu is updated
     table_ = system_helper.get_interfaces(first_host, con_ssh=None)
-    mtu_list = table_parser.get_values(table_, 'attributes', network_type='oam')
+    mtu_list = table_parser.get_values(table_, 'attributes', networktype='oam')
     # parse the string of MTU=xxxx
     actual_mtu_one = mtu_list[0][4:]
 
     table_ = system_helper.get_interfaces(second_host, con_ssh=None)
-    mtu_list = table_parser.get_values(table_, 'attributes', network_type='oam')
+    mtu_list = table_parser.get_values(table_, 'attributes', networktype='oam')
     actual_mtu_two = mtu_list[0][4:]
 
     assert mtu == actual_mtu_one == actual_mtu_two, "Expect MTU={} after modification. Actual active host MTU={}, " \
@@ -131,7 +132,7 @@ def test_data_intf_mtu_modified(mtu):
 
         # check mtu is updated
         table_ = system_helper.get_interfaces(host, con_ssh=None)
-        mtu_list = table_parser.get_values(table_, 'attributes', network_type='data')
+        mtu_list = table_parser.get_values(table_, 'attributes', networktype='data')
         # parse the string of MTU=xxxx
         for port_mtu in mtu_list:
             mtu_list = port_mtu.split(',')

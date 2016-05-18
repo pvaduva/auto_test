@@ -497,7 +497,6 @@ def create_qos_specs(qos_specs_name=None, con_ssh=None, **kwargs):
     if not kwargs:
         raise ValueError("Please specify at least one key=value pair via kwargs.")
 
-    args_ = ''
     args_ = qos_specs_name
 
     for key in kwargs:

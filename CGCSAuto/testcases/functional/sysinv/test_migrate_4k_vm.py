@@ -4,6 +4,7 @@ from pytest import fixture, mark, skip
 
 
 from utils.tis_log import LOG
+from utils import table_parser,cli
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper
 
 
@@ -99,7 +100,25 @@ def is_enough_4k_page_memory():
         host_helper.unlock_host('compute-1')
 
 
+def test_get_4kpage_hosts():
+    # return number of hosts that contain at least one processor with at least 512Mib of 4k pages
+    host_4k = 0
+    for host in host_helper.get_hypervisors():
+        table_ = table_parser.table(cli.system('host-cpu-list', host))
+        proc_ids = set(table_parser.get_column(table_, 'processor'))
+        proc_4k = 0
+        for proc_id in proc_ids:
+            page_in_4k= int(system_helper.get_host_mem_values(host,["vm_total_4K"],proc_id)[0])
+            if page_in_4k >= 131072:
+                proc_4k +=1
+
+        if proc_4k >= 1:
+            host_4k += 1
+
+    return host_4k
+
 @mark.skipif(len(host_helper.get_hypervisors()) < 2, reason="Less than 2 hypervisor hosts on the system")
+@mark.skipif(test_get_4kpage_hosts() < 2, reason="Less than 2 hosts contain enough 4k memory page for live migrate")
 @mark.parametrize(
         "block_migrate", [
             False,

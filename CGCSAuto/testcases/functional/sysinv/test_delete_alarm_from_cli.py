@@ -34,12 +34,15 @@ def test_delete_alarm():
 
     """
     # create an alarm using fmClientCli
-    cmd = "fmClientCli -c '### ###600.005###alarm###system.vm###host=compute-0.vm=$i### ###critical###'oam' port" \
+    # TODO command outdate need new command to create alarm
+    cmd = "fmClientCli -c '### ###300.005###set###system.vm###host=compute-0.vm=$i### ###critical###Automation test" \
           "###processing-error###cpu-cycles-limit-exceeded### ###True###True###'"
 
+
     ssh_client = ControllerClient.get_active_controller()
-    LOG.tc_step("Create an critical alarm 600.005")
+    LOG.tc_step("Create an critical alarm 300.005")
     exit_code, cmd_output = ssh_client.exec_cmd(cmd, err_only=False, expect_timeout=CLI_TIMEOUT)
+
     uuid = re.findall(pattern=UUID, string=cmd_output)[0]
 
     # delete alarm
