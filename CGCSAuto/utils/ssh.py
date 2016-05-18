@@ -307,7 +307,7 @@ class SSHClient:
         """
         LOG.debug("Executing command...")
         if err_only:
-            cmd += ' 1> /dev/null'          # remove stdout
+            cmd += ' 1> /dev/null'          # discard stdout
         self.send(cmd, reconnect, reconnect_timeout)
         self.expect(timeout=expect_timeout)
         return self.__process_exec_result(cmd, rm_date)
