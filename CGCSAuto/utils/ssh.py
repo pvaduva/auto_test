@@ -747,13 +747,13 @@ class ControllerClient:
 
         """
         if not lab_name:
-            LOG.debug("No lab name specified. Getting the active controller ssh client if one is set.")
+            # LOG.debug("No lab name specified. Getting the active controller ssh client if one is set.")
             controllers = cls.get_active_controllers(fail_ok=fail_ok)
             if len(controllers) == 0:
                 return None
             if len(controllers) > 1:
                 LOG.warning("Multiple active controller sessions available. Returning the first one.")
-            LOG.debug("ssh client for {} returned".format(controllers[0].host))
+            # LOG.debug("ssh client for {} returned".format(controllers[0].host))
             return controllers[0]
 
         for lab_ in cls.__lab_ssh_map:

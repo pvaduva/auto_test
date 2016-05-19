@@ -1,4 +1,4 @@
-class SetFlavorVcpuScheduler:
+class VCPUSchedulerErr:
     CANNOT_SET_VCPU0 = "vcpu 0 cannot be specified"
     VCPU_VAL_OUT_OF_RANGE = "vcpu value out of range"
     INVALID_PRIORITY = "priority must be between 1-99"
@@ -9,3 +9,9 @@ class SetFlavorVcpuScheduler:
     MISSING_PARAMETER = "missing required parameter"
     TOO_MANY_PARAMETERS = "too many parameters"
     VCPU_MULTIPLE_ASSIGNMENT = "specified multiple times, specification is ambiguous"
+
+
+class MinCPUErr:
+    VAL_LARGER_THAN_VCPUS = "min_vcpus must be less than or equal to the flavor vcpus value"
+    VAL_LESS_THAN_1 = "min_vcpus must be greater than or equal to 1"
+    CPU_POLICY_NOT_DEDICATED = "min_vcpus is only valid when hw:cpu_policy is 'dedicated'"

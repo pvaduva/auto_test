@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from pytest import fixture
 
 from utils import exceptions
@@ -74,28 +76,18 @@ class ResourceCleanup:
     """
     Class to hold the cleanup list and related functions.
     """
+    __resources_dict = {
+        'vms_with_vols': [],
+        'vms_no_vols': [],
+        'volumes': [],
+        'flavors': [],
+        'images': [],
+        'server_groups': [],
+    }
     __resources_to_cleanup = {
-        'function': {
-            'vms_with_vols': [],
-            'vms_no_vols': [],
-            'volumes': [],
-            'flavors': [],
-            'images': [],
-        },
-        'class': {
-            'vms_with_vols': [],
-            'vms_no_vols': [],
-            'volumes': [],
-            'flavors': [],
-            'images': [],
-        },
-        'module': {
-            'vms_with_vols': [],
-            'vms_no_vols': [],
-            'volumes': [],
-            'flavors': [],
-            'images': [],
-        }
+        'function': deepcopy(__resources_dict),
+        'class': deepcopy(__resources_dict),
+        'module': deepcopy(__resources_dict),
     }
 
     @classmethod
@@ -109,6 +101,7 @@ class ResourceCleanup:
         volumes = resources['volumes']
         flavors = resources['flavors']
         images = resources['images']
+        server_groups = resources['server_groups']
         err_msgs = []
         if vms_with_vols:
             code, msg = vm_helper.delete_vms(vms_with_vols, delete_volumes=True, fail_ok=True)
@@ -135,19 +128,19 @@ class ResourceCleanup:
             if code > 0:
                 err_msgs.append(msg)
 
+        if server_groups:
+            code, msg = nova_helper.delete_server_groups(server_groups, fail_ok=True)
+            if code > 0:
+                err_msgs.append(msg)
+
         # Attempt all deletions before raising exception.
         if err_msgs:
             raise exceptions.CommonError("Failed to delete resource(s). Details: {}".format(err_msgs))
 
     @classmethod
     def _reset(cls, scope):
-        cls.__resources_to_cleanup[scope] = {
-            'vms_with_vols': [],
-            'vms_no_vols': [],
-            'volumes': [],
-            'flavors': [],
-            'images': [],
-        }
+        for key in cls.__resources_to_cleanup[scope]:
+            cls.__resources_to_cleanup[scope][key] = []
 
     @classmethod
     def add(cls, resource_type, resource_id, scope='function', del_vm_vols=False):
@@ -164,7 +157,7 @@ class ResourceCleanup:
         scope == scope.lower()
         resource_type = resource_type.lower()
         valid_scopes = ['function', 'class', 'module']
-        valid_types = ['vm', 'volume', 'flavor', 'image']
+        valid_types = ['vm', 'volume', 'flavor', 'image', 'server_group']
         if scope not in valid_scopes:
             raise ValueError("'scope' param value has to be one of the: {}".format(valid_scopes))
         if resource_type not in valid_types:

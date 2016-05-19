@@ -5,9 +5,9 @@ from utils import cli, exceptions
 from utils import table_parser
 from utils.tis_log import LOG
 from consts.auth import Tenant
-from consts.cgcs import BOOT_FROM_VOLUME, UUID
+from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput
 from keywords import keystone_helper, host_helper
-from keywords.common import Count
+from keywords.common import Count, get_tenant_name
 
 
 def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ephemeral=None, swap=None,
@@ -287,8 +287,275 @@ def get_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN):
     return extra_specs
 
 
-def create_server_group(name, policy=None, best_effort=False, max_group_size=None):
-    raise NotImplementedError
+def create_server_group(name=None, policy='affinity', best_effort=None, max_group_size=None, fail_ok=False, auth_info=None,
+                        con_ssh=None, **metadata):
+    """
+    Create a server group with given criteria
+
+    Args:
+        name (str): name of the server group
+        policy (str): affinity or anti-infinity
+        best_effort (bool): best effort metadata value
+        max_group_size (int): max instances allowed in this server group
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+        **metadata: key, value metadata pairs except group size and best effort.
+
+    Returns (tuple): (rtn_code (int), err_msg_or_srv_grp_id (str))
+        - (0, <server_group_id>)    # server group created successfully
+        - (1, <stderr>)     # create server group cli rejected
+
+    """
+    # process server group metadata
+    args = ''
+    if best_effort is not None or max_group_size is not None or metadata:
+        tmp_list = []
+        if best_effort:
+            tmp_list.append('{}={}'.format(ServerGroupMetadata.BEST_EFFORT, best_effort))
+        if max_group_size:
+            tmp_list.append('{}={}'.format(ServerGroupMetadata.GROUP_SIZE, max_group_size))
+        if metadata:
+            for key, value in metadata.items():
+                tmp_list.append('{}={}'.format(key, value))
+        args += '--metadata ' + ','.join(tmp_list)
+
+    # process server group name
+    if name is None:
+        name = 'srv_grp'
+    args += " {}-{}".format(name, Count.get_sever_group_count())
+
+    # process server group policy
+    args += ' ' + policy
+
+    LOG.info("Creating server group with args: {}...".format(args))
+    exit_code, output = cli.nova('server-group-create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
+                                 rtn_list=True)
+
+    if exit_code == 1:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    srv_grp_id = table_parser.get_column(table_, 'Id')[0]
+    LOG.info("Server group {} created successfully.".format(srv_grp_id))
+    return 0, srv_grp_id
+
+
+def get_server_groups(auth_info=None, con_ssh=None, all_srv_grps=True):
+    """
+    Get server groups ids for given tenant or all server groups if admin is set via auth_info and all_srv_grps=True
+
+    Args:
+        auth_info (dict):
+        con_ssh (SSHClient):
+        all_srv_grps (bool): whether to return server groups for all tenants if ADMIN auth_info is provided
+
+    Returns (list): a list of server groups ids
+
+    """
+
+    table_ = cli.nova('server-group-list', ssh_client=con_ssh, auth_info=auth_info)
+    if not all_srv_grps and get_tenant_name(auth_info) == 'admin':
+        admin_tenant_id = keystone_helper.get_tenant_ids(tenant_name='admin')[0]
+        return table_parser.get_values(table_, 'Id', **{'Project Id': admin_tenant_id})
+
+    return table_parser.get_column(table_, 'Id')
+
+
+def get_server_groups_info(server_groups=None, header='Policies', auth_info=None, con_ssh=None):
+    """
+    Get a server group(s) info as a list
+
+    Args:
+        server_groups (str|list): id(s) of server group(s).
+        header (str): header string for info. such as 'Member', 'Metadata', 'Policies'
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (list): server group(s) info as a list
+
+    """
+    table_ = table_parser.table(cli.nova('server-group-list', ssh_client=con_ssh, auth_info=auth_info))
+    if server_groups:
+        table_ = table_parser.filter_table(table_, Id=server_groups)
+
+    return table_parser.get_column(table_, header)
+
+
+def set_server_group_metadata(srv_grp_id, fail_ok=False, auth_info=None, con_ssh=None, **metadata):
+    if not metadata:
+        raise ValueError("At least one metadata key-value pair needs to be provided.")
+
+    LOG.info("Setting metadata {} for server group {}".format(metadata, srv_grp_id))
+
+    args = srv_grp_id
+    metadata_to_check = {}
+    for key, value in metadata.items():
+        key = key.lower()
+        value = str(value).lower()
+        metadata_to_check[key] = value
+        args += ' {}={}'.format(key, value)
+
+    code, output = cli.nova('server-group-set-metadata', args, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                            fail_ok=fail_ok)
+
+    if code == 1:
+        return 1, output
+
+    post_set_metadata = eval(table_parser.get_values(table_parser.table(output), 'Metadata', Id=srv_grp_id)[0])
+    for key, value in metadata_to_check.items():
+        if not post_set_metadata[key] == value:
+            msg = "Server group metadata {} is not set to {}".format(srv_grp_id, key, value)
+            if fail_ok:
+                LOG.warning(msg)
+                return 2, msg
+            raise exceptions.NovaError(msg)
+
+    msg = "Server group metadata successfully set: {}".format(metadata_to_check)
+    LOG.info(msg)
+    return 0, msg
+
+
+def unset_server_group_metadata(srv_grp_id, fail_ok=False, auth_info=None, con_ssh=None, *metadata):
+    if not metadata:
+        raise ValueError("At least one metadata name needs to be provided.")
+
+    LOG.info("Unsetting metadata {} for server group {}".format(metadata, srv_grp_id))
+
+    args = srv_grp_id + ' '
+    metadata = [item.lower() for item in metadata]
+    args += ' '.join([item + "=" for item in metadata])
+
+    code, output = cli.nova('server-group-set-metadata', args, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                            fail_ok=fail_ok)
+
+    if code == 1:
+        return 1, output
+
+    post_set_metadata = eval(table_parser.get_values(table_parser.table(output), 'Metadata', Id=srv_grp_id))
+
+    undeleted_keys = list(set(metadata) - set(post_set_metadata.keys()))
+
+    if undeleted_keys:
+        msg = "Some metadata for server group {} failed to unset: {}".format(srv_grp_id, undeleted_keys)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, msg
+        raise exceptions.NovaError(msg)
+
+    msg = "Server group metadata successfully unset: {}".format(metadata)
+    LOG.info(msg)
+    return 0, msg
+
+
+def server_group_exists(srv_grp_id, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Return True if given server group exists else False
+
+    Args:
+        srv_grp_id (str):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (bool): True or False
+
+    """
+    table_ = table_parser.table(cli.nova('server-group-list', ssh_client=con_ssh, auth_info=auth_info))
+    existing_server_groups = table_parser.get_column(table_, 'Id')
+
+    return srv_grp_id in existing_server_groups
+
+
+def delete_server_groups(srv_grp_ids=None, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Delete server group(s)
+
+    Args:
+        srv_grp_ids (list|str): id(s) for server group(s) to delete.
+        check_first (bool): whether to check existence of given server groups before attempt to delete. Default: True.
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple): (rtn_code(int), msg(str))  # rtn_code 1,2,3,4 only returns when fail_ok=True
+        (-1, 'No server group(s) to delete.')     # "Empty vm list/string provided and no vm exist on system.
+        (-1, 'None of the given server group(s) exists on system.')
+        (0, "Server group(s) deleted successfully.")
+        (1, <stderr>)   # Deletion rejected for all of the server groups. Return CLI stderr.
+        (2, "Deletion rejected for some server group(s): <srv_grp_ids>")
+        (3, "Deletion rejected for some server group(s) and some deleted server groups still exist on system: <srv_grp_ids>")
+        (4, "Some deleted server group(s) still exist on system:: <srv_grp_ids>")
+    """
+    if srv_grp_ids is None:
+        srv_grp_ids = get_server_groups(con_ssh=con_ssh, auth_info=auth_info)
+
+    if isinstance(srv_grp_ids, str):
+        srv_grp_ids = [srv_grp_ids]
+
+    LOG.info("Deleting server group(s): {}".format(srv_grp_ids))
+
+    for server_group in srv_grp_ids:
+        if server_group:
+            break
+    else:
+        LOG.warning("Empty server group list/string provided and no server group exists on system. Do Nothing")
+        return -1, 'No server group(s) to delete.'
+
+    if check_first:
+        grps_to_del = []
+        for server_group in srv_grp_ids:
+            grp_exist = server_group_exists(server_group, con_ssh=con_ssh)
+            if grp_exist:
+                grps_to_del.append(server_group)
+        if not grps_to_del:
+            LOG.info("None of these server groups exist on system: {}. Do nothing".format(srv_grp_ids))
+            return -1, 'None of the given server group(s) exists on system.'
+    else:
+        grps_to_del = srv_grp_ids
+
+    grps_to_del_str = ' '.join(grps_to_del)
+
+    code, output = cli.nova('server-group-delete', grps_to_del_str, ssh_client=con_ssh, timeout=60, fail_ok=True,
+                            rtn_list=True, auth_info=auth_info)
+
+    if code == 1:
+        return 1, output
+
+    grps_del_accepted = re.findall(NovaCLIOutput.SRV_GRP_DEL_SUCC, output)
+    grps_del_rejected = list(set(grps_to_del) - set(grps_del_accepted))
+
+    # check if server groups are actually removed from nova server-group-list
+    grps_undeleted = []
+    for grp in grps_del_accepted:
+        if server_group_exists(grp):
+            grps_undeleted.append(grp)
+
+    if grps_del_rejected:
+        if grps_undeleted:
+            msg = "Deletion rejected for some server group(s) and some deleted server groups still exist on system: " \
+                  "{}".format(grps_del_rejected, grps_undeleted)
+            if fail_ok:
+                LOG.warning(msg)
+                return 3, msg
+            raise exceptions.NovaError(msg)
+        else:
+            msg = "Deletion rejected for some server group(s): {}".format(grps_del_rejected)
+            if fail_ok:
+                LOG.warning(msg)
+                return 2, msg
+            raise exceptions.NovaError(msg)
+
+    elif grps_undeleted:
+        msg = "Some deleted server group(s) still exist on system: {}".format(grps_undeleted)
+        if fail_ok:
+            LOG.warning(msg)
+            return 4, msg
+        raise exceptions.NovaError(msg)
+
+    else:
+        msg = "Server group(s) deleted successfully."
+        LOG.info(msg)
+        return 0, "Server group(s) deleted successfully."
 
 
 def get_all_vms(return_val='ID', con_ssh=None):

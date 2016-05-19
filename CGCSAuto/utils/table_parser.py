@@ -221,6 +221,9 @@ def get_all_rows(table_):
         Return rows as a list. Each row itself is an sub-list.
         e.g.,[['name', 'internal-subnet0'], ['id', '36864844783']]
     """
+    if table_ and not isinstance(table_, dict):
+        raise ValueError("Input has to be a dictionary. Input: {}".format(table_))
+
     return table_['values'] if table_ else None
 
 

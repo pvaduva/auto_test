@@ -125,3 +125,5 @@ class CommonError(TiSError):
     message = "Setup/Teardown error."
 
 
+class NovaError(TiSError):
+    message = "Nova error."

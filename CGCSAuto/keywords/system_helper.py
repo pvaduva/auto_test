@@ -3,7 +3,6 @@ import math
 
 import time
 
-from consts import cgcs
 from consts.auth import Tenant
 from consts.timeout import CMDTimeout
 from utils import cli, table_parser, exceptions

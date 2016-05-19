@@ -81,7 +81,7 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
     LOG.info("Volume {} is attached to vm {}".format(vol_id, vm_id))
 
 
-def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, nics=None,
+def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None, fail_ok=False,
             auth_info=None, con_ssh=None):
     """
@@ -101,6 +101,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
         auth_info (dict):
         con_ssh (SSHClient):
         nics (list): [{'net-id1': <net_id1>, 'vif-model1': <vif1>}, {'net-id2': <net_id2>, 'vif-model2': <vif2>}, ...]
+        hint (dict): key/value pair(s) sent to scheduler for custom use. such as group=<server_group_id>
         fail_ok (bool):
 
     Returns (tuple): (rtn_code(int), new_vm_id_if_any(str), message(str), new_vol_id_if_any(str))
@@ -184,6 +185,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
     # Handle mandatory arg - key_name
     key_name = key_name if key_name is not None else get_keypair(auth_info=auth_info, con_ssh=con_ssh)
 
+    if hint:
+        hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
+
     optional_args_dict = {'--flavor': flavor,
                           '--image': image,
                           '--boot-volume': volume_id,
@@ -195,6 +199,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
                           '--ephemeral': ephemeral,
                           '--user-data': user_data,
                           '--block-device': block_device,
+                          '--hint': hint
                           }
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])

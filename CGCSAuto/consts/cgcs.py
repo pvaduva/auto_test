@@ -79,8 +79,10 @@ class Prompt:
 
 class NovaCLIOutput:
     VM_DELETE_REJECTED_NOT_EXIST = "No server with a name or ID of '(.*)' exists."
-    VM_DELETE_ACCEPTED = "Request to delete server () has been accepted."
+    VM_DELETE_ACCEPTED = "Request to delete server (.*) has been accepted."
     VM_BOOT_REJECT_MEM_PAGE_SIZE_FORBIDDEN = "Page size .* forbidden against .*"
+    SRV_GRP_DEL_REJ_NOT_EXIST = "Delete for server group (.*) failed"
+    SRV_GRP_DEL_SUCC = "Server group (.*) has been successfully deleted."
 
 
 class FlavorSpec:
@@ -96,12 +98,19 @@ class FlavorSpec:
     AUTO_RECOVERY = 'sw:wrs:auto_recovery'
     GUEST_HEARTBEAT = 'sw:wrs:guest:heartbeat'
     VCPU_SCHEDULER = 'hw:wrs:vcpu:scheduler'
+    MIN_VCPUS = "hw:wrs:min_vcpus"
+    SRV_GRP_MSG = "sw:wrs:srv_grp_messaging"
 
 
 class ImageMetadata:
     MEM_PAGE_SIZE = 'hw_mem_page_size'
     AUTO_RECOVERRY = 'sw_wrs_auto_recovery'
     VIF_MODEL = 'hw_vif_model'
+
+
+class ServerGroupMetadata:
+    BEST_EFFORT = "wrs-sg:best_effort"
+    GROUP_SIZE = "wrs-sg:group_size"
 
 
 class InstanceTopology:

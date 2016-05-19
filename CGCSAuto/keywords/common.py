@@ -87,6 +87,7 @@ class Count:
     __flavor_count = 0
     __volume_count = 0
     __image_count = 0
+    __server_group = 0
 
     @classmethod
     def get_vm_count(cls):
@@ -102,3 +103,8 @@ class Count:
     def get_image_count(cls):
         cls.__image_count += 1
         return cls.__image_count
+
+    @classmethod
+    def get_sever_group_count(cls):
+        cls.__server_group += 1
+        return cls.__server_group
