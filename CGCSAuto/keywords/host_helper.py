@@ -52,7 +52,7 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
             host_ssh.close()
 
 
-def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False):
+def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False, wait_for_reboot_finish=True):
     """
     Reboot one or multiple host(s)
 
@@ -61,6 +61,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         timeout (int): timeout waiting for reboot to complete in seconds
         con_ssh (SSHClient): Active controller ssh
         fail_ok (bool): Whether it is okay or not for rebooting to fail on any host
+        wait_for_reboot_finish (bool): whether to wait for reboot finishes before return
 
     Returns (tuple): (rtn_code, message)
         (0, "Host(s) state(s) - <states_dict>.") hosts rebooted and back to available/degraded or online state.
@@ -105,6 +106,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         hostnames.append(controller)
 
     time.sleep(30)
+    if not wait_for_reboot_finish:
+        return -1, "Reboot hosts command sent."
+
     hostnames = sorted(hostnames)
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
     unlocked_hosts_all = table_parser.get_values(table_, 'hostname', administrative='unlocked')
@@ -171,7 +175,8 @@ def __hosts_stay_in_states(hosts, duration=10, con_ssh=None, **states):
     return True
 
 
-def _wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, duration=3, con_ssh=None, **states):
+def _wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, duration=3, con_ssh=None, fail_ok=True,
+                           **states):
     """
     Wait for hosts to go in specified states
 
@@ -188,6 +193,7 @@ def _wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, 
             False otherwise
 
     """
+
     if isinstance(hosts, str):
         hosts = [hosts]
     for key, value in states.items():
@@ -203,8 +209,11 @@ def _wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, 
             return True
         time.sleep(check_interval)
     else:
-        LOG.warning("Timed out waiting for {} in state(s) - {}".format(hosts, states))
-        return False
+        msg = "Timed out waiting for {} in state(s) - {}".format(hosts, states)
+        if fail_ok:
+            LOG.warning(msg)
+            return False
+        raise exceptions.HostTimeout(msg)
 
 
 def __hosts_in_states(hosts, con_ssh=None, **states):

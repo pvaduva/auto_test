@@ -612,7 +612,7 @@ def get_vm_storage_type(vm_id, con_ssh=None):
     return extra_specs['aggregate_instance_extra_specs:storage']
 
 
-def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False):
+def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False, strict=True, **kwargs):
     """
     get a list of VM IDs or Names for given tenant in auth_info param.
 
@@ -621,6 +621,8 @@ def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False):
         con_ssh (SSHClient): controller SSHClient.
         auth_info (dict): such as ones in auth.py: auth.ADMIN, auth.TENANT1
         all_vms (bool): whether to return VMs for all tenants if admin auth_info is given
+        strict (bool): applies to search for value(s) specified in kwargs
+        **kwargs: header/value pair to filter out the vms
 
     Returns (list): list of VMs for tenant(s).
 
@@ -633,7 +635,10 @@ def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False):
             positional_args = '--all-tenant'
     table_ = table_parser.table(cli.nova('list', positional_args=positional_args, ssh_client=con_ssh,
                                          auth_info=auth_info))
-    return table_parser.get_column(table_, return_val)
+    if kwargs:
+        return table_parser.get_values(table_, return_val, strict, **kwargs)
+    else:
+        return table_parser.get_column(table_, return_val)
 
 
 def get_vm_nova_show_values(vm_id, fields, strict=False, con_ssh=None, auth_info=Tenant.ADMIN):
@@ -643,6 +648,10 @@ def get_vm_nova_show_values(vm_id, fields, strict=False, con_ssh=None, auth_info
         value = table_parser.get_value_two_col_table(table_, field, strict)
         values.append(value)
     return values
+
+
+def get_vm_status(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+    return get_vm_nova_show_value(vm_id, 'status', con_ssh=con_ssh, auth_info=auth_info)
 
 
 def get_vm_id_from_name(vm_name, con_ssh=None):

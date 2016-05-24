@@ -127,3 +127,7 @@ class CommonError(TiSError):
 
 class NovaError(TiSError):
     message = "Nova error."
+
+
+class NeutronError(TiSError):
+    message = "Neutron error."

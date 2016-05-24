@@ -8,13 +8,13 @@ from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
 from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.timeout import VMTimeout
-from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput
+from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper
 
 
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
     """
-    Get a list of vm ids.
+    Get a list of ids of any active vms.
 
     Args:
         count (int): number of vms ids to return. If None, all vms for specific tenant will be returned. If num of
@@ -24,12 +24,12 @@ def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn
         all_tenants (bool): whether to get any vms from all tenants or just admin tenant if auth_info is set to Admin
         rtn_new (bool): whether to return an extra list containing only the newly created vms
 
-    Returns (tuple):
-        vms(tuple)  # rtn_new=False
-        (vms(tuple), new_vms(tuple)) # rtn_new=True
+    Returns (list):
+        vms(list)  # rtn_new=False
+        [vms(list), new_vms(list)] # rtn_new=True
 
     """
-    vms = nova_helper.get_vms(con_ssh=con_ssh, auth_info=auth_info, all_vms=all_tenants)
+    vms = nova_helper.get_vms(con_ssh=con_ssh, auth_info=auth_info, all_vms=all_tenants, Status='ACTIVE')
     if count is None:
         if rtn_new:
             vms = [vms, []]
@@ -48,7 +48,7 @@ def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn
         new_vms.append(new_vm)
 
     if rtn_new:
-        vms = (tuple(vms), tuple(new_vms))
+        vms = [vms, new_vms]
     return vms
 
 
@@ -768,7 +768,7 @@ def _wait_for_vm_status(vm_id, status, timeout=VMTimeout.STATUS_CHANGE, check_in
 
     Args:
         vm_id:
-        status (list or str):
+        status (list|str):
         timeout:
         check_interval:
         fail_ok (bool):
@@ -938,7 +938,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         to_vms = vms_ids
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
-                               prompt=prompt) as from_vm_ssh:
+                               prompt=prompt, con_ssh=con_ssh) as from_vm_ssh:
 
         res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
                         fail_ok=fail_ok)
@@ -946,9 +946,20 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
     return res
 
 
+def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
+                     num_pings=5, timeout=15, fail_ok=False):
+
+    if ext_ip is None:
+        ext_ip = EXT_IP
+
+    with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
+                               prompt=prompt, con_ssh=con_ssh) as from_vm_ssh:
+        return _ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings, timeout=timeout, fail_ok=fail_ok)
+
+
 @contextmanager
 def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
-                          timeout=VMTimeout.SSH_LOGIN, natbox_client=None):
+                          timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None):
     """
     ssh to a vm from natbox.
 
@@ -960,6 +971,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         prompt (str):
         timeout (int): 
         natbox_client (NATBoxClient):
+        con_ssh (SSHClient): ssh connection to TiS active controller
 
     Yields (VMSSHClient):
         ssh client of the vm
@@ -970,7 +982,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
 
     """
     if vm_image_name is None:
-        vm_image_name = nova_helper.get_vm_image_name(vm_id=vm_id).strip().lower()
+        vm_image_name = nova_helper.get_vm_image_name(vm_id=vm_id, con_ssh=con_ssh).strip().lower()
 
     vm_name = nova_helper.get_vm_name_from_id(vm_id=vm_id)
     vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id)[0]
@@ -1289,6 +1301,58 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
                                        format(timeout, vms_to_check))
 
 
+def _wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VMTimeout.STATUS_CHANGE, fail_ok=True,
+                         check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
+
+    """
+    Wait for specific vms to reach any of the given state(s)
+
+    Args:
+        vms (str|list): id(s) of vms to check
+        header (str): target header in nova list
+        values (str|list): expected value(s)
+        timeout (int): in seconds
+        fail_ok (bool):
+        check_interval (int):
+        con_ssh (SSHClient|None):
+        auth_info (dict|None):
+
+    Returns (list): [result(bool), vms_in_state(list), vms_failed_to_reach_state(list)]
+
+    """
+    if isinstance(vms, str):
+        vms = [vms]
+
+    if isinstance(values, str):
+        values = [values]
+
+    vms_to_check = list(vms)
+    res_pass = {}
+    res_fail = {}
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        table_ = table_parser.table(cli.nova('list --all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+
+        for vm_id in vms_to_check:
+            vm_val = table_parser.get_values(table_, target_header=header, ID=vm_id)[0]
+            res_fail[vm_id] = vm_val
+            if vm_val in values:
+                vms_to_check.remove(vm_id)
+                res_pass[vm_id] = vm_val
+                res_fail.pop(vm_id)
+
+        if not vms_to_check:
+            return True, res_pass, res_fail
+
+        time.sleep(check_interval)
+
+    fail_msg = "Some vm(s) did not reach given status from nova list within {} seconds: {}".format(timeout, res_fail)
+    if fail_ok:
+        LOG.warning(fail_msg)
+        return False, res_pass, res_fail
+    raise exceptions.VMPostCheckFailed(fail_msg)
+
+
 def set_vm_state(vm_id, check_first=False, error_state=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Set vm state to error or active via nova reset-state.
@@ -1332,3 +1396,135 @@ def set_vm_state(vm_id, check_first=False, error_state=True, fail_ok=False, auth
     msg = "VM state is successfully set to: {}".format(expt_vm_status)
     LOG.info(msg)
     return 0, msg
+
+
+def reboot_vm(vm_id, hard=False, fail_ok=False, con_ssh=None, auth_info=None):
+    vm_status = nova_helper.get_vm_status(vm_id, con_ssh=con_ssh)
+    if not vm_status.lower() == 'active':
+        LOG.warning("VM is not in active state before rebooting. VM status: {}".format(vm_status))
+
+    extra_arg = '--hard ' if hard else ''
+    arg = "{}{}".format(extra_arg, vm_id)
+
+    code, output = cli.nova('reboot', arg, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    expt_reboot = VMStatus.HARD_REBOOT if hard else VMStatus.SOFT_REBOOT
+    _wait_for_vm_status(vm_id, expt_reboot, check_interval=1, fail_ok=False)
+
+    actual_status = _wait_for_vm_status(vm_id, [VMStatus.ACTIVE, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh)
+    if not actual_status:
+        msg = "VM {} did not reach active state after reboot.".format(vm_id)
+        LOG.warning(msg)
+        return 2, msg
+
+    if actual_status.lower() == VMStatus.ERROR.lower():
+        msg = "VM is in error state after reboot."
+        if fail_ok:
+            LOG.warning(msg)
+            return 3, msg
+        raise exceptions.VMPostCheckFailed(msg)
+
+    succ_msg = "VM rebooted successfully."
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def __perform_action_on_vm(vm_id, action, expt_status, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None,
+                           auth_info=None):
+
+    LOG.info("{}ing vm {}...".format(action, vm_id))
+    code, output = cli.nova(action, vm_id, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    actual_status = _wait_for_vm_status(vm_id, [expt_status, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh,
+                                        timeout=timeout)
+
+    if not actual_status:
+        msg = "VM {} did not reach expected state {} after {}.".format(vm_id, expt_status, action)
+        LOG.warning(msg)
+        return 2, msg
+
+    if actual_status.lower() == VMStatus.ERROR.lower():
+        msg = "VM is in error state after {}.".format(action)
+        if fail_ok:
+            LOG.warning(msg)
+            return 3, msg
+        raise exceptions.VMPostCheckFailed(msg)
+
+    succ_msg = "VM {}ed successfully.".format(action)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def suspend_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
+    return __perform_action_on_vm(vm_id, 'suspend', VMStatus.SUSPENDED, timeout=timeout, fail_ok=fail_ok,
+                                  con_ssh=con_ssh, auth_info=auth_info)
+
+
+def resume_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
+    return __perform_action_on_vm(vm_id, 'resume', VMStatus.ACTIVE, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
+                                  auth_info=auth_info)
+
+
+def pause_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
+    return __perform_action_on_vm(vm_id, 'pause', VMStatus.PAUSED, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
+                                  auth_info=auth_info)
+
+
+def unpause_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
+    return __perform_action_on_vm(vm_id, 'unpause', VMStatus.ACTIVE, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
+                                  auth_info=auth_info)
+
+
+def stop_vms(vms, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
+    return __perform_action_on_vms(vms, 'stop', VMStatus.STOPPED, timeout, check_interval=1, fail_ok=fail_ok,
+                                   con_ssh=con_ssh, auth_info=auth_info)
+
+
+def start_vms(vms, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
+    return __perform_action_on_vms(vms, 'start', VMStatus.ACTIVE, timeout, check_interval=1, fail_ok=fail_ok,
+                                   con_ssh=con_ssh, auth_info=auth_info)
+
+
+def __perform_action_on_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=False,
+                            con_ssh=None, auth_info=None):
+
+    LOG.info("{}ing vms {}...".format(action, vms))
+    action = action.lower()
+    if isinstance(vms, str):
+        vms = [vms]
+
+    code, output = cli.nova(action, ' '.join(vms), ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                            rtn_list=True)
+
+    vms_to_check = list(vms)
+    if code == 1:
+        vms_to_check = re.findall(NovaCLIOutput.VM_ACTION_ACCEPTED.format(action), output)
+        if not vms_to_check:
+            return 1, output
+
+    res_bool, res_pass, res_fail = _wait_for_vms_values(vms_to_check, 'Status', [expt_status, VMStatus.ERROR],
+                                                        fail_ok=fail_ok, check_interval=check_interval,
+                                                        con_ssh=con_ssh, timeout=timeout)
+
+    if not res_bool:
+        msg = "Some VM(s) did not reach expected state(s) - {}. Actual states: {}".format(expt_status, res_fail)
+        LOG.warning(msg)
+        return 2, msg
+
+    error_vms = [vm_id for vm_id in vms_to_check if res_pass[vm_id].lower() == VMStatus.ERROR.lower()]
+    if error_vms:
+        msg = "Some VM(s) in error state after {}: {}".format(action, error_vms)
+        if fail_ok:
+            LOG.warning(msg)
+            return 3, msg
+        raise exceptions.VMPostCheckFailed(msg)
+
+    succ_msg = "Action {} performed successfully on vms.".format(action)
+    LOG.info(succ_msg)
+    return 0, succ_msg

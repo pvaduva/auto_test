@@ -1,6 +1,8 @@
 # output of date. such as: Tue Mar  1 18:20:29 UTC 2016
 DATE_OUTPUT = r'[0-2]\d:[0-5]\d:[0-5]\d\s[A-Z]{3}\s\d{4}$'
 
+EXT_IP = '8.8.8.8'
+
 # such as 192.168.11.6
 MGMT_IP = r'mgmt-net\d?=.*(192.168\.\d{1,3}\.\d{1,3})'
 
@@ -41,6 +43,8 @@ class VMStatus:
     PAUSED = 'PAUSED'
     NO_STATE = 'NO STATE'
     HARD_REBOOT = 'HARD REBOOT'
+    SOFT_REBOOT = 'REBOOT'
+    STOPPED = "SHUTOFF"
 
 
 class HostAdminState:
@@ -78,6 +82,9 @@ class Prompt:
 
 
 class NovaCLIOutput:
+    VM_ACTION_ACCEPTED = "Request to {} server (.*) has been accepted."
+    VM_START_ACCEPTED = "Request to start server (.*) has been accepted."
+    VM_STOP_ACCEPTED = "Request to stop server (.*) has been accepted."
     VM_DELETE_REJECTED_NOT_EXIST = "No server with a name or ID of '(.*)' exists."
     VM_DELETE_ACCEPTED = "Request to delete server (.*) has been accepted."
     VM_BOOT_REJECT_MEM_PAGE_SIZE_FORBIDDEN = "Page size .* forbidden against .*"
