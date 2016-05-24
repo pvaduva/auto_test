@@ -251,7 +251,8 @@ def verify_custom_lab_cfg_location(lab_cfg_location):
     found_system_cfg_file = False
     found_lab_settings_file = False
     for file in os.listdir(lab_cfg_location):
-        if file == SYSTEM_CFG_FILENAME:
+        #if file == SYSTEM_CFG_FILENAME:
+        if file in CFGFILE_LIST:
             found_system_cfg_file = True
         elif file == BULK_CFG_FILENAME:
             found_bulk_cfg_file = True
