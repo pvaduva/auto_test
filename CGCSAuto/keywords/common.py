@@ -88,6 +88,8 @@ class Count:
     __volume_count = 0
     __image_count = 0
     __server_group = 0
+    __router = 0
+    __subnet = 0
 
     @classmethod
     def get_vm_count(cls):
@@ -108,3 +110,13 @@ class Count:
     def get_sever_group_count(cls):
         cls.__server_group += 1
         return cls.__server_group
+
+    @classmethod
+    def get_router_count(cls):
+        cls.__router += 1
+        return cls.__router
+
+    @classmethod
+    def get_subnet_count(cls):
+        cls.__subnet += 1
+        return cls.__subnet

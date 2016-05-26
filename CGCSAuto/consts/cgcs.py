@@ -21,6 +21,8 @@ BOOT_FROM_VOLUME = 'Attempt to boot from volume - no image supplied'
 
 IMAGE_DIR = '/home/wrsroot/images'
 
+DNS_NAMESERVERS = ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
+
 
 class SystemType:
     CPE = 'CPE'
@@ -126,6 +128,11 @@ class InstanceTopology:
     VCPUS = 'vcpus:(\d{1,2}),'
     PCPUS = 'pcpus:(.*),\s'     # find a string separated by ',' if multiple numa nodes
     CPU_POLICY = 'pol:(.*),'
+
+
+class RouterStatus:
+    ACTIVE = 'ACTIVE'
+    DOWN = 'DOWN'
 
 
 class EventLogID:

@@ -1,4 +1,4 @@
-from pytest import fixture, mark, skip
+from pytest import fixture, mark
 
 from utils.tis_log import LOG
 from consts.cgcs import VMStatus
@@ -16,17 +16,18 @@ def set_snat(request):
 
     def disable_snat():
         if run_teardown:
-            network_helper.update_router_ext_gateway_snat(enable_snat=False)
+            network_helper.set_router_gateway(enable_snat=False)
+            # network_helper.update_router_ext_gateway_snat(enable_snat=False)
     request.addfinalizer(disable_snat)
 
 
 @fixture(scope='module')
 def vm_():
     vm_id = vm_helper.boot_vm()[1]
-    ResourceCleanup.add('vm', vm_id)
+    # ResourceCleanup.add('vm', vm_id, scope='module')
 
     # Ensure vm can be reached from outside before proceeding with the test cases
-    vm_helper.ping_vms_from_natbox(vm_)
+    vm_helper.ping_vms_from_natbox(vm_id)
 
     return vm_id
 
@@ -80,11 +81,12 @@ def test_ext_access_vm_actions(vm_):
     vm_helper.start_vms(vm_)
     vm_helper.ping_ext_from_vm(vm_)
 
-    LOG.tc_step("Reboot the VM and verify the ping from VM")
+    LOG.tc_step("Reboot the VM and verify ping from VM")
     vm_helper.reboot_vm(vm_)
     vm_helper.ping_ext_from_vm(vm_)
 
 
+@mark.skipif(True, reason="Evacuation JIRA")
 @mark.slow
 @mark.usefixtures('hosts_recover_func')
 def test_ext_access_host_reboot(vm_):
@@ -156,6 +158,7 @@ def test_reset_router_ext_gateway(vm_):
     vm_helper.ping_ext_from_vm(vm_)
 
 
+@mark.skipif(True, reason="Not implemented")
 def test_vm_nat_protocol(vm_):
     # scp to vm from natbox
     # wget to vm

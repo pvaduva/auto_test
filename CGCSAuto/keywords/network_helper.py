@@ -1,11 +1,13 @@
 import re
 import ipaddress
 
+import math
+
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from consts.auth import Tenant
-from consts.cgcs import MGMT_IP
-from keywords import common
+from consts.cgcs import MGMT_IP, DNS_NAMESERVERS
+from keywords import common, keystone_helper
 
 
 def is_valid_ip_address(ip=None):
@@ -45,9 +47,131 @@ def create_network(name, admin_state='up', qos_policy=None, vlan_transparent=Non
     raise NotImplementedError
 
 
+def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, dns_servers=None,
+                  alloc_pool=None, ip_version=None, subnet_pool=None, tenant_name=None, fail_ok=False, auth_info=None,
+                  con_ssh=None):
+    """
+    Create a subnet for given tenant under specified network
+
+    Args:
+        net_id (str): id of the network to create subnet for
+        name (str): name of the subnet
+        cidr (str): such as "192.168.3.0/24"
+        tenant_name: such as tenant1, tenant2.
+        gateway (str): gateway ip of this subnet
+        dhcp (bool): whether or not to enable DHCP
+        dns_servers (str|list): DNS name servers. Such as ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
+        alloc_pool (dict): {'start': <start_ip>, 'end': 'end_ip'}
+        ip_version (int): 4, or 6
+        subnet_pool (str): ID or name of subnetpool from which this subnet will obtain a CIDR.
+        fail_ok (bool):
+        auth_info (dict): run the neutron subnet-create cli using these authorization info
+        con_ssh (SSHClient):
+
+    Returns (tuple): (rnt_code (int), subnet_id (str), message (str))
+
+    """
+
+    if cidr is None and subnet_pool is None:
+        raise ValueError("Either cidr or subnet_pool has to be specified.")
+
+    args = net_id
+
+    if cidr:
+        args += ' ' + cidr
+
+    if name is None:
+        name = get_net_name_from_id(net_id, con_ssh=con_ssh, auth_info=auth_info) + 'sub'
+    name = "{}-{}".format(name, common.Count.get_subnet_count())
+
+    args += ' --name ' + name
+
+    if dhcp is False:
+        args += ' --disable-dhcp'
+    elif dhcp is True:
+        args += ' --enable-dhcp'
+
+    if isinstance(dns_servers, list):
+        args += ' --dns-nameservers list=true {}'.format(' '.join(dns_servers))
+    elif dns_servers is not None:
+        args += ' --dns-nameservers {}'.format(dns_servers)
+
+    args_dict = {
+        '--tenant-id': keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0] if tenant_name else None,
+        '--gateway': gateway,
+        '--ip-version': ip_version,
+        '--subnetpool': subnet_pool,
+        'allocation-pool': "start={},end={}".format(alloc_pool['start'], alloc_pool['end']) if alloc_pool else None
+    }
+
+    for key, value in args_dict.items():
+        if value is not None:
+            args += ' {} {}'.format(key, value)
+
+    LOG.info("Creating subnet for network: {}. Args: {}".format(net_id, args))
+    code, output = cli.neutron('subnet-create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                               rtn_list=True)
+
+    if code == 1:
+        return 1, '', output
+
+    table_ = table_parser.table(output)
+    subnet_tenant_id = table_parser.get_value_two_col_table(table_, 'tenant_id')
+    subnet_id = table_parser.get_value_two_col_table(table_, 'id')
+
+    expt_tenant_name = tenant_name if tenant_name else common.get_tenant_name(auth_info)
+    if subnet_tenant_id != keystone_helper.get_tenant_ids(expt_tenant_name)[0]:
+        msg = "Subnet {} is not for tenant: {}".format(subnet_id, expt_tenant_name)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, subnet_id, msg
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "Subnet {} is successfully created for tenant {}".format(subnet_id, expt_tenant_name)
+    LOG.info(succ_msg)
+    return 0, subnet_id, succ_msg
+
+
+def delete_subnet(subnet_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+    LOG.info("Deleting subnet {}".format(subnet_id))
+    code, output = cli.neutron('subnet-delete', subnet_id, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                               fail_ok=True)
+
+    if code == 1:
+        return 1, output
+
+    if subnet_id in get_subnets(auth_info=auth_info, con_ssh=con_ssh):
+        msg = "Subnet {} is still listed in neutron subnet-list".format(subnet_id)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, msg
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "Subnet {} is successfully deleted.".format(subnet_id)
+    return 0, succ_msg
+
+
+def get_subnets(net_id=None, auth_info=None, con_ssh=None):
+    if net_id:
+        table_ = table_parser.table(cli.neutron('net-show', net_id, ssh_client=con_ssh, auth_info=auth_info))
+        subnets= table_parser.get_value_two_col_table(table_, 'subnets', merge_lines=False)
+        if isinstance(subnets, str):
+            subnets = [subnets]
+    else:
+        table_ = table_parser.table(cli.neutron('subnet-list', ssh_client=con_ssh, auth_info=auth_info))
+        subnets = table_parser.get_column(table_, 'id')
+
+    return subnets
+
+
 def _get_net_ids(net_name, con_ssh=None, auth_info=None):
     table_ = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_, 'id', name=net_name)
+
+
+def get_net_name_from_id(net_id, con_ssh=None, auth_info=None):
+    table_ = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_values(table_, 'name', id=net_id)[0]
 
 
 def get_ext_net_ids(con_ssh=None, auth_info=None):
@@ -170,7 +294,16 @@ def get_router_ids(auth_info=None, con_ssh=None):
     return table_parser.get_column(table_, 'id')
 
 
-def get_router_info(router_id=None, field='status', strict=True, auth_info=None, con_ssh=None):
+def get_tenant_router(router_name=None, auth_info=None, con_ssh=None):
+    if router_name is None:
+        tenant_name = common.get_tenant_name(auth_info=auth_info)
+        router_name = tenant_name + '-router'
+
+    table_ = table_parser.table(cli.neutron('router-list', ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_values(table_, 'id', name=router_name)[0]
+
+
+def get_router_info(router_id=None, field='status', strict=True, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Get value of specified field for given router via neutron router-show
 
@@ -184,15 +317,256 @@ def get_router_info(router_id=None, field='status', strict=True, auth_info=None,
     Returns (str): value of specified field for given router
 
     """
-    if not router_id:
-        router_id = get_router_ids(auth_info=auth_info, con_ssh=con_ssh)[0]
+    if router_id is None:
+        router_id = get_tenant_router(con_ssh=con_ssh)
 
-    table_ = table_parser.table(cli.neutron('router-show', router_id, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.neutron('router-show', router_id, ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_value_two_col_table(table_, field, strict)
+
+
+def create_router(name=None, tenant=None, distributed=None, ha=None, admin_state_down=False, fail_ok=False,
+                  auth_info=Tenant.ADMIN, con_ssh=None):
+    # Process args
+    if tenant is None:
+        tenant = Tenant.get_primary()['tenant']
+
+    if name is None:
+        name = 'router'
+    name = '-'.join([tenant, name, str(common.Count.get_router_count())])
+    args = name
+
+    if str(admin_state_down).lower() == 'true':
+        args = '--admin-state-down ' + args
+
+    tenant_id = keystone_helper.get_tenant_ids(tenant, con_ssh=con_ssh)[0]
+
+    args_dict = {
+        '--tenant-id': tenant_id if auth_info == Tenant.ADMIN else None,
+        '--distributed': distributed,
+        '--ha': ha,
+    }
+
+    for key, value in args_dict.items():
+        if value is not None:
+            args = "{} {} {}".format(key, value, args)
+
+    LOG.info("Creating router with args: {}".format(args))
+    # send router-create cli
+    code, output = cli.neutron('router-create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                               rtn_list=True)
+
+    # process result
+    if code == 1:
+        return 1, '', output
+
+    table_ = table_parser.table(output)
+    router_id = table_parser.get_value_two_col_table(table_, 'id')
+
+    expt_values = {
+        'admin_state_up': str(not admin_state_down),
+        'distributed': 'True' if distributed else 'False',
+        'ha': 'True' if ha else 'False',
+        'tenant_id': tenant_id
+    }
+
+    for field, expt_val in expt_values.items():
+        if table_parser.get_value_two_col_table(table_, field) != expt_val:
+            msg = "{} is not set to {} for router {}".format(field, expt_val, router_id)
+            if fail_ok:
+                return 2, router_id, msg
+            raise exceptions.NeutronError(msg)
+
+    succ_msg = "Router {} is created successfully.".format(router_id)
+    LOG.info(succ_msg)
+    return 0, router_id, succ_msg
+
+
+def get_router_subnets(router_id, auth_info=Tenant.ADMIN, con_ssh=None):
+    router_ports_tab = table_parser.table(cli.neutron('router-port-list', router_id, ssh_client=con_ssh,
+                                                      auth_info=auth_info))
+
+    fixed_ips = table_parser.get_column(router_ports_tab, 'fixed_ips')
+    subnets_ids = list(set([eval(item)['subnet_id'] for item in fixed_ips]))
+
+    return subnets_ids
+
+
+def get_next_subnet_cidr(net_id, ip_pattern='\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', con_ssh=None, auth_info=Tenant.ADMIN):
+    LOG.info("Creating subnet of tenant-mgmt-net to add interface to router.")
+
+    nets_tab = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    existing_subnets = table_parser.get_values(nets_tab, 'subnets', id=net_id, merge_lines=False)[0]
+    existing_subnets = ','.join(existing_subnets)
+
+    # TODO: add ipv6 support
+    mask = re.findall(ip_pattern + '/(\d{1,3})', existing_subnets)[0]
+    increment = int(math.pow(2, math.ceil(math.log2(int(mask)))))
+
+    ips = re.findall(ip_pattern, existing_subnets)
+    ips = [ipaddress.ip_address(item) for item in ips]
+    max_ip = ipaddress.ip_address(max(ips))
+
+    cidr = "{}/{}".format(str(ipaddress.ip_address(int(max_ip) + increment)), mask)
+
+    return cidr
+
+
+def create_mgmt_subnet(net_id=None, name=None, cidr=None, gateway=None, dhcp=None, dns_servers=None,
+                       alloc_pool=None, ip_version=None, subnet_pool=None, tenant_auth_info=None, fail_ok=False,
+                       auth_info=None, con_ssh=None):
+    if net_id is None:
+        net_id = get_mgmt_net_id(con_ssh=con_ssh, auth_info=tenant_auth_info)
+
+    if cidr is None:
+        cidr = get_next_subnet_cidr(net_id=net_id, ip_pattern="192.168\.\d{1,3}\.\d{1,3}", con_ssh=con_ssh)
+
+    tenant_name = common.get_tenant_name(tenant_auth_info)
+    return create_subnet(net_id, name=name, cidr=cidr, gateway=gateway, dhcp=dhcp, dns_servers=dns_servers,
+                         alloc_pool=alloc_pool, ip_version=ip_version, subnet_pool=subnet_pool, tenant_name=tenant_name,
+                         fail_ok=fail_ok, auth_info=auth_info, con_ssh=con_ssh)
+
+
+def delete_router(router_id, del_ifs=True, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+
+    if del_ifs:
+        LOG.info("Deleting subnet interfaces attached to router {}".format(router_id))
+        router_subnets = get_router_subnets(router_id, con_ssh=con_ssh, auth_info=auth_info)
+        ext_gateway_subnet = get_router_ext_gateway_subnet(router_id, auth_info=auth_info, con_ssh=con_ssh)
+        for subnet in router_subnets:
+            if subnet != ext_gateway_subnet:
+                delete_router_interface(router_id, subnet=subnet, auth_info=auth_info, con_ssh=con_ssh)
+
+    LOG.info("Deleting router {}...".format(router_id))
+    code, output = cli.neutron('router-delete', router_id, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                               rtn_list=True)
+    if code == 1:
+        return 1, output
+
+    routers = get_router_ids(auth_info=auth_info, con_ssh=con_ssh)
+    if router_id in routers:
+        msg = "Router {} is still showing in neutron router-list".format(router_id)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, msg
+
+    succ_msg = "Router {} is successfully deleted.".format(router_id)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def add_router_interface(router_id=None, subnet=None, port=None, auth_info=None, con_ssh=None, check_first=True,
+                         fail_ok=False):
+    if router_id is None:
+        router_id = get_tenant_router(con_ssh=con_ssh)
+
+    if subnet is None and port is None:
+        # Create subnet of tenant-mgmt-net to attach to router
+        # TODO: add ipv6 support
+        subnet = create_mgmt_subnet(dns_servers=DNS_NAMESERVERS, ip_version=4, tenant_auth_info=auth_info,
+                                    auth_info=auth_info, con_ssh=con_ssh)[1]
+        # tenant_mgmt_net_id = get_mgmt_net_id(con_ssh=con_ssh, auth_info=auth_info)
+        # nets_tab = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+        # existing_subnets = table_parser.get_values(nets_tab, 'subnets', id=tenant_mgmt_net_id, merge_lines=False)[0]
+        # existing_subnets = ','.join(existing_subnets)
+        #
+
+        # mask = re.findall("192.168.\d{1,3}\.\d{1,3}/(\d{1,3})", existing_subnets)[0]
+        # increment = int(math.pow(2, math.ceil(math.log2(int(mask)))))
+        #
+        # ips = re.findall("192.168\.\d{1,3}\.\d{1,3}", existing_subnets)
+        # ips = [ipaddress.ip_address(item) for item in ips]
+        # max_ip = ipaddress.ip_address(max(ips))
+        #
+        # cidr = "{}/{}".format(str(ipaddress.ip_address(int(max_ip) + increment)), mask)
+        # subnet = create_subnet(tenant_mgmt_net_id, cidr=cidr, dns_servers=DNS_NAMESERVERS, ip_version=4,
+        #                        auth_info=auth_info, con_ssh=con_ssh)[1]
+
+    arg = router_id
+    if subnet is None:
+        if_source = port
+        arg += ' port={}'.format(port)
+    else:
+        if_source = subnet
+        arg += ' subnet={}'.format(subnet)
+    LOG.info("Adding router interface via: {}".format(arg))
+    code, output = cli.neutron('router-interface-add', arg, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                               fail_ok=fail_ok)
+
+    if code == 1:
+        return 1, output, if_source
+
+    if subnet is not None and not router_subnet_exists(router_id, subnet):
+        msg = "Subnet {} is not shown in router-port-list for router {}".format(subnet, router_id)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, msg, if_source
+        raise exceptions.NeutronError(msg)
+
+    # TODO: Add check if port is used to add interface.
+
+    succ_msg = "Interface is successfully added to router {}".format(router_id)
+    LOG.info(succ_msg)
+    return 0, succ_msg, if_source
+
+
+def delete_router_interface(router_id, subnet=None, port=None, auth_info=None, con_ssh=None, fail_ok=False):
+    args = router_id
+    if subnet is None and port is None:
+        raise ValueError("Either subnet or port has to be specified.")
+
+    if subnet is None:
+        args += ' port={}'.format(port)
+    else:
+        args += ' subnet={}'.format(subnet)
+
+    LOG.info("Deleting router interface. Args: {}".format(args))
+    code, output = cli.neutron('router-interface-delete', args, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                               fail_ok=fail_ok)
+
+    if code == 1:
+        return 1, output
+
+    if subnet is not None and router_subnet_exists(router_id, subnet):
+        msg = "Subnet {} is still shown in router-port-list for router {}".format(subnet, router_id)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, msg
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "Interface is deleted successfully for router {}.".format(router_id)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def router_subnet_exists(router_id, subnet_id, con_ssh=None, auth_info=Tenant.ADMIN):
+    subnets_ids = get_router_subnets(router_id, auth_info=auth_info, con_ssh=con_ssh)
+
+    return subnet_id in subnets_ids
 
 
 def set_router_gateway(router_id=None, extnet_id=None, enable_snat=True, fixed_ip=None, fail_ok=False,
                        auth_info=Tenant.ADMIN, con_ssh=None, clear_first=True):
+    """
+    Set router gateway with given snat, ip settings.
+
+    Args:
+        router_id (str): id of the router to set gateway for. If None, tenant router for Primary tenant will be used.
+        extnet_id (str): id of the external network for getting the gateway
+        enable_snat (bool): whether to enable SNAT.
+        fixed_ip (str): fixed ip to set
+        fail_ok (bool):
+        auth_info (dict): auth info for running the router-gateway-set cli
+        con_ssh (SSHClient):
+        clear_first (bool): Whether to clear the router gateway first if router already has a gateway set
+
+    Returns (tuple): (rtn_code (int), message (str))    scenario 1,2,3,4 only returns if fail_ok=True
+        - (0, "Router gateway is successfully set.")
+        - (1, <stderr>)     -- cli is rejected
+        - (2, "Failed to set gateway of external network <extnet_id> for router <router_id>")
+        - (3, "snat is not <disabled/enabled>")
+        - (4, "Fixed ip is not set to <fixed_ip>")
+
+    """
     # Process args
     args = ''
     if not enable_snat:
@@ -201,8 +575,8 @@ def set_router_gateway(router_id=None, extnet_id=None, enable_snat=True, fixed_i
     if fixed_ip:
         args += ' --fixed-ip {}'.format(fixed_ip)
 
-    if not router_id:
-        router_id = get_router_ids(con_ssh=con_ssh, auth_info=None)[0]
+    if router_id is None:
+        router_id = get_tenant_router(con_ssh=con_ssh)
 
     if not extnet_id:
         extnet_id = get_ext_net_ids(con_ssh=con_ssh, auth_info=None)[0]
@@ -234,6 +608,7 @@ def set_router_gateway(router_id=None, extnet_id=None, enable_snat=True, fixed_i
         if fail_ok:
             LOG.warning(msg)
             return 3, msg
+        raise exceptions.NeutronError(msg)
 
     if fixed_ip and not fixed_ip == post_ext_gateway['external_fixed_ips'][0]['ip_address']:
         msg = "Fixed ip is not set to {}".format(fixed_ip)
@@ -249,19 +624,23 @@ def set_router_gateway(router_id=None, extnet_id=None, enable_snat=True, fixed_i
 
 def clear_router_gateway(router_id=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None, check_first=True):
     """
+    Clear router gateway
 
     Args:
-        router_id (str):
+        router_id (str): id of router to clear gateway for. If None, tenant router for primary tenant will be used.
         fail_ok (bool):
-        auth_info (dict):
+        auth_info (dict): auth info for running the router-gateway-clear cli
         con_ssh (SSHClient):
-        check_first (bool):
+        check_first (bool): whether to check if gateway is set for given router before clearing
 
-    Returns:
+    Returns (tuple): (rtn_code (int), message (str))
+        - (0, "Router gateway is successfully cleared.")
+        - (1, <stderr>)    -- cli is rejected
+        - (2, "Failed to clear gateway for router <router_id>")
 
     """
-    if not router_id:
-        router_id = get_router_ids(con_ssh=con_ssh, auth_info=auth_info)[0]
+    if router_id is None:
+        router_id = get_tenant_router(con_ssh=con_ssh)
 
     if check_first and not get_router_ext_gateway_info(router_id):
         msg = "No gateway found for router. Do nothing."
@@ -287,24 +666,37 @@ def clear_router_gateway(router_id=None, fail_ok=False, auth_info=Tenant.ADMIN, 
 
 
 def _update_router(field, value, val_type=None, router_id=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        field (str): valid fields: distributed, external_gateway_info
+        value:
+        val_type:
+        router_id:
+        fail_ok:
+        con_ssh:
+        auth_info:
+
+    Returns:
+
+    """
 
     if router_id is None:
-        router_id = get_router_ids(auth_info=None, con_ssh=con_ssh)
+        router_id = get_tenant_router(con_ssh=con_ssh)
+
+    if not isinstance(router_id, str):
+        raise ValueError("Expecting string value for router_id. Get {}".format(type(router_id)))
 
     LOG.info("Updating router {}: {}={}".format(router_id, field, value))
 
     if val_type is not None:
-        val_type = 'type={} '.format(val_type)
+        val_type_str = 'type={} '.format(val_type)
+    else:
+        val_type_str = ''
 
-    args = '{} --{} {}{}'.format(router_id, field, val_type, value)
+    args = '{} --{} {}{}'.format(router_id, field, val_type_str, value)
 
-    code, output = cli.neutron('router-update', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                               rtn_list=True)
-
-    if code == 0:
-        LOG.info("Router is successfully updated.")
-
-    return code, output
+    return cli.neutron('router-update', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
 
 
 def get_router_ext_gateway_info(router_id=None, auth_info=None, con_ssh=None):
@@ -327,14 +719,41 @@ def get_router_ext_gateway_info(router_id=None, auth_info=None, con_ssh=None):
     if not info_str:
         return None
 
-    # convert enable_snat value to bool
+    # convert enable_snat value to bool -- will be used when eval(info_str)
     true = True
     false = False
+    null = None
     return eval(info_str)
+
+
+def get_router_ext_gateway_subnet(router_id, auth_info=None, con_ssh=None):
+    ext_gateway_info = get_router_ext_gateway_info(router_id, auth_info=auth_info, con_ssh=con_ssh)
+    if ext_gateway_info is not None:
+        return ext_gateway_info['external_fixed_ips'][0]['subnet_id']
 
 
 def update_router_ext_gateway_snat(router_id=None, ext_net_id=None, enable_snat=True, fail_ok=False, con_ssh=None,
                                    auth_info=Tenant.ADMIN):
+    """
+    Update router external gateway SNAT
+
+    Args:
+        router_id (str): id of router to update
+        ext_net_id (str): id of external network for updating gateway SNAT
+        enable_snat (bool): whether to enable or disable SNAT
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (rtn_code (int), message (str))
+        - (0, <stdout>)     -- router gateway is updated successfully with given SNAT setting
+        - (1, <stderr>)     -- cli is rejected
+        - (2, "enable_snat is not set to <value>")      -- SNAT is not enabled/disabled as specified
+
+    """
+    if ext_net_id is None:
+        ext_net_id = get_ext_net_ids(con_ssh=con_ssh, auth_info=auth_info)[0]
+
     arg = 'network_id={},enable_snat={}'.format(ext_net_id, enable_snat)
     code, output = _update_router(field='external_gateway_info', val_type='dict', value=arg, router_id=router_id,
                                   fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
@@ -347,4 +766,77 @@ def update_router_ext_gateway_snat(router_id=None, ext_net_id=None, enable_snat=
         LOG.warning(msg)
         return 2, msg
 
-    return 0, output
+    succ_msg = "Router external gateway info is successfully updated to enable_SNAT={}".format(enable_snat)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def update_router_distributed(router_id=None, distributed=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    code, output = _update_router(field='distributed', value=distributed, router_id=router_id,
+                                  fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
+    if code == 1:
+        return 1, output
+
+    post_distributed_val = get_router_info(router_id, 'distributed', auth_info=auth_info, con_ssh=con_ssh)
+    if post_distributed_val.lower() != str(distributed).lower():
+        msg = "Router {} is not updated to distributed={}".format(router_id, distributed)
+        if fail_ok:
+            return 2, msg
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "Router is successfully updated to distributed={}".format(distributed)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False, **kwargs):
+    """
+    Update neutron quota(s).
+
+    Args:
+        tenant (str):
+        con_ssh (SSHClient):
+        auth_info (dict):
+        fail_ok (bool):
+        **kwargs: key(str)=value(int) pair(s) to update. such as: network=100, port=50
+            possible keys: network, subnet, port, router, floatingip, security-group, security-group-rule, vip, pool,
+                            member, health-monitor
+
+    Returns (tuple):
+        - (0, "Neutron quota(s) updated successfully to: <kwargs>.")
+        - (1, <stderr>)
+        - (2, "<quota_name> is not set to <specified_value>")
+
+    """
+    if tenant is None:
+        tenant = Tenant.get_primary()['tenant']
+    tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant, con_ssh=con_ssh)[0]
+
+    if not kwargs:
+        raise ValueError("Please specify at least one quota=value pair via kwargs.")
+
+    args_ = ''
+    for key in kwargs:
+        args_ += '--{} {} '.format(key, kwargs[key])
+
+    args_ += tenant_id
+
+    code, output = cli.neutron('quota-update', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                               rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    for key, value in kwargs.items():
+        field = key.replace('-', '_')
+        if not int(table_parser.get_value_two_col_table(table_, field)) == int(value):
+            msg = "{} is not set to {}".format(field, value)
+            if fail_ok:
+                LOG.warning(msg)
+                return 2, msg
+            raise exceptions.NeutronError(msg)
+
+    succ_msg = "Neutron quota(s) updated successfully to: {}.".format(kwargs)
+    LOG.info(succ_msg)
+    return 0, succ_msg

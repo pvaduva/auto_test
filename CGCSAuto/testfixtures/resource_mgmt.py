@@ -3,7 +3,9 @@ from copy import deepcopy
 from pytest import fixture
 
 from utils import exceptions
-from keywords import nova_helper, vm_helper, cinder_helper, glance_helper
+
+from consts.auth import Tenant
+from keywords import nova_helper, vm_helper, cinder_helper, glance_helper, network_helper
 
 
 @fixture(scope='function', autouse=True)
@@ -83,6 +85,9 @@ class ResourceCleanup:
         'flavors': [],
         'images': [],
         'server_groups': [],
+        'routers': [],
+        'router_interfaces': [],
+        'subnets': []
     }
     __resources_to_cleanup = {
         'function': deepcopy(__resources_dict),
@@ -102,36 +107,50 @@ class ResourceCleanup:
         flavors = resources['flavors']
         images = resources['images']
         server_groups = resources['server_groups']
+        routers = resources['routers']
+        subnets = resources['subnets']
         err_msgs = []
         if vms_with_vols:
-            code, msg = vm_helper.delete_vms(vms_with_vols, delete_volumes=True, fail_ok=True)
+            code, msg = vm_helper.delete_vms(vms_with_vols, delete_volumes=True, fail_ok=True, auth_info=Tenant.ADMIN)
             if code not in [0, -1]:
                 err_msgs.append(msg)
 
         if vms_no_vols:
-            code, msg = vm_helper.delete_vms(vms_no_vols, delete_volumes=False, fail_ok=True)
+            code, msg = vm_helper.delete_vms(vms_no_vols, delete_volumes=False, fail_ok=True, auth_info=Tenant.ADMIN)
             if code not in [0, -1]:
                 err_msgs.append(msg)
 
         if volumes:
-            code, msg = cinder_helper.delete_volumes(volumes, fail_ok=True)
+            code, msg = cinder_helper.delete_volumes(volumes, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
 
         if flavors:
-            code, msg = nova_helper.delete_flavors(flavors, fail_ok=True)
+            code, msg = nova_helper.delete_flavors(flavors, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
 
         if images:
-            code, msg = glance_helper.delete_images(images, fail_ok=True)
+            code, msg = glance_helper.delete_images(images, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
 
         if server_groups:
-            code, msg = nova_helper.delete_server_groups(server_groups, fail_ok=True)
+            code, msg = nova_helper.delete_server_groups(server_groups, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
+
+        if routers:
+            for router in routers:
+                code, msg = network_helper.delete_router(router, fail_ok=True, auth_info=Tenant.ADMIN)
+                if code > 0:
+                    err_msgs.append(msg)
+
+        if subnets:
+            for subnet in subnets:
+                code, msg = network_helper.delete_subnet(subnet_id=subnet, fail_ok=True, auth_info=Tenant.ADMIN)
+                if code > 0:
+                    err_msgs.append(msg)
 
         # Attempt all deletions before raising exception.
         if err_msgs:
@@ -157,7 +176,7 @@ class ResourceCleanup:
         scope == scope.lower()
         resource_type = resource_type.lower()
         valid_scopes = ['function', 'class', 'module']
-        valid_types = ['vm', 'volume', 'flavor', 'image', 'server_group']
+        valid_types = ['vm', 'volume', 'flavor', 'image', 'server_group', 'router', 'subnet']
         if scope not in valid_scopes:
             raise ValueError("'scope' param value has to be one of the: {}".format(valid_scopes))
         if resource_type not in valid_types:
