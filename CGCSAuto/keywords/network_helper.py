@@ -179,6 +179,65 @@ def get_ext_net_ids(con_ssh=None, auth_info=None):
     return table_parser.get_column(table_, 'id')
 
 
+def floatingip_create(con_ssh=None,extnet_id=None, auth_info=None,tenanat_id=None,port_id=None):
+   """
+
+
+   Args:
+       con_ssh:
+       floating_network:
+       auth_info:
+       tenanat_id:
+       port_id:
+
+   Returns:
+
+   """
+   args=' '
+   output='Network Not given'
+   if not extnet_id:
+       extnet_id = get_ext_net_ids(con_ssh=con_ssh, auth_info=None)[0]
+
+   args += extnet_id
+   output = cli.neutron('floatingip-create',positional_args=args, ssh_client=con_ssh, auth_info=auth_info)
+   return 1 , output
+
+def floatingip_delete(con_ssh=None,floating_ip_id=None, auth_info=None,tenanat_id=None,port_id=None):
+    """
+
+    Args:
+        con_ssh:
+        floating_ip_id:
+        auth_info:
+        tenanat_id:
+        port_id:
+
+    Returns:
+
+    """
+    args = ' '
+    if floating_ip_id == None:
+       args += floatingip_list_id(con_ssh=None) [0]
+    else:
+       args += floating_ip_id
+    output = cli.neutron('floatingip-delete', positional_args=args, ssh_client=con_ssh, auth_info=auth_info)
+    deleted_in_output = re.search('Deleted floatingip:', output)
+    if deleted_in_output:
+        return True
+    else:
+         return False
+
+
+def floatingip_list(con_ssh=None, auth_info=None):
+    table_ = table_parser.table(cli.neutron('floatingip-list', ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_column(table_, 'floating_ip_address')
+
+
+def floatingip_list_id(con_ssh=None, auth_info=None):
+    table_ = table_parser.table(cli.neutron('floatingip-list', ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_column(table_, 'id')
+
+
 def get_mgmt_net_id(con_ssh=None, auth_info=None):
     """
     Get the management net id of given tenant.
