@@ -1,18 +1,17 @@
 from pytest import mark, fixture
 
-import keywords.system_helper
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
-from keywords import nova_helper, vm_helper, host_helper, cinder_helper
+from keywords import nova_helper, vm_helper, host_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
 def _modify(host):
-    keywords.system_helper.modify_host_cpu(host, 'shared', p0=1, p1=1)
+    host_helper.modify_host_cpu(host, 'shared', p0=1, p1=1)
 
 
 def _revert(host):
-    keywords.system_helper.modify_host_cpu(host, 'shared', p0=0, p1=0)
+    host_helper.modify_host_cpu(host, 'shared', p0=0, p1=0)
 
 
 @fixture(scope='module', autouse=True)

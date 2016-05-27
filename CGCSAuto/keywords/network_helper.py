@@ -154,7 +154,7 @@ def delete_subnet(subnet_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False
 def get_subnets(net_id=None, auth_info=None, con_ssh=None):
     if net_id:
         table_ = table_parser.table(cli.neutron('net-show', net_id, ssh_client=con_ssh, auth_info=auth_info))
-        subnets= table_parser.get_value_two_col_table(table_, 'subnets', merge_lines=False)
+        subnets = table_parser.get_value_two_col_table(table_, 'subnets', merge_lines=False)
         if isinstance(subnets, str):
             subnets = [subnets]
     else:
@@ -188,6 +188,7 @@ def create_floatingip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_a
        port_id:
        fixed_ip_address:
        floating_ip_address:
+       fail_ok:
        con_ssh:
        auth_info:
     Returns: floating IP
@@ -224,7 +225,8 @@ def create_floatingip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_a
             LOG.warning(msg)
             return 3, msg
         raise exceptions.NeutronError(msg)
-    succ_msg="Floating IP created successfully"
+
+    succ_msg = "Floating IP created successfully"
     LOG.info(succ_msg)
     return 0, actual_floating_ip_address
 
@@ -269,7 +271,7 @@ def get_floatingips(auth_info=Tenant.ADMIN, con_ssh=None):
 def get_floatingip_ids(floating_ips=None, con_ssh=None, auth_info=Tenant.ADMIN):
     table_ = table_parser.table(cli.neutron('floatingip-list', ssh_client=con_ssh, auth_info=auth_info))
     if floating_ips is not None:
-         table_ = table_parser.filter_table(table_, **{'floating_ip_address': floating_ips})
+        table_ = table_parser.filter_table(table_, **{'floating_ip_address': floating_ips})
     return table_parser.get_column(table_, 'id')
 
 
@@ -485,7 +487,7 @@ def get_router_subnets(router_id, auth_info=Tenant.ADMIN, con_ssh=None):
     return subnets_ids
 
 
-def get_next_subnet_cidr(net_id, ip_pattern='\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_next_subnet_cidr(net_id, ip_pattern='\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', con_ssh=None):
     LOG.info("Creating subnet of tenant-mgmt-net to add interface to router.")
 
     nets_tab = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
@@ -548,8 +550,7 @@ def delete_router(router_id, del_ifs=True, auth_info=Tenant.ADMIN, con_ssh=None,
     return 0, succ_msg
 
 
-def add_router_interface(router_id=None, subnet=None, port=None, auth_info=None, con_ssh=None, check_first=True,
-                         fail_ok=False):
+def add_router_interface(router_id=None, subnet=None, port=None, auth_info=None, con_ssh=None, fail_ok=False):
     if router_id is None:
         router_id = get_tenant_router(con_ssh=con_ssh)
 
@@ -558,22 +559,6 @@ def add_router_interface(router_id=None, subnet=None, port=None, auth_info=None,
         # TODO: add ipv6 support
         subnet = create_mgmt_subnet(dns_servers=DNS_NAMESERVERS, ip_version=4, tenant_auth_info=auth_info,
                                     auth_info=auth_info, con_ssh=con_ssh)[1]
-        # tenant_mgmt_net_id = get_mgmt_net_id(con_ssh=con_ssh, auth_info=auth_info)
-        # nets_tab = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-        # existing_subnets = table_parser.get_values(nets_tab, 'subnets', id=tenant_mgmt_net_id, merge_lines=False)[0]
-        # existing_subnets = ','.join(existing_subnets)
-        #
-
-        # mask = re.findall("192.168.\d{1,3}\.\d{1,3}/(\d{1,3})", existing_subnets)[0]
-        # increment = int(math.pow(2, math.ceil(math.log2(int(mask)))))
-        #
-        # ips = re.findall("192.168\.\d{1,3}\.\d{1,3}", existing_subnets)
-        # ips = [ipaddress.ip_address(item) for item in ips]
-        # max_ip = ipaddress.ip_address(max(ips))
-        #
-        # cidr = "{}/{}".format(str(ipaddress.ip_address(int(max_ip) + increment)), mask)
-        # subnet = create_subnet(tenant_mgmt_net_id, cidr=cidr, dns_servers=DNS_NAMESERVERS, ip_version=4,
-        #                        auth_info=auth_info, con_ssh=con_ssh)[1]
 
     arg = router_id
     if subnet is None:

@@ -89,14 +89,14 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
     Args:
         name (str):
         flavor (str):
-        source (str):
-        source_id (str):
+        source (str): 'image', 'volume', or 'snapshot'
+        source_id (str): id of the specified source. such as volume_id, image_id, or snapshot_id
         min_count (int):
         max_count (int):
         key_name (str):
         swap (int):
         ephemeral (int):
-        user_data:
+        user_data (str):
         block_device:
         auth_info (dict):
         con_ssh (SSHClient):

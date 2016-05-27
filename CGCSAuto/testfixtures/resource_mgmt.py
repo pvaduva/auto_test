@@ -173,7 +173,7 @@ class ResourceCleanup:
             del_vm_vols (bool): whether to delete attached volume(s) if given resource is vm.
 
         """
-        scope == scope.lower()
+        scope = scope.lower()
         resource_type = resource_type.lower()
         valid_scopes = ['function', 'class', 'module']
         valid_types = ['vm', 'volume', 'flavor', 'image', 'server_group', 'router', 'subnet']
