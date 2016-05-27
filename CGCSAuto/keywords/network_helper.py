@@ -181,8 +181,8 @@ def get_ext_net_ids(con_ssh=None, auth_info=None):
 
 def create_floatingip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_address=None, floating_ip_address=None,
                       fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
-   """
-   Args:
+    """
+    Args:
        extnet_id:
        tenant_name:
        port_id:
@@ -190,43 +190,43 @@ def create_floatingip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_a
        floating_ip_address:
        con_ssh:
        auth_info:
-   Returns: floating IP
-   """
-   if not extnet_id:
-       extnet_id = get_ext_net_ids(con_ssh=con_ssh, auth_info=None)[0]
-   args = extnet_id
-   if tenant_name is not None:
-       tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)[0]
-       args += " --tenant-id {}".format(tenant_id)
-   if port_id is not None:
-       args += " --port_id {}".format(port_id)
-   if fixed_ip_address is not None:
-       args += " --fixed_ip {}".format(fixed_ip_address)
-   if floating_ip_address is not None:
-       args += " --floating-ip-address {}".format(floating_ip_address)
-   print(args)
-   code, output = cli.neutron(cmd='floatingip-create', positional_args=args, ssh_client=con_ssh, auth_info=auth_info,
-                              fail_ok=fail_ok, rtn_list=True)
-   if code == 1:
-       return 1, output
-   table_ = table_parser.table(output)
-   actual_floating_ip_address = table_parser.get_value_two_col_table(table_, "floating_ip_address")
+    Returns: floating IP
+    """
+    if not extnet_id:
+        extnet_id = get_ext_net_ids(con_ssh=con_ssh, auth_info=None)[0]
+    args = extnet_id
+    if tenant_name is not None:
+        tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)[0]
+        args += " --tenant-id {}".format(tenant_id)
+    if port_id is not None:
+        args += " --port_id {}".format(port_id)
+    if fixed_ip_address is not None:
+        args += " --fixed_ip {}".format(fixed_ip_address)
+    if floating_ip_address is not None:
+        args += " --floating-ip-address {}".format(floating_ip_address)
+    print(args)
+    code, output = cli.neutron(cmd='floatingip-create', positional_args=args, ssh_client=con_ssh, auth_info=auth_info,
+                               fail_ok=fail_ok, rtn_list=True)
+    if code == 1:
+        return 1, output
+    table_ = table_parser.table(output)
+    actual_floating_ip_address = table_parser.get_value_two_col_table(table_, "floating_ip_address")
 
-   if not actual_floating_ip_address:
-       msg = "Floating IP is not found in the list"
-       if fail_ok:
-           LOG.warning(msg)
-           return 3, msg
-       raise exceptions.NeutronError(msg)
-   if floating_ip_address is not None and actual_floating_ip_address != floating_ip_address:
-       msg = "Floating IP does not exesist in created list"
-       if fail_ok:
-           LOG.warning(msg)
-           return 3, msg
-       raise exceptions.NeutronError(msg)
-   succ_msg="Floating IP created successfully"
-   LOG.info(succ_msg)
-   return 0, actual_floating_ip_address
+    if not actual_floating_ip_address:
+        msg = "Floating IP is not found in the list"
+        if fail_ok:
+            LOG.warning(msg)
+            return 3, msg
+        raise exceptions.NeutronError(msg)
+    if floating_ip_address is not None and actual_floating_ip_address != floating_ip_address:
+        msg = "Floating IP does not exesist in created list"
+        if fail_ok:
+            LOG.warning(msg)
+            return 3, msg
+        raise exceptions.NeutronError(msg)
+    succ_msg="Floating IP created successfully"
+    LOG.info(succ_msg)
+    return 0, actual_floating_ip_address
 
 
 def delete_floating_ip(floating_ip=None, value='ip', auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
@@ -235,7 +235,6 @@ def delete_floating_ip(floating_ip=None, value='ip', auth_info=Tenant.ADMIN, con
         con_ssh:
         floating_ip:
         auth_info:
-        tenanat_id:
         port_id:
     Returns:
 
@@ -270,8 +269,7 @@ def get_floatingips(auth_info=Tenant.ADMIN, con_ssh=None):
 def get_floatingip_ids(floating_ips=None, con_ssh=None, auth_info=Tenant.ADMIN):
     table_ = table_parser.table(cli.neutron('floatingip-list', ssh_client=con_ssh, auth_info=auth_info))
     if floating_ips is not None:
-        #table_ = table_parser.filter_table(table_, floating_ip_address=floating_ips)
-        table_ = table_parser.filter_table(table_, **{'floating_ip_address': floating_ips})
+         table_ = table_parser.filter_table(table_, **{'floating_ip_address': floating_ips})
     return table_parser.get_column(table_, 'id')
 
 
