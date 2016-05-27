@@ -205,7 +205,7 @@ def create_floatingip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_a
         args += " --fixed_ip {}".format(fixed_ip_address)
     if floating_ip_address is not None:
         args += " --floating-ip-address {}".format(floating_ip_address)
-    print(args)
+
     code, output = cli.neutron(cmd='floatingip-create', positional_args=args, ssh_client=con_ssh, auth_info=auth_info,
                                fail_ok=fail_ok, rtn_list=True)
     if code == 1:
@@ -246,7 +246,7 @@ def delete_floating_ip(floating_ip=None, value='ip', auth_info=Tenant.ADMIN, con
     if value == 'ip':
         floating_ip = get_floatingip_ids(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)
     args = floating_ip
-    print('args=', args)
+
     code, output = cli.neutron('floatingip-delete', positional_args=args, ssh_client=con_ssh, auth_info=auth_info,
                                fail_ok=fail_ok, rtn_list=True)
     if code == 1:
