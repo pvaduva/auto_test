@@ -3,14 +3,16 @@ import time
 from contextlib import contextmanager
 from xml.etree import ElementTree
 
-from consts.auth import Tenant
-from consts.cgcs import HostAavailabilityState, HostAdminState
-from consts.timeout import HostTimeout
-from keywords import system_helper
-from keywords.security_helper import LinuxUser
 from utils import cli, exceptions, table_parser
 from utils.ssh import ControllerClient, SSHFromSSH
 from utils.tis_log import LOG
+
+from consts.auth import Tenant
+from consts.cgcs import HostAavailabilityState, HostAdminState
+from consts.timeout import HostTimeout, CMDTimeout
+
+from keywords import system_helper
+from keywords.security_helper import LinuxUser
 
 
 @contextmanager
@@ -52,7 +54,7 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
             host_ssh.close()
 
 
-def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False):
+def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False, wait_for_reboot_finish=True):
     """
     Reboot one or multiple host(s)
 
@@ -61,6 +63,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         timeout (int): timeout waiting for reboot to complete in seconds
         con_ssh (SSHClient): Active controller ssh
         fail_ok (bool): Whether it is okay or not for rebooting to fail on any host
+        wait_for_reboot_finish (bool): whether to wait for reboot finishes before return
 
     Returns (tuple): (rtn_code, message)
         (0, "Host(s) state(s) - <states_dict>.") hosts rebooted and back to available/degraded or online state.
@@ -105,6 +108,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         hostnames.append(controller)
 
     time.sleep(30)
+    if not wait_for_reboot_finish:
+        return -1, "Reboot hosts command sent."
+
     hostnames = sorted(hostnames)
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
     unlocked_hosts_all = table_parser.get_values(table_, 'hostname', administrative='unlocked')
@@ -171,7 +177,8 @@ def __hosts_stay_in_states(hosts, duration=10, con_ssh=None, **states):
     return True
 
 
-def _wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, duration=3, con_ssh=None, **states):
+def _wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, duration=3, con_ssh=None, fail_ok=True,
+                           **states):
     """
     Wait for hosts to go in specified states
 
@@ -188,6 +195,7 @@ def _wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, 
             False otherwise
 
     """
+
     if isinstance(hosts, str):
         hosts = [hosts]
     for key, value in states.items():
@@ -203,8 +211,11 @@ def _wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, 
             return True
         time.sleep(check_interval)
     else:
-        LOG.warning("Timed out waiting for {} in state(s) - {}".format(hosts, states))
-        return False
+        msg = "Timed out waiting for {} in state(s) - {}".format(hosts, states)
+        if fail_ok:
+            LOG.warning(msg)
+            return False
+        raise exceptions.HostTimeout(msg)
 
 
 def __hosts_in_states(hosts, con_ssh=None, **states):
@@ -826,3 +837,179 @@ def get_values_virsh_xmldump(instance_name, host_ssh, tag_path, target_type='ele
 
     else:
         return elements
+
+
+def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=False, con_ssh=None,
+                    auth_info=Tenant.ADMIN, **kwargs):
+    """
+    Modify host cpu to given key-value pairs. i.e., system host-cpu-modify -f <function> -p<id> <num of cores> <host>
+    Notes: This assumes given host is already locked.
+
+    Args:
+        host (str): hostname of host to be modified
+        function (str): cpu function to modify. e.g., 'shared'
+        timeout (int): Timeout waiting for system host-cpu-modify cli to return
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+        **kwargs: processor id and number of cores pair(s). e.g., p0=1, p1=1
+
+    Returns (tuple): (rtn_code(int), message(str))
+        (0, "Host cpu function modified successfully")
+        (1, <stderr>)   # cli rejected
+        (2, "Number of actual log_cores for <proc_id> is different than number set. Actual: <num>, expect: <num>")
+
+    """
+    LOG.info("Modifying host {} CPU function {} to {}".format(host, function, kwargs))
+
+    if not kwargs:
+        raise ValueError("At least one key-value pair such as p0=1 has to be provided.")
+
+    proc_args = ''
+    for proc, cores in kwargs.items():
+        cores = str(cores)
+        proc_args = ' '.join([proc_args, '-'+proc.lower().strip(), cores])
+
+    subcmd = ' '.join(['host-cpu-modify', '-f', function.lower().strip(), proc_args])
+    code, output = cli.system(subcmd, host, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info, timeout=timeout,
+                              rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    LOG.info("Post action check for host-cpu-modify...")
+    table_ = table_parser.table(output)
+    table_ = table_parser.filter_table(table_, assigned_function=function)
+
+    threads = get_host_threads_number(host, con_ssh=con_ssh)
+
+    for proc, num in kwargs.items():
+        num = int(num)
+        proc_id = re.findall('\d+', proc)[0]
+        expt_cores = threads*num
+        actual_cores = len(table_parser.get_values(table_, 'log_core', processor=proc_id))
+        if expt_cores != actual_cores:
+            msg = "Number of actual log_cores for {} is different than number set. Actual: {}, expect: {}". \
+                format(proc, actual_cores, expt_cores)
+            if fail_ok:
+                LOG.warning(msg)
+                return 2, msg
+            raise exceptions.HostPostCheckFailed(msg)
+
+    msg = "Host cpu function modified successfully"
+    LOG.info(msg)
+    return 0, msg
+
+
+def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='phy_core', con_ssh=None,
+                                    auth_info=Tenant.ADMIN):
+    """
+    Get processor/logical cpu cores mapping for given function for host via system host-cpu-list
+
+    Args:
+        hostname (str): hostname to pass to system host-cpu-list
+        function (str): such as 'Platform', 'vSwitch', or 'VMs'
+        core_type (str): 'phy_core' or 'log_core'
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (dict): format: {<proc_id> (str): <log_cores> (list), ...}
+        e.g., {'0': ['1', '2'], '1': ['1', '2']}
+
+    """
+    table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.filter_table(table_, assigned_function=function, thread='0')
+    procs = list(set(table_parser.get_column(table_, 'processor')))
+    res_dict = {}
+    for proc in procs:
+        res_dict[proc] = sorted(table_parser.get_values(table_, core_type, processor=proc))
+
+    return res_dict
+
+
+def get_host_threads_number(host, con_ssh=None):
+    """
+    Return number of threads for specific host.
+    Notes: when hyperthreading is disabled, the number is usually 1; when enabled, the number is usually 2.
+
+    Args:
+        host (str): hostname
+        con_ssh (SSHClient):
+
+    Returns (int): number of threads
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    code, output = con_ssh.exec_cmd('vm-topology -s topology | grep "{}.*Threads/Core="'.format(host))
+    if code != 0:
+        raise exceptions.SSHExecCommandFailed("CMD stderr: {}".format(output))
+
+    pattern = "Threads/Core=(\d),"
+    return int(re.findall(pattern, output)[0])
+
+
+def get_vswitch_port_engine_map(host_ssh):
+    """
+    Get vswitch cores mapping on host from /etc/vswitch/vswitch.ini
+
+    Args:
+        host_ssh (SSHClient): ssh of a nova host
+
+    Notes: assume the output format will be: 'port-map="0:1,2 1:12,13"', 'port-map="0,1:1,2"', or 'port-map="0:1,2"'
+
+    Returns (dict): format: {<proc_id> (str): <log_cores> (list), ...}
+        e.g., {'0': ['1', '2'], '1': ['1', '2']}
+
+    """
+    output = host_ssh.exec_cmd('''grep "^port-map=" /etc/vswitch/vswitch.ini''', fail_ok=False)[1]
+
+    host_vswitch_map = eval(output.split(sep='=')[1].strip())
+    host_vswitch_map_list = host_vswitch_map.split(sep=' ')
+
+    host_vswitch_dict = {}
+    for ports_maps in host_vswitch_map_list:
+        ports_str, cores_str = ports_maps.split(sep=':')
+        ports = ports_str.split(',')
+        cores = cores_str.split(',')
+        for port in ports:
+            host_vswitch_dict[port] = sorted(int(item) for item in cores)
+
+    LOG.info("ports/cores mapping on {} is: {}".format(host_ssh.get_hostname(), host_vswitch_dict))
+    return host_vswitch_dict
+
+
+def get_expected_vswitch_port_engine_map(host_ssh):
+    """
+    Get expected ports and vswitch cores mapping via vshell port-list and vshell engine-list
+
+    Args:
+        host_ssh (SSHClient): ssh of a nova host
+
+    Returns (dict): format: {<proc_id> (str): <log_cores> (list), ...}
+        e.g., {'0': ['1', '2'], '1': ['1', '2']}
+
+    """
+    ports_tab = table_parser.table(host_ssh.exec_cmd('''vshell port-list | grep -v "avp-"''', fail_ok=False)[1])
+    cores_tab = table_parser.table(host_ssh.exec_cmd("vshell engine-list", fail_ok=False)[1])
+
+    header = 'socket' if 'socket' in ports_tab['headers'] else 'socket-id'
+    sockets_for_ports = sorted(int(item) for item in list(set(table_parser.get_column(ports_tab, header))))
+    sockets_for_cores = sorted(int(item) for item in list(set(table_parser.get_column(cores_tab, 'socket-id'))))
+    expt_map = {}
+    if sockets_for_ports == sockets_for_cores:
+        for socket in sockets_for_ports:
+            soc_ports = table_parser.get_values(ports_tab, 'id', **{header: str(socket)})
+            soc_cores = sorted(int(item) for item in table_parser.get_values(cores_tab, 'cpuid',
+                                                                             **{'socket-id': str(socket)}))
+            for port in soc_ports:
+                expt_map[port] = soc_cores
+
+    else:
+        all_ports = table_parser.get_column(ports_tab, 'id')
+        all_cores = sorted(int(item) for item in table_parser.get_column(cores_tab, 'cpuid'))
+        for port in all_ports:
+            expt_map[port] = all_cores
+
+    return expt_map

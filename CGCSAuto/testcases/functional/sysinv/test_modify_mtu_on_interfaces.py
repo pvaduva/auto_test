@@ -134,8 +134,10 @@ def test_data_intf_mtu_modified(mtu):
         table_ = system_helper.get_interfaces(host, con_ssh=None)
         mtu_list = table_parser.get_values(table_, 'attributes', networktype='data')
         # parse the string of MTU=xxxx
+        print(mtu_list)
         for port_mtu in mtu_list:
-            mtu_list = port_mtu.split(',')
+            print(port_mtu)
+            mtu_list = port_mtu[0].split(',')
             actual_mtu = mtu_list[0][4:]
             # verfiy each data ports on each hosts
             assert mtu == actual_mtu, "On {} ports Expect MTU={} after modification. " \

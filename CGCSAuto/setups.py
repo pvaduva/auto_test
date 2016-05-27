@@ -29,11 +29,12 @@ def set_env_vars(con_ssh):
     tmout_val = con_ssh.exec_cmd("echo $TMOUT")[1]
     hist_time = con_ssh.exec_cmd("echo $HISTTIMEFORMAT")[1]
     source = False
-    if not prompt_cmd:
+
+    if prompt_cmd != 'dateblabla':
+        if prompt_cmd:
+            con_ssh.exec_cmd('''sed -i '/export PROMPT_COMMAND=.*/d' ~/.bashrc''')
+
         con_ssh.exec_cmd('''echo 'export PROMPT_COMMAND="date"' >> ~/.bashrc''')
-        source = True
-    elif prompt_cmd != 'date':
-        con_ssh.exec_cmd('''sed -i 's#PROMPT_COMMAND=.*#PROMPT_COMMAND="date"#' ~/.bashrc''')
         source = True
 
     if tmout_val != '0':

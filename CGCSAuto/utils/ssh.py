@@ -291,7 +291,8 @@ class SSHClient:
 
         return index
 
-    def exec_cmd(self, cmd, expect_timeout=10, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True):
+    def exec_cmd(self, cmd, expect_timeout=10, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
+                 fail_ok=True):
         """
 
         Args:
@@ -301,6 +302,7 @@ class SSHClient:
             reconnect_timeout:
             err_only: if true, stdout will not be included in output
             rm_date (bool): weather to remove date output from cmd output before returning
+            fail_ok (bool): whether to raise exception when non-zero exit-code is returned
 
         Returns (tuple): (exit code (int), command output (str))
 
@@ -310,7 +312,13 @@ class SSHClient:
             cmd += ' 1> /dev/null'          # discard stdout
         self.send(cmd, reconnect, reconnect_timeout)
         self.expect(timeout=expect_timeout)
-        return self.__process_exec_result(cmd, rm_date)
+
+        code, output = self.__process_exec_result(cmd, rm_date)
+
+        if code != 0 and not fail_ok:
+            raise exceptions.SSHExecCommandFailed("Non-zero return code for cmd: {}".format(cmd))
+
+        return code, output
 
     def __process_exec_result(self, cmd, rm_date):
         cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
@@ -401,7 +409,19 @@ class SSHClient:
                 self.send('exit')
                 self.expect()
 
-    def exec_sudo_cmd(self, cmd, expect_timeout=10, rm_date=True):
+    def exec_sudo_cmd(self, cmd, expect_timeout=10, rm_date=True, fail_ok=True):
+        """
+        Execute a command with sudo.
+
+        Args:
+            cmd (str): command to execute. such as 'ifconfig'
+            expect_timeout (int): timeout waiting for command to return
+            rm_date (bool): whether to remove date info at the end of the output
+            fail_ok (bool): whether to raise exception when non-zero exit code is returned
+
+        Returns (tuple): (exit code (int), command output (str))
+
+        """
         cmd = 'sudo ' + cmd
         LOG.info("Executing sudo command: {}".format(cmd))
         self.send(cmd)
@@ -410,7 +430,11 @@ class SSHClient:
             self.send(self.password)
             self.expect(timeout=expect_timeout)
 
-        return self.__process_exec_result(cmd, rm_date)
+        code, output = self.__process_exec_result(cmd, rm_date)
+        if code != 0 and not fail_ok:
+            raise exceptions.SSHExecCommandFailed("Non-zero return code for sudo cmd: {}".format(cmd))
+
+        return code, output
 
     def get_current_user(self):
         output = self.exec_cmd('whoami')[1]

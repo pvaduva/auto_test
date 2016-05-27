@@ -130,7 +130,7 @@ def pytest_runtest_makereport(item, call, __multicall__):
             res_in_tests = 'Failed'
 
         if not res_in_tests:
-            res_in_tests = 'Unknow!'
+            res_in_tests = 'Unknown!'
 
         with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
             f.write('{}\t{}\n'.format(res_in_tests, test_name))

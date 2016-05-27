@@ -1,10 +1,7 @@
-import re
 import math
-
 import time
 
 from consts.auth import Tenant
-from consts.timeout import CMDTimeout
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -485,29 +482,6 @@ def get_vm_topology_tables(*table_names, con_ssh=None):
     return tables_
 
 
-def get_host_threads_number(host, con_ssh=None):
-    """
-    Return number of threads for specific host.
-    Notes: when hyperthreading is disabled, the number is usually 1; when enabled, the number is usually 2.
-
-    Args:
-        host (str): hostname
-        con_ssh (SSHClient):
-
-    Returns (int): number of threads
-
-    """
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
-
-    code, output = con_ssh.exec_cmd('vm-topology -s topology | grep "{}.*Threads/Core="'.format(host))
-    if code != 0:
-        raise exceptions.SSHExecCommandFailed("CMD stderr: {}".format(output))
-
-    pattern = "Threads/Core=(\d),"
-    return int(re.findall(pattern, output)[0])
-
-
 def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Modify host memory to given number of 1G hugepages on specified processor.
@@ -652,65 +626,6 @@ def get_host_used_mem_values(host, proc_id=0, auth_info=Tenant.ADMIN, con_ssh=No
     used_mem = mem_total - mem_avail - avs_hp_size * avs_hp_total
 
     return used_mem
-
-
-def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=False, con_ssh=None,
-                    auth_info=Tenant.ADMIN, **kwargs):
-    """
-    Modify host cpu to given key-value pairs. i.e., system host-cpu-modify -f <function> -p<id> <num of cores> <host>
-    Notes: This assumes given host is already locked.
-
-    Args:
-        host (str): hostname of host to be modified
-        function (str): cpu function to modify. e.g., 'shared'
-        timeout (int): Timeout waiting for system host-cpu-modify cli to return
-        fail_ok (bool):
-        con_ssh (SSHClient):
-        auth_info (dict):
-        **kwargs: processor id and number of cores pair(s). e.g., p0=1, p1=1
-
-    Returns (tuple): (rtn_code(int), message(str))
-        (0, "Host cpu function modified successfully")
-        (1, <stderr>)   # cli rejected
-        (2, "Number of actual log_cores for <proc_id> is different than number set. Actual: <num>, expect: <num>")
-
-    """
-    LOG.info("Modifying host {} CPU function {} to {}".format(host, function, kwargs))
-
-    proc_args = ''
-    for proc, cores in kwargs.items():
-        cores = str(cores)
-        proc_args = ' '.join([proc_args, '-'+proc.lower().strip(), cores])
-
-    subcmd = ' '.join(['host-cpu-modify', '-f', function.lower().strip(), proc_args])
-    code, output = cli.system(subcmd, host, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info, timeout=timeout,
-                              rtn_list=True)
-
-    if code == 1:
-        return 1, output
-
-    LOG.info("Post action check for host-cpu-modify...")
-    table_ = table_parser.table(output)
-    table_ = table_parser.filter_table(table_, assigned_function=function)
-
-    threads = get_host_threads_number(host, con_ssh=con_ssh)
-
-    for proc, num in kwargs.items():
-        num = int(num)
-        proc_id = re.findall('\d+', proc)[0]
-        expt_cores = threads*num
-        actual_cores = len(table_parser.get_values(table_, 'log_core', processor=proc_id))
-        if expt_cores != actual_cores:
-            msg = "Number of actual log_cores for {} is different than number set. Actual: {}, expect: {}". \
-                format(proc, actual_cores, expt_cores)
-            if fail_ok:
-                LOG.warning(msg)
-                return 2, msg
-            raise exceptions.HostPostCheckFailed(msg)
-
-    msg = "Host cpu function modified successfully"
-    LOG.info(msg)
-    return 0, msg
 
 
 def get_processors_shared_cpu_nums(host, con_ssh=None, auth_info=Tenant.ADMIN):
