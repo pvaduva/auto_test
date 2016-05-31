@@ -1013,3 +1013,51 @@ def get_expected_vswitch_port_engine_map(host_ssh):
             expt_map[port] = all_cores
 
     return expt_map
+
+
+def get_local_storage_backing(host, con_ssh=None):
+    table_ = table_parser.table(cli.system('host-lvg-show', host + ' nova-local', ssh_client=con_ssh))
+    return eval(table_parser.get_value_two_col_table(table_, 'parameters'))['instance_backing']
+
+
+def check_host_local_backing_type(host, type='image', con_ssh=None):
+    backing_storage_types = get_local_storage_backing(host, con_ssh=con_ssh).lower()
+    if not type in backing_storage_types:
+        return False
+
+    return True
+
+
+def is_host_local_image_backing(host, con_ssh=None):
+    return check_host_local_backing_type(host, type='image', con_ssh=con_ssh)
+
+
+def is_host_local_lvm_backing(host, con_ssh=None):
+    return check_host_local_backing_type(host, type='lvm', con_ssh=con_ssh)
+
+
+def _check_lab_local_backing_type(type=None, con_ssh=None):
+    hypervisors = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
+    if not hypervisors:
+        return False
+
+    for hypervisor in hypervisors:
+        if check_host_local_backing_type(hypervisor, type=type):
+            return True
+
+    return False
+
+
+def has_local_image_backing(con_ssh=None):
+    if _check_lab_local_backing_type('image'):
+        return True
+
+    return False
+
+
+def has_local_lvm_backing(con_ssh=None):
+    if _check_lab_local_backing_type('lvm'):
+        return True
+
+    return False
+

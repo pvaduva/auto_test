@@ -2,6 +2,7 @@ import math
 import time
 
 from consts.auth import Tenant
+from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -460,7 +461,7 @@ def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, nameserv
 
     LOG.info('args_:{}'.format(args_))
     code, output = cli.system('dns-modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_list=True)
+                              rtn_list=True, timeout=SysInvTimeout.DNS_MODIFY)
 
     if code == 1:
         return 1, output
