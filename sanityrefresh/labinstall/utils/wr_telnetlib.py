@@ -813,7 +813,6 @@ class Telnet:
         if index != 0:
             msg = "Timeout occurred: Failed to find prompt"
             log.error(msg)
-            wr_exit()._exit(1, msg)
 
         # Remove command and prompt
         output = "\n".join(output.decode('utf-8', 'ignore').splitlines()[1:-1])

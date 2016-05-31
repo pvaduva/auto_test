@@ -251,8 +251,7 @@ def verify_custom_lab_cfg_location(lab_cfg_location):
     found_system_cfg_file = False
     found_lab_settings_file = False
     for file in os.listdir(lab_cfg_location):
-        #if file == SYSTEM_CFG_FILENAME:
-        if file in CFGFILE_LIST:
+        if file == SYSTEM_CFG_FILENAME:
             found_system_cfg_file = True
         elif file == BULK_CFG_FILENAME:
             found_bulk_cfg_file = True
@@ -667,10 +666,10 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S sw-patch install-local"
 
     output = node.telnet_conn.exec_cmd(cmd)[1]
-    if not find_error_msg(output):
-        msg = "Failed to install patches"
-        log.error(msg)
-        wr_exit()._exit(1, msg)
+    #if not find_error_msg(output):
+    #    msg = "Failed to install patches"
+    #    log.error(msg)
+    #    wr_exit()._exit(1, msg)
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S sw-patch query"
     if node.telnet_conn.exec_cmd(cmd)[0] != 0:
         msg = "Failed to query patches"
@@ -678,6 +677,10 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
         wr_exit()._exit(1, msg)
 
     node.telnet_conn.exec_cmd("echo " + WRSROOT_PASSWORD + " | sudo -S reboot")
+
+    log.info("Patch application requires a reboot.")
+    log.info("Controller0 reboot has started")
+    node.telnet_conn.get_read_until("Rebooting...")
     node.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
 
 def wait_until_drbd_sync_complete(controller0, timeout=600, check_interval=180):
@@ -1012,6 +1015,19 @@ def main():
         if patch_dir_paths != None:
             apply_patches(controller0, bld_server_conn, patch_dir_paths)
 
+            # Reconnect telnet session
+            log.info("Found login prompt. Controller0 reboot has completed")
+            cont0_telnet_conn.login()
+            controller0.telnet_conn = cont0_telnet_conn
+
+            # Reconnect ssh session
+            cont0_ssh_conn.disconnect()
+            cont0_ssh_conn = SSHClient(log_path=output_dir +\
+                                       "/" + CONTROLLER0 + ".ssh.log")
+            cont0_ssh_conn.connect(hostname=controller0.host_ip,
+                                   username=WRSROOT_USERNAME,
+                                   password=WRSROOT_PASSWORD)
+            controller0.ssh_conn = cont0_ssh_conn
 
     # Download configuration files
     executed = False
