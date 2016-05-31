@@ -115,7 +115,7 @@ class Labs:
         'floating ip': '128.224.151.230',
         'controller-0 ip': '128.224.150.140',
         'controller-1 ip': '128.224.150.180',
-        'auth_url': 'http://192.168.204.102:5000/v2.0/',
+        # 'auth_url': 'http://192.168.204.102:5000/v2.0/',
     }
 
     VBOX = {

@@ -619,8 +619,8 @@ class SSHFromSSH(SSHClient):
         self.parent.send(cmd, reconnect, reconnect_timeout)
         self.cmd_sent = self.parent.cmd_sent
 
-    def close(self):
-        if self._is_connected():
+    def close(self, force=False):
+        if force or self._is_connected():
             self.send('exit')
             self.parent.expect()
             LOG.info("ssh session to {} is closed and returned to parent session {}".
@@ -654,13 +654,13 @@ class VMSSHClient(SSHFromSSH):
         if user:
             if not password:
                 password = user
-        elif 'centos' in vm_img_name:
+        elif 'centos' in vm_img_name or 'centos' in vm_name:
             user = 'centos'
             force_password = False
         else:
             for image_name in Guest.CREDS:
-                if image_name in vm_img_name:
-                    vm_creds = Guest.CREDS[vm_img_name]
+                if image_name in vm_img_name or image_name in vm_name:
+                    vm_creds = Guest.CREDS[image_name]
                     user = vm_creds['user']
                     password = vm_creds['password']
                     break
@@ -673,13 +673,13 @@ class VMSSHClient(SSHFromSSH):
                             "Use root/root to login.".format(known_guests))
 
         if prompt is None:
-            prompt = r'.*{}\@{}.*\~.*[$#]'.format(user, str(vm_name).replace('_', '-'))
+            # prompt = r'.*{}\@{}.*\~.*[$#]'.format(user, str(vm_name).replace('_', '-'))
+            prompt = r'.*{}\@.*\~.*[$#]'.format(user)
         super(VMSSHClient, self).__init__(ssh_client=natbox_client, host=vm_ip, user=user, password=password,
                                           initial_prompt=prompt, timeout=timeout)
 
         # This needs to be modified in centos case.
         if not force_password:
-
             ssh_options = " -i {}".format(ProjVar.get_var('KEYFILE_NAME'))
         else:
             ssh_options = _SSH_OPTS

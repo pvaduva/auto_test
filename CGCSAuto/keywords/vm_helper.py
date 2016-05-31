@@ -986,6 +986,10 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
 
     vm_name = nova_helper.get_vm_name_from_id(vm_id=vm_id)
     vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id)[0]
+
+    if not natbox_client:
+        natbox_client = NATBoxClient.get_natbox_client()
+
     vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_name=vm_name, vm_img_name=vm_image_name,
                          user=username, password=password, prompt=prompt, timeout=timeout)
     try:

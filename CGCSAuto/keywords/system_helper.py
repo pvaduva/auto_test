@@ -650,3 +650,8 @@ def get_processors_shared_cpu_nums(host, con_ssh=None, auth_info=Tenant.ADMIN):
         results[proc_id] = cores
 
     return results
+
+
+def is_hyperthreading_enabled(host, con_ssh=None):
+    table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh))
+    return len(set(table_parser.get_column(table_, 'thread'))) > 1
