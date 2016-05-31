@@ -13,6 +13,9 @@ PRIMARY_TENANT = Tenant.TENANT_2
 NATBOX = NatBoxes.NAT_BOX_HW
 BOOT_VMS = False
 COLLECT_ALL = False
+REPORT_ALL = False
+DOMAIN = 'MTC'
+USERSTORY= ''
 
 #########################################
 # End of Test Session Params            #
