@@ -619,7 +619,7 @@ def get_host_used_mem_values(host, proc_id=0, auth_info=Tenant.ADMIN, con_ssh=No
 
     """
     mem_vals = get_host_mem_values(
-        host, ['mem_total(MiB)','mem_avail(MiB)','avs_hp_size(MiB)', 'avs_hp_total'],
+        host, ['mem_total(MiB)', 'mem_avail(MiB)', 'avs_hp_size(MiB)', 'avs_hp_total'],
         proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)
 
     mem_total, mem_avail, avs_hp_size, avs_hp_total = [int(val) for val in mem_vals]

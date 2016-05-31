@@ -1,6 +1,6 @@
 class Labs:
     HP380 = {
-        'short_name': 'hp380',
+        'short_name': 'HP380',
         'name': 'yow-cgcs-hp380-1_4',
         'floating ip': '128.224.150.189',
         'controller-0 ip': '128.224.150.199',
@@ -9,7 +9,7 @@ class Labs:
     }
 
     IP_1_4 = {
-        'short_name': 'ip_1_4',
+        'short_name': 'IP_1_4',
         'name': 'cgcs-ironpass-1_4',
         'floating ip': '128.224.151.212',
         'controller-0 ip': '128.224.151.192',
@@ -18,7 +18,7 @@ class Labs:
     }
 
     IP_5_6 = {
-        'short_name': 'ip_5_6',
+        'short_name': 'IP_5_6',
         'name': 'cgcs-ironpass-5_6',
         'floating ip': '128.224.151.216',
         'controller-0 ip': '128.224.151.196',
@@ -27,7 +27,7 @@ class Labs:
     }
 
     IP_14_17 = {
-        'short_name': 'ip_14_17',
+        'short_name': 'IP_14_17',
         'name': 'cgcs-ironpass-14_17',
         'floating ip': '128.224.150.54',
         'controller-0 ip': '128.224.150.219',
@@ -35,7 +35,7 @@ class Labs:
     }
 
     IP_18_19 = {
-        'short_name': 'ip18_19',
+        'short_name': 'IP_18_19',
         'name': 'cgcs-ironpass-18_19',
         'floating ip': '128.224.150.158',
         'controller-0 ip': '128.224.150.168',
@@ -44,7 +44,7 @@ class Labs:
     }
 
     PV0 = {
-        'short_name': 'pv0',
+        'short_name': 'PV0',
         'name': 'yow-cgcs-pv-0',
         'floating ip': '128.224.150.73',
         'controller-0 ip': '128.224.150.26',
@@ -53,7 +53,7 @@ class Labs:
     }
 
     PV1 = {
-        'short_name': 'pv1',
+        'short_name': 'PV1',
         'name': 'yow-cgcs-pv-1',
         'floating ip': '128.224.151.182',
         'controller-0 ip': '128.224.151.198',
@@ -61,7 +61,7 @@ class Labs:
     }
 
     PV2 = {
-        'short_name': 'pv2',
+        'short_name': 'PV2',
         'name': 'yow-cgcs-pv-2',
         'floating ip': '128.224.151.225',
         'controller-0 ip': '128.224.151.223',
@@ -69,7 +69,7 @@ class Labs:
     }
 
     R720_1_2 = {
-        'short_name': 'r720_1_2',
+        'short_name': 'R720_1_2',
         'name': 'yow-cgcs-r720-1-2',
         'floating ip': '128.224.150.141',
         'controller-0 ip': '128.224.150.130',
@@ -78,7 +78,7 @@ class Labs:
     }
 
     R720_3_7 = {
-        'short_name': 'r720_3_7',
+        'short_name': 'R720_3_7',
         'name': 'yow-cgcs-r720-3_7',
         'floating ip': '128.224.150.142',
         'controller-0 ip': '128.224.151.35',
@@ -86,7 +86,7 @@ class Labs:
     }
 
     WCP_3_6 = {
-        'short_name': 'wcp_3_6',
+        'short_name': 'WCP_3_6',
         'name': 'yow-cgcs-wildcat-3-6',
         'floating ip': '128.224.151.227',
         'controller-0 ip': '128.224.151.69',
@@ -94,7 +94,7 @@ class Labs:
     }
 
     WCP_7_12 = {
-        'short_name': 'wcp_7_12',
+        'short_name': 'WCP_7_12',
         'name': 'yow-cgcs-wildcat-7_12',
         'floating ip': '128.224.151.228',
         'controller-0 ip': '128.224.150.220',
@@ -102,7 +102,7 @@ class Labs:
     }
 
     WCP_13_14 = {
-        'short_name': 'wcp_13_14',
+        'short_name': 'WCP_13_14',
         'name': 'yow-cgcs-wildcat-13_14',
         'floating ip': '128.224.151.229',
         'controller-0 ip': '128.224.150.133',
@@ -110,7 +110,7 @@ class Labs:
     }
 
     WCP_15_22 = {
-        'short_name': 'wcp_15_22',
+        'short_name': 'WCP_15_22',
         'name': 'yow-cgcs-wildcat-15_22',
         'floating ip': '128.224.151.230',
         'controller-0 ip': '128.224.150.140',
@@ -119,7 +119,7 @@ class Labs:
     }
 
     VBOX = {
-        'short_name': 'vbox',
+        'short_name': 'VBOX',
         'name': 'vbox',
         'floating ip': '10.10.1.3',
         'controller-0 ip': '10.10.1.1',

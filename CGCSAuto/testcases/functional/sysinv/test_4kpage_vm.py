@@ -56,6 +56,16 @@ def smallpage_flavor_vm(request):
     return vm
 
 
+def get_host_aggregate(host):
+    #retrieve the host is either local_lvm or local_image
+    args = host + ' nova-local'
+    table_ = table_parser.table(cli.system('host-lvg-show', args, auth_info=Tenant.ADMIN, fail_ok=False))
+
+    instance_backing = table_parser.get_value_two_col_table(table_,'parameters')
+    inst_back = ast.literal_eval(instance_backing)['instance_backing']
+
+    return inst_back
+
 def is_enough_4k_page_memory():
     """
     Check if there is enough 4k pages on any compute node on any processors is a bit hassle
@@ -66,16 +76,17 @@ def is_enough_4k_page_memory():
     # check if any 4k pages greater than 60000 means more than 2G total.
     check = False
     for host in host_helper.get_hypervisors():
-        for proc_id in [0,1]:
+        for proc_id in [0, 1]:
             num_4k_page = system_helper.get_host_mem_values(host, ['vm_total_4K'], proc_id=proc_id)
-            if int(num_4k_page[0]) > 600000:
+            if int(num_4k_page[0]) > 600000 and get_host_aggregate(host) == 'image':
                 check = True
                 break
+
     if not check:
-        # randomly pick a compute node and give it enough 4k pages
-        host_helper.lock_host('compute-1')
-        system_helper.set_host_4k_pages('compute-1', proc_id=1, smallpage_num=600000)
-        host_helper.unlock_host('compute-1')
+        # randomly pick a compute-0 node and give it enough 4k pages
+        host_helper.lock_host('compute-0')
+        system_helper.set_host_4k_pages('compute-0', proc_id=1, smallpage_num=600000)
+        host_helper.unlock_host('compute-0')
 
 
 def test_4k_page_vm(smallpage_flavor_vm):

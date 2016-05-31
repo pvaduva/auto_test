@@ -21,7 +21,6 @@ def config_local_volume_group(request):
 
     instance_backing = table_parser.get_value_two_col_table(table_,'parameters')
     inst_back = ast.literal_eval(instance_backing)['instance_backing']
-    print(instance_backing, inst_back,"hello")
 
     if inst_back == request.param:
         return local_volume_group

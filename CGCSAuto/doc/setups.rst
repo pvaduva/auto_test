@@ -33,7 +33,7 @@ Installation Instructions: http://internal.wrs.com/engineering/engops/techpubs/w
 PYTHONPATH
 ----------
  * Add **CGCSAuto** to **PYTHONPATH** for libary discovery purpose
- * Automated Keywords and Test Cases are located at: *wasp-repos/testcases/cgcs/CGCSAuto*::
+ * Automated Keywords and Test Cases are located at *wasp-repos/testcases/cgcs/CGCSAuto* ::
 
     echo 'export PYTHONPATH=${PYTHONPATH}:<full path to cgcs/CGCSAuto>' >> ${HOME}/.bashrc
 

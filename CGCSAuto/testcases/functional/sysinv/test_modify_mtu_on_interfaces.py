@@ -44,7 +44,7 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
     host_helper.unlock_host(hostname)
 
 
-@mark.parametrize('mtu', ['1700', '1500'])
+@mark.parametrize('mtu', ['1400', '1500'])
 def test_oam_intf_mtu_modified(mtu):
     """
 
@@ -101,7 +101,7 @@ def test_oam_intf_mtu_modified(mtu):
                                                     "MTU={}".format(mtu, actual_mtu_one, actual_mtu_two)
 
 
-@mark.parametrize('mtu', ['1700', '1500'])
+@mark.parametrize('mtu', ['1550', '1500'])
 def test_data_intf_mtu_modified(mtu):
     """
     23) Change the MTU value of the data interface using CLI
@@ -134,9 +134,9 @@ def test_data_intf_mtu_modified(mtu):
         table_ = system_helper.get_interfaces(host, con_ssh=None)
         mtu_list = table_parser.get_values(table_, 'attributes', networktype='data')
         # parse the string of MTU=xxxx
-        print(mtu_list)
+
         for port_mtu in mtu_list:
-            print(port_mtu)
+
             mtu_list = port_mtu[0].split(',')
             actual_mtu = mtu_list[0][4:]
             # verfiy each data ports on each hosts

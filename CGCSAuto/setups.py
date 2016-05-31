@@ -114,11 +114,13 @@ def boot_vms(is_boot):
 
 
 def get_lab_dict(labname):
-    labname = labname.strip().lower()
+    # labname = labname.strip().lower()
     labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
 
     for lab in labs:
-        if labname.replace('-', '_') in lab['name'].replace('-', '_').lower().strip() or labname == lab['floating ip']:
+        if labname.replace('-', '_').lower().strip() in lab['name'].replace('-', '_').lower().strip() \
+                or labname in lab['short_name'] \
+                or labname == lab['floating ip']:
             return lab
     else:
         if labname.startswith('128.224'):

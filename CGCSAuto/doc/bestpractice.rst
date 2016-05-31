@@ -61,7 +61,6 @@ Order for imports
 .. code-block:: python
 
  #1. System imports
-
  # Typical keyword module imports:
  import re
  import time
@@ -198,7 +197,9 @@ Other Conventions
 
 .. code-block:: python
  
- “{} has {} hosts: {}”.format(‘R720_1_2’, 4, [‘controller-0’, ‘controller-1’])
+  >>> print ("{} has {} hosts: {}".format('R720_1_2', 4, ['controller-0', 'controller-1']))
+  R720_1_2 has 4 hosts: ['controller-0', 'controller-1']
+
 
 Things to Avoid
 ---------------

@@ -29,6 +29,7 @@ def modify_huge_page(request):
     table_ = table_parser.table(cli.system('host-memory-show', host_processor))
     two_m_pages = table_parser.get_value_two_col_table(table_, 'VM  Huge Pages (2M): Total')
     one_g_pages = table_parser.get_value_two_col_table(table_, 'VM  Huge Pages (1G): Total')
+    LOG.info('Before Modification processor:{} have {} 2M pages, {} 1G pages'.format(processor,two_m_pages,one_g_pages))
 
     host = {'hostname': hostname,
             'processor': processor,

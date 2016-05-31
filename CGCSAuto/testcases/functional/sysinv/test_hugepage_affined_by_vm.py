@@ -47,6 +47,7 @@ def create_vm_(request):
 
     return vm
 
+
 # overall skip condition
 def more_than_one_vm():
     return len(nova_helper.get_vms()) > 0

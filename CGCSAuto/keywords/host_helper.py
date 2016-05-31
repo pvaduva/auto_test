@@ -297,7 +297,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
             return 5, msg
         exceptions.HostPostCheckFailed(msg)
 
-    if not _wait_for_host_states(host, timeout=10, administrative=HostAdminState.LOCKED, con_ssh=con_ssh):
+    if not _wait_for_host_states(host, timeout=20, administrative=HostAdminState.LOCKED, con_ssh=con_ssh):
         msg = "Host is not in locked state"
         if fail_ok:
             return 2, msg

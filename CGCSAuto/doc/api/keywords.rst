@@ -5,80 +5,85 @@ comment
 
 
 
-keywords.cinder_helper module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cinder_helper module
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Contain useful cli functions related mostly with Block Storage service for Openstack
 
 .. automodule:: keywords.cinder_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-Common keywords
-^^^^^^^^^^^^^^^
+common module
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.common
     :members:
     :undoc-members:
     :show-inheritance:
 
-Image related keywords
-^^^^^^^^^^^^^^^^^^^^^^
+glance_helper module
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Contain useful cli functions related mostly with host Image setup/creation for Openstack
 
 .. automodule:: keywords.glance_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-Host action and info retrieving keywords
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+host_helper module
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Host action and info retrieving functions
 
 .. automodule:: keywords.host_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-Keystone keywords
-^^^^^^^^^^^^^^^^^
+keystone_helper module
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.keystone_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-Networking keywords
-^^^^^^^^^^^^^^^^^^^
+network_helper module
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.network_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-Nova keywords
-^^^^^^^^^^^^^
+nova_helper module
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.nova_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-Security keywords
-^^^^^^^^^^^^^^^^^
+security_helper module
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.security_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
+system_helper module
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 System information (relatively static info)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: keywords.system_helper
     :members:
     :undoc-members:
     :show-inheritance:
 
-VM action and info retrieving keywords
+vm_helper module
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Contain useful cli functions related mostly with VM creations and helper functions not covered by other modules
 
 .. automodule:: keywords.vm_helper
     :members:
