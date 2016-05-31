@@ -881,7 +881,7 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
     table_ = table_parser.table(output)
     table_ = table_parser.filter_table(table_, assigned_function=function)
 
-    threads = get_host_threads_number(host, con_ssh=con_ssh)
+    threads = get_host_threads_count(host, con_ssh=con_ssh)
 
     for proc, num in kwargs.items():
         num = int(num)
@@ -901,10 +901,10 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
     return 0, msg
 
 
-def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='phy_core', con_ssh=None,
+def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log_core', con_ssh=None,
                                     auth_info=Tenant.ADMIN):
     """
-    Get processor/logical cpu cores mapping for given function for host via system host-cpu-list
+    Get processor/logical cpu cores/per processor on thread 0 for given function for host via system host-cpu-list
 
     Args:
         hostname (str): hostname to pass to system host-cpu-list
@@ -914,7 +914,7 @@ def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='phy
         auth_info (dict):
 
     Returns (dict): format: {<proc_id> (str): <log_cores> (list), ...}
-        e.g., {'0': ['1', '2'], '1': ['1', '2']}
+        e.g., {'0': ['1', '2'], '1': ['21', '22']}
 
     """
     table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh, auth_info=auth_info))
@@ -922,12 +922,34 @@ def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='phy
     procs = list(set(table_parser.get_column(table_, 'processor')))
     res_dict = {}
     for proc in procs:
-        res_dict[proc] = sorted(table_parser.get_values(table_, core_type, processor=proc))
+        res_dict[int(proc)] = sorted(int(item) for item in table_parser.get_values(table_, core_type, processor=proc))
 
     return res_dict
 
 
-def get_host_threads_number(host, con_ssh=None):
+def get_logcores_counts(host, proc_ids=(0, 1), con_ssh=None):
+    """
+    Get number of logical cores on given processor on thread 0.
+
+    Args:
+        host:
+        proc_ids:
+        con_ssh:
+
+    Returns (tuple):
+
+    """
+    table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh))
+    table_ = table_parser.filter_table(table_, thread='0')
+
+    rtns = []
+    for i in proc_ids:
+        rtns.append(len(table_parser.get_values(table_, 'log_core', processor=str(i))))
+
+    return tuple(rtns)
+
+
+def get_host_threads_count(host, con_ssh=None):
     """
     Return number of threads for specific host.
     Notes: when hyperthreading is disabled, the number is usually 1; when enabled, the number is usually 2.
