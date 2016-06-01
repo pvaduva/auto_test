@@ -214,6 +214,21 @@ def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
     return table_
 
 
+def unsuppress_all(ssh_con=None, fail_ok=False):
+    cli.system('alarm-unsuppress-all',ssh_client=ssh_con)
+    get_suppress_list = get_suppressed_alarms()
+    suppressed_list = table_parser.get_values(table_= get_suppress_list, target_header='Suppressed Alarm ID\'s',
+                                              strict=True, **{'Status': 'suppressed'})
+    if len(suppressed_list) == 0:
+        return 0
+    else:
+        msg="Suppressed was unsuccessfull"
+        if fail_ok:
+            LOG.warning(msg)
+            return 1, msg
+        raise exceptions.NeutronError(msg)
+
+
 def get_events(num=5, uuid=False, show_only=None, show_suppress=False, query_key=None, query_value=None,
                query_type=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
