@@ -4,9 +4,7 @@ from utils.tis_log import LOG
 from consts.cgcs import UUID
 from keywords import system_helper
 from utils import cli, table_parser
-# This test case is  to verify Alarm Suppression on Active alarm list
-
-
+# This test case is  to verify Alarm Suppression on Active alarm list (US77193 –FM: Alarm Suppression)
 def test_alarm_suppression():
     """
        Verify suppression and unsuppression of active alarm and query alarms.
@@ -45,6 +43,7 @@ def test_alarm_suppression():
 
 def suppress_unsuppress_alarm(alarm_id=None, con_ssh=None, suppress=True):
     """
+        Waiting for a jira fix  then this can converted to keyword
         suppress alarm by uuid
         Args:
             alarm_id: string
@@ -58,10 +57,10 @@ def suppress_unsuppress_alarm(alarm_id=None, con_ssh=None, suppress=True):
         return False
     query_alarm_suppress_list = system_helper.get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
     if suppress:
-        alarm_idx = {"SuppressedAlarm ID's": alarm_id, 'Status': 'unsuppressed'}
+        alarm_idx = {"Suppressed Alarm ID's": alarm_id, 'Status': 'unsuppressed'}
         clistr = 'alarm-suppress --alarm_id'
     else:
-        alarm_idx = {"SuppressedAlarm ID's": alarm_id, 'Status': 'suppressed'}
+        alarm_idx = {"Suppressed Alarm ID's": alarm_id, 'Status': 'suppressed'}
         clistr = 'alarm-unsuppress --alarm_id'
     get_uuid = table_parser.get_values(table_=query_alarm_suppress_list, target_header='UUID', strict=True, **alarm_idx)
     if len(get_uuid) == 1:

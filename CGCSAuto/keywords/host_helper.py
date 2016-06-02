@@ -1083,3 +1083,10 @@ def has_local_lvm_backing(con_ssh=None):
 
     return False
 
+
+def get_hosts_with_local_storage_backing_type(type=None, con_ssh=None):
+    hosts = []
+    for h in get_hypervisors(state='up', status='enabled', con_ssh=con_ssh):
+        if check_host_local_backing_type(h, type=type, con_ssh=con_ssh):
+            hosts.append(h)
+    return hosts

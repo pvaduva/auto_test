@@ -6,7 +6,7 @@ from consts.cgcs import UUID
 from keywords import system_helper
 # This test case is  to verify the query alarm and logs using event list.
 # Mainly it starts on with generating alarm alarm id 300.005 Critical major minot and not applicable and query them.
-
+#US24127,US36505 and US36506 US70391 –FM: Merge Query/Display of Historical Alarms and Customer Logs
 
 @mark.parametrize(
     ("event_option", "severity"), [

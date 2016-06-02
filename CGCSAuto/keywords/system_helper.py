@@ -214,6 +214,21 @@ def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
     return table_
 
 
+def unsuppress_all(ssh_con=None, fail_ok=False):
+    cli.system('alarm-unsuppress-all',ssh_client=ssh_con)
+    get_suppress_list = get_suppressed_alarms()
+    suppressed_list = table_parser.get_values(table_= get_suppress_list, target_header='Suppressed Alarm ID\'s',
+                                              strict=True, **{'Status': 'suppressed'})
+    if len(suppressed_list) == 0:
+        return 0
+    else:
+        msg="Suppressed was unsuccessfull"
+        if fail_ok:
+            LOG.warning(msg)
+            return 1, msg
+        raise exceptions.NeutronError(msg)
+
+
 def get_events(num=5, uuid=False, show_only=None, show_suppress=False, query_key=None, query_value=None,
                query_type=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
@@ -399,7 +414,7 @@ def set_retention_period(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, ret
 
     args_ = ' retention_secs="{}"'.format(int(retention_period))
     code, output = cli.system('pm-modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_list=True, timeout=60)
+                              rtn_list=True, timeout=SysInvTimeout.RETENTION_PERIOD_MDOIFY)
 
     if code == 1:
         return 1, output
@@ -656,3 +671,70 @@ def get_processors_shared_cpu_nums(host, con_ssh=None, auth_info=Tenant.ADMIN):
 def is_hyperthreading_enabled(host, con_ssh=None):
     table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh))
     return len(set(table_parser.get_column(table_, 'thread'))) > 1
+
+
+def create_storage_profile(host, profile_name='', con_ssh=None):
+    """
+    Create a storage profile
+
+    Args:
+        host (str): hostname or id
+        profile_name (str): name of the profile to create
+        con_ssh (SSHClient):
+
+    Returns (str): uuid of the profile created if success, otherwise an exception will be raised
+
+    """
+    if not profile_name:
+        profile_name = time.strftime('storprof_%Y%m%d_%H%M%S_', time.localtime())
+
+    cmd = 'storprofile-add {} {}'.format(profile_name, host)
+
+    table_ = table_parser.table(cli.system(cmd, ssh_client=con_ssh, fail_ok=False, auth_info=Tenant.ADMIN, rtn_list=False))
+    uuid = table_parser.get_value_two_col_table(table_, 'uuid')
+
+    return uuid
+
+
+def apply_storage_profile(host, profile=None, con_ssh=None, fail_ok=False):
+    """
+    Apply a storage profile
+
+    Args:
+        host (str): hostname or id
+        profile (str): name or id of storage-profile
+        con_ssh (SSHClient):
+
+    Returns (dict): proc_id(str) and num_of_cores(int) pairs. e.g.,: {'0': 1, '1': 1}
+
+    """
+    if not profile:
+        raise ValueError('Name or uuid must be provided to apply that storage-profile')
+
+    cmd = 'host-apply-storprofile {} {}'.format(host, profile)
+    LOG.debug('cmd={}'.format(cmd))
+    code, output = cli.system(cmd, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True, auth_info=Tenant.ADMIN)
+
+    return code, output
+
+
+def delete_stroage_profile(host, profile='', con_ssh=None):
+    """
+    Delete a storage profile
+
+    Args:
+        host (str): hostname or id
+        profile_name (str): name of the profile to create
+        con_ssh (SSHClient):
+
+    Returns (): no return if success, will raise exception otherwise
+
+    """
+    if not profile:
+        raise ValueError('Name or uuid must be provided to delete the storage-profile')
+
+    cmd = 'storprofile-delete {}'.format(profile)
+
+    cli.system(cmd, ssh_client=con_ssh, fail_ok=False, auth_info=Tenant.ADMIN, rtn_list=False)
+
+

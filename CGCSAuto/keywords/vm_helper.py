@@ -100,7 +100,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
         block_device:
         auth_info (dict):
         con_ssh (SSHClient):
-        nics (list): [{'net-id1': <net_id1>, 'vif-model1': <vif1>}, {'net-id2': <net_id2>, 'vif-model2': <vif2>}, ...]
+        nics (list): [{'net-id': <net_id1>, 'vif-model': <vif1>}, {'net-id': <net_id2>, 'vif-model': <vif2>}, ...]
         hint (dict): key/value pair(s) sent to scheduler for custom use. such as group=<server_group_id>
         fail_ok (bool):
 

@@ -109,6 +109,7 @@ class FlavorSpec:
     VCPU_SCHEDULER = 'hw:wrs:vcpu:scheduler'
     MIN_VCPUS = "hw:wrs:min_vcpus"
     SRV_GRP_MSG = "sw:wrs:srv_grp_messaging"
+    NIC_ISOLATION = "hw:wrs:nic_isolation"
 
 
 class ImageMetadata:
