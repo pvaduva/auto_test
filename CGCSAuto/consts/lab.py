@@ -43,6 +43,15 @@ class Labs:
         'system_type': 'CPE',
     }
 
+    IP_31_32 = {
+        'short_name': 'ip_31_32',
+        'name': 'cgcs-ironpass-31_32',
+        'floating ip': '128.224.150.96',
+        'controller-0 ip': '128.224.150.92',
+        'controller-1 ip': '128.224.150.22',
+        'system_type': 'CPE',
+    }
+
     PV0 = {
         'short_name': 'pv0',
         'name': 'yow-cgcs-pv-0',

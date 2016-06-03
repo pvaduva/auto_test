@@ -1,10 +1,12 @@
 import re
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
+from utils import cli
 from consts.cgcs import UUID
 from keywords import system_helper
-from utils import cli, table_parser
 # This test case is  to verify Alarm Suppression on Active alarm list (US77193 –FM: Alarm Suppression)
+
+
 def test_alarm_suppression():
     """
        Verify suppression and unsuppression of active alarm and query alarms.
@@ -14,67 +16,53 @@ def test_alarm_suppression():
        Test Steps:
             Suppress alarms
             Verify alarm supressed
+            Generate alarm again
+            Verify suppressed alarms no in active
             Unsuppressed alarm
             Verify unsuppressed in active alarm list.
+            Delete Active alarm and verify
        Test Teardown:
            - None
     """
     limit = 1
-    alarmid = '300.005'
+    alarm_id = '300.005'
     LOG.tc_step('Generate alarms.')
-    con_ssh_act = ControllerClient.get_active_controller()
-    alarm_log_generate_str = "fmClientCli -c  \"### ###" + alarmid + "###set###system.vm###host=compute-0.vm=$i### ###"\
+    alarm_log_generate_str = "fmClientCli -c  \"### ###" + alarm_id + "###set###system.vm###Automation=### " \
+                                                                      "###"\
                              "critical### ###processing-error###Automation Generate### ###True###True###\""
-    alarm_generate_succ = generate_alarm_log(con_ssh=con_ssh_act, alarm_str=alarm_log_generate_str, maxi=int(limit))
+    alarm_generate_succ = generate_alarm_log(alarm_str=alarm_log_generate_str, maxi=int(limit))
+    system_helper.unsuppress_all(fail_ok=True)
     assert alarm_generate_succ, "Alarm Generated"
-    query_active_alarm = system_helper.get_alarms(con_ssh=con_ssh_act, query_key='alarm_id', query_value=alarmid,
+    query_active_alarm = system_helper.get_alarms(query_key='alarm_id', query_value=alarm_id,
                                                   query_type='string')
-    assert len(query_active_alarm) > 1, "Alarm " + alarmid + " not found in active list  "
+    assert len(query_active_alarm) > 1, "Alarm " + alarm_id + " not found in active list  "
     LOG.tc_step('Alarm Suppressed .')
-    assert suppress_unsuppress_alarm(alarm_id=alarmid, con_ssh=con_ssh_act, suppress=True), "Alarm suppressed for " \
-                                                                                            "alarm ID " + alarmid
-    query_active_alarm = system_helper.get_alarms(con_ssh=con_ssh_act, query_key='alarm_id', query_value=alarmid,
+    retcode, output = system_helper.suppress_unsuppress_alarm(alarm_id=alarm_id, suppress=True)
+    assert retcode == 0, output
+    query_active_alarm = system_helper.get_alarms(query_key='alarm_id', query_value=alarm_id,
                                                   query_type='string')
-    assert bool(query_active_alarm), "Alarm ID " + alarmid + "found in Active list"
+    assert bool(query_active_alarm), "Alarm ID " + alarm_id + " found in Active list"
+    LOG.tc_step('Generate Alarm again  .')
+    alarm_generate_succ = generate_alarm_log(alarm_str=alarm_log_generate_str, maxi=int(limit))
+    assert alarm_generate_succ, "Active Alarm Generated again "
+    query_active_alarm = system_helper.get_alarms(query_key='alarm_id', query_value=alarm_id,
+                                                  query_type='string')
+    assert bool(query_active_alarm), "Alarm ID " + alarm_id + "found in Active list"
     LOG.tc_step('Alarm Unsuppressed .')
-    assert suppress_unsuppress_alarm(alarm_id=alarmid, con_ssh=con_ssh_act, suppress=False), "Alarm suppressed for " \
-                                                                                             "alarm  ID  " + alarmid
-
-
-def suppress_unsuppress_alarm(alarm_id=None, con_ssh=None, suppress=True):
-    """
-        Waiting for a jira fix  then this can converted to keyword
-        suppress alarm by uuid
-        Args:
-            alarm_id: string
-            con_ssh (SSHClient):
-            suppress booolean Ture or false (If true suppress false unsuppress)
-
-    Returns:
-        success/failure
-    """
-    if not alarm_id:
-        return False
-    query_alarm_suppress_list = system_helper.get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
-    if suppress:
-        alarm_idx = {"Suppressed Alarm ID's": alarm_id, 'Status': 'unsuppressed'}
-        clistr = 'alarm-suppress --alarm_id'
-    else:
-        alarm_idx = {"Suppressed Alarm ID's": alarm_id, 'Status': 'suppressed'}
-        clistr = 'alarm-unsuppress --alarm_id'
-    get_uuid = table_parser.get_values(table_=query_alarm_suppress_list, target_header='UUID', strict=True, **alarm_idx)
-    if len(get_uuid) == 1:
-        output = cli.system(clistr, positional_args=get_uuid, ssh_client=con_ssh)
-        invalid_input = re.search('Invalid input for field', output)
-        if invalid_input:
-            return False
-        else:
-            return True
-    else:
-        return True
+    retcode, output = system_helper.suppress_unsuppress_alarm(alarm_id=alarm_id, suppress=False)
+    assert retcode == 0, output
+    active_alarm_uuid = system_helper.get_alarms(uuid=True, query_key='alarm_id', query_value=alarm_id,
+                                                 query_type='string')
+    uuid_val = active_alarm_uuid['values'][0][0]
+    retcode, output = delete_alarm_log(uuid=uuid_val)
+    assert retcode == 0, output
 
 
 def generate_alarm_log(con_ssh=None, alarm_str='', maxi=0):
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+    if alarm_str == ' ':
+        return False
     for i in range(maxi):
         rtn_code, output = con_ssh.exec_cmd(cmd=alarm_str)
         # check UUID returned.
@@ -83,3 +71,13 @@ def generate_alarm_log(con_ssh=None, alarm_str='', maxi=0):
             return False
     else:
         return True
+
+
+def delete_alarm_log(con_ssh=None, uuid=None):
+    if uuid is None:
+        return 1
+    cli.system(cmd="alarm-delete", positional_args=uuid, ssh_client=con_ssh)
+    query_active_alarm = system_helper.get_alarms(query_key='UUID', query_value=uuid, query_type='string')
+    if not bool(query_active_alarm):
+        return 1, "Alarm " + uuid + " was not deleted"
+    return 0, "Alarm ID " + uuid + " was deleted"

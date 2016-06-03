@@ -48,8 +48,14 @@ def test_hist_alarm_suppression(clear_alarm, set_alarm):
     # Jira fix will change this line to supppress alarm from alarm id
     LOG.tc_step('Suppress alarms')
     output = cli.system('alarm-suppress --alarm_id', positional_args=uuid_str)
+    if set_alarm:
+        Unsupppress_uuid = table_parser.get_values(table_=get_suppress_list, target_header='UUID', strict=True,
+                                                 **{"Suppressed Alarm ID's": alarm_id, 'Status': 'unsuppressed'})
+        output = cli.system('alarm-unsuppress --alarm_id', positional_args=uuid_str)
     suppressed_list = table_parser.get_values(table_=system_helper.get_suppressed_alarms(uuid=True),
                                               target_header='UUID', strict=True, **{'Status': 'suppressed'})
     assert len(uuid_list) == len(suppressed_list), "Alarm id is not suppressed Error" + output
     assert system_helper.unsuppress_all() == 0, " Un suppress all failed"
     LOG.tc_step(message)
+
+
