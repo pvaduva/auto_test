@@ -8,18 +8,12 @@ from testfixtures.wait_for_hosts_recover import HostsToWait
 
 
 @fixture(scope='module', autouse=True)
-def vm_(request):
+def snat_setups(request):
     # Enable snat, boot vm
     gateway_info = network_helper.get_router_ext_gateway_info()
     run_teardown = False if gateway_info['enable_snat'] else True
 
     network_helper.update_router_ext_gateway_snat(enable_snat=True)     # Check snat is handled by the keyword
-    vm_id = vm_helper.boot_vm()[1]
-
-    floatingip = network_helper.create_floatingip()[1]
-    network_helper.associate_floatingip(floatingip, vm_id, fip_val='ip', vm_val='id')
-
-    vm_helper.ping_vms_from_natbox(vm_id, fip_only=True)
 
     def disable_snat():
         if run_teardown:
@@ -27,21 +21,19 @@ def vm_(request):
             # network_helper.update_router_ext_gateway_snat(enable_snat=False)
     request.addfinalizer(disable_snat)
 
-    return vm_id
+    vm_id = vm_helper.boot_vm()[1]
+    ResourceCleanup.add('vm', vm_id, scope='module')
+
+    floatingip = network_helper.create_floatingip()[1]
+    ResourceCleanup.add('floating_ip', floatingip, scope='module')
+    network_helper.associate_floatingip(floatingip, vm_id, fip_val='ip', vm_val='id')
+
+    vm_helper.ping_vms_from_natbox(vm_id, use_fip=False)
+
+    return vm_id, floatingip
 
 
-# @fixture(scope='module')
-# def vm_():
-#     vm_id = vm_helper.boot_vm()[1]
-#     ResourceCleanup.add('vm', vm_id, scope='module')
-#
-#     # Ensure vm can be reached from outside before proceeding with the test cases
-#     vm_helper.ping_vms_from_natbox(vm_id, fip_only=True)
-#
-#     return vm_id
-
-
-def test_ext_access_vm_actions(vm_):
+def test_ext_access_vm_actions(snat_setups):
     """
     Test VM external access over VM launch, live-migration, cold-migration, pause/unpause, etc
 
@@ -64,8 +56,9 @@ def test_ext_access_vm_actions(vm_):
         - Delete the created vm     (module)
 
     """
+    vm_ = snat_setups[0]
     LOG.tc_step("Ping from VM {} to 8.8.8.8".format(vm_))
-    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=False)
 
     LOG.tc_step("Live-migrate the VM and verify ping from VM")
     vm_helper.live_migrate_vm(vm_)
@@ -118,7 +111,7 @@ def test_ext_access_host_reboot(vm_):
         - Delete the created vm     (module)
     """
     LOG.tc_step("Ping VM from NatBox".format(vm_))
-    vm_helper.ping_vms_from_natbox(vm_, fip_only=True)
+    vm_helper.ping_vms_from_natbox(vm_, use_fip=False)
 
     LOG.tc_step("Reboot vm host")
     host = nova_helper.get_vm_host(vm_)
@@ -132,7 +125,7 @@ def test_ext_access_host_reboot(vm_):
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 
-def test_reset_router_ext_gateway(vm_):
+def test_reset_router_ext_gateway(snat_setups):
     """
     Test VM external access after evacuation.
 
@@ -153,19 +146,28 @@ def test_reset_router_ext_gateway(vm_):
     Test Teardown:
         - Delete the created vm     (module)
     """
+    vm_, fip = snat_setups
     LOG.tc_step("Ping outside from VM".format(vm_))
-    vm_helper.ping_ext_from_vm(vm_)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=False)
+
+    LOG.tc_step("Disassociate floatingip from vm")
+    network_helper.disassociate_floatingip(floating_ip=fip)
 
     LOG.tc_step("Clear router gateway and verify vm cannot be ping'd from NatBox")
-    # TODO: get gateway fixed ip for setting later
+    fixed_ip = network_helper.get_router_ext_gateway_info()['external_fixed_ips'][0]['ip_address']
     network_helper.clear_router_gateway(check_first=False)
-    ping_res = vm_helper.ping_vms_from_natbox(vm_, fail_ok=True)[0]
+    ping_res = vm_helper.ping_vms_from_natbox(vm_, fail_ok=True, use_fip=False)[0]
     assert ping_res is False, "VM can still be ping'd from outside after clearing router gateway."
 
-    LOG.tc_step("Set router gateway and verify vm can ping to and be ping'd from outside")
-    network_helper.set_router_gateway(clear_first=False)
-    vm_helper.ping_vms_from_natbox(vm_)
-    vm_helper.ping_ext_from_vm(vm_)
+    LOG.tc_step("Set router gateway with the same fixed ip")
+    network_helper.set_router_gateway(clear_first=False, fixed_ip=fixed_ip)
+
+    LOG.tc_step("Associate floatingip to vm")
+    network_helper.associate_floatingip(floating_ip=fip, vm=vm_)
+
+    LOG.tc_step("Verify vm can ping to and be ping'd from outside")
+    vm_helper.ping_vms_from_natbox(vm_, use_fip=False)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=False)
 
 
 @mark.skipif(True, reason="Not implemented")

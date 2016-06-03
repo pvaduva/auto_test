@@ -289,6 +289,21 @@ def get_floatingip_ids(floating_ips=None, con_ssh=None, auth_info=Tenant.ADMIN):
     return table_parser.get_column(table_, 'id')
 
 
+def disassociate_floatingip(floating_ip, fip_val='ip',auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+    if fip_val == 'ip':
+        floating_ip = get_floatingip_ids(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)[0]
+    args = floating_ip
+    code, output = cli.neutron('floatingip-disassociate', args, ssh_client=con_ssh, auth_info=auth_info,
+                               fail_ok=fail_ok, rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    succ_msg = "Floating ip {} is successfully disassociated with fixed ip".format(floating_ip)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
 def associate_floatingip(floating_ip, vm, fip_val='ip', vm_val='id', auth_info=Tenant.ADMIN, con_ssh=None,
                           fail_ok=False):
     """
@@ -399,7 +414,7 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
         return table_parser.get_column(table_, 'id')
 
 
-def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, fip_only=False):
+def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, use_fip=False):
     """
     This function returns the management IPs for all VMs on the system.
     We make the assumption that the management IPs start with "192".
@@ -409,7 +424,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         con_ssh (SSHClient): active controller SSHClient object
         auth_info (dict): use admin by default unless specified
         rtn_dict (bool): return list if False, return dict if True
-        fip_only (bool): Whether to return only floating ip(s) if any vm has floating ip(s) associated with it
+        use_fip (bool): Whether to return only floating ip(s) if any vm has floating ip(s) associated with it
 
     Returns (list|dict):
         a list of all VM management IPs   # rtn_dict=False
@@ -429,7 +444,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         raise ValueError("No vm is on the system. Please boot vm(s) first.")
     vm_nets = table_parser.get_column(table_, 'Networks')
 
-    if fip_only:
+    if use_fip:
         floatingips = get_floatingips(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
 
     for i in range(len(vm_ids)):
@@ -438,7 +453,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         if not mgmt_ips_for_vm:
             LOG.warning("No management ip found for vm {}".format(vm_id))
         else:
-            if fip_only:
+            if use_fip:
                 vm_fips = []
                 # ping floating ips only if any associated to vm, otherwise ping all the mgmt ips
                 if len(mgmt_ips_for_vm) > 1:

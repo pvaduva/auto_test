@@ -87,7 +87,8 @@ class ResourceCleanup:
         'server_groups': [],
         'routers': [],
         'router_interfaces': [],
-        'subnets': []
+        'subnets': [],
+        'floating_ips': []
     }
     __resources_to_cleanup = {
         'function': deepcopy(__resources_dict),
@@ -109,6 +110,7 @@ class ResourceCleanup:
         server_groups = resources['server_groups']
         routers = resources['routers']
         subnets = resources['subnets']
+        floating_ips = resources['floating_ips']
         err_msgs = []
         if vms_with_vols:
             code, msg = vm_helper.delete_vms(vms_with_vols, delete_volumes=True, fail_ok=True, auth_info=Tenant.ADMIN)
@@ -139,6 +141,12 @@ class ResourceCleanup:
             code, msg = nova_helper.delete_server_groups(server_groups, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
+
+        if floating_ips:
+            for fip in floating_ips:
+                code, msg = network_helper.delete_floatingip(fip, value='ip', fail_ok=True, auth_info=Tenant.ADMIN)
+                if code > 0:
+                    err_msgs.append(msg)
 
         if routers:
             for router in routers:
@@ -176,7 +184,7 @@ class ResourceCleanup:
         scope = scope.lower()
         resource_type = resource_type.lower()
         valid_scopes = ['function', 'class', 'module']
-        valid_types = ['vm', 'volume', 'flavor', 'image', 'server_group', 'router', 'subnet']
+        valid_types = ['vm', 'volume', 'flavor', 'image', 'server_group', 'router', 'subnet', 'floating_ip']
         if scope not in valid_scopes:
             raise ValueError("'scope' param value has to be one of the: {}".format(valid_scopes))
         if resource_type not in valid_types:
