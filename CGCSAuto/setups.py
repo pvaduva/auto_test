@@ -114,20 +114,21 @@ def boot_vms(is_boot):
 
 
 def get_lab_dict(labname):
-    labname = labname.strip().lower()
+    labname = labname.strip().lower().replace('-', '_')
     labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
 
     for lab in labs:
-        if labname.replace('-', '_').lower().strip() in lab['name'].replace('-', '_').lower().strip() \
-                or labname == lab['short_name'] \
+        if labname in lab['name'].replace('-', '_').lower().strip() \
+                or labname == lab['short_name'].replace('-', '_').lower().strip() \
                 or labname == lab['floating ip']:
             return lab
     else:
         if labname.startswith('128.224'):
             return add_lab_entry(labname)
 
-        lab_dict_names = [item.lower() for item in dir(Labs) if not item.startswith('__')]
-        raise ValueError("{} is not found! All labs: {}".format(labname, lab_dict_names))
+        lab_valid_short_names = [lab['short_name'] for lab in labs]
+        # lab_valid_names = [lab['name'] for lab in labs]
+        raise ValueError("{} is not found! Available labs: {}".format(labname, lab_valid_short_names))
 
 
 def get_natbox_dict(natboxname):

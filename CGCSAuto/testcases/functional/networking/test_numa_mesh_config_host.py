@@ -1,14 +1,16 @@
+import time
 from pytest import mark, fixture, skip
 
 from utils.tis_log import LOG
 from consts.cli_errs import CpuAssignment
-from keywords import host_helper, system_helper, vm_helper
+from keywords import host_helper, system_helper, vm_helper, nova_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
 @fixture(scope='module')
 def host_to_config(request):
-    if system_helper.is_small_footprint():
+    is_small_system = system_helper.is_small_footprint()
+    if is_small_system:
         host = system_helper.get_standby_controller_name()
     else:
         host = host_helper.get_nova_host_with_min_or_max_vms(rtn_max=False)
@@ -32,21 +34,27 @@ def host_to_config(request):
     request.addfinalizer(revert)
 
     ht_enabled = system_helper.is_hyperthreading_enabled(host)
-    return host, ht_enabled
+    return host, ht_enabled, is_small_system
 
 
-@mark.parametrize(('platform', 'vswitch', 'ht_required'), [
-    (None, None, None),
-    ((1, 0), (1, 1), None),
-    ((1, 2), (3, 2), None),
-    ((1, 2), (2, 2), None),
-    ((1, 0), (1, 0), False),
-    ((1, 0), (2, 0), False),
+@mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required'), [
+    # (None, None, None, None),           # Test without reconfig
+    ((1, 0), (1, 1), None, False),      # Standard lab only
+    ((2, 0), (1, 1), None, True),       # CPE only
+    ((1, 2), (3, 2), None, None),
+    ((1, 2), (2, 2), None, None),
+    ((1, 0), (1, 0), False, False),     # Standard lab only
+    ((2, 0), (1, 0), False, True),      # CPE only
+    ((2, 0), (2, 0), None, True),       # CPE only
+    ((1, 0), (2, 0), None, False),      # Standard lab only
 ])
-def test_boot_vm_vswitch_cpu_reconfig(host_to_config, platform, vswitch, ht_required):
-    host, ht_enabled = host_to_config
+def test_vswitch_cpu_reconfig(host_to_config, platform, vswitch, ht_required, cpe_required):
+    host, ht_enabled, is_cpe = host_to_config
     if ht_required is not None and ht_required is not ht_enabled:
         skip("Hyper-threading for {} is not {}".format(host, ht_required))
+
+    if cpe_required is not None and cpe_required is not is_cpe:
+        skip("Small footprint is not {}".format(cpe_required))
 
     if platform is not None or vswitch is not None:
         LOG.tc_step("Reconfigure host cpus. Platform: {}, vSwitch: {}".format(platform, vswitch))
@@ -75,25 +83,26 @@ def test_boot_vm_vswitch_cpu_reconfig(host_to_config, platform, vswitch, ht_requ
 
     LOG.tc_step("Check {} is still a valid nova host.".format(host))
     nova_hosts_post_config = host_helper.get_nova_hosts()
-    assert host_to_config in nova_hosts_post_config
+    assert host in nova_hosts_post_config
 
-    LOG.tc_step("Check vm can be launched and migrated to {}.".format(host))
+    LOG.tc_step("Check vm can be launched on or live migrated to {}.".format(host))
     vm_id = vm_helper.boot_vm()[1]
     ResourceCleanup.add('vm', vm_id)
-    vm_helper.live_migrate_vm(vm_id, host)
+    if not nova_helper.get_vm_host(vm_id) == host:
+        vm_helper.live_migrate_vm(vm_id, host)
 
 
 @mark.parametrize(('platform', 'vswitch', 'ht_required', 'expt_err'), [
     mark.p1(((1, 1), (5, 5), False, CpuAssignment.VSWITCH_TOO_MANY_CORES)),
     ((7, 9), (2, 2), None, CpuAssignment.TOTAL_TOO_MANY_CORES.format(1)),   # Assume total <= 10 cores/per proc & thread
-    ((1, 1), (2, 3), True, CpuAssignment.VSWITCH_TOO_MANY_CORES),
     mark.p1((('cores-2', 'cores-2'), (2, 2), None, CpuAssignment.NO_VM_CORE)),
     ((1, 1), (9, 8), None, CpuAssignment.VSWITCH_TOO_MANY_CORES),    # Assume total <= 10 cores/per proc & thread
+    ((5, 5), (5, 4), None, CpuAssignment.VSWITCH_TOO_MANY_CORES),
     mark.p1(((5, 5), (6, 5), None, CpuAssignment.TOTAL_TOO_MANY_CORES.format(0))),   # Assume total<=10cores/proc&thread
     ((1, 1), (8, 10), None, CpuAssignment.TOTAL_TOO_MANY_CORES.format(1)),  # Assume total <= 10 cores/per proc & thread
 ])
 def test_vswitch_cpu_reconfig_negative(host_to_config, platform, vswitch, ht_required, expt_err):
-    host, ht_enabled = host_to_config
+    host, ht_enabled, is_cpe = host_to_config
     if ht_required is not None and ht_required is not ht_enabled:
         skip("Hyper-threading for {} is not {}".format(host, ht_required))
 

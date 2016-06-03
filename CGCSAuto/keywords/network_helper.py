@@ -179,59 +179,72 @@ def get_ext_net_ids(con_ssh=None, auth_info=None):
     return table_parser.get_column(table_, 'id')
 
 
-def create_floatingip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_address=None, floating_ip_address=None,
-                      fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def create_floatingip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_addr=None, vm_id=None,
+                      floating_ip_addr=None, fail_ok=False, con_ssh=None, auth_info=None):
     """
     Args:
        extnet_id:
        tenant_name:
        port_id:
-       fixed_ip_address:
-       floating_ip_address:
+       fixed_ip_addr:
+       vm_id (str): id of the vm to associate the created floating ip to. This arg will not be used if port_id is set
+       floating_ip_addr:
        fail_ok:
        con_ssh:
        auth_info:
     Returns: floating IP
     """
-    if not extnet_id:
+    if extnet_id is None:
         extnet_id = get_ext_net_ids(con_ssh=con_ssh, auth_info=None)[0]
     args = extnet_id
+
     if tenant_name is not None:
         tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)[0]
         args += " --tenant-id {}".format(tenant_id)
+
+    # process port info
+    port_id_to_check = None
     if port_id is not None:
-        args += " --port_id {}".format(port_id)
-    if fixed_ip_address is not None:
-        args += " --fixed_ip {}".format(fixed_ip_address)
-    if floating_ip_address is not None:
-        args += " --floating-ip-address {}".format(floating_ip_address)
+        args += " --port-id {}".format(port_id)
+        if fixed_ip_addr is not None:
+            args += " --fixed-ip-address {}".format(fixed_ip_addr)
+    else:
+        if vm_id is not None:
+            vm_ip = get_mgmt_ips_for_vms(vm_id, con_ssh=con_ssh)[0]
+            port = get_vm_port(vm=vm_id, con_ssh=con_ssh, vm_val='id')
+            args += "--port-id {} --fixed-ip-address {}".format(port, vm_ip)
+
+    if floating_ip_addr is not None:
+        args += " --floating-ip-address {}".format(floating_ip_addr)
 
     code, output = cli.neutron(cmd='floatingip-create', positional_args=args, ssh_client=con_ssh, auth_info=auth_info,
                                fail_ok=fail_ok, rtn_list=True)
     if code == 1:
         return 1, output
-    table_ = table_parser.table(output)
-    actual_floating_ip_address = table_parser.get_value_two_col_table(table_, "floating_ip_address")
 
-    if not actual_floating_ip_address:
+    table_ = table_parser.table(output)
+    actual_fip_addr = table_parser.get_value_two_col_table(table_, "floating_ip_address")
+
+    if not actual_fip_addr:
         msg = "Floating IP is not found in the list"
         if fail_ok:
             LOG.warning(msg)
-            return 3, msg
+            return 2, msg
         raise exceptions.NeutronError(msg)
-    if floating_ip_address is not None and actual_floating_ip_address != floating_ip_address:
-        msg = "Floating IP does not exesist in created list"
+
+    if floating_ip_addr is not None and actual_fip_addr != floating_ip_addr:
+        msg = "Floating IP address required: {}, actual: {}".format(floating_ip_addr, actual_fip_addr)
         if fail_ok:
             LOG.warning(msg)
             return 3, msg
         raise exceptions.NeutronError(msg)
 
-    succ_msg = "Floating IP created successfully"
+    succ_msg = "Floating IP created successfully: {}".format(actual_fip_addr)
     LOG.info(succ_msg)
-    return 0, actual_floating_ip_address
+    return 0, actual_fip_addr
 
 
-def delete_floating_ip(floating_ip=None, value='ip', auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+def delete_floatingip(floating_ip, value='ip', auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
     """
     Args
         con_ssh:
@@ -241,23 +254,24 @@ def delete_floating_ip(floating_ip=None, value='ip', auth_info=Tenant.ADMIN, con
     Returns:
 
     """
-    if floating_ip is None:
-        return 1, "Floating IP Required to delete "
     if value == 'ip':
         floating_ip = get_floatingip_ids(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)
     args = floating_ip
 
     code, output = cli.neutron('floatingip-delete', positional_args=args, ssh_client=con_ssh, auth_info=auth_info,
                                fail_ok=fail_ok, rtn_list=True)
+
     if code == 1:
         return 1, output
-    post_deletion_ips = get_floatingip_ids(con_ssh=con_ssh)
+
+    post_deletion_ips = get_floatingip_ids(con_ssh=con_ssh, auth_info=Tenant.ADMIN)
     if floating_ip in post_deletion_ips:
         msg = "floating ip {} still exists in floatingip-list".format(floating_ip)
         if fail_ok:
             LOG.warning(msg)
             return 2, msg
         raise exceptions.NeutronError(msg)
+
     succ_msg = "Floating ip {} is successfully deleted.".format(floating_ip)
     LOG.info(succ_msg)
     return 0, succ_msg
@@ -273,6 +287,55 @@ def get_floatingip_ids(floating_ips=None, con_ssh=None, auth_info=Tenant.ADMIN):
     if floating_ips is not None:
         table_ = table_parser.filter_table(table_, **{'floating_ip_address': floating_ips})
     return table_parser.get_column(table_, 'id')
+
+
+def associate_floatingip(floating_ip, vm, fip_val='ip', vm_val='id', auth_info=Tenant.ADMIN, con_ssh=None,
+                          fail_ok=False):
+    """
+
+    Args:
+        floating_ip (str): floating ip or id of the floatingip
+        vm (str): vm id or ip
+        fip_val (str): ip or id
+        vm_val (str): id or ip
+        auth_info (dict):
+        con_ssh (SSHClient):
+        fail_ok (bool):
+
+    Returns (tuple): (rtn_code(int), msg(str))
+        (0, "port <port_id> is successfully associated with floating ip <floatingip_id>")
+        (1, <stderr>)
+
+    """
+    # convert vm to vm mgmt ip
+    if vm_val == 'id':
+        vm = get_mgmt_ips_for_vms(vm, con_ssh=con_ssh)[0]
+    args = '--fixed-ip-address {}'.format(vm)
+
+    # convert floatingip to id
+    if fip_val == 'ip':
+        floating_ip = get_floatingip_ids(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)[0]
+    args += ' ' + floating_ip
+
+    port = get_vm_port(vm=vm, vm_val='ip', con_ssh=con_ssh)
+    args += ' ' + port
+
+    code, output = cli.neutron('floatingip-associate', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                               rtn_list=True)
+    if code == 1:
+        return 1, output
+
+    succ_msg = "port {} is successfully associated with floating ip {}".format(port, floating_ip)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def get_vm_port(vm, vm_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
+    if vm_val == 'id':
+        vm = get_mgmt_ips_for_vms(vms=vm, con_ssh=con_ssh)[0]
+
+    table_ = table_parser.table(cli.neutron('port-list', ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_values(table_, 'id', strict=False, fixed_ips=vm)[0]
 
 
 def get_mgmt_net_id(con_ssh=None, auth_info=None):
@@ -336,7 +399,7 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
         return table_parser.get_column(table_, 'id')
 
 
-def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False):
+def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, fip_only=False):
     """
     This function returns the management IPs for all VMs on the system.
     We make the assumption that the management IPs start with "192".
@@ -346,6 +409,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         con_ssh (SSHClient): active controller SSHClient object
         auth_info (dict): use admin by default unless specified
         rtn_dict (bool): return list if False, return dict if True
+        fip_only (bool): Whether to return only floating ip(s) if any vm has floating ip(s) associated with it
 
     Returns (list|dict):
         a list of all VM management IPs   # rtn_dict=False
@@ -365,12 +429,25 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         raise ValueError("No vm is on the system. Please boot vm(s) first.")
     vm_nets = table_parser.get_column(table_, 'Networks')
 
+    if fip_only:
+        floatingips = get_floatingips(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
+
     for i in range(len(vm_ids)):
         vm_id = vm_ids[i]
         mgmt_ips_for_vm = mgmt_ip_reg.findall(vm_nets[i])
         if not mgmt_ips_for_vm:
             LOG.warning("No management ip found for vm {}".format(vm_id))
         else:
+            if fip_only:
+                vm_fips = []
+                # ping floating ips only if any associated to vm, otherwise ping all the mgmt ips
+                if len(mgmt_ips_for_vm) > 1:
+                    for ip in mgmt_ips_for_vm:
+                        if ip in floatingips:
+                            vm_fips.append(ip)
+                    if vm_fips:
+                        mgmt_ips_for_vm = vm_fips
+
             all_ips_dict[vm_id] = mgmt_ips_for_vm
             all_ips += mgmt_ips_for_vm
 

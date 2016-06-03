@@ -322,7 +322,7 @@ def get_column(table_, header):
     return column
 
 
-def __get_row_indexes_string(table_, header, value, strict=False):
+def __get_row_indexes_string(table_, header, value, strict=False, exclude=False):
     if isinstance(value, list):
         value = ''.join(value)
     value = value.strip().lower()
@@ -332,7 +332,10 @@ def __get_row_indexes_string(table_, header, value, strict=False):
 
     row_index = []
     for i in range(len(column)):
-        item = column[i].strip().lower()
+        item = column[i]
+        if isinstance(item, list):
+            item = ''.join(item)
+        item = item.strip().lower()
         if strict:
             is_valid = item == value
         elif isinstance(value, list):
@@ -344,7 +347,7 @@ def __get_row_indexes_string(table_, header, value, strict=False):
         else:
             is_valid = value in item
 
-        if is_valid:
+        if is_valid is not exclude:
             row_index.append(i)
 
     LOG.debug("row index list for {}: {}: {}".format(header, value, row_index))
@@ -529,9 +532,9 @@ def __get_values(table_, header1, value1, header2):
     return value2
 
 
-def filter_table_single_field(table_, field, value, strict=True, regex=False, match=False):
-    row_indexes = _get_row_indexes(table_, field=field, value=value, strict=strict, regex=regex, match=match)
-    return __filter_table(table_, row_indexes)
+# def filter_table_single_field(table_, field, value, strict=True, regex=False, match=False):
+#     row_indexes = _get_row_indexes(table_, field=field, value=value, strict=strict, regex=regex)
+#     return __filter_table(table_, row_indexes)
 
 
 def __filter_table(table_, row_indexes):
@@ -551,21 +554,24 @@ def __filter_table(table_, row_indexes):
     return table_
 
 
-def _get_row_indexes(table_, field, value, strict=True, regex=False):
+def _get_row_indexes(table_, field, value, strict=True, regex=False, exclude=False):
     row_indexes = []
     column = get_column(table_, field)
     if regex:
         for j in range(len(column)):
+            search_val = column[j]
+            if isinstance(search_val, list):
+                search_val = ''.join(search_val)
             if isinstance(value, list):
                 value = ''.join(value)
             if strict:
-                res_ = re.match(value, column[j])
+                res_ = re.match(value, search_val)
             else:
-                res_ = re.search(value, column[j])
-            if res_:
+                res_ = re.search(value, search_val)
+            if res_ is not exclude:
                 row_indexes.append(j)
     else:
-        row_indexes = __get_row_indexes_string(table_, field, value, strict)
+        row_indexes = __get_row_indexes_string(table_, field, value, strict, exclude)
 
     return row_indexes
 

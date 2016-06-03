@@ -8,15 +8,18 @@ from testfixtures.wait_for_hosts_recover import HostsToWait
 
 
 @fixture(scope='module', autouse=True)
-def set_snat(request):
-
+def vm_(request):
+    # Enable snat, boot vm
     gateway_info = network_helper.get_router_ext_gateway_info()
     run_teardown = False if gateway_info['enable_snat'] else True
 
     network_helper.update_router_ext_gateway_snat(enable_snat=True)     # Check snat is handled by the keyword
     vm_id = vm_helper.boot_vm()[1]
-    # TODO: Add FIP
-    vm_helper.ping_vms_from_natbox(vm_id)
+
+    floatingip = network_helper.create_floatingip()[1]
+    network_helper.associate_floatingip(floatingip, vm_id, fip_val='ip', vm_val='id')
+
+    vm_helper.ping_vms_from_natbox(vm_id, fip_only=True)
 
     def disable_snat():
         if run_teardown:
@@ -24,16 +27,18 @@ def set_snat(request):
             # network_helper.update_router_ext_gateway_snat(enable_snat=False)
     request.addfinalizer(disable_snat)
 
-
-@fixture(scope='module')
-def vm_():
-    vm_id = vm_helper.boot_vm()[1]
-    # ResourceCleanup.add('vm', vm_id, scope='module')
-
-    # Ensure vm can be reached from outside before proceeding with the test cases
-    vm_helper.ping_vms_from_natbox(vm_id)
-
     return vm_id
+
+
+# @fixture(scope='module')
+# def vm_():
+#     vm_id = vm_helper.boot_vm()[1]
+#     ResourceCleanup.add('vm', vm_id, scope='module')
+#
+#     # Ensure vm can be reached from outside before proceeding with the test cases
+#     vm_helper.ping_vms_from_natbox(vm_id, fip_only=True)
+#
+#     return vm_id
 
 
 def test_ext_access_vm_actions(vm_):
@@ -60,34 +65,34 @@ def test_ext_access_vm_actions(vm_):
 
     """
     LOG.tc_step("Ping from VM {} to 8.8.8.8".format(vm_))
-    vm_helper.ping_ext_from_vm(vm_)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Live-migrate the VM and verify ping from VM")
     vm_helper.live_migrate_vm(vm_)
-    vm_helper.ping_ext_from_vm(vm_)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Cold-migrate the VM and verify ping from VM")
     vm_helper.cold_migrate_vm(vm_)
-    vm_helper.ping_ext_from_vm(vm_)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Pause and un-pause the VM and verify ping from VM")
     vm_helper.pause_vm(vm_)
     vm_helper.unpause_vm(vm_)
-    vm_helper.ping_ext_from_vm(vm_)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Suspend and resume the VM and verify ping from VM")
     vm_helper.suspend_vm(vm_)
     vm_helper.resume_vm(vm_)
-    vm_helper.ping_ext_from_vm(vm_)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Stop and start the VM and verify ping from VM")
     vm_helper.stop_vms(vm_)
     vm_helper.start_vms(vm_)
-    vm_helper.ping_ext_from_vm(vm_)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Reboot the VM and verify ping from VM")
     vm_helper.reboot_vm(vm_)
-    vm_helper.ping_ext_from_vm(vm_)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 
 @mark.skipif(True, reason="Evacuation JIRA")
@@ -113,7 +118,7 @@ def test_ext_access_host_reboot(vm_):
         - Delete the created vm     (module)
     """
     LOG.tc_step("Ping VM from NatBox".format(vm_))
-    vm_helper.ping_vms_from_natbox(vm_)
+    vm_helper.ping_vms_from_natbox(vm_, fip_only=True)
 
     LOG.tc_step("Reboot vm host")
     host = nova_helper.get_vm_host(vm_)
@@ -124,7 +129,7 @@ def test_ext_access_host_reboot(vm_):
     vm_helper._wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=120)
     post_evac_host = nova_helper.get_vm_host(vm_)
     assert post_evac_host != host, "VM is on the same host after original host rebooted."
-    vm_helper.ping_ext_from_vm(vm_)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 
 def test_reset_router_ext_gateway(vm_):
@@ -152,6 +157,7 @@ def test_reset_router_ext_gateway(vm_):
     vm_helper.ping_ext_from_vm(vm_)
 
     LOG.tc_step("Clear router gateway and verify vm cannot be ping'd from NatBox")
+    # TODO: get gateway fixed ip for setting later
     network_helper.clear_router_gateway(check_first=False)
     ping_res = vm_helper.ping_vms_from_natbox(vm_, fail_ok=True)[0]
     assert ping_res is False, "VM can still be ping'd from outside after clearing router gateway."

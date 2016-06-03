@@ -64,7 +64,7 @@ def test_vm_vcpu_model(flavor_and_volume, vcpu_model):
         host = nova_helper.get_vm_host(vm)
         LOG.tc_step("Check vcpu model successfully applied to vm")
         with host_helper.ssh_to_host(host) as host_ssh:
-            code, output = host_ssh.exec_cmd("ps aux | grep -i {}".format(vm))
+            code, output = host_ssh.exec_cmd("ps aux | grep -i {}".format(vm), fail_ok=False)
         assert ' -cpu {} '.format(vcpu_model).lower() in output.lower(), 'cpu_model {} not found for vm {}'.\
             format(vcpu_model, vm)
     else:

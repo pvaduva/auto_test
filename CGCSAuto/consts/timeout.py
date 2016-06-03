@@ -8,6 +8,7 @@ class HostTimeout:
     REBOOT = 1360
     SWACT = 140
     LOCK = 720
+    TASK_CLEAR = 180
 
 
 class VMTimeout:

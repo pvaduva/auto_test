@@ -842,7 +842,7 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
     return packet_loss_rate
 
 
-def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False):
+def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, fip_only=False):
     """
 
     Args:
@@ -852,6 +852,7 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         num_pings (int): number of pings to send
         timeout (int): timeout waiting for response of ping messages in seconds
         fail_ok (bool): Whether it's okay to have 100% packet loss rate.
+        fip_only (bool): Whether to ping floating ip only if a vm has more than one management ips
 
     Returns (tuple): (res (bool), packet_loss_dict (dict))
         Packet loss rate dictionary format:
@@ -862,7 +863,8 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         }
 
     """
-    vm_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh)
+    vm_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, fip_only=fip_only)
+
     res_dict = {}
     for ip in vm_ips:
         packet_loss_rate = _ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings, timeout=timeout,
@@ -875,7 +877,8 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     return res_bool, res_dict
 
 
-def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False):
+def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False,
+                         fip_only=False):
     """
 
     Args:
@@ -886,6 +889,7 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
         timeout (int): timeout waiting for response of ping messages in seconds
         fail_ok (bool): When False, test will stop right away if one ping failed. When True, test will continue to ping
             the rest of the vms and return results even if pinging one vm failed.
+        fip_only (bool): Whether to ping floating ip only if a vm has more than one management ips
 
     Returns (tuple): (res (bool), packet_loss_dict (dict))
         Packet loss rate dictionary format:
@@ -899,11 +903,11 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
         natbox_client = NATBoxClient.get_natbox_client()
 
     return _ping_vms(vm_ids=vm_ids, ssh_client=natbox_client, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                     fail_ok=fail_ok)
+                     fail_ok=fail_ok, fip_only=fip_only)
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None,
-                     natbox_client=None, num_pings=5, timeout=15, fail_ok=False):
+                     natbox_client=None, num_pings=5, timeout=15, fail_ok=False, to_fip=False, from_fip=False):
     """
 
     Args:
@@ -918,6 +922,8 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         timeout:
         fail_ok:  When False, test will stop right away if one ping failed. When True, test will continue to ping
             the rest of the vms and return results even if pinging one vm failed.
+        to_fip (bool): Whether to ping floating ip if a vm has floating ip associated with it
+        from_fip (bool): whether to ssh to vm's floating ip if it has floating ip associated with it
 
     Returns (tuple):
         A tuple in form: (res (bool), packet_loss_dict (dict))
@@ -938,28 +944,28 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         to_vms = vms_ids
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
-                               prompt=prompt, con_ssh=con_ssh) as from_vm_ssh:
+                               prompt=prompt, con_ssh=con_ssh, use_fip=from_fip) as from_vm_ssh:
 
         res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                        fail_ok=fail_ok)
+                        fail_ok=fail_ok, fip_only=to_fip)
 
     return res
 
 
 def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
-                     num_pings=5, timeout=15, fail_ok=False):
+                     num_pings=5, timeout=15, fail_ok=False, use_fip=False):
 
     if ext_ip is None:
         ext_ip = EXT_IP
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
-                               prompt=prompt, con_ssh=con_ssh) as from_vm_ssh:
+                               prompt=prompt, con_ssh=con_ssh, use_fip=use_fip) as from_vm_ssh:
         return _ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings, timeout=timeout, fail_ok=fail_ok)
 
 
 @contextmanager
 def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
-                          timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None):
+                          timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, use_fip=False):
     """
     ssh to a vm from natbox.
 
@@ -972,20 +978,21 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         timeout (int): 
         natbox_client (NATBoxClient):
         con_ssh (SSHClient): ssh connection to TiS active controller
+        use_fip (bool): Whether to ssh to floating ip if a vm has floating ip associated
 
     Yields (VMSSHClient):
         ssh client of the vm
 
     Examples:
         with ssh_to_vm_from_natbox(vm_id=<id>) as vm_ssh:
-        vm_ssh.exec_cmd(cmd)
+            vm_ssh.exec_cmd(cmd)
 
     """
     if vm_image_name is None:
         vm_image_name = nova_helper.get_vm_image_name(vm_id=vm_id, con_ssh=con_ssh).strip().lower()
 
     vm_name = nova_helper.get_vm_name_from_id(vm_id=vm_id)
-    vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id)[0]
+    vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id, fip_only=use_fip)[0]
 
     if not natbox_client:
         natbox_client = NATBoxClient.get_natbox_client()

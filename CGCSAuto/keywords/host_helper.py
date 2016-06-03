@@ -255,6 +255,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         (3, "Host did not go online within <timeout> seconds after (force) lock")   # Locked but didn't go online
         (4, "Lock host <host> is rejected. Details in host-show vim_process_status.")
         (5, "Lock host <host> failed due to migrate vm failed. Details in host-show vm_process_status.")
+        (6, "Task is not cleared within 180 seconds after host goes online")
 
     """
     LOG.info("Locking {}...".format(host))
@@ -309,8 +310,15 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         # ensure the online status lasts for more than 5 seconds. Sometimes host goes online then offline to reboot..
         time.sleep(5)
         if _wait_for_host_states(host, timeout=timeout, availability='online'):
-            LOG.info("Host is successfully locked and in online state.")
-            return 0, "Host is locked and in online state."
+            if _wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, task=''):
+                LOG.info("Host is successfully locked and in online state.")
+                return 0, "Host is locked and in online state."
+            else:
+                msg = "Task is not cleared within {} seconds after host goes online".format(HostTimeout.TASK_CLEAR)
+                if fail_ok:
+                    LOG.warning(msg)
+                    return 6, msg
+                raise exceptions.HostPostCheckFailed(msg)
 
     msg = "Host did not go online within {} seconds after {}lock".format(timeout, extra_msg)
     if fail_ok:
@@ -336,6 +344,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
         (2, "Host is not in unlocked state")    # only applicable if fail_ok
         (3, "Host state did not change to available or degraded within timeout")    # only applicable if fail_ok
         (4, "Host is in degraded state after unlocked.")
+        (5, "Task is not cleared within 180 seconds after host goes available")
 
     """
     LOG.info("Unlocking {}...".format(host))
@@ -362,6 +371,9 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
     if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
                                  availability=[HostAavailabilityState.AVAILABLE, HostAavailabilityState.DEGRADED]):
         return 3, "Host state did not change to available or degraded within timeout"
+
+    if not _wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh, task=''):
+        return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
 
     if get_hostshow_value(host, 'availability') == HostAavailabilityState.DEGRADED:
         LOG.warning("Host is in degraded state after unlocked.")

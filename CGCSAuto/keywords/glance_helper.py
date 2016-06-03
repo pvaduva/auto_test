@@ -9,7 +9,7 @@ from consts.cgcs import IMAGE_DIR
 from keywords.common import Count
 
 
-def get_images(images=None, auth_info=Tenant.ADMIN, con_ssh=None, strict=True, **kwargs):
+def get_images(images=None, auth_info=Tenant.ADMIN, con_ssh=None, strict=True, exclude=False, **kwargs):
     """
     Get a list of image id(s) that matches the criteria
     Args:
@@ -18,6 +18,8 @@ def get_images(images=None, auth_info=Tenant.ADMIN, con_ssh=None, strict=True, *
         con_ssh (SSHClient):
         strict (bool): match full string or substring for the value(s) given in kwargs.
             This is only applicable if kwargs key-val pair(s) are provided.
+        exclude (bool): whether to exclude item containing the string/pattern in kwargs.
+            e.g., search for images that don't contain 'raw'
         **kwargs: header-value pair(s) to filter out images from given image list. e.g., Status='active', Name='centos'
 
     Returns (list): list of image ids
@@ -30,7 +32,7 @@ def get_images(images=None, auth_info=Tenant.ADMIN, con_ssh=None, strict=True, *
     if not kwargs:
         return table_parser.get_column(table_, 'ID')
 
-    return table_parser.get_values(table_, 'ID', strict=strict, **kwargs)
+    return table_parser.get_values(table_, 'ID', strict=strict, exclude=exclude, **kwargs)
 
 
 def get_image_id_from_name(name=None, strict=False, con_ssh=None, auth_info=None):
