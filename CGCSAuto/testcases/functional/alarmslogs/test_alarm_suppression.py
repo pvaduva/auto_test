@@ -37,7 +37,7 @@ def test_alarm_suppression():
                                                   query_type='string')
     assert len(query_active_alarm) > 1, "Alarm " + alarm_id + " not found in active list  "
     LOG.tc_step('Alarm Suppressed .')
-    retcode, output = system_helper.suppress_unsuppress_alarm(alarm_id=alarm_id, suppress=True)
+    retcode, output = system_helper.suppress_alarm(alarm_id=alarm_id)
     assert retcode == 0, output
     query_active_alarm = system_helper.get_alarms(query_key='alarm_id', query_value=alarm_id,
                                                   query_type='string')
@@ -49,7 +49,7 @@ def test_alarm_suppression():
                                                   query_type='string')
     assert bool(query_active_alarm), "Alarm ID " + alarm_id + "found in Active list"
     LOG.tc_step('Alarm Unsuppressed .')
-    retcode, output = system_helper.suppress_unsuppress_alarm(alarm_id=alarm_id, suppress=False)
+    retcode, output = system_helper.unsuppress_alarm(alarm_id=alarm_id)
     assert retcode == 0, output
     active_alarm_uuid = system_helper.get_alarms(uuid=True, query_key='alarm_id', query_value=alarm_id,
                                                  query_type='string')

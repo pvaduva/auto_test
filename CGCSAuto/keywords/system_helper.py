@@ -551,52 +551,61 @@ def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_in
         return 0, "1G memory is modified to {} in pending.".format(hugepage_num)
 
 
-def suppress_unsuppress_alarm(alarm_id=None, suppress=True, fail_ok=False, con_ssh=None):
-        """
-             Jira fix  will change this function .........
-            suppress alarm by uuid
-            Args:
-                alarm_id: string
-                fail_ok : Boolean
-                con_ssh : (SSHClient)
-                suppress boolean True or false
+def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail_ok=False, con_ssh=None):
+    # TODO: Update after Jira fix. (which jira?)
+    """
+    suppress alarm by uuid
+    Args:
+        alarm_id: string
+        fail_ok : Boolean
+        con_ssh : (SSHClient)
+        suppress boolean True or false
 
-        Returns:
-            success 0 ,and output Message
-        """
-        if not alarm_id:
-            return 1, "Alarm ID is None"
-        query_alarm_suppress_list = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
-        alarm_idx = {"Suppressed Alarm ID's": alarm_id, 'Status': 'suppressed'}
-        suppress_unsuppress = "alarm-unsuppress"
-        if suppress:
-            alarm_idx = {"Suppressed Alarm ID's": alarm_id, 'Status': 'unsuppressed'}
-            suppress_unsuppress = "alarm-suppress"
-        get_uuid = table_parser.get_values(table_=query_alarm_suppress_list, target_header='UUID', strict=True,
-                                           **alarm_idx)
-        if not get_uuid:
-            msg = "Alarm ID not found in the list "
-            if fail_ok:
-                return 2, msg
-            return 1, msg
-        alarm_idx["Status"] = 'unsuppressed'
-        if suppress:
-            alarm_idx["Status"] = 'suppressed'
-        cli.system(suppress_unsuppress + ' --alarm_id', positional_args=get_uuid, ssh_client=con_ssh)
-        query_alarm_suppress_list = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
-        get_alarmid = table_parser.get_values(table_=query_alarm_suppress_list, target_header='Suppressed Alarm ID\'s',
-                                              strict=True, **alarm_idx)
-        if not get_alarmid:
-            msg = alarm_idx["Status"] + " Alarm ID " + alarm_id + " was not successful"
-            if fail_ok:
-                return 2, msg
-            return 1, msg
-        if alarm_id != get_alarmid[0]:
-            msg = alarm_idx["Status"] + " Alarm ID " + alarm_id + " was not successful"
-            if fail_ok:
-                return 2, msg
-            return 1, msg
-        return 0, "Suppressed " + alarm_id
+    Returns:
+        success 0 ,and output Message
+    """
+
+    suppressed_alarms_tab = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
+
+    alarm_status = "unsuppressed" if suppress else "suppressed"
+    cmd = "alarm-supress" if suppress else "alarm-unsuppress"
+    alarm_filter = {"Suppressed Alarm ID's": alarm_id}
+
+    if check_first:
+        pre_status = table_parser.get_values(table_=suppressed_alarms_tab, target_header='Status', strict=True,
+                                         **alarm_filter)[0]
+        if pre_status.lower() != alarm_status:
+            msg = "Alarm is already {}. Do nothing".format(pre_status)
+            LOG.info(msg)
+            return -1, msg
+
+    code, output = cli.system(cmd, '--alarm_id ' + alarm_id, ssh_client=con_ssh, rtn_list=True, fail_ok=fail_ok)
+
+    if code == 1:
+        return 1, output
+
+    post_suppressed_alarms_tab = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
+    post_status = table_parser.get_values(table_=post_suppressed_alarms_tab, target_header="Status", strict=True,
+                                          **{"Suppressed Alarm ID's": alarm_id})
+
+    expt_status = "suppressed" if suppress else "unsuppressed"
+    if post_status.lower() != expt_status:
+        msg = "Alarm {} is not {}".format(alarm_id, expt_status)
+        if fail_ok:
+            LOG.warning(msg)
+        raise exceptions.TiSError(msg)
+
+    succ_msg = "Alarm {} is {} successfully".format(alarm_id, expt_status)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def suppress_alarm(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
+    return __suppress_unsuppress_alarm(alarm_id, True, check_first=check_first, fail_ok=fail_ok, con_ssh=con_ssh)
+
+
+def unsuppress_alarm(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
+    return __suppress_unsuppress_alarm(alarm_id, False, check_first=check_first, fail_ok=fail_ok, con_ssh=con_ssh)
 
 
 def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
