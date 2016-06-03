@@ -682,7 +682,7 @@ def create_storage_profile(host, profile_name='', con_ssh=None):
         profile_name (str): name of the profile to create
         con_ssh (SSHClient):
 
-    Returns (str): uuid of the profile created if success, otherwise an exception will be raised
+    Returns (str): uuid of the profile created if success, '' otherwise
 
     """
     if not profile_name:
@@ -696,7 +696,7 @@ def create_storage_profile(host, profile_name='', con_ssh=None):
     return uuid
 
 
-def apply_storage_profile(host, profile=None, con_ssh=None, fail_ok=False):
+def to_delete_apply_storage_profile(host, profile=None, con_ssh=None, fail_ok=False):
     """
     Apply a storage profile
 
@@ -718,12 +718,11 @@ def apply_storage_profile(host, profile=None, con_ssh=None, fail_ok=False):
     return code, output
 
 
-def delete_stroage_profile(host, profile='', con_ssh=None):
+def delete_stroage_profile(profile='', con_ssh=None):
     """
     Delete a storage profile
 
     Args:
-        host (str): hostname or id
         profile_name (str): name of the profile to create
         con_ssh (SSHClient):
 

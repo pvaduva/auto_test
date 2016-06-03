@@ -1056,6 +1056,7 @@ def get_local_storage_backing(host, con_ssh=None):
 
 def check_host_local_backing_type(host, type='image', con_ssh=None):
     backing_storage_types = get_local_storage_backing(host, con_ssh=con_ssh).lower()
+    LOG.debug('host:{} supports local-storage types:{}'.format(host, backing_storage_types))
     if not type in backing_storage_types:
         return False
 
@@ -1070,7 +1071,7 @@ def is_host_local_lvm_backing(host, con_ssh=None):
     return check_host_local_backing_type(host, type='lvm', con_ssh=con_ssh)
 
 
-def _check_lab_local_backing_type(type=None, con_ssh=None):
+def check_lab_local_backing_type(type=None, con_ssh=None):
     hypervisors = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
     if not hypervisors:
         return False
@@ -1083,14 +1084,14 @@ def _check_lab_local_backing_type(type=None, con_ssh=None):
 
 
 def has_local_image_backing(con_ssh=None):
-    if _check_lab_local_backing_type('image'):
+    if check_lab_local_backing_type('image'):
         return True
 
     return False
 
 
 def has_local_lvm_backing(con_ssh=None):
-    if _check_lab_local_backing_type('lvm'):
+    if check_lab_local_backing_type('lvm'):
         return True
 
     return False
@@ -1102,3 +1103,8 @@ def get_hosts_with_local_storage_backing_type(type=None, con_ssh=None):
         if check_host_local_backing_type(h, type=type, con_ssh=con_ssh):
             hosts.append(h)
     return hosts
+
+
+def get_host_pv_uuid(host, lvg_type='noval-local', con_ssh=None, fail_ok=False):
+    table_ = table_parser.table(cli.system('host-pv-list {}'.format(host), ssh_client=con_ssh))
+    return table_parser.get_values(table_, 'uuid', 'lvm_vg_name='.format(lvg_type))

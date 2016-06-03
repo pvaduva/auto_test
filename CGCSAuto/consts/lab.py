@@ -89,8 +89,8 @@ class Labs:
         'short_name': 'wcp_3_6',
         'name': 'yow-cgcs-wildcat-3-6',
         'floating ip': '128.224.151.227',
-        'controller-0 ip': '128.224.151.69',
-        'controller-1 ip': '128.224.151.70',
+        'controller-0 ip': '128.224.150.69',
+        'controller-1 ip': '128.224.150.70',
     }
 
     WCP_7_12 = {
