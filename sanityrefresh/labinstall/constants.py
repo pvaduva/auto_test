@@ -42,6 +42,7 @@ CERTIFICATE_FILE_NAME = "server-with-key.pem"
 # Cumulus TiS on TiS setup
 CUMULUS_SERVER_IP="128.224.151.50"
 BOOT_IMAGE_ISO = "bootimage.iso"
+BOOT_IMAGE_ISO_SIZE = 5
 BOOT_IMAGE_ISO_PATH = "export/" + BOOT_IMAGE_ISO
 BOOT_IMAGE_ISO_TMP_PATH = "/tmp/" + BOOT_IMAGE_ISO
 CUMULUS_CLEANUP_SCRIPT = "cumulus_cleanup.sh"

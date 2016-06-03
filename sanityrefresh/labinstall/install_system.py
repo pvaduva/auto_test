@@ -51,7 +51,7 @@ LOGGER_NAME = os.path.splitext(__name__)[0]
 log = logutils.getLogger(LOGGER_NAME)
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 PUBLIC_SSH_KEY = None
-USERNAME =  getpass.getuser()
+USERNAME = getpass.getuser()
 PASSWORD = None
 controller0 = None
 
