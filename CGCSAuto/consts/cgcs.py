@@ -78,6 +78,7 @@ class Prompt:
     CONTROLLER_PROMPT = '.*controller\-[01]\:~\$ '
     ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
+    STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'
     PASSWORD_PROMPT = '.*assword\:.*'
     ADD_HOST = '.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
