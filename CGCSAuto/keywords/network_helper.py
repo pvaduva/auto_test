@@ -350,7 +350,7 @@ def get_vm_port(vm, vm_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
         vm = get_mgmt_ips_for_vms(vms=vm, con_ssh=con_ssh)[0]
 
     table_ = table_parser.table(cli.neutron('port-list', ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_values(table_, 'id', strict=False, fixed_ips=vm)[0]
+    return table_parser.get_values(table_, 'id', strict=False, fixed_ips=vm+'"')[0]
 
 
 def get_mgmt_net_id(con_ssh=None, auth_info=None):

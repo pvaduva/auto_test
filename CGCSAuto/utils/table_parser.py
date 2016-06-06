@@ -46,7 +46,7 @@ def listing(output_lines):
     return items
 
 
-def tables(output_lines, combine_multiline_entry=True):
+def tables(output_lines, combine_multiline_entry=False):
     """Find all ascii-tables in output and parse them.
     Return list of tables parsed from cli output as dicts.
     (see OutputParser.table())
@@ -163,7 +163,7 @@ def __table_columns(first_table_row):
 TWO_COLUMN_TABLE_HEADERS = [['Field', 'Value'], ['Property', 'Value']]
 
 
-def table(output_lines, combine_multiline_entry=True):
+def table(output_lines, combine_multiline_entry=False):
     """
     Tempest table does not take into account when multiple lines are used for one entry. Such as neutron net-list -- if
     a net has multiple subnets, then tempest table will create multiple entries in table_['values']
@@ -195,7 +195,7 @@ def table(output_lines, combine_multiline_entry=True):
                 entry_lines = [rows[index] for index in range(start_index, end_index+1)]
                 # each column value is a list
                 entry_combined = [list(filter(None, list(t))) for t in zip(*entry_lines)]
-                if not combine_multiline_entry:
+                if combine_multiline_entry:
                     entry = [''.join(item) for item in entry_combined]
                 else:
                     # convert column value to string if list len is 1

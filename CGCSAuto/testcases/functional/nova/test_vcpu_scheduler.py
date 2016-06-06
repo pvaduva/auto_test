@@ -154,7 +154,7 @@ def test_boot_vm_vcpu_scheduler(vcpu_num, vcpu_scheduler):
                     break
 
             LOG.tc_step("Check vcpu policy and priority in real-time process attributes via chrt cmd")
-            code, output = host_ssh.exec_sudo_cmd('''sudo chrt -ap {} | grep -B1 "priority: {}$"'''.
+            code, output = host_ssh.exec_sudo_cmd('''chrt -ap {} | grep -B1 "priority: {}$"'''.
                                                   format(vm_pid, expt_priority))
             assert 0 == code, "Expected priority {} is not found in chrt output".format(expt_priority)
 

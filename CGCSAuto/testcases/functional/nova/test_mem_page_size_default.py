@@ -120,23 +120,33 @@ def test_vm_mem_pool(flavor_1g, mem_page_size, volume_):
 
     # Calculate used and available memories before booting vm
     pre_computes_tab = table_parser.filter_table(pre_computes_tab, Host=vm_host)
-    pre_used_mem = sum([int(mem) for mem in table_parser.get_column(pre_computes_tab, 'U:memory')[0]])
-    pre_avail_mems = []
+    pre_used_mem = sum([int(mem) for mem in table_parser.get_column(pre_computes_tab, 'U:memory')[0] if mem != ''])
+    # pre_avail_mems = []
+    pre_avail_mems = 0
     for header in avail_headers:
-        pre_avail_mems += table_parser.get_column(pre_computes_tab, header)[0]
-    pre_avail_mems = [int(mem) for mem in pre_avail_mems]
+        # pre_avail_mems += table_parser.get_column(pre_computes_tab, header)[0]
+        total = table_parser.get_column(pre_computes_tab, header)[0]
+        if isinstance(total, list):
+            total = sum([int(item) for item in total if item != ''])
+        print(total)
+        pre_avail_mems += total
+    # pre_avail_mems = [int(mem) for mem in pre_avail_mems]
 
     # Calculate used and available memories after booting vm
     post_computes_tab = system_helper.get_vm_topology_tables('computes')[0]
     post_computes_tab = table_parser.filter_table(post_computes_tab, Host=vm_host)
     post_used_mem = sum([int(mem) for mem in table_parser.get_column(post_computes_tab, 'U:memory')[0]])
-    post_avail_mems = []
+    post_avail_mems = 0
     for header in avail_headers:
-        post_avail_mems += table_parser.get_column(post_computes_tab, header)[0]
-    post_avail_mems = [int(mem) for mem in post_avail_mems]
+        total = table_parser.get_column(post_computes_tab, header)[0]
+        if isinstance(total, list):
+            total = sum([int(item) for item in total if item != ''])
+        print(total)
+        post_avail_mems += total
+    # post_avail_mems = [int(mem) for mem in post_avail_mems]
 
     LOG.tc_step("Check memory is taken from mem page pool that matches mem_page_size - {} via vm-topology.".
                 format(mem_page_size))
     assert pre_used_mem + 1024 == post_used_mem, "Used memory is not increased by 1024MiB"
-    assert sum(pre_avail_mems) - 1024 == sum(post_avail_mems), ("Available memory in {} page pool is not decreased "
+    assert pre_avail_mems - 1024 == post_avail_mems, ("Available memory in {} page pool is not decreased "
                                                                 "by 1024MiB").format(mem_page_size)

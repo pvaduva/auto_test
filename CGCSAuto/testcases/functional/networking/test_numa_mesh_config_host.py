@@ -49,6 +49,33 @@ def host_to_config(request):
     ((1, 0), (2, 0), None, False),      # Standard lab only
 ])
 def test_vswitch_cpu_reconfig(host_to_config, platform, vswitch, ht_required, cpe_required):
+    """
+    Test valid vswitch cpu reconfigurations, and verify vm can still be hosted on the modified host
+
+    Args:
+        host_to_config: hostname of the host to reconfig
+        platform: cpu cores to config for platform
+        vswitch: cpu cores to config for vswitch
+        ht_required: whether hyperthreading is required for the testcase. skip test if requirement is not met
+        cpe_required: whether cpe lab is required for the testcase. skip test if requirement is not met.
+
+    Setups (module):
+        - Find a nova host with minimum number of vms (or standby controller if small footprint lab) for testing
+        - Record the cpu configs for vswitch and platform
+
+    Test Steps:
+        - Lock host
+        - Reconfigure host platform and vswitch cpus to give numbers
+        - Unlock host
+        - Check ports and vswitch cores mapping in vswitch.ini are correct
+        - Check host is still eligible to schedule instance via in nova host-list
+        - Boot a vm
+        - Live migrate to host if it's not originally booted on host
+
+    Teardown:
+        - Revert host platform and vswitch cpu configs
+
+    """
     host, ht_enabled, is_cpe = host_to_config
     if ht_required is not None and ht_required is not ht_enabled:
         skip("Hyper-threading for {} is not {}".format(host, ht_required))
