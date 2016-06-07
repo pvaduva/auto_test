@@ -1,7 +1,7 @@
 import re
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
-from utils import cli
+from utils import cli,table_parser
 from consts.cgcs import UUID
 from keywords import system_helper
 # This test case is  to verify Alarm Suppression on Active alarm list (US77193 –FM: Alarm Suppression)
@@ -25,7 +25,7 @@ def test_alarm_suppression():
            - None
     """
     limit = 1
-    alarm_id = '300.005'
+    alarm_id = "300.005"
     LOG.tc_step('Generate alarms.')
     alarm_log_generate_str = "fmClientCli -c  \"### ###" + alarm_id + "###set###system.vm###Automation=### " \
                                                                       "###"\
@@ -37,7 +37,12 @@ def test_alarm_suppression():
                                                   query_type='string')
     assert len(query_active_alarm) > 1, "Alarm " + alarm_id + " not found in active list  "
     LOG.tc_step('Alarm Suppressed .')
-    retcode, output = system_helper.suppress_alarm(alarm_id=alarm_id)
+    suppress_=system_helper.get_suppressed_alarms(uuid=True)
+    ### Convert ALARMID to UUID
+    # TODO: Update after Jira fix.CGTS-4356 No need to conver after jira fix
+    alarm_id_uuid = table_parser.get_values(table_= suppress_, target_header='UUID',
+                                            **{"Suppressed Alarm ID's": alarm_id})
+    retcode, output = system_helper.suppress_alarm(alarm_id=alarm_id_uuid[0])
     assert retcode == 0, output
     query_active_alarm = system_helper.get_alarms(query_key='alarm_id', query_value=alarm_id,
                                                   query_type='string')
@@ -49,7 +54,7 @@ def test_alarm_suppression():
                                                   query_type='string')
     assert bool(query_active_alarm), "Alarm ID " + alarm_id + "found in Active list"
     LOG.tc_step('Alarm Unsuppressed .')
-    retcode, output = system_helper.unsuppress_alarm(alarm_id=alarm_id)
+    retcode, output = system_helper.unsuppress_alarm(alarm_id=alarm_id_uuid[0])
     assert retcode == 0, output
     active_alarm_uuid = system_helper.get_alarms(uuid=True, query_key='alarm_id', query_value=alarm_id,
                                                  query_type='string')

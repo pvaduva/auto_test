@@ -217,7 +217,7 @@ def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
 def unsuppress_all(ssh_con=None, fail_ok=False):
     cli.system('alarm-unsuppress-all',ssh_client=ssh_con)
     get_suppress_list = get_suppressed_alarms()
-    suppressed_list = table_parser.get_values(table_= get_suppress_list, target_header='Suppressed Alarm ID\'s',
+    suppressed_list = table_parser.get_values(table_=get_suppress_list, target_header='Suppressed Alarm ID\'s',
                                               strict=True, **{'Status': 'suppressed'})
     if len(suppressed_list) == 0:
         return 0
@@ -552,7 +552,7 @@ def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_in
 
 
 def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail_ok=False, con_ssh=None):
-    # TODO: Update after Jira fix. (which jira?)
+    # TODO: Update after Jira fix.CGTS-4356
     """
     suppress alarm by uuid
     Args:
@@ -568,12 +568,12 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
     suppressed_alarms_tab = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
 
     alarm_status = "unsuppressed" if suppress else "suppressed"
-    cmd = "alarm-supress" if suppress else "alarm-unsuppress"
+    cmd = "alarm-suppress" if suppress else "alarm-unsuppress"
     alarm_filter = {"Suppressed Alarm ID's": alarm_id}
 
     if check_first:
         pre_status = table_parser.get_values(table_=suppressed_alarms_tab, target_header='Status', strict=True,
-                                         **alarm_filter)[0]
+                                             **alarm_filter)[0]
         if pre_status.lower() != alarm_status:
             msg = "Alarm is already {}. Do nothing".format(pre_status)
             LOG.info(msg)
@@ -586,10 +586,9 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
 
     post_suppressed_alarms_tab = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
     post_status = table_parser.get_values(table_=post_suppressed_alarms_tab, target_header="Status", strict=True,
-                                          **{"Suppressed Alarm ID's": alarm_id})
-
+                                          **{"UUID": alarm_id})
     expt_status = "suppressed" if suppress else "unsuppressed"
-    if post_status.lower() != expt_status:
+    if post_status[0].lower() != expt_status:
         msg = "Alarm {} is not {}".format(alarm_id, expt_status)
         if fail_ok:
             LOG.warning(msg)
