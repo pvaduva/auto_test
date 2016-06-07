@@ -3,7 +3,8 @@ from keywords import network_helper
 from utils.tis_log import LOG
 from keywords import vm_helper
 from testfixtures.resource_mgmt import ResourceCleanup
-_skip = True
+
+
 ##############################################
 # us57685_Test Strategy for US57685_AVR_FIP (Accelerated Virtual router Floating IP) #
 ##############################################
@@ -24,33 +25,33 @@ def fip_setups(request):
 
 def test_fip(fip_setups):
     """
-	Test VM Floating IP  over VM launch, live-migration, cold-migration, pause/unpause, etc
+    Test VM Floating IP  over VM launch, live-migration, cold-migration, pause/unpause, etc
 
-	Args:
-		vm_ (str): vm created by module level test fixture
+    Args:
+        vm (str): vm created by module level test fixture
 
-	Test Setups:
-		- boot a vm from volume and ping vm from NatBox     (module)
+    Test Setups:
+        - boot a vm from volume and ping vm from NatBox     (module)
 
-	Test Steps:
-		- Ping  VM FIP
-		- Live-migrate the VM and verify ping from VM
-		- Cold-migrate the VM and verify ping from VM
-		- Pause and un-pause the VM and verify ping from VM
-		- Suspend and resume the VM and verify ping from VM
-		- Stop and start the VM and verify ping from VM
-		- Reboot the VM and verify ping from VM
-		- Ping  VM FIP
+    Test Steps:
+        - Ping  VM FIP
+        - Live-migrate the VM and verify ping from VM
+        - Cold-migrate the VM and verify ping from VM
+        - Pause and un-pause the VM and verify ping from VM
+        - Suspend and resume the VM and verify ping from VM
+        - Stop and start the VM and verify ping from VM
+        - Reboot the VM and verify ping from VM
+        - Ping  VM FIP
 
-	Test Teardown:
-	    - Disassoicate FIP
-		- Delete the created vm
+    Test Teardown:
+        - Disassoicate FIP
+        - Delete the created vm
 
-	"""
+    """
     vm_id, fip = fip_setups
     LOG.tc_step("Ping VM with Floating IP ")
     vm_helper.ping_ext_from_vm(vm_id, use_fip=True)
-    #hello
+
     LOG.tc_step("Live-migrate the VM and verify ping from VM")
     vm_helper.live_migrate_vm(vm_id)
     vm_helper.ping_ext_from_vm(vm_id, use_fip=True)
