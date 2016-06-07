@@ -43,6 +43,7 @@ def test_fip(fip_setups):
 		- Ping  VM FIP
 
 	Test Teardown:
+	    - Disassoicate FIP
 		- Delete the created vm
 
 	"""
@@ -50,13 +51,13 @@ def test_fip(fip_setups):
     LOG.tc_step("Ping VM with Floating IP ")
     vm_helper.ping_ext_from_vm(vm_id, use_fip=True)
 
-    #LOG.tc_step("Live-migrate the VM and verify ping from VM")
-    #vm_helper.live_migrate_vm(vm_id)
-    #vm_helper.ping_ext_from_vm(vm_id, use_fip=True)
+    LOG.tc_step("Live-migrate the VM and verify ping from VM")
+    vm_helper.live_migrate_vm(vm_id)
+    vm_helper.ping_ext_from_vm(vm_id, use_fip=True)
 
-    #LOG.tc_step("Cold-migrate the VM and verify ping from VM")
-    #vm_helper.cold_migrate_vm(vm_id)
-    #vm_helper.ping_ext_from_vm(vm_id, use_fip=True)
+    LOG.tc_step("Cold-migrate the VM and verify ping from VM")
+    vm_helper.cold_migrate_vm(vm_id)
+    vm_helper.ping_ext_from_vm(vm_id, use_fip=True)
 
     LOG.tc_step("Pause and un-pause the VM and verify ping from VM")
     vm_helper.pause_vm(vm_id)
