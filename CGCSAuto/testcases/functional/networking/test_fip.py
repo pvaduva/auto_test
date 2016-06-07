@@ -50,7 +50,7 @@ def test_fip(fip_setups):
     vm_id, fip = fip_setups
     LOG.tc_step("Ping VM with Floating IP ")
     vm_helper.ping_ext_from_vm(vm_id, use_fip=True)
-
+    #hello
     LOG.tc_step("Live-migrate the VM and verify ping from VM")
     vm_helper.live_migrate_vm(vm_id)
     vm_helper.ping_ext_from_vm(vm_id, use_fip=True)
