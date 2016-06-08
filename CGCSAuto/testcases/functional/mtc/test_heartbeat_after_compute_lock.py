@@ -1,11 +1,12 @@
 ###
-#us63135_tc11: validate_heartbeat_works_after_controller_swact
+#from us63135_tc11: validate_heartbeat_works_after_compute_node_reboot
 ###
 
 
 from pytest import fixture, mark, skip
 from time import sleep
 
+from utils import table_parser
 from utils.tis_log import LOG
 from consts.cgcs import EventLogID, FlavorSpec
 from consts.timeout import EventLogTimeout
@@ -59,19 +60,41 @@ def heartbeat_flavor_vm(request):
     return vm
 
 
-def test_heartbeat_after_swact(heartbeat_flavor_vm):
+def test_heartbeat_after_compute_lock(heartbeat_flavor_vm):
     """
-    check the heartbeat of a given vm
+    from us63135_tc11: validate_heartbeat_works_after_compute_node_reboot
+
+    Verfiy heartbeat is still function after compute node where vm is located is locked
 
     Args:
-        heartbeat_flavor_vm: vm_ fixture which passes the created vm based on  <local_image, local_lvm, or remote>,
+        - Nothing
+
+    Setup:
+        1) Log on to active controller, add flavor with extension with heartbeat enabled.
+        2) Instantiate VM and log into their VM consoles. Verify it's running on a compute node.
+        3) Confirm that heartbeating is running in both VMs (check logs, and/or "ps -ef | fgrep guest-client").
+        4) Lock the compute node.
+
+    Test Steps:
+        5) Verify VMs successfully migrate to the other compute node.
+        6) Log back into VM consoles, and verify that heartbeat is running
+
+    Teardown:
+        -delete vm
 
     """
     vm_id = heartbeat_flavor_vm['id']
     heartbeat_type = heartbeat_flavor_vm['heartbeat']
 
-    LOG.tc_step("execute swact")
-    host_helper.swact_host()
+    LOG.tc_step("Reboot the compute node where the VM is located")
+    # find the compute node where the vm is located
+
+    vm_host_table = system_helper.get_vm_topology_tables('servers')[0]
+    vm_host = table_parser.get_values(vm_host_table,'host', ID=vm_id)[0]
+
+    host_helper.lock_host(vm_host)
+    compute_list = system_helper.get_computes()
+    print(compute_list)
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 
@@ -87,8 +110,8 @@ def test_heartbeat_after_swact(heartbeat_flavor_vm):
                 assert heartbeat_proc_disappear, "Heartbeat set to False, However, heartbeat process is running " \
                                                  "after swact."
             else:
-                assert not heartbeat_proc_disappear, "Heartbeat set to True. However, heartbeat process is not running " \
-                                                     "after swact."
+                assert not heartbeat_proc_disappear, "Heartbeat set to True. However, heartbeat process is not " \
+                                                     "running after swact."
 
         else:
             heartbeat_proc_appear = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False,
@@ -99,3 +122,6 @@ def test_heartbeat_after_swact(heartbeat_flavor_vm):
             else:
                 assert not heartbeat_proc_appear, "Heartbeat set to False, However, heartbeat process is running " \
                                                   "after swact. "
+
+    # unlock the locked compute node after test
+    host_helper.unlock_host(vm_host)

@@ -1,3 +1,9 @@
+###
+# below testcases is under SysInv Local Storage Test Plan -
+# ~/wassp-repos/testmatrices/cgcs/teststrategies/cgcs2.0/us68398_sysinv_local_storage_test_plan.odt
+# It specifically cover testcase 40 Local Storage Negative Test (Storage Host → Non-storage Host)
+###
+
 from pytest import fixture, mark, skip
 import ast
 

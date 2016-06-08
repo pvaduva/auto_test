@@ -37,6 +37,7 @@ def config_local_volume_group(request):
     if inst_back == request.param:
         return local_volume_group
 
+    #if instance backing is different, set the new instance backing type.
     lvg_args = "-b "+request.param+" compute-0 nova-local"
     host_helper.lock_host('compute-0')
 
@@ -233,14 +234,14 @@ def test_verify_disk_extra_on_virsh(create_vm_with_volume):
         - Nothing
 
     Setup:
-        - Setup flavor with specific bytes per second extra specs
+        - Setup qos specswith specific bytes per second extra specs on specifc volume type
 
 
     Test Steps:
-        -verify the extra spec is set and match to expected specs
+        -verify the extra spec is set and match to expected specs on vm through varish cli
 
     Teardown:
-        - delete specific bytes per second extra specs
+        - delete specific bytes per second extra specs vm/volume-type/qos-specs
 
     """
     vm_id = create_vm_with_volume['id']
