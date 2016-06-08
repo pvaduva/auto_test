@@ -58,10 +58,10 @@ class TestLocalStorage(object):
             # restore the local-storage types for computes ever changed by testing
             old_new_types = TestLocalStorage._host_old_new_lc_types
             try:
-                while old_new_types:
-                    host, old_type, new_type = old_new_types.pop()
+                for host in old_new_types.keys():
                     host_helper.lock_host(host)
-                    self.set_local_storage_backing(compute=host, new_type=new_type)
+                    (old_type, _) = old_new_types.pop(host)
+                    self.set_local_storage_backing(compute=host, to_type=old_type)
                     host_helper.unlock_host(host)
             finally:
                 pass
@@ -123,20 +123,20 @@ class TestLocalStorage(object):
 
         return prof_uuid
 
-    def set_local_storage_backing(self, compute=None, new_type='image'):
+    def set_local_storage_backing(self, compute=None, to_type='image'):
         LOG.info('will lock compute:{} in order to change to new lc-type:{}' \
-                 .format(compute, new_type))
+                 .format(compute, to_type))
         rtn_code, msg = host_helper.lock_host(compute, check_first=True)
         if 0 == rtn_code:
             TestLocalStorage._computes_locked.append(compute)
         LOG.info('Get the original lc-backing-type for compute:{}'.format(compute))
         old_type = host_helper.get_local_storage_backing(compute)
-        cmd = 'host-lvg-modify -b {} {} nova-local'.format(new_type, compute)
+        cmd = 'host-lvg-modify -b {} {} nova-local'.format(to_type, compute)
         _, _ = cli.system(cmd, rtn_list=True, fail_ok=False)
-        LOG.info('Save lc-backing-type for compute:{}, old:{}, new:{}'.format(compute, old_type, new_type))
-        TestLocalStorage._host_old_new_lc_types[compute] = (old_type, new_type)
+        LOG.info('Save lc-backing-type for compute:{}, old:{}, new:{}'.format(compute, old_type, to_type))
+        TestLocalStorage._host_old_new_lc_types[compute] = (old_type, to_type)
 
-        LOG.info('OK, the lc-type of {} changed to {}'.format(compute, new_type))
+        LOG.info('OK, the lc-type of {} changed to {}'.format(compute, to_type))
 
         LOG.info('Unlock {} now'.format(compute))
 
@@ -155,7 +155,7 @@ class TestLocalStorage(object):
             computes_unlocked = host_helper.get_hypervisors(state='up', status='enabled')
             compute_to_change = random.choice([c for c in computes_unlocked
                                                if c != ControllerClient.get_active_controller().host])
-        self.set_local_storage_backing(compute=compute_to_change, new_type=lc_type)
+        self.set_local_storage_backing(compute=compute_to_change, to_type=lc_type)
 
         return compute_to_change
 
@@ -319,7 +319,7 @@ class TestLocalStorage(object):
         Setup:
 
         Test Steps:
-            1 Create a storage-profile with expected local-storage type
+            1 Create a storage-profile with the expected local-storage type
                 1) if there are computes/hyperviors with the local-storage type, randomly choose one
                 2) otherwise, chose a non-active-controller, change its local-storage backing type to the expected type
             2 Test a negative case: attempt to apply the storage-profile on an unlocked compute/hypervisor
@@ -341,6 +341,7 @@ class TestLocalStorage(object):
         Teardown:
             1 delete the storage-profile created
             2 unlock the computes/hyperviors locked for testing
+            3 restore the local-storage types changed during testing for the impacted computes
 
         Notes:
                 will cover 3 test cases:
@@ -393,22 +394,33 @@ class TestLocalStorage(object):
             'Local-storage backing failed to change to {} on host:{}'.format(local_storage_type, compute_to_modify)
 
     @mark.skipif(_less_than_2_hypervisors(), reason='Requires 2 or more computes to test this test case')
-    @mark.parametrize('local_storage_type', [mark.p2('image'), mark.p2('lvm')])
+    @mark.parametrize('local_storage_type', [
+        mark.p2('image'),
+        mark.p2('lvm')
+    ])
     def test_apply_profile_to_smaller_sized_host(self, local_storage_type):
         """
 
         Args:
-            local_storage_type:
+            local_storage_type(str): type of local-storage backing, allowed values: image, lvm
 
         Returns:
 
         Setup:
 
         Test Steps:
+            1 check if the lab has computes with different disk sizes, if not skip the rest of the testing
+            2 find the compute having max disk size
+            3 create storage-profile on the compute with max disk size
+            4 randomly choose one of the compute
+            5 lock the selected compute
+            6 apply the storage-profile on compute, expecting to fail
+            7 verify the attempt to apply the storage-profile did not succeed
 
         Teardown:
             1 delete the storage-profile created
             2 unlock the computes/hyperviors locked for testing
+            3 restore the local-storage types changed during testing for the impacted computes
 
         Notes:
                 will cover 2 test cases:
@@ -419,7 +431,7 @@ class TestLocalStorage(object):
         host_lc_sizes = self._get_local_storage_disk_sizes()
         sizes = [size for _, size in host_lc_sizes.items()]
         LOG.tc_step('Check if all the sizes of physical-volumes are the same')
-        if len(sizes) <= 1:
+        if len(set(sizes)) <= 1:
             msg = 'Skip the test cases, because all sizes of physical-volumes are the same'
             LOG.tc_step(msg)
             skip(msg)
@@ -434,7 +446,8 @@ class TestLocalStorage(object):
         LOG.info('host_lc_sizes={}'.format(host_lc_sizes))
 
         LOG.tc_step('Randomly select one other than compute:{}'.format(compute_with_max))
-        compute_dest = random.choice([c for c in host_lc_sizes.keys() if c != compute_with_max])
+        compute_dest = random.choice([c for c in host_lc_sizes.keys()
+                                      if c != compute_with_max and host_lc_sizes[c] != max and host_lc_sizes[c] > 0])
 
         LOG.tc_step('Attemp to apply storage-profile from {} to {}'.format(compute_with_max, compute_dest))
         host_helper.lock_host(compute_dest, check_first=True)
@@ -468,7 +481,7 @@ class TestLocalStorage(object):
         LOG.info('Attempt to import profile:{}'.format(profile_file))
         return cli.system('profile-import {}'.format(profile_file), rtn_list=True)
 
-    def verify_local_storage_type(self, local_storage_type='image'):
+    def verify_local_storage_type(self, profile=''):
         return 0
 
     @mark.skipif(_less_than_2_hypervisors(), reason='Requires 2 or more computes to test this test case')
@@ -476,17 +489,23 @@ class TestLocalStorage(object):
     def test_import_storage_profile(self, local_storage_type):
         """
         Args:
-            local_storage_type(str): type of local-storage backing, should be image, lvm
+            local_storage_type(str): type of local-storage backing, allowed values: image, lvm
 
         Setup:
 
         Test Steps:
+            1 check if the profile exists
+            2 apply the profile
+            3 verify the results
 
         Teardown:
+            1 delete the storage-profile created
+            2 unlock the computes/hyperviors locked for testing
+            3 restore the local-storage types changed during testing for the impacted computes
 
         Notes:
-                will cover 1 test cases:
-                    39.  Local Storage Profile Import
+            will cover 1 test cases:
+                39.  Local Storage Profile Import
         Returns:
 
         """
@@ -501,4 +520,4 @@ class TestLocalStorage(object):
         assert 0 == rtn_code, 'Failed in system profile-import {}, msg:{}'.format(profile_file, output)
 
         LOG.tc_step('Check if the storage profile types are changed on all computes')
-        assert 0 == self.verify_local_storage_type(local_storage_type)
+        assert 0 == self.verify_local_storage_type(profile=profile_file)
