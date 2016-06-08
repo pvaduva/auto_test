@@ -86,20 +86,11 @@ class TestLocalStorage(object):
         if 0 == rtn_code:
             TestLocalStorage._computes_locked.append(compute_dest)
 
-        LOG.tc_step('Delete the PV of type:{} on host:{}'.format(lc_type, compute_dest))
-        pv_uuids = host_helper.get_host_pv_uuid(compute_dest, lvg_type='nova-local', con_ssh=ssh_client)
-        if len(pv_uuids) <= 0:
-            LOG.warn('No pv for lvg type:{} on host:{}'.format(lc_type, compute_dest))
-        else:
-            # THERE IS A Known issue: the following CLI return non-zero, hence skip checking the return code
-            # rtn_code, output = cli.system('host-pv-delete {}'.format(pv_uuids[0]),
-            _, _ = cli.system('host-pv-delete {}'.format(pv_uuids[0]),
-                              ssh_client=ssh_client, fail_ok=True, rtn_list=True)
-            # assert 0 == rtn_code
-
         LOG.tc_step('Delete the lvg "nova-local" on host:{}'.format(compute_dest))
-        cli.system('host-lvg-delete {} nova-local'.format(compute_dest),
+        rtn_code, msg = cli.system('host-lvg-delete {} nova-local'.format(compute_dest),
                    ssh_client=ssh_client, fail_ok=False, rtn_list=True)
+
+        assert 0 == rtn_code, 'Failed to delete the nova-local logical-group from {}'.format(compute_dest)
 
         LOG.tc_step('Apply the storage-profile:{} onto host:{}'.format(profile, compute_dest))
         LOG.info('Get the original lc-type for compute:{}'.format(compute_dest))
