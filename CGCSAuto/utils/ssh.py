@@ -50,7 +50,7 @@ class SSHClient:
     """
 
     def __init__(self, host, user='wrsroot', password='li69nux', force_password=True, initial_prompt=CONTROLLER_PROMPT,
-                 timeout=10):
+                 timeout=20):
         """
         Initiate an object for connecting to remote host
         Args:

@@ -171,7 +171,7 @@ def test_reset_router_ext_gateway(snat_setups):
 
 
 @mark.skipif(True, reason="Not implemented")
-def test_vm_nat_protocol(vm_):
+def a_test_vm_nat_protocol():
     # scp to vm from natbox
     # wget to vm
     raise NotImplementedError("Test not implemented yet.")

@@ -42,20 +42,26 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
         '--is-public': is_public
     }
 
-    if name is None:
-        name = 'flavor'
-
     table_ = table_parser.table(cli.nova('flavor-list', ssh_client=con_ssh, auth_info=auth_info))
     existing_names = table_parser.get_column(table_, 'Name')
 
-    flavor_name = None
-    for i in range(10):
-        tmp_name = '-'.join([name, str(Count.get_flavor_count())])
-        if tmp_name not in existing_names:
-            flavor_name = tmp_name
-            break
+    if name is not None:
+        flavor_name = name
+        if name in existing_names:
+            for i in range(50):
+                tmp_name = '-'.join([name, str(i)])
+                if tmp_name not in existing_names:
+                    flavor_name = tmp_name
+                    break
     else:
-        exceptions.FlavorError("Unable to get a proper name for flavor creation.")
+        name = 'flavor'
+        for i in range(10):
+            tmp_name = '-'.join([name, str(Count.get_flavor_count())])
+            if tmp_name not in existing_names:
+                flavor_name = tmp_name
+                break
+        else:
+            exceptions.FlavorError("Unable to get a proper name for flavor creation.")
 
     mandatory_args = ' '.join([flavor_name, flavor_id, str(ram), str(root_disk), str(vcpus)])
 
@@ -155,6 +161,24 @@ def get_flavor_id(name=None, memory=None, disk=None, ephemeral=None, swap=None, 
     if not ids:
         return ''
     return random.choice(ids)
+
+
+def get_basic_flavor(auth_info=None, con_ssh=None):
+    """
+    Get a basic flavor with the default arg values and without adding extra specs.
+    Args:
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (str): id of the basic flavor
+
+    """
+    default_flavor_name = 'flavor-default'
+    flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info)
+    if flavor_id == '':
+        flavor_id = create_flavor(name=default_flavor_name, con_ssh=con_ssh)[1]
+
+    return flavor_id
 
 
 def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False, **extra_specs):

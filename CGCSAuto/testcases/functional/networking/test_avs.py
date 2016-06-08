@@ -65,7 +65,7 @@ def vms_():
                 vms[vif_model].append(vm_id)
     return vms
 
-def test_avp_vms_with_vm_actions(vms_):
+def a_test_avp_vms_with_vm_actions(vms_):
     """
     Test VM external access over VM launch, live-migration, cold-migration, pause/unpause, etc
 

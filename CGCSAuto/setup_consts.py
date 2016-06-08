@@ -15,7 +15,7 @@ BOOT_VMS = False
 COLLECT_ALL = False
 REPORT_ALL = False
 DOMAIN = 'MTC'
-USERSTORY= ''
+USERSTORY = ''
 
 #########################################
 # End of Test Session Params            #

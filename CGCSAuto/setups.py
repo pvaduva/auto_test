@@ -154,7 +154,7 @@ def get_tenant_dict(tenantname):
         raise ValueError("{} is not a valid input".format(tenantname))
 
 
-def collect_tis_logs(con_ssh=None):
+def collect_tis_logs(con_ssh):
     LOG.info("Collecting all hosts logs...")
     con_ssh.send('collect all')
 
@@ -186,3 +186,7 @@ def collect_tis_logs(con_ssh=None):
     except Exception as e:
         LOG.warning("Failed to copy log file to localhost.")
         LOG.error(e, exc_info=True)
+
+
+def get_tis_timestamp(con_ssh):
+    return con_ssh.exec_cmd('date +"%T"')[1]

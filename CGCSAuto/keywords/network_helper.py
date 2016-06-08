@@ -203,7 +203,6 @@ def create_floatingip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_a
         args += " --tenant-id {}".format(tenant_id)
 
     # process port info
-    port_id_to_check = None
     if port_id is not None:
         args += " --port-id {}".format(port_id)
         if fixed_ip_addr is not None:
@@ -284,6 +283,9 @@ def get_floatingips(auth_info=Tenant.ADMIN, con_ssh=None):
 
 def get_floatingip_ids(floating_ips=None, con_ssh=None, auth_info=Tenant.ADMIN):
     table_ = table_parser.table(cli.neutron('floatingip-list', ssh_client=con_ssh, auth_info=auth_info))
+    if not table_['headers']:           # no floating ip listed
+        return []
+
     if floating_ips is not None:
         table_ = table_parser.filter_table(table_, **{'floating_ip_address': floating_ips})
     return table_parser.get_column(table_, 'id')

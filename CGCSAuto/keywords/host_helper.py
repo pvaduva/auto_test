@@ -543,11 +543,10 @@ def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, st
             if isinstance(actual_val, list):
                 actual_val = ' '.join(actual_val)
 
-            LOG.warning("Actual_val: {}".format(actual_val))
             actual_val_lower = actual_val.lower()
             if isinstance(val, str):
                 val = [val]
-            LOG.info("Expected val(s): {}; Actual val: {}".format(val, actual_val))
+
             for expected_val in val:
                 expected_val_lower = expected_val.strip().lower()
                 found_match = False
@@ -568,7 +567,7 @@ def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, st
                     LOG.info("{} {} has reached: {}".format(host, field, actual_val))
                     break
             else:   # no match found. run system host-show again
-                LOG.info("{} {} is {}".format(host, field, actual_val))
+                LOG.info("{} {} is {}. Expected: {}".format(host, field, actual_val, val))
                 break
         else:
             LOG.info("{} is in states: {}".format(host, states))
@@ -700,6 +699,33 @@ def get_nova_hosts(con_ssh=None, auth_info=Tenant.ADMIN):
 
     table_ = table_parser.table(cli.nova('host-list', ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_, 'host_name', service='compute', zone='nova')
+
+
+def wait_for_hosts_in_nova(hosts, timeout=60, check_interval=3, fail_ok=True, auth_info=Tenant.ADMIN, con_ssh=None):
+
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    hosts_to_check = list(hosts)
+    LOG.info("Waiting for {} to be shown in nova host-list...".format(hosts))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        hosts_in_nova = get_nova_hosts(con_ssh=con_ssh, auth_info=auth_info)
+        for host in hosts_to_check:
+            if host in hosts_in_nova:
+                hosts_to_check.remove(host)
+        if not hosts_to_check:
+            msg = "Host(s) {} appeared in nova host-list".format(hosts)
+            LOG.info(msg)
+            return True, hosts_to_check
+
+        time.sleep(check_interval)
+    else:
+        msg = "Host(s) {} did not shown in nova host-list within timeout".format(hosts_to_check)
+        if fail_ok:
+            LOG.warning(msg)
+            return False, hosts_to_check
+        raise exceptions.HostTimeout(msg)
 
 
 def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):

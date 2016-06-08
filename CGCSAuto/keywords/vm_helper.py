@@ -134,7 +134,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
 
     # Handle mandatory arg - flavor
     if flavor is None:
-        flavor = nova_helper.get_flavor_id()
+        flavor = nova_helper.get_basic_flavor(auth_info=auth_info, con_ssh=con_ssh)
 
     # Handle mandatory arg - nics
     if not nics:
@@ -906,8 +906,8 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
                      fail_ok=fail_ok, use_fip=use_fip)
 
 
-def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None,
-                     natbox_client=None, num_pings=5, timeout=15, fail_ok=False, to_fip=False, from_fip=False):
+def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
+                     num_pings=5, timeout=15, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False):
     """
 
     Args:
@@ -920,8 +920,9 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         natbox_client:
         num_pings:
         timeout:
-        fail_ok:  When False, test will stop right away if one ping failed. When True, test will continue to ping
+        fail_ok (bool):  When False, test will stop right away if one ping failed. When True, test will continue to ping
             the rest of the vms and return results even if pinging one vm failed.
+        from_vm_ip (str): vm ip to ssh to if given. from_fip flag will be considered only if from_vm_ip=None
         to_fip (bool): Whether to ping floating ip if a vm has floating ip associated with it
         from_fip (bool): whether to ssh to vm's floating ip if it has floating ip associated with it
 
@@ -944,7 +945,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         to_vms = vms_ids
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
-                               prompt=prompt, con_ssh=con_ssh, use_fip=from_fip) as from_vm_ssh:
+                               prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
 
         res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
                         fail_ok=fail_ok, use_fip=to_fip)
@@ -953,19 +954,19 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
 
 
 def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
-                     num_pings=5, timeout=15, fail_ok=False, use_fip=False):
+                     num_pings=5, timeout=15, fail_ok=False, vm_ip=None, use_fip=False):
 
     if ext_ip is None:
         ext_ip = EXT_IP
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
-                               prompt=prompt, con_ssh=con_ssh, use_fip=use_fip) as from_vm_ssh:
+                               prompt=prompt, con_ssh=con_ssh, vm_ip=vm_ip, use_fip=use_fip) as from_vm_ssh:
         return _ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings, timeout=timeout, fail_ok=fail_ok)
 
 
 @contextmanager
 def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
-                          timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, use_fip=False):
+                          timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, vm_ip=None, use_fip=False):
     """
     ssh to a vm from natbox.
 
@@ -978,7 +979,8 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         timeout (int): 
         natbox_client (NATBoxClient):
         con_ssh (SSHClient): ssh connection to TiS active controller
-        use_fip (bool): Whether to ssh to floating ip if a vm has floating ip associated
+        vm_ip (str): ssh to this ip from NatBox if given
+        use_fip (bool): Whether to ssh to floating ip if a vm has one associated. Not applicable if vm_ip is given.
 
     Yields (VMSSHClient):
         ssh client of the vm
@@ -992,7 +994,9 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         vm_image_name = nova_helper.get_vm_image_name(vm_id=vm_id, con_ssh=con_ssh).strip().lower()
 
     vm_name = nova_helper.get_vm_name_from_id(vm_id=vm_id)
-    vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id, use_fip=use_fip)[0]
+
+    if vm_ip is None:
+        vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id, use_fip=use_fip)[0]
 
     if not natbox_client:
         natbox_client = NATBoxClient.get_natbox_client()

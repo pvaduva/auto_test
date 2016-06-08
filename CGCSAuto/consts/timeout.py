@@ -47,4 +47,4 @@ class ImageTimeout:
 
 class EventLogTimeout:
     HEARTBEAT_ESTABLISH = 300
-    HEALTH_CHECK_FAIL = 30
+    HEALTH_CHECK_FAIL = 60
