@@ -97,12 +97,11 @@ class TestLocalStorage(object):
         old_type = host_helper.get_local_storage_backing(compute_dest)
         rtn_code, output = cli.system('host-apply-storprofile {} {}'.format(compute_dest, profile),
                                       fail_ok=fail_ok, rtn_list=True)
-        # if rtn_code == 0:
-        #
+        assert rtn_code == 0, 'Failed to apply storage-profile {} onto {}'.format(profile, compute_dest)
+
         LOG.info('Save lc-type for compute:{}, old:{}, new:{}'.format(compute_dest, old_type, lc_type))
         TestLocalStorage._host_old_new_lc_types[compute_dest] = (old_type, lc_type)
-        # currently there's a known issue that the CLI host-apply-stoprof returns 1 even it succeeded
-        # assert 0 == rtn_code, 'Failed to apply storage-profile:{} to host:{}'.format(prof_name, compute_dest)
+
         return rtn_code, output
 
     def create_storage_profile(self, host, lc_type='image'):
