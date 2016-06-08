@@ -18,7 +18,7 @@ from keywords import system_helper, host_helper, local_storage_helper
 
 def _get_computes_for_local_backing_type(lc_type='image', con_ssh=None):
     hosts_of_type = []
-    hosts = host_helper.get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
+    hosts = host_helper.get_nova_hosts(con_ssh=con_ssh)
 
     for host in hosts:
         if host_helper.check_host_local_backing_type(host, type=lc_type, con_ssh=con_ssh):
@@ -73,10 +73,10 @@ class TestLocalStorage(object):
         if host_helper.check_host_local_backing_type(compute_dest, lc_type, con_ssh=ssh_client) and not force_change:
             msg = 'host already has local-storage backing:{} as expected'.format(lc_type)
             LOG.info(msg)
-            return 1, msg
+            return -1, msg
 
         LOG.info('compute: {} is not in lc-type:{} or will force to apply'.format(compute_dest, lc_type))
-        if compute_dest == ControllerClient.get_active_controller().host:
+        if compute_dest == system_helper.get_active_controller_name():
             # this will happen on a CPE lab
             LOG.info('will swact the current active controller:{}'.format(compute_dest))
             host_helper.swact_host()
@@ -152,9 +152,9 @@ class TestLocalStorage(object):
             compute_to_change = random.choice(computes_locked)
         else:
             # if possible, avoid to pick up the active controller, which only may happen on CPE system
-            computes_unlocked = host_helper.get_hypervisors(state='up', status='enabled')
+            computes_unlocked = host_helper.get_nova_hosts()
             compute_to_change = random.choice([c for c in computes_unlocked
-                                               if c != ControllerClient.get_active_controller().host])
+                                               if c != system_helper.get_active_controller_name()])
         self.set_local_storage_backing(compute=compute_to_change, to_type=lc_type)
 
         return compute_to_change
@@ -183,7 +183,7 @@ class TestLocalStorage(object):
 
     def _choose_compute_unlocked_diff_Type(self, lc_type='image', active_controller=''):
         computes_unlocked_diff_type = [c for c in
-                                       host_helper.get_hypervisors(state='up', status='enabled')
+                                       host_helper.get_nova_hosts()
                                        if not host_helper.check_host_local_backing_type(c, type=lc_type)]
 
         if computes_unlocked_diff_type:
@@ -224,7 +224,7 @@ class TestLocalStorage(object):
 
     def _choose_compute_unlocked_same_type(self, lc_type='image', active_controller=''):
         computes_unlocked = [c for c in
-                             host_helper.get_hypervisors(state='up', status='enabled')
+                             host_helper.get_nova_hosts()
                              if host_helper.check_host_local_backing_type(c, type=lc_type)]
         if active_controller in computes_unlocked:
             computes_unlocked.remove(active_controller)
@@ -251,7 +251,7 @@ class TestLocalStorage(object):
             LOG.info('-got target compute:{}, locked, diff lc-type'.format(compute_dest))
             return compute_dest
 
-        old_active_controller = ControllerClient.get_active_controller().host
+        old_active_controller = system_helper.get_active_controller_name()
         LOG.info('-no locked computes with different lc-type')
 
         # otherwise chose one compute from unlocked and of different lc-type to apply storage-profile
@@ -290,7 +290,7 @@ class TestLocalStorage(object):
             # no computes have expected type of lc-type, modify one of them to the type
             compute_src = self.setup_local_storage_type_on_lab(lc_type=lc_type)
         else:
-            active_controller = ControllerClient.get_active_controller().host
+            active_controller = system_helper.get_active_controller_name()
             if active_controller in computes_of_lc_type:
                 compute_src = active_controller
             else:
@@ -308,8 +308,8 @@ class TestLocalStorage(object):
 
     @mark.skipif(_less_than_2_hypervisors(), reason='Requires 2 or more hyperviors to run the testcase')
     @mark.parametrize('local_storage_type', [
-        mark.p1('image'),
         mark.p1('lvm'),
+        mark.p1('image'),
     ])
     def test_local_storage_operations(self, local_storage_type):
         """
@@ -357,9 +357,9 @@ class TestLocalStorage(object):
         LOG.info('OK, created {} lc-type from compute:{}'.format(local_storage_type, compute_src))
 
         LOG.tc_step('NEG: Attempt to apply the storage profile on an unlocked compute, expecting to fail')
-        computes_unlocked = host_helper.get_hypervisors(state='up', status='enabled')
+        computes_unlocked = host_helper.get_nova_hosts()
         if computes_unlocked:
-            compute_unlocked = random.choice(host_helper.get_hypervisors(state='up', status='enabled'))
+            compute_unlocked = random.choice(host_helper.get_nova_hosts())
             rtn_code, output = cli.system('host-apply-storprofile {} {}'.format(compute_unlocked, prof_uuid),
                                           fail_ok=True, rtn_list=True)
             assert 0 != rtn_code, 'Should fail to apply storage-profile:{} to unlocked host:{}' \
@@ -378,9 +378,12 @@ class TestLocalStorage(object):
         LOG.tc_step('Apply the storage-profile:{} onto host:{}'.format(prof_uuid, compute_to_modify))
         # THERE IS A KNOWN issue currently (20160602), CLI will return non-zero when applying storage-profile
         # so we don not check ther return code
-        self.apply_storage_profile(
+        rtn_code, output = self.apply_storage_profile(
             compute_to_modify,
             lc_type=local_storage_type, profile=prof_uuid, fail_ok=True)
+        if rtn_code == -1:
+            LOG.info('Skipped to apply storage profile')
+            return rtn_code, output
         # assert 0 == rtn_code, ...
 
         LOG.tc_step('Check if the changes take effect after unlocking')
@@ -396,7 +399,7 @@ class TestLocalStorage(object):
     @mark.skipif(_less_than_2_hypervisors(), reason='Requires 2 or more computes to test this test case')
     @mark.parametrize('local_storage_type', [
         mark.p2('image'),
-        mark.p2('lvm')
+        mark.p2('lvm'),
     ])
     def test_apply_profile_to_smaller_sized_host(self, local_storage_type):
         """
@@ -435,7 +438,7 @@ class TestLocalStorage(object):
             msg = 'Skip the test cases, because all sizes of physical-volumes are the same'
             LOG.tc_step(msg)
             skip(msg)
-            return 1
+            return -1, msg
 
         LOG.info('There are differnt sizes for the pv-disks')
         compute_with_max, size_max = max(host_lc_sizes.items(), key=operator.itemgetter(1))
@@ -446,8 +449,17 @@ class TestLocalStorage(object):
         LOG.info('host_lc_sizes={}'.format(host_lc_sizes))
 
         LOG.tc_step('Randomly select one other than compute:{}'.format(compute_with_max))
-        compute_dest = random.choice([c for c in host_lc_sizes.keys()
-                                      if c != compute_with_max and host_lc_sizes[c] != max and host_lc_sizes[c] > 0])
+        other_computes = []
+        for host in host_lc_sizes.keys():
+            size = int(host_lc_sizes[host])
+            if host != compute_with_max and  size < size_max and size > 0:
+                other_computes.append(host)
+        if not other_computes:
+            msg = 'Cannot find one compute with the disk size:{} other than'.format(size_max, compute_with_max)
+            LOG.error(msg)
+            return 1, msg
+
+        compute_dest = random.choice(other_computes)
 
         LOG.tc_step('Attemp to apply storage-profile from {} to {}'.format(compute_with_max, compute_dest))
         host_helper.lock_host(compute_dest, check_first=True)
@@ -461,6 +473,7 @@ class TestLocalStorage(object):
             format(rtn_code, output)
 
         LOG.tc_step('Done, let the tear-down procedure to unlock the host')
+        return 0, output
 
     def _get_storage_profile_local_file(self, local_storage_type='image'):
         profile_file_path = os.path.sep.join([ProjVar.get_var('LOG_DIR'),

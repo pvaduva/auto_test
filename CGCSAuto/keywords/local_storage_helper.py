@@ -1,6 +1,5 @@
 from utils import cli, table_parser
 from utils.tis_log import LOG
-from keywords import host_helper
 
 
 def get_storprof_diskconfig(profile=None, con_ssh=None):
@@ -33,13 +32,13 @@ def get_pv_of_lvg(host=None, lvg_name='nova-local', con_ssh=None):
     idisk_uuid = table_parser.get_values(table, 'idisk_uuid', lvm_vg_name=lvg_name, strict=True)[0]
     idisk_device_node = table_parser.get_values(table, 'idisk_device_node', lvm_vg_name=lvg_name, strict=True)[0]
 
-    LOG.info('pv_uuid={}, lvm_pv_name={}, idisk_uuid={}, idisk_device_node={}'\
+    LOG.info('pv_uuid={}, lvm_pv_name={}, idisk_uuid={}, idisk_device_node={}'
              .format(pv_uuid, lvm_pv_name, idisk_uuid, idisk_device_node))
 
-    return {'pv_uuid':pv_uuid,
-            'lvm_pv_name':lvm_pv_name,
-            'idisk_uuid':idisk_uuid,
-            'idisk_device_node':idisk_device_node}
+    return {'pv_uuid': pv_uuid,
+            'lvm_pv_name': lvm_pv_name,
+            'idisk_uuid': idisk_uuid,
+            'idisk_device_node': idisk_device_node}
 
 
 def get_host_disk_size(host=None, disk=None, con_ssh=None):
@@ -49,7 +48,7 @@ def get_host_disk_size(host=None, disk=None, con_ssh=None):
     table = table_parser.table(cli.system('host-disk-show {} {}'.format(host, disk), ssh_client=con_ssh))
     size_mib = table_parser.get_value_two_col_table(table, 'size_mib')
 
-    return size_mib
+    return int(size_mib)
 
 
 def get_host_lvg_disk_size(host=None, lvg_name='nova-local', con_ssh=None):
