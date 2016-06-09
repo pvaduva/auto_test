@@ -210,23 +210,30 @@ def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
     if uuid:
         args += ' --uuid'
     args += ' --nowrap --nopaging'
-    table_ = table_parser.table(cli.system('alarm-suppress-list', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.system('event-suppress-list', args, ssh_client=con_ssh, auth_info=auth_info))
     return table_
 
 
 def unsuppress_all(ssh_con=None, fail_ok=False):
-    cli.system('alarm-unsuppress-all',ssh_client=ssh_con)
-    get_suppress_list = get_suppressed_alarms()
+    """
+    Args:
+        ssh_con:
+        fail_ok:
+
+    Returns: success , msg
+    """
+    table_events = table_parser.table(cli.system('event-unsuppress-all',
+                                                 ssh_client=ssh_con, fail_ok=fail_ok, rtn_list=True))
+    get_suppress_list = table_events
     suppressed_list = table_parser.get_values(table_=get_suppress_list, target_header='Suppressed Alarm ID\'s',
                                               strict=True, **{'Status': 'suppressed'})
     if len(suppressed_list) == 0:
-        return 0
-    else:
-        msg = "Suppressed was unsuccessfull"
-        if fail_ok:
-            LOG.warning(msg)
-            return 1, msg
-        raise exceptions.NeutronError(msg)
+        return 0, "Successfully unsuppressed"
+    msg = "Suppressed was unsuccessfull"
+    if fail_ok:
+        LOG.warning(msg)
+        return 2, msg
+    raise exceptions.NeutronError(msg)
 
 
 def get_events(num=5, uuid=False, show_only=None, show_suppress=False, query_key=None, query_value=None,
@@ -568,7 +575,7 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
     suppressed_alarms_tab = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
 
     alarm_status = "unsuppressed" if suppress else "suppressed"
-    cmd = "alarm-suppress" if suppress else "alarm-unsuppress"
+    cmd = "event-suppress" if suppress else "alarm-unsuppress"
     alarm_filter = {"Suppressed Alarm ID's": alarm_id}
 
     if check_first:

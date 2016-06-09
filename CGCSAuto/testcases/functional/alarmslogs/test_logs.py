@@ -31,7 +31,7 @@ def test_event_list_vms(event_option, severity):
     """
     limit = 5
     LOG.tc_step('Generate alarms.')
-    if event_option == '--alarms':
+    if event_option == 'alarms':
         alarm_log_generate_str = "fmClientCli -c  \"### ###300.005###set###system.vm###host=compute-0.vm=$i### ###" + \
                          severity + "### ###processing-error###Automation Generate### ###True###True###\""
     else:
