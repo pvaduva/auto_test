@@ -48,11 +48,14 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None):
    build = options['build'] if options['build'] else get_build_info(lab_ip)
    domain = options['domain'] if options['domain'] else setup_consts.DOMAIN.upper()
    userstory = options['userstory'] if options['userstory'] else setup_consts.USERSTORY.upper()
-   tag = options['tag'] if options['tag'] else 'regression_%s_%s' % (build, lab_name)
+   if ProjVar.get_var('REPORT_TAG'):
+       tag = ProjVar.get_var('REPORT_TAG')
+   else:
+       tag = options['tag'] if options['tag'] else 'regression_%s_%s' % (build, lab_name)
    jira = options['jira'] if options['jira']  else 'Unknown'
    release_name = options['release_name']
    output = options['output']
-   tester_name = options['tester_name']
+   tester_name = options['tester_name'] if options['tester_name'] else os.environ['USER']
 
    if log_dir is None:
        logfile = options['logfile']
@@ -86,7 +89,6 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None):
                      jira, logfile, release_name)
 
    print("Saving results for test case: %s" % test_name)
-   print('Query parameters: %s' % env_params)
    ini_writer = os.path.join(LOCAL_PATH, 'ini_writer.sh')
    cmd = "%s %s" % (ini_writer, env_params)
    os.system(cmd)
@@ -94,6 +96,8 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None):
    # write to the mongo database
    test_reporter = os.path.join(WASSP_PATH, "wassp/host/tools/report/testReportManual.py")
    activate = os.path.join(WASSP_PATH, ".venv_wassp/bin/python3")
+   
+   print('Report upload command: %s %s -f %s 2>&1' % (activate, test_reporter, output))
    if not os.system("%s %s -f %s 2>&1" % (activate, test_reporter, output)):
       msg = "Data upload successful."
    else:
@@ -230,7 +234,7 @@ def get_build_info(lab):
     out = std_output.split('\n')
     for idx in out:
         if 'BUILD_ID' in idx:
-            build = idx.split('=')[-1]
+            build = idx.split('=')[-1].strip('"')
             break
         else:
             build = ' '

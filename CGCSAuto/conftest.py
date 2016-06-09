@@ -130,7 +130,7 @@ def pytest_runtest_makereport(item, call, __multicall__):
         # reset tc_start and end time for next test case
         tc_start_time = None
 
-        if ProjVar.get_var("REPORT_ALL"):
+        if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
             collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'))
 
     return report
@@ -196,6 +196,7 @@ def pytest_configure(config):
     bootvms_arg = config.getoption('bootvms')
     collect_all = config.getoption('collectall')
     report_all = config.getoption('reportall')
+    report_tag = config.getoption('report_tag')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
     lab = setups.get_lab_dict(lab_arg) if lab_arg else setup_consts.LAB
@@ -210,7 +211,7 @@ def pytest_configure(config):
 
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
-                     report_all=report_all)
+                     report_all=report_all, report_tag=report_tag)
 
     os.makedirs(log_dir, exist_ok=True)
     config_logger(log_dir)
@@ -229,6 +230,7 @@ def pytest_addoption(parser):
     bootvm_help = "Boot 2 vms at the beginning of the test session as background VMs."
     collect_all_help = "Run collect all on TiS server at the end of test session if any test fails."
     report_help = "Upload results and logs to the test results database."
+    tag_help = "Tag to be used for uploading logs to the test results database."
     parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
     parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
     parser.addoption('--natbox', action='store', metavar='natboxname', default=None, help=natbox_help)
@@ -237,6 +239,8 @@ def pytest_addoption(parser):
                      help=collect_all_help)
     parser.addoption('--reportall', '--report_all', '--report-all', dest='reportall', action='store_true',
                      help=report_help)
+    parser.addoption('--report_tag', action='store', dest='report_tag', metavar='tagname', default=None, 
+                     help=tag_help)
 
 
 def config_logger(log_dir):
