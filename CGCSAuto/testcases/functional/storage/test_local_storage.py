@@ -219,16 +219,15 @@ class TestLocalStorage(object):
             computes_unlocked.remove(active_controller)
             if computes_unlocked:
                 compute_dest = random.choice(computes_unlocked)
-
             else:
                 compute_dest = active_controller
                 LOG.debug('-selected old active-controller:{}, same lc-type:{}' \
                          .format(compute_dest, lc_type))
-                return compute_dest
         else:
             compute_dest = random.choice(computes_unlocked)
             LOG.debug('-target compute:{}, unlocked, same lc-type'.format(compute_dest))
-            return compute_dest
+
+        return compute_dest
 
     def select_target_compute(self, compute_src='', lc_type='image'):
         compute_dest = ''
