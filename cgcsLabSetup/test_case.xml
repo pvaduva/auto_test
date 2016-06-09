@@ -190,6 +190,9 @@ WAIT 30 MIN
 Con1 TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' ${EXECUTOR}@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/heat_templates/* ${WRSDIR}/heat/ \n
 Con1 WAIT 30 SEC
 
+# Heat template path is hardcoded to Unified Daily Build directory temporarily
+Con1 TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' ${EXECUTOR}@$BUILDSERVER:${JKPATH}/CGCS_3.0_Unified_Daily_Build/latest_build/export/heat_templates/* ${WRSDIR}/heat/ \n
+Con1 WAIT 30 SEC
 
 # Temporary workaroudn to pull in testid.py into nosetest
 Con1 TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' ${EXECUTOR}@$BUILDSERVER:/folk/cgts/users/${EXECUTOR}/testid.py /usr/lib64/python2.7/site-packages/nose/plugins/ \n
