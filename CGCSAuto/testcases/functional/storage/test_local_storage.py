@@ -11,7 +11,6 @@ from consts.proj_vars import ProjVar
 
 from utils.tis_log import LOG
 from utils import cli
-from utils.ssh import ControllerClient
 
 from keywords import system_helper, host_helper, local_storage_helper
 
@@ -72,13 +71,13 @@ class TestLocalStorage(object):
                               ssh_client=None, fail_ok=False, force_change=False):
         if host_helper.check_host_local_backing_type(compute_dest, lc_type, con_ssh=ssh_client) and not force_change:
             msg = 'host already has local-storage backing:{} as expected'.format(lc_type)
-            LOG.info(msg)
+            LOG.debug(msg)
             return -1, msg
 
-        LOG.info('compute: {} is not in lc-type:{} or will force to apply'.format(compute_dest, lc_type))
+        LOG.debug('compute: {} is not in lc-type:{} or will force to apply'.format(compute_dest, lc_type))
         if compute_dest == system_helper.get_active_controller_name():
             # this will happen on a CPE lab
-            LOG.info('will swact the current active controller:{}'.format(compute_dest))
+            LOG.debug('will swact the current active controller:{}'.format(compute_dest))
             host_helper.swact_host()
 
         LOG.tc_step('Lock the host:{} for applying storage-profile'.format(compute_dest))
@@ -93,13 +92,13 @@ class TestLocalStorage(object):
         assert 0 == rtn_code, 'Failed to delete the nova-local logical-group from {}'.format(compute_dest)
 
         LOG.tc_step('Apply the storage-profile:{} onto host:{}'.format(profile, compute_dest))
-        LOG.info('Get the original lc-type for compute:{}'.format(compute_dest))
+        LOG.debug('Get the original lc-type for compute:{}'.format(compute_dest))
         old_type = host_helper.get_local_storage_backing(compute_dest)
         rtn_code, output = cli.system('host-apply-storprofile {} {}'.format(compute_dest, profile),
                                       fail_ok=fail_ok, rtn_list=True)
         assert rtn_code == 0, 'Failed to apply storage-profile {} onto {}'.format(profile, compute_dest)
 
-        LOG.info('Save lc-type for compute:{}, old:{}, new:{}'.format(compute_dest, old_type, lc_type))
+        LOG.debug('Save lc-type for compute:{}, old:{}, new:{}'.format(compute_dest, old_type, lc_type))
         TestLocalStorage._host_old_new_lc_types[compute_dest] = (old_type, lc_type)
 
         return rtn_code, output
@@ -114,28 +113,28 @@ class TestLocalStorage(object):
         return prof_uuid
 
     def set_local_storage_backing(self, compute=None, to_type='image'):
-        LOG.info('will lock compute:{} in order to change to new lc-type:{}' \
+        LOG.debug('will lock compute:{} in order to change to new lc-type:{}' \
                  .format(compute, to_type))
         rtn_code, msg = host_helper.lock_host(compute, check_first=True)
         if 0 == rtn_code:
             TestLocalStorage._computes_locked.append(compute)
-        LOG.info('Get the original lc-backing-type for compute:{}'.format(compute))
+        LOG.debug('Get the original lc-backing-type for compute:{}'.format(compute))
         old_type = host_helper.get_local_storage_backing(compute)
         cmd = 'host-lvg-modify -b {} {} nova-local'.format(to_type, compute)
         _, _ = cli.system(cmd, rtn_list=True, fail_ok=False)
-        LOG.info('Save lc-backing-type for compute:{}, old:{}, new:{}'.format(compute, old_type, to_type))
+        LOG.debug('Save lc-backing-type for compute:{}, old:{}, new:{}'.format(compute, old_type, to_type))
         TestLocalStorage._host_old_new_lc_types[compute] = (old_type, to_type)
 
-        LOG.info('OK, the lc-type of {} changed to {}'.format(compute, to_type))
+        LOG.debug('OK, the lc-type of {} changed to {}'.format(compute, to_type))
 
-        LOG.info('Unlock {} now'.format(compute))
+        LOG.debug('Unlock {} now'.format(compute))
 
         host_helper.unlock_host(compute)
         if 0 == rtn_code:
             TestLocalStorage._computes_locked.remove(compute)
 
     def setup_local_storage_type_on_lab(self, lc_type='image'):
-        LOG.info('Chose one compute to change its lc-backing to expected type: {}'.format(lc_type))
+        LOG.debug('Chose one compute to change its lc-backing to expected type: {}'.format(lc_type))
 
         computes_locked = host_helper.get_hypervisors(state='down', status='disabled')
         if computes_locked:
@@ -150,7 +149,7 @@ class TestLocalStorage(object):
         return compute_to_change
 
     def _is_profile_applicable_to(self, storage_profile=None, compute_dest=None):
-        LOG.info('compare storage-sizes of the storage-profile:{} with compute:{}'.\
+        LOG.debug('compare storage-sizes of the storage-profile:{} with compute:{}'.\
                  format(storage_profile, compute_dest))
 
         disk, size_profile = local_storage_helper.get_storprof_diskconfig(profile=storage_profile)
@@ -177,27 +176,27 @@ class TestLocalStorage(object):
                                        if not host_helper.check_host_local_backing_type(c, type=lc_type)]
 
         if computes_unlocked_diff_type:
-            LOG.info('-{} computes unlocked and with lc-type:{}' \
+            LOG.debug('-{} computes unlocked and with lc-type:{}' \
                      .format(len(computes_unlocked_diff_type), lc_type))
-            LOG.info('-old active is controller:{}'.format(active_controller))
+            LOG.debug('-old active is controller:{}'.format(active_controller))
 
             if active_controller in computes_unlocked_diff_type:
-                LOG.info('-is on a CPE system')
+                LOG.debug('-is on a CPE system')
                 computes_unlocked_diff_type.remove(active_controller)
                 if computes_unlocked_diff_type:
-                    LOG.info('- multiple computes unlocked, different type, randomly select one non-active controller')
+                    LOG.debug('- multiple computes unlocked, different type, randomly select one non-active controller')
                     compute_dest = random.choice(computes_unlocked_diff_type)
-                    LOG.info('-OK, selected {} as the target compute'.format(compute_dest))
+                    LOG.debug('-OK, selected {} as the target compute'.format(compute_dest))
                     return compute_dest
                 else:
-                    LOG.info('have to select the active controller as target:{}'.format(active_controller))
+                    LOG.debug('have to select the active controller as target:{}'.format(active_controller))
                     compute_dest = active_controller
                     return compute_dest
 
             else:
-                LOG.info('-non-CPE system')
+                LOG.debug('-non-CPE system')
                 compute_dest = random.choice(computes_unlocked_diff_type)
-                LOG.info('-non-CPE lab, select {} as target compute'.format(compute_dest))
+                LOG.debug('-non-CPE lab, select {} as target compute'.format(compute_dest))
                 return compute_dest
 
         return ''
@@ -208,7 +207,7 @@ class TestLocalStorage(object):
                            if host_helper.check_host_local_backing_type(c, type=lc_type)]
         if computes_locked:
             compute_dest = random.choice(computes_locked)
-            LOG.info('-will apply the storage-profile to locked compute:{}, locked, same lc-type' \
+            LOG.debug('-will apply the storage-profile to locked compute:{}, locked, same lc-type' \
                      .format(compute_dest))
             return compute_dest
 
@@ -220,59 +219,58 @@ class TestLocalStorage(object):
             computes_unlocked.remove(active_controller)
             if computes_unlocked:
                 compute_dest = random.choice(computes_unlocked)
-
             else:
                 compute_dest = active_controller
-                LOG.info('-selected old active-controller:{}, same lc-type:{}' \
+                LOG.debug('-selected old active-controller:{}, same lc-type:{}' \
                          .format(compute_dest, lc_type))
-                return compute_dest
         else:
             compute_dest = random.choice(computes_unlocked)
-            LOG.info('-target compute:{}, unlocked, same lc-type'.format(compute_dest))
-            return compute_dest
+            LOG.debug('-target compute:{}, unlocked, same lc-type'.format(compute_dest))
+
+        return compute_dest
 
     def select_target_compute(self, compute_src='', lc_type='image'):
         compute_dest = ''
 
         # firstly chose one compute from locked and of different lc-type to apply storage-profile
-        LOG.info('Looking for a locked computes with different lc-type')
+        LOG.debug('Looking for a locked computes with different lc-type')
         compute_dest = self._choose_compute_locked_diff_type(lc_type=lc_type)
         if compute_dest:
-            LOG.info('-got target compute:{}, locked, diff lc-type'.format(compute_dest))
+            LOG.debug('-got target compute:{}, locked, diff lc-type'.format(compute_dest))
             return compute_dest
 
         old_active_controller = system_helper.get_active_controller_name()
-        LOG.info('-no locked computes with different lc-type')
+        LOG.debug('-no locked computes with different lc-type')
 
         # otherwise chose one compute from unlocked and of different lc-type to apply storage-profile
-        LOG.info('Looking for unlocked computes with different lc-type')
+        LOG.debug('Looking for unlocked computes with different lc-type')
         compute_dest = self._choose_compute_unlocked_diff_Type(lc_type=lc_type, active_controller=old_active_controller)
         if compute_dest:
-            LOG.info('-got target compute:{}, unlocked, diff lc-type'.format(compute_dest))
+            LOG.debug('-got target compute:{}, unlocked, diff lc-type'.format(compute_dest))
             return compute_dest
 
-        LOG.info('-no unlocked computes with different lc-type')
+        LOG.debug('-no unlocked computes with different lc-type')
 
         # still can't find a candidate, choose one with the same lc-type
-        LOG.info('Looking for compute locked with same lc-type')
+        LOG.debug('Looking for compute locked with same lc-type')
         compute_dest = self._choose_compute_locked_diff_type(lc_type=lc_type)
         if compute_dest:
-            LOG.info('-got target compute:{}, locked, same lc-type'.format(compute_dest))
+            LOG.debug('-got target compute:{}, locked, same lc-type'.format(compute_dest))
             return compute_dest
 
-        LOG.info('-no locked computes with same lc-type')
-        LOG.info('Looking for compute unlocked with same lc-type')
+        LOG.debug('-no locked computes with same lc-type')
+        LOG.debug('Looking for compute unlocked with same lc-type')
         compute_dest = self._choose_compute_unlocked_same_type(lc_type=lc_type, active_controller=old_active_controller)
 
         if compute_dest:
-            LOG.info('-got target compute:{}, unlocked, same lc-type'.format(compute_dest))
+            LOG.debug('-got target compute:{}, unlocked, same lc-type'.format(compute_dest))
             return compute_dest
 
         LOG.warn('Cannot find a target compute!?')
         return ''
 
     def create_storage_profile_of_type(self, lc_type='image'):
-        LOG.info('create a local-storage profile of backing type:{}'.format(lc_type))
+        LOG.debug('create a local-storage profile of backing type:{}'.format(lc_type))
         computes_of_lc_type = [h for h in host_helper.get_hypervisors()
                                if host_helper.check_host_local_backing_type(h, lc_type)]
 
@@ -343,48 +341,48 @@ class TestLocalStorage(object):
                     .format(local_storage_type))
         prof_uuid, compute_src = self.create_storage_profile_of_type(lc_type=local_storage_type)
         assert prof_uuid, 'Faild to create storage-profile for local-storage-type:{}' \
-            .format_map(local_storage_type)
-        LOG.info('OK, created {} lc-type from compute:{}'.format(local_storage_type, compute_src))
+            .format(local_storage_type)
 
-        LOG.tc_step('NEG: Attempt to apply the storage profile on an unlocked compute, expecting to fail')
-        computes_unlocked = host_helper.get_nova_hosts()
-        if computes_unlocked:
+        LOG.tc_step('NEG TC: Attempt to apply the storage profile on an unlocked compute, expecting to fail')
+        try:
             compute_unlocked = random.choice(host_helper.get_nova_hosts())
-            rtn_code, output = cli.system('host-apply-storprofile {} {}'.format(compute_unlocked, prof_uuid),
-                                          fail_ok=True, rtn_list=True)
-            assert 0 != rtn_code, 'Should fail to apply storage-profile:{} to unlocked host:{}' \
-                .format(prof_uuid, compute_unlocked)
+        except IndexError as e:
+            LOG.warn('No unlocked computes')
+            skip('No unlocked computes to create storage-profile from')
 
-        LOG.tc_step('Choose another compute to apply the storage-profile'.format(compute_src))
-        compute_to_modify = self.select_target_compute(compute_src, lc_type=local_storage_type)
-        LOG.info('target compute:{}'.format(compute_to_modify))
+        rtn_code, output = cli.system('host-apply-storprofile {} {}'.format(compute_unlocked, prof_uuid),
+                                      fail_ok=True, rtn_list=True)
+        assert 0 != rtn_code, 'Should fail to apply storage-profile:{} to unlocked host:{}' \
+            .format(prof_uuid, compute_unlocked)
 
-        LOG.info('Check if the storprofile is applicable to the target compute')
-        if not local_storage_helper.is_storprof_applicable_to(host=compute_to_modify, profile=prof_uuid):
-            msg = 'storage-profile:{} is not applicable to compute:{}'.format(prof_uuid, compute_to_modify)
-            LOG.info(msg)
-            return 1, msg
+        LOG.tc_step('Choose a compute other than {} to apply the storage-profile'.format(compute_src))
+        compute_dest = self.select_target_compute(compute_src, lc_type=local_storage_type)
+        LOG.debug('target compute:{}'.format(compute_dest))
 
-        LOG.tc_step('Apply the storage-profile:{} onto host:{}'.format(prof_uuid, compute_to_modify))
-        # THERE IS A KNOWN issue currently (20160602), CLI will return non-zero when applying storage-profile
-        # so we don not check ther return code
+        LOG.debug('Check if the storprofile is applicable to the target compute')
+        if not local_storage_helper.is_storprof_applicable_to(host=compute_dest, profile=prof_uuid):
+            msg = 'storage-profile:{} is not applicable to compute:{}'.format(prof_uuid, compute_dest)
+            LOG.debug(msg)
+            return -1, msg
+
+        LOG.tc_step('Apply the storage-profile:{} onto host:{}'.format(prof_uuid, compute_dest))
         rtn_code, output = self.apply_storage_profile(
-            compute_to_modify,
+            compute_dest,
             lc_type=local_storage_type, profile=prof_uuid, fail_ok=True)
         if rtn_code == -1:
-            LOG.info('Skipped to apply storage profile')
+            LOG.debug('Skipped to apply storage profile')
             return rtn_code, output
-        # assert 0 == rtn_code, ...
+        assert 0 == rtn_code, 'Failed to apply the storage-profile {} onto {}'.format(prof_uuid, compute_dest)
 
         LOG.tc_step('Check if the changes take effect after unlocking')
-        rtn_code = host_helper.unlock_host(compute_to_modify)
+        rtn_code = host_helper.unlock_host(compute_dest)
         if 0 == rtn_code:
-            TestLocalStorage._computes_locked.remove(compute_to_modify)
+            TestLocalStorage._computes_locked.remove(compute_dest)
 
         LOG.tc_step('-Verify the lc type changed to {} on host:{}'
-                    .format(local_storage_type, compute_to_modify))
-        assert host_helper.check_host_local_backing_type(compute_to_modify, type=local_storage_type), \
-            'Local-storage backing failed to change to {} on host:{}'.format(local_storage_type, compute_to_modify)
+                    .format(local_storage_type, compute_dest))
+        assert host_helper.check_host_local_backing_type(compute_dest, type=local_storage_type), \
+            'Local-storage backing failed to change to {} on host:{}'.format(local_storage_type, compute_dest)
 
     @mark.skipif(_less_than_2_hypervisors(), reason='Requires 2 or more computes to test this test case')
     @mark.parametrize('local_storage_type', [
@@ -430,13 +428,13 @@ class TestLocalStorage(object):
             skip(msg)
             return -1, msg
 
-        LOG.info('There are differnt sizes for the pv-disks')
+        LOG.debug('There are differnt sizes for the pv-disks')
         compute_with_max, size_max = max(host_lc_sizes.items(), key=operator.itemgetter(1))
         LOG.tc_step('Create storage-profile on the compute:{} with max disk size:{}'.
                     format(compute_with_max, size_max))
         profile_uuid = self.create_storage_profile(compute_with_max, lc_type=local_storage_type)
-        LOG.info('Profile:{} with max disk size:{} is created for {}'.format(size_max, profile_uuid, compute_with_max))
-        LOG.info('host_lc_sizes={}'.format(host_lc_sizes))
+        LOG.debug('Profile:{} with max disk size:{} is created for {}'.format(size_max, profile_uuid, compute_with_max))
+        LOG.debug('host_lc_sizes={}'.format(host_lc_sizes))
 
         LOG.tc_step('Randomly select one other than compute:{}'.format(compute_with_max))
         other_computes = []
@@ -473,7 +471,7 @@ class TestLocalStorage(object):
             LOG.warn(msg)
             return ''
         else:
-            LOG.info('OK, found local storage profile:{}'.format(profile_file_path))
+            LOG.debug('OK, found local storage profile:{}'.format(profile_file_path))
             return profile_file_path
 
     def import_profile(self, profile_file=None):
@@ -481,7 +479,7 @@ class TestLocalStorage(object):
             LOG.warn('Full path name of the storage/hardware profile name is required.')
             return 1
 
-        LOG.info('Attempt to import profile:{}'.format(profile_file))
+        LOG.debug('Attempt to import profile:{}'.format(profile_file))
         return cli.system('profile-import {}'.format(profile_file), rtn_list=True)
 
     def verify_local_storage_type(self, profile=''):

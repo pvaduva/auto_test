@@ -6,7 +6,7 @@ from consts.cgcs import UUID
 from keywords import system_helper
 # This test case is  to verify Alarm Suppression on Active alarm list (US77193 –FM: Alarm Suppression)
 
-
+#jira CGTS-4489 need to be fixed Test will fail.
 def test_alarm_suppression():
     """
        Verify suppression and unsuppression of active alarm and query alarms.
@@ -32,29 +32,30 @@ def test_alarm_suppression():
                              "critical### ###processing-error###Automation Generate### ###True###True###\""
     alarm_generate_succ = generate_alarm_log(alarm_str=alarm_log_generate_str, maxi=int(limit))
     system_helper.unsuppress_all(fail_ok=True)
+    LOG.tc_step("Generate ALARM")
     assert alarm_generate_succ, "Alarm Generated"
     query_active_alarm = system_helper.get_alarms(query_key='alarm_id', query_value=alarm_id,
                                                   query_type='string')
     assert len(query_active_alarm) > 1, "Alarm " + alarm_id + " not found in active list  "
-    LOG.tc_step('Alarm Suppressed .')
+    LOG.tc_step(alarm_id+' Alarm Suppressed .')
     suppress_=system_helper.get_suppressed_alarms(uuid=True)
     ### Convert ALARMID to UUID
     # TODO: Update after Jira fix.CGTS-4356 No need to conver after jira fix
     alarm_id_uuid = table_parser.get_values(table_= suppress_, target_header='UUID',
                                             **{"Suppressed Alarm ID's": alarm_id})
-    retcode, output = system_helper.suppress_alarm(alarm_id=alarm_id_uuid[0])
+    retcode, output = system_helper.suppress_alarm(alarm_id=alarm_id)
     assert retcode == 0, output
     query_active_alarm = system_helper.get_alarms(query_key='alarm_id', query_value=alarm_id,
                                                   query_type='string')
     assert bool(query_active_alarm), "Alarm ID " + alarm_id + " found in Active list"
-    LOG.tc_step('Generate Alarm again  .')
+    LOG.tc_step('Generate Alarm again .and Verify not in the Active list')
     alarm_generate_succ = generate_alarm_log(alarm_str=alarm_log_generate_str, maxi=int(limit))
     assert alarm_generate_succ, "Active Alarm Generated again "
     query_active_alarm = system_helper.get_alarms(query_key='alarm_id', query_value=alarm_id,
                                                   query_type='string')
     assert bool(query_active_alarm), "Alarm ID " + alarm_id + "found in Active list"
     LOG.tc_step('Alarm Unsuppressed .')
-    retcode, output = system_helper.unsuppress_alarm(alarm_id=alarm_id_uuid[0])
+    retcode, output = system_helper.unsuppress_alarm(alarm_id=alarm_id)
     assert retcode == 0, output
     active_alarm_uuid = system_helper.get_alarms(uuid=True, query_key='alarm_id', query_value=alarm_id,
                                                  query_type='string')

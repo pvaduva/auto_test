@@ -5,6 +5,7 @@ from utils import cli, table_parser
 
 
 # This test case is  to verify Alarm Suppression on Event alarm list (US77193 –FM: Alarm Suppression)
+#jira CGTS-4489 need to be fixed Test will fail.
 @mark.parametrize(('clear_alarm', 'set_alarm'), [
     (True, None),
     (None, True),
