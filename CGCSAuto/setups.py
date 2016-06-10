@@ -190,3 +190,17 @@ def collect_tis_logs(con_ssh):
 
 def get_tis_timestamp(con_ssh):
     return con_ssh.exec_cmd('date +"%T"')[1]
+
+
+def get_build_id(con_ssh):
+    code, output = con_ssh.exec_cmd('cat /etc/build.info')
+    if code != 0:
+        build_id = ' '
+    else:
+        build_id = re.findall('''BUILD_ID=\"(.*)\"''', output)
+        if build_id:
+            build_id = build_id[0]
+        else:
+            build_id = ' '
+
+    return build_id

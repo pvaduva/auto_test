@@ -4,15 +4,16 @@ from time import strftime
 
 import pytest
 
-import setups
 import setup_consts
-from utils.tis_log import LOG
+import setups
 from consts.proj_vars import ProjVar
-from utils.cgcs_mongo_reporter import collect_and_upload_results
+from utils.tis_log import LOG
+from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 
 con_ssh = None
 tc_start_time = None
 has_fail = False
+build_id = None
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -125,13 +126,16 @@ def pytest_runtest_makereport(item, call, __multicall__):
 
         global tc_start_time
         with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
-            f.write('{}\t{}\t{}\n'.format(res_in_tests, tc_start_time, test_name))
+            f.write('\n{}\t{}\t{}'.format(res_in_tests, tc_start_time, test_name))
 
         # reset tc_start and end time for next test case
         tc_start_time = None
 
         if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
-            collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'))
+            collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id)
+
+        with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
+            f.write('\tUPLOAD_UNSUCC')
 
     return report
 
@@ -142,6 +146,8 @@ def pytest_collectstart():
     """
     global con_ssh
     con_ssh = setups.setup_tis_ssh(ProjVar.get_var("LAB"))
+    global build_id
+    build_id = setups.get_build_id(con_ssh)
 
 
 def pytest_runtest_setup(item):

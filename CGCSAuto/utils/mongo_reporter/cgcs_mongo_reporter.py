@@ -17,24 +17,21 @@ modification history:
 
 """
 
-import os
-import datetime
 import argparse
 import configparser
-
-from utils import openSSHConnUtils as sshU
-from utils.testResultsParser import TestResultsParser
-from utils.tis_log import LOG
+import datetime
+import os
 
 import setup_consts
 from consts.proj_vars import ProjVar
-
+from utils.mongo_reporter.testResultsParser import TestResultsParser
+from utils.tis_log import LOG
 
 LOCAL_PATH = os.path.dirname(__file__)
-WASSP_PATH = os.path.join(LOCAL_PATH, "..", "..", "..", "..")
+WASSP_PATH = os.path.join(LOCAL_PATH, "..", "..", "..", "..", "..")
 
 
-def collect_and_upload_results(test_name=None, result=None, log_dir=None):
+def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=None):
     """
     collect the test environment variables 
     """
@@ -44,9 +41,8 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None):
     
     # get the environment variables
     lab = options['lab'] if options['lab'] else ProjVar.get_var('LAB')
-    lab_ip = lab['floating ip'] 
     lab_name = lab['short_name'].upper()
-    build = options['build'] if options['build'] else get_build_info(lab_ip)
+    build = options['build'] if options['build'] else build
     userstory = options['userstory'] if options['userstory'] else setup_consts.USERSTORY.upper()
     
     if ProjVar.get_var('REPORT_TAG'):
@@ -101,7 +97,7 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None):
                     lab_name, build, userstory, domain,
                     jira, logfile, release_name)
     
-    LOG.info("Saving results for test case: %s" % test_name)
+    log_msg = "Mongo upload results for test case: %s" % test_name
     ini_writer = os.path.join(LOCAL_PATH, 'ini_writer.sh')
     cmd = "%s %s" % (ini_writer, env_params)
     os.system(cmd)
@@ -109,17 +105,26 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None):
     # write to the mongo database
     test_reporter = os.path.join(WASSP_PATH, "wassp/host/tools/report/testReportManual.py")
     activate = os.path.join(WASSP_PATH, ".venv_wassp/bin/python3")
-    
-    LOG.info('Report upload command: %s %s -f %s 2>&1' % (activate, test_reporter, output))
-    if not os.system("%s %s -f %s 2>&1" % (activate, test_reporter, output)):
-        msg = "Data upload successful."
+
+    report_file_name = log_dir + '/mongo_res.log'
+    upload_cmd = "{} {} -f {} >>{} 2>&1".format(activate, test_reporter, output, report_file_name)
+    log_msg += '\nReport upload command: {}'.format(upload_cmd)
+    if not os.system(upload_cmd):
+        msg = "Test result successfully uploaded to MongoDB."
+        log_msg += msg
         rtn = True
     else:
-        msg = "Data upload failed. Please check parameters stored at %s" % output
+        log_msg += "\nTest result failed to upload. Please check parameters stored at %s" % output
+        msg = log_msg
         rtn = False
     today_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    LOG.info('Date: %s. Report tag: %s' % (today_date, tag))
-    LOG.info(msg)
+    extra_info = '\nDate: %s. Report tag: %s\n\n' % (today_date, tag)
+    msg += extra_info
+    log_msg += extra_info
+    print(msg)
+    with open(report_file_name, mode='a') as f:
+        f.write(log_msg)
+
     return rtn
 
 
@@ -234,31 +239,6 @@ def parse_config_file():
             info_dict[opt] = config.get(section, opt)
 
     return info_dict
-
-
-def get_build_info(lab):
-    """ Get build information from the lab that the test was executed on. 
-    """
-
-    # establish SSH connection auth keys
-    nodeSSH = sshU.SshConn(host=lab,
-                           username='wrsroot',
-                           password='li69nux',
-                           port=22)
-
-    # get the latest build available
-    std_output, std_err, status = nodeSSH.executeCommand('cat /etc/build.info')
-
-    # parse the build info from the output
-    out = std_output.split('\n')
-    for idx in out:
-        if 'BUILD_ID' in idx:
-            build = idx.split('=')[-1].strip('"')
-            break
-    else:
-        build = ' '
-
-    return build
 
 
 # Used to invoke the query and report generation from the command line

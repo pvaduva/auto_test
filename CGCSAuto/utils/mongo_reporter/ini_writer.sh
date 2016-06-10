@@ -3,7 +3,7 @@
 # little ini creation script - Craig Miller 8 May 2015
 # ccw, 2015nov20 update to suport tags field
 
-
+LOG_DIR=${1:-/tmp}
 function usage {
                echo "	$0 - wassp manual submision INI creation script "
 	       echo "	e.g. $0  [-n joeblow]" 
@@ -114,14 +114,15 @@ fi
 
 if [ $DEBUG -gt 0 ]; then 
 	# change output file to stdout for debugging
-	outfile="/dev/stdout"
+	# outfile="/dev/stdout"
+	outfile=$LOG_DIR/mongo_upload_res.log
 fi
 
 
 #======== Actual work performed by script ============
 
-echo "Report data saved in file: ${outfile}"
-#echo "DEBUG: ${DEBUG}"
+# echo "Report data saved in file: ${outfile}"
+# echo "DEBUG: ${DEBUG}"
 
 # Setup details on the executed test
 echo "[default]" >> $outfile
