@@ -2,8 +2,8 @@ class ProjVar:
     __var_dict = {}
 
     @classmethod
-    def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, 
-                 report_all, report_tag):
+    def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all, report_tag):
+
         labname = lab['short_name']
 
         cls.__var_dict = {

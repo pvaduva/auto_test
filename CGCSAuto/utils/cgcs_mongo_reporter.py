@@ -48,6 +48,7 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None):
    build = options['build'] if options['build'] else get_build_info(lab_ip)
    domain = options['domain'] if options['domain'] else setup_consts.DOMAIN.upper()
    userstory = options['userstory'] if options['userstory'] else setup_consts.USERSTORY.upper()
+
    if ProjVar.get_var('REPORT_TAG'):
        tag = ProjVar.get_var('REPORT_TAG')
    else:

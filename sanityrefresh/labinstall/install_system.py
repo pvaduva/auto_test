@@ -21,11 +21,7 @@ modification history:
 02dec15,kav  initial version
 '''
 
-
-import pdb
-
 import os
-import sys
 import re
 import copy
 import time
@@ -38,7 +34,8 @@ import configparser
 from constants import *
 from utils.ssh import SSHClient
 import utils.log as logutils
-from utils.common import create_node_dict, vlm_reserve, vlm_findmine, vlm_exec_cmd, find_error_msg, get_ssh_key, wr_exit
+from utils.common import create_node_dict, vlm_reserve, vlm_findmine, \
+    vlm_exec_cmd, find_error_msg, get_ssh_key, wr_exit
 from utils.classes import Host
 import utils.wr_telnetlib as telnetlib
 from install_cumulus import Cumulus_TiS, create_cumulus_node_dict
@@ -51,7 +48,7 @@ LOGGER_NAME = os.path.splitext(__name__)[0]
 log = logutils.getLogger(LOGGER_NAME)
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 PUBLIC_SSH_KEY = None
-USERNAME =  getpass.getuser()
+USERNAME = getpass.getuser()
 PASSWORD = None
 controller0 = None
 
@@ -98,19 +95,19 @@ def parse_args():
     #      or modify this option to be "skip_lab_setup" so that it skips
     #      lab_setup.sh if specified. Either way option needs to be used somehow
     lab_grp.add_argument('--run-lab-setup', dest='run_lab_setup',
-                           action='store_true', help="Run lab setup")
+                         action='store_true', help="Run lab setup")
 
     #TODO: Have an if for this and say it is not supported yet
     lab_grp.add_argument('--small-footprint', dest='small_footprint',
-                           action='store_true',help="Run installation"
-                           " as small footprint. Not applicable"
-                           " for ts-on-tis install")
+                         action='store_true', help="Run installation"
+                         " as small footprint. Not applicable"
+                         " for ts-on-tis install")
 
     lab_grp.add_argument('--tis-on-tis', dest='tis_on_tis', action='store_true',
                          help=" Run installation for Cumulus TiS on TiS. ")
 
     lab_grp.add_argument('--cumulus-userid', dest='cumulus_userid',
-                         help="Tenant's login userid of linux account in Cumulus "
+                         help="Tenant's linux login userid in Cumulus "
                          "Server. This is mandatory if --tis-on-tis is "
                          "specified.")
 
@@ -130,6 +127,16 @@ def parse_args():
                          help="Burn boot image into USB before install. Valid"
                          " only with --small-footprint option")
 
+
+    # Add a flag to identify a wrl linux install
+    lab_grp.add_argument('--host-os', dest='host_os',
+                         choices=HOST_OS, default=DEFAULT_HOST_OS,
+                         help="Install a system that is wrlinux-based")
+
+    # Add a flag to identify a centos install
+    lab_grp.add_argument('--centos', dest='host_os',
+                         action='store_true', default='centos',
+                         help="Install a system that is centos-based")
 
     #TODO: Custom directory path is not supported yet. Need to add code
     #      to rsync files from custom directory path on local PC to controller-0
@@ -153,7 +160,7 @@ def parse_args():
                                         -> hosts_bulk_add.xml'''))
     bld_grp = parser.add_argument_group("Build server and paths")
     bld_grp.add_argument('--build-server', metavar='SERVER',
-                         dest='bld_server',choices=BLD_SERVERS,
+                         dest='bld_server', choices=BLD_SERVERS,
                          default=DEFAULT_BLD_SERVER,
                          help="Titanium Server build server"
                          " host name\n(default: %(default)s)")
@@ -164,7 +171,7 @@ def parse_args():
                          "\n(default: %(default)s)")
     bld_grp.add_argument('--tis-blds-dir', metavar='DIR',
                          dest='tis_blds_dir',
-                         default="CGCS_3.0_Unified_Daily_Build",
+                         default="CGCS_3.0_Centos_Build",
                          help='Directory under "--bld-server-wkspce"'
                          " containing directories for Titanium Server loads"
                          "\n(default: %(default)s)")
@@ -192,12 +199,9 @@ def parse_args():
     bld_grp.add_argument('--email-address', metavar='EMAILADDRESS',
                          dest='email_address',
                          default=None,
-                         help="Comma-separated list of email addresses to which  "
+                         help="Comma-separated list of email addresses to which"
                               " lab install status notification is sent"
                          "\n(default: %(default)s)")
-
-
-
 
     other_grp = parser.add_argument_group("Other options:")
     other_grp.add_argument('--output-dir', metavar='DIR_PATH',
@@ -208,18 +212,19 @@ def parse_args():
                            help="Logging level (default: %(default)s)")
     other_grp.add_argument('--password', metavar='PASSWORD', dest='password',
                            help="User password")
-    other_grp.add_argument('-h','--help', action='help',
+    other_grp.add_argument('-h', '--help', action='help',
                            help="Show this help message and exit")
 
     args = parser.parse_args()
     if not args.tis_on_tis and args.controller is None:
         parser.error('--controller is required')
     if args.tis_on_tis and args.cumulus_userid is None:
-        parser.error('--cumulus-userid is required if --tis-on-tis is specified.')
+        parser.error('--cumulus-userid is required if --tis-on-tis used.')
     return args
 
-def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir, tis_bld_dir):
-    ''' Get the directory path for the load that will be used in the 
+def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
+                  tis_bld_dir):
+    ''' Get the directory path for the load that will be used in the
         lab. This directory path is typically taken as the latest build on
         the TiS build server.
     '''
@@ -228,20 +233,21 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir, tis_bld_dir)
 
     if tis_bld_dir == LATEST_BUILD_DIR or not tis_bld_dir:
         cmd = "readlink " + load_path + "/" + LATEST_BUILD_DIR
-        tis_bld_dir = bld_server_conn.exec_cmd(cmd, expect_pattern=TIS_BLD_DIR_REGEX)
+        tis_bld_dir = bld_server_conn.exec_cmd(cmd,
+                                               expect_pattern=TIS_BLD_DIR_REGEX)
 
     load_path += "/" + tis_bld_dir
     cmd = "test -d " + load_path
     if bld_server_conn.exec_cmd(cmd)[0] != 0:
         msg = "Load path {} not found".format(load_path)
         log.error(msg)
-        wr_exit()._exit(1,msg)
+        wr_exit()._exit(1, msg)
 
     return load_path
 
 def verify_custom_lab_cfg_location(lab_cfg_location):
-    ''' Verify that the correct configuration file is used in setting up the 
-        lab. 
+    ''' Verify that the correct configuration file is used in setting up the
+        lab.
     '''
 
     # Rename variable to reflect that it is a path
@@ -251,17 +257,29 @@ def verify_custom_lab_cfg_location(lab_cfg_location):
     found_system_cfg_file = False
     found_lab_settings_file = False
     for file in os.listdir(lab_cfg_location):
-        #if file == SYSTEM_CFG_FILENAME:
-        if file in CFGFILE_LIST:
+        cfgfile_list = CENTOS_CFGFILE_LIST + WRL_CFGFILE_LIST
+        if file in cfgfile_list:
             found_system_cfg_file = True
         elif file == BULK_CFG_FILENAME:
             found_bulk_cfg_file = True
         elif file == CUSTOM_LAB_SETTINGS_FILENAME:
-             found_lab_settings_file = True
-    if not (found_bulk_cfg_file and found_system_cfg_file):
-        msg = 'Failed to find \"{}\" or \"{}\" in {}'.format(
-                  BULK_CFG_FILENAME, SYSTEM_CFG_FILENAME,
-                  lab_cfg_location)
+            found_lab_settings_file = True
+
+    # Tell the user what files are missing
+    if not found_bulk_cfg_file:
+        msg = 'Failed to find {} in {}'.format(BULK_CFG_FILENAME,
+                                               lab_cfg_location)
+        log.error(msg)
+    if not found_system_cfg_file:
+        msg = 'Failed to find {} in {}'.format(cfgfile_list, lab_cfg_location)
+        log.error(msg)
+    if not found_lab_settings_file:
+        msg = 'Failed to find {} in {}'.format(CUSTOM_LAB_SETTINGS_FILENAME,
+                                               lab_cfg_location)
+        log.error(msg)
+
+    if not (found_bulk_cfg_file or found_system_cfg_file or
+            found_lab_settings_file):
         log.error(msg)
         wr_exit()._exit(1, msg)
 
@@ -270,24 +288,28 @@ def verify_custom_lab_cfg_location(lab_cfg_location):
                                 + CUSTOM_LAB_SETTINGS_FILENAME
     return lab_cfg_path, lab_settings_filepath
 
-def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path):
-    ''' Get the directory path for the configuration file that is used in 
-        setting up the lab. 
+def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_os):
+    ''' Get the directory path for the configuration file that is used in
+        setting up the lab.
     '''
 
-    lab_cfg_rel_path = LAB_YOW_REL_PATH + "/" + lab_cfg_location
-    lab_cfg_path = load_path + "/" + lab_cfg_rel_path
     lab_settings_filepath = None
+    if host_os == "wrlinux":
+        lab_cfg_rel_path = LAB_YOW_REL_PATH + "/" + lab_cfg_location
+        lab_cfg_path = load_path + "/" + lab_cfg_rel_path
+    else:
+        lab_cfg_path = CENTOS_CFG_FILES + lab_cfg_location
 
     cmd = "test -d " + lab_cfg_path
     if bld_server_conn.exec_cmd(cmd)[0] != 0:
         msg = 'Lab config directory \"{}\" not found in {}'.format(
-                  lab_cfg_location, lab_cfg_rel_path)
+            lab_cfg_location, lab_cfg_path)
         log.error(msg)
         wr_exit()._exit(1, msg)
 
+    # ~/wassp-repos/testcases/cgcs/sanityrefresh/labinstall/lab_settings/*.ini
     lab_settings_rel_path = LAB_SETTINGS_DIR + "/{}.ini".format(
-                            lab_cfg_location)
+        lab_cfg_location)
     lab_settings_filepath = SCRIPT_DIR + "/" + lab_settings_rel_path
     if not os.path.isfile(lab_settings_filepath):
         log.error('Lab settings filepath was not found.')
@@ -323,9 +345,9 @@ def deploy_key(conn):
             conn.write_line('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
             conn.write_line("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
 
-def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, output_dir):
+def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, host_os, output_dir):
     ''' Transfer the load and set the feed on the tuxlab server in preparation
-        for booting up the lab. 
+        for booting up the lab.
     '''
 
     logutils.print_step("Set feed for {} network boot".format(barcode))
@@ -352,14 +374,21 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ou
         tuxlab_conn.find_prompt()
         # Extra forward slash at end is required to indicate the sync is for
         # all of the contents of RPM_INSTALL_REL_PATH into the feed path
-        bld_server_conn.rsync(load_path + "/" + RPM_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete"])
+        if host_os == "centos":
+            bld_server_conn.sendline("cd " + load_path)
+            bld_server_conn.find_prompt()
+            bld_server_conn.rsync(CENTOS_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete"])
+            bld_server_conn.rsync("extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
+        else:
+            bld_server_conn.rsync(load_path + "/" + RPM_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete"])
 
-        bld_server_conn.sendline("cd " + load_path)
-        bld_server_conn.find_prompt()
+            bld_server_conn.sendline("cd " + load_path)
+            bld_server_conn.find_prompt()
 
-        bld_server_conn.rsync("extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
-        bld_server_conn.rsync(RPM_INSTALL_REL_PATH + "/boot/isolinux/vmlinuz", USERNAME, tuxlab_server, feed_path)
-        bld_server_conn.rsync(RPM_INSTALL_REL_PATH + "/boot/isolinux/initrd", USERNAME, tuxlab_server, feed_path + "/initrd.img")
+            bld_server_conn.rsync("extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
+            bld_server_conn.rsync(RPM_INSTALL_REL_PATH + "/boot/isolinux/vmlinuz", USERNAME, tuxlab_server, feed_path)
+            bld_server_conn.rsync(RPM_INSTALL_REL_PATH + "/boot/isolinux/initrd", USERNAME, tuxlab_server, feed_path + "/initrd.img")
+
     else:
         log.info("Build directory \"{}\" already exists".format(tuxlab_sub_dir))
 
@@ -376,7 +405,7 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ou
 
     tuxlab_conn.logout()
 
-def burn_usb_load_image(node,  bld_server_conn, load_path):
+def burn_usb_load_image(node, bld_server_conn, load_path):
     ''' Burn usb with given load image.
     '''
 
@@ -385,15 +414,15 @@ def burn_usb_load_image(node,  bld_server_conn, load_path):
     # Check  if node (controller-0) is accessible.
     cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, node.host_ip)
     if (bld_server_conn.exec_cmd(cmd, timeout=PING_TIMEOUT +
-                                  TIMEOUT_BUFFER)[0] != 0):
+                                 TIMEOUT_BUFFER)[0] != 0):
         log.info("Node not responding. Skipping USB burning. Installing with existing USB image")
         return
     else:
         node.telnet_conn.login()
 
-    # check if  a USB is plugged in 
+    # check if a USB is plugged in
     cmd = "ls -lrtd /dev/disk/by-id/usb*"
-    if (node.telnet_conn.exec_cmd(cmd)[0] != 0):
+    if node.telnet_conn.exec_cmd(cmd)[0] != 0:
         msg = "No USB found in lab node. Please plug in a usb to {}.".format(node.host_ip)
         log.info(msg)
         wr_exit()._exit(1, msg)
@@ -401,15 +430,15 @@ def burn_usb_load_image(node,  bld_server_conn, load_path):
     cmd = "test -f " + load_path + "/" + BOOT_IMAGE_ISO_PATH
     if bld_server_conn.exec_cmd(cmd)[0] != 0:
         msg = 'Boot image iso file \"{}\" not found in {}'.format(
-                  load_path, BOOT_IMAGE_ISO_PATH)
+            load_path, BOOT_IMAGE_ISO_PATH)
         log.error(msg)
         wr_exit()._exit(1, msg)
 
     bld_server_conn.sendline("cd " + load_path)
     bld_server_conn.find_prompt()
     pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
-    bld_server_conn.rsync( BOOT_IMAGE_ISO_PATH,  WRSROOT_USERNAME, node.host_ip,
-                           BOOT_IMAGE_ISO_TMP_PATH, pre_opts=pre_opts)
+    bld_server_conn.rsync(BOOT_IMAGE_ISO_PATH, WRSROOT_USERNAME, node.host_ip,
+                          BOOT_IMAGE_ISO_TMP_PATH, pre_opts=pre_opts)
 
     cmd = "test -f " + BOOT_IMAGE_ISO_TMP_PATH
     if node.telnet_conn.exec_cmd(cmd)[0] != 0:
@@ -419,24 +448,21 @@ def burn_usb_load_image(node,  bld_server_conn, load_path):
 
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S dd if=" + BOOT_IMAGE_ISO_TMP_PATH + " of=/dev/sdc bs=1M oflag=direct; sync"
     if node.telnet_conn.exec_cmd(cmd, timeout=RSYNC_TIMEOUT)[0] != 0:
-        msg = 'Faile to burn Boot image iso file \"{}\"  onto USB'.format(
-                   BOOT_IMAGE_ISO_PATH)
+        msg = 'Failed to burn Boot image iso file \"{}\"  onto USB'.format(
+            BOOT_IMAGE_ISO_PATH)
         log.error(msg)
         wr_exit()._exit(1, msg)
 
-
-
-
 def wipe_disk(node, output_dir):
     ''' Perform a wipedisk operation on the lab before booting a new load into
-        it. 
+        it.
     '''
 
     # Until we have time to figure out how to have this fool-proof
     return
 
     # Only works for small footprint
-    if small_footprint: 
+    if small_footprint:
         if node.telnet_conn is None:
             node.telnet_conn = telnetlib.connect(node.telnet_ip, \
                                                 int(node.telnet_port), \
@@ -448,11 +474,11 @@ def wipe_disk(node, output_dir):
 
             # Check that the node is accessible for wipedisk to run.
             # If we cannot successfully ping the interface of the node, then it is
-            # expected that the login will fail. This may be due to the node not 
+            # expected that the login will fail. This may be due to the node not
             # being left in an installed state.
             cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, node.host_ip)
             if (node.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT +
-                                        TIMEOUT_BUFFER)[0] != 0):
+                                          TIMEOUT_BUFFER)[0] != 0):
                 log.info("Node not responding. Skipping wipedisk process")
                 return
             else:
@@ -471,8 +497,8 @@ def wipe_disk(node, output_dir):
 
 
 def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
-    ''' Function to wait for the lab to enter a specified state.  
-        If the expected state is not entered, the boot operation will be 
+    ''' Function to wait for the lab to enter a specified state.
+        If the expected state is not entered, the boot operation will be
         terminated.
     '''
     global controller0
@@ -495,7 +521,6 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
     expected_state_count = 0
     sleep_secs = int(REBOOT_TIMEOUT/MAX_SEARCH_ATTEMPTS)
     node_count = len(nodes)
-    reboot_done = False
     while count < MAX_SEARCH_ATTEMPTS:
         output = controller0.ssh_conn.exec_cmd("source /etc/nova/openrc; system host-list")[1]
         # Remove table header and footer
@@ -535,20 +560,9 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
                 output = re.sub(re.escape(match.group(0)), "", output)
                 nodes.remove(node)
 
-            '''
             # TODO: host-reboot does not fix the problem. Users need to hard reboot from
             # horizon manually until it is fixed (CGTS-3964)
 
-            if not reboot_done and len(nodes) == 1 and str(node_names[0]) == "controller-1" \
-                and str(nodes[0].barcode) == "tis_on_tis" and \
-                        expected_state == 'online':
-                # Due two some bug in culumuls, controller-1 sometimes does
-                #  not come online in first reboot. The work around is
-                #  to hard reboot the node.
-                cmd = "source /etc/nova/openrc; system host-reboot 2"
-                controller0.ssh_conn.exec_cmd(cmd)
-                reboot_done = True
-            '''
         if expected_state_count == node_count:
             break
         else:
@@ -581,7 +595,7 @@ def get_system_name(bld_server_conn, lab_cfg_path):
     cmd = "grep SYSTEM_NAME " + lab_cfg_path + "/" + LAB_SETUP_CFG_FILENAME
     return bld_server_conn.exec_cmd(cmd)[1]
 
-def bring_up(node, boot_device_dict, small_footprint, output_dir, close_telnet_conn=True):
+def bring_up(node, boot_device_dict, small_footprint, host_os, output_dir, close_telnet_conn=True):
     ''' Initiate the boot and installation operation.
     '''
 
@@ -595,12 +609,12 @@ def bring_up(node, boot_device_dict, small_footprint, output_dir, close_telnet_c
 
     vlm_exec_cmd(VLM_TURNON, node.barcode)
     logutils.print_step("Installing {}...".format(node.name))
-    node.telnet_conn.install(node, boot_device_dict, small_footprint)
+    node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os)
     if close_telnet_conn:
         node.telnet_conn.close()
 
 def apply_patches(node, bld_server_conn, patch_dir_paths):
-    ''' Apply any patches after the load is installed.  
+    ''' Apply any patches after the load is installed.
     '''
 
     patch_names = []
@@ -667,10 +681,10 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S sw-patch install-local"
 
     output = node.telnet_conn.exec_cmd(cmd)[1]
-    if not find_error_msg(output):
-        msg = "Failed to install patches"
-        log.error(msg)
-        wr_exit()._exit(1, msg)
+    #if not find_error_msg(output):
+    #    msg = "Failed to install patches"
+    #    log.error(msg)
+    #    wr_exit()._exit(1, msg)
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S sw-patch query"
     if node.telnet_conn.exec_cmd(cmd)[0] != 0:
         msg = "Failed to query patches"
@@ -678,6 +692,10 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
         wr_exit()._exit(1, msg)
 
     node.telnet_conn.exec_cmd("echo " + WRSROOT_PASSWORD + " | sudo -S reboot")
+
+    log.info("Patch application requires a reboot.")
+    log.info("Controller0 reboot has started")
+    node.telnet_conn.get_read_until("Rebooting...")
     node.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
 
 def wait_until_drbd_sync_complete(controller0, timeout=600, check_interval=180):
@@ -710,7 +728,6 @@ def wait_until_drbd_sync_complete(controller0, timeout=600, check_interval=180):
 def main():
 
     boot_device_dict = DEFAULT_BOOT_DEVICE_DICT
-    custom_lab_setup = False
     lab_settings_filepath = ""
     compute_dict = {}
     storage_dict = {}
@@ -733,6 +750,7 @@ def main():
         #lab_cfg_location = "cgcs-tis_on_tis"
         lab_cfg_location = args.lab_config_location
     else:
+        # e.g. cgcs-ironpass-7_12
         lab_cfg_location = args.lab_config_location
 
     if not tis_on_tis:
@@ -753,6 +771,8 @@ def main():
     run_lab_setup = args.run_lab_setup
     small_footprint = args.small_footprint
     burn_usb = args.burn_usb
+
+    host_os = args.host_os
 
     bld_server = args.bld_server + HOST_EXT
 
@@ -806,12 +826,13 @@ def main():
     logutils.print_name_value("Output directory", output_dir)
     logutils.print_name_value("Log level", log_level)
 
+    logutils.print_name_value("Host OS", host_os)
 
     email_info = {}
     email_info['email_server'] = EMAIL_SERVER
     email_info['email_from'] = EMAIL_FROM
-    email_info['email_to'] =  args.email_address
-    email_info['email_subject'] =  EMAIL_SUBJECT
+    email_info['email_to'] = args.email_address
+    email_info['email_subject'] = EMAIL_SUBJECT
 
     installer_exit = wr_exit()
     installer_exit._set_email_attr(**email_info)
@@ -820,7 +841,6 @@ def main():
     installed_load_info = ''
 
     print("\nRunning as user: " + USERNAME + "\n")
-
 
     if tis_on_tis:
         controller_dict = create_cumulus_node_dict((0, 1), CONTROLLER)
@@ -844,16 +864,13 @@ def main():
     guest_load_path = "{}/{}".format(bld_server_wkspce, guest_bld_dir)
 
     load_path = get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
-                              tis_bld_dir)
-
-
+                                  tis_bld_dir)
     if os.path.isdir(lab_cfg_location):
-        custom_lab_setup = True
         lab_cfg_path, lab_settings_filepath = verify_custom_lab_cfg_location(lab_cfg_location)
     else:
         lab_cfg_path, lab_settings_filepath = verify_lab_cfg_location(bld_server_conn,
-                                                        lab_cfg_location,
-                                                        load_path)
+                                                  lab_cfg_location, load_path,
+                                                  host_os)
 
     if lab_settings_filepath:
         log.info("Lab settings file path: " + lab_settings_filepath)
@@ -864,8 +881,7 @@ def main():
         except Exception:
             msg = "Failed to read file: " + lab_settings_filepath
             log.exception(msg)
-            wr_exit()._exit(1,msg)
-
+            wr_exit()._exit(1, msg)
 
         for section in config.sections():
             try:
@@ -903,7 +919,7 @@ def main():
     if not executed:
         if str(boot_device_dict.get('controller-0')) != "USB" \
                 and not tis_on_tis:
-            set_network_boot_feed(controller0.barcode, tuxlab_server, bld_server_conn, load_path, output_dir)
+            set_network_boot_feed(controller0.barcode, tuxlab_server, bld_server_conn, load_path, host_os, output_dir)
 
     nodes = list(controller_dict.values()) + list(compute_dict.values()) + list(storage_dict.values())
     if not tis_on_tis:
@@ -944,7 +960,7 @@ def main():
 
             # Run the wipedisk utility if the nodes are accessible
             for node in nodes:
-                node_thread = threading.Thread(target=wipe_disk,name=node.name,args=(node, output_dir,))
+                node_thread = threading.Thread(target=wipe_disk, name=node.name, args=(node, output_dir,))
                 threads.append(node_thread)
                 log.info("Starting thread for {}".format(node_thread.name))
                 node_thread.start()
@@ -957,7 +973,7 @@ def main():
                 vlm_exec_cmd(VLM_TURNOFF, barcode)
 
             # Boot up controller0
-            bring_up(controller0, boot_device_dict, small_footprint, output_dir, close_telnet_conn=False)
+            bring_up(controller0, boot_device_dict, small_footprint, host_os, output_dir, close_telnet_conn=False)
             logutils.print_step("Initial login and password set for " + controller0.name)
             controller0.telnet_conn.login(reset=True)
     else:
@@ -995,8 +1011,7 @@ def main():
             if controller0.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT + TIMEOUT_BUFFER)[0] != 0:
                 msg = "Failed to ping outside network"
                 log.error(msg)
-                wr_exit()._exit(1,msg)
-
+                wr_exit()._exit(1, msg)
 
     # Open an ssh session
     cont0_ssh_conn = SSHClient(log_path=output_dir + "/" + CONTROLLER0 + ".ssh.log")
@@ -1012,44 +1027,49 @@ def main():
         if patch_dir_paths != None:
             apply_patches(controller0, bld_server_conn, patch_dir_paths)
 
+            # Reconnect telnet session
+            log.info("Found login prompt. Controller0 reboot has completed")
+            cont0_telnet_conn.login()
+            controller0.telnet_conn = cont0_telnet_conn
+
+            # Reconnect ssh session
+            cont0_ssh_conn.disconnect()
+            cont0_ssh_conn = SSHClient(log_path=output_dir +\
+                                       "/" + CONTROLLER0 + ".ssh.log")
+            cont0_ssh_conn.connect(hostname=controller0.host_ip,
+                                   username=WRSROOT_USERNAME,
+                                   password=WRSROOT_PASSWORD)
+            controller0.ssh_conn = cont0_ssh_conn
 
     # Download configuration files
     executed = False
     if not executed:
         pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
-        bld_server_conn.rsync(LICENSE_FILEPATH, WRSROOT_USERNAME, 
-                              controller0.host_ip, 
+        bld_server_conn.rsync(LICENSE_FILEPATH, WRSROOT_USERNAME,
+                              controller0.host_ip,
                               os.path.join(WRSROOT_HOME_DIR, "license.lic"),
                               pre_opts=pre_opts)
-        bld_server_conn.rsync(os.path.join(lab_cfg_path, "*"), 
-                              WRSROOT_USERNAME, controller0.host_ip, 
+        bld_server_conn.rsync(os.path.join(lab_cfg_path, "*"),
+                              WRSROOT_USERNAME, controller0.host_ip,
                               WRSROOT_HOME_DIR, pre_opts=pre_opts)
-        bld_server_conn.rsync(os.path.join(load_path, LAB_SCRIPTS_REL_PATH, "*"), 
-                              WRSROOT_USERNAME, controller0.host_ip, 
+        if host_os == "centos":
+            bld_server_conn.rsync(os.path.join(CENTOS_LAB_SCRIPTS, "*"),
+                              WRSROOT_USERNAME, controller0.host_ip,
                               WRSROOT_HOME_DIR, pre_opts=pre_opts)
-        bld_server_conn.rsync(os.path.join(guest_load_path, "cgcs-guest.img"), 
+        else:
+            bld_server_conn.rsync(os.path.join(load_path, LAB_SCRIPTS_REL_PATH, "*"), 
+                              WRSROOT_USERNAME, controller0.host_ip,
+                              WRSROOT_HOME_DIR, pre_opts=pre_opts)
+        bld_server_conn.rsync(os.path.join(guest_load_path, "cgcs-guest.img"),
                               WRSROOT_USERNAME, controller0.host_ip, \
                               WRSROOT_IMAGES_DIR + "/",\
                               pre_opts=pre_opts)
 
         if small_footprint:
-            bld_server_conn.rsync(SFP_LICENSE_FILEPATH, WRSROOT_USERNAME, 
+            bld_server_conn.rsync(SFP_LICENSE_FILEPATH, WRSROOT_USERNAME,
                               controller0.host_ip, 
                               os.path.join(WRSROOT_HOME_DIR, "license.lic"),
                               pre_opts=pre_opts)
-            # COMMENTING OUT WORKAROUND FOR R720-1/2 NO LONGER NEEDED
-            #bld_server_conn.rsync(controller0.host_config_filename, 
-            #                  WRSROOT_USERNAME, controller0.host_ip, 
-            #                  os.path.join(WRSROOT_HOME_DIR, SYSTEM_CFG_FILENAME),
-            #                  pre_opts=pre_opts)
-            #bld_server_conn.rsync(controller0.host_lab_filename,
-            #                  WRSROOT_USERNAME, controller0.host_ip,
-            #                  os.path.join(WRSROOT_HOME_DIR, "lab_setup.conf"),
-            #                  pre_opts=pre_opts)
-            #bld_server_conn.rsync(controller0.host_hosts_filename,
-            #                  WRSROOT_USERNAME, controller0.host_ip,
-            #                  os.path.join(WRSROOT_HOME_DIR, BULK_CFG_FILENAME),
-            #                  pre_opts=pre_opts)
 
         cmd = 'grep -q "TMOUT=" ' + WRSROOT_ETC_PROFILE
         cmd += " && echo " + WRSROOT_PASSWORD + " | sudo -S"
@@ -1074,7 +1094,11 @@ def main():
     if not executed:
         # No consistency in naming of config file naming
         cfg_found = False
-        for cfgfile in CFGFILE_LIST: 
+        if host_os == "centos":
+            cfgfile_list = CENTOS_CFGFILE_LIST
+        else:
+            cfgfile_list = WRL_CFGFILE_LIST
+        for cfgfile in cfgfile_list: 
             cfgpath = WRSROOT_HOME_DIR + "/" + cfgfile
             cmd = "test -f " + cfgpath
             if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
@@ -1113,7 +1137,7 @@ def main():
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
 
-    # Run host bulk add 
+    # Run host bulk add
     executed = False
     if not executed:
         if not tis_on_tis:
@@ -1137,8 +1161,7 @@ def main():
                 log.error(msg)
                 installer_exit._exit(1, msg)
 
-
-    # Complete controller0 configuration either as a regular host 
+    # Complete controller0 configuration either as a regular host
     # or a small footprint host.
     executed = False
     if not executed:
@@ -1154,8 +1177,7 @@ def main():
                 log.error("compute-config-complete failed in small footprint configuration")
                 installer_exit._exit(1, "compute-config-complete failed in small footprint configuration.")
 
-
-            # The controller0 will restart. Need to login after reset is 
+            # The controller0 will restart. Need to login after reset is
             # complete before we can continue.
 
             log.info("Controller0 reset has started")
@@ -1190,7 +1212,12 @@ def main():
             threads.clear()
             for node in nodes:
                 if node.name != CONTROLLER0:
-                    node_thread = threading.Thread(target=bring_up,name=node.name,args=(node, boot_device_dict, small_footprint, output_dir))
+                    node_thread = threading.Thread(target=bring_up,
+                                                   name=node.name,
+                                                   args=(node,
+                                                   boot_device_dict,
+                                                   small_footprint, host_os,
+                                                   output_dir))
                     threads.append(node_thread)
                     log.info("Starting thread for {}".format(node_thread.name))
                     node_thread.start()
@@ -1202,8 +1229,8 @@ def main():
             cumulus.launch_controller1()
             # Set controller-1 personality after virtual controller finish spawning
             time.sleep(60)
-            cmd =  "source /etc/nova/openrc; system host-list | grep None"
-            rc, ouput = controller0.ssh_conn.exec_cmd(cmd)
+            cmd = "source /etc/nova/openrc; system host-list | grep None"
+            rc, output = controller0.ssh_conn.exec_cmd(cmd)
             if rc is 0:
                 cmd = "source /etc/nova/openrc; system host-update 2 " \
                       "personality=controller rootfs_device=vda boot_device=vda"
@@ -1218,7 +1245,7 @@ def main():
 
             cumulus.launch_computes()
             time.sleep(60)
-            cmd =  "source /etc/nova/openrc; system host-list | awk \'/None/ { print $2 }\'"
+            cmd = "source /etc/nova/openrc; system host-list | awk \'/None/ { print $2 }\'"
             rc, ids = controller0.ssh_conn.exec_cmd(cmd)
             if rc is 0:
                 cmd0 = "source /etc/nova/openrc;system host-update 3 " \
@@ -1239,9 +1266,6 @@ def main():
                 msg = "Launching computes failed"
                 log.error(msg)
                 wr_exit()._exit(1, msg)
-
-
-
 
     # STORAGE LAB INSTALL
     executed = False
@@ -1279,17 +1303,7 @@ def main():
                     log.error(msg)
                     wr_exit()._exit(1, msg)
 
-                #wait_state(node, OPERATIONAL, ENABLED)
-                # Commented out since degraded state is acceptable during drbd
-                # sync
-                #if get_availability_controller1() == "degraded":
-                    # Controler1 is in degraded state. Sometimes the fault could be
-                    # corrected by re-boot.
-                #    log.info("Controller1 is in degraded state. Attempting to reset")
-                #    vlm_exec_cmd(VLM_REBOOT, node.barcode)
-                #    time.sleep(5)
-                #    wait_state(node, OPERATIONAL, ENABLED)
-        
+
                 # Wait for controller-1 to be available, otherwise we can't add OSDs to
                 # storage nodes via lab_setup.sh if controller-1 is still degraded.
                 wait_state(node, AVAILABILITY, AVAILABLE)
@@ -1423,15 +1437,6 @@ def main():
                     wr_exit()._exit(1, "Failed to unlock: " + node.name)
 
                 wait_state(node, OPERATIONAL, ENABLED)
-                """
-                controller1_state = get_availability_controller1()
-                if re.search('degraded', controller1_state):
-                    # Controler1 is in degraded state. Sometimes the fault could be
-                    # corrected by re-boot.
-                    log.info("Controller1 is in degraded state. Attempting to reset")
-                    vlm_exec_cmd(VLM_REBOOT, node.barcode)
-                    wait_state(node, OPERATIONAL, ENABLED)
-                """
 
         # Run lab_setup again
         if controller0.ssh_conn.exec_cmd(lab_setup_cmd, LAB_SETUP_TIMEOUT)[0] != 0:

@@ -146,14 +146,25 @@ class Cumulus_TiS(object):
         log = self.log
 
         # get tis image
-        tis_image_path = CUMULUS_TMP_TIS_IMAGE_PATH + \
-                         "/{}".format(CUMULUS_USERID)
+        if cumulus_tis_conn.exec_cmd("test -d " + CUMULUS_TMP_TIS_IMAGE_PATH)[0] == 0:
+            tis_image_path = CUMULUS_TMP_TIS_IMAGE_PATH + \
+                             "/{}".format(CUMULUS_USERID)
 
-        if cumulus_tis_conn.exec_cmd("test -d " + tis_image_path)[0] != 0:
-            cumulus_tis_conn.sendline("mkdir -p " + tis_image_path)
-            cumulus_tis_conn.find_prompt()
-            cumulus_tis_conn.sendline("chmod 755 " + tis_image_path)
-            cumulus_tis_conn.find_prompt()
+            if cumulus_tis_conn.exec_cmd("test -d " + tis_image_path)[0] != 0:
+                cumulus_tis_conn.sendline("mkdir -p " + tis_image_path)
+                cumulus_tis_conn.find_prompt()
+                cumulus_tis_conn.sendline("chmod 755 " + tis_image_path)
+                cumulus_tis_conn.find_prompt()
+        else:
+            tis_image_path = "/home/{}".format(CUMULUS_USERID)
+            cmd = "df --output=avail -h {} | sed '1d;s/[^0-9]//g'".format(tis_image_path)
+            rc, avail = cumulus_tis_conn.exec_cmd(cmd)
+            if rc != 0 and avail < BOOT_IMAGE_ISO_SIZE:
+                msg = "Unable to check available disk space or not sufficient" \
+                      " space in {} for tis image. Currently availabe space is" \
+                      " {}.".format(tis_image_path, avail)
+                log.exception(msg)
+                wr_exit()._exit(1,msg)
 
         bld_server_image_path = os.path.join(self.load_path, "export/tis.img")
         pre_opts = 'sshpass -p "{0}"'.format(CUMULUS_PASSWORD)

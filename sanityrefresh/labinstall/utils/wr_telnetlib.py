@@ -813,7 +813,6 @@ class Telnet:
         if index != 0:
             msg = "Timeout occurred: Failed to find prompt"
             log.error(msg)
-            wr_exit()._exit(1, msg)
 
         # Remove command and prompt
         output = "\n".join(output.decode('utf-8', 'ignore').splitlines()[1:-1])
@@ -900,7 +899,7 @@ class Telnet:
     #TODO: The timeouts in this function need to be tested to see if they
     #      should be increased/decreased
     #TODO: If script returns zero, should check return code, otherwise remove it
-    def install(self, node, boot_device_dict, small_footprint=False):
+    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos'):
         if "wildcat" in node.host_name:
             index = 0
             bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[index]
@@ -959,25 +958,27 @@ class Telnet:
                 wr_exit()._exit(1, msg)
 
             log.info("Waiting for ESC to exit")
-            #self.get_read_until("ESC to exit")
-            # Sleep is required before pressing enter
-            #time.sleep(5)
-            #for i in range(0, down_press_count):
-            #    self.write(str.encode(DOWN))
-            #self.write(str.encode("\r\r"))
             if node.name == CONTROLLER0:
-                #TODO: Check time on this
                 if boot_device_regex == 'USB':
                     self.get_read_until("Select kernel options and boot kernel", 120)
                 else:
                     self.get_read_until("Kickstart Boot Menu", 240)
-                    selection_menu_option = '2'
+                    # New pxeboot cfg menu
+                    # 0) Boot from hard drive
+                    # 1) WRL Serial Controller Install
+                    # 2) CentOS Serial Controller Install
+                    # 3) WRL Serial CPE Install
+                    # 4) CentOS Serial CPE Install
+                    if host_os == 'wrlinux':
+                        selection_menu_option = '1'
+                    else:
+                        selection_menu_option = '2'
+
                     if hasattr(node, "host_kickstart_menu_selection"):
                         selection_menu_option =  getattr(node, "host_kickstart_menu_selection")
 
-                    log.info(" Kickstart boot  menu selection = {}".format(selection_menu_option))
+                    log.info("Kickstart boot  menu selection = {}".format(selection_menu_option))
 
-                    log.info("Enter second option for Controller Install")
                     self.write_line(selection_menu_option)
 
             self.get_read_until(LOGIN_PROMPT, install_timeout)
@@ -1023,9 +1024,6 @@ class Telnet:
             down_press_count = 0
             while count < MAX_SEARCH_ATTEMPTS:
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
-                #regex = re.compile(b"\\x1b\[1;37;44m.*\|\s(.*)\s+\**\|")
-                #regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s*(.*)\s+(.*)\|")
-                #regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)(\s+?)\|")
                 regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)\s+(.*?)\|")
                 #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
                 try:
@@ -1054,15 +1052,7 @@ class Telnet:
                 log.error(msg)
                 wr_exit()._exit(1, msg)
 
-#            log.info("Waiting for ENTER to select boot device")
-#            self.get_read_until("ESC to boot using defaults")
-            # Sleep is required before pressing enter
-#            time.sleep(5)
-#            for i in range(0, down_press_count):
-#                self.write(str.encode(DOWN))
-#            self.write(str.encode("\r\r"))
             if node.name == CONTROLLER0:
-                #TODO: Check time on this
                 # booting device = USB tested only for Ironpass-31_32
                 if boot_device_regex == 'USB':
                     self.get_read_until("Select kernel options and boot kernel", 120)
@@ -1085,18 +1075,31 @@ class Telnet:
                     log.info("Searching Kickstart boot device menu for ...")
                     # Some labs like IP-28_30 has kickstart boot menu selection as 0,1,2
                     # other have selection of 1,2,3. Need to determine menu options:
-                    selection_menu_option = '2'
+                    #selection_menu_option = '2'
                     if hasattr(node, "host_kickstart_menu_selection"):
                         selection_menu_option =  getattr(node, "host_kickstart_menu_selection")
 
-                    log.info(" Kickstart boot  menu slection = {}".format(selection_menu_option))
+                    # New pxeboot cfg menu
+                    # 0) Boot from hard drive
+                    # 1) WRL Serial Controller Install
+                    # 2) CentOS Serial Controller Install
+                    # 3) WRL Serial CPE Install
+                    # 4) CentOS Serial CPE Install
                     if small_footprint:
-                        log.info("Enter third option for Controller and Compute Install")
-                        self.write_line("3")
-
+                        log.info("Enter option for {} Controller and Compute Install".format(host_os))
+                        if host_os == 'wrlinux':
+                            selection_menu_option = '3'
+                        else:
+                            selection_menu_option = '4'
                     else:
-                        log.info("Enter second option for Controller Install")
-                        self.write_line(selection_menu_option)
+                        log.info("Enter option for {} Controller Install".format(host_os))
+                        if host_os == 'wrlinux':
+                            selection_menu_option = '1'
+                        else:
+                            selection_menu_option = '2'
+
+                    log.info("Kickstart boot menu selection = {}".format(selection_menu_option))
+                    self.write_line(selection_menu_option)
 
         elif bios_type == BIOS_TYPES[1]:
             # Hewlett-Packard BIOS
@@ -1104,38 +1107,23 @@ class Telnet:
             self.get_read_until("Network Boot", 10)
             log.info("Enter BIOS key")
             self.write(str.encode(bios_key))
-            #TODO: Enhance to support parsing of Anaconda boot menu
-            #      For now assuming controller install is the second option
-            #      With bulk add, computes will use default so nothing to select
+            # With bulk add, computes will use default so nothing to select
             if node.name == CONTROLLER0:
+                # New pxeboot cfg menu
+                # 0) Boot from hard drive
+                # 1) WRL Serial Controller Install
+                # 2) CentOS Serial Controller Install
+                # 3) WRL Serial CPE Install
+                # 4) CentOS Serial CPE Install
                 self.get_read_until("Kickstart Boot Menu", 30)
-                log.info("Enter second option for Controller Install")
-                self.write_line("2")
+                log.info("Enter option for {} Controller Install".format(host))
+                if host_os == 'wrlinux':
+                    selection_menu_option = '1'
+                else:
+                    selection_menu_option = '2'
+                log.info("Kickstart boot menu selection = {}".format(selection_menu_option))
+                self.write_line(selection_menu_option)
         elif bios_type == BIOS_TYPES[2]:
-            # Phoenix BIOS, e.g. Dell
-            #if small_footprint:
-            #    if node.name == CONTROLLER0:
-            #        self.get_read_until("Kickstart Boot Menu", 600)
-            #        log.info("Enter third option for Controller+Compute Install")
-            #        self.write_line("3")
-            #    else:
-            #        # Wait for the prompt for F12
-            #        bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[2]
-            #        self.get_read_until("F12", 100)
-            #        self.write_line(bios_key)
-            #        log.info("Entered BIOS key: %s" % bios_key)
-
-                    # Wait for the PXE selection menu
-            #        self.get_read_until("NIC 2 BRCM MBA", 600)
-            #        self.write_line("\r")
-            #        self.write_line("\r")
-            #        log.info("Integrated NIC 2 BRCM MBA Slot found")
-
-                    # wait for the prompt to set the personality
-            #        self.get_read_until("Please configure the personality", 600)
-            #        log.info("Personality request found")
-            #        return True
-            #else:
             boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
@@ -1153,7 +1141,6 @@ class Telnet:
             while count < MAX_SEARCH_ATTEMPTS:
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
                 # e.g. Integrated NIC 2 BRCM MBA Slot 0101 v16.2.1
-                #regex = re.compile(b"\x1B\(B(.*)\x1B")
                 regex = re.compile(b"\x1B\(B(.*)\x1B\(0x")
                 try:
                     index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
@@ -1183,13 +1170,29 @@ class Telnet:
                 wr_exit()._exit(1, msg)
         
             if node.name == CONTROLLER0:
-                #TODO: Check time on this
                 self.get_read_until("Kickstart Boot Menu", 300)
                 log.info("Enter install type")
+                # New pxeboot cfg menu
+                # 0) Boot from hard drive
+                # 1) WRL Serial Controller Install
+                # 2) CentOS Serial Controller Install
+                # 3) WRL Serial CPE Install
+                # 4) CentOS Serial CPE Install
                 if small_footprint:
-                    self.write_line("3")
+                    log.info("Enter option for {} Controller and Compute Install".format(host_os))
+                    if host_os == 'wrlinux':
+                        selection_menu_option = '3'
+                    else:
+                        selection_menu_option = '4'
                 else:
-                    self.write_line("2")
+                    log.info("Enter option for {} Controller Install".format(host))
+                    if host_os == 'wrlinux':
+                        selection_menu_option = '1'
+                    else:
+                        selection_menu_option = '2'
+
+                log.info("Kickstart boot menu selection = {}".format(selection_menu_option))
+                self.write_line(selection_menu_option)
 
         # Not fool-proof.  FIX
         self.get_read_until(LOGIN_PROMPT, install_timeout)
