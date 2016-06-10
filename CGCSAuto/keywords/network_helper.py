@@ -151,17 +151,52 @@ def delete_subnet(subnet_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False
     return 0, succ_msg
 
 
-def get_subnets(net_id=None, auth_info=None, con_ssh=None):
-    if net_id:
-        table_ = table_parser.table(cli.neutron('net-show', net_id, ssh_client=con_ssh, auth_info=auth_info))
-        subnets = table_parser.get_value_two_col_table(table_, 'subnets', merge_lines=False)
-        if isinstance(subnets, str):
-            subnets = [subnets]
-    else:
-        table_ = table_parser.table(cli.neutron('subnet-list', ssh_client=con_ssh, auth_info=auth_info))
-        subnets = table_parser.get_column(table_, 'id')
+def get_subnets(name=None, cidr=None, strict=True, regex=False, auth_info=None, con_ssh=None):
+    """
+    Get subnets ids based on given criteria.
 
-    return subnets
+    Args:
+        name (str): name of the subnet
+        cidr (str): cidr of the subnet
+        strict (bool): whether to perform strict search on given name and cidr
+        regex (bool): whether to use regext to search
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (list): a list of subnet ids
+
+    """
+    table_ = table_parser.table(cli.neutron('subnet-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is not None:
+        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, name=name)
+    if cidr is not None:
+        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, cidr=cidr)
+
+    return table_parser.get_column(table_, 'id')
+
+
+def get_net_info(net_id, field='status', strict=True, auto_info=None, con_ssh=None):
+    """
+    Get specified info for given network
+
+    Args:
+        net_id (str): network id
+        field (str): such as 'status', 'subnets', 'wrs-net:vlan_id' or 'vlan_id' if strict=False
+        strict (bool): whether to perform strict search for the name of the field
+        auto_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (str|list): Value of the specified field. When field=subnets, return a list of subnet ids
+
+    """
+    table_ = table_parser.table(cli.neutron('net-show', net_id, ssh_client=con_ssh, auth_info=auto_info))
+    value = table_parser.get_value_two_col_table(table_, field, merge_lines=False)
+
+    if field == 'subnets':
+        if isinstance(value, str):
+            value = [value]
+
+    return value
 
 
 def _get_net_ids(net_name, con_ssh=None, auth_info=None):
@@ -1012,7 +1047,7 @@ def update_router_distributed(router_id=None, distributed=True, fail_ok=False, a
     if code == 1:
         return 1, output
 
-    post_distributed_val = get_router_info(router_id, 'distributed', auth_info=auth_info, con_ssh=con_ssh)
+    post_distributed_val = get_router_info(router_id, 'distributed', auth_info=Tenant.ADMIN, con_ssh=con_ssh)
     if post_distributed_val.lower() != str(distributed).lower():
         msg = "Router {} is not updated to distributed={}".format(router_id, distributed)
         if fail_ok:

@@ -39,7 +39,8 @@ def scp_to_local(source_path, source_ip, dest_path, source_user='wrsroot', sourc
 
     """
     dir_option = '-r ' if is_dir else ''
-    cmd = 'scp {}{}@{}:{} {}'.format(dir_option, source_user, source_ip, source_path, dest_path)
+    cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{}@{}:{} {}'.format(
+            dir_option, source_user, source_ip, source_path, dest_path)
 
     __scp_base(cmd, remote_password=source_password, logdir=dest_path, timeout=timeout)
 
@@ -90,6 +91,7 @@ class Count:
     __server_group = 0
     __router = 0
     __subnet = 0
+    __other = 0
 
     @classmethod
     def get_vm_count(cls):
@@ -120,3 +122,59 @@ class Count:
     def get_subnet_count(cls):
         cls.__subnet += 1
         return cls.__subnet
+
+    @classmethod
+    def get_other_count(cls):
+        cls.__other += 1
+        return cls.__other
+
+
+class NameCount:
+    __names_count = {
+        'vm': 0,
+        'flavor': 0,
+        'volume': 0,
+        'image': 0,
+        'server_group': 0,
+        'subnet': 0,
+        'heat_stack': 0,
+        'other': 0,
+    }
+
+    @classmethod
+    def get_number(cls, resource_type='other'):
+        cls.__names_count[resource_type] += 1
+        return cls.__names_count[resource_type]
+
+    @classmethod
+    def get_valid_types(cls):
+        return list(cls.__names_count.keys())
+
+
+def get_unique_name(name_str, existing_names=None, resource_type='other'):
+    """
+    Get a unique name string by appending a number to given name_str
+
+    Args:
+        name_str (str): partial name string
+        existing_names (list): names to avoid
+        resource_type (str): type of resource. valid values: 'vm'
+
+    Returns:
+
+    """
+    valid_types = NameCount.get_valid_types()
+    if resource_type not in valid_types:
+        raise ValueError("Invalid resource_type provided. Valid types: {}".format(valid_types))
+
+    unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
+
+    if existing_names:
+        for i in range(50):
+            if unique_name not in existing_names:
+                break
+            unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
+        else:
+            raise LookupError("Cannot find unique name.")
+
+    return unique_name

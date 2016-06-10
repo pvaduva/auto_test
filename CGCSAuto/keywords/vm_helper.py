@@ -9,7 +9,7 @@ from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.timeout import VMTimeout
 from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP
-from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper
+from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common
 
 
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
@@ -81,7 +81,7 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
     LOG.info("Volume {} is attached to vm {}".format(vol_id, vm_id))
 
 
-def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, nics=None, hint=None,
+def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None, fail_ok=False,
             auth_info=None, con_ssh=None):
     """
@@ -116,21 +116,24 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
     """
     LOG.info("Processing boot_vm args...")
     # Handle mandatory arg - name
-    if auth_info is None:
-        auth_info = Tenant.get_primary()
-    tenant = auth_info['tenant']
-
+    tenant = common.get_tenant_name(auth_info=auth_info)
     if name is None:
-        existing_names = nova_helper.get_all_vms('Name')
-        for i in range(20):
-            tmp_name = '-'.join([tenant, 'vm', str(i+1)])
-            if tmp_name not in existing_names:
-                name = tmp_name
-                break
-        else:
-            exceptions.VMError("Unable to get a proper name for booting new vm.")
-    else:
-        name = '-'.join([tenant, name])
+        name = 'vm'
+    name = "{}-{}".format(tenant, name)
+
+    name = common.get_unique_name(name, resource_type='vm')
+
+    # if name is None:
+    #     existing_names = nova_helper.get_all_vms('Name')
+    #     for i in range(20):
+    #         tmp_name = '-'.join([tenant, 'vm', str(i+1)])
+    #         if tmp_name not in existing_names:
+    #             name = tmp_name
+    #             break
+    #     else:
+    #         exceptions.VMError("Unable to get a proper name for booting new vm.")
+    # else:
+    #     name = '-'.join([tenant, name])
 
     # Handle mandatory arg - flavor
     if flavor is None:
@@ -192,8 +195,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=1, ni
                           '--image': image,
                           '--boot-volume': volume_id,
                           '--snapshot': snapshot_id,
-                          '--min-count': str(min_count),
-                          '--max-count': str(max_count) if max_count else None,
+                          '--min-count': str(min_count) if min_count is not None else None,
+                          '--max-count': str(max_count) if max_count is not None else None,
                           '--key-name': key_name,
                           '--swap': swap,
                           '--ephemeral': ephemeral,
@@ -300,13 +303,18 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
         tenant_name (str) - name of tenant to launch VMs as, e.g. tenant1, tenant2.
             If not specified, the primary tenant for the test session will be used.
         vm_type (str): - either avp, virtio or vswitch
-        num_vms (int): - number of vms of that type to launch, e.g. 3
+        num_vms (int|str): number of vms to launch, or launch all vms with given vif type if 'all' is set
         launch_timeout (int): timeout waiting for vm to be launched via script in seconds.
         con_ssh:
 
-    Returns (tuple): ids for launched vms. (Either already launched, or launched by this script)
+    Returns (list): ids for launched vms. (Either already launched, or launched by this script)
 
     """
+    vif_mapping = {'vswitch': 'DPDKAPPS',
+                   'avp': 'AVPAPPS',
+                   'virtio': 'VIRTIOAPPS'
+                   }
+
     if not tenant_name:
         tenant_name = Tenant.get_primary()['tenant']
     if not con_ssh:
@@ -320,12 +328,14 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
     # Get the list of VMs that are already launched on the system by name
     current_vms = nova_helper.get_all_vms(return_val="Name", con_ssh=con_ssh)
 
-    # Cap VM launch to 4
-    if num_vms > 4:
-        num_vms = 4
-        LOG.warning("lab_setup provides launch scripts for 4 VMs of a \
-                         particular type, so the number of VMs to launch will \
-                         be capped at 4.")
+    with host_helper.ssh_to_host('controller-0') as host_ssh:
+        vm_limit = host_ssh.exec_cmd("grep -r {} lab_setup.conf | cut -d = -f2".format(vif_mapping[vm_type]))[1]
+
+    if num_vms == 'all':
+        num_vms = vm_limit
+    elif num_vms > vm_limit:
+        num_vms = vm_limit
+        LOG.warning("Maximum {} vms is {}. Thus only {} vms will be launched.".format(vm_type, vm_limit, vm_limit))
 
     # Launch the desired VMs
     for vm_index in range(1, (num_vms + 1)):
@@ -335,13 +345,11 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
         vm_names.append(vm_name)
 
         if vm_name in current_vms:
-            vm_id = nova_helper.get_vm_id_from_name(vm_name, con_ssh=con_ssh)
+            vm_id = nova_helper.get_vm_id_from_name(vm_name, con_ssh=con_ssh, fail_ok=False)
             LOG.info("VM {} is already present on the system. Do nothing.".format(vm_name))
         else:
             script = "~/instances_group0/./launch_{}.sh".format(vm_name)
-            exitcode, output = con_ssh.exec_cmd(script, expect_timeout=launch_timeout)     # Up the timeout
-            if not exitcode == 0:
-                raise exceptions.SSHExecCommandFailed("Failed to launch VM {}".format(vm_name))
+            con_ssh.exec_cmd(script, expect_timeout=launch_timeout, fail_ok=False)   # Up the timeout
 
             vm_id = nova_helper.get_vm_id_from_name(vm_name, con_ssh=con_ssh)
             if not nova_helper.vm_exists(vm_id, con_ssh):
@@ -351,40 +359,7 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
 
         vm_ids.append(vm_id)
 
-    return tuple(vm_ids)
-
-
-def launch_vm_custom_script(script, con_ssh=None):
-    """
-    Full path of the custom script.
-
-    Args:
-        script:
-        con_ssh:
-
-    Returns (tuple):
-
-    """
-    LOG.info("Launching VM(s) from custom script...")
-
-    before_vm_ids = nova_helper.get_all_vms(return_val="ID", con_ssh=con_ssh)
-
-    paths = script.split('/')
-    paths[-1] = './' + paths[-1]
-    cmd = '/'.join(paths)
-    exitcode, output = con_ssh.exec_cmd(cmd, expect_timeout=60)     # Up the timeout
-
-    if not exitcode == 0:
-        raise exceptions.SSHExecCommandFailed("Exit code: {}, Output: {}".format(exitcode, output))
-
-    after_vm_ids = nova_helper.get_all_vms(return_val="ID", con_ssh=con_ssh)
-    if not len(after_vm_ids) > len(before_vm_ids):
-        raise exceptions.VMPostCheckFailed("No new VM detected on the system.")
-
-    vms_launched = [vm_id for vm_id in after_vm_ids if vm_id not in before_vm_ids]
-
-    LOG.info("New VM(s) launched: {}".format(vms_launched))
-    return tuple(vms_launched)
+    return vm_ids
 
 
 def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=False, fail_ok=False,
@@ -966,7 +941,8 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
 
 @contextmanager
 def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
-                          timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, vm_ip=None, use_fip=False):
+                          timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, vm_ip=None, use_fip=False,
+                          retry=True, retry_timeout=120):
     """
     ssh to a vm from natbox.
 
@@ -981,6 +957,8 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         con_ssh (SSHClient): ssh connection to TiS active controller
         vm_ip (str): ssh to this ip from NatBox if given
         use_fip (bool): Whether to ssh to floating ip if a vm has one associated. Not applicable if vm_ip is given.
+        retry (bool): whether or not to retry if fails to connect
+        retry_timeout (int): max time to retry
 
     Yields (VMSSHClient):
         ssh client of the vm
@@ -1002,7 +980,8 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         natbox_client = NATBoxClient.get_natbox_client()
 
     vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_name=vm_name, vm_img_name=vm_image_name,
-                         user=username, password=password, prompt=prompt, timeout=timeout)
+                         user=username, password=password, prompt=prompt, timeout=timeout, retry=retry,
+                         retry_timeout=retry_timeout)
     try:
         yield vm_ssh
     finally:

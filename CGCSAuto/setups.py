@@ -172,7 +172,7 @@ def collect_tis_logs(con_ssh):
         output = con_ssh.cmd_output
         con_ssh.expect()
         logpath = re.findall('.*(/scratch/ALL_NODES_.*.tar).*', output)[0]
-        LOG.info("\n################### TiS server log path: {} #######################".format(logpath))
+        LOG.info("\n################### TiS server log path: {}".format(logpath))
     else:
         LOG.error("Collecting logs failed. No ALL_NODES logs found.")
         return
