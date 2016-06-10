@@ -133,9 +133,6 @@ def pytest_runtest_makereport(item, call, __multicall__):
         if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
             collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'))
 
-        if(ProjVar.get_var("REPORT_ALL")):
-            collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'))
-
     return report
 
 
@@ -244,6 +241,7 @@ def pytest_addoption(parser):
                      help=report_help)
     parser.addoption('--report_tag', action='store', dest='report_tag', metavar='tagname', default=None, 
                      help=tag_help)
+
 
 def config_logger(log_dir):
     # logger for log saved in file

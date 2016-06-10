@@ -4,8 +4,6 @@
 # of this software may be licensed only pursuant to the terms
 # of an applicable Wind River license agreement.
 
-import logging
-import time
 import re
 import sys
 from pytest import fixture, mark, skip, raises, fail
