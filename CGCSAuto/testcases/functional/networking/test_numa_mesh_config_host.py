@@ -120,12 +120,12 @@ def test_vswitch_cpu_reconfig(host_to_config, platform, vswitch, ht_required, cp
 
 @mark.parametrize(('platform', 'vswitch', 'ht_required', 'expt_err'), [
     mark.p1(((1, 1), (5, 5), False, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
-    ((7, 9), (2, 2), None, "CpuAssignment.TOTAL_TOO_MANY_CORES.format(1)"),   # Assume total<=10 cores/per proc & thread
+    ((7, 9), (2, 2), None, "CpuAssignment.TOTAL_TOO_MANY_CORES"),   # Assume total<=10 cores/per proc & thread
     mark.p1((('cores-2', 'cores-2'), (2, 2), None, "CpuAssignment.NO_VM_CORE")),
     ((1, 1), (9, 8), None, "CpuAssignment.VSWITCH_TOO_MANY_CORES"),    # Assume total <= 10 cores/per proc & thread
     ((5, 5), (5, 4), None, "CpuAssignment.VSWITCH_TOO_MANY_CORES"),
-    mark.p1(((5, 5), (6, 5), None, "CpuAssignment.TOTAL_TOO_MANY_CORES.format(0)")),  # Assume total<=10core/proc&thread
-    ((1, 1), (8, 10), None, "CpuAssignment.TOTAL_TOO_MANY_CORES.format(1)"),  # Assume total <= 10 cores/per proc&thread
+    mark.p1(((5, 5), (6, 5), None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),  # Assume total<=10core/proc&thread
+    ((1, 1), (8, 10), None, "CpuAssignment.TOTAL_TOO_MANY_CORES"),  # Assume total <= 10 cores/per proc&thread
 ])
 def test_vswitch_cpu_reconfig_negative(host_to_config, platform, vswitch, ht_required, expt_err):
     host, ht_enabled, is_cpe = host_to_config
@@ -156,4 +156,10 @@ def test_vswitch_cpu_reconfig_negative(host_to_config, platform, vswitch, ht_req
 
     LOG.tc_step("Verify modify host cpu request is rejected.")
     assert 1 == code, "Modify host cpu request is not rejected."
-    assert eval(expt_err) in output, "Expected error string is not in output"
+
+    if "TOTAL_TOO_MANY_CORES" in expt_err:
+        proc_id = 0 if platform[0] + vswitch[0] > 10 else 1
+        expt_err = eval(expt_err).format(proc_id)
+    else:
+        expt_err = eval(expt_err)
+    assert expt_err in output, "Expected error string is not in output"

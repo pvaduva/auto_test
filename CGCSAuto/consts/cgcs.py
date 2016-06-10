@@ -148,3 +148,18 @@ class EventLogID:
     VM_DELETED = '700.114'
     VM_CREATED = '700.108'
     VM_FAILED = '700.001'
+
+
+class NetworkingVmMapping:
+    VSWITCH = {
+        'vif': 'avp',
+        'flavor': 'medium.dpdk',
+    }
+    AVP = {
+        'vif': 'avp',
+        'flavor': 'small',
+    }
+    VIRTIO = {
+        'vif': 'avp',
+        'flavor': 'small',
+    }

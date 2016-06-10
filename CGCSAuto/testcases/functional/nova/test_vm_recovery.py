@@ -72,6 +72,7 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
     Test auto recovery setting in vm with various auto recovery settings in flavor and image.
 
     Args:
+        cpu_policy (str|None): cpu policy to set in flavor
         flavor_auto_recovery (str|None): None (unset) or true or false
         image_auto_recovery (str|None): None (unset) or true or false
         disk_format (str):
@@ -255,7 +256,7 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
         step_str = 'not '
 
     LOG.tc_step("Verify vm heartbeat is {}established via event logs".format(step_str))
-    hb_tmout=EventLogTimeout.HEARTBEAT_ESTABLISH
+    hb_tmout = EventLogTimeout.HEARTBEAT_ESTABLISH
     events_1 = system_helper.wait_for_events(hb_tmout, strict=False, fail_ok=True,
                                              **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                                 EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
