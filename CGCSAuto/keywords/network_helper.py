@@ -355,6 +355,68 @@ def get_vm_port(vm, vm_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
     return table_parser.get_values(table_, 'id', strict=False, fixed_ips=vm+'"')[0]
 
 
+def get_neutron_port(name=None, con_ssh=None, auth_info=None):
+    """
+        Get the neutron port list based on name if given for a given tenant.
+
+        Args:
+            con_ssh (SSHClient): If None, active controller ssh will be used.
+            auth_info (dict): Tenant dict. If None, primary tenant will be used.
+            name (str): Given name for the port
+
+        Returns (str): Neutron port id of a specific tenant.
+
+    """
+    table_ = table_parser.table(cli.neutron('port-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is None:
+        return table_parser.get_values(table_, 'id')
+
+    return table_parser.get_values(table_, 'id', strict=False, name=name)
+
+
+def get_provider_net(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+        Get the neutron provider net list based on name if given for ADMIN user.
+
+        Args:
+            con_ssh (SSHClient): If None, active controller ssh will be used.
+            auth_info (dict): Tenant dict. If None, primary tenant will be used.
+            name (str): Given name for the provider network to filter
+
+        Returns (str): Neutron port id of admin user.
+
+    """
+    table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is None:
+        return table_parser.get_values(table_, 'id')
+
+    return table_parser.get_values(table_, 'id', strict=False, name=name)
+
+
+def get_provider_net_range(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+        Get the neutron provider net ranges based on name if given for ADMIN user.
+
+        Args:
+            con_ssh (SSHClient): If None, active controller ssh will be used.
+            auth_info (dict): Tenant dict. If None, primary tenant will be used.
+            name (str): Given name for the provider network to filter
+
+        Returns (dict): Neutron provider network ranges of admin user.
+
+    """
+    table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is None:
+        ranges = table_parser.get_values(table_, 'ranges')
+    else:
+        ranges = table_parser.get_values(table_, 'ranges', strict=False, name=name)
+    if ranges is not '':
+        ranges = eval(ranges)
+    else:
+        ranges = {}
+    return ranges
+
+
 def get_mgmt_net_id(con_ssh=None, auth_info=None):
     """
     Get the management net id of given tenant.
