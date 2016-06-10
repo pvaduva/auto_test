@@ -17,8 +17,8 @@ def less_than_two_hypervisors():
 @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @fixture(scope='module')
 def modify_huge_page(request):
-    # setup up 3 1G huge page on compute-1
-    # this can be parametreized in the future to accept other values
+    # setup up huge page on compute-1
+
 
     hostname = request.param[0]
     processor = request.param[1]

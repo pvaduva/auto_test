@@ -8,7 +8,7 @@ Create Local Work Branch
 Goto automation repo. If you haven't checked out any branch, it will be under master by default.
 ::
 
-    export $MY_REPO=path_to_wassp-repos/testcase/cgcs
+    export $MY_REPO=~/wassp-repos/testcase/cgcs
     cd $MY_REPO
     cd CGCSAuto
 
@@ -91,3 +91,5 @@ cd to wasp-repos/testcases/cgcs/CGCSAuto directory Sample Commands to Run Test C
  py.test -m 'P1 or P2' testcases/test_sample.py
  # Run tests in test_sample module with ping_vms in tests' names
  py.test -k 'ping_vms' testcases/test_sample.py
+ # Run tests in from lab IP_1_4
+ py.test --lab IP_1_4 testcases/test_sample.py

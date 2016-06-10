@@ -23,7 +23,9 @@ Basic Packages
  * Pytest for python3::
 
     sudo pip3 install pytest
+ * Pyaml for python3::
 
+    sudo pip3 install pyyaml
 
 WASSP
 -----

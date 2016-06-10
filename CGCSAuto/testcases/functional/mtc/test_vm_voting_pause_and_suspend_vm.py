@@ -8,7 +8,7 @@ from time import sleep
 
 from utils import table_parser
 from utils.tis_log import LOG
-from consts.cgcs import EventLogID, FlavorSpec
+from consts.cgcs import EventLogID, FlavorSpec, VMStatus
 from consts.timeout import EventLogTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 
@@ -70,22 +70,39 @@ def test_vm_voting_pause_and_suspend(heartbeat_flavor_vm):
         vm_ssh.exec_cmd(cmd)
 
     #try to pause
+    vm_helper.pause_vm(vm_id, fail_ok=True)
 
-    #verify it fail
-
+    #verify it fail it should still be active state
+    vm_state = nova_helper.get_vm_status(vm_id)
+    print(vm_state)
+    assert vm_state == VMStatus.ACTIVE
     #try to suspend
+    vm_helper.suspend_vm(vm_id, fail_ok=True)
 
-    #verify that fail
+    #verify that fail it should still be active state
+    vm_state = nova_helper.get_vm_status(vm_id)
+    print(vm_state)
+    assert vm_state == VMStatus.ACTIVE
 
     cmd = "rm /tmp/vote_no_to_suspend"
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         vm_ssh.exec_cmd(cmd)
 
     # try to pause
-
+    vm_helper.pause_vm(vm_id, fail_ok=True)
     # verify that pass
+    vm_state = nova_helper.get_vm_status(vm_id)
+    print(vm_state)
+    assert vm_state == VMStatus.PAUSED
+    #unpause
+    vm_helper.unpause_vm(vm_id, fail_ok=True)
 
+    sleep(10)
     # try to suspend
-
+    vm_helper.suspend_vm(vm_id, fail_ok=True)
     #verify that pass
-
+    vm_state = nova_helper.get_vm_status(vm_id)
+    print(vm_state)
+    assert vm_state == VMStatus.SUSPENDED
+    #resume vm
+    vm_helper.resume_vm(vm_id, fail_ok=True)
