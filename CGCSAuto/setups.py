@@ -19,7 +19,6 @@ def setup_tis_ssh(lab):
         con_ssh = SSHClient(lab['floating ip'], 'wrsroot', 'li69nux', CONTROLLER_PROMPT)
         con_ssh.connect()
         ControllerClient.set_active_controller(con_ssh)
-        con_ssh.exec_cmd('cat /etc/build.info')
     if 'auth_url' in lab:
         Tenant._set_url(lab['auth_url'])
     return con_ssh
@@ -31,7 +30,7 @@ def set_env_vars(con_ssh):
     hist_time = con_ssh.exec_cmd("echo $HISTTIMEFORMAT")[1]
     source = False
 
-    if prompt_cmd != 'dateblabla':
+    if prompt_cmd != 'date':
         if prompt_cmd:
             con_ssh.exec_cmd('''sed -i '/export PROMPT_COMMAND=.*/d' ~/.bashrc''')
 
