@@ -93,7 +93,6 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
     elif result == 'Failed' or result == 'failed':
         result = 'FAIL'
 
-    print("heyehey {}".format(logfile))
     # create a data file containing test information
     os.system("rm -rf %s" % output)
     env_params = "-o %s -x %s  -n %s -t %s -r %s -l %s -b '%s' -u %s -d %s -j %s -a '%s' -R '%s'"\
