@@ -12,7 +12,8 @@ LATEST_BUILD_DIR = "latest_build"
 EXPORT_LAB_REL_PATH = "export/lab"
 LAB_YOW_REL_PATH = EXPORT_LAB_REL_PATH + "/yow"
 LAB_SCRIPTS_REL_PATH = EXPORT_LAB_REL_PATH + "/scripts"
-CENTOS_LAB_BASE_PATH = "/localdisk/designer/jenkins/Secure_Src_Pull_CGCS_DEV_0016/wrlinux-x/addons/wr-cgcs/layers/cgcs/extras.ND/lab/"
+#CENTOS_LAB_BASE_PATH = "/localdisk/designer/jenkins/Secure_Src_Pull_CGCS_DEV_0016/wrlinux-x/addons/wr-cgcs/layers/cgcs/extras.ND/lab/"
+CENTOS_LAB_BASE_PATH = "/localdisk/designer/jenkins/CGCS_3.0_Centos_Pull_CGCS_DEV_0016/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/"
 CENTOS_LAB_SCRIPTS = CENTOS_LAB_BASE_PATH + "scripts/"
 CENTOS_CFG_FILES = CENTOS_LAB_BASE_PATH + "yow/"
 
@@ -157,7 +158,7 @@ REMOVE_HOSTS_SSH_KEY_CMD = "ssh-keygen -f {} -R {}"
 # Command timeouts
 COLLECT_TIMEOUT=300
 RSYNC_TIMEOUT = 3600
-REBOOT_TIMEOUT = 4000
+REBOOT_TIMEOUT = 7200
 BIOS_TYPE_TIMEOUT = 1800
 CONFIG_CONTROLLER_TIMEOUT = 1200
 LAB_SETUP_TIMEOUT = 1800
