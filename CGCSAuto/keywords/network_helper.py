@@ -500,7 +500,8 @@ def get_provider_net(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
         name (str): Given name for the provider network to filter
 
-    Returns (str): Neutron port id of admin user.
+        Returns (str): Neutron provider net id of admin user.
+
 
     """
     table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -532,6 +533,43 @@ def get_provider_net_range(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
     else:
         ranges = {}
     return ranges
+
+
+def get_security_group(name=None, con_ssh=None, auth_info=None):
+    """
+        Get the neutron security group list based on name if given for given user.
+
+        Args:
+            con_ssh (SSHClient): If None, active controller ssh will be used.
+            auth_info (dict): Tenant dict. If None, primary tenant will be used.
+            name (str): Given name for the security group to filter
+
+        Returns (str): Neutron security group id.
+
+    """
+    table_ = table_parser.table(cli.neutron('security-group-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is None:
+        return table_parser.get_values(table_, 'id')
+
+    return table_parser.get_values(table_, 'id', strict=False, name=name)
+
+
+def get_qos(name=None, con_ssh=None, auth_info=None):
+    """
+        Get the neutron qos list based on name if given for given user.
+
+        Args:
+            con_ssh (SSHClient): If None, active controller ssh will be used.
+            auth_info (dict): Tenant dict. If None, primary tenant will be used.
+            name (str): Given name for the qos list to filter
+        Returns (str): Neutron qos policy id.
+
+    """
+    table_ = table_parser.table(cli.neutron('qos-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is None:
+        return table_parser.get_values(table_, 'id')
+
+    return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
 def get_mgmt_net_id(con_ssh=None, auth_info=None):
