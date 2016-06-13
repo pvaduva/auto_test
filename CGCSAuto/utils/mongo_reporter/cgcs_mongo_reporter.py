@@ -57,7 +57,10 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
     if log_dir is None:
         logfile = options['logfile']
     else:
-        logfile = os.path.join(log_dir, 'TIS_AUTOMATION.log')
+        everything_log = os.path.join(log_dir, 'TIS_AUTOMATION.log')
+        testres_log = os.path.join(log_dir, 'test_results.log')
+        pytest_log = os.path.join(log_dir, 'pytestlog.log')
+        logfile = ','.join([everything_log, testres_log, pytest_log])
 
     # determine domain. config.ini > test path > setup_consts(default)
     if options['domain']:
@@ -89,7 +92,8 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
         result = 'PASS'
     elif result == 'Failed' or result == 'failed':
         result = 'FAIL'
-    
+
+    print("heyehey {}".format(logfile))
     # create a data file containing test information
     os.system("rm -rf %s" % output)
     env_params = "-o %s -x %s  -n %s -t %s -r %s -l %s -b '%s' -u %s -d %s -j %s -a '%s' -R '%s'"\

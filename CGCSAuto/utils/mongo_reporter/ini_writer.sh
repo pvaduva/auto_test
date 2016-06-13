@@ -180,7 +180,7 @@ cat $outfile > /tmp/cw_outfile.txt
 
 if [ "$logfile" != "" ]; then
 	echo "console = $logfile " >> $outfile
-	echo "logs = $logfile " >> $outfile
+	echo "logs = ${logfile} " >> $outfile
 fi
 
 #if [ $DEBUG -eq 0 ]; then 

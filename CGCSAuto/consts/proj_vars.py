@@ -10,7 +10,7 @@ class ProjVar:
             'KEYFILE_PATH': 'keyfile_{}.pem'.format(labname),
             'KEYFILE_NAME': '/home/wrsroot/.ssh/' + 'keyfile_{}.pem'.format(labname),
             'LOG_DIR': logdir,
-            'TCLIST_PATH': logdir + '/testcases.lst',
+            'TCLIST_PATH': logdir + '/test_results.log',
             'PYTESTLOG_PATH': logdir + '/pytestlog.log',
             'LAB_NAME': lab['short_name'],
             'TEMP_DIR': logdir + '/tmp_files',
