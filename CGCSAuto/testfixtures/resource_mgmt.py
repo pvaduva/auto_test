@@ -144,7 +144,7 @@ class ResourceCleanup:
 
         if floating_ips:
             for fip in floating_ips:
-                code, msg = network_helper.delete_floatingip(fip, value='ip', fail_ok=True, auth_info=Tenant.ADMIN)
+                code, msg = network_helper.delete_floating_ip(fip, fip_val='ip', fail_ok=True, auth_info=Tenant.ADMIN)
                 if code > 0:
                     err_msgs.append(msg)
 
