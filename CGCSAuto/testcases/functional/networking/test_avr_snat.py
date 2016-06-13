@@ -24,9 +24,9 @@ def snat_setups(request):
     vm_id = vm_helper.boot_vm()[1]
     ResourceCleanup.add('vm', vm_id, scope='module')
 
-    floatingip = network_helper.create_floatingip()[1]
+    floatingip = network_helper.create_floating_ip()[1]
     ResourceCleanup.add('floating_ip', floatingip, scope='module')
-    network_helper.associate_floatingip(floatingip, vm_id, fip_val='ip', vm_val='id')
+    network_helper.associate_floating_ip(floatingip, vm_id, fip_val='ip', vm_val='id')
 
     vm_helper.ping_vms_from_natbox(vm_id, use_fip=False)
 
@@ -151,7 +151,7 @@ def test_reset_router_ext_gateway(snat_setups):
     vm_helper.ping_ext_from_vm(vm_, use_fip=False)
 
     LOG.tc_step("Disassociate floatingip from vm")
-    network_helper.disassociate_floatingip(floating_ip=fip)
+    network_helper.disassociate_floating_ip(floating_ip=fip)
 
     LOG.tc_step("Clear router gateway and verify vm cannot be ping'd from NatBox")
     fixed_ip = network_helper.get_router_ext_gateway_info()['external_fixed_ips'][0]['ip_address']
@@ -163,7 +163,7 @@ def test_reset_router_ext_gateway(snat_setups):
     network_helper.set_router_gateway(clear_first=False, fixed_ip=fixed_ip)
 
     LOG.tc_step("Associate floatingip to vm")
-    network_helper.associate_floatingip(floating_ip=fip, vm=vm_)
+    network_helper.associate_floating_ip(floating_ip=fip, vm=vm_)
 
     LOG.tc_step("Verify vm can ping to and be ping'd from outside")
     vm_helper.ping_vms_from_natbox(vm_, use_fip=False)

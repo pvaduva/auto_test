@@ -5,21 +5,21 @@ from keywords import vm_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-##############################################
+######################################################################################
 # us57685_Test Strategy for US57685_AVR_FIP (Accelerated Virtual router Floating IP) #
-##############################################
+######################################################################################
+
 @fixture(scope='module', autouse=True)
 def fip_setups(request):
     # Create FIP and Associate VM to FIP
-    retcode, floating_ip = network_helper.create_floatingip(extnet_id=None)
+    floating_ip = network_helper.create_floating_ip()[1]
+    ResourceCleanup.add('floating_ip', floating_ip, scope='module')
 
-    def disassoicate_fip():
-        network_helper.disassociate_floatingip(floating_ip)
-    # Boot VM with FIP
-    request.addfinalizer(disassoicate_fip)
     vm_id = vm_helper.boot_vm()[1]
-    network_helper.associate_floatingip(floating_ip=floating_ip, vm=vm_id)
     ResourceCleanup.add('vm', vm_id, scope='module')
+
+    network_helper.associate_floating_ip(floating_ip=floating_ip, vm=vm_id)
+
     return vm_id, floating_ip
 
 
@@ -30,8 +30,10 @@ def test_fip(fip_setups):
     Args:
         vm (str): vm created by module level test fixture
 
-    Test Setups:
-        - boot a vm from volume and ping vm from NatBox     (module)
+    Test Setups (module):
+        - Create a floating ip
+        - boot a vm
+        - Attach floating ip to vm
 
     Test Steps:
         - Ping  VM FIP
@@ -44,8 +46,7 @@ def test_fip(fip_setups):
         - Ping  VM FIP
 
     Test Teardown:
-        - Disassoicate FIP
-        - Delete the created vm
+        - Delete created FIP and vm (module)
 
     """
     vm_id, fip = fip_setups
@@ -81,8 +82,3 @@ def test_fip(fip_setups):
 
     LOG.tc_step("Ping VM with Floating IP Ensure FIP reachable ")
     vm_helper.ping_ext_from_vm(vm_id, use_fip=True)
-
-
-
-
-

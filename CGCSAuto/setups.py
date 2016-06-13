@@ -25,6 +25,9 @@ def setup_tis_ssh(lab):
 
 
 def set_env_vars(con_ssh):
+    # TODO: delete this after source to bash issue is fixed on centos
+    con_ssh.exec_cmd("bash")
+
     prompt_cmd = con_ssh.exec_cmd("echo $PROMPT_COMMAND")[1]
     tmout_val = con_ssh.exec_cmd("echo $TMOUT")[1]
     hist_time = con_ssh.exec_cmd("echo $HISTTIMEFORMAT")[1]
