@@ -131,12 +131,7 @@ def parse_args():
     # Add a flag to identify a wrl linux install
     lab_grp.add_argument('--host-os', dest='host_os',
                          choices=HOST_OS, default=DEFAULT_HOST_OS,
-                         help="Install a system that is wrlinux-based")
-
-    # Add a flag to identify a centos install
-    lab_grp.add_argument('--centos', dest='host_os',
-                         action='store_true', default='centos',
-                         help="Install a system that is centos-based")
+                         help="Centos or wrlinux based install")
 
     #TODO: Custom directory path is not supported yet. Need to add code
     #      to rsync files from custom directory path on local PC to controller-0
