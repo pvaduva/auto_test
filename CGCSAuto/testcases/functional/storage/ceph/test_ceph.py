@@ -795,7 +795,7 @@ def test_import_raw_with_cache_raw():
     elif disk_size.group(1):
         if disk_size.group(2) == "M":
             disk_size = 1
-        if disk_size(2) == "G"
+        if disk_size(2) == "G":
             disk_size = disk_size
 
     LOG.tc_step('Create flavor of sufficient size for VM')
