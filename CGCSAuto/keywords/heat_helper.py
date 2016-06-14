@@ -13,35 +13,59 @@ import yaml
 from consts.heat import Heat
 
 
-def _get_stack_user_id(con_ssh=None, auth_info=None):
-    """ Function for getting stack user ID"""
-    if auth_info is None:
-        auth_info = Primary.get_primary()
+def get_stacks(name=None, con_ssh=None, auth_info=None):
+    """
+        Get the stacks list based on name if given for a given tenant.
 
-    tenant = auth_info['tenant']
-    table_ = table_parser.table(cli.openstack('user list',ssh_client=con_ssh, auth_info=auth_info))
-    user_id = table_parser.get_column(table_, 'ID', Name=tenant)
-    return user_id
+        Args:
+            con_ssh (SSHClient): If None, active controller ssh will be used.
+            auth_info (dict): Tenant dict. If None, primary tenant will be used.
+            name (str): Given name for the heat stack
 
-def _get_tenant_id(con_ssh=None, auth_info=None):
-    """ Function for getting stack user ID"""
-    if auth_info is None:
-        auth_info = Primary.get_primary()
+        Returns (str): Heat stack id of a specific tenant.
 
-    tenant = auth_info['tenant']
-    table_ = table_parser.table(cli.openstack('project list',ssh_client=con_ssh, auth_info=auth_info))
-    tenant_id = table_parser.get_column(table_, 'ID', Name=tenant)
-    return tenant_id
+    """
 
-def get_stack_list(con_ssh=None, auth_info=None):
     table_ = table_parser.table(cli.heat('stack-list', ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_column(table_, 'stack_name')
+    if name is not None:
+        return table_parser.get_values(table_, 'id', stack_name=name)
+    else:
+        return table_parser.get_column(table_, 'id')
+
 
 def get_stack_status(stack_name=None, con_ssh=None, auth_info=None):
+    """
+        Get the stacks status based on name if given for a given tenant.
+
+        Args:
+            con_ssh (SSHClient): If None, active controller ssh will be used.
+            auth_info (dict): Tenant dict. If None, primary tenant will be used.
+            stack_name (str): Given name for the heat stack
+
+        Returns (str): Heat stack status of a specific tenant.
+
+    """
+
     table_ = table_parser.table(cli.heat('stack-list', ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_,'stack_status', stack_name=stack_name)
 
+
 def delete_stack(stack_name, con_ssh=None, auth_info=None):
+    """
+        Delete the given heat stack for a given tenant.
+
+        Args:
+            con_ssh (SSHClient): If None, active controller ssh will be used.
+            auth_info (dict): Tenant dict. If None, primary tenant will be used.
+            stack_name (str): Given name for the heat stack
+
+        Returns (list): Status and msg of the heat deletion.
+
+    """
+
+    if stack_name is None:
+        return [1, "Stack name is missing in the arg"]
+
     LOG.info("Deleting Heat Stack %s", stack_name)
     exitcode, output = cli.heat('stack-delete', stack_name, ssh_client=con_ssh, auth_info=auth_info,
                                 fail_ok=True, rtn_list=True)

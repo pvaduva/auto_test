@@ -774,6 +774,25 @@ def get_vms_by_hypervisors(con_ssh=None, rtn_val='ID'):
     return host_vms
 
 
+def get_key_pair(name=Nome,con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        name (str): Name of the key pair to filter for a given user
+        con_ssh (SSHClient):
+        auth_info (dict): Tenant to be used to execute the cli if none Primary tenant will be used
+
+    Returns (dict):return the name of the keypairs
+
+    """
+    table_ = table_parser.table(cli.nova('keypair-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is not None:
+        return table_parser.get_values(table_,'Name',Name=name)
+    else:
+        return table_parser.get_column(table_, 'Name')
+
+
+
 def vm_exists(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Return True if VM with given id exists. Else False.
