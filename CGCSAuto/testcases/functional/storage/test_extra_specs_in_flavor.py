@@ -228,7 +228,7 @@ def test_verify_disk_extra_on_virsh(vm_with_disk_spec):
     LOG.tc_step("SSH to the {} where VM is located".format(vm_host))
 
     with host_helper.ssh_to_host(vm_host) as comp_ssh:
-        # code, virsh_list_output = comp_ssh.exec_sudo_cmd(cmd="sudo virsh list | grep -o 'instance[^ ]*' ")
+        # code, virsh_list_output = comp_ssh.exec_sudo_cmd(cmd="sudo virsh list | grep --color='never' -o 'instance[^ ]*' ")
 
         LOG.tc_step("Extract the correct bytes value from virsh dumpxml")
 

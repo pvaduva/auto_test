@@ -1002,7 +1002,8 @@ def get_host_threads_count(host, con_ssh=None):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    code, output = con_ssh.exec_cmd('vm-topology -s topology | grep "{}.*Threads/Core="'.format(host))
+    code, output = con_ssh.exec_cmd('''vm-topology -s topology | grep --color='never' "{}.*Threads/Core="'''.
+                                    format(host))
     if code != 0:
         raise exceptions.SSHExecCommandFailed("CMD stderr: {}".format(output))
 
@@ -1023,7 +1024,7 @@ def get_vswitch_port_engine_map(host_ssh):
         e.g., {'0': ['1', '2'], '1': ['1', '2']}
 
     """
-    output = host_ssh.exec_cmd('''grep "^port-map=" /etc/vswitch/vswitch.ini''', fail_ok=False)[1]
+    output = host_ssh.exec_cmd('''grep --color='never' "^port-map=" /etc/vswitch/vswitch.ini''', fail_ok=False)[1]
 
     host_vswitch_map = eval(output.split(sep='=')[1].strip())
     host_vswitch_map_list = host_vswitch_map.split(sep=' ')
@@ -1051,7 +1052,8 @@ def get_expected_vswitch_port_engine_map(host_ssh):
         e.g., {'0': ['1', '2'], '1': ['1', '2']}
 
     """
-    ports_tab = table_parser.table(host_ssh.exec_cmd('''vshell port-list | grep -v "avp-"''', fail_ok=False)[1])
+    ports_tab = table_parser.table(host_ssh.exec_cmd('''vshell port-list | grep --color='never' -v "avp-"''',
+                                                     fail_ok=False)[1])
     cores_tab = table_parser.table(host_ssh.exec_cmd("vshell engine-list", fail_ok=False)[1])
 
     header = 'socket' if 'socket' in ports_tab['headers'] else 'socket-id'

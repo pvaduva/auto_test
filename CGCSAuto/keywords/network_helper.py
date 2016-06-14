@@ -190,7 +190,7 @@ def get_net_info(net_id, field='status', strict=True, auto_info=None, con_ssh=No
 
     """
     table_ = table_parser.table(cli.neutron('net-show', net_id, ssh_client=con_ssh, auth_info=auto_info))
-    value = table_parser.get_value_two_col_table(table_, field, merge_lines=False)
+    value = table_parser.get_value_two_col_table(table_, field, strict=strict, merge_lines=False)
 
     if field == 'subnets':
         if isinstance(value, str):
@@ -255,7 +255,7 @@ def create_floating_ip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_
 
     """
     if extnet_id is None:
-        extnet_id = get_ext_networks(con_ssh=con_ssh, auth_info=None)[0]
+        extnet_id = get_ext_networks(con_ssh=con_ssh)[0]
     args = extnet_id
 
     if tenant_name is not None:
@@ -500,7 +500,8 @@ def get_provider_net(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
         name (str): Given name for the provider network to filter
 
-    Returns (str): Neutron port id of admin user.
+        Returns (str): Neutron provider net id of admin user.
+
 
     """
     table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -532,6 +533,43 @@ def get_provider_net_range(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
     else:
         ranges = {}
     return ranges
+
+
+def get_security_group(name=None, con_ssh=None, auth_info=None):
+    """
+        Get the neutron security group list based on name if given for given user.
+
+        Args:
+            con_ssh (SSHClient): If None, active controller ssh will be used.
+            auth_info (dict): Tenant dict. If None, primary tenant will be used.
+            name (str): Given name for the security group to filter
+
+        Returns (str): Neutron security group id.
+
+    """
+    table_ = table_parser.table(cli.neutron('security-group-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is None:
+        return table_parser.get_values(table_, 'id')
+
+    return table_parser.get_values(table_, 'id', strict=False, name=name)
+
+
+def get_qos(name=None, con_ssh=None, auth_info=None):
+    """
+        Get the neutron qos list based on name if given for given user.
+
+        Args:
+            con_ssh (SSHClient): If None, active controller ssh will be used.
+            auth_info (dict): Tenant dict. If None, primary tenant will be used.
+            name (str): Given name for the qos list to filter
+        Returns (str): Neutron qos policy id.
+
+    """
+    table_ = table_parser.table(cli.neutron('qos-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is None:
+        return table_parser.get_values(table_, 'id')
+
+    return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
 def get_mgmt_net_id(con_ssh=None, auth_info=None):
@@ -931,7 +969,7 @@ def set_router_gateway(router_id=None, extnet_id=None, enable_snat=True, fixed_i
         router_id = get_tenant_router(con_ssh=con_ssh)
 
     if not extnet_id:
-        extnet_id = get_ext_networks(con_ssh=con_ssh, auth_info=None)[0]
+        extnet_id = get_ext_networks(con_ssh=con_ssh)[0]
 
     args = ' '.join([args, router_id, extnet_id])
 
