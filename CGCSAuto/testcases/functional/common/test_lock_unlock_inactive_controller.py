@@ -1,5 +1,5 @@
 ###
-# test_468_lock_unlock_compute_node sanity_juno_unified_R3.xls
+# test_467_lock_unlock_compute_node sanity_juno_unified_R3.xls
 ###
 
 from pytest import fixture, mark, skip
