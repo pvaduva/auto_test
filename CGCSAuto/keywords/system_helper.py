@@ -210,23 +210,30 @@ def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
     if uuid:
         args += ' --uuid'
     args += ' --nowrap --nopaging'
-    table_ = table_parser.table(cli.system('alarm-suppress-list', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.system('event-suppress-list', args, ssh_client=con_ssh, auth_info=auth_info))
     return table_
 
 
 def unsuppress_all(ssh_con=None, fail_ok=False):
-    cli.system('alarm-unsuppress-all',ssh_client=ssh_con)
-    get_suppress_list = get_suppressed_alarms()
-    suppressed_list = table_parser.get_values(table_= get_suppress_list, target_header='Suppressed Alarm ID\'s',
+    """
+    Args:
+        ssh_con:
+        fail_ok:
+
+    Returns: success , msg
+    """
+    table_events = table_parser.table(cli.system('event-unsuppress-all',
+                                                 ssh_client=ssh_con, fail_ok=fail_ok, rtn_list=True))
+    get_suppress_list = table_events
+    suppressed_list = table_parser.get_values(table_=get_suppress_list, target_header='Suppressed Alarm ID\'s',
                                               strict=True, **{'Status': 'suppressed'})
     if len(suppressed_list) == 0:
-        return 0
-    else:
-        msg = "Suppressed was unsuccessfull"
-        if fail_ok:
-            LOG.warning(msg)
-            return 1, msg
-        raise exceptions.NeutronError(msg)
+        return 0, "Successfully unsuppressed"
+    msg = "Suppressed was unsuccessfull"
+    if fail_ok:
+        LOG.warning(msg)
+        return 2, msg
+    raise exceptions.NeutronError(msg)
 
 
 def get_events(num=5, uuid=False, show_only=None, show_suppress=False, query_key=None, query_value=None,
@@ -270,7 +277,7 @@ def __process_query_args(args, query_key, query_value, query_type):
     return args
 
 
-def wait_for_events(timeout=30, num=5, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,
+def wait_for_events(timeout=30, num=10, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,
                     fail_ok=True, rtn_val='Event Log ID', con_ssh=None, auth_info=Tenant.ADMIN, regex=False,
                     strict=True, check_interval=3, **kwargs):
     """
@@ -552,7 +559,7 @@ def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_in
 
 
 def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail_ok=False, con_ssh=None):
-    # TODO: Update after Jira fix. (which jira?)
+    # TODO: Update after Jira fix.CGTS-4356
     """
     suppress alarm by uuid
     Args:
@@ -568,12 +575,12 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
     suppressed_alarms_tab = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
 
     alarm_status = "unsuppressed" if suppress else "suppressed"
-    cmd = "alarm-supress" if suppress else "alarm-unsuppress"
+    cmd = "event-suppress" if suppress else "alarm-unsuppress"
     alarm_filter = {"Suppressed Alarm ID's": alarm_id}
 
     if check_first:
         pre_status = table_parser.get_values(table_=suppressed_alarms_tab, target_header='Status', strict=True,
-                                         **alarm_filter)[0]
+                                             **alarm_filter)[0]
         if pre_status.lower() != alarm_status:
             msg = "Alarm is already {}. Do nothing".format(pre_status)
             LOG.info(msg)
@@ -586,10 +593,9 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
 
     post_suppressed_alarms_tab = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
     post_status = table_parser.get_values(table_=post_suppressed_alarms_tab, target_header="Status", strict=True,
-                                          **{"Suppressed Alarm ID's": alarm_id})
-
+                                          **{"UUID": alarm_id})
     expt_status = "suppressed" if suppress else "unsuppressed"
-    if post_status.lower() != expt_status:
+    if post_status[0].lower() != expt_status:
         msg = "Alarm {} is not {}".format(alarm_id, expt_status)
         if fail_ok:
             LOG.warning(msg)

@@ -14,7 +14,7 @@ def test_setting_denied_unlocked_host():
     LOG.tc_step("Verify host-cpu-modify is rejected if host is unlocked.")
     for host in nova_hosts:
         code, msg = host_helper.modify_host_cpu(host, 'vswitch', p0=1, fail_ok=True)
-        assert 1 == code, "CLI is not rejected with return code 1."
+        assert 1 == code, "modify host cpu CLI is not rejected with return code 1."
         assert 'Host must be locked' in msg
 
         LOG.tc_step("Verify one ore more cpu cores are assigned to Platform and vSwitch.")

@@ -36,6 +36,7 @@ def test_boot_vms_server_group(srv_grp_msging_flavor, policy, group_size, best_e
     """
     LOG.tc_step("Create a flavor with server group messaging set to {}".format(srv_grp_msging_flavor))
     flavor_id = nova_helper.create_flavor('srv_grp')[1]
+    ResourceCleanup.add('flavor', resource_id=flavor_id)
     if srv_grp_msging_flavor is not None:
         nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.SRV_GRP_MSG: srv_grp_msging_flavor})
 

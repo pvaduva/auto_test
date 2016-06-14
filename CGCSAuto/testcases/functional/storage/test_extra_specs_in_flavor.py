@@ -1,5 +1,14 @@
+###
+# below testcases is part of us77170_StorageTestPlan.pdf specifically under
+# https://jive.windriver.com/docs/DOC-45652
+# It specifically test scenarios where an flavor created with image/lvm/remote specs
+# and storage specs set specifically to disk read/write/total with different values
+# and when VMs are created using those flavors, they were checked that that those specs hold true on vms.
+###
+
 from pytest import fixture, mark, skip
 import ast
+from time import sleep
 
 from utils import cli
 from utils import table_parser
@@ -16,18 +25,20 @@ instance_backing_params =['image', 'lvm']
 def config_local_volume_group(request):
 
     local_volume_group = {'instance_backing': request.param}
-    #if already same lvm skip
+    #check the local volume group of compute-0
     table_ = table_parser.table(cli.system('host-lvg-show compute-0 nova-local', auth_info=Tenant.ADMIN, fail_ok=False))
 
     instance_backing = table_parser.get_value_two_col_table(table_,'parameters')
     inst_back = ast.literal_eval(instance_backing)['instance_backing']
 
+    # if already same lvm skip
     if inst_back == request.param:
         return local_volume_group
 
     lvg_args = "-b "+request.param+" compute-0 nova-local"
     host_helper.lock_host('compute-0')
-
+    #could be a bug seems to cause host-lvg-modify to fail add timer work around it
+    #sleep(10)
     # config lvg parameter for instance backing either image/lvm
     cli.system('host-lvg-modify', lvg_args, auth_info=Tenant.ADMIN, fail_ok=False)
 
@@ -68,7 +79,10 @@ def flavor_with_disk_spec(request, config_local_volume_group):
          'pagesize': pagesize
         }
     """
-    storage = 'local_'+config_local_volume_group['instance_backing']
+    if config_local_volume_group['instance_backing'] == 'remote':
+        storage = 'remote'
+    else:
+        storage = 'local_'+config_local_volume_group['instance_backing']
 
     if len(host_helper.get_hosts_by_storage_aggregate(storage_backing=storage)) < 1:
         skip("No host support {} storage backing".format(storage))
@@ -116,9 +130,9 @@ def vm_with_disk_spec(request, flavor_with_disk_spec):
 
 def test_disk_extra_spec(flavor_with_disk_spec):
     """
-    Storage_Flavor_US77170_Diskquota_14.1 from us77170_StorageTestPlan.pdf
+    from us77170_StorageTestPlan.pdf
 
-    Verify the version number (or str) exist for the system when execute the "system show" cli
+    verify the extra specs are properly set and matching expecte specs
 
     Args:
         - Nothing
@@ -147,9 +161,8 @@ def test_disk_extra_spec(flavor_with_disk_spec):
 
 def test_verify_disk_extra_on_vm( vm_with_disk_spec):
     """
-    Storage_Flavor_ US77170_Diskquota_14.2.1 from us77170_StorageTestPlan.pdf
-
-    Verify the version number (or str) exist for the system when execute the "system show" cli
+    from us77170_StorageTestPlan.pdf
+    verify the extra specs from flavor is created set on vm
 
     Args:
         - Nothing
@@ -181,7 +194,26 @@ def test_verify_disk_extra_on_vm( vm_with_disk_spec):
 
 
 def test_verify_disk_extra_on_virsh(vm_with_disk_spec):
+    """
+    from us77170_StorageTestPlan.pdf
 
+    Verify the version number (or str) exist for the system when execute the "system show" cli
+
+    Args:
+        - Nothing
+
+    Setup:
+        - Setup flavor with specific bytes per second extra specs
+        - create a vm using the created flavor
+
+    Test Steps:
+        -verify the extra spec used by vm is set and match to expected specs
+
+    Teardown:
+        -delete vm
+        -delete specific bytes per second extra specs
+
+    """
     vm_id = vm_with_disk_spec['id']
     disk_extra_spec = vm_with_disk_spec['disk_spec']
     virsh_tag = disk_extra_spec[0].split('quota:disk_')[1]

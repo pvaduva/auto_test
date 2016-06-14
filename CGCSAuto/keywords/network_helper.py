@@ -151,17 +151,52 @@ def delete_subnet(subnet_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False
     return 0, succ_msg
 
 
-def get_subnets(net_id=None, auth_info=None, con_ssh=None):
-    if net_id:
-        table_ = table_parser.table(cli.neutron('net-show', net_id, ssh_client=con_ssh, auth_info=auth_info))
-        subnets = table_parser.get_value_two_col_table(table_, 'subnets', merge_lines=False)
-        if isinstance(subnets, str):
-            subnets = [subnets]
-    else:
-        table_ = table_parser.table(cli.neutron('subnet-list', ssh_client=con_ssh, auth_info=auth_info))
-        subnets = table_parser.get_column(table_, 'id')
+def get_subnets(name=None, cidr=None, strict=True, regex=False, auth_info=None, con_ssh=None):
+    """
+    Get subnets ids based on given criteria.
 
-    return subnets
+    Args:
+        name (str): name of the subnet
+        cidr (str): cidr of the subnet
+        strict (bool): whether to perform strict search on given name and cidr
+        regex (bool): whether to use regext to search
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (list): a list of subnet ids
+
+    """
+    table_ = table_parser.table(cli.neutron('subnet-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is not None:
+        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, name=name)
+    if cidr is not None:
+        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, cidr=cidr)
+
+    return table_parser.get_column(table_, 'id')
+
+
+def get_net_info(net_id, field='status', strict=True, auto_info=None, con_ssh=None):
+    """
+    Get specified info for given network
+
+    Args:
+        net_id (str): network id
+        field (str): such as 'status', 'subnets', 'wrs-net:vlan_id' or 'vlan_id' if strict=False
+        strict (bool): whether to perform strict search for the name of the field
+        auto_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (str|list): Value of the specified field. When field=subnets, return a list of subnet ids
+
+    """
+    table_ = table_parser.table(cli.neutron('net-show', net_id, ssh_client=con_ssh, auth_info=auto_info))
+    value = table_parser.get_value_two_col_table(table_, field, merge_lines=False)
+
+    if field == 'subnets':
+        if isinstance(value, str):
+            value = [value]
+
+    return value
 
 
 def _get_net_ids(net_name, con_ssh=None, auth_info=None):
@@ -170,32 +205,57 @@ def _get_net_ids(net_name, con_ssh=None, auth_info=None):
 
 
 def get_net_name_from_id(net_id, con_ssh=None, auth_info=None):
+    """
+    Get network name from id
+
+    Args:
+        net_id (str):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (str): name of a network
+
+    """
     table_ = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_, 'name', id=net_id)[0]
 
 
-def get_ext_net_ids(con_ssh=None, auth_info=None):
+def get_ext_networks(con_ssh=None, auth_info=None):
+    """
+    Get ids of external networks
+
+    Args:
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (list): list of ids of external networks
+
+    """
     table_ = table_parser.table(cli.neutron('net-external-list', ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_column(table_, 'id')
 
 
-def create_floatingip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_addr=None, vm_id=None,
-                      floating_ip_addr=None, fail_ok=False, con_ssh=None, auth_info=None):
+def create_floating_ip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_addr=None, vm_id=None,
+                       floating_ip_addr=None, fail_ok=False, con_ssh=None, auth_info=None):
     """
+    Create a floating ip for given tenant
+
     Args:
-       extnet_id:
-       tenant_name:
-       port_id:
-       fixed_ip_addr:
+       extnet_id (str): id of external network
+       tenant_name (str): name of the tenant to create floating ip for. e.g., 'tenant1', 'tenant2'
+       port_id (str): id of the port
+       fixed_ip_addr (str): fixed ip address. such as 192.168.x.x
        vm_id (str): id of the vm to associate the created floating ip to. This arg will not be used if port_id is set
-       floating_ip_addr:
-       fail_ok:
-       con_ssh:
-       auth_info:
-    Returns: floating IP
+       floating_ip_addr (str): specific floating ip to create
+       fail_ok (bool):
+       con_ssh (SSHClient):
+       auth_info (dict):
+
+    Returns (str): floating IP. such as 192.168.x.x
+
     """
     if extnet_id is None:
-        extnet_id = get_ext_net_ids(con_ssh=con_ssh, auth_info=None)[0]
+        extnet_id = get_ext_networks(con_ssh=con_ssh, auth_info=None)[0]
     args = extnet_id
 
     if tenant_name is not None:
@@ -203,7 +263,6 @@ def create_floatingip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_a
         args += " --tenant-id {}".format(tenant_id)
 
     # process port info
-    port_id_to_check = None
     if port_id is not None:
         args += " --port-id {}".format(port_id)
         if fixed_ip_addr is not None:
@@ -244,18 +303,25 @@ def create_floatingip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_a
     return 0, actual_fip_addr
 
 
-def delete_floatingip(floating_ip, value='ip', auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+def delete_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
     """
-    Args
-        con_ssh:
-        floating_ip:
-        auth_info:
-        port_id:
-    Returns:
+    Delete a floating ip
+
+    Args:
+        floating_ip (str): floating ip to delete.
+        fip_val (str): value type of the floating ip provided. 'ip' or 'id'
+        auth_info (dict):
+        con_ssh (SSHClient):
+        fail_ok (bool): whether to raise exception if fail to delete floating ip
+
+    Returns (tuple): (rtn_code(int), msg(str))
+        - (0, Floating ip <ip> is successfully deleted.)
+        - (1, <stderr>)
+        - (2, Floating ip <ip> still exists in floatingip-list.)
 
     """
-    if value == 'ip':
-        floating_ip = get_floatingip_ids(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)
+    if fip_val == 'ip':
+        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)
     args = floating_ip
 
     code, output = cli.neutron('floatingip-delete', positional_args=args, ssh_client=con_ssh, auth_info=auth_info,
@@ -264,9 +330,9 @@ def delete_floatingip(floating_ip, value='ip', auth_info=Tenant.ADMIN, con_ssh=N
     if code == 1:
         return 1, output
 
-    post_deletion_ips = get_floatingip_ids(con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+    post_deletion_ips = get_floating_ids_from_ips(con_ssh=con_ssh, auth_info=Tenant.ADMIN)
     if floating_ip in post_deletion_ips:
-        msg = "floating ip {} still exists in floatingip-list".format(floating_ip)
+        msg = "Floating ip {} still exists in floatingip-list.".format(floating_ip)
         if fail_ok:
             LOG.warning(msg)
             return 2, msg
@@ -277,21 +343,61 @@ def delete_floatingip(floating_ip, value='ip', auth_info=Tenant.ADMIN, con_ssh=N
     return 0, succ_msg
 
 
-def get_floatingips(auth_info=Tenant.ADMIN, con_ssh=None):
+def get_floating_ips(auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Get all floating ips.
+
+    Args:
+        auth_info (dict): if tenant auth_info is given instead of admin, only floating ips for this tenant will be
+            returned.
+        con_ssh (SSHClient):
+
+    Returns (list): list of floating ips
+
+    """
     table_ = table_parser.table(cli.neutron('floatingip-list', ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_column(table_, 'floating_ip_address')
 
 
-def get_floatingip_ids(floating_ips=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_floating_ids_from_ips(floating_ips=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get ids of floating ips
+
+    Args:
+        floating_ips (list|str): floating ip(s) to convert to id(s). If None, all floating ip ids will be returned.
+        con_ssh:
+        auth_info:
+
+    Returns (list): list of id(s) of floating ip(s)
+
+    """
     table_ = table_parser.table(cli.neutron('floatingip-list', ssh_client=con_ssh, auth_info=auth_info))
+    if not table_['headers']:           # no floating ip listed
+        return []
+
     if floating_ips is not None:
         table_ = table_parser.filter_table(table_, **{'floating_ip_address': floating_ips})
     return table_parser.get_column(table_, 'id')
 
 
-def disassociate_floatingip(floating_ip, fip_val='ip',auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+def disassociate_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+    """
+    Disassociate a floating ip
+
+    Args:
+        floating_ip (str): ip or id of the floating ip
+        fip_val (str): type of the value of floating ip. 'ip' or 'id'
+        auth_info (dict):
+        con_ssh (SSHClient):
+        fail_ok (bool):
+
+    Returns (tuple): (rtn_code(int), msg(str))
+        (0, "Floating ip <ip> is successfully disassociated with fixed ip")
+        (1, <stderr>)
+
+    """
     if fip_val == 'ip':
-        floating_ip = get_floatingip_ids(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)[0]
+        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)[0]
     args = floating_ip
     code, output = cli.neutron('floatingip-disassociate', args, ssh_client=con_ssh, auth_info=auth_info,
                                fail_ok=fail_ok, rtn_list=True)
@@ -304,12 +410,13 @@ def disassociate_floatingip(floating_ip, fip_val='ip',auth_info=Tenant.ADMIN, co
     return 0, succ_msg
 
 
-def associate_floatingip(floating_ip, vm, fip_val='ip', vm_val='id', auth_info=Tenant.ADMIN, con_ssh=None,
+def associate_floating_ip(floating_ip, vm, fip_val='ip', vm_val='id', auth_info=Tenant.ADMIN, con_ssh=None,
                           fail_ok=False):
     """
+    Associate a floating ip to management net ip of given vm.
 
     Args:
-        floating_ip (str): floating ip or id of the floatingip
+        floating_ip (str): ip or id of the floating ip
         vm (str): vm id or ip
         fip_val (str): ip or id
         vm_val (str): id or ip
@@ -329,7 +436,7 @@ def associate_floatingip(floating_ip, vm, fip_val='ip', vm_val='id', auth_info=T
 
     # convert floatingip to id
     if fip_val == 'ip':
-        floating_ip = get_floatingip_ids(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)[0]
+        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)[0]
     args += ' ' + floating_ip
 
     port = get_vm_port(vm=vm, vm_val='ip', con_ssh=con_ssh)
@@ -346,11 +453,85 @@ def associate_floatingip(floating_ip, vm, fip_val='ip', vm_val='id', auth_info=T
 
 
 def get_vm_port(vm, vm_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get port id of a vm
+
+    Args:
+        vm (str): id or management ip of a vm
+        vm_val (str): 'id' or 'ip'
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (str): id of a port
+
+    """
     if vm_val == 'id':
         vm = get_mgmt_ips_for_vms(vms=vm, con_ssh=con_ssh)[0]
 
     table_ = table_parser.table(cli.neutron('port-list', ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_values(table_, 'id', strict=False, fixed_ips=vm)[0]
+    return table_parser.get_values(table_, 'id', strict=False, fixed_ips=vm+'"')[0]
+
+
+def get_neutron_port(name=None, con_ssh=None, auth_info=None):
+    """
+    Get the neutron port list based on name if given for a given tenant.
+
+    Args:
+        con_ssh (SSHClient): If None, active controller ssh will be used.
+        auth_info (dict): Tenant dict. If None, primary tenant will be used.
+        name (str): Given name for the port
+
+    Returns (str): Neutron port id of a specific tenant.
+
+    """
+    table_ = table_parser.table(cli.neutron('port-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is None:
+        return table_parser.get_values(table_, 'id')
+
+    return table_parser.get_values(table_, 'id', strict=False, name=name)
+
+
+def get_provider_net(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get the neutron provider net list based on name if given for ADMIN user.
+
+    Args:
+        con_ssh (SSHClient): If None, active controller ssh will be used.
+        auth_info (dict): Tenant dict. If None, primary tenant will be used.
+        name (str): Given name for the provider network to filter
+
+    Returns (str): Neutron port id of admin user.
+
+    """
+    table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is None:
+        return table_parser.get_values(table_, 'id')
+
+    return table_parser.get_values(table_, 'id', strict=False, name=name)
+
+
+def get_provider_net_range(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get the neutron provider net ranges based on name if given for ADMIN user.
+
+    Args:
+        con_ssh (SSHClient): If None, active controller ssh will be used.
+        auth_info (dict): Tenant dict. If None, primary tenant will be used.
+        name (str): Given name for the provider network to filter
+
+    Returns (dict): Neutron provider network ranges of admin user.
+
+    """
+    table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is None:
+        ranges = table_parser.get_values(table_, 'ranges')
+    else:
+        ranges = table_parser.get_values(table_, 'ranges', strict=False, name=name)
+    if ranges is not '':
+        ranges = eval(ranges)
+    else:
+        ranges = {}
+    return ranges
 
 
 def get_mgmt_net_id(con_ssh=None, auth_info=None):
@@ -445,7 +626,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
     vm_nets = table_parser.get_column(table_, 'Networks')
 
     if use_fip:
-        floatingips = get_floatingips(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
+        floatingips = get_floating_ips(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
 
     for i in range(len(vm_ids)):
         vm_id = vm_ids[i]
@@ -750,7 +931,7 @@ def set_router_gateway(router_id=None, extnet_id=None, enable_snat=True, fixed_i
         router_id = get_tenant_router(con_ssh=con_ssh)
 
     if not extnet_id:
-        extnet_id = get_ext_net_ids(con_ssh=con_ssh, auth_info=None)[0]
+        extnet_id = get_ext_networks(con_ssh=con_ssh, auth_info=None)[0]
 
     args = ' '.join([args, router_id, extnet_id])
 
@@ -923,7 +1104,7 @@ def update_router_ext_gateway_snat(router_id=None, ext_net_id=None, enable_snat=
 
     """
     if ext_net_id is None:
-        ext_net_id = get_ext_net_ids(con_ssh=con_ssh, auth_info=auth_info)[0]
+        ext_net_id = get_ext_networks(con_ssh=con_ssh, auth_info=auth_info)[0]
 
     arg = 'network_id={},enable_snat={}'.format(ext_net_id, enable_snat)
     code, output = _update_router(field='external_gateway_info', val_type='dict', value=arg, router_id=router_id,
@@ -948,7 +1129,7 @@ def update_router_distributed(router_id=None, distributed=True, fail_ok=False, a
     if code == 1:
         return 1, output
 
-    post_distributed_val = get_router_info(router_id, 'distributed', auth_info=auth_info, con_ssh=con_ssh)
+    post_distributed_val = get_router_info(router_id, 'distributed', auth_info=Tenant.ADMIN, con_ssh=con_ssh)
     if post_distributed_val.lower() != str(distributed).lower():
         msg = "Router {} is not updated to distributed={}".format(router_id, distributed)
         if fail_ok:

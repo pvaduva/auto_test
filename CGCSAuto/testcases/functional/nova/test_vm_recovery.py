@@ -72,6 +72,7 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
     Test auto recovery setting in vm with various auto recovery settings in flavor and image.
 
     Args:
+        cpu_policy (str|None): cpu policy to set in flavor
         flavor_auto_recovery (str|None): None (unset) or true or false
         image_auto_recovery (str|None): None (unset) or true or false
         disk_format (str):
@@ -134,21 +135,21 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
             expt_result, actual_val)
 
 
-@mark.parametrize(('cpu_policy', 'auto_recovery', 'autorecovery_enabled'), [
+@mark.parametrize(('cpu_policy', 'auto_recovery', 'expt_autorecovery'), [
     mark.p1((None, 'true', True)),
     mark.p1(('dedicated', None, True)),
     mark.p1((None, 'false', False)),
     mark.p1(('shared', None, True)),
     mark.p1(('shared', 'false', False)),
 ])
-def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, autorecovery_enabled):
+def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autorecovery):
     """
     Test auto recovery with guest heartbeat enabled
 
     Args:
         cpu_policy (str|None): shared, dedicated or None (unset)
         auto_recovery (str|None): None (unset) or true or false. Auto recovery setting in flavor
-        autorecovery_enabled (bool): Expected vm auto recovery behavior. False > disabled, True > enabled.
+        expt_autorecovery (bool): Expected vm auto recovery behavior. False > disabled, True > enabled.
 
     Test Steps:
         - Create a flavor with heartbeat set to true, and auto recovery set to given value in extra spec
@@ -181,22 +182,20 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, autorecovery_
     ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
 
     LOG.tc_step("Verify vm heartbeat is on via event logs")
-    event = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=False,
-                                          **{'Entity Instance ID': vm_id, 'Event Log ID': [
-                                             EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})[0]
-    assert event == EventLogID.HEARTBEAT_ENABLED, "Heartbeat is disabled for vm {}".format(vm_id)
+    system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=False,
+                                  **{'Entity Instance ID': vm_id, 'Event Log ID': EventLogID.HEARTBEAT_ENABLED})
 
     LOG.tc_step("Login to vm via NatBox")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         LOG.tc_step("Run touch /tmp/unhealthy to put vm into unhealthy state.")
         vm_ssh.exec_cmd("touch /tmp/unhealthy")
 
-        step_str = "is rebooted automatically" if autorecovery_enabled else "is not rebooted"
-        LOG.tc_step("Verify vm {} with auto recovery set to {}".format(step_str, autorecovery_enabled))
+        step_str = "is rebooted automatically" if expt_autorecovery else "is not rebooted"
+        LOG.tc_step("Verify vm {} with auto recovery set to {}".format(step_str, expt_autorecovery))
         natbox_ssh = NATBoxClient.get_natbox_client()
         index = natbox_ssh.expect("Power button pressed", timeout=60, fail_ok=True)
 
-        if not autorecovery_enabled:
+        if not expt_autorecovery:
             assert -1 == index, "VM is rebooted automatically even though Auto Recovery is set to false."
 
         else:
@@ -257,7 +256,7 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
         step_str = 'not '
 
     LOG.tc_step("Verify vm heartbeat is {}established via event logs".format(step_str))
-    hb_tmout=EventLogTimeout.HEARTBEAT_ESTABLISH
+    hb_tmout = EventLogTimeout.HEARTBEAT_ESTABLISH
     events_1 = system_helper.wait_for_events(hb_tmout, strict=False, fail_ok=True,
                                              **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                                 EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})

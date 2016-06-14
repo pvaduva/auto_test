@@ -14,8 +14,8 @@ NATBOX = NatBoxes.NAT_BOX_HW
 BOOT_VMS = False
 COLLECT_ALL = False
 REPORT_ALL = False
-DOMAIN = 'MTC'
-USERSTORY= ''
+DOMAIN = 'UNKNOWN'
+USERSTORY = ''
 
 #########################################
 # End of Test Session Params            #

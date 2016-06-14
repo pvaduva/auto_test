@@ -4,18 +4,20 @@ from time import strftime
 
 import pytest
 
-import setups
 import setup_consts
-from utils.tis_log import LOG
+import setups
 from consts.proj_vars import ProjVar
-from utils.cgcs_mongo_reporter import collect_and_upload_results
+from utils.tis_log import LOG
+from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 
 con_ssh = None
+tc_start_time = None
 has_fail = False
+build_id = None
 
 
 @pytest.fixture(scope='session', autouse=True)
-def setup_test_session(request):
+def setup_test_session():
     """
     Setup primary tenant and Nax Box ssh before the first test gets executed.
     TIS ssh was already set up at collecting phase.
@@ -25,18 +27,6 @@ def setup_test_session(request):
     setups.set_env_vars(con_ssh)
     setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'))
     setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
-
-    def teardown():
-        if has_fail and ProjVar.get_var('COLLECT_ALL'):
-            # Collect tis logs if collect all required upon test(s) failure
-            # Failure on collect all would not change the result of the last test case.
-            setups.collect_tis_logs(con_ssh)
-
-        try:
-            con_ssh.close()
-        except:
-            pass
-    request.addfinalizer(teardown)
 
 
 @pytest.fixture(scope='function', autouse=True)
@@ -121,6 +111,7 @@ def pytest_runtest_makereport(item, call, __multicall__):
             fail_at = ', '.join(fail_at)
             res_in_log = 'Test Failed at {}'.format(fail_at)
 
+        # Log test result
         testcase_log(msg=res_in_log, nodeid=test_name, log_type='tc_end')
 
         if 'Test Passed' in res_in_log:
@@ -133,11 +124,18 @@ def pytest_runtest_makereport(item, call, __multicall__):
         if not res_in_tests:
             res_in_tests = 'Unknown!'
 
+        global tc_start_time
         with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
-            f.write('{}\t{}\n'.format(res_in_tests, test_name))
+            f.write('\n{}\t{}\t{}'.format(res_in_tests, tc_start_time, test_name))
 
-        if(ProjVar.get_var("REPORT_ALL")):
-            collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'))
+        # reset tc_start and end time for next test case
+        tc_start_time = None
+
+        if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
+            collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id)
+
+        with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
+            f.write('\tUPLOAD_UNSUCC')
 
     return report
 
@@ -148,9 +146,13 @@ def pytest_collectstart():
     """
     global con_ssh
     con_ssh = setups.setup_tis_ssh(ProjVar.get_var("LAB"))
+    global build_id
+    build_id = setups.get_build_id(con_ssh)
 
 
 def pytest_runtest_setup(item):
+    global tc_start_time
+    tc_start_time = setups.get_tis_timestamp(con_ssh)
     print('')
     message = "Setup started:"
     testcase_log(message, item.nodeid, log_type='tc_setup')
@@ -200,6 +202,7 @@ def pytest_configure(config):
     bootvms_arg = config.getoption('bootvms')
     collect_all = config.getoption('collectall')
     report_all = config.getoption('reportall')
+    report_tag = config.getoption('report_tag')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
     lab = setups.get_lab_dict(lab_arg) if lab_arg else setup_consts.LAB
@@ -213,10 +216,8 @@ def pytest_configure(config):
     log_dir = os.path.expanduser("~") + "/AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
 
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
-    ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, 
-                     is_boot=is_boot, 
-                      collect_all=collect_all,
-                      report_all=report_all)
+    ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
+                     report_all=report_all, report_tag=report_tag)
 
     os.makedirs(log_dir, exist_ok=True)
     config_logger(log_dir)
@@ -235,13 +236,18 @@ def pytest_addoption(parser):
     bootvm_help = "Boot 2 vms at the beginning of the test session as background VMs."
     collect_all_help = "Run collect all on TiS server at the end of test session if any test fails."
     report_help = "Upload results and logs to the test results database."
+    tag_help = "Tag to be used for uploading logs to the test results database."
     parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
     parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
     parser.addoption('--natbox', action='store', metavar='natboxname', default=None, help=natbox_help)
     parser.addoption('--bootvms', '--boot_vms', '--boot-vms', dest='bootvms', action='store_true', help=bootvm_help)
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
                      help=collect_all_help)
-    parser.addoption('--reportall', '--report_all', '--report-all', dest='reportall', action='store_true', help=report_help)
+    parser.addoption('--reportall', '--report_all', '--report-all', dest='reportall', action='store_true',
+                     help=report_help)
+    parser.addoption('--report_tag', action='store', dest='report_tag', metavar='tagname', default=None, 
+                     help=tag_help)
+
 
 def config_logger(log_dir):
     # logger for log saved in file
@@ -256,5 +262,18 @@ def config_logger(log_dir):
     stream_hdler.setLevel(logging.INFO)
     LOG.addHandler(stream_hdler)
 
+
+def pytest_unconfigure():
+    # collect all if needed
+    if has_fail and ProjVar.get_var('COLLECT_ALL'):
+        # Collect tis logs if collect all required upon test(s) failure
+        # Failure on collect all would not change the result of the last test case.
+        setups.collect_tis_logs(con_ssh)
+
+    # close ssh session
+    try:
+        con_ssh.close()
+    except:
+        pass
 
 # TODO: add support for feature marks

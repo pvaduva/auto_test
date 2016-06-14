@@ -9,9 +9,9 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 
 @mark.parametrize(('vcpu_num', 'cpu_policy', 'min_vcpus', 'expected_err'), [
-    mark.p2((1, 'dedicated', 2, MinCPUErr.VAL_LARGER_THAN_VCPUS)),
-    mark.p3((1, 'dedicated', [0, -1], MinCPUErr.VAL_LESS_THAN_1)),
-    mark.p3((2, 'shared', 1, MinCPUErr.CPU_POLICY_NOT_DEDICATED)),
+    mark.p2((1, 'dedicated', 2, "MinCPUErr.VAL_LARGER_THAN_VCPUS")),
+    mark.p3((1, 'dedicated', [0, -1], "MinCPUErr.VAL_LESS_THAN_1")),
+    mark.p3((2, 'shared', 1, "MinCPUErr.CPU_POLICY_NOT_DEDICATED")),
 ])
 def test_flavor_min_vcpus_invalid(vcpu_num, cpu_policy, min_vcpus, expected_err):
     """
@@ -48,4 +48,4 @@ def test_flavor_min_vcpus_invalid(vcpu_num, cpu_policy, min_vcpus, expected_err)
         assert 1 == code, "Set flavor extra spec request is not rejected."
 
         if expected_err:
-            assert expected_err in output, "Expected error string is not found in CLI output."
+            assert eval(expected_err) in output, "Expected error string is not found in CLI output."

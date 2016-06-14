@@ -4,20 +4,26 @@
 #      the same level as install_system.py
 
 # Directory and file paths/names
+HOST_OS = ["centos", "wrlinux"]
+DEFAULT_HOST_OS = "centos"
 NODE_INFO_DIR = "node_info"
 LAB_SETTINGS_DIR = "lab_settings"
 LATEST_BUILD_DIR = "latest_build"
 EXPORT_LAB_REL_PATH = "export/lab"
 LAB_YOW_REL_PATH = EXPORT_LAB_REL_PATH + "/yow"
 LAB_SCRIPTS_REL_PATH = EXPORT_LAB_REL_PATH + "/scripts"
-
+#CENTOS_LAB_BASE_PATH = "/localdisk/designer/jenkins/Secure_Src_Pull_CGCS_DEV_0016/wrlinux-x/addons/wr-cgcs/layers/cgcs/extras.ND/lab/"
+CENTOS_LAB_BASE_PATH = "/localdisk/designer/jenkins/CGCS_3.0_Centos_Pull_CGCS_DEV_0016/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/"
+CENTOS_LAB_SCRIPTS = CENTOS_LAB_BASE_PATH + "scripts/"
+CENTOS_CFG_FILES = CENTOS_LAB_BASE_PATH + "yow/"
 
 #TODO: Not all labs define their config_controller file as "system_config"
 #      E.g. some refer to it as cgcs_config or TiS_config.ini
 #      Need this filename to be ORed with other options or standardize naming
 #      for config files in Stash
 SYSTEM_CFG_FILENAME = "system_config"
-CFGFILE_LIST = ["system_config", "TiS_config.ini"]
+WRL_CFGFILE_LIST = ["system_config", "TiS_config.ini", "TiS_config.ini_wrl"]
+CENTOS_CFGFILE_LIST = ["TiS_config.ini_centos"]
 # TODO: Same todo as above, where the bulk add filename might be different
 BULKCFG_LIST = ["hosts_bulk_add.xml", "hosts.xml"]
 BULK_CFG_FILENAME = "hosts_bulk_add.xml"
@@ -31,6 +37,7 @@ LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-full-jun2016.lic"
 SFP_LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-CPE-full-jun2016.lic"
 WRSROOT_ETC_PROFILE = "/etc/profile"
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards"
+CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
 RPM_INSTALL_REL_PATH = "export/RPM_INSTALL"
 WRSROOT_HOME_DIR = "/home/wrsroot"
 WRSROOT_PATCHES_DIR = WRSROOT_HOME_DIR + "/patches"
@@ -42,6 +49,7 @@ CERTIFICATE_FILE_NAME = "server-with-key.pem"
 # Cumulus TiS on TiS setup
 CUMULUS_SERVER_IP="128.224.151.50"
 BOOT_IMAGE_ISO = "bootimage.iso"
+BOOT_IMAGE_ISO_SIZE = 5
 BOOT_IMAGE_ISO_PATH = "export/" + BOOT_IMAGE_ISO
 BOOT_IMAGE_ISO_TMP_PATH = "/tmp/" + BOOT_IMAGE_ISO
 CUMULUS_CLEANUP_SCRIPT = "cumulus_cleanup.sh"
@@ -150,7 +158,7 @@ REMOVE_HOSTS_SSH_KEY_CMD = "ssh-keygen -f {} -R {}"
 # Command timeouts
 COLLECT_TIMEOUT=300
 RSYNC_TIMEOUT = 3600
-REBOOT_TIMEOUT = 3600
+REBOOT_TIMEOUT = 7200
 BIOS_TYPE_TIMEOUT = 1800
 CONFIG_CONTROLLER_TIMEOUT = 1200
 LAB_SETUP_TIMEOUT = 1800

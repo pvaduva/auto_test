@@ -1,3 +1,13 @@
+###
+# below testcases is part of us77170_StorageTestPlan.pdf specifically under
+# https://jive.windriver.com/docs/DOC-45652
+# It specifically test scenarios where an qos Specs created with read/write/total in bytes/iops
+# and volumes type associated with those qos specs
+# and when VMs are created using those volume types, they were checked that that those specs hold true on vms.
+###
+
+
+
 from pytest import fixture, mark, skip
 from time import sleep
 import ast
@@ -10,21 +20,24 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper,cinder_h
 from setup_consts import P1, P2, P3
 
 
-instance_backing_params =['image']
+instance_backing_params =['image', 'lvm']
+
 
 @fixture(scope='module', params=instance_backing_params )
 def config_local_volume_group(request):
 
     local_volume_group = {'instance_backing': request.param}
-    #if already same lvm skip
+    #check the local volume group of compute-0
     table_ = table_parser.table(cli.system('host-lvg-show compute-0 nova-local', auth_info=Tenant.ADMIN, fail_ok=False))
 
     instance_backing = table_parser.get_value_two_col_table(table_,'parameters')
     inst_back = ast.literal_eval(instance_backing)['instance_backing']
 
+    # if already same lvm skip
     if inst_back == request.param:
         return local_volume_group
 
+    #if instance backing is different, set the new instance backing type.
     lvg_args = "-b "+request.param+" compute-0 nova-local"
     host_helper.lock_host('compute-0')
 
@@ -47,16 +60,12 @@ qos_spec_params = [
         ('write_bytes_sec', 400000000),
         ('write_bytes_sec', 419430400),
         ('total_bytes_sec', 10485769),
-        ('total_bytes_sec', 20485769),
         ('total_bytes_sec', 419430400),
         ('read_iops_sec',   200),
-        ('read_iops_sec',   1500),
         ('read_iops_sec',   5000),
         ('write_iops_sec',  200),
-        ('write_iops_sec',  1500),
         ('write_iops_sec',  5000),
         ('total_iops_sec',  200),
-        ('total_iops_sec',  1500),
         ('total_iops_sec',  5000),
 
     ]
@@ -216,7 +225,25 @@ def test_create_volume_with_volume_type(create_volume_with_type):
 
 
 def test_verify_disk_extra_on_virsh(create_vm_with_volume):
+    """
+    from us77170_StorageTestPlan.pdf
 
+    verify the qos extra specs are properly set and matching expecte specs
+
+    Args:
+        - Nothing
+
+    Setup:
+        - Setup qos specswith specific bytes per second extra specs on specifc volume type
+
+
+    Test Steps:
+        -verify the extra spec is set and match to expected specs on vm through varish cli
+
+    Teardown:
+        - delete specific bytes per second extra specs vm/volume-type/qos-specs
+
+    """
     vm_id = create_vm_with_volume['id']
     disk_extra_spec = create_vm_with_volume['qos_spec']
     virsh_tag = disk_extra_spec[0]

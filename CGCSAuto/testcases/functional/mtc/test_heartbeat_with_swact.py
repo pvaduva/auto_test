@@ -1,3 +1,8 @@
+###
+#us63135_tc11: validate_heartbeat_works_after_controller_swact
+###
+
+
 from pytest import fixture, mark, skip
 from time import sleep
 
@@ -6,9 +11,6 @@ from consts.cgcs import EventLogID, FlavorSpec
 from consts.timeout import EventLogTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 
-###
-#us63135_tc11: validate_heartbeat_works_after_controller_swact
-###
 
 # heartbeat Type
 flavor_params = ['True', 'False']
@@ -17,7 +19,7 @@ flavor_params = ['True', 'False']
 @fixture(scope='module', params=flavor_params)
 def heartbeat_flavor_vm(request):
     """
-    Text fixture to create flavor with specific 'ephemeral', 'swap', and 'heartbeat'
+    Text fixture to create flavor with specific 'heartbeat'
     Args:
         request: pytest arg
 
@@ -82,14 +84,18 @@ def test_heartbeat_after_swact(heartbeat_flavor_vm):
             heartbeat_proc_disappear = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False,
                                                                   expt_timeout=3, disappear=True, check_interval=2)
             if heartbeat_type == 'False':
-                assert heartbeat_proc_disappear, "Heartbeat process is running after swact."
+                assert heartbeat_proc_disappear, "Heartbeat set to False, However, heartbeat process is running " \
+                                                 "after swact."
             else:
-                assert not heartbeat_proc_disappear, "Heartbeat process is not running after swact."
+                assert not heartbeat_proc_disappear, "Heartbeat set to True. However, heartbeat process is not running " \
+                                                     "after swact."
 
         else:
             heartbeat_proc_appear = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False,
                                                                expt_timeout=3, check_interval=2)
             if heartbeat_type == 'True':
-                assert heartbeat_proc_appear, "Heartbeat process is not running after swact."
+                assert heartbeat_proc_appear, "Heartbeat set to True. However, heartbeat process is not running " \
+                                              "after swact."
             else:
-                assert not heartbeat_proc_appear, "Heartbeat process is running after swact."
+                assert not heartbeat_proc_appear, "Heartbeat set to False, However, heartbeat process is running " \
+                                                  "after swact. "

@@ -2,14 +2,15 @@ class ProjVar:
     __var_dict = {}
 
     @classmethod
-    def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all):
+    def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all, report_tag):
+
         labname = lab['short_name']
 
         cls.__var_dict = {
             'KEYFILE_PATH': 'keyfile_{}.pem'.format(labname),
             'KEYFILE_NAME': '/home/wrsroot/.ssh/' + 'keyfile_{}.pem'.format(labname),
             'LOG_DIR': logdir,
-            'TCLIST_PATH': logdir + '/testcases.lst',
+            'TCLIST_PATH': logdir + '/test_results.log',
             'PYTESTLOG_PATH': logdir + '/pytestlog.log',
             'LAB_NAME': lab['short_name'],
             'TEMP_DIR': logdir + '/tmp_files',
@@ -18,7 +19,8 @@ class ProjVar:
             'BOOT_VMS': is_boot,
             'NATBOX': natbox,
             'COLLECT_ALL': collect_all,
-            'REPORT_ALL': report_all
+            'REPORT_ALL': report_all,
+            'REPORT_TAG': report_tag
         }
 
     @classmethod

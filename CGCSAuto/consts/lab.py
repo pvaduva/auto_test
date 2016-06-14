@@ -43,6 +43,14 @@ class Labs:
         'system_type': 'CPE',
     }
 
+    IP_28_30 = {
+        'short_name': 'ip_28_30',
+        'name': 'cgcs-ironpass-28_30',
+        'floating ip': '128.224.150.188',
+        'controller-0 ip': '128.224.150.223',
+        'controller-1 ip': '128.224.150.179',
+    }
+
     IP_31_32 = {
         'short_name': 'ip_31_32',
         'name': 'cgcs-ironpass-31_32',
@@ -50,6 +58,14 @@ class Labs:
         'controller-0 ip': '128.224.150.92',
         'controller-1 ip': '128.224.150.22',
         'system_type': 'CPE',
+    }
+
+    IP_33_36 = {
+        'short_name': 'ip_33_36',
+        'name': 'cgcs-ironpass-33_36',
+        'floating ip': '128.224.150.215',
+        'controller-0 ip': '128.224.150.32',
+        'controller-1 ip': '128.224.151.148',
     }
 
     PV0 = {

@@ -42,20 +42,26 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
         '--is-public': is_public
     }
 
-    if name is None:
-        name = 'flavor'
-
     table_ = table_parser.table(cli.nova('flavor-list', ssh_client=con_ssh, auth_info=auth_info))
     existing_names = table_parser.get_column(table_, 'Name')
 
-    flavor_name = None
-    for i in range(10):
-        tmp_name = '-'.join([name, str(Count.get_flavor_count())])
-        if tmp_name not in existing_names:
-            flavor_name = tmp_name
-            break
+    if name is not None:
+        flavor_name = name
+        if name in existing_names:
+            for i in range(50):
+                tmp_name = '-'.join([name, str(i)])
+                if tmp_name not in existing_names:
+                    flavor_name = tmp_name
+                    break
     else:
-        exceptions.FlavorError("Unable to get a proper name for flavor creation.")
+        name = 'flavor'
+        for i in range(10):
+            tmp_name = '-'.join([name, str(Count.get_flavor_count())])
+            if tmp_name not in existing_names:
+                flavor_name = tmp_name
+                break
+        else:
+            exceptions.FlavorError("Unable to get a proper name for flavor creation.")
 
     mandatory_args = ' '.join([flavor_name, flavor_id, str(ram), str(root_disk), str(vcpus)])
 
@@ -155,6 +161,24 @@ def get_flavor_id(name=None, memory=None, disk=None, ephemeral=None, swap=None, 
     if not ids:
         return ''
     return random.choice(ids)
+
+
+def get_basic_flavor(auth_info=None, con_ssh=None):
+    """
+    Get a basic flavor with the default arg values and without adding extra specs.
+    Args:
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (str): id of the basic flavor
+
+    """
+    default_flavor_name = 'flavor-default'
+    flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info)
+    if flavor_id == '':
+        flavor_id = create_flavor(name=default_flavor_name, con_ssh=con_ssh)[1]
+
+    return flavor_id
 
 
 def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False, **extra_specs):
@@ -341,25 +365,31 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
     return 0, srv_grp_id
 
 
-def get_server_groups(auth_info=None, con_ssh=None, all_srv_grps=True):
+def get_server_groups(name=None, project_id=None, auth_info=None, con_ssh=None, strict=False, regex=False, **kwargs):
     """
-    Get server groups ids for given tenant or all server groups if admin is set via auth_info and all_srv_grps=True
+    Get server groups ids based on the given criteria
 
     Args:
+        name (str): filter out server groups with given name
+        project_id (str): filter out server groups for given tenant id
         auth_info (dict):
         con_ssh (SSHClient):
-        all_srv_grps (bool): whether to return server groups for all tenants if ADMIN auth_info is provided
+        strict (bool): whether to do strict search for name and value(s) in kwargs
+        regex (bool): whether or not to use regex
+        **kwargs: extra key/value pair(s) to filter the table. e.g., Policies = 'affinity'
 
-    Returns (list): a list of server groups ids
+    Returns (list): list of server groups ids
 
     """
-
     table_ = cli.nova('server-group-list', ssh_client=con_ssh, auth_info=auth_info)
-    if not all_srv_grps and get_tenant_name(auth_info) == 'admin':
-        admin_tenant_id = keystone_helper.get_tenant_ids(tenant_name='admin')[0]
-        return table_parser.get_values(table_, 'Id', **{'Project Id': admin_tenant_id})
 
-    return table_parser.get_column(table_, 'Id')
+    if name is not None:
+        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, Name=name)
+
+    if project_id is not None:
+        table_ = table_parser.filter_table(table_, strict=True, **{"Project Id": project_id})
+
+    return table_parser.get_values(table_, 'Id', strict=strict, regex=regex, **kwargs)
 
 
 def get_server_groups_info(server_groups=None, header='Policies', auth_info=None, con_ssh=None):
@@ -654,9 +684,15 @@ def get_vm_status(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     return get_vm_nova_show_value(vm_id, 'status', con_ssh=con_ssh, auth_info=auth_info)
 
 
-def get_vm_id_from_name(vm_name, con_ssh=None):
+def get_vm_id_from_name(vm_name, con_ssh=None, fail_ok=True):
     table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    return table_parser.get_values(table_, 'ID', Name=vm_name.strip())[0]
+    vm_ids = table_parser.get_values(table_, 'ID', Name=vm_name.strip())
+    if not vm_ids:
+        if fail_ok:
+            return None
+        raise exceptions.VMError("No vm with name {} found".format(vm_name))
+
+    return vm_ids[0]
 
 
 def get_vm_name_from_id(vm_id, con_ssh=None):
@@ -974,3 +1010,36 @@ def delete_image_metadata(image, meta_keys, check_first=True, fail_ok=False, aut
         LOG.info(success_msg)
         return 0, success_msg
 
+
+def copy_flavor(from_flavor_id, new_name=None, con_ssh=None):
+    """
+    Extract the info from an existing flavor and create a new flavor that is has identical info
+
+    Args:
+        from_flavor_id (str): id of an existing flavor to extract the info from
+        new_name:
+        con_ssh:
+
+    Returns (str): flavor_id
+
+    """
+    table_ = table_parser.table(cli.nova('flavor-show', from_flavor_id, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+
+    extra_specs = eval(table_parser.get_value_two_col_table(table_, 'extra_specs'))
+    ephemeral = table_parser.get_value_two_col_table(table_, 'ephemeral', strict=False)
+    disk = table_parser.get_value_two_col_table(table_, 'disk')
+    is_public = table_parser.get_value_two_col_table(table_, 'is_public', strict=False)
+    ram = table_parser.get_value_two_col_table(table_, 'ram')
+    rxtx_factor = table_parser.get_value_two_col_table(table_, 'rxtx_factor')
+    swap = table_parser.get_value_two_col_table(table_, 'swap')
+    vcpus = table_parser.get_value_two_col_table(table_, 'vcpus')
+    old_name = table_parser.get_value_two_col_table(table_, 'name')
+
+    if new_name is not None:
+        new_name = "{}-{}".format(old_name, new_name)
+    swap = swap if swap else 0
+    new_flavor_id = create_flavor(name=new_name, vcpus=vcpus, ram=ram, swap=swap, root_disk=disk, ephemeral=ephemeral,
+                                  is_public=is_public, rxtx_factor=rxtx_factor, con_ssh=con_ssh)[1]
+    set_flavor_extra_specs(new_flavor_id, con_ssh=con_ssh, **extra_specs)
+
+    return new_flavor_id

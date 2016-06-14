@@ -22,7 +22,7 @@ def flavor_2g():
 
 
 def _modify(host):
-    system_helper.set_host_1g_pages(host=host, proc_id=0, hugepage_num=4)
+    system_helper.set_host_1g_pages(host=host, proc_id=0, hugepage_num=2)
     system_helper.set_host_4k_pages(host=host, proc_id=1, smallpage_num=2048*2*1024/4)
 
 

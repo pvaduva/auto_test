@@ -49,16 +49,16 @@ def test_flavor_vcpu_scheduler_valid(vcpu_num, vcpu_schedulers):
 
 @mark.parametrize(('vcpu_num', 'vcpu_schedulers', 'expected_err'), [
     mark.p2((1, "fifo:9:1", None)),    # CGTS-2462
-    mark.p2((4, ["fifo:20:1;rr:4-6:4", "fifo:20:1;rr:6:4"], VCPUSchedulerErr.VCPU_VAL_OUT_OF_RANGE)),
-    mark.p2((3, ["fifo:20:1;rr:-1:2"], VCPUSchedulerErr.INVALID_PRIORITY)),
-    mark.p3((3, "fifo:20:1;rr:10:0", VCPUSchedulerErr.CANNOT_SET_VCPU0)),
-    mark.p3((4, ["fifo:20:1;rr:4-6:2", "fifo:20:1;rr:4-6", "fifo:"], VCPUSchedulerErr.PRIORITY_NOT_INTEGER)),
-    mark.p3((3, "fifo:20:1;rr:4-6:3'", VCPUSchedulerErr.INVALID_FORMAT)),
-    mark.p3((3, "fifo:20:1;roarr:10:2", VCPUSchedulerErr.UNSUPPORTED_POLICY)),
-    mark.p3((3, "fifo:20;rr:10:1", VCPUSchedulerErr.POLICY_MUST_SPECIFIED_LAST)),
-    mark.p3((3, "fifo", VCPUSchedulerErr.MISSING_PARAMETER)),
-    mark.p3((3, "fifo:20:1_roarr:10", VCPUSchedulerErr.TOO_MANY_PARAMETERS)),
-    mark.p3((3, "fifo:20:1;roarr:10:1", VCPUSchedulerErr.VCPU_MULTIPLE_ASSIGNMENT)),
+    mark.p2((4, ["fifo:20:1;rr:4-6:4", "fifo:20:1;rr:6:4"], "VCPUSchedulerErr.VCPU_VAL_OUT_OF_RANGE")),
+    mark.p2((3, ["fifo:20:1;rr:-1:2"], "VCPUSchedulerErr.INVALID_PRIORITY")),
+    mark.p3((3, "fifo:20:1;rr:10:0", "VCPUSchedulerErr.CANNOT_SET_VCPU0")),
+    mark.p3((4, ["fifo:20:1;rr:4-6:2", "fifo:20:1;rr:4-6", "fifo:"], "VCPUSchedulerErr.PRIORITY_NOT_INTEGER")),
+    mark.p3((3, "fifo:20:1;rr:4-6:3'", "VCPUSchedulerErr.INVALID_FORMAT")),
+    mark.p3((3, "fifo:20:1;roarr:10:2", "VCPUSchedulerErr.UNSUPPORTED_POLICY")),
+    mark.p3((3, "fifo:20;rr:10:1", "VCPUSchedulerErr.POLICY_MUST_SPECIFIED_LAST")),
+    mark.p3((3, "fifo", "VCPUSchedulerErr.MISSING_PARAMETER")),
+    mark.p3((3, "fifo:20:1_roarr:10", "VCPUSchedulerErr.TOO_MANY_PARAMETERS")),
+    mark.p3((3, "fifo:20:1;roarr:10:1", "VCPUSchedulerErr.VCPU_MULTIPLE_ASSIGNMENT")),
 ])
 def test_flavor_vcpu_scheduler_invalid(vcpu_num, vcpu_schedulers, expected_err):
     """
@@ -93,7 +93,7 @@ def test_flavor_vcpu_scheduler_invalid(vcpu_num, vcpu_schedulers, expected_err):
         assert 1 == code, "Set flavor extra spec request is not rejected."
 
         if expected_err:
-            assert expected_err in output, "Expected error string is not found in CLI output."
+            assert eval(expected_err) in output, "Expected error string is not found in CLI output."
 
 
 @mark.parametrize(('vcpu_num', 'vcpu_scheduler'), [
@@ -154,7 +154,7 @@ def test_boot_vm_vcpu_scheduler(vcpu_num, vcpu_scheduler):
                     break
 
             LOG.tc_step("Check vcpu policy and priority in real-time process attributes via chrt cmd")
-            code, output = host_ssh.exec_sudo_cmd('''sudo chrt -ap {} | grep -B1 "priority: {}$"'''.
+            code, output = host_ssh.exec_sudo_cmd('''chrt -ap {} | grep -B1 "priority: {}$"'''.
                                                   format(vm_pid, expt_priority))
             assert 0 == code, "Expected priority {} is not found in chrt output".format(expt_priority)
 

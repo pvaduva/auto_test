@@ -319,7 +319,7 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
 
     # Each numa node will have an entry for given instance, thus number of entries should be the same as number of
     # numa nodes for the vm
-    assert len(instance_topology) == numa_nodes, \
+    assert numa_nodes == len(instance_topology) , \
         "Number of numa node entries for vm {} is different than number of NUMA nodes set in flavor".format(vm_id)
 
     expected_node_vals = [int(val) for val in [numa_node0, numa_node1] if val is not None]
@@ -328,7 +328,7 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
         actual_node_val = int(re.findall(InstanceTopology.NODE, actual_node_info)[0])
         actual_node_vals.append(actual_node_val)
 
-    assert actual_node_vals == expected_node_vals, \
+    assert expected_node_vals == actual_node_vals, \
         "Individual NUMA node value(s) for vm {} is different than numa_node setting in flavor".format(vm_id)
 
     assert vcpus == vcpus_libvert, \

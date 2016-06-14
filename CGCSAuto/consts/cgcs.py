@@ -36,10 +36,11 @@ class HostStorageBacking:
 
 
 class VMStatus:
+    # under http://docs.openstack.org/developer/nova/vmstates.html
     ACTIVE = 'ACTIVE'
-    BUILD = 'BUILD'
+    BUILD = 'BUILDING'
     VERIFY_RESIZE = 'VERIFY_RESIZE'
-    RESIZE = 'RESIZE'
+    RESIZE = 'RESIZED'
     ERROR = 'ERROR'
     SUSPENDED = 'SUSPENDED'
     PAUSED = 'PAUSED'
@@ -149,3 +150,18 @@ class EventLogID:
     VM_DELETED = '700.114'
     VM_CREATED = '700.108'
     VM_FAILED = '700.001'
+
+
+class NetworkingVmMapping:
+    VSWITCH = {
+        'vif': 'avp',
+        'flavor': 'medium.dpdk',
+    }
+    AVP = {
+        'vif': 'avp',
+        'flavor': 'small',
+    }
+    VIRTIO = {
+        'vif': 'avp',
+        'flavor': 'small',
+    }

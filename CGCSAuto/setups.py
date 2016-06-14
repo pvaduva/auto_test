@@ -25,12 +25,15 @@ def setup_tis_ssh(lab):
 
 
 def set_env_vars(con_ssh):
+    # TODO: delete this after source to bash issue is fixed on centos
+    con_ssh.exec_cmd("bash")
+
     prompt_cmd = con_ssh.exec_cmd("echo $PROMPT_COMMAND")[1]
     tmout_val = con_ssh.exec_cmd("echo $TMOUT")[1]
     hist_time = con_ssh.exec_cmd("echo $HISTTIMEFORMAT")[1]
     source = False
 
-    if prompt_cmd != 'dateblabla':
+    if prompt_cmd != 'date':
         if prompt_cmd:
             con_ssh.exec_cmd('''sed -i '/export PROMPT_COMMAND=.*/d' ~/.bashrc''')
 
@@ -153,7 +156,7 @@ def get_tenant_dict(tenantname):
         raise ValueError("{} is not a valid input".format(tenantname))
 
 
-def collect_tis_logs(con_ssh=None):
+def collect_tis_logs(con_ssh):
     LOG.info("Collecting all hosts logs...")
     con_ssh.send('collect all')
 
@@ -171,7 +174,7 @@ def collect_tis_logs(con_ssh=None):
         output = con_ssh.cmd_output
         con_ssh.expect()
         logpath = re.findall('.*(/scratch/ALL_NODES_.*.tar).*', output)[0]
-        LOG.info("\n################### TiS server log path: {} #######################".format(logpath))
+        LOG.info("\n################### TiS server log path: {}".format(logpath))
     else:
         LOG.error("Collecting logs failed. No ALL_NODES logs found.")
         return
@@ -185,3 +188,21 @@ def collect_tis_logs(con_ssh=None):
     except Exception as e:
         LOG.warning("Failed to copy log file to localhost.")
         LOG.error(e, exc_info=True)
+
+
+def get_tis_timestamp(con_ssh):
+    return con_ssh.exec_cmd('date +"%T"')[1]
+
+
+def get_build_id(con_ssh):
+    code, output = con_ssh.exec_cmd('cat /etc/build.info')
+    if code != 0:
+        build_id = ' '
+    else:
+        build_id = re.findall('''BUILD_ID=\"(.*)\"''', output)
+        if build_id:
+            build_id = build_id[0]
+        else:
+            build_id = ' '
+
+    return build_id

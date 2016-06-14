@@ -50,7 +50,7 @@ class SSHClient:
     """
 
     def __init__(self, host, user='wrsroot', password='li69nux', force_password=True, initial_prompt=CONTROLLER_PROMPT,
-                 timeout=10):
+                 timeout=20):
         """
         Initiate an object for connecting to remote host
         Args:
@@ -375,7 +375,8 @@ class SSHClient:
         to_user = (dest_user if dest_user is not None else local_host.get_user()) + '@'
 
         destination = to_user + to_host + dest_path
-        scp_cmd = ' '.join(['scp -r', source_file, destination]).strip()
+        scp_cmd = ' '.join(['scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source_file,
+                            destination]).strip()
         LOG.info("Copying files from ssh client to {}: {}".format(to_host, scp_cmd))
         self.send(scp_cmd)
         index = self.expect([self.prompt, PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout)
@@ -571,11 +572,12 @@ class SSHFromSSH(SSHClient):
                 return
 
             except (OSError, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh) as e:
+                LOG.info("herehere {}".format(e))
                 # fail login if retry=False
                 if not retry:
                     raise
                 # don't retry if login credentials incorrect
-                if "permission denied" in e.__str__().lower:
+                if "permission denied" in e.__str__().lower():
                     LOG.error("Login credentials denied by {}. User: {} Password: {}".format(
                         self.host, self.user, self.password))
                     raise
@@ -632,7 +634,7 @@ class SSHFromSSH(SSHClient):
 class VMSSHClient(SSHFromSSH):
 
     def __init__(self, vm_ip, vm_name, vm_img_name='cgcs-guest', user=None, password=None, natbox_client=None,
-                 prompt=None, timeout=20):
+                 prompt=None, timeout=20, retry=True, retry_timeout=120):
         """
 
         Args:
@@ -684,7 +686,7 @@ class VMSSHClient(SSHFromSSH):
         else:
             ssh_options = _SSH_OPTS
         self.ssh_cmd = '/usr/bin/ssh{} {}@{}'.format(ssh_options, self.user, self.host)
-        self.connect(use_password=force_password)
+        self.connect(use_password=force_password, retry=retry, retry_timeout=retry_timeout)
         self.exec_cmd("TMOUT=0")
 
 

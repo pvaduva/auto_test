@@ -86,8 +86,8 @@ def test_hugepage_affined_by_vm(create_vm_):
     memory_size = int(instance_topo[1][0:-2])
     proc_id = instance_topo[0][-1]
     # memory_size return how much memory a vm used
-    LOG.tc_step("Wait for 20 seconds for clis to sync up")
-    sleep(20)
+    LOG.tc_step("Wait for 30 seconds for clis to sync up")
+    sleep(30)
     total_used_mem = system_helper.get_host_used_mem_values(host_name, proc_id)
 
     assert memory_size == total_used_mem, "Expected {}MB to be used by VM {}. However, " \
