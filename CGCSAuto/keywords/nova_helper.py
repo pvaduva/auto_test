@@ -774,7 +774,7 @@ def get_vms_by_hypervisors(con_ssh=None, rtn_val='ID'):
     return host_vms
 
 
-def get_key_pair(name=Nome,con_ssh=None, auth_info=None):
+def get_key_pair(name=None,con_ssh=None, auth_info=None):
     """
 
     Args:
