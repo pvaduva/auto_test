@@ -62,10 +62,9 @@ def is_small_footprint(controller_ssh=None):
 
 
 def get_storage_nodes(con_ssh=None):
-    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
-    nodes = table_parser.get_values(table_, 'hostname', strict=True, personality='storage')
+    nodes = _get_nodes(con_ssh)
 
-    return nodes
+    return nodes['storages']
 
 
 def get_controllers(con_ssh=None):

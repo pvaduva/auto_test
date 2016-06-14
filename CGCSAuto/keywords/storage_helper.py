@@ -74,13 +74,12 @@ def get_osd_host(osd_id, con_ssh=None):
         - Return message
     """
 
+    cli.source_admin(con_ssh)
+
     storage_hosts = system_helper.get_storage_nodes()
     for host in storage_hosts:
-        storage_ssh = SSHFromSSH(ssh_client=con_ssh, host=host, \
-            user=Host.USER, password=Host.PASSWORD, \
-            prompt=Prompt.STORAGE_PROMPT)
         cmd = 'system host-stor-list {}'.format(host)
-        rtn_code, out = storage_ssh.exec_cmd(cmd, expect_timeout=60)
+        rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=60)
         table_ = table_parser.table(cli.system('host-stor-list', host))
         osd_list = table_parser.get_values(table_, 'osdid')
         if osd_id in osd_list:
@@ -90,7 +89,7 @@ def get_osd_host(osd_id, con_ssh=None):
     msg = 'Could not find host for OSD ID {}'.format(osd_id)
     return -1, msg
 
-def kill_osd_process(host, pid, con_ssh=None):
+def kill_osd_process(osd_host, pid, con_ssh=None):
     """
     Given the id of an OSD, kill the process and ensure it restarts.
     Args:
@@ -103,50 +102,57 @@ def kill_osd_process(host, pid, con_ssh=None):
         - (string) message
     """
 
+
     cmd = 'kill -9 {}'.format(pid)
 
-    LOG.info('Kill OSD process {}'.format(pid))
-    storage_ssh = SSHFromSSH(ssh_client=con_ssh, host=host, \
-        user=Host.USER, password=Host.PASSWORD, prompt=Prompt.STORAGE_PROMPT)
-    rtn_code, out = storage_ssh.exec_cmd(cmd, expect_timeout=60)
+    LOG.info('Kill OSD process {} on {}'.format(pid, osd_host))
+    storage_ssh = SSHFromSSH(con_ssh, osd_host, Host.USER, Host.PASSWORD, \
+        initial_prompt=Prompt.STORAGE_PROMPT)
+    storage_ssh.connect()
+    with storage_ssh.login_as_root() as root_ssh:
+        rtn_code, out = root_ssh.exec_cmd(cmd, expect_timeout=60)
+        LOG.info(cmd)
 
     LOG.info('Ensure the PID is no longer listed')
-    pid_exists = check_pid_exists(pid, storage_ssh)
+    pid_exists, msg = check_pid_exists(pid, root_ssh)
     if pid_exists:
-        msg = 'Failed to kill OSD process {}'.format(pid)
+        root_ssh.close()
+        storage_ssh.close()
         return False, msg
 
-    msg = 'Process {} killed'.format(pid)
+    root_ssh.close()
+    storage_ssh.close()
     return True, msg
 
-def get_osd_pid(host, osd_id, loop_iter=1, con_ssh=None):
+def get_osd_pid(osd_host, osd_id, con_ssh=None):
     """
     Given the id of an OSD, return the pid.
     Args:
         con_ssh(SSHClient)
-        host - the host to ssh into
+        osd_host - the host to ssh into
         osd_id - osd_id to get the pid of
-        loop_iter - the number of times we should check for the process
     Returns:
         - (integer) pid if found, or -1 if pid not found
         - (string) message
     """
 
-    cmd = '$(ps -ef | grep osd.{})'.format(osd_id)
+    cmd = 'cat /var/run/ceph/osd.{}.pid'.format(osd_id)
 
-    storage_ssh = SSHFromSSH(ssh_client=con_ssh, host=host, \
-        user=Host.USER, password=Host.PASSWORD, prompt=Prompt.STORAGE_PROMPT)
+    storage_ssh = SSHFromSSH(con_ssh, osd_host, Host.USER, Host.PASSWORD, \
+        initial_prompt=Prompt.STORAGE_PROMPT)
+    storage_ssh.connect()
 
-    for i in range(0, loop_iter):
-        rtn_code, out = storage_ssh.exec_cmd(cmd, expect_timeout=60)
-        osd_match = r"(\d+)"
-        pid = re.match(osd_match, out)
-        if pid:
-            msg = 'Corresponding pid for OSD ID {} is {}'.format(osd_id, pid)
-            return pid, msg
-        time.sleep(1)
+    LOG.info(cmd)
+    rtn_code, out = storage_ssh.exec_cmd(cmd, expect_timeout=60)
+    osd_match = r'(\d+)'
+    pid = re.match(osd_match, out)
+    if pid:
+        msg = 'Corresponding pid for OSD ID {} is {}'.format(osd_id, pid.group(1))
+        storage_ssh.close()
+        return pid.group(1), msg
 
     msg = 'Corresponding pid for OSD ID {} was not found'.format(osd_id)
+    storage_ssh.close()
     return -1, msg
 
 def get_osds(host=None, con_ssh=None):
@@ -218,7 +224,7 @@ def check_pid_exists(pid, con_ssh=None):
     cmd = 'kill -0 {}'.format(pid)
 
     rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=60)
-    if out:
+    if rtn_code != 1:
         msg = 'Process {} exists'.format(pid)
         return True, msg
 
