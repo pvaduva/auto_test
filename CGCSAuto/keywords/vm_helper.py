@@ -329,7 +329,8 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
     current_vms = nova_helper.get_all_vms(return_val="Name", con_ssh=con_ssh)
 
     with host_helper.ssh_to_host('controller-0') as host_ssh:
-        vm_limit = host_ssh.exec_cmd("grep -r {} lab_setup.conf | cut -d = -f2".format(vif_mapping[vm_type]))[1]
+        vm_limit = host_ssh.exec_cmd("grep --color='never' -r {} lab_setup.conf | cut -d = -f2".
+                                     format(vif_mapping[vm_type]))[1]
 
     if num_vms == 'all':
         num_vms = vm_limit
@@ -1003,7 +1004,7 @@ def get_vm_pid(instance_name, host_ssh):
     Returns (str): pid of a instance on its host
 
     """
-    code, vm_pid = host_ssh.exec_sudo_cmd(cmd="""ps aux | grep {} | awk '{{if ($11=="/usr/bin/kvm") print $2}}'""".
+    code, vm_pid = host_ssh.exec_sudo_cmd("""ps aux | grep {} | awk '{{if ($11=="/usr/bin/kvm") print $2}}'""".
                                           format(instance_name))
     if code != 0:
         raise exceptions.SSHExecCommandFailed("Failed to get pid for vm: {}".format(instance_name))

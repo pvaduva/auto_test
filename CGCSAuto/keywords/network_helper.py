@@ -190,7 +190,7 @@ def get_net_info(net_id, field='status', strict=True, auto_info=None, con_ssh=No
 
     """
     table_ = table_parser.table(cli.neutron('net-show', net_id, ssh_client=con_ssh, auth_info=auto_info))
-    value = table_parser.get_value_two_col_table(table_, field, merge_lines=False)
+    value = table_parser.get_value_two_col_table(table_, field, strict=strict, merge_lines=False)
 
     if field == 'subnets':
         if isinstance(value, str):
@@ -255,7 +255,7 @@ def create_floating_ip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_
 
     """
     if extnet_id is None:
-        extnet_id = get_ext_networks(con_ssh=con_ssh, auth_info=None)[0]
+        extnet_id = get_ext_networks(con_ssh=con_ssh)[0]
     args = extnet_id
 
     if tenant_name is not None:
@@ -969,7 +969,7 @@ def set_router_gateway(router_id=None, extnet_id=None, enable_snat=True, fixed_i
         router_id = get_tenant_router(con_ssh=con_ssh)
 
     if not extnet_id:
-        extnet_id = get_ext_networks(con_ssh=con_ssh, auth_info=None)[0]
+        extnet_id = get_ext_networks(con_ssh=con_ssh)[0]
 
     args = ' '.join([args, router_id, extnet_id])
 

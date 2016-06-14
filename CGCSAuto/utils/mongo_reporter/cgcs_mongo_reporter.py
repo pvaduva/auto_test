@@ -59,8 +59,8 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
     else:
         everything_log = os.path.join(log_dir, 'TIS_AUTOMATION.log')
         testres_log = os.path.join(log_dir, 'test_results.log')
-        pytest_log = os.path.join(log_dir, 'pytestlog.log')
-        logfile = ','.join([everything_log, testres_log, pytest_log])
+        # pytest_log = os.path.join(log_dir, 'pytestlog.log')
+        logfile = ','.join([everything_log, testres_log])
 
     # determine domain. config.ini > test path > setup_consts(default)
     if options['domain']:

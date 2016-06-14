@@ -39,7 +39,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
 #     for vif in possible_vifs:
 #
 #         with host_helper.ssh_to_host('controller-0') as host_ssh:
-#             vm_limit = host_ssh.exec_cmd("grep -r {} lab_setup.conf | cut -d = -f2".format(vif))[1]
+#             vm_limit = host_ssh.exec_cmd("grep --color='never' -r {} lab_setup.conf | cut -d = -f2".format(vif))[1]
 #
 #         vif = eval(vif)
 #         tenant_net_ips = {'tenant1': "172.16.0.1", 'tenant2': "172.18.0.1"}

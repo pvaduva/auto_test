@@ -179,7 +179,7 @@ echo "statusDetail = $result" >> $outfile
 cat $outfile > /tmp/cw_outfile.txt
 
 if [ "$logfile" != "" ]; then
-	echo "console = $logfile " >> $outfile
+	# echo "console = $logfile " >> $outfile
 	echo "logs = ${logfile} " >> $outfile
 fi
 
