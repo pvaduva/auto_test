@@ -1,7 +1,7 @@
 import random
 import re
 
-from keywords import common, nova_helper,ceilometer_helper
+from keywords import common, nova_helper,ceilometer_helper,network_helper
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from consts.auth import Tenant
@@ -11,6 +11,7 @@ from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, SSHFromSSH
 import os
 import yaml
 from consts.heat import Heat
+
 
 
 def get_stacks(name=None, con_ssh=None, auth_info=None):
@@ -76,3 +77,22 @@ def delete_stack(stack_name, con_ssh=None, auth_info=None):
     return 0
 
 
+def get_heat_params(param_name=None):
+    """
+        Generate parameters for heat based on keywords
+
+        Args:
+            param_name (str): template to be used to create heat stack.
+
+        Returns (str): return None if failure or the val for the given param
+
+    """
+    if param_name is 'NETWORK':
+        net_id = network_helper.get_mgmt_net_id()
+        return network_helper.get_net_name_from_id(net_id=net_id)
+    elif param_name is 'FLAVOR':
+        return 'small'
+    elif param_name is 'IMAGE':
+        return 'cgcs-guest'
+    else:
+        return None
