@@ -11,7 +11,60 @@ from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, SSHFromSSH
 import os
 import yaml
 from consts.heat import Heat
+import time
 
+
+def _wait_for_heat_stack_deleted(stack_name=None, timeout=120, check_interval=3, con_ssh=None, auth_info=None):
+    """
+    This will wait for the heat stack to be deleted
+    Args:
+        stack_name(str): Heat stack name to check for state
+        ccon_ssh (SSHClient): If None, active controller ssh will be used.
+        auth_info (dict): Tenant dict. If None, primary tenant will be used.
+
+    Returns:
+
+    """
+    LOG.info("Waiting for {} to be deleted...".format(stack_name))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        stack_status = get_stack_status(stack_name=stack_name, auth_info=auth_info)
+        if not stack_status:
+            return True
+
+        time.sleep(check_interval)
+
+    msg = "Heat stack {} did not get deleted within timeout".format(stack_name)
+
+    LOG.warning(msg)
+    return False
+
+
+def wait_for_heat_state(stack_name=None, state=None, timeout=120, check_interval=3, con_ssh=None, auth_info=None):
+    """
+    This will wait for the desired state of the heat stack or timeout
+    Args:
+        stack_name(str): Heat stack name to check for state
+        state(str): Status to check for
+        ccon_ssh (SSHClient): If None, active controller ssh will be used.
+        auth_info (dict): Tenant dict. If None, primary tenant will be used.
+
+    Returns:
+
+    """
+    LOG.info("Waiting for {} to be shown in {} ...".format(stack_name,state))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        stack_status = get_stack_status(stack_name=stack_name, auth_info=auth_info)
+        if state in stack_status:
+            return True
+
+        time.sleep(check_interval)
+
+    msg = "Heat stack {} did not go to state {} within timeout".format(stack_name,state)
+
+    LOG.warning(msg)
+    return False
 
 
 def get_stacks(name=None, con_ssh=None, auth_info=None):
@@ -74,7 +127,7 @@ def delete_stack(stack_name, con_ssh=None, auth_info=None):
         LOG.warning("Delete heat stack request rejected.")
         return [1, output]
 
-    return 0
+    return _wait_for_heat_stack_deleted(stack_name=stack_name, auth_info=auth_info)
 
 
 def get_heat_params(param_name=None):
