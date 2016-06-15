@@ -23,7 +23,8 @@ class Heat:
     WR_Neutron_ProviderNet = {'params':None,'verify':['neutron_provider_net'],'heat_user':'admin'}
     WR_Neutron_ProviderNetRange = {'params':None,'verify':['neutron_provider_net_range'],'heat_user':'admin'}
     WR_Neutron_QoSPolicy = {'params':None,'verify':['neutron_qos'],'heat_user':'admin'}
-    OS_Heat_AutoScalingGroup = {}
+    OS_Heat_AutoScalingGroup = {'params':['NETWORK', 'IMAGE', 'FLAVOR'],'verify':['vm'], 'heat_user':'tenant',
+                      'vm_name':'nova_server'}
 
 
 

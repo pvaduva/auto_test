@@ -5,7 +5,8 @@ from pytest import fixture
 from utils import exceptions
 
 from consts.auth import Tenant
-from keywords import nova_helper, vm_helper, cinder_helper, glance_helper, network_helper
+from consts.heat import Heat
+from keywords import nova_helper, vm_helper, cinder_helper, glance_helper, network_helper, heat_helper
 
 
 @fixture(scope='function', autouse=True)
@@ -88,7 +89,8 @@ class ResourceCleanup:
         'routers': [],
         'router_interfaces': [],
         'subnets': [],
-        'floating_ips': []
+        'floating_ips': [],
+        'heat_stacks': []
     }
     __resources_to_cleanup = {
         'function': deepcopy(__resources_dict),
@@ -111,6 +113,7 @@ class ResourceCleanup:
         routers = resources['routers']
         subnets = resources['subnets']
         floating_ips = resources['floating_ips']
+        heat_stacks = resources['heat_stacks']
         err_msgs = []
         if vms_with_vols:
             code, msg = vm_helper.delete_vms(vms_with_vols, delete_volumes=True, fail_ok=True, auth_info=Tenant.ADMIN)
@@ -159,6 +162,17 @@ class ResourceCleanup:
                 code, msg = network_helper.delete_subnet(subnet_id=subnet, fail_ok=True, auth_info=Tenant.ADMIN)
                 if code > 0:
                     err_msgs.append(msg)
+        if heat_stacks:
+            auth_info = None
+            for stack in heat_stacks:
+                heat_user = getattr(Heat, stack)['heat_user']
+                if heat_user is 'admin':
+                    auth_info = Tenant.ADMIN
+                stack_status = heat_helper.get_stack_status(stack_name=stack, auth_info=auth_info)
+                if stack_status:
+                    code = heat_helper.delete_stack(stack_name=stack, auth_info=auth_info)
+                    if code > 0:
+                        err_msgs.append("delete stack failed for {}".format(stack))
 
         # Attempt all deletions before raising exception.
         if err_msgs:
@@ -184,7 +198,7 @@ class ResourceCleanup:
         scope = scope.lower()
         resource_type = resource_type.lower()
         valid_scopes = ['function', 'class', 'module']
-        valid_types = ['vm', 'volume', 'flavor', 'image', 'server_group', 'router', 'subnet', 'floating_ip']
+        valid_types = ['vm', 'volume', 'flavor', 'image', 'server_group', 'router', 'subnet', 'floating_ip', 'heat_stack']
         if scope not in valid_scopes:
             raise ValueError("'scope' param value has to be one of the: {}".format(valid_scopes))
         if resource_type not in valid_types:

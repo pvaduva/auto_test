@@ -603,6 +603,10 @@ def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
 
     """
     net_ids = get_tenant_net_ids(net_names=net_name, con_ssh=con_ssh, auth_info=auth_info)
+    if not net_ids:
+        LOG.warning("No network found with name {}".format(net_name))
+        return []
+
     return net_ids[0]
 
 
@@ -719,7 +723,6 @@ def get_tenant_router(router_name=None, auth_info=None, con_ssh=None):
     if not routers:
         LOG.warning("No router with name {} found".format(router_name))
         return None
-
     return routers[0]
 
 

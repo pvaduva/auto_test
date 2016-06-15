@@ -13,6 +13,7 @@ from consts.cgcs import HOME
 from consts.cgcs import HEAT_PATH
 import os
 from consts.auth import Tenant
+from testfixtures.resource_mgmt import ResourceCleanup
 
 
 def verify_heat_resource(to_verify=None,template_name=None,stack_name=None,auth_info=None):
@@ -183,6 +184,9 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
         return [1, output]
     LOG.info("Stack {} created sucessfully.".format(stack_name))
 
+    ### add the heat stack name for deleteion on failure
+    ResourceCleanup.add(resource_type='heat_stack', resource_id=t_name)
+
     LOG.tc_step("Verifying Heat Stack Status for CREATE_COMPLETE for stack %s",stack_name)
 
     if not heat_helper.wait_for_heat_state(stack_name=stack_name,state='CREATE_COMPLETE',auth_info=auth_info):
@@ -249,7 +253,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
         P1(('OS_Heat_Stack.yaml')),
         P1(('OS_Cinder_VolumeAttachment.yaml')),
         P1(('OS_Nova_Server.yaml')),
-        P1(('OS_Heat_AccessPolicy')),
+        P1(('OS_Heat_AccessPolicy.yaml')),
 
     ])
 # can add test fixture to configure hosts to be certain storage backing
