@@ -774,7 +774,7 @@ def get_vms_by_hypervisors(con_ssh=None, rtn_val='ID'):
     return host_vms
 
 
-def get_key_pair(name=None,con_ssh=None, auth_info=None):
+def get_key_pair(name=None, con_ssh=None, auth_info=None):
     """
 
     Args:
@@ -790,7 +790,6 @@ def get_key_pair(name=None,con_ssh=None, auth_info=None):
         return table_parser.get_values(table_,'Name',Name=name)
     else:
         return table_parser.get_column(table_, 'Name')
-
 
 
 def vm_exists(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
