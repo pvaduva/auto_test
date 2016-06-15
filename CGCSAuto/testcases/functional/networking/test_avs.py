@@ -101,6 +101,7 @@ def test_avp_vms_with_vm_actions(spec_name, spec_val, vm_type, vif_model):
         - Create a flavor with given extra spec
         - boot a vm via lab_setup script
         - resize the vm with the flavor created
+        - Ping VM from Natbox(external network)
         - Ping from VM to 8.8.8.8
         - Live-migrate the VM and verify ping from VM
         - Cold-migrate the VM and verify ping from VM

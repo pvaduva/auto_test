@@ -1,5 +1,5 @@
 ###
-# test_468_lock_unlock_compute_node sanity_juno_unified_R3.xls
+# test_467_lock_unlock_compute_node sanity_juno_unified_R3.xls
 ###
 
 from pytest import fixture, mark, skip
@@ -9,7 +9,7 @@ from utils.tis_log import LOG
 from keywords import host_helper,system_helper
 from setup_consts import P1, P2, P3
 
-
+@mark.sanity
 def test_lock_unlock_inactive_controller():
     """
     Verify Swact is working on two controllers system

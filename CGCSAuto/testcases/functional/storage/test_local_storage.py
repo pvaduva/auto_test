@@ -246,15 +246,7 @@ class TestLocalStorage(object):
     def select_target_compute(self, compute_src='', ls_type='image'):
         compute_dest = ''
 
-        # firstly chose one compute from locked and of different local-storage-type to apply storage-profile
-        LOG.debug('Looking for a locked computes with different local-storage-type')
-        compute_dest = self._choose_compute_locked_diff_type(ls_type=ls_type)
-        if compute_dest:
-            LOG.debug('got target compute:{}, locked, diff local-storage-type'.format(compute_dest))
-            return compute_dest
-
         old_active_controller = system_helper.get_active_controller_name()
-        LOG.debug('-no locked computes with different local-storage-type')
 
         # otherwise chose one compute from unlocked and of different local-storage-type to apply storage-profile
         LOG.debug('Looking for unlocked computes with different local-storage-type')
@@ -265,14 +257,6 @@ class TestLocalStorage(object):
 
         LOG.debug('-no unlocked computes with different local-storage-type')
 
-        # still can't find a candidate, choose one with the same local-storage-type
-        LOG.debug('Looking for compute locked with same local-storage-type')
-        compute_dest = self._choose_compute_locked_diff_type(ls_type=ls_type)
-        if compute_dest:
-            LOG.debug('got target compute:{}, locked, same local-storage-type'.format(compute_dest))
-            return compute_dest
-
-        LOG.debug('-no locked computes with same local-storage-type')
         LOG.debug('Looking for compute unlocked with same local-storage-type')
         compute_dest = self._choose_compute_unlocked_same_type(ls_type=ls_type, active_controller=old_active_controller)
 

@@ -12,7 +12,7 @@ from consts.cgcs import EventLogID, FlavorSpec
 from consts.timeout import EventLogTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 
-
+#TODO need to me removed it's a duplicate of testcases/mtc/test_vm_voting_start_stop
 # heartbeat Type
 flavor_params = ['True']
 

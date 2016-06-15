@@ -528,10 +528,7 @@ def get_provider_net_range(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
         ranges = table_parser.get_values(table_, 'ranges')
     else:
         ranges = table_parser.get_values(table_, 'ranges', strict=False, name=name)
-    if ranges is not '':
-        ranges = eval(ranges)
-    else:
-        ranges = {}
+
     return ranges
 
 

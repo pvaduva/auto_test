@@ -684,9 +684,9 @@ def get_vm_status(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     return get_vm_nova_show_value(vm_id, 'status', con_ssh=con_ssh, auth_info=auth_info)
 
 
-def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, fail_ok=True):
+def get_vm_id_from_name(vm_name, con_ssh=None, strick=True, fail_ok=True):
     table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    vm_ids = table_parser.get_values(table_, 'ID', Name=vm_name.strip(), strict=strict)
+    vm_ids = table_parser.get_values(table_, 'ID', strict=strick, Name=vm_name.strip())
     if not vm_ids:
         if fail_ok:
             return None
@@ -792,6 +792,24 @@ def get_vms_by_hypervisors(con_ssh=None, rtn_val='ID'):
         host_vms[host] = get_vms_on_hypervisor(host, con_ssh, rtn_val=rtn_val)
 
     return host_vms
+
+
+def get_key_pair(name=None, con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        name (str): Name of the key pair to filter for a given user
+        con_ssh (SSHClient):
+        auth_info (dict): Tenant to be used to execute the cli if none Primary tenant will be used
+
+    Returns (dict):return the name of the keypairs
+
+    """
+    table_ = table_parser.table(cli.nova('keypair-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is not None:
+        return table_parser.get_values(table_,'Name',Name=name)
+    else:
+        return table_parser.get_column(table_, 'Name')
 
 
 def vm_exists(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):

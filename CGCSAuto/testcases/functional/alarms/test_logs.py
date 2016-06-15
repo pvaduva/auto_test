@@ -2,6 +2,7 @@ import re
 from pytest import mark
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
+from utils import cli
 from consts.cgcs import UUID
 from keywords import system_helper
 # This test case is  to verify the query alarm and logs using event list.
@@ -32,9 +33,11 @@ def test_event_list_vms(event_option, severity):
     limit = 5
     LOG.tc_step('Generate alarms.')
     if event_option == 'alarms':
-        alarm_log_generate_str = "fmClientCli -c  \"### ###300.005###set###system.vm###host=compute-0.vm=$i### ###" + \
-                         severity + "### ###processing-error###Automation Generate### ###True###True###\""
+        alarm_log_generate_str = "fmClientCli -c  \"### ###300.005###set###system.vm### ### ###" + \
+                         severity + "###Automation Test Alarm ### ###Automation Generate### ###True###True###\""
+        alarm_id="300.005"
     else:
+        alarm_id = "600.005"
         alarm_log_generate_str = "fmClientCli -c  \"### ###600.005###msg###system.vm###host=compute-0.vm=$i### ### " + \
                         severity + "###'oam' Test###Automation Generate###cpu-cycles-limit-" \
                                    "exceeded### ###True###True### \""
@@ -47,7 +50,12 @@ def test_event_list_vms(event_option, severity):
     LOG.tc_step('Verify test result')
     check_flag = query_check(len(query_tab['values']), int(limit) - 1)
     assert check_flag != 1, " Test Failed "
-
+    active_alarm_uuid = system_helper.get_alarms(uuid=True, query_key='alarm_id', query_value=alarm_id,
+                                                 query_type='string')
+    if event_option == 'alarms':
+        uuid_val = active_alarm_uuid['values'][0][0]
+        retcode, output = delete_alarm_log(uuid=uuid_val)
+        assert retcode == 0, output
 
 def query_check(length, local_limit):
     flag = 0
@@ -70,3 +78,13 @@ def generate_alarm_log(alarm_str, maxi=0):
             return False
     else:
         return True
+
+
+def delete_alarm_log(con_ssh=None, uuid=None):
+    if uuid is None:
+        return 1
+    cli.system(cmd="alarm-delete", positional_args=uuid, ssh_client=con_ssh)
+    query_active_alarm = system_helper.get_alarms(query_key='UUID', query_value=uuid, query_type='string')
+    if not bool(query_active_alarm):
+        return 1, "Alarm " + uuid + " was not deleted"
+    return 0, "Alarm ID " + uuid + " was deleted"
