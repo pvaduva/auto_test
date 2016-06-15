@@ -702,12 +702,28 @@ def get_router_ids(auth_info=None, con_ssh=None):
 
 
 def get_tenant_router(router_name=None, auth_info=None, con_ssh=None):
+    """
+    Get id of tenant router with specified name.
+
+    Args:
+        router_name (str): name of the router
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (str): router id
+
+    """
     if router_name is None:
         tenant_name = common.get_tenant_name(auth_info=auth_info)
         router_name = tenant_name + '-router'
 
     table_ = table_parser.table(cli.neutron('router-list', ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_values(table_, 'id', name=router_name)[0]
+    routers = table_parser.get_values(table_, 'id', name=router_name)
+    if not routers:
+        LOG.warning("No router with name {} found".format(router_name))
+        return None
+
+    return routers[0]
 
 
 def get_router_info(router_id=None, field='status', strict=True, auth_info=Tenant.ADMIN, con_ssh=None):

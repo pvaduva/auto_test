@@ -381,7 +381,7 @@ def get_server_groups(name=None, project_id=None, auth_info=None, con_ssh=None, 
     Returns (list): list of server groups ids
 
     """
-    table_ = cli.nova('server-group-list', ssh_client=con_ssh, auth_info=auth_info)
+    table_ = table_parser.table(cli.nova('server-group-list', ssh_client=con_ssh, auth_info=auth_info))
 
     if name is not None:
         table_ = table_parser.filter_table(table_, strict=strict, regex=regex, Name=name)
@@ -684,9 +684,9 @@ def get_vm_status(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     return get_vm_nova_show_value(vm_id, 'status', con_ssh=con_ssh, auth_info=auth_info)
 
 
-def get_vm_id_from_name(vm_name, con_ssh=None, fail_ok=True):
+def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, fail_ok=True):
     table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    vm_ids = table_parser.get_values(table_, 'ID', Name=vm_name.strip())
+    vm_ids = table_parser.get_values(table_, 'ID', Name=vm_name.strip(), strict=strict)
     if not vm_ids:
         if fail_ok:
             return None
@@ -733,11 +733,31 @@ def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADM
 
 
 def get_vm_flavor(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get flavor id of given vm
+
+    Args:
+        vm_id (str):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (str):
+
+    """
     flavor_output = get_vm_nova_show_value(vm_id, field='flavor', strict=True, con_ssh=con_ssh, auth_info=auth_info)
     return re.search(r'\((.*)\)', flavor_output).group(1)
 
 
 def get_vm_host(vm_id, con_ssh=None):
+    """
+    Get host of given vm
+    Args:
+        vm_id:
+        con_ssh:
+
+    Returns:
+
+    """
     return get_vm_nova_show_value(vm_id, ':host', strict=False, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
 
 

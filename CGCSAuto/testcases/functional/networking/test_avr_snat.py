@@ -10,15 +10,15 @@ from testfixtures.wait_for_hosts_recover import HostsToWait
 @fixture(scope='module', autouse=True)
 def snat_setups(request):
     # Enable snat, boot vm
-    gateway_info = network_helper.get_router_ext_gateway_info()
-    run_teardown = False if gateway_info['enable_snat'] else True
+    # gateway_info = network_helper.get_router_ext_gateway_info()
+    # run_teardown = False if gateway_info['enable_snat'] else True
 
     network_helper.update_router_ext_gateway_snat(enable_snat=True)     # Check snat is handled by the keyword
 
     def disable_snat():
-        if run_teardown:
-            network_helper.update_router_ext_gateway_snat(enable_snat=False)
+        #if run_teardown:
             # network_helper.update_router_ext_gateway_snat(enable_snat=False)
+        network_helper.update_router_ext_gateway_snat(enable_snat=False)
     request.addfinalizer(disable_snat)
 
     vm_id = vm_helper.boot_vm()[1]

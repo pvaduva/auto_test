@@ -53,7 +53,7 @@ def test_update_router_distributed(router_info):
     LOG.tc_step("Boot a vm before updating router and ping vm from NatBox")
     vm_id = vm_helper.boot_vm()[1]
     ResourceCleanup.add('vm', vm_id)
-    vm_helper.ping_vms_from_natbox(vm_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
     for update_to_val in [not is_dvr, is_dvr]:
         LOG.tc_step("Update router distributed to {}".format(update_to_val))
@@ -62,4 +62,4 @@ def test_update_router_distributed(router_info):
         LOG.tc_step("Verify router is in active state and vm can be ping'd from NatBox")
         assert RouterStatus.ACTIVE == network_helper.get_router_info(router_id, field='status'), \
             "Router is not in active state after updating distributed to {}.".format(update_to_val)
-        vm_helper.ping_vms_from_natbox(vm_id)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False, timeout=60)

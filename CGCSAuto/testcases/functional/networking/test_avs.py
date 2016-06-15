@@ -138,7 +138,7 @@ def test_avp_vms_with_vm_actions(spec_name, spec_val, vm_type, vif_model):
     ResourceCleanup.add('vm', vm)
 
     LOG.tc_step("Ping VM {} from NatBox".format(vm))
-    vm_helper.ping_vms_from_natbox(vm)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm)
 
     LOG.tc_step("Ping from VM to external ip 8.8.8.8")
     vm_helper.ping_ext_from_vm(vm)
