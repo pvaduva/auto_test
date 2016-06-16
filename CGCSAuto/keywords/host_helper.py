@@ -764,7 +764,7 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
         hosts = [eval(host) for host in hosts]
 
     LOG.info("Hosts with {} backing: {}".format(storage_backing, hosts))
-    return tuple(hosts)
+    return hosts
 
 
 def get_nova_hosts_with_storage_backing(storage_backing, con_ssh=None):
