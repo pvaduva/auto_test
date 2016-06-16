@@ -162,7 +162,7 @@ def _get_active_standby(controller='active', con_ssh=None):
 
 
 def get_interfaces(host, con_ssh=None):
-    table_ = table_parser.table(cli.system('host-if-list', host, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.system('host-if-list --nowrap', host, ssh_client=con_ssh))
     return table_
 
 

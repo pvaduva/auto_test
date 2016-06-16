@@ -35,8 +35,8 @@ def heartbeat_flavor_vm(request):
     heartbeat_spec = {FlavorSpec.GUEST_HEARTBEAT: heartbeat}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
 
-    boot_source = 'image'
-    vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
+    # use volume to boot a vm by default
+    vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
     events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
@@ -47,15 +47,17 @@ def heartbeat_flavor_vm(request):
         assert not events, "Heartbeat event generated unexpectedly: {}".format(events)
 
     vm = {'id': vm_id,
-          'boot_source': boot_source,
           'heartbeat': heartbeat
           }
 
-    def delete_flavor_vm():
+    vm_host = nova_helper.get_vm_host(vm_id)
+
+    def unlock_host():
         # must delete VM before flavors
         vm_helper.delete_vms(vm_id, delete_volumes=True)
         nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
-    request.addfinalizer(delete_flavor_vm)
+        host_helper.unlock_host(vm_host)
+    request.addfinalizer(unlock_host)
 
     return vm
 
@@ -72,7 +74,7 @@ def test_heartbeat_after_compute_lock(heartbeat_flavor_vm):
     Setup:
         1) Log on to active controller, add flavor with extension with heartbeat enabled.
         2) Instantiate VM and log into their VM consoles. Verify it's running on a compute node.
-        3) Confirm that heartbeating is running in both VMs (check logs, and/or "ps -ef | fgrep guest-client").
+        3) Confirm that heartbeating is running in VM (check logs, and/or "ps -ef | fgrep guest-client").
         4) Lock the compute node.
 
     Test Steps:
@@ -81,6 +83,7 @@ def test_heartbeat_after_compute_lock(heartbeat_flavor_vm):
 
     Teardown:
         -delete vm
+        -unlock locked host
 
     """
     vm_id = heartbeat_flavor_vm['id']
@@ -123,5 +126,3 @@ def test_heartbeat_after_compute_lock(heartbeat_flavor_vm):
                 assert not heartbeat_proc_appear, "Heartbeat set to False, However, heartbeat process is running " \
                                                   "after swact. "
 
-    # unlock the locked compute node after test
-    host_helper.unlock_host(vm_host)

@@ -71,8 +71,8 @@ class CLIRejected(TiSError):
 
 
 class HostError(TiSError):
-    """Used if post action check inside a keyword fails"""
-    pass
+    """Generic Host error"""
+    message = "Host not found"
 
 
 class HostPostCheckFailed(HostError):
