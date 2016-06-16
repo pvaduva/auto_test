@@ -356,6 +356,9 @@ def get_floating_ips(auth_info=Tenant.ADMIN, con_ssh=None):
 
     """
     table_ = table_parser.table(cli.neutron('floatingip-list', ssh_client=con_ssh, auth_info=auth_info))
+    if not table_['headers']:  # no floating ip listed
+        return []
+
     return table_parser.get_column(table_, 'floating_ip_address')
 
 

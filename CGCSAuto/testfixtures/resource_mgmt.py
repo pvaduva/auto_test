@@ -168,11 +168,9 @@ class ResourceCleanup:
                 heat_user = getattr(Heat, stack)['heat_user']
                 if heat_user is 'admin':
                     auth_info = Tenant.ADMIN
-                stack_status = heat_helper.get_stack_status(stack_name=stack, auth_info=auth_info)
-                if stack_status:
-                    code = heat_helper.delete_stack(stack_name=stack, auth_info=auth_info)
-                    if code > 0:
-                        err_msgs.append("delete stack failed for {}".format(stack))
+                code, msg = heat_helper.delete_stack(stack_name=stack, check_first=True, auth_info=auth_info, fail_ok=True)
+                if code > 0:
+                    err_msgs.append(msg)
 
         # Attempt all deletions before raising exception.
         if err_msgs:

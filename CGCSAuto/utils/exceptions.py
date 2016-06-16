@@ -131,3 +131,7 @@ class NovaError(TiSError):
 
 class NeutronError(TiSError):
     message = "Neutron error."
+
+
+class HeatError(TiSError):
+    message = "Heat error."
