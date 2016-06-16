@@ -1,8 +1,11 @@
+import os
 import pexpect
 from consts.auth import Tenant
+from consts.proj_vars import ProjVar
+from utils.tis_log import LOG
 
-
-def scp_from_local(source_path, dest_ip, dest_user='wrsroot', dest_password='li69nux', dest_path='/home/wrsroot',
+def scp_from_local(source_path, dest_ip, dest_path='',
+                   dest_user='wrsroot', dest_password='li69nux',
                    timeout=60, is_dir=False):
     """
     Scp file(s) from localhost (i.e., from where the automated tests are executed).
@@ -18,19 +21,20 @@ def scp_from_local(source_path, dest_ip, dest_user='wrsroot', dest_password='li6
 
     """
     dir_option = '-r ' if is_dir else ''
-    cmd = 'scp {}{} {}@{}:{}'.format(dir_option, source_path, dest_user, dest_ip, dest_path)
+    cmd = 'scp {} {} {}@{}:{}'.format(dir_option, source_path, dest_user, dest_ip, dest_path)
 
-    __scp_base(cmd, remote_password=dest_password, logdir=dest_path, timeout=timeout)
+    __scp_base(cmd, remote_password=dest_password, timeout=timeout, is_dir=is_dir)
 
 
-def scp_to_local(source_path, source_ip, dest_path, source_user='wrsroot', source_password='li69nux', is_dir=False,
-                 timeout=60):
+def scp_to_local(source_path, dest_ip, dest_path='',
+                 source_user='wrsroot', source_password='li69nux',
+                 timeout=60, is_dir=False):
     """
     Scp file(s) to localhost (i.e., to where the automated tests are executed).
 
     Args:
         source_path (str): source file/directory path
-        source_ip (str): ip of the source host.
+        dest_ip (str): ip of the source host.
         source_user (str): username of source host.
         source_password (str): password of source host
         dest_path (str): destination directory path to copy the file(s) to
@@ -40,31 +44,28 @@ def scp_to_local(source_path, source_ip, dest_path, source_user='wrsroot', sourc
     """
     dir_option = '-r ' if is_dir else ''
     cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{}@{}:{} {}'.format(
-            dir_option, source_user, source_ip, source_path, dest_path)
+            dir_option, source_user, dest_ip, source_path, dest_path)
 
-    __scp_base(cmd, remote_password=source_password, logdir=dest_path, timeout=timeout)
+    __scp_base(cmd, remote_password=source_password, timeout=timeout, is_dir=is_dir)
 
 
-def __scp_base(cmd, remote_password, logdir=None, timeout=60):
-    if logdir:
-        logfilepath = logdir + '/scp_files.log'
-        logfile = open(logfilepath, 'w+')
-    else:
-        logfile = None
+def __scp_base(cmd, remote_password, logdir=None, timeout=60, is_dir=False):
+    LOG.info('cmd={}'.format(cmd))
 
-    local_child = pexpect.spawn(command=cmd, encoding='utf-8', logfile=logfile)
-    index = local_child.expect([pexpect.EOF, 'assword:', 'yes/no'], timeout=timeout)
+    logdir = logdir or ProjVar.get_var('LOG_DIR')
+    logfile = os.path.sep.join([logdir, 'scp_files.log'])
 
-    if index == 2:
-        local_child.sendline('yes')
-        index = local_child.expect(pexpect.EOF, 'assword:')
+    with open(logfile, mode='a') as f:
+        local_child = pexpect.spawn(command=cmd, encoding='utf-8', logfile=f)
+        index = local_child.expect([pexpect.EOF, 'assword:', 'yes/no'], timeout=timeout)
 
-    if index == 1:
-        local_child.sendline(remote_password)
-        local_child.expect(pexpect.EOF)
+        if index == 2:
+            local_child.sendline('yes')
+            index = local_child.expect(pexpect.EOF, 'assword:')
 
-    if logfile:
-        logfile.close()
+        if index == 1:
+            local_child.sendline(remote_password)
+            local_child.expect(pexpect.EOF)
 
 
 def get_tenant_name(auth_info=None):
