@@ -46,5 +46,5 @@ def test_lock_unlock_inactive_controller():
     # unlock standby controller node and verify controller node is successfully unlocked
     host_helper.unlock_host(standby_controller)
     lucky_compute_node_unlocked_state = host_helper.get_hostshow_value(standby_controller,'administrative')
-    assert lucky_compute_node_locked_state == 'unlocked', 'Test Failed. Standby Controller {} should be in unlocked ' \
+    assert lucky_compute_node_unlocked_state == 'unlocked', 'Test Failed. Standby Controller {} should be in unlocked ' \
                                                           'state but is not.'.format(standby_controller)
