@@ -3,6 +3,30 @@ import pexpect
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
+from utils.ssh import ControllerClient
+
+
+def scp_to_active_controller(source_path, dest_path='',
+                   dest_user='wrsroot', dest_password='li69nux',
+                   timeout=60, is_dir=False):
+
+    active_cont_ip = ControllerClient.get_active_controller().host
+
+    return scp_from_local(source_path, active_cont_ip, dest_path=dest_path,
+                          dest_user=dest_user, dest_password=dest_password,
+                          timeout=timeout, is_dir=is_dir)
+
+
+def scp_from_active_controller(source_path, dest_path='',
+                               src_user='wrsroot', src_password='li69nux',
+                               timeout=60, is_dir=False):
+
+    active_cont_ip = ControllerClient.get_active_controller().host
+
+    return scp_to_local(source_path, active_cont_ip, dest_path=dest_path,
+                        src_user=src_user, src_password=src_password,
+                        timeout=timeout, is_dir=is_dir)
+
 
 def scp_from_local(source_path, dest_ip, dest_path='',
                    dest_user='wrsroot', dest_password='li69nux',
@@ -21,6 +45,7 @@ def scp_from_local(source_path, dest_ip, dest_path='',
 
     """
     dir_option = '-r ' if is_dir else ''
+
     cmd = 'scp {} {} {}@{}:{}'.format(dir_option, source_path, dest_user, dest_ip, dest_path)
 
     __scp_base(cmd, remote_password=dest_password, timeout=timeout, is_dir=is_dir)
