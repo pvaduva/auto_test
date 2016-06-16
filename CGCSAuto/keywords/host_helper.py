@@ -285,14 +285,14 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
     #  vim_progress_status | Lock of host compute-0 rejected because there are no other hypervisors available.
     if _wait_for_host_states(host=host, timeout=5, vim_progress_status='ock .* host .* rejected.*',
-                             regex=True, fail_ok=True, con_ssh=con_ssh):
+                             regex=True, strict=False, fail_ok=True, con_ssh=con_ssh):
         msg = "Lock host {} is rejected. Details in host-show vim_process_status.".format(host)
         if fail_ok:
             return 4, msg
         raise exceptions.HostPostCheckFailed(msg)
 
     if _wait_for_host_states(host=host, timeout=5, vim_progress_status='Migrate of instance .* from host .* failed.*',
-                             regex=True, fail_ok=True, con_ssh=con_ssh):
+                             regex=True, strict=False, fail_ok=True, con_ssh=con_ssh):
         msg = "Lock host {} failed due to migrate vm failed. Details in host-show vm_process_status.".format(host)
         if fail_ok:
             return 5, msg

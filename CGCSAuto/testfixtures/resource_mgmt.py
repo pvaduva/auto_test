@@ -168,7 +168,7 @@ class ResourceCleanup:
                 heat_user = getattr(Heat, stack)['heat_user']
                 if heat_user is 'admin':
                     auth_info = Tenant.ADMIN
-                code, msg = heat_helper.delete_stack(stack_name=stack, check_first=True, auth_info=auth_info, fail_ok=True)
+                code, msg = heat_helper.delete_stack(stack, check_first=True, auth_info=auth_info, fail_ok=True)
                 if code > 0:
                     err_msgs.append(msg)
 
