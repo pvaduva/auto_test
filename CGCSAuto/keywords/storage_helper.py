@@ -9,7 +9,7 @@ import re
 from utils import table_parser, cli
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient, SSHFromSSH
-from keywords import system_helper
+from keywords import system_helper, host_helper
 from consts.cgcs import Prompt
 from consts.auth import Host
 
@@ -89,13 +89,12 @@ def get_osd_host(osd_id, con_ssh=None):
     msg = 'Could not find host for OSD ID {}'.format(osd_id)
     return -1, msg
 
-def kill_osd_process(osd_host, pid, con_ssh=None):
+def kill_process(host, pid):
     """
     Given the id of an OSD, kill the process and ensure it restarts.
     Args:
-        con_ssh(SSHClient)
-        host - the host to ssh into
-        osd_id - osd_id to kill
+        host (string) - the host to ssh into, e.g. 'controller-1'
+        pid (string) - pid to kill, e.g. '12345'
 
     Returns:
         - (bool) True if process was killed, False otherwise
@@ -105,32 +104,27 @@ def kill_osd_process(osd_host, pid, con_ssh=None):
 
     cmd = 'kill -9 {}'.format(pid)
 
-    LOG.info('Kill OSD process {} on {}'.format(pid, osd_host))
-    storage_ssh = SSHFromSSH(con_ssh, osd_host, Host.USER, Host.PASSWORD, \
-        initial_prompt=Prompt.STORAGE_PROMPT)
-    storage_ssh.connect()
-    with storage_ssh.login_as_root() as root_ssh:
-        rtn_code, out = root_ssh.exec_cmd(cmd, expect_timeout=60)
-        LOG.info(cmd)
+    # SSH could be redundant if we are on controller-0 (oh well!)
+    LOG.info('Kill process {} on {}'.format(pid, host))
+    with host_helper.ssh_to_host(host) as host_ssh:
+        with host_ssh.login_as_root() as root_ssh:
+            rtn_code, out = root_ssh.exec_cmd(cmd, expect_timeout=60)
+            LOG.info(cmd)
 
-    LOG.info('Ensure the PID is no longer listed')
-    pid_exists, msg = check_pid_exists(pid, root_ssh)
-    if pid_exists:
-        root_ssh.close()
-        storage_ssh.close()
-        return False, msg
+        LOG.info('Ensure the PID is no longer listed')
+        pid_exists, msg = check_pid_exists(pid, root_ssh)
+        if pid_exists:
+            return False, msg
 
-    root_ssh.close()
-    storage_ssh.close()
     return True, msg
 
-def get_osd_pid(osd_host, osd_id, con_ssh=None):
+# TODO: get_osd_pid and get_mon_pid are good candidates for combining
+def get_osd_pid(osd_host, osd_id):
     """
     Given the id of an OSD, return the pid.
     Args:
-        con_ssh(SSHClient)
-        osd_host - the host to ssh into
-        osd_id - osd_id to get the pid of
+        osd_host (string) - the host to ssh into, e.g. 'storage-0'
+        osd_id (string) - osd_id to get the pid of, e.g. '0'
     Returns:
         - (integer) pid if found, or -1 if pid not found
         - (string) message
@@ -138,22 +132,42 @@ def get_osd_pid(osd_host, osd_id, con_ssh=None):
 
     cmd = 'cat /var/run/ceph/osd.{}.pid'.format(osd_id)
 
-    storage_ssh = SSHFromSSH(con_ssh, osd_host, Host.USER, Host.PASSWORD, \
-        initial_prompt=Prompt.STORAGE_PROMPT)
-    storage_ssh.connect()
-
-    LOG.info(cmd)
-    rtn_code, out = storage_ssh.exec_cmd(cmd, expect_timeout=60)
-    osd_match = r'(\d+)'
-    pid = re.match(osd_match, out)
-    if pid:
-        msg = 'Corresponding pid for OSD ID {} is {}'.format(osd_id, pid.group(1))
-        storage_ssh.close()
-        return pid.group(1), msg
+    with host_helper.ssh_to_host(osd_host) as storage_ssh:
+        LOG.info(cmd)
+        rtn_code, out = storage_ssh.exec_cmd(cmd, expect_timeout=60)
+        osd_match = r'(\d+)'
+        pid = re.match(osd_match, out)
+        if pid:
+            msg = 'Corresponding pid for OSD ID {} is {}'.format(osd_id, pid.group(1))
+            return pid.group(1), msg
 
     msg = 'Corresponding pid for OSD ID {} was not found'.format(osd_id)
-    storage_ssh.close()
     return -1, msg
+
+# TODO: get_osd_pid and get_mon_pid are good candidates for combining
+def get_mon_pid(mon_host):
+    """
+    Given the host name of a monitor, return the pid of the ceph-mon process
+    Args:
+        mon_host (string) - the host to get the pid of, e.g. 'storage-1'
+    Returns:
+        - (integer) pid if found, or -1 if pid not found
+        - (string) message
+    """
+
+    cmd = 'cat /var/run/ceph/mon.{}.pid'.format(mon_host)
+
+    with host_helper.ssh_to_host(mon_host) as mon_ssh:
+        LOG.info(cmd)
+        rtn_code, out = mon_ssh.exec_cmd(cmd, expect_timeout=60)
+        mon_match = r'(\d+)'
+        pid = re.match(mon_match, out)
+        if pid:
+            msg = 'Corresponding ceph-mon pid for {} is {}'.format(mon_host, pid.group(1))
+            return pid.group(1), msg
+
+    msg = 'Corresponding ceph-mon pid for {} was not found'.format(mon_host)
+
 
 def get_osds(host=None, con_ssh=None):
     """
@@ -230,6 +244,27 @@ def check_pid_exists(pid, con_ssh=None):
 
     msg = 'Process {} does not exist'.format(pid)
     return False, msg
+
+def get_storage_group(host):
+    """
+    Determine the storage replication group name associated with the storage
+    host.
+
+    Args:
+        host (string) - storage host, e.g. 'storage-0'
+    Returns:
+        storage_group (string) - group name, e.g. 'group-0'
+        msg (string) - log message
+    """
+
+    host_table = table_parser.table(cli.system('host-show', host))
+    peers = table_parser.get_values(host_table, 'Value', Property='peers')
+    storage_group = re.search('(group-\d+)', peers[0])
+    msg = 'Unable to determine replication group for {}'.format(host)
+    assert storage_group, msg
+    storage_group = storage_group.group(0)
+    msg = 'The replication group for {} is {}'.format(host, storage_group)
+    return storage_group, msg
 
 def download_images(dload_type='all', img_dest='~/images/', con_ssh=None):
     """

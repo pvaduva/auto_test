@@ -19,7 +19,7 @@ PROC_RESTART_TIME = 10     # how long to wait for process to restart
 RESTARTS_BEFORE_ASSERT = 3 # number of process restarts until error assertion
 SECS_BTWN_RESTARTS = 30    # interval between process restarts
 
-@mark.usefixtures('check_alarms')
+# Runtime: 222 seconds - pass on wildcat-7-12
 @mark.usefixtures('ceph_precheck')
 def test_ceph_osd_process_kill():
     """
@@ -42,11 +42,8 @@ def test_ceph_osd_process_kill():
         3.  Randomly pick one OSD and get the pid of the OSD process
         4.  Kill the OSD processes
         5.  Verify the process is restarted
-        6.  Check the health of the cluster is restored
-        7.  Repeatedly kill processes until error assertion occurs
-        8.  Verify the error assertion is cleared and health is restored
-        9.  Ensure OSD process cannot start and error assertion results
-        10.  Restore OSD process and then kill OSD processes.
+        6.  Repeatedly kill processes until error assertion occurs
+        7.  Verify the error assertion is cleared and health is restored
         recover.
 
     Teardown:
@@ -66,13 +63,17 @@ def test_ceph_osd_process_kill():
     assert osd_host, msg
     LOG.info(msg)
 
+    LOG.tc_step('Determine the storage group for host {}'.format(osd_host))
+    storage_group, msg = storage_helper.get_storage_group(osd_host) 
+    LOG.info(msg)
+
     LOG.tc_step('Determine the pid of OSD ID {}'.format(osd_id))
     osd_pid, msg = storage_helper.get_osd_pid(osd_host, str(osd_id), con_ssh)
     assert osd_pid, msg
     LOG.info(msg)
 
     LOG.tc_step('Kill the OSD process')
-    proc_killed, msg = storage_helper.kill_osd_process(osd_host, osd_pid,
+    proc_killed, msg = storage_helper.kill_process(osd_host, osd_pid,
         con_ssh)
     assert proc_killed, msg
     LOG.info(msg)
@@ -88,14 +89,14 @@ def test_ceph_osd_process_kill():
     assert osd_pid2 != osd_pid, msg
     LOG.info('Old pid is {} and new pid is {}'.format(osd_pid, osd_pid2))
     
-    # Note, we will not see an impact to alarms or ceph health if we only kill
-    # the process once.
+    # Note, there is an impact to ceph health going from HEALTH_OK to
+    # HEALTH_WARN but it is too brief to look for.
 
     LOG.tc_step('Repeatedly kill the OSD process until we alarm')
     for i in range(0, RESTARTS_BEFORE_ASSERT):
         osd_pid, msg = storage_helper.get_osd_pid(osd_host, osd_id, con_ssh)
         assert osd_pid, msg
-        proc_killed, msg = storage_helper.kill_osd_process(osd_host, osd_pid,
+        proc_killed, msg = storage_helper.kill_process(osd_host, osd_pid,
             con_ssh)
         assert proc_killed, msg
         for i in range(0, PROC_RESTART_TIME):
@@ -107,12 +108,8 @@ def test_ceph_osd_process_kill():
         assert osd_pid2 != osd_pid, msg
         LOG.info('Old pid is {} and new pid is {}'.format(osd_pid, osd_pid2))
 
-        # Check the OSD process is restarted with a different pid 
-        #time.sleep(SECS_BTWN_RESTARTS)
-
     # Note, we cannot check alarms since the alarms clears too quickly.  Check
-    # events instead.  Also, it doesn't appear CEPH health is impacted (might
-    # be too fast)
+    # events instead.
 
     # storage-1 is degraded due to the failure of its 'ceph (osd.1)' process.
     # Auto recovery of this major process is in progress. 
@@ -122,24 +119,165 @@ def test_ceph_osd_process_kill():
         **{'Entity Instance ID': entity_instance, 'Event Log ID':
         EventLogID.STORAGE_DEGRADE})
 
+    # Can't always catch this event - CGTS-4513
+    # Loss of replication in replication group group-0: OSDs are down
+    #LOG.tc_step('Check events list for replication group failure')
+    #reason_text = 'Loss of replication in replication group {}: OSDs are down'.format(storage_group)
+    #system_helper.wait_for_events(30, strict=False, fail_ok=False, 
+    #    **{'Reason Text': reason_text, 'Event Log ID': EventLogID.STORAGE_LOR})
+
     # Note, the storage host degrade state is so brief that we cannot check
     # for it.
 
     LOG.tc_step('Check the OSD failure event clears')
     LOG.tc_step('Check events list for OSD failure')
     entity_instance = 'host={}.process=ceph (osd.{})'.format(osd_host, osd_id)
-    system_helper.wait_for_events(30, strict=False, fail_ok=False, 
+    system_helper.wait_for_events(45, strict=False, fail_ok=False, 
         **{'Entity Instance ID': entity_instance, 'Event Log ID':
         EventLogID.STORAGE_DEGRADE, 'State': 'clear'})
 
+    # Can't always catch this event - CGTS-4513
+    #LOG.tc_step('Check events list for replication group event clear')
+    #reason_text = 'Loss of replication in replication group {}: OSDs are down'.format(storage_group)
+    #system_helper.wait_for_events(30, strict=False, fail_ok=False, 
+    #    **{'Reason Text': reason_text, 'Event Log ID': EventLogID.STORAGE_LOR,
+    #    State: 'clear'})
+
+    # Give Ceph a bit of time to return to health ok state
+    time.sleep(10)
+
     LOG.tc_step('Verify the health cluster is healthy')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-    assert not ceph_healthy, msg
+    assert ceph_healthy, msg
 
-@mark.usefixtures('check_alarms')
 @mark.usefixtures('ceph_precheck')
 def test_ceph_mon_process_kill():
     """
+    TODO: Update description
+    us69932_tc1_ceph_osd_process_kill from us69932_ceph_monitoring.odt
+
+    Verify that ceph osd processes recover when they are killed.
+
+    Args:
+        - Nothing
+
+    Setup:
+        - Requires system with storage nodes
+
+    Test Steps:
+        1.  Run CEPH pre-check fixture to check:
+            - system has storage nodes
+            - health of the ceph cluster is okay
+            - that we have OSDs provisioned
+        3.  Pick one ceph monitor and get the pid of the monitor process
+        4.  Kill the monitor process
+        5.  Verify the process is restarted
+        6.  Repeatedly kill processes until error assertion occurs
+        7.  Verify the error assertion is cleared and health is restored
+        recover.
+
+    Teardown:
+        - None
+
+    """
+
+    con_ssh = ControllerClient.get_active_controller()
+    ceph_monitors = ['controller-0', 'controller-1', 'storage-0']
+    # For testing only
+    ceph_monitors = ['controller-1']
+
+    for monitor in ceph_monitors:
+        LOG.tc_step('Determine the pid of the ceph-mon process on {}'.format(monitor))
+        mon_pid, msg = storage_helper.get_mon_pid(monitor)
+        assert mon_pid, msg
+        LOG.info(msg)
+
+        LOG.tc_step('Kill the OSD process')
+        proc_killed, msg = storage_helper.kill_process(monitor, mon_pid)
+        assert proc_killed, msg
+        LOG.info(msg)
+
+        # We're doing this twice, move to function
+        LOG.tc_step('Check the ceph-mon process is restarted with a different pid')
+        for i in range(0, PROC_RESTART_TIME):
+            mon_pid2, msg = storage_helper.get_mon_pid(monitor)
+            if mon_pid2 != mon_pid:
+                break
+            time.sleep(1)
+        msg = 'Process did not restart in time'
+        assert mon_pid2 != mon_pid, msg
+        LOG.info('Old pid is {} and new pid is {}'.format(mon_pid, mon_pid2))
+    
+        # Note, there is an impact to ceph health going from HEALTH_OK to
+        # HEALTH_WARN but it is too brief to look for.
+
+        LOG.tc_step('Repeatedly kill the ceph-mon process until we alarm')
+        for i in range(0, RESTARTS_BEFORE_ASSERT):
+            mon_pid, msg = storage_helper.get_mon_pid(monitor)
+            assert mon_pid, msg
+            proc_killed, msg = storage_helper.kill_process(monitor, mon_pid)
+            assert proc_killed, msg
+            for i in range(0, PROC_RESTART_TIME):
+                mon_pid2, msg = storage_helper.get_mon_pid(monitor)
+                if mon_pid2 != mon_pid:
+                    break
+                time.sleep(1)
+            msg = 'Process did not restart in time'
+            assert mon_pid2 != mon_pid, msg
+            LOG.info('Old pid is {} and new pid is {}'.format(mon_pid, mon_pid2))
+
+        # Note, we cannot check alarms since the alarms clears too quickly.  Check
+        # events instead.
+
+        # Alarm #1
+        # controller-1 is degraded due to the failure of its 'ceph
+        # (mon.controller-1)' process. Auto recovery of this major process is in
+        # progress.
+        # Alarm #2
+        # Storage Alarm Condition: 1 mons down, quorum 0,2
+        # controller-0,storage-0
+        LOG.tc_step('Check events list for OSD failure')
+        entity_instance = 'host={}.process=ceph (mon.{})'.format(monitor)
+        system_helper.wait_for_events(30, strict=False, fail_ok=False, 
+            **{'Entity Instance ID': entity_instance, 'Event Log ID':
+            EventLogID.STORAGE_DEGRADE})
+
+        # Can't always catch this event - CGTS-4513
+        # Loss of replication in replication group group-0: OSDs are down
+        #LOG.tc_step('Check events list for replication group failure')
+        #reason_text = 'Loss of replication in replication group {}: OSDs are down'.format(storage_group)
+        #system_helper.wait_for_events(30, strict=False, fail_ok=False, 
+        #    **{'Reason Text': reason_text, 'Event Log ID': EventLogID.STORAGE_LOR})
+
+        # Note, the storage host degrade state is so brief that we cannot check
+        # for it.
+
+        LOG.tc_step('Check the OSD failure event clears')
+        LOG.tc_step('Check events list for OSD failure')
+        entity_instance = 'host={}.process=ceph (osd.{})'.format(osd_host, osd_id)
+        system_helper.wait_for_events(45, strict=False, fail_ok=False, 
+            **{'Entity Instance ID': entity_instance, 'Event Log ID':
+            EventLogID.STORAGE_DEGRADE, 'State': 'clear'})
+
+        # Can't always catch this event - CGTS-4513
+        #LOG.tc_step('Check events list for replication group event clear')
+        #reason_text = 'Loss of replication in replication group {}: OSDs are down'.format(storage_group)
+        #system_helper.wait_for_events(30, strict=False, fail_ok=False, 
+        #    **{'Reason Text': reason_text, 'Event Log ID': EventLogID.STORAGE_LOR,
+        #    State: 'clear'})
+
+        # Give Ceph a bit of time to return to health ok state
+        time.sleep(10)
+
+        LOG.tc_step('Verify the health cluster is healthy')
+        ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+
+
+"""
+@mark.usefixtures('ceph_precheck')
+def test_ceph_mon_process_kill():
+"""
+"""
     us69932_tc2_ceph_mon_process_kill from us69932_ceph_monitoring.odt
 
     Verify that ceph mon processes recover when they are killed
@@ -172,32 +310,34 @@ def test_ceph_mon_process_kill():
             - mon state goes up
             - OSD state goes up
     """
-
+"""
     con_ssh = ControllerClient.get_active_controller()
 
     host = 'storage-0'
     LOG.tc_step('Reboot {}'.format(host))
     results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
     LOG.tc_step("Results: {}".format(results))
-    assert results[0] == 0
+    assert results[0] != 0
 
     LOG.tc_step('Check health of CEPH cluster')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-    assert ceph_healthy, msg
+    assert not ceph_healthy, msg
 
-    LOG.tc_step('Get alarms list')
-    alarms_table = system_helper.get_alarms(con_ssh=None)
-    reasons = table_parser.get_values(alarms_table, 'Reason Text')
-    msg = '{0} \'ceph mon\' process has failed'.format(host)
-    assert not re.search(msg, reasons), \
-        'Alarm reason {} not found in alarm-list'.format(msg)
+    # Ceph mon process alarm not seen.  We see 800.011 loss of replication
+    # group.  Storage Alarm Condition: 1/2 osds are down, 1 monds down.
+    #LOG.tc_step('Get alarms list')
+    #alarms_table = system_helper.get_alarms(con_ssh=None)
+    #reasons = table_parser.get_values(alarms_table, 'Reason Text')
+    #msg = '{0} \'ceph mon\' process has failed'.format(host)
+    #assert re.search(msg, reasons), \
+    #    'Alarm reason {} not found in alarm-list'.format(msg)
 
     LOG.tc_step('Check that OSDs are down')
     osd_list = storage_helper.get_osds(host, con_ssh)
     for osd_id in osd_list:
         osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
         msg = 'OSD ID {} is up but should be down'.format(osd_id)
-        assert osd_up, msg
+        assert not osd_up, msg
 
     if not host_helper._wait_for_host_states(host, availability='available'):
         msg = 'Host {} did not come available in the expected time'.format(host)
@@ -207,49 +347,49 @@ def test_ceph_mon_process_kill():
     for osd_id in osd_list:
         osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
         msg = 'OSD ID {} should be up but is not'.format(osd_id)
-        assert not osd_up, msg
+        assert osd_up, msg
 
-    LOG.tc_step('Get alarms list')
-    alarms_table = system_helper.get_alarms(con_ssh=None)
-    reasons = table_parser.get_values(alarms_table, 'Reason Text')
-    msg = '{0} \'ceph mon\' process has failed'.format(host)
-    assert re.search(msg, reasons), \
-        'Alarm {} system alarm-list'.format(msg)
+    #LOG.tc_step('Get alarms list')
+    #alarms_table = system_helper.get_alarms(con_ssh=None)
+    #reasons = table_parser.get_values(alarms_table, 'Reason Text')
+    #msg = '{0} \'ceph mon\' process has failed'.format(host)
+    #assert not re.search(msg, reasons), \
+    #    'Alarm {} system alarm-list'.format(msg)
 
     LOG.tc_step('Check health of CEPH cluster')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-    assert not ceph_healthy, msg
+    assert ceph_healthy, msg
 
     LOG.tc_step('Swact controllers')
     host_helper.swact_host(host)
 
     LOG.tc_step('Check health of CEPH cluster')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-    assert not ceph_healthy, msg
+    assert ceph_healthy, msg
 
     LOG.tc_step('Check OSD state after swact')
     total_osd_list = storage_helper.get_osds(con_ssh=con_ssh)
     for osd_id in total_osd_list:
         osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
         msg = 'OSD ID {} should be up but is not'.format(osd_id)
-        assert not osd_up, msg
+        assert osd_up, msg
 
     host = 'controller-0'
     LOG.tc_step('Reboot {}'.format(host))
     results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
     LOG.tc_step("Results: {}".format(results))
-    assert results[0] == 0
+    assert results[0] != 0
 
     LOG.tc_step('Check health of CEPH cluster')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-    assert ceph_healthy, msg
+    assert not ceph_healthy, msg
 
     LOG.tc_step('Check that OSDs are down')
     osd_list = storage_helper.get_osds(host, con_ssh)
     for osd_id in osd_list:
         osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
         msg = 'OSD ID {} is up but should be down'.format(osd_id)
-        assert osd_up, msg
+        assert not osd_up, msg
 
     if not host_helper._wait_for_host_states(host, availability='available'):
         msg = 'Host {} did not come available in the expected time'.format(host)
@@ -259,10 +399,11 @@ def test_ceph_mon_process_kill():
     for osd_id in osd_list:
         osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
         msg = 'OSD ID {} should be up but is not'.format(osd_id)
-        assert not osd_up, msg
+        assert osd_up, msg
+"""
 
-@mark.parametrize('host', ['storage-0', 'any'])
-@mark.usefixtures('check_alarms')
+
+@mark.parametrize('host', ['any', 'storage-0'])
 @mark.usefixtures('ceph_precheck')
 def test_lock_stor_check_osds_down(host):
     """
@@ -300,8 +441,9 @@ def test_lock_stor_check_osds_down(host):
 
     if host == 'any':
         storage_nodes = system_helper.get_storage_nodes(con_ssh)
-        node_id = random.randint(1, len(storage_nodes) - 1)
-        host = storage_nodes[node_id]
+        LOG.info('System has {} storage nodes:'.format(storage_nodes))
+        node_id = random.randint(0, len(storage_nodes) - 1)
+        host = 'storage-' + node_id
 
     LOG.tc_step('Lock storage node {}'.format(host))
     rtn_code, out = host_helper.lock_host(host)
@@ -311,13 +453,13 @@ def test_lock_stor_check_osds_down(host):
     alarms_table = system_helper.get_alarms(con_ssh=None)
     reasons = table_parser.get_values(alarms_table, 'Reason Text')
     msg = '{} was administratively locked'.format(host)
-    assert not re.search(msg, reasons), \
+    assert re.search(msg, reasons), \
         'Alarm reason {} not found in alarm-list'.format(msg)
 
     # If storage host is a storage monitor, ensure we alarm
     if host == 'storage-0':
-        msg = 'Storage Alarm Condition: 1 mons down'
-        assert not re.search(msg, reasons), \
+        msg = 'Storage Alarm Condition:.*1 mons down'
+        assert re.search(msg, reasons), \
             'Alarm reason {} not found in alarm-list'.format(msg)
 
     LOG.tc_step('Check health of CEPH cluster')
