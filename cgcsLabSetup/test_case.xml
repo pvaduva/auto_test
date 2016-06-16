@@ -84,6 +84,35 @@ TYPE \n
 WAIT 1 SEC
 SINK 2 SEC
 
+# update the quotas
+Con1 TYPE  adminid=`keystone tenant-list |grep admin|awk '${CL}print $$2${CR}'`\n
+Con1 WAIT 10 MIN
+Con1 TYPE  tenant1=`keystone tenant-list |grep tenant1|awk '${CL}print $$2${CR}'`\n
+Con1 WAIT 10 MIN
+Con1 TYPE  tenant2=`keystone tenant-list |grep tenant2|awk '${CL}print $$2${CR}'`\n
+Con1 WAIT 10 MIN
+
+Con1 TYPE  neutron quota-update --tenant-id $$adminid --network 500 --subnet 500 --port 333 --router 100 --floatingip 222\n
+Con1 WAIT 10 MIN
+Con1 TYPE  cinder quota-update --snapshots 100 --volumes 100 $$adminid\n
+Con1 WAIT 10 MIN
+Con1 TYPE  nova quota-update --instances 200 --cores 200 --floating-ips 254 --fixed-ips 254   $$adminid\n
+Con1 WAIT 10 MIN
+
+Con1 TYPE  neutron quota-update --tenant-id $$tenant1 --network 500 --subnet 500 --port 333 --router 100 --floatingip 222\n
+Con1 WAIT 10 MIN
+Con1 TYPE  cinder quota-update --snapshots 100 --volumes 100 $$tenant1\n
+Con1 WAIT 10 MIN
+Con1 TYPE  nova quota-update --instances 200 --cores 200 --floating-ips 254 --fixed-ips 254   $$tenant1\n
+Con1 WAIT 10 MIN
+
+Con1 TYPE  neutron quota-update --tenant-id $$tenant2 --network 500 --subnet 500 --port 333 --router 100 --floatingip 222\n
+Con1 WAIT 10 MIN
+Con1 TYPE  cinder quota-update --snapshots 100 --volumes 100 $$tenant2\n
+Con1 WAIT 10 MIN
+Con1 TYPE  nova quota-update --instances 200 --cores 200 --floating-ips 254 --fixed-ips 254   $$tenant2\n
+Con1 WAIT 10 MIN
+
 # import users public and private keys
 CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u ${WRSUSER} -p ${WRSPASS} -s ~/.ssh/id_rsa -d ${WRSDIR}/.ssh/ -P 22
 CALL  python3 ${WASSP_TC_PATH}/../utils/sendFile.py -i $env.NODE.target.Boot.oamAddrA -u ${WRSUSER} -p ${WRSPASS} -s ~/.ssh/id_rsa.pub -d ${WRSDIR}/.ssh/ -P 22
@@ -179,7 +208,6 @@ WAIT 20 SEC {ignoreTimeout:True}
 TYPE rsync -av -e 'ssh -o ConnectTimeout=20 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' ${EXECUTOR}@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/lab/scripts/* ${WRSDIR}/ \n
 WAIT 20 SEC {ignoreTimeout:True}
 
-
 TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' ${EXECUTOR}@$BUILDSERVER:${JKPATH}${GUESTPATH}/cgcs-guest.img ${WRSDIR}/images/  \n
 WAIT 30 MIN {ignoreTimeout:True}
 
@@ -190,12 +218,14 @@ WAIT 30 MIN
 Con1 TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' ${EXECUTOR}@$BUILDSERVER:${JKPATH}${LOADPATH}/latest_build/layers/wr-cgcs/cgcs/extras.ND/heat_templates/* ${WRSDIR}/heat/ \n
 Con1 WAIT 30 SEC
 
+
 # Heat template path is hardcoded to Unified Daily Build directory temporarily
 Con1 TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' ${EXECUTOR}@$BUILDSERVER:${JKPATH}/CGCS_3.0_Unified_Daily_Build/latest_build/export/heat_templates/* ${WRSDIR}/heat/ \n
 Con1 WAIT 30 SEC
 
 Con1 TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' ${EXECUTOR}@$BUILDSERVER:${JKPATH}/CGCS_3.0_Centos_Build/latest_build/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates/* ${WRSDIR}/heat/ \n
 Con1 WAIT 30 SEC
+
 
 # Temporary workaroudn to pull in testid.py into nosetest
 Con1 TYPE rsync -av -e 'ssh -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' ${EXECUTOR}@$BUILDSERVER:/folk/cgts/users/${EXECUTOR}/testid.py /usr/lib64/python2.7/site-packages/nose/plugins/ \n
