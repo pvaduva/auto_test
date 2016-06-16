@@ -28,7 +28,7 @@ def scp_from_active_controller(source_path, dest_path='',
                         timeout=timeout, is_dir=is_dir)
 
 
-def scp_from_local(source_path, dest_ip, dest_path='',
+def scp_from_local(source_path, dest_ip, dest_path='/home/wrsroot',
                    dest_user='wrsroot', dest_password='li69nux',
                    timeout=60, is_dir=False):
     """
@@ -46,12 +46,13 @@ def scp_from_local(source_path, dest_ip, dest_path='',
     """
     dir_option = '-r ' if is_dir else ''
 
-    cmd = 'scp {} {} {}@{}:{}'.format(dir_option, source_path, dest_user, dest_ip, dest_path)
+    cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{} {}@{}:{}'.format(
+            dir_option, source_path, dest_user, dest_ip, dest_path)
 
-    __scp_base(cmd, remote_password=dest_password, timeout=timeout, is_dir=is_dir)
+    __scp_base(cmd, remote_password=dest_password, timeout=timeout)
 
 
-def scp_to_local(source_path, dest_ip, dest_path='',
+def scp_to_local(source_path, source_ip, dest_path='/home/wrsroot',
                  source_user='wrsroot', source_password='li69nux',
                  timeout=60, is_dir=False):
     """
@@ -59,7 +60,7 @@ def scp_to_local(source_path, dest_ip, dest_path='',
 
     Args:
         source_path (str): source file/directory path
-        dest_ip (str): ip of the source host.
+        source_ip (str): ip of the source host.
         source_user (str): username of source host.
         source_password (str): password of source host
         dest_path (str): destination directory path to copy the file(s) to
@@ -69,13 +70,13 @@ def scp_to_local(source_path, dest_ip, dest_path='',
     """
     dir_option = '-r ' if is_dir else ''
     cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{}@{}:{} {}'.format(
-            dir_option, source_user, dest_ip, source_path, dest_path)
+            dir_option, source_user, source_ip, source_path, dest_path)
 
-    __scp_base(cmd, remote_password=source_password, timeout=timeout, is_dir=is_dir)
+    __scp_base(cmd, remote_password=source_password, timeout=timeout)
 
 
-def __scp_base(cmd, remote_password, logdir=None, timeout=60, is_dir=False):
-    LOG.info('cmd={}'.format(cmd))
+def __scp_base(cmd, remote_password, logdir=None, timeout=60):
+    LOG.debug('scp cmd: {}'.format(cmd))
 
     logdir = logdir or ProjVar.get_var('LOG_DIR')
     logfile = os.path.sep.join([logdir, 'scp_files.log'])
