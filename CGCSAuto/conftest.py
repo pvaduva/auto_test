@@ -132,10 +132,10 @@ def pytest_runtest_makereport(item, call, __multicall__):
         tc_start_time = None
 
         if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
-            collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id)
-
-        with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
-            f.write('\tUPLOAD_UNSUCC')
+            upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id)
+            if not upload_res:
+                with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
+                    f.write('\tUPLOAD_UNSUCC')
 
     return report
 

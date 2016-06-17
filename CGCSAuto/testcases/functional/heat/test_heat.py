@@ -79,9 +79,54 @@ def verify_heat_resource(dic_to_verify=None):
             if image_id is None:
                 return 1
         elif key is 'subnet':
-            LOG.info("Verifying glance image creation via heat")
-            image_id = network_helper.get_subnets(name='sample_subnet')
-            if image_id is None:
+            LOG.info("Verifying subnet image creation via heat")
+            subnet_id = network_helper.get_subnets(name='sample_subnet')
+            if subnet_id is None:
+                return 1
+        elif key is 'floating_ip':
+            LOG.info("Verifying floating ip creation via heat")
+            floating_ip_id = network_helper.get_floating_ips()
+            if floating_ip_id is None:
+                return 1
+        elif key is 'router':
+            LOG.info("Verifying router creation via heat")
+            router_id = network_helper.get_tenant_router(router_name='sample_router')
+            if router_id is None:
+                return 1
+        elif key is 'router_gateway':
+            LOG.info("Verifying router gateway creation via heat")
+            router_id = network_helper.get_tenant_router(router_name='sample_gateway_router')
+            if router_id is None:
+                return 1
+            gateway_info = network_helper.get_router_ext_gateway_info(router_id=router_id)
+            if gateway_info is None:
+                return 1
+        elif key is 'router_interface':
+            LOG.info("Verifying router interface creation via heat")
+            router_id = network_helper.get_tenant_router(router_name='sample_if_router')
+            if router_id is None:
+                return 1
+            LOG.info("Verifying subnet creation via heat")
+            subnet_id = network_helper.get_subnets(name='sample_if_subnet')
+            if subnet_id is None:
+                return 1
+            router_subnets = network_helper.get_router_subnets(router_id=router_id)
+            if subnet_id not in router_subnets:
+                return 1
+        elif key is 'security_group':
+            LOG.info("Verifying neutron security group creation via heat")
+            security_group = network_helper.get_security_group(name='SecurityGroupDeluxe')
+            if security_group is None:
+                return 1
+        elif key is 'key_pair':
+            LOG.info("Verifying nova key pair creation via heat")
+            security_group = nova_helper.get_key_pair(name='KeyPairDeluxe')
+            if security_group is None:
+                return 1
+        elif key is 'neutron_qos':
+            LOG.info("Verifying neutron qos policy creation via heat")
+            qos_id = network_helper.get_qos(name='SampleQoS')
+            if qos_id is None:
                 return 1
     return 0
 
@@ -110,7 +155,7 @@ def verify_basic_template(template_name=None, template_path=None, con_ssh=None, 
             param_result = get_heat_params(param_name=param)
             cmd_list.append("-P %s=%s" % (param, param_result))
 
-    cmd_list.append(stack_name)
+    cmd_list.append(" %s" % stack_name)
     params_string = ''.join(cmd_list)
 
     LOG.tc_step("Creating Heat Stack..using template %s",template_name)
@@ -122,7 +167,7 @@ def verify_basic_template(template_name=None, template_path=None, con_ssh=None, 
     LOG.info("Stack {} created sucessfully.".format(stack_name))
     time.sleep(20)
     LOG.tc_step("Verifying Heat Stack Status for CREATE_COMPLETE for stack %s",stack_name)
-    stack_status = heat_helper.get_stack_status(stack_name=stack_name)
+    stack_status = heat_helper.get_stack_status(stack_name=stack_name, auth_info=auth_info)
     if "CREATE_COMPLETE" not in stack_status:
         LOG.warning("Create heat stack Failed %s",stack_status)
         return [1, stack_status]
@@ -138,7 +183,7 @@ def verify_basic_template(template_name=None, template_path=None, con_ssh=None, 
 
     LOG.info("Stack {} resources are created expected.".format(stack_name))
     LOG.tc_step("Delete heat stack {} ".format(stack_name))
-    delete_result = heat_helper.delete_stack(stack_name)
+    delete_result = heat_helper.delete_stack(stack_name=stack_name, auth_info=auth_info)
     if delete_result is 1:
         LOG.info("Stack {} delete failed.".format(stack_name))
         output = "Stack {} delete failed".format(stack_name)
@@ -162,7 +207,13 @@ def verify_basic_template(template_name=None, template_path=None, con_ssh=None, 
         P1(('OS_Neutron_Net.yaml')),
         P1(('OS_Neutron_Subnet.yaml')),
         P1(('OS_Nova_Flavor.yaml')),
-        #P1(('OS_Nova_ServerGroup.yaml')),
+        P1(('OS_Neutron_FloatingIP.yaml')),
+        P1(('OS_Neutron_Router.yaml')),
+        P1(('OS_Neutron_RouterGateway.yaml')),
+        P1(('OS_Neutron_SecurityGroup.yaml')),
+        P1(('OS_Nova_ServerGroup.yaml')),
+        P1(('OS_Nova_KeyPair.yaml')),
+        P1(('WR_Neutron_QoSPolicy.yaml')),
     ])
 # can add test fixture to configure hosts to be certain storage backing
 def test_heat_template(template_name):

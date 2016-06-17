@@ -159,7 +159,7 @@ class TestRetentionPeriod:
         LOG.tc_step('Verify the new value is saved into correct file:{}'.format(self.PM_SETTING_FILE))
         controller_ssh = ControllerClient.get_active_controller()
 
-        cmd_get_saved_retention_periods = 'fgrep {} {}'. \
+        cmd_get_saved_retention_periods = "fgrep --color='never' {} {}". \
             format(self.SEARCH_KEY_FOR_RENTION_PERIOD, self.PM_SETTING_FILE)
         code, output = controller_ssh.exec_sudo_cmd(cmd_get_saved_retention_periods, expect_timeout=20)
 
