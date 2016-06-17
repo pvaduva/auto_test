@@ -1,10 +1,8 @@
-from pytest import fixture, mark
+from pytest import fixture
 
-from consts.auth import Tenant
 from utils import table_parser
-from utils.ssh import ControllerClient
 from utils.tis_log import LOG
-from keywords import system_helper, vm_helper, nova_helper, cinder_helper,heat_helper
+from keywords import system_helper, heat_helper
 
 
 @fixture()
