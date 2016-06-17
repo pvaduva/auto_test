@@ -158,6 +158,7 @@ class EventLogID:
     STORAGE_DEGRADE = '200.006'
     STORAGE_ALARM_COND = '800.001'
     STORAGE_LOR = '800.011'
+    HOST_LOCK = '200.001'
 
 class NetworkingVmMapping:
     VSWITCH = {
