@@ -57,6 +57,8 @@ def heartbeat_flavor_vm(request):
         vm_helper.delete_vms(vm_id, delete_volumes=True)
         nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
         host_helper.unlock_host(vm_host)
+        # wait for hostname to be back in host list in nova
+        host_helper.wait_for_hosts_in_nova(vm_host)
     request.addfinalizer(unlock_host)
 
     return vm
@@ -101,7 +103,7 @@ def test_heartbeat_after_compute_lock(heartbeat_flavor_vm):
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 
-        LOG.tc_step("check heartbeat after swact")
+        LOG.tc_step("check heartbeat after compute lock")
         cmd = "ps -ef | grep [h]eartbeat | awk '{print $10}' "
         heartbeat_proc_shown = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False, expt_timeout=3,
                                                           check_interval=2)
@@ -111,18 +113,18 @@ def test_heartbeat_after_compute_lock(heartbeat_flavor_vm):
                                                                   expt_timeout=3, disappear=True, check_interval=2)
             if heartbeat_type == 'False':
                 assert heartbeat_proc_disappear, "Heartbeat set to False, However, heartbeat process is running " \
-                                                 "after swact."
+                                                 "after compute lock."
             else:
                 assert not heartbeat_proc_disappear, "Heartbeat set to True. However, heartbeat process is not " \
-                                                     "running after swact."
+                                                     "running after compute lock."
 
         else:
             heartbeat_proc_appear = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False,
                                                                expt_timeout=3, check_interval=2)
             if heartbeat_type == 'True':
                 assert heartbeat_proc_appear, "Heartbeat set to True. However, heartbeat process is not running " \
-                                              "after swact."
+                                              "after compute lock."
             else:
                 assert not heartbeat_proc_appear, "Heartbeat set to False, However, heartbeat process is running " \
-                                                  "after swact. "
+                                                  "after compute lock. "
 

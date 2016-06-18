@@ -209,8 +209,8 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
             return [1, "swact host failed"]
 
     LOG.tc_step("Delete heat stack {} ".format(stack_name))
-    delete_result = heat_helper.delete_stack(stack_name=stack_name, auth_info=auth_info, fail_ok=True)
-    if delete_result > 0:
+    del_res,del_output = heat_helper.delete_stack(stack_name=stack_name, auth_info=auth_info, fail_ok=True)
+    if del_res > 0:
         LOG.info("Stack {} delete failed.".format(stack_name))
         output = "Stack {} delete failed".format(stack_name)
         return [1, output]

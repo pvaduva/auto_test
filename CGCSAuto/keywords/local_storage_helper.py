@@ -1,6 +1,9 @@
 from utils import cli, table_parser
 from utils.tis_log import LOG
+from xml.etree import ElementTree as ET
+from ast import literal_eval
 
+from consts.cgcs import LocalStorage
 
 def get_storprof_diskconfig(profile=None, con_ssh=None):
     if not profile:
@@ -25,14 +28,14 @@ def get_pv_of_lvg(host=None, lvg_name='nova-local', con_ssh=None):
     if not host:
         return {}
 
-    cmd = 'host-pv-list {}'.format(host)
+    cmd = 'host-pv-list {} --nowrap'.format(host)
     table = table_parser.table(cli.system(cmd, ssh_client=con_ssh))
     pv_uuid = table_parser.get_values(table, 'UUID', lvm_vg_name=lvg_name, strict=True)[0]
     lvm_pv_name = table_parser.get_values(table, 'lvm_pv_name', lvm_vg_name=lvg_name, strict=True)[0]
     idisk_uuid = table_parser.get_values(table, 'idisk_uuid', lvm_vg_name=lvg_name, strict=True)[0]
     idisk_device_node = table_parser.get_values(table, 'idisk_device_node', lvm_vg_name=lvg_name, strict=True)[0]
 
-    LOG.info('pv_uuid={}, lvm_pv_name={}, idisk_uuid={}, idisk_device_node={}'
+    LOG.debug('pv_uuid={}, lvm_pv_name={}, idisk_uuid={}, idisk_device_node={}'
              .format(pv_uuid, lvm_pv_name, idisk_uuid, idisk_device_node))
 
     return {'pv_uuid': pv_uuid,
@@ -57,3 +60,240 @@ def get_host_lvg_disk_size(host=None, lvg_name='nova-local', con_ssh=None):
         return 0
 
     return get_host_disk_size(host=host, disk=pv_info['idisk_uuid'], con_ssh=con_ssh)
+
+
+def get_profnms_from_storage_profile(profile_in_xml=None):
+    tree = ET.parse(profile_in_xml)
+
+    known_profile_types = LocalStorage.TYPE_STORAGE_PROFILE
+    profile_name_types = []
+    for elem in tree.getroot():
+        if elem.tag in known_profile_types:
+            profile_name_types.append((elem.attrib['name'], elem.tag))
+    return profile_name_types
+
+
+def _check_storprof_type(headers_actual, expected_type='storage'):
+    headers_storage_type = ['uuid', 'profilename', 'disk config', 'stor config']
+    headers_localstorage_type = ['uuid', 'profilename', 'disk config',
+                                 'physical volume config', 'logical volume group config']
+
+    if expected_type == 'storage':
+        return headers_storage_type == headers_actual
+    elif expected_type == 'localstorage':
+        return headers_localstorage_type == headers_actual
+
+    return False
+
+
+def get_dict_from_table(table, key_col=None):
+
+    results = {}
+    headers = table['headers']
+    index_key = 0
+    try:
+        index_key = headers.index(key_col)
+    except ValueError:
+        pass
+
+    num_cols = len(headers)
+    for row in table['values']:
+        results[row[index_key].strip()] \
+            = {headers[i]: row[i].strip() for i in range(num_cols) if i != index_key}
+
+    return headers[index_key], results
+
+
+def _get_storprofile_settings(table):
+    key_header, results = get_dict_from_table(table, key_col='uuid')
+
+    settings = {}
+    for uuid, record in results.items():
+        dev_confs = {}
+        dev_info = record['disk config'].split(';')
+        stor_info = record['stor config'].split(';')
+        for i in range(len(dev_info)):
+            try:
+                dev, size = dev_info[i].split(':')
+                stor = stor_info[i]
+                if dev.strip():
+                    dev_confs[dev.strip()] = [size.strip(), stor.strip()]
+            except IndexError:
+                pass
+
+        profname = record['profilename']
+        settings[uuid] = {'name':profname,
+                          'storage_type': 'storage',
+                          'disk_stor_conf':dev_confs}
+
+    # LOG.info('inuse storpofile:{}'.format(settings))
+
+    return settings
+
+def _get_local_storageprofle_details(name_id=None):
+    if not name_id:
+        return {}
+
+    table = table_parser.table(cli.system('storprofile-show {}'.format(name_id)))
+
+    lvgsetting = {}
+
+    profile_name_header = 'hostname' # should be 'profile name', CGTS-4432
+    name = table_parser.get_value_two_col_table(table, profile_name_header)
+    lvgsetting['name'] = name
+
+    diskconfig = table_parser.get_value_two_col_table(table, 'diskconfig')
+    disks = dict([kv.split(':') for kv in diskconfig.split(';')])
+    disks = [{k:v} for k,v in disks.items()]
+    lvgsetting.update({'disk': disks})
+
+    # pvconfig = table_parser.get_value_two_col_table(table, 'physical volume config')
+
+    lvgconfig = table_parser.get_value_two_col_table(table, 'logical volume group config')
+    lvgname = lvgconfig.split(',')[0].strip()
+    lvgsetting = {'lvm_vg_name': lvgname}
+
+    lvgbackings = dict([kv.split(':') for kv in lvgconfig.split(',')[1].split(';')])
+    lvgsetting.update({k.strip(): v.strip() for k,v in lvgbackings.items()})
+    # from xml
+    #  'localstorageProfile':
+    #      {'lvg': [
+    #          {'lvm_vg_name': 'nova-local',
+    #           'concurrent_disk_operations': '2',
+    #           'instance_backing': 'image'}],
+    #          'name': 'with_ceph_image_local_storage_backed',
+    #          'disk': [{'size': '228936', 'node': '/dev/sdb'
+    #          }]
+    #      }
+    #  }
+
+    return lvgsetting
+
+
+def _get_local_storprofile_settings_todo(table):
+    key_header, results = get_dict_from_table(table, key_col='uuid')
+
+    local_profiles = []
+    for uuid, _ in results.items():
+        local_profiles.append(_get_local_storageprofle_details(uuid))
+
+    return local_profiles
+
+
+def _get_local_storprofile_settings(table):
+    key_header, results = get_dict_from_table(table, key_col='uuid')
+
+    settings = {}
+    for uuid, record in results.items():
+        profname = record['profilename']
+        disks = dict([x.split(':') for x in record['disk config'].split(';')])
+        disks = {key.strip():value.strip() for key, value in disks.items()}
+        pvs = dict([x.split(':') for x in record['physical volume config'].split(',')])
+        pvs = {key.strip():value.strip() for key, value in pvs.items()}
+        lvgnm, lvginfo = record['logical volume group config'].split(',')
+        lvg = dict([x.split(':') for x in lvginfo.split(';')])
+        lvg = {key.strip():value.strip() for key, value in lvg.items()}
+
+        setting = {}
+        setting['name'] = profname
+        setting['disk'] = disks
+        lvg['lvm_vg_name'] = lvgnm
+        setting['lvg'] = lvg
+
+        settings[uuid] = setting
+
+    # LOG.info('inuse local storpofile:{}'.format(settings))
+
+
+    return settings
+
+
+def get_inuse_storporfile_names(con_ssh=None):
+    tables = table_parser.tables(cli.system('storprofile-list --nowrap', ssh_client=con_ssh))
+    names = []
+    for table in tables:
+        names.extend(table_parser.get_values(table, 'profilename'))
+
+    # LOG.debug('exisitng storage-profile names:{}'.format(names))
+
+
+def get_existing_storprofiles(con_ssh=None):
+    tables = table_parser.tables(cli.system('storprofile-list --nowrap', ssh_client=con_ssh))
+
+    cur_profile_settings = {}
+
+    for table in tables:
+        headers = table['headers']
+        if _check_storprof_type(headers, expected_type='storage'):
+            cur_profile_settings['storage'] = _get_storprofile_settings(table)
+
+        elif _check_storprof_type(headers, expected_type='localstorage'):
+            cur_profile_settings['localstorage'] = _get_local_storprofile_settings(table)
+
+    return cur_profile_settings
+
+
+def parse_storprofiles_from_xml(xml_file=None):
+    """
+
+    Args:
+        xml_file:
+
+    Returns:
+        example result:
+            {'storageProfile':[
+                 {'disk':
+                      [{'node': '/dev/sdb', 'volumeFunc': 'osd', 'size': '228936'},
+                       {'node': '/dev/sdc', 'volumeFunc': 'osd', 'size': '228936'}],
+                  'name': 'ceph_storage_profile'
+                  }],
+             'localstorageProfile':
+                 {'lvg':
+                      [{'lvm_vg_name': 'nova-local', 'concurrent_disk_operations': '2', 'instance_backing': 'image'}],
+                  'disk': [{'node': '/dev/sdb', 'size': '228936'}],
+                  'name': 'with_ceph_image_local_storage_backed'}
+             }
+
+    """
+    if not xml_file:
+        return {}
+
+    storprofile = {}
+    expected_types = ['storageProfile', 'localstorageProfile']
+    for type in expected_types:
+        storprofile.setdefault(type, [])
+
+    root = ET.parse(xml_file).getroot()
+
+    for child in root:
+        if child.tag not in expected_types:
+            continue
+
+        # if child.tag in storprofile:
+        #     LOG.warn('{} already exists!'.format(child.tag))
+        #     storprofile[child.tag].append(child.attrib)
+        # else:
+        #     storprofile[child.tag] = [child.attrib]
+        #
+        values = child.attrib
+        for grandchild in child:
+            if grandchild.tag in values:
+                values[grandchild.tag].append(grandchild.attrib)
+            else:
+                values[grandchild.tag] = [grandchild.attrib]
+        # storprofile[child.tag] = values
+
+        if child.tag in storprofile:
+            LOG.warn('{} already exists!'.format(child.tag))
+            storprofile[child.tag].append(values)
+        else:
+            storprofile[child.tag] = [values]
+
+
+    # LOG.info('xml storage-profile:{}'.format(storprofile))
+    return storprofile
+
+
+
+
+
