@@ -467,15 +467,15 @@ class TestLocalStorage(object):
         return 0, output
 
     def get_remote_storprofile_file(self, local_storage_type='image', local_file=''):
-        remote_file = os.path.sep.join(['/home/wrsroot',
-                         '{}_storage_profile_to_import.xml'.format(local_storage_type)])
+        remote_file = os.path.join('/home/wrsroot',
+                         '{}_storage_profile_to_import.xml'.format(local_storage_type))
 
         return remote_file
 
     def get_local_storprfoile_file(self, local_storage_type='image'):
-        file_path = os.path.sep.join([os.path.expanduser('~'),
+        file_path = os.path.join(os.path.expanduser('~'),
                             LocalStorage.DIR_PROFILE,
-                         '{}_storage_profile_to_import.xml'.format(local_storage_type)])
+                         '{}_storage_profile_to_import.xml'.format(local_storage_type))
         if os.path.isfile(file_path):
             return file_path
         return ''

@@ -4,11 +4,11 @@ from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 
 def test_scp_from_local():
-    srcfile = os.path.sep.join([os.path.expanduser('~'),
-                                'TiS_config.ini'])
+    srcfile = os.path.join(os.path.expanduser('~'),
+                                'TiS_config.ini')
 
-    destfile = os.path.sep.join(['/home/wrsroot',
-                                 'TiS_config.ini'])
+    destfile = os.path.join('/home/wrsroot',
+                                 'TiS_config.ini')
 
     destip = ControllerClient.get_active_controller().host
 
@@ -19,7 +19,7 @@ def test_scp_from_local():
 def test_scp_to_local():
     srcdir = '/home/wrsroot/instances'
 
-    destdir = os.path.sep.join([os.path.expanduser('~')])
+    destdir = os.path.join(os.path.expanduser('~'))
 
     destip = ControllerClient.get_active_controller().host
 
