@@ -1,24 +1,18 @@
-from pytest import fixture, mark
+from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 from consts.cgcs import VMStatus
-from keywords import vm_helper, nova_helper, host_helper, network_helper
+from keywords import vm_helper, nova_helper, host_helper, network_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
-from testfixtures.wait_for_hosts_recover import HostsToWait
+from testfixtures.recover_hosts import HostsToRecover
 
 
 @fixture(scope='module', autouse=True)
 def snat_setups(request):
-    # Enable snat, boot vm
-    gateway_info = network_helper.get_router_ext_gateway_info()
-    run_teardown = False if gateway_info['enable_snat'] else True
-
     network_helper.update_router_ext_gateway_snat(enable_snat=True)     # Check snat is handled by the keyword
 
     def disable_snat():
-        if run_teardown:
-            network_helper.update_router_ext_gateway_snat(enable_snat=False)
-            # network_helper.update_router_ext_gateway_snat(enable_snat=False)
+        network_helper.update_router_ext_gateway_snat(enable_snat=False)
     request.addfinalizer(disable_snat)
 
     vm_id = vm_helper.boot_vm()[1]
@@ -90,13 +84,12 @@ def test_ext_access_vm_actions(snat_setups):
 
 @mark.skipif(True, reason="Evacuation JIRA")
 @mark.slow
-@mark.usefixtures('hosts_recover_func')
-def test_ext_access_host_reboot(vm_):
+def test_ext_access_host_reboot(snat_setups):
     """
     Test VM external access after evacuation.
 
     Args:
-        vm_ (str): vm created by module level test fixture
+
 
     Test Setups:
         - boot a vm from volume and ping vm from NatBox     (module)
@@ -110,18 +103,64 @@ def test_ext_access_host_reboot(vm_):
     Test Teardown:
         - Delete the created vm     (module)
     """
+    vm_ = snat_setups[0]
+    host = nova_helper.get_vm_host(vm_)
+
     LOG.tc_step("Ping VM from NatBox".format(vm_))
     vm_helper.ping_vms_from_natbox(vm_, use_fip=False)
 
     LOG.tc_step("Reboot vm host")
-    host = nova_helper.get_vm_host(vm_)
     host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-    HostsToWait.add(host, scope='function')
+    HostsToRecover.add(host, scope='module')
 
-    LOG.tc_step("Verify vm is evacuated and can still ping outside")
-    vm_helper._wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=120)
+    LOG.tc_step("Verify vm is evacuated to other host")
+    vm_helper._wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=120, fail_ok=False)
     post_evac_host = nova_helper.get_vm_host(vm_)
     assert post_evac_host != host, "VM is on the same host after original host rebooted."
+
+    LOG.tc_step("Verify vm can still ping outside")
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
+
+
+@mark.slow
+@mark.trylast
+def test_ext_access_computes_lock_reboot(snat_setups):
+    """
+
+    Returns:
+
+    """
+    hypervisors = host_helper.get_hypervisors()
+    if len(hypervisors) > 3:
+        skip("More than 3 hypervisors on system. Skip to reduce run time.")
+    if system_helper.is_small_footprint():
+        skip("Skip for CPE system.")
+
+    vm_ = snat_setups[0]
+    LOG.tc_step("Ping VM {} from NatBox".format(vm_))
+    vm_helper.ping_vms_from_natbox(vm_, use_fip=False)
+
+    vm_host = nova_helper.get_vm_host(vm_)
+    LOG.info("VM host is {}".format(vm_host))
+    assert vm_host in hypervisors, "vm host is not in nova hypervisor-list"
+
+    hosts_should_lock = set(hypervisors) - {vm_host}
+    hosts_already_locked = set(host_helper.get_hosts(administrative='locked'))
+    hosts_to_lock = list(hosts_should_lock - hosts_already_locked)
+    LOG.tc_step("Lock all compute hosts {} except vm host {}".format(hosts_to_lock, vm_host))
+    for host_ in hosts_to_lock:
+        host_helper.lock_host(host_)
+        HostsToRecover.add(host_, scope='module')
+
+    LOG.tc_step("Ping external from vm {}".format(vm_))
+    vm_helper.ping_ext_from_vm(vm_)
+
+    LOG.tc_step("Reboot vm host")
+    host_helper.reboot_hosts(vm_host)
+    host_helper.wait_for_hypervisors_up(vm_host)
+
+    LOG.tc_step("Verify vm is recovered after host reboot complete and can still ping outside")
+    vm_helper._wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 

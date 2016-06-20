@@ -4,11 +4,33 @@
 
 from pytest import fixture, mark, skip
 
+from consts.cgcs import EventLogID, FlavorSpec, VMStatus
 from utils.tis_log import LOG
-from keywords import host_helper,system_helper
+from keywords import host_helper,system_helper,cinder_helper,glance_helper,vm_helper,nova_helper
 from setup_consts import P1, P2, P3
+from testfixtures.resource_mgmt import ResourceCleanup
 
 
+def test_volume_based_vm():
+    '''
+    create a VM based of volumes
+    Returns:
+
+    '''
+    img_id = glance_helper.get_image_id_from_name('cgcs-guest')
+    vol_id = cinder_helper.create_volume("a_test_volume",image_id=img_id )[1]
+    ResourceCleanup.add('volume', vol_id, scope='module')
+
+    boot_source = 'volume'
+    vm_id = vm_helper.boot_vm( source=boot_source, source_id=vol_id)[1]
+    ResourceCleanup.add('vm', vm_id, scope='module')
+    # get the status of the VM show that it is active at least
+    vm_state = nova_helper.get_vm_status(vm_id)
+    print(vm_state)
+    assert vm_state == VMStatus.ACTIVE
+
+
+@mark.sanity
 def test_swact_controllers():
     """
     Verify Swact is working on two controllers system
@@ -31,6 +53,8 @@ def test_swact_controllers():
     active_controller_before_swact = system_helper.get_active_controller_name()
     standby_controller_before_swact = system_helper.get_standby_controller_name()
 
+    LOG.tc_step('Active controller: {} Standby Controller:{}'.format(active_controller_before_swact,standby_controller_before_swact ))
+
     LOG.tc_step('Execute swact cli')
     exit_code, output = host_helper.swact_host(fail_ok=True)
     # Verify that swact cli excuted successfully
@@ -46,5 +70,6 @@ def test_swact_controllers():
            standby_controller_before_swact == active_controller_after_swact, "Test Failed. New active controller is " \
                                                                              "not the original standby controller"
 
-    # Swact controllers back to it's original state
-    host_helper.swact_host(fail_ok=True)
+    LOG.tc_step('Active controller: {} Standby Controller:{}'.format(active_controller_after_swact,standby_controller_after_swact ))
+    # There is no revert back to previous controller to active becase both controller should work the same
+

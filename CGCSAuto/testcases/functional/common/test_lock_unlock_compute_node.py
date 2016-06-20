@@ -9,7 +9,7 @@ from utils.tis_log import LOG
 from keywords import host_helper,system_helper
 from setup_consts import P1, P2, P3
 
-
+@mark.sanity
 def test_lock_unlock_compute_node():
     """
     Verify Swact is working on two controllers system
@@ -45,5 +45,5 @@ def test_lock_unlock_compute_node():
     # unlock compute node and verify compute node is successfully unlocked
     host_helper.unlock_host(lucky_compute_node)
     lucky_compute_node_unlocked_state = host_helper.get_hostshow_value(lucky_compute_node,'administrative')
-    assert lucky_compute_node_locked_state == 'unlocked', 'Test Failed. Compute Node {} should be in unlocked state ' \
+    assert lucky_compute_node_unlocked_state == 'unlocked', 'Test Failed. Compute Node {} should be in unlocked state ' \
                                                           'but is not.'.format(lucky_compute_node)

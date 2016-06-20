@@ -5,12 +5,14 @@ from pytest import mark
 from utils import table_parser, exceptions
 from utils.ssh import NATBoxClient
 from utils.tis_log import LOG
+from consts.feature_marks import Features
 from consts.timeout import VMTimeout, EventLogTimeout
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
+@mark.features(Features.AUTO_RECOV)
 @mark.parametrize(('auto_recovery', 'disk_format', 'container_format'), [
     mark.p1(('true', 'qcow2', 'bare')),
     mark.p1(('False', 'raw', 'bare')),
@@ -57,6 +59,7 @@ def test_image_metadata_in_volume(auto_recovery, disk_format, container_format):
     assert container_format == vol_image_metadata_dict['container_format']
 
 
+@mark.features(Features.AUTO_RECOV)
 @mark.parametrize(('cpu_policy', 'flavor_auto_recovery', 'image_auto_recovery', 'disk_format', 'container_format', 'expt_result'), [
     mark.p1((None, None, None, 'raw', 'bare', True)),
     mark.p1((None, 'false', 'true', 'qcow2', 'bare', False)),
@@ -135,6 +138,7 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
             expt_result, actual_val)
 
 
+@mark.features(Features.AUTO_RECOV, Features.HEARTBEAT)
 @mark.parametrize(('cpu_policy', 'auto_recovery', 'expt_autorecovery'), [
     mark.p1((None, 'true', True)),
     mark.p1(('dedicated', None, True)),
@@ -208,6 +212,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
                 "Instance rebooting active alarm is not listed"
 
 
+@mark.features(Features.HEARTBEAT)
 @mark.parametrize(('guest_heartbeat', 'heartbeat_enabled'), [
     mark.p1((None, False)),
     mark.p1(('true', True)),
@@ -285,6 +290,7 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
         assert not events_2, "VM heartbeat failure is logged while heartbeat is set to False."
 
 
+@mark.features(Features.AUTO_RECOV, Features.HEARTBEAT)
 @mark.parametrize('heartbeat', [
     mark.p1(True),
     mark.p1(False)

@@ -64,22 +64,32 @@ LOOKFOR
 CALLPARSER python3 ${WASSP_TC_PATH}/hosts.py $env.NODE.target.Boot.oamFloat
 DELAY 3 SEC
 
-FOREACH ${HOST}
+#FOREACH ${HOST}
 # TYPE ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node} zip -r  /root/${ITEM_node}.var.log.zip /var/log/ \n
-Con1SSH TYPE ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node} sudo /usr/local/sbin/collect \n
-    Con1SSH WAIT 30 SEC {ignoreTimeout:True} Password:
-    Con1SSH TYPE $env.NODE.target.Connect.ssh_pass\n
-    Con1SSH WAIT 100 SEC
-ENDFOREACH
+#Con1SSH TYPE ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node}  /usr/local/sbin/collect \n
+#    Con1SSH WAIT 30 SEC {ignoreTimeout:True} password
+#    Con1SSH TYPE $env.NODE.target.Connect.ssh_pass\n
+#    Con1SSH WAIT 900 SEC
+#ENDFOREACH
 
-FOREACH ${HOST}
-Con1SSH TYPE scp  -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node}:/scratch/*.tgz . \n
-    Con1SSH WAIT 15 SEC {ignoreTimeout:True} Password:
-    Con1SSH TYPE $env.NODE.target.Connect.ssh_pass\n
-    Con1SSH WAIT 200 SEC
-ENDFOREACH
+Con1SSH TYPE /usr/local/sbin/collect all \n
+Con1SSH WAIT 30 SEC {ignoreTimeout:True} password
+Con1SSH TYPE $env.NODE.target.Connect.ssh_pass\n
+Con1SSH WAIT 1200 SEC
 
-CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' wrsroot@$env.NODE.target.Boot.oamAddrA:*.tgz ${WASSP_TC_RUN_LOG}/
+#FOREACH ${HOST}
+#Con1SSH TYPE scp  -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${ITEM_node}:/scratch/*.tar . \n
+#    Con1SSH WAIT 15 SEC {ignoreTimeout:True} assword
+#    Con1SSH TYPE $env.NODE.target.Connect.ssh_pass\n
+#    Con1SSH WAIT 900 SEC
+#ENDFOREACH
+
+Con1SSH TYPE scp  -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  controller-0:/scratch/*.tar . \n
+Con1SSH WAIT 15 SEC {ignoreTimeout:True} assword
+Con1SSH TYPE $env.NODE.target.Connect.ssh_pass\n
+Con1SSH WAIT 900 SEC
+
+CALL rsync -r -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' wrsroot@$env.NODE.target.Boot.oamAddrA:*.tar ${WASSP_TC_RUN_LOG}/
 
 ####################################################################################
 ####################################################################################

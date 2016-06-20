@@ -356,6 +356,9 @@ def get_floating_ips(auth_info=Tenant.ADMIN, con_ssh=None):
 
     """
     table_ = table_parser.table(cli.neutron('floatingip-list', ssh_client=con_ssh, auth_info=auth_info))
+    if not table_['headers']:  # no floating ip listed
+        return []
+
     return table_parser.get_column(table_, 'floating_ip_address')
 
 
@@ -528,10 +531,7 @@ def get_provider_net_range(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
         ranges = table_parser.get_values(table_, 'ranges')
     else:
         ranges = table_parser.get_values(table_, 'ranges', strict=False, name=name)
-    if ranges is not '':
-        ranges = eval(ranges)
-    else:
-        ranges = {}
+
     return ranges
 
 
@@ -606,6 +606,10 @@ def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
 
     """
     net_ids = get_tenant_net_ids(net_names=net_name, con_ssh=con_ssh, auth_info=auth_info)
+    if not net_ids:
+        LOG.warning("No network found with name {}".format(net_name))
+        return []
+
     return net_ids[0]
 
 
@@ -702,12 +706,27 @@ def get_router_ids(auth_info=None, con_ssh=None):
 
 
 def get_tenant_router(router_name=None, auth_info=None, con_ssh=None):
+    """
+    Get id of tenant router with specified name.
+
+    Args:
+        router_name (str): name of the router
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (str): router id
+
+    """
     if router_name is None:
         tenant_name = common.get_tenant_name(auth_info=auth_info)
         router_name = tenant_name + '-router'
 
     table_ = table_parser.table(cli.neutron('router-list', ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_values(table_, 'id', name=router_name)[0]
+    routers = table_parser.get_values(table_, 'id', name=router_name)
+    if not routers:
+        LOG.warning("No router with name {} found".format(router_name))
+        return None
+    return routers[0]
 
 
 def get_router_info(router_id=None, field='status', strict=True, auth_info=Tenant.ADMIN, con_ssh=None):

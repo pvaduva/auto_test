@@ -9,6 +9,10 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 @fixture(scope='module')
 def host_to_config(request):
+    nova_hosts = host_helper.get_nova_hosts()
+    if len(nova_hosts) < 2:
+        skip("Less than 2 nova hosts in the system, no host to lock and reconfigure.")
+
     is_small_system = system_helper.is_small_footprint()
     if is_small_system:
         host = system_helper.get_standby_controller_name()
