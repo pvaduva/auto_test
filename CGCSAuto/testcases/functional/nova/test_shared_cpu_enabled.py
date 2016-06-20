@@ -18,6 +18,7 @@ def _revert(host):
 def add_shared_cpu(config_host):
     host = host_helper.get_nova_host_with_min_or_max_vms(rtn_max=False)
     config_host(host=host, modify_func=_modify, revert_func=_revert)
+    host_helper.wait_for_hosts_in_nova(host)
 
 
 @mark.parametrize(('vcpus', 'cpu_policy', 'numa_nodes', 'numa_node0', 'shared_vcpu'), [

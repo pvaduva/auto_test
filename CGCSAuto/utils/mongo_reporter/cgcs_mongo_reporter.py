@@ -21,6 +21,9 @@ import argparse
 import configparser
 import datetime
 import os
+import re
+
+import pexpect
 
 import setup_consts
 from consts.proj_vars import ProjVar
@@ -99,8 +102,7 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
                  % (output, tag, tester_name, test_name, result, 
                     lab_name, build, userstory, domain,
                     jira, logfile, release_name)
-    
-    log_msg = "Mongo upload results for test case: %s" % test_name
+
     ini_writer = os.path.join(LOCAL_PATH, 'ini_writer.sh')
     cmd = "%s %s" % (ini_writer, env_params)
     os.system(cmd)
@@ -110,25 +112,49 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
     activate = os.path.join(WASSP_PATH, ".venv_wassp/bin/python3")
 
     report_file_name = log_dir + '/mongo_res.log'
-    upload_cmd = "{} {} -f {} >>{} 2>&1".format(activate, test_reporter, output, report_file_name)
-    log_msg += '\nReport upload command: {}'.format(upload_cmd)
-    if not os.system(upload_cmd):
-        msg = "Test result successfully uploaded to MongoDB."
-        log_msg += msg
-        rtn = True
-    else:
-        log_msg += "\nTest result failed to upload. Please check parameters stored at %s" % output
-        msg = log_msg
-        rtn = False
-    today_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    extra_info = '\nDate: %s. Report tag: %s\n\n' % (today_date, tag)
-    msg += extra_info
-    log_msg += extra_info
-    print(msg)
-    with open(report_file_name, mode='a') as f:
-        f.write(log_msg)
+    upload_cmd = "{} {} -f {} 2>&1 ".format(activate, test_reporter, output)
 
-    return rtn
+    with open(report_file_name, mode='a') as f:
+        f.write("Mongo upload results for test case: %s\n" % test_name)
+        local_child = pexpect.spawn(command=upload_cmd, encoding='utf-8', logfile=f)
+        local_child.expect(pexpect.EOF)
+        upload_output = local_child.before
+
+        res = re.search("Finished saving test result .* to database", upload_output)
+        msg = "\nTest result successfully uploaded to MongoDB" if res else \
+              "\nTest result failed to upload. Please check parameters stored at {}\n{}".format(output, upload_output)
+
+        today_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        extra_info = '\nDate: %s. Report tag: %s\n\n' % (today_date, tag)
+        msg += extra_info
+
+        f.write(msg + "\n")
+        print(msg)
+
+    return res
+
+    # upload_cmd = "{} {} -f {} >>{} 2>&1 ".format(activate, test_reporter, output, report_file_name)
+    # log_msg += '\nReport upload command: {}'.format(upload_cmd)
+    #
+    # exit_code = os.system(upload_cmd)
+    # LOG.info("mongo reporter exit code: {}".format(exit_code))
+    # if not exit_code:
+    #     msg = "Test result successfully uploaded to MongoDB."
+    #     log_msg += msg
+    #     rtn = True
+    # else:
+    #     log_msg += "\nTest result failed to upload. Please check parameters stored at %s" % output
+    #     msg = log_msg
+    #     rtn = False
+    # today_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    # extra_info = '\nDate: %s. Report tag: %s\n\n' % (today_date, tag)
+    # msg += extra_info
+    # log_msg += extra_info
+    # print(msg)
+    # with open(report_file_name, mode='a') as f:
+    #     f.write(log_msg)
+    #
+    # return rtn
 
 
 def collect_user_input_and_upload_results(test_name=None, result=None, log_dir=None):

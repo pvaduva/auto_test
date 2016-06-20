@@ -1,132 +1,60 @@
-<?xml version="1.0" encoding="utf-8"?><testsuite errors="1" failures="1" name="pytest" skips="0" tests="5" time="157.864"><testcase classname="testcases.functional.heat.test_heat" file="testcases/functional/heat/test_heat.py" line="113" name="test_heat_template[WR_Neutron_ProviderNetRange.yaml]" time="14.391437530517578"><failure message="utils.exceptions.CLIRejected: CLI command is rejected.
-Details: CLI command failed to execute: ERROR: The Stack (STACK1) already exists.">template_name = &apos;WR_Neutron_ProviderNetRange.yaml&apos;
-
-    @mark.usefixtures(&apos;check_alarms&apos;)
-    @mark.parametrize(
-        (&apos;template_name&apos;), [
-            P1((&apos;WR_Neutron_ProviderNetRange.yaml&apos;)),
-            P1((&apos;WR_Neutron_ProviderNet.yaml&apos;)),
-            P1((&apos;OS_Cinder_Volume.yaml&apos;)),
-            P1((&apos;OS_Ceilometer_Alarm.yaml&apos;)),
-            P1((&apos;OS_Neutron_Port.yaml&apos;)),
-            #P1((&apos;OS_Nova_ServerGroup.yaml&apos;)),
-        ])
-    # can add test fixture to configure hosts to be certain storage backing
-    def test_heat_template(template_name):
-        &quot;&quot;&quot;
-        Basic Heat template testing:
-            various Heat templates.
-    
-        Args:
-            template_name (str): e.g, OS_Cinder_Volume.
-    
-        =====
-        Prerequisites (skip test if not met):
-            - at least two hypervisors hosts on the system
-    
-        Test Steps:
-            - Create a heat stack with the given template
-            - Verify heat stack is created sucessfully
-            - Verify heat resources are created
-            - Delete Heat stack and verify resource deletion
-    
-        &quot;&quot;&quot;
-    
-    
-    
-        # Another test step
-        LOG.tc_step(&quot;Create Heat stack using&quot;)
-&gt;       return_code, message = verify_basic_template(template_name)
-
-test_heat.py:149: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-test_heat.py:78: in verify_basic_template
-    fail_ok=fail_ok, rtn_list=True)
-../../../utils/cli.py:150: in heat
-    err_only=err_only, timeout=timeout, rtn_list=rtn_list)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-
-cmd = &apos;heat&apos;, sub_cmd = &apos;stack-create&apos;, positional_args = &apos;-f /home/wrsroot/heat/templates/hot/simple/WR_Neutron_ProviderNetRange.yaml STACK1&apos;, ssh_client = &lt;utils.ssh.SSHClient object at 0x7f58be739ba8&gt;
-flags = &apos;--os-username admin --os-password admin --os-tenant-name admin --os-auth-url http://192.168.204.2:5000/v2.0/ --os-region-name RegionOne&apos;, fail_ok = 0, cli_dir = &apos;&apos;
-auth_info = {&apos;auth_url&apos;: &apos;http://192.168.204.2:5000/v2.0/&apos;, &apos;password&apos;: &apos;admin&apos;, &apos;region&apos;: &apos;RegionOne&apos;, &apos;tenant&apos;: &apos;admin&apos;, ...}, err_only = False, timeout = 10, rtn_list = True
-
-    def exec_cli(cmd, sub_cmd, positional_args=&apos;&apos;, ssh_client=None, flags=&apos;&apos;, fail_ok=False, cli_dir=&apos;&apos;,
-                 auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
-        &quot;&quot;&quot;
-    
-        Args:
-            cmd: such as &apos;neutron&apos;
-            sub_cmd: such as &apos;net-show&apos;
-            positional_args: string or list.
-                Single arg examples: &apos;arg0&apos; or [&apos;arg0&apos;]
-                Multiple args string example: &apos;arg1 arg2&apos;
-                Multiple args list example: [&apos;arg1&apos;,&apos;arg2&apos;]
-            flags: string or list.
-                Single arg examples: &apos;arg0 value0&apos; or [&apos;arg0 value&apos;]
-                Multiple args string example: &apos;arg1 value1 arg2 value2 arg3&apos;
-                Multiple args list example: [&apos;arg1 value1&apos;,&apos;arg2 value2&apos;, &apos;arg3&apos;]
-            ssh_client:
-            auth_info: (dictionary) authorization information to run cli commands.
-            fail_ok:
-            cli_dir:
-            err_only:
-            timeout:
-            rtn_list:
-    
-        Returns:
-            if command executed successfully: return command_output
-            if command failed to execute such as authentication failure:
-                if fail_ok: return exit_code, command_output
-                if not fail_ok: raise exception
-        &quot;&quot;&quot;
-        if ssh_client is None:
-            ssh_client = ControllerClient.get_active_controller()
-    
-        if auth_info is None:
-            auth_info = Tenant.get_primary()
-    
-        positional_args = __convert_args(positional_args)
-        flags = __convert_args(flags)
-    
-        if auth_info:
-            auth_args = (&apos;--os-username {} --os-password {} --os-tenant-name {} --os-auth-url {} --os-region-name {}&apos;.
-                         format(auth_info[&apos;user&apos;], auth_info[&apos;password&apos;], auth_info[&apos;tenant&apos;], auth_info[&apos;auth_url&apos;],
-                                auth_info[&apos;region&apos;]))
-            flags = (auth_args + &apos; &apos; + flags).strip()
-    
-        complete_cmd = &apos; &apos;.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
-        exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout)
-    
-        # The commented code is to convert output to dictionary or list.
-        # But it might be a overkill, and hides the return type.
-        # if not raw_output:
-        #    cmd_output = table_parser.tables(cmd_output)
-        #    # return dictionary if output contains only 1 table, otherwise return a list of tables.
-        #    if len(cmd_output) == 1:
-        #        cmd_output = cmd_output[0]
-    
-        if fail_ok:
-            if exit_code in [0, 1]:
-                return exit_code, cmd_output
-        elif exit_code == 0:
-            if rtn_list:
-                return exit_code, cmd_output
-            else:
-                return cmd_output
-    
-&gt;       raise exceptions.CLIRejected(&quot;CLI command failed to execute: {}&quot;.format(cmd_output))
-E       utils.exceptions.CLIRejected: CLI command is rejected.
-E       Details: CLI command failed to execute: ERROR: The Stack (STACK1) already exists.
-
-../../../utils/cli.py:74: CLIRejected</failure></testcase><testcase classname="testcases.functional.heat.test_heat" file="testcases/functional/heat/test_heat.py" line="113" name="test_heat_template[WR_Neutron_ProviderNet.yaml]" time="33.0141499042511"><error message="test setup failure">def verify_alarms():
-        LOG.debug(&quot;Verifying system alarms after test ended...&quot;)
-        after_tab = system_helper.get_alarms()
-        after_rows = table_parser.get_all_rows(after_tab)
-        new_alarms = []
-        for item in after_rows:
-            if item not in before_rows:
-                new_alarms.append(item)
-&gt;       assert not new_alarms, &quot;New alarm(s) found: {}&quot;.format(new_alarms)
-E       AssertionError: New alarm(s) found: [[&apos;300.004&apos;, &apos;No enabled compute host with connectivity to provider network.&apos;, &apos;service=networking.providernet=c4abd18e-5972-4db3-9758-6e88f1bc3175&apos;, &apos;major&apos;, &apos;2016-06-10T14:38:11.171517&apos;]]
-
-../../../testfixtures/verify_fixtures.py:35: AssertionError</error></testcase><testcase classname="testcases.functional.heat.test_heat" file="testcases/functional/heat/test_heat.py" line="113" name="test_heat_template[OS_Cinder_Volume.yaml]" time="37.4611918926239"></testcase><testcase classname="testcases.functional.heat.test_heat" file="testcases/functional/heat/test_heat.py" line="113" name="test_heat_template[OS_Ceilometer_Alarm.yaml]" time="36.697368144989014"></testcase><testcase classname="testcases.functional.heat.test_heat" file="testcases/functional/heat/test_heat.py" line="113" name="test_heat_template[OS_Neutron_Port.yaml]" time="35.142125606536865"></testcase></testsuite>
+<?xml version="1.0" encoding="utf-8"?><testsuite errors="1" failures="0" name="pytest" skips="0" tests="1" time="29.397"><testcase classname="testcases.functional.heat.test_heat" file="testcases/functional/heat/test_heat.py" line="234" name="test_heat_template[WR_Neutron_ProviderNetRange.yaml]" time="23.613245010375977"></testcase><testcase classname="pytest" name="internal" time="0"><error message="internal error">Traceback (most recent call last):
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/main.py&quot;, line 94, in wrap_session
+    session.exitstatus = doit(config, session) or 0
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/main.py&quot;, line 125, in _main
+    config.hook.pytest_runtestloop(session=session)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 724, in __call__
+    return self._hookexec(self, self._nonwrappers + self._wrappers, kwargs)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 338, in _hookexec
+    return self._inner_hookexec(hook, methods, kwargs)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 333, in &lt;lambda&gt;
+    _MultiCall(methods, kwargs, hook.spec_opts).execute()
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 596, in execute
+    res = hook_impl.function(*args)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/main.py&quot;, line 150, in pytest_runtestloop
+    item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 724, in __call__
+    return self._hookexec(self, self._nonwrappers + self._wrappers, kwargs)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 338, in _hookexec
+    return self._inner_hookexec(hook, methods, kwargs)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 333, in &lt;lambda&gt;
+    _MultiCall(methods, kwargs, hook.spec_opts).execute()
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 595, in execute
+    return _wrapped_call(hook_impl.function(*args), self.execute)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 253, in _wrapped_call
+    return call_outcome.get_result()
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 278, in get_result
+    raise ex[1].with_traceback(ex[2])
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 264, in __init__
+    self.result = func()
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 596, in execute
+    res = hook_impl.function(*args)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/runner.py&quot;, line 66, in pytest_runtest_protocol
+    runtestprotocol(item, nextitem=nextitem)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/runner.py&quot;, line 78, in runtestprotocol
+    nextitem=nextitem))
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/runner.py&quot;, line 122, in call_and_report
+    report = hook.pytest_runtest_makereport(item=item, call=call)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 724, in __call__
+    return self._hookexec(self, self._nonwrappers + self._wrappers, kwargs)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 338, in _hookexec
+    return self._inner_hookexec(hook, methods, kwargs)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 333, in &lt;lambda&gt;
+    _MultiCall(methods, kwargs, hook.spec_opts).execute()
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 595, in execute
+    return _wrapped_call(hook_impl.function(*args), self.execute)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 249, in _wrapped_call
+    wrap_controller.send(call_outcome)
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/skipping.py&quot;, line 226, in pytest_runtest_makereport
+    rep = outcome.get_result()
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 278, in get_result
+    raise ex[1].with_traceback(ex[2])
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 264, in __init__
+    self.result = func()
+  File &quot;/usr/local/lib/python3.4/dist-packages/_pytest/vendored_packages/pluggy.py&quot;, line 596, in execute
+    res = hook_impl.function(*args)
+  File &quot;/home/ubuntu/cgcs/CGCSAuto/conftest.py&quot;, line 135, in pytest_runtest_makereport
+    upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var(&apos;LOG_DIR&apos;), build=build_id)
+  File &quot;/home/ubuntu/cgcs/CGCSAuto/utils/mongo_reporter/cgcs_mongo_reporter.py&quot;, line 44, in collect_and_upload_results
+    lab_name = lab[&apos;short_name&apos;].upper()
+TypeError: string indices must be integers</error></testcase></testsuite>

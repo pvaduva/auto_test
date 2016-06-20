@@ -8,7 +8,7 @@ from pytest import fixture, mark, skip
 import ast
 from time import sleep
 
-from utils import cli
+from utils import cli,exceptions
 from utils.ssh import ControllerClient
 from utils import table_parser
 from consts.auth import Tenant
@@ -21,9 +21,12 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
 
     LOG.tc_step('This Test will take 10min+ to execute as it lock, modify and unlock a node. ')
 
+    if not hostname:
+        raise exceptions.HostError("Expected a valid hostname but got nothing instead")
+
     # get the port_uuid for oam type interface only
     table_ = system_helper.get_interfaces(hostname, con_ssh=None)
-    port_uuid_list = table_parser.get_values(table_, 'uuid', networktype=network_type)
+    port_uuid_list = table_parser.get_values(table_, 'uuid', **{'network type': network_type})
     imtu = " --imtu "+mtu
 
     # lock the node
@@ -42,6 +45,7 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
     # unlock the node
     LOG.tc_step('unlock the standby')
     host_helper.unlock_host(hostname)
+
 
 
 @mark.parametrize('mtu', ['1400', '1500'])
@@ -79,7 +83,10 @@ def test_oam_intf_mtu_modified(mtu):
     # modify mtu on standby controller
     modify_mtu_on_interface(first_host, mtu, 'oam')
     # swact active and standby controller
-    sleep(10)
+
+    # wait for hostname to be back in host list in nova
+    host_helper.wait_for_hosts_in_nova(first_host)
+
     host_helper.swact_host(fail_ok=False)
     # modify mtu on new standby controller
     second_host = system_helper.get_standby_controller_name()
@@ -88,12 +95,12 @@ def test_oam_intf_mtu_modified(mtu):
 
     # check mtu is updated
     table_ = system_helper.get_interfaces(first_host, con_ssh=None)
-    mtu_list = table_parser.get_values(table_, 'attributes', networktype='oam')
+    mtu_list = table_parser.get_values(table_, 'attributes', **{'network type': 'oam'})
     # parse the string of MTU=xxxx
     actual_mtu_one = mtu_list[0][4:]
 
     table_ = system_helper.get_interfaces(second_host, con_ssh=None)
-    mtu_list = table_parser.get_values(table_, 'attributes', networktype='oam')
+    mtu_list = table_parser.get_values(table_, 'attributes', **{'network type': 'oam'})
     actual_mtu_two = mtu_list[0][4:]
 
     assert mtu == actual_mtu_one == actual_mtu_two, "Expect MTU={} after modification. Actual active host MTU={}, " \
@@ -130,14 +137,17 @@ def test_data_intf_mtu_modified(mtu):
 
         modify_mtu_on_interface(host, mtu, 'data')
 
+        # wait for hostname to be back in host list in nova
+        host_helper.wait_for_hosts_in_nova(host)
+
         # check mtu is updated
         table_ = system_helper.get_interfaces(host, con_ssh=None)
-        mtu_list = table_parser.get_values(table_, 'attributes', networktype='data')
+        mtu_list = table_parser.get_values(table_, 'attributes', **{'network type': 'data'})
         # parse the string of MTU=xxxx
 
         for port_mtu in mtu_list:
 
-            mtu_list = port_mtu[0].split(',')
+            mtu_list = port_mtu.split(',')
             actual_mtu = mtu_list[0][4:]
             # verfiy each data ports on each hosts
             assert mtu == actual_mtu, "On {} ports Expect MTU={} after modification. " \

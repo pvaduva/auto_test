@@ -1,5 +1,5 @@
 ###
-# test_468_lock_unlock_compute_node sanity_juno_unified_R3.xls
+# test_467_lock_unlock_compute_node sanity_juno_unified_R3.xls
 ###
 
 from pytest import fixture, mark, skip
@@ -9,7 +9,7 @@ from utils.tis_log import LOG
 from keywords import host_helper,system_helper
 from setup_consts import P1, P2, P3
 
-
+@mark.sanity
 def test_lock_unlock_inactive_controller():
     """
     Verify Swact is working on two controllers system
@@ -46,5 +46,5 @@ def test_lock_unlock_inactive_controller():
     # unlock standby controller node and verify controller node is successfully unlocked
     host_helper.unlock_host(standby_controller)
     lucky_compute_node_unlocked_state = host_helper.get_hostshow_value(standby_controller,'administrative')
-    assert lucky_compute_node_locked_state == 'unlocked', 'Test Failed. Standby Controller {} should be in unlocked ' \
+    assert lucky_compute_node_unlocked_state == 'unlocked', 'Test Failed. Standby Controller {} should be in unlocked ' \
                                                           'state but is not.'.format(standby_controller)

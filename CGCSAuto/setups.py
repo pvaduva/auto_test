@@ -183,7 +183,7 @@ def collect_tis_logs(con_ssh):
     dest_path = ProjVar.get_var('LOG_DIR')
     try:
         LOG.info("Copying log file from lab {} to local {}".format(lab_ip, dest_path))
-        scp_to_local(source_path=logpath, source_ip=lab_ip,dest_path=dest_path)
+        scp_to_local(source_path=logpath, source_ip=lab_ip, dest_path=dest_path)
         LOG.info("{} is successfully copied to local directory: {}".format(logpath, dest_path))
     except Exception as e:
         LOG.warning("Failed to copy log file to localhost.")

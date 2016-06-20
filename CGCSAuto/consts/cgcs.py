@@ -173,3 +173,9 @@ class NetworkingVmMapping:
         'vif': 'avp',
         'flavor': 'small',
     }
+
+
+class LocalStorage:
+    DIR_PROFILE = 'storage_profiles'
+    TYPE_STORAGE_PROFILE = ['storageProfile', 'localstorageProfile']
+

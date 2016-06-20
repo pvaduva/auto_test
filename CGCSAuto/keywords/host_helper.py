@@ -190,11 +190,12 @@ def _wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, 
         con_ssh (SSHClient):
         **states: such as availability=[online, available]
 
-    Returns:
-        bool: True if host reaches specified states within timeout, and stays in states for given duration;
+    Returns (bool): True if host reaches specified states within timeout, and stays in states for given duration;
             False otherwise
 
     """
+    if not hosts:
+        raise ValueError("No host(s) provided to wait for states.")
 
     if isinstance(hosts, str):
         hosts = [hosts]
@@ -285,14 +286,14 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
     #  vim_progress_status | Lock of host compute-0 rejected because there are no other hypervisors available.
     if _wait_for_host_states(host=host, timeout=5, vim_progress_status='ock .* host .* rejected.*',
-                             regex=True, fail_ok=True, con_ssh=con_ssh):
+                             regex=True, strict=False, fail_ok=True, con_ssh=con_ssh):
         msg = "Lock host {} is rejected. Details in host-show vim_process_status.".format(host)
         if fail_ok:
             return 4, msg
         raise exceptions.HostPostCheckFailed(msg)
 
     if _wait_for_host_states(host=host, timeout=5, vim_progress_status='Migrate of instance .* from host .* failed.*',
-                             regex=True, fail_ok=True, con_ssh=con_ssh):
+                             regex=True, strict=False, fail_ok=True, con_ssh=con_ssh):
         msg = "Lock host {} failed due to migrate vm failed. Details in host-show vm_process_status.".format(host)
         if fail_ok:
             return 5, msg
@@ -327,7 +328,8 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         raise exceptions.HostPostCheckFailed(msg)
 
 
-def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+                check_hypervisor_up=False):
     """
 
     Args:
@@ -345,6 +347,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
         (3, "Host state did not change to available or degraded within timeout")    # only applicable if fail_ok
         (4, "Host is in degraded state after unlocked.")
         (5, "Task is not cleared within 180 seconds after host goes available")
+        (6, "Host is not up in nova hypervisor-list")
 
     """
     LOG.info("Unlocking {}...".format(host))
@@ -379,13 +382,17 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
         LOG.warning("Host is in degraded state after unlocked.")
         return 4, "Host is in degraded state after unlocked."
 
+    if check_hypervisor_up:
+        if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh)[0]:
+            return 6, "Host is not up in nova hypervisor-list"
+
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
 
 
 def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN):
     """
-
+    Unlock given hosts. Please use unlock_host() keyword if only one host needs to be unlocked.
     Args:
         hosts (list|str): Host(s) to unlock
         timeout (int): MAX seconds to wait for host to become available or degraded after unlocking
@@ -403,6 +410,9 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
         (4, "Host is in degraded state after unlocked.")
 
     """
+    if not hosts:
+        raise ValueError("No host(s) provided to unlock.")
+
     LOG.info("Unlocking {}...".format(hosts))
 
     if isinstance(hosts, str):
@@ -701,7 +711,39 @@ def get_nova_hosts(con_ssh=None, auth_info=Tenant.ADMIN):
     return table_parser.get_values(table_, 'host_name', service='compute', zone='nova')
 
 
-def wait_for_hosts_in_nova(hosts, timeout=60, check_interval=3, fail_ok=True, auth_info=Tenant.ADMIN, con_ssh=None):
+def wait_for_hypervisors_up(hosts, timeout=60, check_interval=3, fail_ok=False, con_ssh=None):
+    if isinstance(hosts, str):
+        hosts = [hosts]
+    hypervisors = get_hypervisors(con_ssh=con_ssh)
+
+    if not set(hosts) <= set(hypervisors):
+        msg = "Some host(s) not in nova hypervisor-list. Host(s) given: {}. Hypervisors: {}".format(hosts, hypervisors)
+        raise exceptions.HostPreCheckFailed(msg)
+
+    hosts_to_check = list(hosts)
+    LOG.info("Waiting for {} to be up in nova hypervisor-list...".format(hosts))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        up_hosts = get_hypervisors(state='up', status='enabled')
+        for host in hosts_to_check:
+            if host in up_hosts:
+                hosts_to_check.remove(host)
+
+        if not hosts_to_check:
+            msg = "Host(s) {} are up and enabled in nova hypervisor-list".format(hosts)
+            LOG.info(msg)
+            return True, hosts_to_check
+
+        time.sleep(check_interval)
+    else:
+        msg = "Host(s) {} are not up in hypervisor-list within timeout".format(hosts_to_check)
+        if fail_ok:
+            LOG.warning(msg)
+            return False, hosts_to_check
+        raise exceptions.HostTimeout(msg)
+
+
+def wait_for_hosts_in_nova(hosts, timeout=60, check_interval=3, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
 
     if isinstance(hosts, str):
         hosts = [hosts]
@@ -764,7 +806,7 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
         hosts = [eval(host) for host in hosts]
 
     LOG.info("Hosts with {} backing: {}".format(storage_backing, hosts))
-    return tuple(hosts)
+    return hosts
 
 
 def get_nova_hosts_with_storage_backing(storage_backing, con_ssh=None):

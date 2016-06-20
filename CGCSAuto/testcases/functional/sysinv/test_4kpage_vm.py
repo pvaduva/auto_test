@@ -6,7 +6,7 @@
 
 from pytest import fixture, mark, skip
 import ast
-from time import sleep
+import random
 
 from utils import cli
 from utils.ssh import ControllerClient
@@ -84,9 +84,10 @@ def is_enough_4k_page_memory():
 
     if not check:
         # randomly pick a compute-0 node and give it enough 4k pages
-        host_helper.lock_host('compute-0')
-        system_helper.set_host_4k_pages('compute-0', proc_id=1, smallpage_num=600000)
-        host_helper.unlock_host('compute-0')
+        a_random_host = random.choice(host_helper.get_nova_hosts())
+        host_helper.lock_host(a_random_host)
+        system_helper.set_host_4k_pages(a_random_host, proc_id=1, smallpage_num=600000)
+        host_helper.unlock_host(a_random_host)
 
 
 def test_4k_page_vm(smallpage_flavor_vm):

@@ -1,6 +1,7 @@
 import time
 import random
 import os
+import re
 import operator
 
 from pytest import mark
@@ -8,9 +9,11 @@ from pytest import skip
 from pytest import fixture
 
 from consts.proj_vars import ProjVar
+from consts.cgcs import LocalStorage
 
 from utils.tis_log import LOG
 from utils import cli
+from keywords import common
 
 from keywords import system_helper, host_helper, local_storage_helper
 
@@ -27,12 +30,14 @@ def _get_computes_for_local_backing_type(ls_type='image', con_ssh=None):
 
 
 def _less_than_2_hypervisors():
-    return len(host_helper.get_hypervisors()) < 2
+    return len(host_helper.get_nova_hosts()) < 2
 
 
 class TestLocalStorage(object):
-    """
-    """
+    """test local storage"""
+
+    DIR_PROFILE_IMPORT_FROM='/home/wrsroot/storage_profiles'
+
     _cleanup_lists = {
         'profile': [],
         'locked': [],
@@ -56,7 +61,6 @@ class TestLocalStorage(object):
                 while old_new_types:
                     host, old_type, _ = old_new_types.pop()
                     host_helper.lock_host(host)
-                    # self.set_local_storage_backing(compute=host, to_type=old_type)
                     cmd = 'host-lvg-modify -b {} {} nova-local'.format(old_type, host)
                     cli.system(cmd, fail_ok=False)
                     host_helper.unlock_host(host)
@@ -246,15 +250,7 @@ class TestLocalStorage(object):
     def select_target_compute(self, compute_src='', ls_type='image'):
         compute_dest = ''
 
-        # firstly chose one compute from locked and of different local-storage-type to apply storage-profile
-        LOG.debug('Looking for a locked computes with different local-storage-type')
-        compute_dest = self._choose_compute_locked_diff_type(ls_type=ls_type)
-        if compute_dest:
-            LOG.debug('got target compute:{}, locked, diff local-storage-type'.format(compute_dest))
-            return compute_dest
-
         old_active_controller = system_helper.get_active_controller_name()
-        LOG.debug('-no locked computes with different local-storage-type')
 
         # otherwise chose one compute from unlocked and of different local-storage-type to apply storage-profile
         LOG.debug('Looking for unlocked computes with different local-storage-type')
@@ -265,14 +261,6 @@ class TestLocalStorage(object):
 
         LOG.debug('-no unlocked computes with different local-storage-type')
 
-        # still can't find a candidate, choose one with the same local-storage-type
-        LOG.debug('Looking for compute locked with same local-storage-type')
-        compute_dest = self._choose_compute_locked_diff_type(ls_type=ls_type)
-        if compute_dest:
-            LOG.debug('got target compute:{}, locked, same local-storage-type'.format(compute_dest))
-            return compute_dest
-
-        LOG.debug('-no locked computes with same local-storage-type')
         LOG.debug('Looking for compute unlocked with same local-storage-type')
         compute_dest = self._choose_compute_unlocked_same_type(ls_type=ls_type, active_controller=old_active_controller)
 
@@ -478,32 +466,247 @@ class TestLocalStorage(object):
         LOG.tc_step('Done, let the tear-down procedure to unlock the host')
         return 0, output
 
-    def _get_storage_profile_local_file(self, local_storage_type='image'):
-        profile_file_path = os.path.sep.join([ProjVar.get_var('LOG_DIR'),
-                                              'tc39_local_storage_profile_{}.xml'.format(local_storage_type)])
-        if not os.path.isfile(profile_file_path):
-            msg = 'local storage profile:{} does not exist!'.format(profile_file_path)
-            LOG.warn(msg)
-            return ''
-        else:
-            LOG.debug('OK, found local storage profile:{}'.format(profile_file_path))
-            return profile_file_path
+    def get_remote_storprofile_file(self, local_storage_type='image', local_file=''):
+        remote_file = os.path.join('/home/wrsroot',
+                         '{}_storage_profile_to_import.xml'.format(local_storage_type))
 
-    def import_profile(self, profile_file=None):
-        #TODO: need to complete
-        if not profile_file:
-            LOG.warn('Full path name of the storage/hardware profile name is required.')
-            return 1
+        return remote_file
 
-        LOG.debug('Attempt to import profile:{}'.format(profile_file))
-        return cli.system('profile-import {}'.format(profile_file), rtn_list=True)
+    def get_local_storprfoile_file(self, local_storage_type='image'):
+        file_path = os.path.join(os.path.expanduser('~'),
+                            LocalStorage.DIR_PROFILE,
+                         '{}_storage_profile_to_import.xml'.format(local_storage_type))
+        if os.path.isfile(file_path):
+            return file_path
+        return ''
 
-    def verify_local_storage_type(self, profile=''):
-        #TODO: not implemented yet
+    def import_storprofile_profile(self, profile_file=None):
+        rtn_code, msg = cli.system('profile-import {}'.format(profile_file), rtn_list=True)
+        LOG.info('rtn:{}, msg:{}'.format(rtn_code, msg))
+        return rtn_code, msg
+
+    def existing_storprofile_names(self, existing_storprofiles=None):
+        existing_names = [(existing_storprofiles[type][uuid]['name'], type)
+                            for type in existing_storprofiles.keys()
+                                for uuid in existing_storprofiles[type].keys()]
+        return existing_names
+
+    def verify_storprofile_existing(self, file_name='', existing_profiles=None):
+        existing_names = self.existing_storprofile_names(existing_profiles)
+
+        return file_name in [name for name, type in existing_names]
+
+    def is_storage_node(self):
+        return len(system_helper.get_storage_nodes()) > 0
+
+    def check_warn_msg(self, msg_import='', existing_profiles=None):
+        err_msg = re.compile('error: Storage profile can only be imported into a system with Ceph backend')
+        warn_msg = re.compile('warning: Local Storage profile (\w+) already exists and is not imported.')
+
+
+        if 'warn' in msg_import or 'error' in msg_import:
+            for line in msg_import.splitlines():
+                match = warn_msg.match(line)
+                if match:
+                    failed_profile_name = match.group(1)
+                    if not self.verify_storprofile_existing(file_name=failed_profile_name,
+                                                            existing_profiles=existing_profiles):
+                        LOG.error('storprofile {} does not exist but still been rejected to import'\
+                                  .format(failed_profile_name))
+                        return 1
+                    else:
+                        LOG.info('OK, {} is already existing hence failed to import'.format(failed_profile_name))
+                else:
+                    match = err_msg.match(line)
+                    if match:
+                        if self.is_storage_node():
+                            LOG.error('storprofile been rejected due to non-storage lab')
+                            return 1
+                        else:
+                            LOG.info('OK, storage-profiles been rejected because of non-storage lab')
         return 0
 
-    @mark.skipif(_less_than_2_hypervisors(), reason='Requires 2 or more computes to test this test case')
-    @mark.parametrize('local_storage_type', [mark.p2('image'), mark.p2('lvm')])
+# ls xml_sps:
+# {'lvg':
+#      [
+#          {'instance_backing': 'image',
+#           'lvm_vg_name': 'nova-local',
+#           'concurrent_disk_operations': '2'
+#           }
+#      ],
+#  'disk': [{'size': '228936', 'node': '/dev/sdb'}],
+#  'name': 'with_ceph_image_local_storage_backed'
+# }
+
+
+# ls post_import_sps:
+# {'9bba4db3-9b06-4fb0-a53d-c00fb7a00207':
+#      {'lvg':
+#           {'instance_backing': 'image', 'lvm_vg_name': 'nova-local', 'concurrent_disk_operations': '2'},
+#       'disk': {'/dev/sdb': 228936},
+#       'name': 'with_ceph_image_local_storage_backed'
+#       }
+# }
+
+# storage-profiles from XML:/home/mhuang1/storage_profiles/image_storage_profile_to_import.xml
+# {'localstorageProfile':
+#     {'name': 'with_ceph_image_local_storage_backed',
+#      'disk': [{'node': '/dev/sdb', 'size': '228936'}],
+#      'lvg':
+#         [{'lvm_vg_name': 'nova-local', 'concurrent_disk_operations': '2', 'instance_backing': 'image'}]
+#     },
+#  'storageProfile':
+#     {'name': 'ceph_st
+#      'disk': [
+#         {'node': '/dev/sdb', 'volumeFunc': 'osd', 'size': '228936'},
+#         {'node': '/dev/sdc', 'volumeFunc': 'osd', 'size': '228936'}
+#         ]
+#     }
+# }
+
+# storage-profiles from lab
+# {'storage':
+#     {'a716a4b3-7dba-4a82-8ac4-854bef593c25':
+#         {'name': 'ceph_storage_profile',
+#          'storage_type': 'storage',
+#          'disk_stor_conf':
+#             {'/dev/sdb': [228936, 'osd'],
+#              '/dev/sdc': [228936, 'osd']
+#             }
+#         }
+#     },
+#  'localstorage':
+#     {
+#     }
+# }
+    def compare_stor_disks(self, xml_disks, impt_disks):
+        for disk in xml_disks:
+            dev = disk['node']
+            func = disk['volumeFunc']
+            size = disk['size']
+            impt_size, impt_func = impt_disks[dev]
+            if  size != impt_size:
+                LOG.info('mismatched size for XML:{} vs imported:{} for dev:{}'\
+                         .format(size, impt_size, dev))
+                return False
+
+            if func != impt_func:
+                LOG.info('mismatched volume-function for XML:{} vs imported:{} for dev:{}'\
+                         .format(func, impt_func, dev))
+                return False
+        return True
+
+    def get_impt_prof_by_name(self, name, impt_setting):
+        for uuid in impt_setting.keys():
+            if 'name' in impt_setting[uuid] and name == impt_setting[uuid]['name']:
+                return impt_setting[uuid]
+        LOG.warn('Failed to find imported storage-profile with name:{}'.format(name))
+        return {}
+
+    def compare_storage_profile(self, xml_setting, impt_setting):
+        for sprof in xml_setting:
+            name = sprof['name']
+            sprof_impt = self.get_impt_prof_by_name(name, impt_setting)
+            if not sprof_impt:
+                LOG.warn('NONE profile imported EISTS for profile from XML {}'.format(name))
+                return 1
+
+            if not self.compare_single_storage_profile(sprof, sprof_impt):
+                LOG.warn('profile imported does not match profile from XML')
+                return 1
+        return 0
+
+    def compare_single_storage_profile(self, xml_sprofile, impt_sprofile):
+
+        if impt_sprofile['storage_type'] != 'storage':
+            LOG.info('storage-type imported:{} IS NOT "storage"'\
+                     .format(impt_sprofile['name']))
+            return False
+
+        if not self.compare_stor_disks(xml_sprofile['disk'], impt_sprofile['disk_stor_conf']):
+            LOG.info('disk setting does not match')
+
+        return True
+
+    def compare_ls_disks(self, xml_disks, imt_disks):
+        for kv in xml_disks:
+            size = kv['size']
+            node = kv['node']
+            if size != imt_disks[node]:
+                LOG.info('mismatched lvg disk size, in XML:{} vs imported:{} for dev:{}'\
+                         .format(size, imt_disks[node], node))
+                return False
+        return True
+
+    def compare_ls_lvginfo(self, xml_lvginfo, imt_lvginfo):
+        xmllvg = xml_lvginfo[0]
+        for key in xmllvg.keys():
+            if xmllvg[key] != imt_lvginfo[key]:
+                LOG.info('mismatched lvg setting, in XML:{} vs imported:{}'\
+                         .format(xmllvg[key], imt_lvginfo[key]))
+                return False
+
+        return True
+
+    def get_impt_lsprof_by_name(self, name, impt_lsprf):
+        for uuid in impt_lsprf.keys():
+            if 'name' in impt_lsprf[uuid] and name == impt_lsprf[uuid]['name']:
+                return impt_lsprf[uuid]
+
+        LOG.error('No imported local-storage profile found with name {}'.format(name))
+        assert 0
+        return {}
+
+    def compare_single_local_storprof(self, xmlprof, imptprof):
+        if not self.compare_ls_disks(xmlprof['disk'], imptprof['disk']):
+            LOG.error('disk setting MISMATCH for local-storage profile:{}'.format(xmlprof['name']))
+            return False
+
+        if not self.compare_ls_lvginfo(xmlprof['lvg'], imptprof['lvg']):
+            LOG.error('lvg setting MISMATCH for local-storage profile:{}'.format(xmlprof['name']))
+            return False
+
+        return True
+
+    def compare_local_storage_profile(self, xml_lsprf, pstimt_lsprf):
+        for xmlprof in xml_lsprf:
+            name = xmlprof['name']
+            impt_prof = self.get_impt_lsprof_by_name(name, pstimt_lsprf)
+            if not impt_prof or not self.compare_single_local_storprof(xmlprof, impt_prof):
+                LOG.error('local storage profile mismatch between imported and from XML:{}'.format(name))
+                return 1
+        return 0
+
+    def check_imported_storprofiles(self, xml_profiles=None):
+        post_import_storprofiles = local_storage_helper.get_existing_storprofiles()
+
+        if self.is_storage_node():
+            assert 0 == self.compare_storage_profile(xml_profiles['storageProfile'],
+                                                     post_import_storprofiles['storage']),\
+                    'Improted storage-profiles MISMATCH XML profile'
+
+        assert 0 == self.compare_local_storage_profile(xml_profiles['localstorageProfile'],
+                                                       post_import_storprofiles['localstorage']),\
+                    'Improted local-storage-profiles MISMATCH XML profile'
+        return 0
+
+    def verify_storage_profile_imported(self, profile='',
+                                        rtn_import=0, msg_import='', pre_import_storprofiles=None):
+
+        from_xml_profile = local_storage_helper.parse_storprofiles_from_xml(xml_file=profile)
+
+        assert 0 == self.check_warn_msg(msg_import=msg_import, existing_profiles=pre_import_storprofiles),\
+                        'Incorrect CLI messages'
+
+        assert 0 == self.check_imported_storprofiles(xml_profiles=from_xml_profile),\
+                        'Imported storage-profiles do not match settings from XML file'
+
+        return 0
+
+    @mark.parametrize('local_storage_type', [
+        mark.p2('image'),
+        mark.p2('lvm'),
+    ])
     def test_import_storage_profile(self, local_storage_type):
         """
         Args:
@@ -512,14 +715,16 @@ class TestLocalStorage(object):
         Setup:
 
         Test Steps:
-            1 check if the profile exists
-            2 apply the profile
-            3 verify the results
+            1 check if the storage-profile exists, skip if not
+            2 get list of profile names current existing in the system
+            3 import the storage-profile
+            4 check the storage-profile actually created matching with those in the profile:
+                1) profilename
+                2) disk configuration
+                3) physical volume config
+                4) local volume group config
 
         Teardown:
-            1 delete the storage-profile created
-            2 unlock the computes/hyperviors locked for testing
-            3 restore the local-storage types changed during testing for the impacted computes
 
         Notes:
             will cover 1 test cases:
@@ -527,15 +732,27 @@ class TestLocalStorage(object):
         Returns:
 
         """
-        LOG.tc_step('Check if file existing for storage-profile of type:{}'.format(local_storage_type))
-        profile_file = self._get_storage_profile_local_file(local_storage_type=local_storage_type)
-        if not profile_file:
-            skip('cannot find required file: {} for type:{}'.format(profile_file, local_storage_type))
-            return
+        LOG.tc_step('Get the name of the profile and check if it is existing')
+        local_file = self.get_local_storprfoile_file(local_storage_type=local_storage_type)
+        if not local_file:
+            msg = 'Cannot find the porfile:{}'.format(local_file)
+            LOG.tc_step(msg)
+            skip(msg)
+            return -1
 
-        LOG.tc_step('Apply the storage-profile via CLI profile-import {}'.format(profile_file))
-        rtn_code, output = self.import_profile(profile_file=profile_file)
-        assert 0 == rtn_code, 'Failed in system profile-import {}, msg:{}'.format(profile_file, output)
+        LOG.tc_step('Get list of profile names')
+        pre_import_storprofiles = local_storage_helper.get_existing_storprofiles()
 
-        LOG.tc_step('Check if the storage profile types are changed on all computes')
-        assert 0 == self.verify_local_storage_type(profile=profile_file)
+        LOG.tc_step('Apply the storage-profile via CLI profile-import {}'.format(local_file))
+        remote_file = self.get_remote_storprofile_file(local_storage_type=local_storage_type)
+        common.scp_to_active_controller(local_file, remote_file)
+
+        rtn_code, output = self.import_storprofile_profile(profile_file=remote_file)
+        assert 0 == rtn_code, 'Failed to import storage-profile'.format(remote_file)
+
+        LOG.tc_step('Check if the storage profile are correctly imported into the system')
+        assert 0 == self.verify_storage_profile_imported(profile=local_file,
+                                                         rtn_import=rtn_code, msg_import=output,
+                                                         pre_import_storprofiles=pre_import_storprofiles)
+
+        return 0

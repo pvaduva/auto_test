@@ -196,6 +196,9 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
 ########################
 
 def pytest_configure(config):
+    config.addinivalue_line("markers",
+                            "features(feature_name1, feature_name2, ...): mark impacted feature(s) for a test case.")
+
     lab_arg = config.getoption('lab')
     natbox_arg = config.getoption('natbox')
     tenant_arg = config.getoption('tenant')
@@ -276,4 +279,11 @@ def pytest_unconfigure():
     except:
         pass
 
-# TODO: add support for feature marks
+
+def pytest_collection_modifyitems(items):
+    for item in items:
+        feature_marker = item.get_marker("features")
+        if feature_marker is not None:
+            features = feature_marker.args
+            for feature in features:
+                item.add_marker(eval("pytest.mark.{}".format(feature)))

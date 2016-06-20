@@ -186,7 +186,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             if not snapshot_id:
                 raise ValueError("snapshot id is required to boot vm; however no snapshot exists on the system.")
     # Handle mandatory arg - key_name
-    key_name = key_name if key_name is not None else get_keypair(auth_info=auth_info, con_ssh=con_ssh)
+    key_name = key_name if key_name is not None else get_any_keypair(auth_info=auth_info, con_ssh=con_ssh)
 
     if hint:
         hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
@@ -239,20 +239,35 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             return 3, vm_id, message, new_vol
         else:
             raise exceptions.VMPostCheckFailed(message)
-    #
-    # for i in range(5):
-    #     if ping_vms_from_natbox(vm_ids=vm_id, fail_ok=True)[0]:
-    #         break
-    # else:
-    #     msg = "Ping from NatBox to vm {} failed.".format(vm_id)
-    #     if fail_ok:
-    #         LOG.warning(msg)
-    #         return 6, vm_id, msg, new_vol
-    #     else:
-    #         raise exceptions.VMPostCheckFailed(msg)
 
     LOG.info("VM {} is booted successfully.".format(vm_id))
     return 0, vm_id, 'VM is booted successfully', new_vol
+
+
+def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=True, con_ssh=None):
+    """
+    Wait for ping vm from natbox succeeds.
+
+    Args:
+        vm_id (str): id of the vm to ping
+        timeout (int): max retry time for pinging vm
+        fail_ok (bool): whether to raise exception if vm cannot be ping'd successfully from natbox within timeout
+        con_ssh (SSHClient): TiS server ssh handle
+
+    Returns (bool): True if ping vm succeeded, False otherwise.
+
+    """
+    ping_end_time = time.time() + timeout
+    while time.time() < ping_end_time:
+        if ping_vms_from_natbox(vm_ids=vm_id, fail_ok=True, con_ssh=con_ssh, num_pings=3)[0]:
+            return True
+    else:
+        msg = "Ping from NatBox to vm {} failed.".format(vm_id)
+        if fail_ok:
+            LOG.warning(msg)
+            return False
+        else:
+            raise exceptions.VMPostCheckFailed(msg)
 
 
 def __compose_args(optional_args_dict):
@@ -264,7 +279,7 @@ def __compose_args(optional_args_dict):
     return ' '.join(args)
 
 
-def get_keypair(auth_info=None, con_ssh=None):
+def get_any_keypair(auth_info=None, con_ssh=None):
     """
     Get keypair for specific tenant.
 
@@ -990,7 +1005,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
 
 
 def get_vm_ids(image=None, status=VMStatus.ACTIVE, flavor=None, host=None, tenant=None, delete=False):
-    raise NotImplementedError
+    raise NotImplemented
 
 
 def get_vm_pid(instance_name, host_ssh):
@@ -1004,10 +1019,13 @@ def get_vm_pid(instance_name, host_ssh):
     Returns (str): pid of a instance on its host
 
     """
-    code, vm_pid = host_ssh.exec_sudo_cmd("""ps aux | grep {} | awk '{{if ($11=="/usr/bin/kvm") print $2}}'""".
-                                          format(instance_name))
+    code, vm_pid = host_ssh.exec_sudo_cmd(
+            """ps aux | grep --color='never' {} | grep -v grep | awk '{{print $2}}'""".format(instance_name))
     if code != 0:
         raise exceptions.SSHExecCommandFailed("Failed to get pid for vm: {}".format(instance_name))
+
+    if not vm_pid:
+        LOG.warning("PID for {} is not found on host!".format(instance_name))
 
     return vm_pid
 
