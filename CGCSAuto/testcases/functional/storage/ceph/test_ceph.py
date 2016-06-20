@@ -346,6 +346,8 @@ def test_ceph_mon_reboot():
 
     LOG.tc_step('Check that OSDs are down')
     osd_list = storage_helper.get_osds(host, con_ssh)
+    LOG.info('OSD type is'.format(type(osd_list)))
+    LOG.info('OSD list is {}'.format(osd_list))
     for osd_id in osd_list:
         osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
         msg = 'OSD ID {} is up but should be down'.format(osd_id)
@@ -416,7 +418,7 @@ def test_ceph_mon_reboot():
 
 
 #@mark.parametrize('host', ['any', 'storage-0'])
-@mark.parametrize('host', ['any'])
+@mark.parametrize('host', ['storage-1'])
 @mark.usefixtures('ceph_precheck')
 def test_lock_stor_check_osds_down(host):
     """
@@ -451,7 +453,7 @@ def test_lock_stor_check_osds_down(host):
     """
 
     con_ssh = ControllerClient.get_active_controller()
-    """
+
     if host == 'any':
         storage_nodes = system_helper.get_storage_nodes(con_ssh)
         LOG.info('System has {} storage nodes:'.format(storage_nodes))
@@ -461,7 +463,7 @@ def test_lock_stor_check_osds_down(host):
     LOG.tc_step('Lock storage node {}'.format(host))
     rtn_code, out = host_helper.lock_host(host)
     assert rtn_code == 0, out
-    """
+
     # Alarm for all nodes: 
     # storage-0 was administratively locked to take it out-of-service.
     # Alarm for storage monitors only, e.g. storage-0
@@ -492,14 +494,14 @@ def test_lock_stor_check_osds_down(host):
     for osd_id in osd_list:
         osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
         msg = 'OSD ID {} is up but should be down'.format(osd_id)
-        assert osd_up, msg
+        assert not osd_up, msg
 
     LOG.tc_step('Unlock storage node')
     rtn_code, out = host_helper.unlock_host(host)
-    assert rtn_code != 0, out
+    assert rtn_code == 0, out
 
     LOG.tc_step('Checked that the host locked alarm is cleared')
-    alarms_table = system_helper.get_alarms(con_ssh=None)
+    alarms_table = system_helper.get_alarms(con_ssh)
     reasons = table_parser.get_values(alarms_table, 'Reason Text')
     msg = '{} was administratively locked'.format(host)
     assert re.search(msg, reasons), \
@@ -513,13 +515,13 @@ def test_lock_stor_check_osds_down(host):
 
     LOG.tc_step('Check health of CEPH cluster')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-    assert not ceph_healthy, msg
+    assert ceph_healthy, msg
 
     LOG.tc_step('Check OSDs are up after unlock')
     for osd_id in osd_list:
         osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
         msg = 'OSD ID {} should be up but is not'.format(osd_id)
-        assert not osd_up, msg
+        assert osd_up, msg
 
 @mark.usefixtures('check_alarms')
 @mark.usefixtures('ceph_precheck')

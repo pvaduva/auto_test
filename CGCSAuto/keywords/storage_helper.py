@@ -191,6 +191,8 @@ def get_osds(host=None, con_ssh=None):
             Nothing.  Update osd_list by side-effect.
         """
 
+        cli.source_admin(con_ssh)
+
         cmd = 'system host-stor-list {}'.format(host)
         rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=60)
         table_ = table_parser.table(cli.system('host-stor-list', host))
