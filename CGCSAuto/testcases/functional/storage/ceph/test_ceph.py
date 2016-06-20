@@ -460,9 +460,13 @@ def test_lock_stor_check_osds_down(host):
         node_id = random.randint(0, len(storage_nodes) - 1)
         host = 'storage-' + str(node_id)
 
-    LOG.tc_step('Lock storage node {}'.format(host))
-    rtn_code, out = host_helper.lock_host(host)
-    assert rtn_code == 0, out
+    #LOG.tc_step('Lock storage node {}'.format(host))
+    #rtn_code, out = host_helper.lock_host(host)
+    #assert rtn_code == 0, out
+
+    LOG.tc_step('Determine the storage group for host {}'.format(host))
+    storage_group, msg = storage_helper.get_storage_group(host)
+    LOG.info(msg)
 
     # Alarm for all nodes: 
     # storage-0 was administratively locked to take it out-of-service.
@@ -473,7 +477,6 @@ def test_lock_stor_check_osds_down(host):
     alarms_table = system_helper.get_alarms(query_key='alarm_id',
                                             query_value=EventLogID.HOST_LOCK,
                                             query_type='string')
-    LOG.info(alarms_table)
     LOG.info("LEN: {}".format(len(alarms_table)))
     msg = "Alarm {} not found in alarm-list".format(EventLogID.HOST_LOCK)
     assert len(alarms_table) == 2, msg
@@ -495,17 +498,50 @@ def test_lock_stor_check_osds_down(host):
         osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
         msg = 'OSD ID {} is up but should be down'.format(osd_id)
         assert not osd_up, msg
+        msg = 'OSD ID {} is down as expected'.format(osd_id)
+        LOG.info(msg)
+
+    # Check for loss of replication group alarm
+    # 800.011   Loss of replication in replication group group-0: OSDs are down
+    alarms_table = system_helper.get_alarms(query_key='alarm_id',
+                                            query_value=EventLogID.STORAGE_LOR,
+                                            query_type='string')
+    LOG.info("LEN: {}".format(len(alarms_table)))
+    msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_LOR)
+    assert len(alarms_table) == 2, msg
+
+    # Check for Storage Alarm Condition
+    # 800.001   Storage Alarm Condition: Pgs are degraded/stuck/blocked. Please
+    # check 'ceph -s' for more details
+    alarms_table = system_helper.get_alarms(query_key='alarm_id',
+                                            query_value=EventLogID.STORAGE_LOR,
+                                            query_type='string')
+    LOG.info("LEN: {}".format(len(alarms_table)))
+    msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_LOR)
+    assert len(alarms_table) == 2, msg
 
     LOG.tc_step('Unlock storage node')
     rtn_code, out = host_helper.unlock_host(host)
     assert rtn_code == 0, out
 
-    LOG.tc_step('Checked that the host locked alarm is cleared')
+    # Check that alarms clear
+    LOG.tc_step('Check that the host locked alarm is cleared')
     alarms_table = system_helper.get_alarms(con_ssh)
-    reasons = table_parser.get_values(alarms_table, 'Reason Text')
-    msg = '{} was administratively locked'.format(host)
-    assert re.search(msg, reasons), \
-        'Alarm reason {} not found in alarm-list'.format(msg)
+    id = table_parser.get_values(alarms_table, 'ID')
+    assert re.search(id, EventLogID.HOST_LOCK), \
+        'Alarm ID {} was found in alarm-list'.format(EventLogID.HOST_LOCK)
+
+    LOG.tc_step('Check that the replication group alarm is cleared')
+    alarms_table = system_helper.get_alarms(con_ssh)
+    id = table_parser.get_values(alarms_table, 'ID')
+    assert re.search(id, EventLogID.STORAGE_LOR), \
+        'Alarm ID {} not found in alarm-list'.format(EventLogID.STORAGE_LOR)
+
+    LOG.tc_step('Check that the Storage Alarm Condition is cleared')
+    alarms_table = system_helper.get_alarms(con_ssh)
+    id = table_parser.get_values(alarms_table, 'ID')
+    assert re.search(id, EventLogID.STORAGE_ALARM_COND), \
+        'Alarm ID {} not found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
 
     # If storage host is a storage monitor, ensure the monitor alarm clears
     if host == 'storage-0':

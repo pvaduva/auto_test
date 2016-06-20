@@ -180,7 +180,7 @@ def get_osds(host=None, con_ssh=None):
         (list) List of OSDs on the host.  Empty list if none.
     """
 
-    def _get_osds_per_host(host, con_ssh=None):
+    def _get_osds_per_host(host, osd_list, con_ssh=None):
         """
         Return the OSDs on a system.
 
@@ -196,16 +196,18 @@ def get_osds(host=None, con_ssh=None):
         cmd = 'system host-stor-list {}'.format(host)
         rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=60)
         table_ = table_parser.table(cli.system('host-stor-list', host))
-        osd_list.append(table_parser.get_values(table_, 'osdid'))
+        osd_list = osd_list + table_parser.get_values(table_, 'osdid')
+
+        return osd_list
 
     osd_list = []
 
     if host:
-        _get_osds_per_host(host, con_ssh)
+        osd_list = _get_osds_per_host(host, osd_list, con_ssh)
     else:
         storage_hosts = system_helper.get_storage_hosts()
         for host in storage_hosts:
-            _get_osds_per_host(host, con_ssh)
+            osd_list = _get_osds_per_host(host, osd_list, con_ssh)
 
     return osd_list
 
