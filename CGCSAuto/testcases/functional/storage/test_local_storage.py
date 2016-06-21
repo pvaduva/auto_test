@@ -36,7 +36,7 @@ def _less_than_2_hypervisors():
 class TestLocalStorage(object):
     """test local storage"""
 
-    DIR_PROFILE_IMPORT_FROM='/home/wrsroot/storage_profiles'
+    # DIR_PROFILE_IMPORT_FROM='/home/wrsroot/storage_profiles'
 
     _cleanup_lists = {
         'profile': [],
@@ -703,6 +703,7 @@ class TestLocalStorage(object):
 
         return 0
 
+    @mark.known_issue('CGTS-4432')
     @mark.parametrize('local_storage_type', [
         mark.p2('image'),
         mark.p2('lvm'),

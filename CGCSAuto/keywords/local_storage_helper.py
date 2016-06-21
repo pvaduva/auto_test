@@ -138,7 +138,8 @@ def _get_local_storageprofle_details(name_id=None):
 
     lvgsetting = {}
 
-    profile_name_header = 'hostname' # should be 'profile name', CGTS-4432
+    # FIXME: should be 'profile name', CGTS-4432
+    profile_name_header = 'hostname'
     name = table_parser.get_value_two_col_table(table, profile_name_header)
     lvgsetting['name'] = name
 
