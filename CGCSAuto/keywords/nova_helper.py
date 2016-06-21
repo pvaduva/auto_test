@@ -1248,3 +1248,27 @@ def copy_flavor(from_flavor_id, new_name=None, con_ssh=None):
     set_flavor_extra_specs(new_flavor_id, con_ssh=con_ssh, **extra_specs)
 
     return new_flavor_id
+
+
+def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=True, auth_info=Tenant.ADMIN,
+                          con_ssh=None, rnt_int=True):
+    """
+    Get provider net info from "nova providernet-show"
+
+    Args:
+        providernet_id (str): id of a providernet
+        field (str): Field name such as pci_vfs_configured, pci_pfs_used, etc
+        strict (bool): whether to perform a strict search on field name
+        auth_info (dict):
+        con_ssh (SSHClient):
+        rnt_int (bool): whether to return integer or string
+
+    Returns (int|str): value of specified field. Convert to integer by default unless rnt_int=False.
+
+    """
+    if not providernet_id:
+        raise ValueError("Providernet id is not provided.")
+
+    table_ = table_parser.table(cli.nova('providernet-show', providernet_id, ssh_client=con_ssh, auth_info=auth_info))
+    info_str = table_parser.get_value_two_col_table(table_, field, strict=strict)
+    return int(info_str) if rnt_int else info_str

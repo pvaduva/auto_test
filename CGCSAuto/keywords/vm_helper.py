@@ -1,6 +1,7 @@
 import random
 import re
 import time
+from collections import Counter
 from contextlib import contextmanager
 
 from utils import exceptions, cli, table_parser
@@ -834,7 +835,7 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
 
 
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
-              net_type='mgmt'):
+              net_types='mgmt'):
     """
 
     Args:
@@ -855,12 +856,16 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         }
 
     """
-    if net_type == 'data':
-        vms_ips = network_helper.get_data_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
-    elif net_type == 'mgmt':
-        vms_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
-    else:
-        raise ValueError("Net type has to be one of the following: 'data', 'mgmt'")
+    if isinstance(net_types, str):
+        net_types = [net_types]
+
+    vms_ips = []
+    if 'data' in net_types:
+        vms_ips += network_helper.get_data_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
+    if 'mgmt' in net_types:
+        vms_ips += network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
+    if not vms_ips:
+        raise ValueError("Invalid net_types or vms ips for given net types are not found.")
 
     res_dict = {}
     for ip in vms_ips:
@@ -900,30 +905,30 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
         natbox_client = NATBoxClient.get_natbox_client()
 
     return _ping_vms(vm_ids=vm_ids, ssh_client=natbox_client, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                     fail_ok=fail_ok, use_fip=use_fip, net_type='mgmt')
+                     fail_ok=fail_ok, use_fip=use_fip, net_types='mgmt')
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
                      num_pings=5, timeout=15, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
-                     net_type='mgmt'):
+                     net_types='mgmt'):
     """
 
     Args:
-        from_vm:
+        from_vm (str):
         to_vms (str|list|None):
-        user:
-        password:
-        prompt:
-        con_ssh:
-        natbox_client:
-        num_pings:
-        timeout:
+        user (str):
+        password (str):
+        prompt (str):
+        con_ssh (SSHClient):
+        natbox_client (SSHClient):
+        num_pings (int):
+        timeout (int): max number of seconds to wait for ssh connection to from_vm
         fail_ok (bool):  When False, test will stop right away if one ping failed. When True, test will continue to ping
             the rest of the vms and return results even if pinging one vm failed.
         from_vm_ip (str): vm ip to ssh to if given. from_fip flag will be considered only if from_vm_ip=None
         to_fip (bool): Whether to ping floating ip if a vm has floating ip associated with it
         from_fip (bool): whether to ssh to vm's floating ip if it has floating ip associated with it
-        net_type (str): 'mgmt' or 'data'
+        net_types (list|str): 'mgmt' or 'data'
 
     Returns (tuple):
         A tuple in form: (res (bool), packet_loss_dict (dict))
@@ -936,24 +941,25 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         }
 
     """
-    if net_type == 'data':
-        vms_ips = network_helper.get_data_ips_for_vms(con_ssh=con_ssh, rtn_dict=True)
-    elif net_type == 'mgmt':
-        vms_ips = network_helper.get_mgmt_ips_for_vms(con_ssh=con_ssh, rtn_dict=True)
-    else:
-        raise ValueError("Net type has to be one of the following: 'data', 'mgmt'")
+    if isinstance(net_types, str):
+        net_types = [net_types]
 
-    vms_ids = list(vms_ips.keys())
-    if from_vm is None:
-        from_vm = random.choice(vms_ids)
-    if to_vms is None:
-        to_vms = vms_ids
+    if from_vm is None or to_vms is None:
+        vms_ips = network_helper.get_mgmt_ips_for_vms(con_ssh=con_ssh, rtn_dict=True)
+        if not vms_ips:
+            raise exceptions.NeutronError("No management ip found for any vms")
+
+        vms_ids = list(vms_ips.keys())
+        if from_vm is None:
+            from_vm = random.choice(vms_ids)
+        if to_vms is None:
+            to_vms = vms_ids
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
 
         res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                        fail_ok=fail_ok, use_fip=to_fip, net_type=net_type)
+                        fail_ok=fail_ok, use_fip=to_fip, net_types=net_types)
 
     return res
 

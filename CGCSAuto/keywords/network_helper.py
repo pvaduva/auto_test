@@ -7,7 +7,7 @@ from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import MGMT_IP, DATA_IP, DNS_NAMESERVERS
-from keywords import common, keystone_helper
+from keywords import common, keystone_helper, host_helper
 
 
 def is_valid_ip_address(ip=None):
@@ -525,7 +525,7 @@ def get_neutron_port(name=None, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
-def get_provider_net(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_provider_nets(name=None, con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN):
     """
     Get the neutron provider net list based on name if given for ADMIN user.
 
@@ -533,18 +533,20 @@ def get_provider_net(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
         con_ssh (SSHClient): If None, active controller ssh will be used.
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
         name (str): Given name for the provider network to filter
+        strict (bool): Whether to perform strict search on provider net name provided
+        regex (bool): Whether to use regex to perform search on provider net name
 
-    Returns (str): Neutron provider net id of admin user.
+    Returns (str): Neutron provider net ids
 
     """
     table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is None:
         return table_parser.get_values(table_, 'id')
 
-    return table_parser.get_values(table_, 'id', strict=False, name=name)
+    return table_parser.get_values(table_, 'id', strict=strict, regex=regex, name=name)
 
 
-def get_provider_net_range(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_provider_net_ranges(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get the neutron provider net ranges based on name if given for ADMIN user.
 
@@ -753,51 +755,6 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
     """
     return _get_net_ips_for_vms(ip_pattern=MGMT_IP, vms=vms, con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict,
                                 use_fip=use_fip)
-
-    # table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=auth_info))
-    # if vms:
-    #     table_ = table_parser.filter_table(table_, ID=vms)
-    # elif vms is not None:
-    #     raise ValueError("Invalid value for vms: {}".format(vms))
-    # all_ips = []
-    # all_ips_dict = {}
-    # mgmt_ip_reg = re.compile(MGMT_IP)
-    # vm_ids = table_parser.get_column(table_, 'ID')
-    # if not vm_ids:
-    #     raise ValueError("No vm is on the system. Please boot vm(s) first.")
-    # vm_nets = table_parser.get_column(table_, 'Networks')
-    #
-    # if use_fip:
-    #     floatingips = get_floating_ips(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
-    #
-    # for i in range(len(vm_ids)):
-    #     vm_id = vm_ids[i]
-    #     mgmt_ips_for_vm = mgmt_ip_reg.findall(vm_nets[i])
-    #     if not mgmt_ips_for_vm:
-    #         LOG.warning("No management ip found for vm {}".format(vm_id))
-    #     else:
-    #         if use_fip:
-    #             vm_fips = []
-    #             # ping floating ips only if any associated to vm, otherwise ping all the mgmt ips
-    #             if len(mgmt_ips_for_vm) > 1:
-    #                 for ip in mgmt_ips_for_vm:
-    #                     if ip in floatingips:
-    #                         vm_fips.append(ip)
-    #                 if vm_fips:
-    #                     mgmt_ips_for_vm = vm_fips
-    #
-    #         all_ips_dict[vm_id] = mgmt_ips_for_vm
-    #         all_ips += mgmt_ips_for_vm
-    #
-    # if not all_ips:
-    #     raise ValueError("No management ip found for any of these vms: {}".format(vm_ids))
-    #
-    # LOG.info("Management IPs dict: {}".format(all_ips_dict))
-    #
-    # if rtn_dict:
-    #     return all_ips_dict
-    # else:
-    #     return all_ips
 
 
 def _get_net_ips_for_vms(ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, use_fip=False):
@@ -1425,3 +1382,31 @@ def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=Fal
     succ_msg = "Neutron quota(s) updated successfully to: {}.".format(kwargs)
     LOG.info(succ_msg)
     return 0, succ_msg
+
+
+def get_sriov_provider_net(filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get provider net id for SRIOV interface
+
+    Args:
+        filepath: lab_setup.conf path to retrive the info from
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (str):  id of the provider net for SRIOV interface. Returns empty string if not found.
+
+    """
+    if filepath is None:
+        filepath = "lab_setup.conf"
+
+    with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con0_ssh:
+        sriov_if_override = con0_ssh.exec_cmd("cat {} | grep -i sriov".format(filepath))[1]
+
+    if not sriov_if_override:
+        LOG.warning("SRIOV interface is not found in lab_setup")
+        return ''
+
+    provider_net_name = re.findall('\{DATAMTU\}\|(.*)\|', sriov_if_override)[0]
+
+    return get_provider_nets(name='.*{}'.format(provider_net_name), con_ssh=con_ssh, strict=True, regex=True,
+                             auth_info=auth_info)[0]

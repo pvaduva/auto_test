@@ -85,21 +85,23 @@ def test_vms_network_connection(vms_num, srv_grp_policy, server_groups):
     Args:
         vms_num (int): number of vms to boot
         srv_grp_policy (str): affinity to boot vms on same host, anti-affinity to boot vms on different hosts
+        server_groups: test fixture to return affinity and anti-affinity server groups
 
     Setups:
-        - Enable DVR
-        - Boot vms with specific server group policy to schedule vms on same or different host(s)
-        - Ping vms' data network from vm
+        - Enable DVR    (module)
+
+    Test Steps
+        - Boot given number of vms with specific server group policy to schedule vms on same or different host(s)
+        - Ping vms' data and management network from vm to test NS and EW traffic
 
     Teardown:
         - Delete vms
-        - Delete server group
 
     """
     if srv_grp_policy == 'anti-affinity' and len(host_helper.get_nova_hosts()) == 1:
         skip("Only one nova host on the system.")
 
-    LOG.tc_step("Boot vms with server group policy {}".format(srv_grp_policy))
+    LOG.tc_step("Boot {} vms with server group policy {}".format(vms_num, srv_grp_policy))
     affinity_grp, anti_affinity_grp = server_groups()
     srv_grp_id = affinity_grp if srv_grp_policy == 'affinity' else anti_affinity_grp
 
@@ -117,7 +119,9 @@ def test_vms_network_connection(vms_num, srv_grp_policy, server_groups):
                                   hint={'group': srv_grp_id})[1]
         ResourceCleanup.add(resource_type='vm', resource_id=vm_id, del_vm_vols=True)
         vms.append(vm_id)
+        LOG.tc_step("Ping vm {} from NatBox".format(vm_id))
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
     for vm in vms:
-        LOG.tc_step("Ping vms' data network ip (172.x.x.x) from vm {}, and verify ping successful.".format(vm))
-        vm_helper.ping_vms_from_vm(from_vm=vm, to_vms=vms, net_type='data', fail_ok=False)
+        LOG.tc_step("Ping vms' management and data network ips from vm {}, and verify ping successful.".format(vm))
+        vm_helper.ping_vms_from_vm(from_vm=vm, to_vms=vms, net_types=['data', 'mgmt'], fail_ok=False)

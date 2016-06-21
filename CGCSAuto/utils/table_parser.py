@@ -568,7 +568,7 @@ def _get_row_indexes(table_, field, value, strict=True, regex=False, exclude=Fal
                 res_ = re.match(value, search_val)
             else:
                 res_ = re.search(value, search_val)
-            if res_ is not exclude:
+            if bool(res_) != exclude:
                 row_indexes.append(j)
     else:
         row_indexes = __get_row_indexes_string(table_, field, value, strict, exclude)

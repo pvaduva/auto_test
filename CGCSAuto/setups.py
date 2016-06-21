@@ -200,9 +200,13 @@ def get_build_id(con_ssh):
         build_id = ' '
     else:
         build_id = re.findall('''BUILD_ID=\"(.*)\"''', output)
-        if build_id:
+        if build_id and build_id[0] != 'n/a':
             build_id = build_id[0]
         else:
-            build_id = ' '
+            build_date = re.findall('''BUILD_DATE=\"(.*)\"''', output)
+            if build_date and build_date[0]:
+                build_id = build_date[0]
+            else:
+                build_id = ' '
 
     return build_id

@@ -51,12 +51,12 @@ def verify_heat_resource(to_verify=None,template_name=None,stack_name=None,auth_
             return 0
     elif to_verify is 'neutron_provider_net':
         LOG.info("Verifying neutron provider net")
-        net_id = network_helper.get_provider_net(name='physnetX')
+        net_id = network_helper.get_provider_nets(name='physnetX')
         if net_id:
             return 0
     elif to_verify is 'neutron_provider_net_range':
         LOG.info("Verifying neutron provider net range")
-        net_range = network_helper.get_provider_net_range(name='sample_physnet_X')
+        net_range = network_helper.get_provider_net_ranges(name='sample_physnet_X')
         if net_range:
             return 0
     elif to_verify is 'nova_server_group':
