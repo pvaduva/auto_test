@@ -358,8 +358,8 @@ def get_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN):
     return extra_specs
 
 
-def create_server_group(name=None, policy='affinity', best_effort=None, max_group_size=None, fail_ok=False, auth_info=None,
-                        con_ssh=None, **metadata):
+def create_server_group(name=None, policy='affinity', best_effort=None, max_group_size=None, fail_ok=False,
+                        auth_info=None, con_ssh=None, rtn_exist=False, **metadata):
     """
     Create a server group with given criteria
 
@@ -371,6 +371,7 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
         fail_ok (bool):
         auth_info (dict):
         con_ssh (SSHClient):
+        rtn_exist (bool): Whether to return existing server group that matches the given name
         **metadata: key, value metadata pairs except group size and best effort.
 
     Returns (tuple): (rtn_code (int), err_msg_or_srv_grp_id (str))
@@ -379,6 +380,12 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
 
     """
     # process server group metadata
+    if name is not None and rtn_exist:
+        existing_grp = get_server_groups(name=name, con_ssh=con_ssh, auth_info=auth_info)
+        if existing_grp:
+            LOG.debug("Returning existing server group {}".format(existing_grp[0]))
+            return -1, existing_grp[0]
+
     args = ''
     if best_effort is not None or max_group_size is not None or metadata:
         tmp_list = []
@@ -728,7 +735,7 @@ def get_vm_storage_type(vm_id, con_ssh=None):
     return extra_specs['aggregate_instance_extra_specs:storage']
 
 
-def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False, strict=True, **kwargs):
+def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False, strict=True, regex=False, **kwargs):
     """
     get a list of VM IDs or Names for given tenant in auth_info param.
 
@@ -738,6 +745,7 @@ def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False, strict
         auth_info (dict): such as ones in auth.py: auth.ADMIN, auth.TENANT1
         all_vms (bool): whether to return VMs for all tenants if admin auth_info is given
         strict (bool): applies to search for value(s) specified in kwargs
+        regex (bool): whether to use regular expression to search for the kwargs value(s)
         **kwargs: header/value pair to filter out the vms
 
     Returns (list): list of VMs for tenant(s).
@@ -752,7 +760,7 @@ def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False, strict
     table_ = table_parser.table(cli.nova('list', positional_args=positional_args, ssh_client=con_ssh,
                                          auth_info=auth_info))
     if kwargs:
-        return table_parser.get_values(table_, return_val, strict, **kwargs)
+        return table_parser.get_values(table_, return_val, strict=strict, regex=regex, **kwargs)
     else:
         return table_parser.get_column(table_, return_val)
 
@@ -782,9 +790,9 @@ def get_vm_status(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     return get_vm_nova_show_value(vm_id, 'status', con_ssh=con_ssh, auth_info=auth_info)
 
 
-def get_vm_id_from_name(vm_name, con_ssh=None, strick=True, fail_ok=True):
+def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, regex=False, fail_ok=True):
     table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    vm_ids = table_parser.get_values(table_, 'ID', strict=strick, Name=vm_name.strip())
+    vm_ids = table_parser.get_values(table_, 'ID', strict=strict, regex=regex, Name=vm_name.strip())
     if not vm_ids:
         if fail_ok:
             return None

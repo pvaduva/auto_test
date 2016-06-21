@@ -833,7 +833,8 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
     return packet_loss_rate
 
 
-def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False):
+def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
+              net_type='mgmt'):
     """
 
     Args:
@@ -854,10 +855,15 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         }
 
     """
-    vm_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
+    if net_type == 'data':
+        vms_ips = network_helper.get_data_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
+    elif net_type == 'mgmt':
+        vms_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
+    else:
+        raise ValueError("Net type has to be one of the following: 'data', 'mgmt'")
 
     res_dict = {}
-    for ip in vm_ips:
+    for ip in vms_ips:
         packet_loss_rate = _ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings, timeout=timeout,
                                         fail_ok=fail_ok)
         res_dict[ip] = packet_loss_rate
@@ -894,11 +900,12 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
         natbox_client = NATBoxClient.get_natbox_client()
 
     return _ping_vms(vm_ids=vm_ids, ssh_client=natbox_client, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                     fail_ok=fail_ok, use_fip=use_fip)
+                     fail_ok=fail_ok, use_fip=use_fip, net_type='mgmt')
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
-                     num_pings=5, timeout=15, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False):
+                     num_pings=5, timeout=15, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
+                     net_type='mgmt'):
     """
 
     Args:
@@ -916,6 +923,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         from_vm_ip (str): vm ip to ssh to if given. from_fip flag will be considered only if from_vm_ip=None
         to_fip (bool): Whether to ping floating ip if a vm has floating ip associated with it
         from_fip (bool): whether to ssh to vm's floating ip if it has floating ip associated with it
+        net_type (str): 'mgmt' or 'data'
 
     Returns (tuple):
         A tuple in form: (res (bool), packet_loss_dict (dict))
@@ -928,7 +936,13 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         }
 
     """
-    vms_ips = network_helper.get_mgmt_ips_for_vms(con_ssh=con_ssh, rtn_dict=True)
+    if net_type == 'data':
+        vms_ips = network_helper.get_data_ips_for_vms(con_ssh=con_ssh, rtn_dict=True)
+    elif net_type == 'mgmt':
+        vms_ips = network_helper.get_mgmt_ips_for_vms(con_ssh=con_ssh, rtn_dict=True)
+    else:
+        raise ValueError("Net type has to be one of the following: 'data', 'mgmt'")
+
     vms_ids = list(vms_ips.keys())
     if from_vm is None:
         from_vm = random.choice(vms_ids)
@@ -939,7 +953,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
                                prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
 
         res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                        fail_ok=fail_ok, use_fip=to_fip)
+                        fail_ok=fail_ok, use_fip=to_fip, net_type=net_type)
 
     return res
 
@@ -1002,10 +1016,6 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         yield vm_ssh
     finally:
         vm_ssh.close()
-
-
-def get_vm_ids(image=None, status=VMStatus.ACTIVE, flavor=None, host=None, tenant=None, delete=False):
-    raise NotImplemented
 
 
 def get_vm_pid(instance_name, host_ssh):

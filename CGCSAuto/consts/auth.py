@@ -54,7 +54,7 @@ class Tenant:
         """
         should be called after _set_region and _set_url
         Args:
-            tenant (str): name of tenant. Such as 'admin', 'tenant1', 'tenant2'
+            tenant (dict): Tenant dict
 
         Returns:
 

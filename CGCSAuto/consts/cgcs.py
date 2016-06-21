@@ -6,6 +6,9 @@ EXT_IP = '8.8.8.8'
 # such as 192.168.11.6
 MGMT_IP = r'mgmt-net\d?=.*(192.168\.\d{1,3}\.\d{1,3})'
 
+# such as 172.16.1.11
+DATA_IP = r'tenant\d?-net\d?=.*(172.\d{1,3}\.\d{1,3}\.\d{1,3})'
+
 # such as in string '5 packets transmitted, 0 received, 100% packet loss, time 4031ms', number 100 will be found
 PING_LOSS_RATE = r'\, (\d{1,3})\% packet loss\,'
 

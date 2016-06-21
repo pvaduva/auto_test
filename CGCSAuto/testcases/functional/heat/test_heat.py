@@ -67,7 +67,7 @@ def verify_heat_resource(to_verify=None,template_name=None,stack_name=None,auth_
     elif to_verify is 'vm':
         vm_name = getattr(Heat, template_name)['vm_name']
         LOG.info("Verifying server")
-        vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name,strick=False)
+        vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
         if vm_id:
             return 0
     elif to_verify is 'nova_flavor':
