@@ -622,3 +622,53 @@ def filter_table(table_, strict=True, regex=False, **kwargs):
         first_iteration = False
 
     return __filter_table(table_, row_indexes)
+
+
+def compare_tables(table_one, table_two):
+    """
+    table_one and table_two are two nested dict where header is a list and values are nested list
+    table_one and table two are form of {'headers':['id','name',...], 'values':[[1,'name1',..],[2,'name2',..]]}
+
+    This function compare the number of elements under 'headers' and 'values' are same between two tables
+    Check if the nested list are same length and contain same elements between two table.
+    This function does not check any ordering
+    """
+
+    table1_keys = set(table_one.keys())
+    table2_keys = set(table_two.keys())
+    # compare number of keys in each set. They should be only 'headers' and 'values'
+    if len(table1_keys) == len(table2_keys) == 2:
+        if table1_keys - {'headers','values'} or table2_keys - {'headers', 'values'}:
+            return 1, "The keys of the two tables is different than expected {'headers','values'}, " \
+                      "Table one contain {}. Table two contain {}".format(table1_keys, table2_keys)
+    else:
+        return 2, "The number of keys is different between Table One and Table Two"
+
+    # compare values within the header and values
+    for key in table_one:
+
+        if key == 'headers':
+            table1_list = set(table_one[key])
+            table2_list = set(table_two[key])
+
+        # map nested list into tuples for easy comparison with other table
+        if key == 'values':
+            table1_list = set(map(tuple, table_one[key]))
+            table2_list = set(map(tuple, table_two[key]))
+
+        # values (in list form) under the dict of one table should have same length as the other table
+        if len(table1_list) == len(table2_list):
+
+            # they should also have no difference between each other as well
+            in1_not2 = table1_list - table2_list
+            in2_not1 = table2_list - table1_list
+
+            if len(in1_not2) > 0 or len(in2_not1) > 0:
+                msg = "The Value {} was found in table one under header '{}' but not in table two. " \
+                      "The Value {} was found in table two under header '{}' but not in table one. "\
+                    .format(in1_not2, key, in2_not1, key)
+                return 3, msg
+        else:
+            return 4, "The number of elements under header '{}' different in Table one and Table two".format(key)
+
+    return 0, "Both Table contain same headers and values"

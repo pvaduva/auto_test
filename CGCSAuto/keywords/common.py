@@ -79,7 +79,8 @@ def __scp_base(cmd, remote_password, logdir=None, timeout=60):
     LOG.debug('scp cmd: {}'.format(cmd))
 
     logdir = logdir or ProjVar.get_var('LOG_DIR')
-    logfile = os.path.sep.join([logdir, 'scp_files.log'])
+    logfile = os.path.join(logdir, 'scp_files.log')
+
 
     with open(logfile, mode='a') as f:
         local_child = pexpect.spawn(command=cmd, encoding='utf-8', logfile=f)

@@ -198,6 +198,8 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
 def pytest_configure(config):
     config.addinivalue_line("markers",
                             "features(feature_name1, feature_name2, ...): mark impacted feature(s) for a test case.")
+    config.addinivalue_line("markers",
+                            "known_issue(CGTS-xxxx): mark known issue with JIRA ID or description if no JIRA needed.")
 
     lab_arg = config.getoption('lab')
     natbox_arg = config.getoption('natbox')
@@ -282,8 +284,16 @@ def pytest_unconfigure():
 
 def pytest_collection_modifyitems(items):
     for item in items:
-        feature_marker = item.get_marker("features")
+        feature_marker = item.get_marker('features')
         if feature_marker is not None:
             features = feature_marker.args
             for feature in features:
                 item.add_marker(eval("pytest.mark.{}".format(feature)))
+
+        known_issue_mark = item.get_marker('known_issue')
+        if known_issue_mark is not None:
+            issue = known_issue_mark.args[0]
+            msg = "{} has a workaround due to {}".format(item.nodeid, issue)
+            print(msg)
+            LOG.debug(msg=msg)
+            item.add_marker(eval("pytest.mark.known_issue"))
