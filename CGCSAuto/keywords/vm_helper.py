@@ -328,7 +328,9 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
     """
     vif_mapping = {'vswitch': 'DPDKAPPS',
                    'avp': 'AVPAPPS',
-                   'virtio': 'VIRTIOAPPS'
+                   'virtio': 'VIRTIOAPPS',
+                   'sriov': 'SRIOVAPPS',
+                   'pcipt': 'PCIPTAPPS'
                    }
 
     if not tenant_name:
