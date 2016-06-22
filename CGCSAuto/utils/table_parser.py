@@ -629,7 +629,7 @@ def compare_tables(table_one, table_two):
     table_one and table_two are two nested dict where header is a list and values are nested list
     table_one and table two are form of {'headers':['id','name',...], 'values':[[1,'name1',..],[2,'name2',..]]}
 
-    This function compare the number of elements under 'headers' and 'values' are same between two tables
+    This function compare the number of elements under 'headers' and 'values' and see if they are same between two table
     Check if the nested list are same length and contain same elements between two table.
     This function does not check any ordering
     """
