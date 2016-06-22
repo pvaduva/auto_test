@@ -44,7 +44,7 @@ def test_avp_vms_with_vm_actions(vif_model):
     LOG.tc_step("Boot vm with vif_model {} for tenant-net".format(vif_model))
     sourceid = glance_helper.get_image_id_from_name('cgcs-guest')
     vm = vm_helper.boot_vm(source='image', source_id=sourceid, nics=nics)[1]
-    #ResourceCleanup.add('vm', vm)
+    ResourceCleanup.add('vm', vm)
     sleep(10)
     LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm))
     vm_helper.ping_vms_from_natbox(vm)
