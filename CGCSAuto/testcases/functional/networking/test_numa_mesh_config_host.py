@@ -20,7 +20,7 @@ def host_to_config(request):
         host = host_helper.get_nova_host_with_min_or_max_vms(rtn_max=False)
 
     if not host:
-        skip("No nova host available in the system.")
+        skip("No nova host available to reconfigure in the system.")
 
     vswitch_proc_core_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch', core_type='log_core')
     pform_proc_core_dict = host_helper.get_host_cpu_cores_for_function(host, function='platform', core_type='log_core')
@@ -47,10 +47,11 @@ def host_to_config(request):
     ((2, 0), (1, 1), None, True),       # CPE only
     ((1, 2), (3, 2), None, None),
     ((1, 2), (2, 2), None, None),
-    ((1, 0), (1, 0), False, False),     # Standard lab only
+    mark.p1(((1, 0), (0, 1), False, False)),     # Standard lab only
+    mark.p1(((1, 0), (0, 1), True, False)),     # Standard lab only
     ((2, 0), (1, 0), False, True),      # CPE only
-    ((2, 0), (2, 0), None, True),       # CPE only
-    ((1, 0), (2, 0), None, False),      # Standard lab only
+    ((2, 0), (0, 2), None, True),       # CPE only
+    mark.p1(((1, 0), (2, 0), None, False)),      # Standard lab only
 ])
 def test_vswitch_cpu_reconfig(host_to_config, platform, vswitch, ht_required, cpe_required):
     """
@@ -118,23 +119,38 @@ def test_vswitch_cpu_reconfig(host_to_config, platform, vswitch, ht_required, cp
     LOG.tc_step("Check vm can be launched on or live migrated to {}.".format(host))
     vm_id = vm_helper.boot_vm()[1]
     ResourceCleanup.add('vm', vm_id)
+
     if not nova_helper.get_vm_host(vm_id) == host:
         vm_helper.live_migrate_vm(vm_id, host)
 
+    LOG.tc_step("Check vm host and numa node value via vm-topology")
+    vm_host, numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
+    assert host == vm_host
+    assert 1 == len(numa_nodes), "VM numa node number is not 1"
 
-@mark.parametrize(('platform', 'vswitch', 'ht_required', 'expt_err'), [
-    mark.p1(((1, 1), (5, 5), False, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
-    ((7, 9), (2, 2), None, "CpuAssignment.TOTAL_TOO_MANY_CORES"),   # Assume total<=10 cores/per proc & thread
-    mark.p1((('cores-2', 'cores-2'), (2, 2), None, "CpuAssignment.NO_VM_CORE")),
-    ((1, 1), (9, 8), None, "CpuAssignment.VSWITCH_TOO_MANY_CORES"),    # Assume total <= 10 cores/per proc & thread
-    ((5, 5), (5, 4), None, "CpuAssignment.VSWITCH_TOO_MANY_CORES"),
-    mark.p1(((5, 5), (6, 5), None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),  # Assume total<=10core/proc&thread
-    ((1, 1), (8, 10), None, "CpuAssignment.TOTAL_TOO_MANY_CORES"),  # Assume total <= 10 cores/per proc&thread
+    if vswitch[0] == 0:
+        assert numa_nodes[0] == 1, "vSwitch only on numa node 1, but vm is on numa node 0"
+    elif vswitch[1] == 0:
+        assert numa_nodes[0] == 0, "vSwitch only on numa node 0, but vm is on numa node 1"
+
+
+@mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required', 'expt_err'), [
+    mark.p1(((1, 1), (5, 5), False, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
+    ((7, 9), (2, 2), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES"),   # Assume total<=10 cores/per proc & thread
+    mark.p1((('cores-2', 'cores-2'), (2, 2), None, None, "CpuAssignment.NO_VM_CORE")),
+    ((1, 1), (9, 8), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES"),   # Assume total <= 10 cores/per proc & thread
+    ((5, 5), (5, 4), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES"),
+    mark.p1(((5, 5), (6, 5), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),  # Assume total<=10core/proc&thread
+    ((1, 1), (8, 10), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES"),  # Assume total <= 10 cores/per proc&thread
+    mark.p3(((2, 0), (0, 0), None, None, "CpuAssignment.VSWITCH_INSUFFICIENT_CORES")),
 ])
-def test_vswitch_cpu_reconfig_negative(host_to_config, platform, vswitch, ht_required, expt_err):
+def test_vswitch_cpu_reconfig_negative(host_to_config, platform, vswitch, ht_required, cpe_required, expt_err):
     host, ht_enabled, is_cpe = host_to_config
     if ht_required is not None and ht_required is not ht_enabled:
         skip("Hyper-threading for {} is not {}".format(host, ht_required))
+
+    if cpe_required is not None and (cpe_required is not is_cpe):
+        skip("Requires {} system.".format("non-CPE" if is_cpe else "CPE"))
 
     if platform[0] == 'cores-2':
         p0, p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1))
@@ -164,6 +180,10 @@ def test_vswitch_cpu_reconfig_negative(host_to_config, platform, vswitch, ht_req
     if "TOTAL_TOO_MANY_CORES" in expt_err:
         proc_id = 0 if platform[0] + vswitch[0] > 10 else 1
         expt_err = eval(expt_err).format(proc_id)
+    elif "VSWITCH_INSUFFICIENT_CORES" in expt_err:
+        min_core_num = 2 if is_cpe else 1
+        expt_err = eval(expt_err).format(min_core_num)
     else:
         expt_err = eval(expt_err)
+
     assert expt_err in output, "Expected error string is not in output"

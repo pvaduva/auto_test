@@ -796,6 +796,12 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
         raise ValueError("Invalid storage backing provided. "
                          "Please use one of these: 'local_image', 'local_lvm', 'remote'")
 
+    aggregates_tab = table_parser.table(cli.nova('aggregate-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    avail_aggregates = table_parser.get_column(aggregates_tab, 'Name')
+    if aggregate not in avail_aggregates:
+        LOG.warning("Requested aggregate {} is not in nova aggregate-list".format(aggregate))
+        return []
+
     table_ = table_parser.table(cli.nova('aggregate-details', aggregate, ssh_client=con_ssh,
                                          auth_info=Tenant.ADMIN))
     hosts = table_parser.get_values(table_, 'Hosts', Name=aggregate)[0]
@@ -1124,30 +1130,30 @@ def get_local_storage_backing(host, con_ssh=None):
     return eval(table_parser.get_value_two_col_table(table_, 'parameters'))['instance_backing']
 
 
-def check_host_local_backing_type(host, type='image', con_ssh=None):
+def check_host_local_backing_type(host, storage_type='image', con_ssh=None):
     backing_storage_types = get_local_storage_backing(host, con_ssh=con_ssh).lower()
     LOG.debug('host:{} supports local-storage types:{}'.format(host, backing_storage_types))
-    if not type in backing_storage_types:
+    if storage_type not in backing_storage_types:
         return False
 
     return True
 
 
 def is_host_local_image_backing(host, con_ssh=None):
-    return check_host_local_backing_type(host, type='image', con_ssh=con_ssh)
+    return check_host_local_backing_type(host, storage_type='image', con_ssh=con_ssh)
 
 
 def is_host_local_lvm_backing(host, con_ssh=None):
-    return check_host_local_backing_type(host, type='lvm', con_ssh=con_ssh)
+    return check_host_local_backing_type(host, storage_type='lvm', con_ssh=con_ssh)
 
 
-def check_lab_local_backing_type(type=None, con_ssh=None):
+def check_lab_local_backing_type(storage_type=None, con_ssh=None):
     hypervisors = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
     if not hypervisors:
         return False
 
     for hypervisor in hypervisors:
-        if check_host_local_backing_type(hypervisor, type=type):
+        if check_host_local_backing_type(hypervisor, storage_type=storage_type):
             return True
 
     return False
@@ -1167,14 +1173,9 @@ def has_local_lvm_backing(con_ssh=None):
     return False
 
 
-def get_hosts_with_local_storage_backing_type(type=None, con_ssh=None):
+def get_hosts_with_local_storage_backing_type(storage_type=None, con_ssh=None):
     hosts = []
     for h in get_hypervisors(state='up', status='enabled', con_ssh=con_ssh):
-        if check_host_local_backing_type(h, type=type, con_ssh=con_ssh):
+        if check_host_local_backing_type(h, storage_type=storage_type, con_ssh=con_ssh):
             hosts.append(h)
     return hosts
-
-
-def get_host_pv_uuid(host, lvg_type='noval-local', con_ssh=None, fail_ok=False):
-    table_ = table_parser.table(cli.system('host-pv-list {}'.format(host), ssh_client=con_ssh))
-    return table_parser.get_values(table_, 'uuid', 'lvm_vg_name='.format(lvg_type))
