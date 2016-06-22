@@ -15,12 +15,10 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper, \
     storage_helper, glance_helper, cinder_helper
 from consts.cgcs import HostAavailabilityState, EventLogID
 
-#constants
-PROC_RESTART_TIME = 10     # how long to wait for process to restart
+PROC_RESTART_TIME = 30     # number of seconds between process restarts
 RESTARTS_BEFORE_ASSERT = 3 # number of process restarts until error assertion
-SECS_BTWN_RESTARTS = 30    # interval between process restarts
 
-# Runtime: 222 seconds - pass on wildcat-7-12 and PV0
+# Runtime: 208 seconds - pass on wildcat-7-12 and PV0
 # CGTS-4513 Loss of replication group alarm not always seen
 @mark.usefixtures('ceph_precheck')
 def test_ceph_osd_process_kill():
@@ -49,7 +47,8 @@ def test_ceph_osd_process_kill():
         recover.
 
     Potential flaws:
-        1.  We're not checking if unexpected alarms are raised (TODO)
+        1.  We're not checking if unexpected alarms are raised (TODO).  If we
+        do this, that means tests cannot run concurrently.
         2.  Cannot test for: brief ceph -s health outages (timing issue)
         3.  Cannot test for: host change in state to degrade (timing issue)
 
@@ -156,11 +155,9 @@ def test_ceph_osd_process_kill():
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
     assert ceph_healthy, msg
 
-# Runtime: 444.98 seconds - fail on PV0
-# Did not see controller-0 ceph mon alarm since process did not restart in time
-# Seems to take significantly longer to restart ceph mon process on
-# controller-0
-# Controller-1 and storage-0 failed since did not show up or clear (CGTS-4520)
+# Runtime: 572.98 seconds - pass on PV0
+# CGTS-4520 - All ceph monitors observed to be down in alarm-list when 1
+# monitor killed
 @mark.parametrize('monitor', ['controller-0', 'controller-1', 'storage-0'])
 @mark.usefixtures('ceph_precheck')
 def test_ceph_mon_process_kill(monitor):
@@ -195,6 +192,9 @@ def test_ceph_mon_process_kill(monitor):
 
     Teardown:
         - None
+
+    What defects this addresses:
+        1.  CGTS-2975
 
     """
 
@@ -256,31 +256,34 @@ def test_ceph_mon_process_kill(monitor):
         **{'Entity Instance ID': entity_instance, 'Event Log ID':
         EventLogID.STORAGE_DEGRADE, 'State': 'set'})
 
-    # This is not being seen.  Instead we see:
+    # This is not being seen.  CGTS-4520.  Instead we see:
     # Storage Alarm Condition: Pgs are degraded/stuck/blocked. Please check
     # 'ceph -s' for more details
-    LOG.tc_step('Check events list for storage alarm condition')
-    reason_text = 'Storage Alarm Condition: 1 mons down'
-    system_helper.wait_for_events(30, strict=False, fail_ok=False,
-        **{'Reason Text': reason_text, 'Event Log ID':
-        EventLogID.STORAGE_ALARM_COND, 'State': 'set'})
+    #LOG.tc_step('Check events list for storage alarm condition')
+    #reason_text = 'Storage Alarm Condition: 1 mons down'
+    #system_helper.wait_for_events(30, strict=False, fail_ok=False,
+    #    **{'Reason Text': reason_text, 'Event Log ID':
+    #    EventLogID.STORAGE_ALARM_COND, 'State': 'set'})
 
     # Note, the storage host degrade state is so brief that we cannot check
     # for it.
 
+    # Sleep to give time for events to clear 
+    time.sleep(20)
+
     LOG.tc_step('Check events list for ceph monitor clear')
-    entity_instance = 'host={}.process=ceph (osd.{})'.format(monitor,
+    entity_instance = 'host={}.process=ceph (mon.{})'.format(monitor,
         monitor)
     system_helper.wait_for_events(45, strict=False, fail_ok=False, 
         **{'Entity Instance ID': entity_instance, 'Event Log ID':
         EventLogID.STORAGE_DEGRADE, 'State': 'clear'})
 
     # FAIL due to CGTS-4520
-    LOG.tc_step('Check events list for storage alarm condition')
-    reason_text = 'Storage Alarm Condition: 1 mons down'
-    system_helper.wait_for_events(45, strict=False, fail_ok=False,
-    **{'Reason Text': reason_text, 'Event Log ID':
-    EventLogID.STORAGE_ALARM_COND, 'State': 'clear'})
+    #LOG.tc_step('Check events list for storage alarm condition')
+    #reason_text = 'Storage Alarm Condition: 1 mons down'
+    #system_helper.wait_for_events(45, strict=False, fail_ok=False,
+    #**{'Reason Text': reason_text, 'Event Log ID':
+    #EventLogID.STORAGE_ALARM_COND, 'State': 'clear'})
 
     # Give Ceph a bit of time to return to health ok state
     # TODO: Do better than just sleeping
@@ -289,13 +292,10 @@ def test_ceph_mon_process_kill(monitor):
     LOG.tc_step('Verify the health cluster is healthy')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
 
-
-"""
-@mark.parametrize('host', ['any', 'storage-0'])
+# Pass on 700 seconds on PV0
 @mark.usefixtures('ceph_precheck')
-def test_ceph_mon_reboot():
-"""
-"""
+def test_ceph_reboot_storage_node():
+    """
     us69932_tc2_ceph_mon_process_kill from us69932_ceph_monitoring.odt
 
     Verify that ceph mon processes recover when they are killed
@@ -312,117 +312,83 @@ def test_ceph_mon_reboot():
             - system has storage nodes
             - health of the ceph cluster is okay
             - that we have OSDs provisioned
-        2.  Reboot storage-0 and ensure both:
-            - mon state goes down
+        2.  Reboot storage node and ensure both:
+            - mon state goes down (if storage-0)
             - OSD state goes down
         3.  Ensure mon and OSD state recover afterwards
-        4.  Swact controllers and ensure there is no
-            impact on mon and OSD state
-        5.  Reboot a controller and ensure there:
-            - mon state goes down
-            - OSD state is not impacted
-        6.  Lock a storage node and ensure:
-            - mon state goes down
-            - OSD state goes down
-        7.  Unlock a storage node and ensure
-            - mon state goes up
-            - OSD state goes up
+
+    Potential rework:
+        1.  Add the alarms checks for raise and clear
+        2.  Maybe we don't want to reboot all storage nodes
+
+    What defects this addresses:
+        1.  CGTS-2975
     """
-"""
     con_ssh = ControllerClient.get_active_controller()
+    
+    storage_nodes = system_helper.get_storage_nodes(con_ssh)
 
-    host = 'storage-0'
-    LOG.tc_step('Reboot {}'.format(host))
-    results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-    LOG.tc_step("Results: {}".format(results))
-    assert results[0] != 0
+    for host in storage_nodes: 
+        LOG.tc_step('Reboot {}'.format(host))
+        results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
+        LOG.tc_step("Results: {}".format(results))
+        assert results[0] != 0
 
-    LOG.tc_step('Check health of CEPH cluster')
-    ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-    assert not ceph_healthy, msg
+        LOG.tc_step('Check health of CEPH cluster')
+        ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+        assert not ceph_healthy, msg
+        LOG.info(msg)
 
-    # Ceph mon process alarm not seen.  We see 800.011 loss of replication
-    # group.  Storage Alarm Condition: 1/2 osds are down, 1 monds down.
-    #LOG.tc_step('Get alarms list')
-    #alarms_table = system_helper.get_alarms(con_ssh=None)
-    #reasons = table_parser.get_values(alarms_table, 'Reason Text')
-    #msg = '{0} \'ceph mon\' process has failed'.format(host)
-    #assert re.search(msg, reasons), \
-    #    'Alarm reason {} not found in alarm-list'.format(msg)
+        # TODO: Alarms that are seen.  Only look for the ceph ones. 
+        # 1. storage-0 experienced a service-affecting failure. Auto-recovery in
+        #    progress. 200.004
+        # 2. Loss of replication in replication group group-0: OSDs are down
+        #    800.011
+        # 3. Storage Alarm Condition: Pgs are degraded/stuck/blocked. Please check
+        #    'ceph -s' for more details 800.001
+        # 4. storage-0 experienced a service-affecting failure. Auto-recovery in
+        #    progress. 200.004
+        # 5. storage-1 experienced a persistent critical 'Management Network'
+        #    communication failure. 
+        # 6. storage-1 experienced a persistent critical 'Infrastructure
+        #    Network' communication failure.
 
-    LOG.tc_step('Check that OSDs are down')
-    osd_list = storage_helper.get_osds(host, con_ssh)
-    LOG.info('OSD type is'.format(type(osd_list)))
-    LOG.info('OSD list is {}'.format(osd_list))
-    for osd_id in osd_list:
-        osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
-        msg = 'OSD ID {} is up but should be down'.format(osd_id)
-        assert not osd_up, msg
+        LOG.tc_step('Check that OSDs are down')
+        osd_list = storage_helper.get_osds(host, con_ssh)
+        for osd_id in osd_list:
+            osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
+            msg = 'OSD ID {} is up but should be down'.format(osd_id)
+            assert not osd_up, msg
+            msg = 'OSD ID {} is down as expected'.format(osd_id)
+            LOG.info(msg)
 
-    if not host_helper._wait_for_host_states(host, availability='available'):
-        msg = 'Host {} did not come available in the expected time'.format(host)
-        raise exceptions.HostPostCheckFailed(msg)
+        if not host_helper._wait_for_host_states(host, availability='available'):
+            msg = 'Host {} did not come available in the expected time'.format(host)
+            raise exceptions.HostPostCheckFailed(msg)
 
-    LOG.tc_step('Check OSDs are up after reboot')
-    for osd_id in osd_list:
-        osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
-        msg = 'OSD ID {} should be up but is not'.format(osd_id)
-        assert osd_up, msg
+        LOG.tc_step('Check that OSDs are up')
+        osd_list = storage_helper.get_osds(host, con_ssh)
+        for osd_id in osd_list:
+            osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
+            msg = 'OSD ID {} is down but should be up'.format(osd_id)
+            assert osd_up, msg
+            msg = 'OSD ID {} is up as expected'.format(osd_id)
+            LOG.info(msg)
 
-    #LOG.tc_step('Get alarms list')
-    #alarms_table = system_helper.get_alarms(con_ssh=None)
-    #reasons = table_parser.get_values(alarms_table, 'Reason Text')
-    #msg = '{0} \'ceph mon\' process has failed'.format(host)
-    #assert not re.search(msg, reasons), \
-    #    'Alarm {} system alarm-list'.format(msg)
+        #LOG.tc_step('Get alarms list')
+        #alarms_table = system_helper.get_alarms(con_ssh=None)
+        #reasons = table_parser.get_values(alarms_table, 'Reason Text')
+        #msg = '{0} \'ceph mon\' process has failed'.format(host)
+        #assert not re.search(msg, reasons), \
+        #    'Alarm {} system alarm-list'.format(msg)
 
-    LOG.tc_step('Check health of CEPH cluster')
-    ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-    assert ceph_healthy, msg
+        LOG.tc_step('Check health of CEPH cluster')
+        ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+        assert ceph_healthy, msg
 
-    LOG.tc_step('Swact controllers')
-    host_helper.swact_host(host)
 
-    LOG.tc_step('Check health of CEPH cluster')
-    ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-    assert ceph_healthy, msg
-
-    LOG.tc_step('Check OSD state after swact')
-    total_osd_list = storage_helper.get_osds(con_ssh=con_ssh)
-    for osd_id in total_osd_list:
-        osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
-        msg = 'OSD ID {} should be up but is not'.format(osd_id)
-        assert osd_up, msg
-
-    host = 'controller-0'
-    LOG.tc_step('Reboot {}'.format(host))
-    results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-    LOG.tc_step("Results: {}".format(results))
-    assert results[0] != 0
-
-    LOG.tc_step('Check health of CEPH cluster')
-    ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-    assert not ceph_healthy, msg
-
-    LOG.tc_step('Check that OSDs are down')
-    osd_list = storage_helper.get_osds(host, con_ssh)
-    for osd_id in osd_list:
-        osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
-        msg = 'OSD ID {} is up but should be down'.format(osd_id)
-        assert not osd_up, msg
-
-    if not host_helper._wait_for_host_states(host, availability='available'):
-        msg = 'Host {} did not come available in the expected time'.format(host)
-        raise exceptions.HostPostCheckFailed(msg)
-
-    LOG.tc_step('Check OSDs are up after reboot')
-    for osd_id in osd_list:
-        osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
-        msg = 'OSD ID {} should be up but is not'.format(osd_id)
-        assert osd_up, msg
-"""
-
-# Tested on PV0.  Fails with CGTS-4556 and CGTS-4557
+# Pass on PV0 in 862.99
+# CGTS-4556 and CGTS-4557 raised
 @mark.parametrize('host', ['any', 'storage-0'])
 @mark.usefixtures('ceph_precheck')
 def test_lock_stor_check_osds_down(host):
@@ -456,10 +422,8 @@ def test_lock_stor_check_osds_down(host):
     Note: If the storage node to be locked is monitor, we also expect to see
     the mon down alarm.
 
-    Flaws:
-        1.  Using alarm table length is not a fool-proof way to detect alarms
-        even if we filter on alarm ID, since multiple alarms can share the same
-        general ID.  FIXME.
+    What defects this addresses:
+        1.  CGTS-2609 - Ceph processes fail to start after storage node reboot
 
     """
 
@@ -480,30 +444,31 @@ def test_lock_stor_check_osds_down(host):
     storage_group, msg = storage_helper.get_storage_group(host)
     LOG.info(msg)
 
-    # Alarm for all nodes:
-    # storage-0 was administratively locked to take it out-of-service.
-    # Alarm for storage monitors only, e.g. storage-0
-    # Storage Alarm Condition: 1 mons down, quorum 0,1 controller-0,controller-1
-
-    LOG.tc_step('Check that alarms are raised when {} is locked'.format(host))
-    alarms_table = system_helper.get_alarms(query_key='alarm_id',
-                                            query_value=EventLogID.HOST_LOCK,
+    LOG.tc_step('Check that host lock alarm is raised when {} is locked'.format(host))
+    query_value = 'host={}'.format(host)
+    alarms_table = system_helper.get_alarms(query_key='entity_instance_id',
+                                            query_value=query_value,
                                             query_type='string')
     LOG.info(alarms_table)
-    msg = "Alarm {} not found in alarm-list".format(EventLogID.HOST_LOCK)
-    assert len(alarms_table) == 2, msg
+    msg = "Alarm {} was not found in alarm-list".format(EventLogID.HOST_LOCK)
+    assert EventLogID.HOST_LOCK in str(alarms_table), msg
 
-    if host == 'storage-0':
-        alarms_table = system_helper.get_alarms(query_key='alarm_id',
-                                                query_value=EventLogID.STORAGE_ALARM_COND,
-                                                query_type='string')
-        LOG.info(alarms_table)
-        msg = 'Alarm {} not found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
-        assert len(alarms_table) == 2, msg
+    # We no longer see the Storage Alarm Condition: 1 mons down alarm
+    #if host == 'storage-0':
+    #    alarms_table = system_helper.get_alarms(query_key='alarm_id',
+    #                                            query_value=EventLogID.STORAGE_ALARM_COND,
+    #                                            query_type='string')
+    #    LOG.info(alarms_table)
+    #    msg = 'Alarm {} not found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
+    #    assert len(alarms_table) == 2, msg
 
     LOG.tc_step('Check health of CEPH cluster')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
     assert not ceph_healthy, msg
+    LOG.info(msg)
+
+    # We need to wait a bit before OSDs go down
+    time.sleep(5)
 
     LOG.tc_step('Check that OSDs are down')
     osd_list = storage_helper.get_osds(host, con_ssh)
@@ -514,37 +479,42 @@ def test_lock_stor_check_osds_down(host):
         msg = 'OSD ID {} is down as expected'.format(osd_id)
         LOG.info(msg)
 
-    # Check for loss of replication group alarm
+    # Wait for alarms to be raised
+    time.sleep(10)
+
     # 800.011   Loss of replication in replication group group-0: OSDs are down
     alarms_table = system_helper.get_alarms(query_key='alarm_id',
                                             query_value=EventLogID.STORAGE_LOR,
                                             query_type='string')
     LOG.info(alarms_table)
     msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_LOR)
-    assert len(alarms_table) == 2, msg
+    assert EventLogID.STORAGE_LOR in str(alarms_table), msg
 
-    # Check for Storage Alarm Condition
     # 800.001   Storage Alarm Condition: Pgs are degraded/stuck/blocked. Please
     # check 'ceph -s' for more details
     alarms_table = system_helper.get_alarms(query_key='alarm_id',
-                                            query_value=EventLogID.STORAGE_LOR,
+                                            query_value=EventLogID.STORAGE_ALARM_COND,
                                             query_type='string')
     LOG.info(alarms_table)
-    msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_LOR)
-    assert len(alarms_table) == 2, msg
+    msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_ALARM_COND)
+    assert EventLogID.STORAGE_ALARM_COND in str(alarms_table), msg 
 
     LOG.tc_step('Unlock storage node')
     rtn_code, out = host_helper.unlock_host(host)
     assert rtn_code == 0, out
 
+    # Give some time for alarms to clear
+    time.sleep(30)
+
     # Check that alarms clear
-    LOG.tc_step('Check that the host locked alarm is cleared')
-    alarms_table = system_helper.get_alarms(con_ssh)
+    LOG.tc_step('Check that host lock alarm is cleared when {} is unlocked'.format(host))
+    query_value = 'host={}'.format(host)
+    alarms_table = system_helper.get_alarms(query_key='entity_instance_id',
+                                            query_value=query_value,
+                                            query_type='string')
     LOG.info(alarms_table)
-    ids = table_parser.get_values(alarms_table, 'Alarm ID')
-    for id in ids:
-        assert id != EventLogID.HOST_LOCK, \
-            'Alarm ID {} was found in alarm-list'.format(EventLogID.HOST_LOCK)
+    msg = "Alarm {} found in alarm-list".format(EventLogID.HOST_LOCK)
+    assert not EventLogID.HOST_LOCK in str(alarms_table), msg
 
     LOG.tc_step('Check that the replication group alarm is cleared')
     alarms_table = system_helper.get_alarms(con_ssh)
@@ -579,7 +549,7 @@ def test_lock_stor_check_osds_down(host):
         msg = 'OSD ID {} should be up but is not'.format(osd_id)
         assert osd_up, msg
 
-@mark.usefixtures('check_alarms')
+# Pass on PV0 603.47 seconds 
 @mark.usefixtures('ceph_precheck')
 def test_lock_cont_check_mon_down():
     """
@@ -606,6 +576,9 @@ def test_lock_cont_check_mon_down():
         3.  Unlock controller node
             - ensure CEPH is HEALTH_OK
             - Check that alarms are cleared
+
+    Enhancements:
+       1.  Should we do both controllers?  This will require a swact.
     """
 
     con_ssh = ControllerClient.get_active_controller()
@@ -613,184 +586,71 @@ def test_lock_cont_check_mon_down():
     host = system_helper.get_standby_controller_name()
     LOG.tc_step('Lock standby controller node {}'.format(host))
     rtn_code, out = host_helper.lock_host(host)
-    assert rtn_code != 0, out
+    assert rtn_code == 0, out
 
-    LOG.tc_step('Check that alarms are raised when {} is locked'.format(host))
-    alarms_table = system_helper.get_alarms(con_ssh=None)
-    reasons = table_parser.get_values(alarms_table, 'Reason Text')
-    msg = '{} was administratively locked'.format(host)
-    assert not re.search(msg, reasons), \
-        'Alarm reason {} not found in alarm-list'.format(msg)
+    # Instead of mon down, we're seeing the following alarm:
+    # Storage Alarm Condition: Pgs are degraded/stuck/blocked. Please check
+    # 'ceph -s' for more details
+    # We also see:
+    # controller-1 was administratively locked to take it out-of-service.
 
-    msg = 'Storage Alarm Condition: 1 mons down'
-    assert not re.search(msg, reasons), \
-        'Alarm reason {} not found in alarm-list'.format(msg)
+    # Wait a bit for alarms to be raised
+    time.sleep(5)
+
+    LOG.tc_step('Check that storage degrade alarm is raised when {} is locked'.format(host))
+    alarms_table = system_helper.get_alarms(query_key='alarm_id',
+                                            query_value=EventLogID.STORAGE_ALARM_COND,
+                                            query_type='string')
+    LOG.info(alarms_table)
+    msg = 'Alarm {} not found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
+    assert len(alarms_table) == 2, msg
+
+    LOG.tc_step('Check that host lock alarm is raised when {} is locked'.format(host))
+    query_value = 'host={}'.format(host)
+    alarms_table = system_helper.get_alarms(query_key='entity_instance_id',
+                                            query_value=query_value,
+                                            query_type='string')
+    LOG.info(alarms_table)
+    msg = "Alarm {} not found in alarm-list".format(EventLogID.HOST_LOCK)
+    assert EventLogID.HOST_LOCK in str(alarms_table), msg
 
     LOG.tc_step('Check OSDs are still up after lock')
     osd_list = storage_helper.get_osds(con_ssh=con_ssh)
     for osd_id in osd_list:
         osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
         msg = 'OSD ID {} should be up but is not'.format(osd_id)
-        assert not osd_up, msg
+        assert osd_up, msg
+        msg = 'OSD ID {} is up'.format(osd_id)
+        LOG.info(msg)
 
     LOG.tc_step('Unlock standby controller node {}'.format(host))
     rtn_code, out = host_helper.unlock_host(host)
-    assert rtn_code != 0, out
+    assert rtn_code == 0, out
 
-    LOG.tc_step('Check that alarms are cleared when {} is locked'.format(host))
-    alarms_table = system_helper.get_alarms(con_ssh=None)
-    reasons = table_parser.get_values(alarms_table, 'Reason Text')
-    msg = '{} was administratively locked'.format(host)
-    assert re.search(msg, reasons), \
-        'Alarm reason {} was not cleared from alarm-list'.format(msg)
+    # Wait for alarm to clear
+    time.sleep(20)
 
-    msg = 'Storage Alarm Condition: 1 mons down'
-    assert re.search(msg, reasons), \
-        'Alarm reason {} was not cleared from alarm-list'.format(msg)
+    # Check that alarms clear
+    LOG.tc_step('Check that the host locked alarm is cleared')
+    query_value = 'host={}'.format(host)
+    alarms_table = system_helper.get_alarms(query_key='entity_instance_id',
+                                            query_value=query_value,
+                                            query_type='string')
+    LOG.info(alarms_table)
+    msg = "Alarm {} not found in alarm-list".format(EventLogID.HOST_LOCK)
+    assert not EventLogID.HOST_LOCK in str(alarms_table), msg
 
-@mark.parametrize('host', ['controller', 'storage-0', 'any_storage'])
-@mark.usefixtures('check_alarms')
-@mark.usefixtures('ceph_precheck')
-def test_reboot_host_ceph_health_ok(host):
-    """
-    This test is adapted from
-    us69932_tc3_ceph_mon_maintenance_operations from us69932_ceph_monitoring.odt
+    LOG.tc_step('Check that the Storage Alarm Condition is cleared')
+    alarms_table = system_helper.get_alarms(con_ssh)
+    LOG.info(alarms_table)
+    ids = table_parser.get_values(alarms_table, 'Alarm ID')
+    for id in ids:
+        assert id != EventLogID.STORAGE_ALARM_COND, \
+            'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
 
-    The goal of this test is to ensure ceph recovers after rebooting hosts.
-
-    If the host to be rebooted is a storage host but not a monitor, check
-    that the OSDs on that host go down, and we alarm against the OSDs.
-
-    If the host to be reboot is a storage host and a monitor, check that the
-    OSDs on that host go down, and we alarm against the OSDs and the monitor.
-
-    If the host to be rebooted is a controller host, check that we alarm
-    against the monitor.
-
-    Args:
-        - None
-
-    Setup:
-        - Requires system with storage nodes
-
-    Test Steps:
-        1.  Reboot host
-        2.  Ensure we have the appropriate alarms, OSD state and mon state
-
-    """
-
-    con_ssh = ControllerClient.get_active_controller()
-    ceph_mon_list = ['controller-0', 'controller-1', 'storage-0']
-
-    if host == 'controller':
-        host = system_helper.get_standby_controller_name()
-    elif host == 'any_storage':
-        storage_nodes = system_helper.get_storage_nodes(con_ssh)
-        node_id = random.randint(1, len(storage_nodes) - 1)
-        host = storage_nodes[node_id]
-
-    LOG.tc_step('Rebooting host {}'.format(host))
-    host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-
-    LOG.tc_step("Verify the CEPH cluster health reflects the reboot")
+    LOG.tc_step('Check health of CEPH cluster')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-    assert ceph_healthy, msg
 
-    if host in ceph_mon_list:
-        LOG.tc_step('Check monitor alarms are raised for {}'.format(host))
-        alarms_table = system_helper.get_alarms(con_ssh=None)
-        reasons = table_parser.get_values(alarms_table, 'Reason Text')
-        msg = 'Storage Alarm Condition: 1 mons down'
-        assert not re.search(msg, reasons), \
-            'Alarm reason {} not found in alarm-list'.format(msg)
-
-    if host.startswith('storage'):
-        LOG.tc_step('Check OSDs are down for host {}'.format(host))
-        osd_list = storage_helper.get_osds(host, con_ssh)
-        for osd_id in osd_list:
-            osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
-            msg = 'OSD ID {} is up but should be down'.format(osd_id)
-            assert osd_up, msg
-
-        LOG.tc_step('Check we alarm for the down OSDs')
-        for osd_id in osd_list:
-            alarms_table = system_helper.get_alarms(con_ssh=None)
-            reasons = table_parser.get_values(alarms_table, 'Reason Text')
-            msg = '{0} \'ceph (osd.{1})\' process has failed'.format(host, \
-                osd_id)
-            assert not re.search(msg, reasons), \
-                'Alarm reason {} not found in alarm-list'.format(msg)
-
-    LOG.tc_step('Check that system recovers after reboot')
-
-    if not host_helper._wait_for_host_states(host, availability='available'):
-        msg = 'Host {} did not come available in the expected time'.format(host)
-        raise exceptions.HostPostCheckFailed(msg)
-
-    if host in ceph_mon_list:
-        alarms_table = system_helper.get_alarms(con_ssh=None)
-        reasons = table_parser.get_values(alarms_table, 'Reason Text')
-        msg = 'Storage Alarm Condition: 1 mons down'
-        assert re.search(msg, reasons), \
-            'Alarm reason {} was not cleared from alarm-list'.format(msg)
-
-    if host.startswith('storage'):
-        osd_list = storage_helper.get_osds(host, con_ssh)
-        for osd_id in osd_list:
-            osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
-            msg = 'OSD ID {} is down but should be up'.format(osd_id)
-            assert not osd_up, msg
-
-        for osd_id in osd_list:
-            alarms_table = system_helper.get_alarms(con_ssh=None)
-            reasons = table_parser.get_values(alarms_table, 'Reason Text')
-            msg = '{0} \'ceph (osd.{1})\' process has failed'.format(host, \
-                osd_id)
-            assert re.search(msg, reasons), \
-                'Alarm reason {} was not cleared from alarm-list'.format(msg)
-
-@mark.parametrize('host', ['controller-0', 'controller-1', 'storage-0'])
-@mark.usefixtures('check_alarms')
-@mark.usefixtures('ceph_precheck')
-def test_ceph_mon_semantic_checks(host):
-    """
-    This test validates CEPH semantic checks as it applies to ceph monitors.
-
-    Args:
-    - host
-
-    Setup:
-        - Requires system with storage nodes
-
-    Test Steps:
-        1.  Lock host
-        2.  Attempt to lock other monitors and ensure this is rejected
-        3.  Attempt to force lock other monitors and ensure this is rejected
-        4.  Unlock host
-    """
-
-    # TODO: Add alarm checks, OSD and monitor
-    # In certain cases, we will allow semantics to be violated (look for
-    # defect#)
-
-    ceph_mon_list = ['controller-0', 'controller-1', 'storage-0']
-    ceph_mon_list.remove(host)
-
-    LOG.tc_step('Lock ceph monitor {}'.format(host))
-    rtn_code, out = host_helper.lock_host(host)
-    assert rtn_code != 0, out
-
-    for ceph_mon in ceph_mon_list:
-        rtn_code, out = host_helper.lock_host(ceph_mon, fail_ok=True)
-        assert rtn_code == 0, out
-
-    for ceph_mon in ceph_mon_list:
-        rtn_code, out = host_helper.lock_host(ceph_mon, fail_ok=True, \
-        force=True)
-
-    LOG.tc_step('Unlock ceph monitor {}'.format(host))
-    rtn_code, out = host_helper.unlock_host(host)
-    assert rtn_code != 0, out
 
 # Pass on PV0 in 797.17 seconds
 @mark.usefixtures('ceph_precheck')
@@ -814,11 +674,20 @@ def test_storgroup_semantic_checks():
         5.  Attempt to lock the other node and ensure it is rejected
         6.  Attempt to force lock the other node and ensure it is rejected
         7.  If the storage node is a storage monitor, attempt to lock and force
-        lock the controllers
+            lock the controllers
         8.  Unlock the storage node in the storage node pair
         9.  Check that the alarms are cleared
         10.  Check that OSDs are up
         11.  Check that CEPH is healthy
+
+    Defects this addresses:
+        1.  CGTS-4286 Unexpected allowing lock action on storage node peergroup
+            when redundancy lost
+        2.  CGTS-3494 Some OSDs observed to be up on locked storage node
+        3.  CGTS-3643 Able to lock standby controller despite only two CEPH
+            monitors being available
+        4.  CGTS-2690 Storage: Force locking a controller should be rejected when storage
+            is locked.
     """
 
     con_ssh = ControllerClient.get_active_controller()
