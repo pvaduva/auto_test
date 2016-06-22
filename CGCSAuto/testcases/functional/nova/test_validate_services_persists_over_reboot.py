@@ -104,4 +104,46 @@ def test_validate_services_persists_over_compute_reboot():
     assert neutron_list_result[0] == 0, "neutron list comparison failed: {}".format(neutron_list_result[1])
 
 
+@mark.sanity
+def test_validate_inventory_summary_persists_over_reboot():
+    """
+    Validate Inventory summary over reboot of one of the compute node see if data persists over reboot
 
+    Args:
+        None
+    Setup:
+        - Standard 4 blade config: 2 controllers + 2 compute
+        - Lab booted and configure step complete
+
+    Test Steps:
+        - capture Inventory summary for list of hosts on system host-list
+        - reboot the current Controller-Active
+        - Wait for reboot to complete
+        - Validate key items from inventory persist over reboot
+
+    Teardown:
+        None
+    """
+
+    # retrieve states from controller-0
+    # retrieve nova service-list
+    host_list_table_ = table_parser.table(cli.system('host-list', auth_info=Tenant.ADMIN, fail_ok=False))
+    # retrieve neutron agent list
+
+    # swact so that controller-1 become active
+    host_helper.swact_host(fail_ok=False)
+    active_controller = system_helper.get_active_controller_name()
+
+    # reboot active controller-1
+    host_helper.reboot_hosts(active_controller)
+    # now original active controller should be active
+    # sleep 20 seconds for services to settle
+    sleep(20)
+    after_host_list_table_ = table_parser.table(cli.system('host-list', auth_info=Tenant.ADMIN, fail_ok=False))
+
+    # retrieve system service-list
+    # retrieve neutron agent list
+    # check the states is same as before.
+    host_list_result = table_parser.compare_tables(host_list_table_, after_host_list_table_)
+
+    assert host_list_result[0] == 0, "Service list comparison failed: {}".format(host_list_result[1])
