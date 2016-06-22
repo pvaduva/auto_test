@@ -1384,11 +1384,12 @@ def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=Fal
     return 0, succ_msg
 
 
-def get_sriov_provider_net(filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_provider_net_for_interface(interface='pthru', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get provider net id for SRIOV interface
 
     Args:
+        interface (str): 'pthru' or 'sriov'
         filepath: lab_setup.conf path to retrive the info from
         con_ssh (SSHClient):
         auth_info (dict):
@@ -1396,15 +1397,22 @@ def get_sriov_provider_net(filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
     Returns (str):  id of the provider net for SRIOV interface. Returns empty string if not found.
 
     """
+    valid_interfaces = ['pthru', 'sriov']
+    if not interface in valid_interfaces:
+        raise ValueError("Interface has to be one of the following: {}".format(valid_interfaces))
+
     if filepath is None:
         filepath = "lab_setup.conf"
 
     with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con0_ssh:
-        sriov_if_override = con0_ssh.exec_cmd("cat {} | grep -i sriov".format(filepath))[1]
+        sriov_if_override = con0_ssh.exec_cmd("cat {} | grep -i {}".format(filepath, interface))[1]
 
     if not sriov_if_override:
         LOG.warning("SRIOV interface is not found in lab_setup")
         return ''
+
+    if 'No such file or directory' in sriov_if_override:
+        raise ValueError("File '{}' cannot be found".format(filepath))
 
     provider_net_name = re.findall('\{DATAMTU\}\|(.*)\|', sriov_if_override)[0]
 

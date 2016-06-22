@@ -1,4 +1,6 @@
+import random
 from collections import Counter
+
 from pytest import mark, fixture, skip
 
 from utils.tis_log import LOG
@@ -92,7 +94,7 @@ def test_vms_network_connection(vms_num, srv_grp_policy, server_groups):
 
     Test Steps
         - Boot given number of vms with specific server group policy to schedule vms on same or different host(s)
-        - Ping vms' data and management network from vm to test NS and EW traffic
+        - Ping vms' over data and management networks from one vm to test NS and EW traffic
 
     Teardown:
         - Delete vms
@@ -119,9 +121,9 @@ def test_vms_network_connection(vms_num, srv_grp_policy, server_groups):
                                   hint={'group': srv_grp_id})[1]
         ResourceCleanup.add(resource_type='vm', resource_id=vm_id, del_vm_vols=True)
         vms.append(vm_id)
-        LOG.tc_step("Ping vm {} from NatBox".format(vm_id))
+        LOG.tc_step("Wait for vm {} pingable from NatBox".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
-    for vm in vms:
-        LOG.tc_step("Ping vms' management and data network ips from vm {}, and verify ping successful.".format(vm))
-        vm_helper.ping_vms_from_vm(from_vm=vm, to_vms=vms, net_types=['data', 'mgmt'], fail_ok=False)
+    from_vm = random.choice(vms)
+    LOG.tc_step("Ping vms' over management and data networks from vm {}, and verify ping successful.".format(from_vm))
+    vm_helper.ping_vms_from_vm(from_vm=from_vm, to_vms=vms, net_types=['data', 'mgmt'], fail_ok=False)

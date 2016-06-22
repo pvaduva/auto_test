@@ -30,21 +30,21 @@ def flavor_(request):
 
     Returns (tuple): (storage (str), flavor_id (str))
     """
-    storage = request.param[0]
+    storage_backing = request.param[0]
     ephemeral, swap = request.param[1]
-    if len(host_helper.get_hosts_by_storage_aggregate(storage_backing=storage)) < 1:
-        skip("No host support {} storage backing".format(storage))
+    if len(host_helper.get_hosts_by_storage_aggregate(storage_backing=storage_backing)) < 1:
+        skip("No host support {} storage backing".format(storage_backing))
 
-    storage_spec = {'aggregate_instance_extra_specs:storage': storage}
+    storage_spec = {'aggregate_instance_extra_specs:storage': storage_backing}
 
-    flavor_id = nova_helper.create_flavor(ephemeral=ephemeral, swap=swap)[1]
+    flavor_id = nova_helper.create_flavor(ephemeral=ephemeral, swap=swap, check_storage_backing=False)[1]
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **storage_spec)
 
     def delete_flavor():
         nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
     request.addfinalizer(delete_flavor)
 
-    return storage, flavor_id
+    return storage_backing, flavor_id
 
 
 @fixture(scope='module', params=['volume', 'image', 'image_with_vol'])
@@ -146,7 +146,7 @@ def _boot_migrable_vms(storage_backing):
     storage_spec = {'aggregate_instance_extra_specs:storage': storage_backing}
     vms_to_test = []
     flavors_created = []
-    flavor_no_localdisk = nova_helper.create_flavor(ephemeral=0, swap=0)[1]
+    flavor_no_localdisk = nova_helper.create_flavor(ephemeral=0, swap=0, check_storage_backing=False)[1]
     flavors_created.append(flavor_no_localdisk)
     nova_helper.set_flavor_extra_specs(flavor=flavor_no_localdisk, **storage_spec)
     vm_1 = vm_helper.boot_vm(flavor=flavor_no_localdisk, source='volume')[1]
@@ -160,8 +160,8 @@ def _boot_migrable_vms(storage_backing):
         if storage_backing == 'remote':
             LOG.info("Boot a VM from volume with local disks if storage backing is remote...")
             ephemeral_swap = random.choice([[0, 1], [1, 1], [1, 0]])
-            flavor_with_localdisk = nova_helper.create_flavor(ephemeral=ephemeral_swap[0],
-                                                              swap=ephemeral_swap[1])[1]
+            flavor_with_localdisk = nova_helper.create_flavor(ephemeral=ephemeral_swap[0], swap=ephemeral_swap[1],
+                                                              check_storage_backing=False)[1]
             flavors_created.append(flavor_with_localdisk)
             nova_helper.set_flavor_extra_specs(flavor=flavor_with_localdisk, **storage_spec)
             vm_3 = vm_helper.boot_vm(flavor=flavor_with_localdisk, source='volume')[1]

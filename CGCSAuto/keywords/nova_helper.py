@@ -5,13 +5,14 @@ from utils import cli, exceptions
 from utils import table_parser
 from utils.tis_log import LOG
 from consts.auth import Tenant
-from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput
+from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec
 from keywords import keystone_helper, host_helper
-from keywords.common import Count, get_tenant_name
+from keywords.common import Count
 
 
 def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ephemeral=None, swap=None,
-                  is_public=None, rxtx_factor=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                  is_public=None, rxtx_factor=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None,
+                  check_storage_backing=True):
     """
     Create a flavor with given critria.
 
@@ -29,6 +30,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
         fail_ok (bool): whether it's okay to fail to create a flavor. Default to False.
         auth_info (dict): This is set to Admin by default. Can be set to other tenant for negative test.
         con_ssh (SSHClient):
+        check_storage_backing (bool): whether to set local_storage spec based on the hosts configuration
 
     Returns (tuple): (rtn_code (int), flavor_id/err_msg (str))
         (0, <flavor_id>): flavor created successfully
@@ -81,6 +83,46 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
     table_ = table_parser.table(output)
     flavor_id = table_parser.get_column(table_, 'ID')[0]
     LOG.info("Flavor {} created successfully.".format(flavor_name))
+
+    if check_storage_backing:
+        LOG.info("Setting local_storage spec to storage backing with max number of hosts on system if not local_image")
+        local_image_hosts = ['local_image', host_helper.get_hosts_by_storage_aggregate(con_ssh=con_ssh)]
+        local_lvm_hosts = ['local_lvm', host_helper.get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh)]
+        remote_hosts = ['remote', host_helper.get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh)]
+
+        hosts_in_aggregates = [local_image_hosts, local_lvm_hosts, remote_hosts]
+
+        storage_backing_spec = None
+        max_num = 0
+        for hosts_with_backing in hosts_in_aggregates:
+            hosts_num = len(hosts_with_backing[1])
+            if hosts_num > max_num:
+                storage_backing_spec = hosts_with_backing[0]
+                max_num = hosts_num
+
+        if max_num == 0:
+            image_hosts_num = lvm_hosts_num = remote_hosts_num = 0
+            down_hosts = host_helper.get_hypervisors(state='down', con_ssh=con_ssh)
+            for down_host in down_hosts:
+                host_instance_backing = host_helper.get_local_storage_backing(down_host, con_ssh=con_ssh)
+                if 'image' in host_instance_backing:
+                    image_hosts_num += 1
+                elif 'lvm' in host_instance_backing:
+                    lvm_hosts_num += 1
+                else:
+                    remote_hosts_num += 1
+            hosts_nums = [image_hosts_num, lvm_hosts_num, remote_hosts_num]
+            max_num = max(hosts_nums)
+            storage_backing_spec = ['local_image', 'local_lvm', 'remote'][hosts_nums.index(max_num)]
+            LOG.warning("No up hosts in host-aggregate. Using {} storage spec based on instance backing for down hosts."
+                        .format(storage_backing_spec))
+
+        if storage_backing_spec != 'local_image':
+            LOG.info("Setting local_storage extra spec to {}. Number of hosts with this storage backing: {}".format(
+                    storage_backing_spec, max_num))
+            set_flavor_extra_specs(flavor_id, con_ssh=con_ssh, auth_info=auth_info,
+                                   **{FlavorSpec.STORAGE_BACKING: storage_backing_spec})
+
     return 0, flavor_id
 
 
@@ -1244,7 +1286,8 @@ def copy_flavor(from_flavor_id, new_name=None, con_ssh=None):
         new_name = "{}-{}".format(old_name, new_name)
     swap = swap if swap else 0
     new_flavor_id = create_flavor(name=new_name, vcpus=vcpus, ram=ram, swap=swap, root_disk=disk, ephemeral=ephemeral,
-                                  is_public=is_public, rxtx_factor=rxtx_factor, con_ssh=con_ssh)[1]
+                                  is_public=is_public, rxtx_factor=rxtx_factor, con_ssh=con_ssh,
+                                  check_storage_backing=False)[1]
     set_flavor_extra_specs(new_flavor_id, con_ssh=con_ssh, **extra_specs)
 
     return new_flavor_id

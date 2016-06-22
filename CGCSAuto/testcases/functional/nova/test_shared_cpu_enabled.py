@@ -67,6 +67,3 @@ def test_launch_vm_with_shared_cpu(vcpus, cpu_policy, numa_nodes, numa_node0, sh
         ResourceCleanup.add('volume', vol_id, scope='module')
 
     assert 0 == code, "Boot vm failed. Details: {}".format(output)
-
-
-

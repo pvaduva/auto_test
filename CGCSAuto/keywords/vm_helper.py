@@ -9,8 +9,8 @@ from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
 from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.timeout import VMTimeout
-from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP
-from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common
+from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology
+from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 
 
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
@@ -1557,3 +1557,31 @@ def __perform_action_on_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_C
     succ_msg = "Action {} performed successfully on vms.".format(action)
     LOG.info(succ_msg)
     return 0, succ_msg
+
+
+def get_vm_host_and_numa_nodes(vm_id, con_ssh=None):
+    """
+    Get vm host and numa nodes used for the vm on the host
+    Args:
+        vm_id (str):
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<vm_hostname> (str), <numa_nodes> (list of integers))
+
+    """
+    nova_tab = system_helper.get_vm_topology_tables('servers', con_ssh=con_ssh)[0]
+    nova_tab = table_parser.filter_table(nova_tab, ID=vm_id)
+
+    host = table_parser.get_column(nova_tab, 'host')[0]
+    instance_topology = table_parser.get_column(nova_tab, 'instance_topology')[0]
+    if isinstance(instance_topology, str):
+        instance_topology = [instance_topology]
+
+    # Each numa node will have an entry for given instance, thus number of entries should be the same as number of
+    # numa nodes for the vm
+    actual_node_vals = []
+    for actual_node_info in instance_topology:
+        actual_node_val = int(re.findall(InstanceTopology.NODE, actual_node_info)[0])
+        actual_node_vals.append(actual_node_val)
+
+    return host, actual_node_vals
