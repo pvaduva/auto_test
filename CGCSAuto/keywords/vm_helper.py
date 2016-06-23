@@ -1455,8 +1455,8 @@ def reboot_vm(vm_id, hard=False, fail_ok=False, con_ssh=None, auth_info=None):
     return 0, succ_msg
 
 
-def __perform_action_on_vm(vm_id, action, expt_status, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None,
-                           auth_info=None):
+def _perform_action_on_vm(vm_id, action, expt_status, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None,
+                          auth_info=None):
 
     LOG.info("{}ing vm {}...".format(action, vm_id))
     code, output = cli.nova(action, vm_id, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
@@ -1485,37 +1485,37 @@ def __perform_action_on_vm(vm_id, action, expt_status, timeout=VMTimeout.STATUS_
 
 
 def suspend_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
-    return __perform_action_on_vm(vm_id, 'suspend', VMStatus.SUSPENDED, timeout=timeout, fail_ok=fail_ok,
-                                  con_ssh=con_ssh, auth_info=auth_info)
+    return _perform_action_on_vm(vm_id, 'suspend', VMStatus.SUSPENDED, timeout=timeout, fail_ok=fail_ok,
+                                 con_ssh=con_ssh, auth_info=auth_info)
 
 
 def resume_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
-    return __perform_action_on_vm(vm_id, 'resume', VMStatus.ACTIVE, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
-                                  auth_info=auth_info)
+    return _perform_action_on_vm(vm_id, 'resume', VMStatus.ACTIVE, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
+                                 auth_info=auth_info)
 
 
 def pause_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
-    return __perform_action_on_vm(vm_id, 'pause', VMStatus.PAUSED, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
-                                  auth_info=auth_info)
+    return _perform_action_on_vm(vm_id, 'pause', VMStatus.PAUSED, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
+                                 auth_info=auth_info)
 
 
 def unpause_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
-    return __perform_action_on_vm(vm_id, 'unpause', VMStatus.ACTIVE, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
-                                  auth_info=auth_info)
+    return _perform_action_on_vm(vm_id, 'unpause', VMStatus.ACTIVE, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
+                                 auth_info=auth_info)
 
 
 def stop_vms(vms, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
-    return __perform_action_on_vms(vms, 'stop', VMStatus.STOPPED, timeout, check_interval=1, fail_ok=fail_ok,
-                                   con_ssh=con_ssh, auth_info=auth_info)
+    return _perform_action_on_vms(vms, 'stop', VMStatus.STOPPED, timeout, check_interval=1, fail_ok=fail_ok,
+                                  con_ssh=con_ssh, auth_info=auth_info)
 
 
 def start_vms(vms, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
-    return __perform_action_on_vms(vms, 'start', VMStatus.ACTIVE, timeout, check_interval=1, fail_ok=fail_ok,
-                                   con_ssh=con_ssh, auth_info=auth_info)
+    return _perform_action_on_vms(vms, 'start', VMStatus.ACTIVE, timeout, check_interval=1, fail_ok=fail_ok,
+                                  con_ssh=con_ssh, auth_info=auth_info)
 
 
-def __perform_action_on_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=False,
-                            con_ssh=None, auth_info=None):
+def _perform_action_on_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=False,
+                           con_ssh=None, auth_info=None):
 
     LOG.info("{}ing vms {}...".format(action, vms))
     action = action.lower()

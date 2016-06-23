@@ -61,11 +61,20 @@ def heartbeat_flavor_vm(request):
 
 def test_heartbeat_after_swact(heartbeat_flavor_vm):
     """
-    check the heartbeat of a given vm
+    Verify heartbeat is still working after swact
 
     Args:
-        heartbeat_flavor_vm: vm_ fixture which passes the created vm based on  <local_image, local_lvm, or remote>,
+        - Nothing
 
+    Setup:
+        - Nothing
+
+    Test Steps:
+        -execute swact command on active controller
+        -verify the command is successful
+
+    Teardown:
+        - Nothing
     """
     vm_id = heartbeat_flavor_vm['id']
     heartbeat_type = heartbeat_flavor_vm['heartbeat']

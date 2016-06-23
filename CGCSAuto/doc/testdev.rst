@@ -22,6 +22,23 @@ Add ``@pytest.mark.skipif()`` decorator to test function
 
  #when the above executed on the commandline using py.test. the test will be skipped.
 
+
+
+System Verifications (if applicable)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Add ``@pytest.mark.<P1-P3,sanity,cpe_sanity>``
+ * to set the specific type of test you are running. weither it's a P1,P2,P3,cpe_sanity or sanity testcases
+
+.. code-block:: python
+
+ # Example
+ # this is a sanity testcase
+ @mark.sanity
+ def test_something():
+ ...
+
+ #when the above is executed with 'py.test -m sanity' this test will automatically be included
+
 System Verifications (if applicable)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
