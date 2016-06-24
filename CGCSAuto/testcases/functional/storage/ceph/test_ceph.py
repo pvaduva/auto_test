@@ -885,9 +885,6 @@ def test_import_with_cache_raw():
         msg = '{} was not found in rbd image pool'.format(rbd_raw_img_id)
         assert rbd_raw_img_id in out, msg
 
-        # TEST FAILS ON RBD RAW IMG CREATION
-        # BELOW THIS IS UNTESTED DUE TO FAILURE
-
         # Check how large of a flavor the image requires
         flav_size = storage_helper.find_image_size(con_ssh, image)
 
@@ -1003,6 +1000,7 @@ def test_import_raw_with_cache_raw():
 
     #TODO: Clean up resources used
 
+
 # INPROGRESS 
 @mark.usefixtures('ceph_precheck')
 def test_exceed_size_of_img_pool():
@@ -1025,44 +1023,54 @@ def test_exceed_size_of_img_pool():
 
 
     con_ssh = ControllerClient.get_active_controller()
+    glance_ids = []
 
     img_loc = '/home/wrsroot/images/'
 
     # Return a list of images of a given type
-    LOG.tc_step('Determine what raw images we have available')
-    image_names = storage_helper.find_images(con_ssh, image_type='raw')
+    LOG.tc_step('Determine what qcow2 images we have available')
+    image_names = storage_helper.find_images(con_ssh)
 
     if not image_names:
-        LOG.info('No raw images were found on the controller')
-        LOG.tc_step('Rsyncing images from controller-0')
-        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no " {} controller-1:{}'.format(img_loc, img_loc)
-        con_ssh.exec_cmd(rsync_images)
-        image_names = storage_helper.find_images(con_ssh, image_type='raw')
-        msg = 'No images found on controller'
-        assert not image_names, msg
+        LOG.info('No qcow2 images were found on the system')
+        LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
+        image_names = storage_helper.download_images(dload_type='ubuntu', \
+            img_dest=img_loc, con_ssh=con_ssh)
 
-    LOG.tc_step('Import raw images into glance with --cache-raw')
-    for image in image_names: 
-        source_image_loc = img_loc + image
-        img_name = 'testimage_{}'.format(image)
-        ret = glance_helper.create_image(source_image_file=source_image_loc,
-                                         disk_format='raw', \
+    LOG.tc_step('Import qcow2 images into glance until pool is full')
+    img_loc = img_loc + "/" + image_names[0]
+    while True:
+        ret = glance_helper.create_image(source_image_file=img_loc,
+                                         disk_format='qcow2', \
                                          container_format='bare', \
-                                         cache_raw=True)
-        LOG.info("ret {}".format(ret))
-        assert ret[0] == 0, ret[2]
+                                         cache_raw=True, wait=True,
+                                         fail_ok=True)
+        glance_ids.append(ret[1])
 
-        LOG.tc_step('Check image is shown in rbd but no raw file is generated')
-        rbd_img_id = ret[1]
-        rbd_raw_img_id = rbd_img_id + '_raw'
-        cmd = 'rbd -p images ls'
-        rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=60)
-        LOG.info("out {}:".format(out))
-        msg = '{} was not found in rbd image pool'.format(rbd_img_id)
-        assert rbd_img_id in out, msg
-        msg = '{} was found in rbd image pool'.format(rbd_raw_img_id)
-        assert not rbd_raw_img_id in out, msg
+        if ret[0] == 1:
+            break
 
-    #TODO: Clean up resources used
+    #Wait for alarm to appear
+    time.sleep(10)
 
+    # 800.001   Storage Alarm Condition: Pgs are degraded/stuck/blocked.
+    # Please check 'ceph -s' for more details
+    LOG.tc_step('Query alarms for ceph alarms')
+    alarms_table = system_helper.get_alarms(query_key='alarm_id',
+        query_value=EventLogID.STORAGE_ALARM_COND,
+        query_type='string')
+    LOG.info(alarms_table)
+    msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_ALARM_COND)
+    assert EventLogID.STORAGE_ALARM_COND in str(alarms_table)
+
+    LOG.tc_step('Verify the health cluster is not healthy')
+    ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+    assert ceph_healthy, msg
+
+
+    LOG.info("glance ids {}".format(glance_ids))
+    # Not checking ceph -s for images pool full since this is generic openstack
+
+    #LOG.tc_step('Delete Image(s) {}'.format(glance_ids))
+    #glance_helper.delete_images(glance_ids)
 
