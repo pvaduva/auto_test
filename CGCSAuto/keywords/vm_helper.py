@@ -83,8 +83,8 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
-            max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None, fail_ok=False,
-            auth_info=None, con_ssh=None):
+            max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
+            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None):
     """
 
     Args:
@@ -98,6 +98,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         swap (int):
         ephemeral (int):
         user_data (str):
+        vm_host (str): which host to place the vm
         block_device:
         auth_info (dict):
         con_ssh (SSHClient):
@@ -123,18 +124,6 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     name = "{}-{}".format(tenant, name)
 
     name = common.get_unique_name(name, resource_type='vm')
-
-    # if name is None:
-    #     existing_names = nova_helper.get_all_vms('Name')
-    #     for i in range(20):
-    #         tmp_name = '-'.join([tenant, 'vm', str(i+1)])
-    #         if tmp_name not in existing_names:
-    #             name = tmp_name
-    #             break
-    #     else:
-    #         exceptions.VMError("Unable to get a proper name for booting new vm.")
-    # else:
-    #     name = '-'.join([tenant, name])
 
     # Handle mandatory arg - flavor
     if flavor is None:
@@ -192,6 +181,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if hint:
         hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
 
+    avail_zone = 'nova:{}'.format(vm_host) if vm_host else None
+
     optional_args_dict = {'--flavor': flavor,
                           '--image': image,
                           '--boot-volume': volume_id,
@@ -203,7 +194,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--ephemeral': ephemeral,
                           '--user-data': user_data,
                           '--block-device': block_device,
-                          '--hint': hint
+                          '--hint': hint,
+                          '--availability-zone': avail_zone
                           }
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
@@ -1195,7 +1187,7 @@ class VMInfo:
 def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeout.DELETE, fail_ok=False, con_ssh=None,
                auth_info=Tenant.ADMIN):
     """
-    Delete given vm (and attached volume(s))
+    Delete given vm(s) (and attached volume(s)). If None vms given, all vms on the system will be deleted.
 
     Args:
         vms (list|str): list of vm ids to be deleted. If string input, assume only one vm id is provided.

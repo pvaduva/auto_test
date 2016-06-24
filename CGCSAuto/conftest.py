@@ -10,6 +10,7 @@ from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 
+natbox_ssh = None
 con_ssh = None
 tc_start_time = None
 has_fail = False
@@ -22,10 +23,12 @@ def setup_test_session():
     Setup primary tenant and Nax Box ssh before the first test gets executed.
     TIS ssh was already set up at collecting phase.
     """
+    global natbox_ssh
+
     os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     setups.set_env_vars(con_ssh)
-    setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'))
+    natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'))
     setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
 
@@ -66,8 +69,9 @@ class MakeReport:
 
     def update_results(self, call, report):
         if report.failed:
-            LOG.info("\n***Failure at test {}: {}".format(call.when, call.excinfo))
-            LOG.debug("\n***Details: {}".format(report.longrepr))
+            msg = "\n***Failure at test {}: {}".format(call.when, call.excinfo)
+            print(msg)
+            LOG.debug(msg + "\n***Details: {}".format(report.longrepr))
             self.test_results[call.when] = ['Failed', call.excinfo]
         elif report.skipped:
             sep = 'Skipped: '
@@ -278,6 +282,11 @@ def pytest_unconfigure():
     # close ssh session
     try:
         con_ssh.close()
+    except:
+        pass
+
+    try:
+        natbox_ssh.close()
     except:
         pass
 

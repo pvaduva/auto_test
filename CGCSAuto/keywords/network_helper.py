@@ -1389,7 +1389,7 @@ def get_provider_net_for_interface(interface='pcipt', filepath=None, con_ssh=Non
     Get provider net id for SRIOV interface
 
     Args:
-        interface (str): 'pthru' or 'sriov'
+        interface (str): 'pcipt' or 'sriov'
         filepath: lab_setup.conf path to retrive the info from
         con_ssh (SSHClient):
         auth_info (dict):
@@ -1398,6 +1398,10 @@ def get_provider_net_for_interface(interface='pcipt', filepath=None, con_ssh=Non
 
     """
     valid_interfaces = ['pcipt', 'sriov']
+<<<<<<< HEAD
+=======
+    interface = 'pthru' if interface == 'pcipt' else interface
+>>>>>>> c8749773af3862af496888cdf7c5fdf51cc603f9
     if interface not in valid_interfaces:
         raise ValueError("Interface has to be one of the following: {}".format(valid_interfaces))
 

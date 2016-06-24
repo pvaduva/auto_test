@@ -28,8 +28,11 @@ CONNECTION_REFUSED = '.*Connection refused.*'
 
 _SSH_OPTS = (' -o RSAAuthentication=no' + ' -o PubkeyAuthentication=no' + ' -o StrictHostKeyChecking=no' +
              ' -o UserKnownHostsFile=/dev/null')
+
 EXIT_CODE_CMD = 'echo $?'
 TIMEOUT_EXPECT = 10
+
+RSYNC_SSH_OPTIONS = ['-o StrictHostKeyChecking=no', '-o UserKnownHostsFile=/dev/null']
 
 
 class SSHClient:
@@ -320,7 +323,7 @@ class SSHClient:
 
         return code, output
 
-    def __process_exec_result(self, cmd, rm_date):
+    def __process_exec_result(self, cmd, rm_date=True):
         cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
         # LOG.debug("cmd output list: {}".format(cmd_output_list))
         # cmd_output_list[0] = ''                                       # exclude command, already done in expect
@@ -360,6 +363,32 @@ class SSHClient:
 
     def get_hostname(self):
         return self.exec_cmd('hostname')[1].splitlines()[0]
+
+    def rsync(self, source, dest_server, dest, dest_user='wrsroot', extra_opts=None, pre_opts=None, timeout=60,
+              fail_ok=False):
+        if extra_opts:
+            extra_opts_str = ' '.join(extra_opts) + ' '
+        else:
+            extra_opts_str = ''
+
+        if not pre_opts:
+            pre_opts = ''
+
+        ssh_opts = 'ssh {}'.format(' '.join(RSYNC_SSH_OPTIONS))
+        cmd = "{} rsync -ave {} {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
+        cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
+        self.send(cmd)
+        index = self.expect([self.prompt, PASSWORD_PROMPT], timeout=timeout)
+        if index == 1:
+            self.send(self.password)
+            self.expect(timeout=timeout)
+
+        code, output = self.__process_exec_result(cmd, rm_date=True)
+        if code != 0 and not fail_ok:
+            raise exceptions.SSHExecCommandFailed("Non-zero return code for rsync cmd: {}".format(cmd))
+
+        return code, output
+
 
     def scp_files_to_local_host(self, source_file, dest_password, dest_user=None, dest_folder_name=None, timeout=10):
 
