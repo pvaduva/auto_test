@@ -23,7 +23,7 @@ def fip_setups(request):
     return vm_id, floating_ip
 
 
-def test_fip(fip_setups):
+def obsolete_test_fip(fip_setups):
     """
     Test VM Floating IP  over VM launch, live-migration, cold-migration, pause/unpause, etc
 

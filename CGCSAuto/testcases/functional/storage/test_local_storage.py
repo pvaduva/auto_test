@@ -23,7 +23,7 @@ def _get_computes_for_local_backing_type(ls_type='image', con_ssh=None):
     hosts = host_helper.get_nova_hosts(con_ssh=con_ssh)
 
     for host in hosts:
-        if host_helper.check_host_local_backing_type(host, type=ls_type, con_ssh=con_ssh):
+        if host_helper.check_host_local_backing_type(host, storage_type=ls_type, con_ssh=con_ssh):
             hosts_of_type.append(host)
 
     return hosts_of_type
@@ -36,7 +36,7 @@ def _less_than_2_hypervisors():
 class TestLocalStorage(object):
     """test local storage"""
 
-    DIR_PROFILE_IMPORT_FROM='/home/wrsroot/storage_profiles'
+    # DIR_PROFILE_IMPORT_FROM='/home/wrsroot/storage_profiles'
 
     _cleanup_lists = {
         'profile': [],
@@ -181,7 +181,7 @@ class TestLocalStorage(object):
     def _choose_compute_locked_diff_type(self, ls_type='image'):
         computes_locked_diff_type = [c for c in
                                      host_helper.get_hypervisors(state='down', status='disabled')
-                                     if not host_helper.check_host_local_backing_type(c, type=ls_type)]
+                                     if not host_helper.check_host_local_backing_type(c, storage_type=ls_type)]
         if computes_locked_diff_type:
             compute_dest = random.choice(computes_locked_diff_type)
             return compute_dest
@@ -191,7 +191,7 @@ class TestLocalStorage(object):
     def _choose_compute_unlocked_diff_Type(self, ls_type='image', active_controller=''):
         computes_unlocked_diff_type = [c for c in
                                        host_helper.get_nova_hosts()
-                                       if not host_helper.check_host_local_backing_type(c, type=ls_type)]
+                                       if not host_helper.check_host_local_backing_type(c, storage_type=ls_type)]
 
         if computes_unlocked_diff_type:
             LOG.debug('{} computes unlocked and with local-storage-type:{}'\
@@ -222,7 +222,7 @@ class TestLocalStorage(object):
     def _choose_compute_locked_same_type(self, ls_type='image'):
         computes_locked = [c for c in
                            host_helper.get_hypervisors(state='down', status='disabled')
-                           if host_helper.check_host_local_backing_type(c, type=ls_type)]
+                           if host_helper.check_host_local_backing_type(c, storage_type=ls_type)]
         if computes_locked:
             compute_dest = random.choice(computes_locked)
             LOG.debug('selected target compute:{}, locked, same local-storage-type' \
@@ -232,7 +232,7 @@ class TestLocalStorage(object):
     def _choose_compute_unlocked_same_type(self, ls_type='image', active_controller=''):
         computes_unlocked = [c for c in
                              host_helper.get_nova_hosts()
-                             if host_helper.check_host_local_backing_type(c, type=ls_type)]
+                             if host_helper.check_host_local_backing_type(c, storage_type=ls_type)]
         if active_controller in computes_unlocked:
             computes_unlocked.remove(active_controller)
             if computes_unlocked:
@@ -383,7 +383,7 @@ class TestLocalStorage(object):
 
         LOG.tc_step('Verify the local-storage type changed to {} on host:{}'
                     .format(local_storage_type, compute_dest))
-        assert host_helper.check_host_local_backing_type(compute_dest, type=local_storage_type), \
+        assert host_helper.check_host_local_backing_type(compute_dest, storage_type=local_storage_type), \
             'Local-storage backing failed to change to {} on host:{}'.format(local_storage_type, compute_dest)
 
     @mark.skipif(_less_than_2_hypervisors(), reason='Requires 2 or more computes to test this test case')
@@ -703,6 +703,7 @@ class TestLocalStorage(object):
 
         return 0
 
+    @mark.known_issue('CGTS-4432')
     @mark.parametrize('local_storage_type', [
         mark.p2('image'),
         mark.p2('lvm'),

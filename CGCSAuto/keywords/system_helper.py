@@ -213,16 +213,20 @@ def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
     return table_
 
 
-def unsuppress_all(ssh_con=None, fail_ok=False):
+def unsuppress_all(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
     """
+
     Args:
         ssh_con:
         fail_ok:
+        auth_info:
 
-    Returns: success , msg
+    Returns:
+
     """
-    table_events = table_parser.table(cli.system('event-unsuppress-all',
-                                                 ssh_client=ssh_con, fail_ok=fail_ok, rtn_list=True))
+    args = '--nowrap --nopaging'
+    table_events = table_parser.table(cli.system('event-unsuppress-all',positional_args=args, ssh_client=ssh_con,
+                                                 fail_ok=fail_ok,auth_info=auth_info, rtn_list=True))
     get_suppress_list = table_events
     suppressed_list = table_parser.get_values(table_=get_suppress_list, target_header='Suppressed Alarm ID\'s',
                                               strict=True, **{'Status': 'suppressed'})

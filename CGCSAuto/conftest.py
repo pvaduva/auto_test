@@ -10,6 +10,7 @@ from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 
+natbox_ssh = None
 con_ssh = None
 tc_start_time = None
 has_fail = False
@@ -22,10 +23,12 @@ def setup_test_session():
     Setup primary tenant and Nax Box ssh before the first test gets executed.
     TIS ssh was already set up at collecting phase.
     """
+    global natbox_ssh
+
     os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     setups.set_env_vars(con_ssh)
-    setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'))
+    natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'))
     setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
 
@@ -66,8 +69,9 @@ class MakeReport:
 
     def update_results(self, call, report):
         if report.failed:
-            LOG.info("\n***Failure at test {}: {}".format(call.when, call.excinfo))
-            LOG.debug("\n***Details: {}".format(report.longrepr))
+            msg = "\n***Failure at test {}: {}".format(call.when, call.excinfo)
+            print(msg)
+            LOG.debug(msg + "\n***Details: {}".format(report.longrepr))
             self.test_results[call.when] = ['Failed', call.excinfo]
         elif report.skipped:
             sep = 'Skipped: '
@@ -198,6 +202,8 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
 def pytest_configure(config):
     config.addinivalue_line("markers",
                             "features(feature_name1, feature_name2, ...): mark impacted feature(s) for a test case.")
+    config.addinivalue_line("markers",
+                            "known_issue(CGTS-xxxx): mark known issue with JIRA ID or description if no JIRA needed.")
 
     lab_arg = config.getoption('lab')
     natbox_arg = config.getoption('natbox')
@@ -279,11 +285,24 @@ def pytest_unconfigure():
     except:
         pass
 
+    try:
+        natbox_ssh.close()
+    except:
+        pass
+
 
 def pytest_collection_modifyitems(items):
     for item in items:
-        feature_marker = item.get_marker("features")
+        feature_marker = item.get_marker('features')
         if feature_marker is not None:
             features = feature_marker.args
             for feature in features:
                 item.add_marker(eval("pytest.mark.{}".format(feature)))
+
+        known_issue_mark = item.get_marker('known_issue')
+        if known_issue_mark is not None:
+            issue = known_issue_mark.args[0]
+            msg = "{} has a workaround due to {}".format(item.nodeid, issue)
+            print(msg)
+            LOG.debug(msg=msg)
+            item.add_marker(eval("pytest.mark.known_issue"))

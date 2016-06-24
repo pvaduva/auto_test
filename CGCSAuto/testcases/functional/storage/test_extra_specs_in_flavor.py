@@ -87,7 +87,7 @@ def flavor_with_disk_spec(request, config_local_volume_group):
     if len(host_helper.get_hosts_by_storage_aggregate(storage_backing=storage)) < 1:
         skip("No host support {} storage backing in current lab".format(storage))
 
-    flavor_id = nova_helper.create_flavor(vcpus=4, ram=1024, root_disk=2)[1]
+    flavor_id = nova_helper.create_flavor(vcpus=4, ram=1024, root_disk=2, check_storage_backing=False)[1]
     quota_disk_spec = {request.param[0]: request.param[1],
                        'aggregate_instance_extra_specs:storage': storage,
                        'hw:cpu_policy': 'dedicated'

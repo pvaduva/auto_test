@@ -28,8 +28,11 @@ CONNECTION_REFUSED = '.*Connection refused.*'
 
 _SSH_OPTS = (' -o RSAAuthentication=no' + ' -o PubkeyAuthentication=no' + ' -o StrictHostKeyChecking=no' +
              ' -o UserKnownHostsFile=/dev/null')
+
 EXIT_CODE_CMD = 'echo $?'
 TIMEOUT_EXPECT = 10
+
+RSYNC_SSH_OPTIONS = ['-o StrictHostKeyChecking=no', '-o UserKnownHostsFile=/dev/null']
 
 
 class SSHClient:
@@ -360,6 +363,22 @@ class SSHClient:
 
     def get_hostname(self):
         return self.exec_cmd('hostname')[1].splitlines()[0]
+
+    def rsync(self, source, dest_user, dest_server, dest, extra_opts=None, pre_opts=None, timeout=60):
+        if extra_opts:
+            extra_opts_str = ' '.join(extra_opts) + ' '
+        else:
+            extra_opts_str = ''
+
+        if not pre_opts:
+            pre_opts = ''
+
+        ssh_opts = 'ssh {}'.format(' '.join(RSYNC_SSH_OPTIONS))
+        cmd = "{} rsync -ave {} {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
+        cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
+        if self.exec_cmd(cmd, expect_timeout=timeout)[0] > 0:
+            msg = "Rsync failed. Command: {}".format(cmd)
+            raise exceptions.SSHExecCommandFailed(msg)
 
     def scp_files_to_local_host(self, source_file, dest_password, dest_user=None, dest_folder_name=None, timeout=10):
 
