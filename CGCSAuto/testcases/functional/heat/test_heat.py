@@ -51,12 +51,12 @@ def verify_heat_resource(to_verify=None,template_name=None,stack_name=None,auth_
             return 0
     elif to_verify is 'neutron_provider_net':
         LOG.info("Verifying neutron provider net")
-        net_id = network_helper.get_provider_net(name='physnetX')
+        net_id = network_helper.get_provider_nets(name='physnetX')
         if net_id:
             return 0
     elif to_verify is 'neutron_provider_net_range':
         LOG.info("Verifying neutron provider net range")
-        net_range = network_helper.get_provider_net_range(name='sample_physnet_X')
+        net_range = network_helper.get_provider_net_ranges(name='sample_physnet_X')
         if net_range:
             return 0
     elif to_verify is 'nova_server_group':
@@ -67,7 +67,7 @@ def verify_heat_resource(to_verify=None,template_name=None,stack_name=None,auth_
     elif to_verify is 'vm':
         vm_name = getattr(Heat, template_name)['vm_name']
         LOG.info("Verifying server")
-        vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name,strick=False)
+        vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
         if vm_id:
             return 0
     elif to_verify is 'nova_flavor':

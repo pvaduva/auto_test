@@ -2,17 +2,13 @@ from pytest import fixture, mark
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
 from keywords import nova_helper
+from testfixtures.resource_mgmt import ResourceCleanup
 
-created_flavors = []
+
 @fixture(scope='module', autouse=True)
-def flavor_to_test(request):
-    flavor_id = nova_helper.create_flavor()[1]
-    created_flavors.append(flavor_id)
-
-    def delete():
-        if created_flavors:
-            nova_helper.delete_flavors(created_flavors)
-    request.addfinalizer(delete)
+def flavor_to_test():
+    flavor_id = nova_helper.create_flavor(check_storage_backing=False)[1]
+    ResourceCleanup.add('flavor', flavor_id, scope='module')
 
     return flavor_id
 
@@ -26,8 +22,9 @@ def test_flavor_default_specs():
        - Check "aggregate_instance_extra_specs:storage": "local_image" is included in extra specs of the flavor
     """
     LOG.tc_step("Create flavor with minimal input.")
-    flavor = nova_helper.create_flavor()[1]
-    created_flavors.append(flavor)
+    flavor = nova_helper.create_flavor(check_storage_backing=False)[1]
+    ResourceCleanup.add('flavor', flavor)
+
     extra_specs = nova_helper.get_flavor_extra_specs(flavor=flavor)
     expected_spec = '"aggregate_instance_extra_specs:storage": "local_image"'
     LOG.tc_step("Check local_image storage is by default included in flavor extra specs")

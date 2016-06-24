@@ -530,8 +530,6 @@ def create_volume_type(vol_type_name=None, con_ssh=None):
 
     table_ = table_parser.table(cli.cinder('type-create', vol_type_name, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     vol_type_id = table_parser.get_values(table_, 'ID')[0]
-    print(vol_type_id)
-    #vol_type_name = table_parser.get_values(table_, 'Name')[0]
 
     return 0, vol_type_id
 

@@ -25,9 +25,12 @@ instance_backing_params =['image', 'lvm']
 
 @fixture(scope='module', params=instance_backing_params )
 def config_local_volume_group(request):
+    """
+    fixture to configure the local volume group to have the same storage type as the the type need for testing
+    """
 
     local_volume_group = {'instance_backing': request.param}
-    #check the local volume group of compute-0
+    # check the local volume group of compute-0
     table_ = table_parser.table(cli.system('host-lvg-show compute-0 nova-local', auth_info=Tenant.ADMIN, fail_ok=False))
 
     instance_backing = table_parser.get_value_two_col_table(table_,'parameters')

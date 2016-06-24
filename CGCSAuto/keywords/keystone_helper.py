@@ -47,5 +47,5 @@ def get_user_token(con_ssh=None):
     Returns (list): a list containing at most one authentication token
 
     """
-    table_ = table_parser.table(cli.keystone('token-get', ssh_client=con_ssh))
-    return table_parser.get_values(table_, 'Value', Property='id')
+    table_ = table_parser.table(cli.openstack('token issue', ssh_client=con_ssh))
+    return table_parser.get_values(table_, 'Value', Field='id')

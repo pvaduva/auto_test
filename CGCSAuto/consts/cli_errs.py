@@ -21,4 +21,5 @@ class CpuAssignment:
     VSWITCH_TOO_MANY_CORES = "The vswitch function can only be assigned up to 8 core"
     TOTAL_TOO_MANY_CORES = "More total logical cores requested than present on 'Processor {}'"
     NO_VM_CORE = "There must be at least one unused core for VMs."
+    VSWITCH_INSUFFICIENT_CORES = "The vswitch function must have at least {} core(s)"
 

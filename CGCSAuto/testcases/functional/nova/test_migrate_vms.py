@@ -32,7 +32,7 @@ def flavor_(request):
     if len(keywords.host_helper.get_hosts_by_storage_aggregate(storage_backing=storage)) < 1:
         skip("No host support {} storage backing".format(storage))
 
-    flavor_id = nova_helper.create_flavor(ephemeral=param[0], swap=param[1])[1]
+    flavor_id = nova_helper.create_flavor(ephemeral=param[0], swap=param[1], check_storage_backing=False)[1]
     storage_spec = {'aggregate_instance_extra_specs:storage': storage}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **storage_spec)
     flavor = {'id': flavor_id,

@@ -1,6 +1,7 @@
 import random
 import re
 import time
+from collections import Counter
 from contextlib import contextmanager
 
 from utils import exceptions, cli, table_parser
@@ -8,8 +9,8 @@ from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
 from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.timeout import VMTimeout
-from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP
-from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common
+from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology
+from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 
 
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
@@ -82,8 +83,8 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
-            max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None, fail_ok=False,
-            auth_info=None, con_ssh=None):
+            max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
+            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None):
     """
 
     Args:
@@ -97,6 +98,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         swap (int):
         ephemeral (int):
         user_data (str):
+        vm_host (str): which host to place the vm
         block_device:
         auth_info (dict):
         con_ssh (SSHClient):
@@ -122,18 +124,6 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     name = "{}-{}".format(tenant, name)
 
     name = common.get_unique_name(name, resource_type='vm')
-
-    # if name is None:
-    #     existing_names = nova_helper.get_all_vms('Name')
-    #     for i in range(20):
-    #         tmp_name = '-'.join([tenant, 'vm', str(i+1)])
-    #         if tmp_name not in existing_names:
-    #             name = tmp_name
-    #             break
-    #     else:
-    #         exceptions.VMError("Unable to get a proper name for booting new vm.")
-    # else:
-    #     name = '-'.join([tenant, name])
 
     # Handle mandatory arg - flavor
     if flavor is None:
@@ -191,6 +181,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if hint:
         hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
 
+    avail_zone = 'nova:{}'.format(vm_host) if vm_host else None
+
     optional_args_dict = {'--flavor': flavor,
                           '--image': image,
                           '--boot-volume': volume_id,
@@ -202,7 +194,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--ephemeral': ephemeral,
                           '--user-data': user_data,
                           '--block-device': block_device,
-                          '--hint': hint
+                          '--hint': hint,
+                          '--availability-zone': avail_zone
                           }
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
@@ -833,7 +826,8 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
     return packet_loss_rate
 
 
-def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False):
+def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
+              net_types='mgmt'):
     """
 
     Args:
@@ -854,10 +848,19 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         }
 
     """
-    vm_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
+    if isinstance(net_types, str):
+        net_types = [net_types]
+
+    vms_ips = []
+    if 'data' in net_types:
+        vms_ips += network_helper.get_data_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
+    if 'mgmt' in net_types:
+        vms_ips += network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
+    if not vms_ips:
+        raise ValueError("Invalid net_types or vms ips for given net types are not found.")
 
     res_dict = {}
-    for ip in vm_ips:
+    for ip in vms_ips:
         packet_loss_rate = _ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings, timeout=timeout,
                                         fail_ok=fail_ok)
         res_dict[ip] = packet_loss_rate
@@ -894,28 +897,30 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
         natbox_client = NATBoxClient.get_natbox_client()
 
     return _ping_vms(vm_ids=vm_ids, ssh_client=natbox_client, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                     fail_ok=fail_ok, use_fip=use_fip)
+                     fail_ok=fail_ok, use_fip=use_fip, net_types='mgmt')
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
-                     num_pings=5, timeout=15, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False):
+                     num_pings=5, timeout=15, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
+                     net_types='mgmt'):
     """
 
     Args:
-        from_vm:
+        from_vm (str):
         to_vms (str|list|None):
-        user:
-        password:
-        prompt:
-        con_ssh:
-        natbox_client:
-        num_pings:
-        timeout:
+        user (str):
+        password (str):
+        prompt (str):
+        con_ssh (SSHClient):
+        natbox_client (SSHClient):
+        num_pings (int):
+        timeout (int): max number of seconds to wait for ssh connection to from_vm
         fail_ok (bool):  When False, test will stop right away if one ping failed. When True, test will continue to ping
             the rest of the vms and return results even if pinging one vm failed.
         from_vm_ip (str): vm ip to ssh to if given. from_fip flag will be considered only if from_vm_ip=None
         to_fip (bool): Whether to ping floating ip if a vm has floating ip associated with it
         from_fip (bool): whether to ssh to vm's floating ip if it has floating ip associated with it
+        net_types (list|str): 'mgmt' or 'data'
 
     Returns (tuple):
         A tuple in form: (res (bool), packet_loss_dict (dict))
@@ -928,18 +933,25 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         }
 
     """
-    vms_ips = network_helper.get_mgmt_ips_for_vms(con_ssh=con_ssh, rtn_dict=True)
-    vms_ids = list(vms_ips.keys())
-    if from_vm is None:
-        from_vm = random.choice(vms_ids)
-    if to_vms is None:
-        to_vms = vms_ids
+    if isinstance(net_types, str):
+        net_types = [net_types]
+
+    if from_vm is None or to_vms is None:
+        vms_ips = network_helper.get_mgmt_ips_for_vms(con_ssh=con_ssh, rtn_dict=True)
+        if not vms_ips:
+            raise exceptions.NeutronError("No management ip found for any vms")
+
+        vms_ids = list(vms_ips.keys())
+        if from_vm is None:
+            from_vm = random.choice(vms_ids)
+        if to_vms is None:
+            to_vms = vms_ids
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
 
         res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                        fail_ok=fail_ok, use_fip=to_fip)
+                        fail_ok=fail_ok, use_fip=to_fip, net_types=net_types)
 
     return res
 
@@ -1002,10 +1014,6 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         yield vm_ssh
     finally:
         vm_ssh.close()
-
-
-def get_vm_ids(image=None, status=VMStatus.ACTIVE, flavor=None, host=None, tenant=None, delete=False):
-    raise NotImplemented
 
 
 def get_vm_pid(instance_name, host_ssh):
@@ -1177,7 +1185,7 @@ class VMInfo:
 def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeout.DELETE, fail_ok=False, con_ssh=None,
                auth_info=Tenant.ADMIN):
     """
-    Delete given vm (and attached volume(s))
+    Delete given vm(s) (and attached volume(s)). If None vms given, all vms on the system will be deleted.
 
     Args:
         vms (list|str): list of vm ids to be deleted. If string input, assume only one vm id is provided.
@@ -1541,3 +1549,31 @@ def __perform_action_on_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_C
     succ_msg = "Action {} performed successfully on vms.".format(action)
     LOG.info(succ_msg)
     return 0, succ_msg
+
+
+def get_vm_host_and_numa_nodes(vm_id, con_ssh=None):
+    """
+    Get vm host and numa nodes used for the vm on the host
+    Args:
+        vm_id (str):
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<vm_hostname> (str), <numa_nodes> (list of integers))
+
+    """
+    nova_tab = system_helper.get_vm_topology_tables('servers', con_ssh=con_ssh)[0]
+    nova_tab = table_parser.filter_table(nova_tab, ID=vm_id)
+
+    host = table_parser.get_column(nova_tab, 'host')[0]
+    instance_topology = table_parser.get_column(nova_tab, 'instance_topology')[0]
+    if isinstance(instance_topology, str):
+        instance_topology = [instance_topology]
+
+    # Each numa node will have an entry for given instance, thus number of entries should be the same as number of
+    # numa nodes for the vm
+    actual_node_vals = []
+    for actual_node_info in instance_topology:
+        actual_node_val = int(re.findall(InstanceTopology.NODE, actual_node_info)[0])
+        actual_node_vals.append(actual_node_val)
+
+    return host, actual_node_vals
