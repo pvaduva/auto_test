@@ -15,8 +15,6 @@ from utils.ssh import ControllerClient
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
 
 
-@mark.skipif(host_helper.get_hostshow_value(system_helper.get_active_controller_name(), 'administrative') != 'unlocked',
-             reason="The active controller is not unlocked.")
 def test_locking_active_controller():
     """
     Finds the active controller and attempts to lock it..
