@@ -24,7 +24,7 @@ def scp_from_active_controller(source_path, dest_path='',
     active_cont_ip = ControllerClient.get_active_controller().host
 
     return scp_to_local(source_path, active_cont_ip, dest_path=dest_path,
-                        src_user=src_user, src_password=src_password,
+                        source_user=src_user, source_password=src_password,
                         timeout=timeout, is_dir=is_dir)
 
 

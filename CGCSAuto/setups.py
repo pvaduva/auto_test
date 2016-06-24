@@ -62,6 +62,7 @@ def setup_natbox_ssh(keyfile_path, natbox):
     natbox_ip = natbox['ip']
     NATBoxClient.set_natbox_client(natbox_ip)
     __copy_keyfile_to_natbox(natbox, keyfile_path)
+    return NATBoxClient.get_natbox_client()
 
 
 def __copy_keyfile_to_natbox(natbox, keyfile_path):

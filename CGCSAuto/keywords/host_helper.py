@@ -331,13 +331,14 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
                 check_hypervisor_up=False):
     """
-
+    Unlock given host
     Args:
         host (str):
         timeout (int): MAX seconds to wait for host to become available or degraded after unlocking
         fail_ok (bool):
         con_ssh (SSHClient):
-        auth_info (dict)
+        auth_info (dict):
+        check_hypervisor_up (bool): Whether to check if host is up in nova hypervisor-list
 
     Returns (tuple):
         (-1, "Host already unlocked. Do nothing")
@@ -383,7 +384,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
         return 4, "Host is in degraded state after unlocked."
 
     if check_hypervisor_up:
-        if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh)[0]:
+        if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[0]:
             return 6, "Host is not up in nova hypervisor-list"
 
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
@@ -524,7 +525,7 @@ def get_hostshow_values(host, con_ssh=None, *fields):
     return rtn
 
 
-def _wait_for_openstack_cli_enable(con_ssh=None, timeout=30, fail_ok=False):
+def _wait_for_openstack_cli_enable(con_ssh=None, timeout=60, fail_ok=False, check_interval=1):
     cli_enable_end_time = time.time() + timeout
     while True:
         try:
@@ -536,6 +537,7 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=30, fail_ok=False):
                     LOG.warning("Timed out waiting for cli to enable. \nException: {}".format(e))
                     return False
                 raise
+            time.sleep(check_interval)
 
 
 def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, strict=True, regex=False, fail_ok=True,
@@ -545,19 +547,22 @@ def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, st
 
     LOG.info("Waiting for {} to reach state(s) - {}".format(host, states))
     end_time = time.time() + timeout
+    last_vals = {}
+    for field in states:
+        last_vals[field] = None
     while time.time() < end_time:
         table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
-        for field, val in states.items():
+        for field, expt_vals in states.items():
             actual_val = table_parser.get_value_two_col_table(table_, field)
             # ['Lock of host compute-0 rejected because instance vm-from-vol-t1 is', 'suspended.']
             if isinstance(actual_val, list):
                 actual_val = ' '.join(actual_val)
 
             actual_val_lower = actual_val.lower()
-            if isinstance(val, str):
-                val = [val]
+            if isinstance(expt_vals, str):
+                expt_vals = [expt_vals]
 
-            for expected_val in val:
+            for expected_val in expt_vals:
                 expected_val_lower = expected_val.strip().lower()
                 found_match = False
                 if regex:
@@ -577,7 +582,9 @@ def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, st
                     LOG.info("{} {} has reached: {}".format(host, field, actual_val))
                     break
             else:   # no match found. run system host-show again
-                LOG.info("{} {} is {}. Expected: {}".format(host, field, actual_val, val))
+                if last_vals[field] != actual_val_lower:
+                    LOG.info("{} {} is {}.".format(host, field, actual_val))
+                last_vals[field] = actual_val_lower
                 break
         else:
             LOG.info("{} is in states: {}".format(host, states))
@@ -743,7 +750,7 @@ def wait_for_hypervisors_up(hosts, timeout=60, check_interval=3, fail_ok=False, 
         raise exceptions.HostTimeout(msg)
 
 
-def wait_for_hosts_in_nova(hosts, timeout=60, check_interval=3, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def wait_for_hosts_in_nova(hosts, timeout=90, check_interval=3, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
 
     if isinstance(hosts, str):
         hosts = [hosts]
@@ -999,8 +1006,8 @@ def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (dict): format: {<proc_id> (str): <log_cores> (list), ...}
-        e.g., {'0': ['1', '2'], '1': ['21', '22']}
+    Returns (dict): format: {<proc_id> (int): <log_cores> (list), ...}
+        e.g., {0: [1, 2], 1: [21, 22]}
 
     """
     table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh, auth_info=auth_info))

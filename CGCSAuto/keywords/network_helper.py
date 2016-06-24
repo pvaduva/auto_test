@@ -1384,12 +1384,12 @@ def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=Fal
     return 0, succ_msg
 
 
-def get_provider_net_for_interface(interface='pthru', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_provider_net_for_interface(interface='pcipt', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get provider net id for SRIOV interface
 
     Args:
-        interface (str): 'pthru' or 'sriov'
+        interface (str): 'pcipt' or 'sriov'
         filepath: lab_setup.conf path to retrive the info from
         con_ssh (SSHClient):
         auth_info (dict):
@@ -1397,8 +1397,9 @@ def get_provider_net_for_interface(interface='pthru', filepath=None, con_ssh=Non
     Returns (str):  id of the provider net for SRIOV interface. Returns empty string if not found.
 
     """
-    valid_interfaces = ['pthru', 'sriov']
-    if not interface in valid_interfaces:
+    valid_interfaces = ['pcipt', 'sriov']
+    interface = 'pthru' if interface == 'pcipt' else interface
+    if interface not in valid_interfaces:
         raise ValueError("Interface has to be one of the following: {}".format(valid_interfaces))
 
     if filepath is None:

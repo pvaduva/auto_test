@@ -87,7 +87,7 @@ class TestLockWithVM:
 
         def unlock():
             if self.lock_rtn_code in [0, 3]:
-                host_helper.unlock_host(self.target_host)
+                host_helper.unlock_host(self.target_host, check_hypervisor_up=True)
         request.addfinalizer(unlock)
 
     @mark.skipif(len(host_helper.get_hypervisors()) < 2, reason="Less than 2 hypervisor hosts on the system")
@@ -239,7 +239,7 @@ class TestLockWithVMs:
                 vm_helper.delete_vms(vm_to_del)
             nova_helper.delete_flavors(all_new_flavors)
             for host_to_unlock in self.hosts_locked:
-                host_helper.unlock_host(host_to_unlock)
+                host_helper.unlock_host(host_to_unlock, check_hypervisor_up=True)
                 host_helper.wait_for_hosts_in_nova(host_to_unlock)
         request.addfinalizer(teardown)
 
@@ -328,7 +328,7 @@ class TestLockWithVMsNegative:
                 vm_helper.delete_vms(vm_to_del)
             nova_helper.delete_flavors(all_new_flavors)
             for host_to_unlock in self.hosts_locked:
-                host_helper.unlock_host(host_to_unlock)
+                host_helper.unlock_host(host_to_unlock, check_hypervisor_up=True)
         request.addfinalizer(teardown)
 
         return target_hosts, storages_to_test
