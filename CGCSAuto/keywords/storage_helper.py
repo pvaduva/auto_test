@@ -13,6 +13,7 @@ from keywords import system_helper, host_helper
 from consts.cgcs import Prompt
 from consts.auth import Host
 
+
 def is_ceph_healthy(con_ssh=None):
     """
     Query 'ceph -s' and return True if ceph health is okay
@@ -39,8 +40,10 @@ def is_ceph_healthy(con_ssh=None):
         msg = 'CEPH cluster is in health warn state'
         return False, msg
 
-    LOG.info('Cannot determine CEPH health state')
+    msg = 'Cannot determine CEPH health state'
+    LOG.info(msg)
     return False, msg
+
 
 def get_num_osds(con_ssh=None):
     """
@@ -62,24 +65,20 @@ def get_num_osds(con_ssh=None):
     LOG.info('There are no OSDs on the system')
     return 0
 
+
 def get_osd_host(osd_id, con_ssh=None):
     """
     Return the host associated with the provided OSD ID
     Args:
         con_ssh(SSHClient):
-        osd_id - an OSD number, e.g. 0, 1, 2, 3...
+        osd_id (int): an OSD number, e.g. 0, 1, 2, 3...
 
     Returns:
         - Return hostname or -1 if not found
         - Return message
     """
-
-    cli.source_admin(con_ssh)
-
     storage_hosts = system_helper.get_storage_nodes()
     for host in storage_hosts:
-        cmd = 'system host-stor-list {}'.format(host)
-        rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=60)
         table_ = table_parser.table(cli.system('host-stor-list', host))
         osd_list = table_parser.get_values(table_, 'osdid')
         if osd_id in osd_list:
@@ -88,6 +87,7 @@ def get_osd_host(osd_id, con_ssh=None):
 
     msg = 'Could not find host for OSD ID {}'.format(osd_id)
     return -1, msg
+
 
 def kill_process(host, pid):
     """
@@ -101,14 +101,13 @@ def kill_process(host, pid):
         - (string) message
     """
 
-
     cmd = 'kill -9 {}'.format(pid)
 
     # SSH could be redundant if we are on controller-0 (oh well!)
     LOG.info('Kill process {} on {}'.format(pid, host))
     with host_helper.ssh_to_host(host) as host_ssh:
         with host_ssh.login_as_root() as root_ssh:
-            rtn_code, out = root_ssh.exec_cmd(cmd, expect_timeout=60)
+            root_ssh.exec_cmd(cmd, expect_timeout=60)
             LOG.info(cmd)
 
         LOG.info('Ensure the PID is no longer listed')
@@ -117,6 +116,7 @@ def kill_process(host, pid):
             return False, msg
 
     return True, msg
+
 
 # TODO: get_osd_pid and get_mon_pid are good candidates for combining
 def get_osd_pid(osd_host, osd_id):
@@ -144,6 +144,7 @@ def get_osd_pid(osd_host, osd_id):
     msg = 'Corresponding pid for OSD ID {} was not found'.format(osd_id)
     return -1, msg
 
+
 # TODO: get_osd_pid and get_mon_pid are good candidates for combining
 def get_mon_pid(mon_host):
     """
@@ -165,7 +166,7 @@ def get_mon_pid(mon_host):
         if pid:
             msg = 'Corresponding ceph-mon pid for {} is {}'.format(mon_host, pid.group(1))
             return pid.group(1), msg
-
+    # FIXME
     msg = 'Corresponding ceph-mon pid for {} was not found'.format(mon_host)
 
 
@@ -191,11 +192,7 @@ def get_osds(host=None, con_ssh=None):
             Nothing.  Update osd_list by side-effect.
         """
 
-        cli.source_admin(con_ssh)
-
-        cmd = 'system host-stor-list {}'.format(host)
-        rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=60)
-        table_ = table_parser.table(cli.system('host-stor-list', host))
+        table_ = table_parser.table(cli.system('host-stor-list', host, ssh_client=con_ssh))
         osd_list = osd_list + table_parser.get_values(table_, 'osdid')
 
         return osd_list
@@ -205,11 +202,12 @@ def get_osds(host=None, con_ssh=None):
     if host:
         osd_list = _get_osds_per_host(host, osd_list, con_ssh)
     else:
-        storage_hosts = system_helper.get_storage_hosts()
+        storage_hosts = system_helper.get_storage_nodes()
         for host in storage_hosts:
             osd_list = _get_osds_per_host(host, osd_list, con_ssh)
 
     return osd_list
+
 
 def is_osd_up(osd_id, con_ssh=None):
     """
@@ -229,25 +227,27 @@ def is_osd_up(osd_id, con_ssh=None):
     else:
         return False
 
-def check_pid_exists(pid, con_ssh=None):
+
+def check_pid_exists(pid, host_ssh):
     """
     Check if a PID exists on a particular host.
     Args:
-        con_ssh(SSHClient)
-        pid - the process ID
+        host_ssh (SSHClient)
+        pid (int|str): the process ID
     Returns (bool):
         True if pid exists and False otherwise
     """
 
     cmd = 'kill -0 {}'.format(pid)
 
-    rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=60)
+    rtn_code, out = host_ssh.exec_cmd(cmd, expect_timeout=60)
     if rtn_code != 1:
         msg = 'Process {} exists'.format(pid)
         return True, msg
 
     msg = 'Process {} does not exist'.format(pid)
     return False, msg
+
 
 def get_storage_group(host):
     """
@@ -269,6 +269,7 @@ def get_storage_group(host):
     storage_group = storage_group.group(0)
     msg = 'The replication group for {} is {}'.format(host, storage_group)
     return storage_group, msg
+
 
 def download_images(dload_type='all', img_dest='~/images/', con_ssh=None):
     """
@@ -292,7 +293,7 @@ def download_images(dload_type='all', img_dest='~/images/', con_ssh=None):
         """
         for url in urls:
             cmd = 'wget {} --no-check-certificate -P {}'.format(url, img_dest)
-            rtn_code, out = con_ssh.exec_cmd(cmd)
+            rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=7200)
             assert not rtn_code, out
 
     centos_image_location = \
@@ -317,3 +318,76 @@ def download_images(dload_type='all', img_dest='~/images/', con_ssh=None):
         _wget(centos_image_location)
 
     #return image_names
+
+def find_images(con_ssh, image_type='qcow2', location='~/images'):
+    '''
+    This function finds all images of a given type, in the given location.
+    This is designed to save test time, to prevent downloading images if not
+    necessary.
+
+    Arguments:
+        - image_type(string): image format, e.g. 'qcow2', 'raw', etc.
+        - location(string): where to find images, e.g. '~/images' 
+
+    Test Steps:
+        1.  Cycle through the files in a given location
+        2.  Create a list of image names of the expected type 
+
+    Return:
+        - image_names(list): list of image names of a given type, e.g.
+          'cgcs-guest.img'
+    '''
+
+    image_names = []
+
+    cmd = 'ls {}'.format(location)
+    rtn_code, out = con_ssh.exec_cmd(cmd)
+    image_list = out.split()
+    LOG.info('Found the following files: {}'.format(image_list))
+
+    # Return a list of image names where the image type matches what the user
+    # is looking for, e.g. qcow2
+    for image in image_list:
+        image_path = location + "/" + image
+        cmd = 'qemu-img info {}'.format(image_path)
+        rtn_code, out = con_ssh.exec_cmd(cmd)
+        if image_type in out:
+            image_names.append(image)
+
+    LOG.info('{} images available: {}'.format(image_type, image_names))
+    return image_names
+
+
+def find_image_size(con_ssh, image_name='cgcs-guest.img', location='~/images'):
+    '''
+    This function uses qemu-img info to determine what size of flavor to use. 
+
+    Arguments:
+        - con_ssh: ssh connection
+        - image_name(string): e.g. 'cgcs-guest.img'
+        - location(string): where to find images, e.g. '~/images' 
+
+    Test Steps:
+        1.  Parse qemu-img info for the image size 
+
+    Return:
+        - image_size(int): e.g. 8
+    '''
+
+
+    image_path = location + "/" + image_name
+    cmd = 'qemu-img info {}'.format(image_path)
+    rtn_code, out = con_ssh.exec_cmd(cmd)
+    virtual_size = re.search('virtual size: (\d+\.*\d*[M|G])', out)
+    msg = 'Unable to determine size of image {}'.format(image_name)
+    assert virtual_size.group(0), msg
+    # If the size is less than 1G, round to 1
+    # If the size is greater than 1G, round up
+    if 'M' in virtual_size.group(1):
+        image_size = 1
+    else:
+        image_size = round(float(virtual_size.group(1).strip('G')))
+
+    return image_size
+
+
