@@ -1397,15 +1397,12 @@ def get_provider_net_for_interface(interface='pcipt', filepath=None, con_ssh=Non
     Returns (str):  id of the provider net for SRIOV interface. Returns empty string if not found.
 
     """
-    valid_interfaces = ['pcipt', 'sriov']
-<<<<<<< HEAD
-=======
+    valid_interfaces = ['pthru', 'sriov']
     interface = 'pthru' if interface == 'pcipt' else interface
->>>>>>> c8749773af3862af496888cdf7c5fdf51cc603f9
+
     if interface not in valid_interfaces:
         raise ValueError("Interface has to be one of the following: {}".format(valid_interfaces))
 
-    interface = 'pthru' if interface == 'pcipt' else interface
     if filepath is None:
         filepath = "lab_setup.conf"
 

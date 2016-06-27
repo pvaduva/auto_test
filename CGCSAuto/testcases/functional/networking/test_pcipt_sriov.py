@@ -10,7 +10,7 @@ from keywords import vm_helper, nova_helper, host_helper, network_helper, cinder
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-
+@mark.skipif(True, reason="Update required")
 @mark.parametrize(('vm_type', 'resource_usage'), [
     ('pcipt', 'pci_vfs_used'),
     ('sriov', 'pci_pfs_used')
@@ -50,7 +50,7 @@ def test_sriov_pcipt_with_vm_actions(vm_type):
 
 
 
-    if not pnet_id
+    if not pnet_id:
         skip("The lab does not support {}".format(vm_type))
     print(pnet_id)
 
