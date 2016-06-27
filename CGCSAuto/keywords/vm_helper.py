@@ -1459,7 +1459,8 @@ def _perform_action_on_vm(vm_id, action, expt_status, timeout=VMTimeout.STATUS_C
                           auth_info=None):
 
     LOG.info("{}ing vm {}...".format(action, vm_id))
-    code, output = cli.nova(action, vm_id, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+    code, output = cli.nova(action, vm_id, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True,
+                            timeout=120)
 
     if code == 1:
         return 1, output
