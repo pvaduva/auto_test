@@ -823,3 +823,68 @@ def delete_stroage_profile(profile='', con_ssh=None):
     cli.system(cmd, ssh_client=con_ssh, fail_ok=False, auth_info=Tenant.ADMIN, rtn_list=False)
 
 
+def get_host_cpu_list(host, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get the parsed version of the output from system host-cpu-list <host>
+    Args:
+        host (str): host's name
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (dict): output of system host-cpu-list <host> parsed by table_parser
+
+    """
+    output = cli.system('host-cpu-list', host, ssh_client=con_ssh, auth_info=auth_info)
+    table_ = table_parser.table(output)
+    return table_
+
+
+def get_host_mem_list(host, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get the parsed version of the output from system host-memory-list <host>
+        Args:
+            host (str): host's name
+            con_ssh (SSHClient):
+            auth_info (dict):
+
+        Returns (dict): output of system host-memory-list <host> parsed by table_parser
+
+        """
+    output = cli.system('host-memory-list', host, ssh_client=con_ssh, auth_info=auth_info)
+    table_ = table_parser.table(output)
+    return table_
+
+def get_host_cpu_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get the parsed version of the output from system host-cpu-show <host> <proc_num>
+    Args:
+        host (str): host's name
+        proc_num (int): logical core number
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (dict): output of system host-cpu-show <host> <proc_num> parsed by table_parser
+
+    """
+    pos_args = host + ' ' + proc_num
+    output = cli.system('host-cpu-show', positional_args=pos_args, ssh_client=con_ssh, auth_info=auth_info)
+    table_ = table_parser.table(output)
+    return table_
+
+
+def get_host_mem_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get the parsed version of the output from system host-memory-list <host> <proc_num>
+    Args:
+        host (str): host's name
+        proc_num (int): processor number
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+        Returns (dict): output of system host-memory-show <host> <proc_num> parsed by table_parser
+
+    """
+    pos_args = host + ' ' + proc_num
+    output = cli.system('host-memory-show', positional_args=pos_args, ssh_client=con_ssh, auth_info=auth_info)
+    table_ = table_parser.table(output)
+    return table_
