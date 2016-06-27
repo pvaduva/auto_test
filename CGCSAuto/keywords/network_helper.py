@@ -525,11 +525,12 @@ def get_neutron_port(name=None, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
-def get_provider_nets(name=None, con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN):
+def get_provider_nets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN):
     """
     Get the neutron provider net list based on name if given for ADMIN user.
 
     Args:
+        rtn_val (str): id or name
         con_ssh (SSHClient): If None, active controller ssh will be used.
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
         name (str): Given name for the provider network to filter
@@ -541,9 +542,9 @@ def get_provider_nets(name=None, con_ssh=None, strict=False, regex=False, auth_i
     """
     table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is None:
-        return table_parser.get_values(table_, 'id')
+        return table_parser.get_values(table_, rtn_val)
 
-    return table_parser.get_values(table_, 'id', strict=strict, regex=regex, name=name)
+    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, name=name)
 
 
 def get_provider_net_ranges(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
@@ -1384,12 +1385,13 @@ def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=Fal
     return 0, succ_msg
 
 
-def get_provider_net_for_interface(interface='pcipt', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_provider_net_for_interface(interface='pthru', rtn_val='id', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get provider net id for SRIOV interface
 
     Args:
-        interface (str): 'pcipt' or 'sriov'
+        interface (str): 'pthru' or 'sriov'
+        rtn_val (str): 'id' or 'name'
         filepath: lab_setup.conf path to retrive the info from
         con_ssh (SSHClient):
         auth_info (dict):
@@ -1420,5 +1422,22 @@ def get_provider_net_for_interface(interface='pcipt', filepath=None, con_ssh=Non
     if not provider_net_name:
         return ''
 
-    return get_provider_nets(name='.*{}'.format(provider_net_name[0]), con_ssh=con_ssh, strict=True, regex=True,
-                             auth_info=auth_info)[0]
+    return get_provider_nets(name='.*{}'.format(provider_net_name), rtn_val=rtn_val, con_ssh=con_ssh, strict=True,
+                             regex=True, auth_info=auth_info)[0]
+
+
+def get_networks_on_providernet(providernet_name, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        con_ssh:
+        providernet_name:
+        auth_info:
+
+    Returns:
+        statue (0 or 1) and the list of network IDs
+    """
+    table_ = table_parser.table(cli.neutron(cmd='net-list-on-providernet', positional_args=providernet_name,
+                                            auth_info=auth_info, ssh_client=con_ssh))
+
+    return table_parser.get_values(table_, 'id')
