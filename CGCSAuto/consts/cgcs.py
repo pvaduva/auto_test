@@ -23,6 +23,7 @@ BOOT_FROM_VOLUME = 'Attempt to boot from volume - no image supplied'
 
 
 IMAGE_DIR = '/home/wrsroot/images'
+DEFAULT_GUEST = 'cgcs-guest.img'
 
 DNS_NAMESERVERS = ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
 
@@ -161,6 +162,7 @@ class EventLogID:
     STORAGE_DEGRADE = '200.006'
     STORAGE_ALARM_COND = '800.001'
     STORAGE_LOR = '800.011'
+    STORAGE_POOLQUOTA = '800.003'
     HOST_LOCK = '200.001'
 
 class NetworkingVmMapping:

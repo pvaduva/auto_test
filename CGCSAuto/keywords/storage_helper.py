@@ -327,6 +327,7 @@ def find_images(con_ssh, image_type='qcow2', location='~/images'):
 
     Arguments:
         - image_type(string): image format, e.g. 'qcow2', 'raw', etc.
+          - if the user specifies 'all', return all images
         - location(string): where to find images, e.g. '~/images' 
 
     Test Steps:
@@ -335,7 +336,8 @@ def find_images(con_ssh, image_type='qcow2', location='~/images'):
 
     Return:
         - image_names(list): list of image names of a given type, e.g.
-          'cgcs-guest.img'
+          'cgcs-guest.img' or all images if the user specified 'all' as the
+          argument to image_type.
     '''
 
     image_names = []
@@ -344,6 +346,8 @@ def find_images(con_ssh, image_type='qcow2', location='~/images'):
     rtn_code, out = con_ssh.exec_cmd(cmd)
     image_list = out.split()
     LOG.info('Found the following files: {}'.format(image_list))
+    if image_type='all':
+        return image_list
 
     # Return a list of image names where the image type matches what the user
     # is looking for, e.g. qcow2

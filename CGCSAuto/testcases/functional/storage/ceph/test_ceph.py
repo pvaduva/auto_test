@@ -961,8 +961,6 @@ def test_import_raw_with_cache_raw():
 
     con_ssh = ControllerClient.get_active_controller()
 
-    img_loc = '/home/wrsroot/images/'
-
     # Return a list of images of a given type
     LOG.tc_step('Determine what raw images we have available')
     image_names = storage_helper.find_images(con_ssh, image_type='raw')
@@ -970,7 +968,9 @@ def test_import_raw_with_cache_raw():
     if not image_names:
         LOG.info('No raw images were found on the controller')
         LOG.tc_step('Rsyncing images from controller-0')
-        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no " {} controller-1:{}'.format(img_loc, img_loc)
+        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o
+        StrictHostKeyChecking=no " {} controller-1:{}'.format(IMAGE_DIR,
+        IMAGE_DIR)
         con_ssh.exec_cmd(rsync_images)
         image_names = storage_helper.find_images(con_ssh, image_type='raw')
         msg = 'No images found on controller'
@@ -978,7 +978,7 @@ def test_import_raw_with_cache_raw():
 
     LOG.tc_step('Import raw images into glance with --cache-raw')
     for image in image_names: 
-        source_image_loc = img_loc + image
+        source_image_loc = IMAGE_DIR + image
         img_name = 'testimage_{}'.format(image)
         ret = glance_helper.create_image(source_image_file=source_image_loc,
                                          disk_format='raw', \
@@ -1025,8 +1025,6 @@ def test_exceed_size_of_img_pool():
     con_ssh = ControllerClient.get_active_controller()
     glance_ids = []
 
-    img_loc = '/home/wrsroot/images/'
-
     # Return a list of images of a given type
     LOG.tc_step('Determine what qcow2 images we have available')
     image_names = storage_helper.find_images(con_ssh)
@@ -1035,12 +1033,12 @@ def test_exceed_size_of_img_pool():
         LOG.info('No qcow2 images were found on the system')
         LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
         image_names = storage_helper.download_images(dload_type='ubuntu', \
-            img_dest=img_loc, con_ssh=con_ssh)
+            img_dest=IMAGE_DIR, con_ssh=con_ssh)
 
     LOG.tc_step('Import qcow2 images into glance until pool is full')
-    img_loc = img_loc + "/" + image_names[0]
+    source_img = IMAGE_DIR + "/" + image_names[0]
     while True:
-        ret = glance_helper.create_image(source_image_file=img_loc,
+        ret = glance_helper.create_image(source_image_file=source_img,
                                          disk_format='qcow2', \
                                          container_format='bare', \
                                          cache_raw=True, wait=True,
@@ -1073,4 +1071,291 @@ def test_exceed_size_of_img_pool():
 
     #LOG.tc_step('Delete Image(s) {}'.format(glance_ids))
     #glance_helper.delete_images(glance_ids)
+
+@mark.usefixtures('ceph_precheck')
+def test_import_large_images_with_cache_raw():
+    """
+    Verify that system behaviour when we attempt to import large images, i.e.
+    20-40GB, with cache-raw enabled. 
+
+    This is US68056_tc4_import_large_images_with_cache_raw
+    us68056_glance_backend_to_storage_node.odt
+
+    Args:
+    - None
+
+    Setup:
+        - Requires a system with storage nodes
+
+    Test Steps:
+        1.  Determine if we have a cgcs-guest.img and if not, rsync from the
+        other controller
+        2.  Use qemu-img resize to enlarge an existing cgcs-guest image
+        3.  Use qemu-img convert to convert the raw image into qcow2
+        4.  Import image into glance with --cache-raw specified
+        5.  Ensure the image is imported successfully
+        6.  Create a flavor of sufficient size for the image
+        6.  Using the image, create a volume
+        7.  Launch a VM from volume
+        8.  Launch a VM from image
+        9.  Cleanup flavors and VMs
+    """
+
+
+    con_ssh = ControllerClient.get_active_controller()
+    img = 'cgcs-guest'
+    base_img = img + '.img'
+    qcow2_img = img + '.qcow2'
+    new_img = '40GB' + base_img
+
+    # Check that we have the cgcs-guest.img available
+    # If we are on controller-1, we may need to rsync image files from
+    # controller-0
+    LOG.tc_step('Determine if the cgcs-guest image is available')
+    image_names = storage_helper.find_images(con_ssh)
+    if base_img not in image_names:
+        LOG.tc_step('Rsyncing images from controller-0')
+        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o
+        StrictHostKeyChecking=no " {} controller-1:{}'.format(IMAGE_DIR,
+        IMAGE_DIR)
+        con_ssh.exec_cmd(rsync_images)
+        image_names = storage_helper.find_images(con_ssh)
+        msg = '{} was not found in {}'.format(base_img, IMAGE_DIR)
+        assert base_img in image_names, msg
+
+    # Resize the image to 40GB
+    LOG.tc_step('Resize the cgcs-guest image to 40GB')
+    cmd = 'cp {}/{} {}/{}'.format(IMAGE_DIR, base_img, IMAGE_DIR, new_img)
+    rtn_code, out = con_ssh.exec_cmd(cmd)
+    assert not rtn_code, out
+    cmd = 'qemu-img resize {} -f raw 40G'.format(new_img)
+    rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=600)
+    assert not rtn_code, out
+    
+    # Confirm the virtual size is 40GB
+    size = find_image_size(con_ssh, image_name=new_img)
+    msg = 'Image was not resized to 40GB'
+    assert size == '40', msg
+
+    # Convert the image to qcow2
+    LOG.tc_step('Convert the raw image to qcow2')
+    cmd = 'qemu-img convert -f raw -O qcow2 {}/{} {}/{}'.format(IMAGE_DIR, new_img, IMAGE_DIR, qcow2_img)
+    rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=600)
+    assert not rtn_code, out
+
+    # Check the image type is updated
+    image_names = storage_helper.find_images(con_ssh, image_type='qcow2')
+    msg = 'qcow2 image was not found in {}'.format(IMAGE_DIR)
+    assert qcow2_img in image_names, msg
+
+    LOG.tc_step('Import image into glance')
+    source_img = IMAGE_DIR + qcow2_img
+    out = glance_helper.create_image(source_image_file=source_img,
+                                     disk_format='qcow2', \
+                                     container_format='bare', \
+                                     cache_raw=True, wait=True)
+    msg = 'Failed to import {} into glance'.format(qcow2_img)
+    assert out[0] == 0, msg
+
+    LOG.tc_step('Create volume from the imported image')
+    volume_id = cinder_helper.create_volume(name=img_name, \
+        image_id=out[1], \
+        size=flav_size,
+        con_ssh=con_ssh, \
+        rtn_exist=False)[1]
+    msg = "Unable to create volume"
+    assert volume_id, msg
+
+    LOG.tc_step('Create flavor of sufficient size for VM')
+    flv = nova_helper.create_flavor(name=img_name, root_disk=size)
+    assert flv[0] == 0, flv[1]
+
+    LOG.tc_step('Launch VM from created volume')
+    vm_id = vm_helper.boot_vm(name=img_name, flavor=flv[1], \
+        source='volume', source_id=volume_id)[1]
+    vm_list.append(vm_id)
+
+    # When spawning, make sure we don't download the image
+    LOG.tc_step('Launch VM from image')
+    img_name2 = img_name + '_fromimage'
+    vm_id2 = vm_helper.boot_vm(name=img_name2, flavor=flv[1], \
+        source='image', source_id=out[1])[1]
+    vm_list.append(vm_id2)
+
+    LOG.tc_step('Delete VMs {}'.format(vm_list))
+    vm_helper.delete_vms(vms=vm_list, con_ssh=con_ssh)
+
+    LOG.tc_step('Delete Flavor(s) {}'.format(flv[1]))
+    nova_helper.delete_flavors(flv[1])
+
+    LOG.tc_step('Delete Image(s) {}'.format(rbd_img_id))
+    glance_helper.delete_images(out[1])
+
+
+@mark.usefixtures('ceph_precheck')
+def test_modify_ceph_pool_size:
+    """
+    Verify that the user can modify the size of the ceph images pool.
+
+    This is US68056_tc5_modify_ceph_pool_size adapted from
+    us68056_glance_backend_to_storage_node.odt
+
+    Args:
+    - None
+
+    Setup:
+        - Requires a system with storage nodes
+
+    Test Steps:
+        1.  Determine the current size of the ceph image pool
+        2.  Increase the ceph image pool size
+        3.  Confirm the pool size has been increased (without having to reboot
+        controllers)
+    """
+
+    con_ssh = ControllerClient.get_active_controller()
+
+    LC.tc_step('Query the size of the CEPH storage pools')
+    table_ = table_parser.table(cli.system('storagepool-show'))
+    glance_pool_gib = int(table_parser.get_values(table_, 'glance_pool_gib'))
+    cinder_pool_gib = int(table_parser.get_values(table_, 'cinder_pool_gib'))
+    ephemeral_pool_gib = int(table_parser.get_values(table_, 'ephemeral_pool_gib'))
+    ceph_total_space_gib = table_parser.get_values(table_, 'ceph_total_space_gib')
+
+    LOG.tc_step('Increase the size of the ceph image pool')
+    total_used = glance_pool_gib + cinder_pool_gib + ephemeral_pool_gib
+    if total_used != ceph_total_space_gib:
+        # Check for 800.003 Ceph cluster has free space unused by storage pool quotas
+        alarms_table = system_helper.get_alarms(query_key='alarm_id',
+            query_value=EventLogID.STORAGE_POOLQUOTA,
+            query_type='string')
+        LOG.info(alarms_table)
+        msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_POOLQUOTA)
+        assert EventLogID.STORAGE_POOLQUOTA in str(alarms_table)
+
+        # Add the free space to the glance_pool_gib
+        total_available = ceph_total_space_gib - total_used
+        new_value = glance_pool_gib + total_available
+        args = 'glance_pool_gib=' + str(new_value)
+        rtn_code, out = cli.system('storagepool-modify', args)
+        msg = 'Failed to change glance storage pool quota from {} to
+        {}'.format(glance_pool_gib, new_value)
+        assert rtn_code == 0, msg
+
+        # Now, let's wait a bit for the free space alarm to clear
+        time.sleep(10)
+
+        # Check for 800.003 Ceph cluster has free space unused by storage pool quotas
+        alarms_table = system_helper.get_alarms(query_key='alarm_id',
+            query_value=EventLogID.STORAGE_POOLQUOTA,
+            query_type='string')
+        LOG.info(alarms_table)
+        msg = "Alarm {} found in alarm-list".format(EventLogID.STORAGE_POOLQUOTA)
+        assert not EventLogID.STORAGE_POOLQUOTA in str(alarms_table)
+
+    else:
+        # Else we have used up all the space we have available, so let's take some
+        # space from the other pools. 
+        # We check because in some cases ephemeral pool can be set to 0
+        if ephemeral_pool_gib > 10:
+            other_args = 'ephemeral_pool_gib=' + str(ephemeral_pool_gib - 10)
+        else:
+            other_args = 'cinder_pool_gib=' + str(cinder_pool_gib - 10)
+
+        glance_args = 'glance_pool_gib=' + str(glance_pool_gib + 10)
+        args = glance_args + " " + other_args
+        new_value = glance_pool_gib + 10
+        rtn_code, out = cli.system('storagepool-modify', args)
+        msg = 'Failed to change glance storage pool quota from {} to
+        {}'.format(glance_pool_gib, new_value)
+        assert rtn_code == 0, msg
+
+    LOG.info('Check the ceph images pool is set to the right value')
+    table_ = table_parser.table(cli.system('storagepool-show'))
+    glance_pool_gib = table_parser.get_values(table_, 'glance_pool_gib')
+
+    msg = 'Glance pool size was supposed to be {} but is {} instead'.format(new_value, glance_pool_gib)
+    assert int(glance_pool_gib) == new_value, msg
+
+
+@mark.usefixtures('ceph_precheck')
+def test_modify_ceph_pool_size:
+    """
+    Verify that the user can modify the size of the ceph images pool.
+
+    This is US68056_tc6_neg_modify_ceph_pool_size adapted from
+    us68056_glance_backend_to_storage_node.odt
+
+    Args:
+    - None
+
+    Setup:
+        - Requires a system with storage nodes
+
+    Test Steps:
+        1.  Determine the current size of the ceph image pool
+        2.  Fill up the images pool until you can't add anymore images
+        3.  Attempt to set the ceph pool size to less than the data in the
+        pool.  It should be rejected.
+        4.  Increase the pool size.
+        5.  Ensure you can import another image.
+    """
+
+    con_ssh = ControllerClient.get_active_controller()
+
+    LOG.tc_step('Query the size of the CEPH storage pools')
+    table_ = table_parser.table(cli.system('storagepool-show'))
+    glance_pool_gib = int(table_parser.get_values(table_, 'glance_pool_gib'))
+
+    LOG.tc_step('Determine what qcow2 images we have available')
+    image_names = storage_helper.find_images(con_ssh)
+
+    if not image_names:
+        LOG.info('No qcow2 images were found on the system')
+        LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
+        image_names = storage_helper.download_images(dload_type='ubuntu', \
+            img_dest=IMAGE_DIR, con_ssh=con_ssh)
+
+    LOG.tc_step('Import qcow2 images into glance until pool is full')
+    source_img = IMAGE_DIR + "/" + image_names[0]
+    while True:
+        ret = glance_helper.create_image(source_image_file=source_img,
+                                         disk_format='qcow2', \
+                                         container_format='bare', \
+                                         cache_raw=True, wait=True,
+                                         fail_ok=True)
+        glance_ids.append(ret[1])
+
+        if ret[0] == 1:
+            break
+
+    LOG.tc_step('Attempt to reduce the quota to less than the data in pool')
+    glance_args = 'glance_pool_gib=' + str(glance_pool_gib - 10)
+    eph_args = 'ephemeral_pool_gib=' + str(ephemeral_pool_gib + 10)
+    args = glance_args + " " + eph_args
+    new_value = glance_pool_gib - 10
+    rtn_code, out = cli.system('storagepool-modify', args)
+    msg = 'Unexpectedly changed glance storage pool quota from {} to
+    {}'.format(glance_pool_gib, new_value)
+    assert rtn_code != 0, msg
+
+    LOG.tc_step('Increase the pool quota and ensure you can import images
+    again')
+    glance_args = 'glance_pool_gib=' + str(glance_pool_gib + 20)
+    eph_args = 'ephemeral_pool_gib=' + str(ephemeral_pool_gib - 20)
+    args = glance_args + " " + eph_args
+    new_value = glance_pool_gib + 20
+    rtn_code, out = cli.system('storagepool-modify', args)
+    msg = 'Could not change glance storage pool quota from {} to {}'.format(glance_pool_gib, new_value)
+    assert rtn_code == 0, msg
+
+    LOG.tc_step('Import one more image')
+    ret = glance_helper.create_image(source_image_file=source_img,
+                                        disk_format='qcow2', \
+                                        container_format='bare', \
+                                        cache_raw=True, wait=True,
+                                        fail_ok=True)
+    msg = 'Was not able to import another image after increasing the quota'
+    assert ret[0] == 0, msg
+
 
