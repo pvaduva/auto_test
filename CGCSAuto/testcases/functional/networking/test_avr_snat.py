@@ -185,6 +185,7 @@ def test_ext_access_host_reboot(snat_setups, snat):
 
 @mark.slow
 @mark.trylast
+@mark.skipif(True, reason="CGTS-4616")
 def test_ext_access_computes_lock_reboot(snat_setups):
     """
     test vm external access after host compute reboot with all rest of computes locked

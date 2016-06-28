@@ -112,6 +112,14 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         return -1, "Reboot hosts command sent."
 
     hostnames = sorted(hostnames)
+    hosts_in_rebooting = _wait_for_hosts_states(
+            hostnames, timeout=HostTimeout.FAIL_AFTER_REBOOT, check_interval=10, duration=8, con_ssh=con_ssh,
+            availability=[HostAavailabilityState.OFFLINE, HostAavailabilityState.FAILED])
+
+    if not hosts_in_rebooting:
+        hosts_info = get_host_show_values_for_hosts(hostnames, 'task', 'availability', con_ssh=con_ssh)
+        raise exceptions.HostError("Some hosts are not rebooting. \nHosts info:{}".format(hosts_info))
+
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
     unlocked_hosts_all = table_parser.get_values(table_, 'hostname', administrative='unlocked')
     locked_hosts_all = table_parser.get_values(table_, 'hostname', administrative='locked')
@@ -152,6 +160,15 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         return 1, err_msg
     else:
         raise exceptions.HostPostCheckFailed(err_msg)
+
+
+def get_host_show_values_for_hosts(hostnames, *fields, con_ssh):
+    states_vals = {}
+    for host in hostnames:
+        vals = get_hostshow_values(host, con_ssh, *fields)
+        states_vals[host] = vals
+
+    return states_vals
 
 
 def __hosts_stay_in_states(hosts, duration=10, con_ssh=None, **states):
@@ -750,7 +767,7 @@ def wait_for_hypervisors_up(hosts, timeout=60, check_interval=3, fail_ok=False, 
         raise exceptions.HostTimeout(msg)
 
 
-def wait_for_hosts_in_nova(hosts, timeout=90, check_interval=3, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def wait_for_hosts_in_nova_compute(hosts, timeout=90, check_interval=3, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
 
     if isinstance(hosts, str):
         hosts = [hosts]

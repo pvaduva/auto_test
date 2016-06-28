@@ -72,7 +72,7 @@ class CLIRejected(TiSError):
 
 class HostError(TiSError):
     """Generic Host error"""
-    message = "Host not found"
+    message = "Host error."
 
 
 class HostPostCheckFailed(HostError):

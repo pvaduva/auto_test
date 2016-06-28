@@ -85,7 +85,8 @@ def test_oam_intf_mtu_modified(mtu):
     # swact active and standby controller
 
     # wait for hostname to be back in host list in nova
-    host_helper.wait_for_hosts_in_nova(first_host)
+    host_helper.wait_for_hypervisors_up(first_host)
+    host_helper.wait_for_hosts_in_nova_compute(first_host)
 
     host_helper.swact_host(fail_ok=False)
     # modify mtu on new standby controller
@@ -138,7 +139,8 @@ def test_data_intf_mtu_modified(mtu):
         modify_mtu_on_interface(host, mtu, 'data')
 
         # wait for hostname to be back in host list in nova
-        host_helper.wait_for_hosts_in_nova(host)
+        host_helper.wait_for_hypervisors_up(host)
+        host_helper.wait_for_hosts_in_nova_compute(host)
 
         # check mtu is updated
         table_ = system_helper.get_interfaces(host, con_ssh=None)

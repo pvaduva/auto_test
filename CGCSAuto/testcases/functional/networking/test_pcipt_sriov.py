@@ -15,8 +15,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
     ('pcipt', 'pci_vfs_used'),
     ('sriov', 'pci_pfs_used')
 ])
-
-def test_sriov_pcipt_with_vm_actions(vm_type):
+def incomplete_test_sriov_pcipt_with_vm_actions(vm_type, resource_usage):
     """
     <summary>
 

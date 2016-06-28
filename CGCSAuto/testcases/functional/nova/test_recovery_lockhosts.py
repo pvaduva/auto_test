@@ -11,19 +11,22 @@ from testfixtures.resource_mgmt import ResourceCleanup
 @fixture(scope='module')
 def target_host(request):
     nova_hosts = host_helper.get_nova_hosts()
-    if len(nova_hosts) > 3:
-        skip("More than 3 nova hosts detected.")
+    if len(nova_hosts) > 4:
+        skip("More than 4 nova hosts detected.")
 
     if system_helper.is_small_footprint():
         target_host = system_helper.get_active_controller_name()
     else:
         target_host = host_helper.get_nova_host_with_min_or_max_vms(rtn_max=True)
 
+    assert target_host, "No nova host found on the system."
+
     nova_hosts = host_helper.get_nova_hosts()
     hosts_to_lock = list(set(nova_hosts) - {target_host})
 
     def unlock():
-        host_helper.unlock_hosts(hosts=hosts_to_lock)
+        if hosts_to_lock:
+            host_helper.unlock_hosts(hosts=hosts_to_lock)
     request.addfinalizer(unlock)
 
     for host in hosts_to_lock:
@@ -32,6 +35,7 @@ def target_host(request):
     return target_host
 
 
+@mark.skipif(True, reason="CGTS-4616")
 @mark.p1
 def test_vm_autorecovery_reboot_host(target_host):
     """
@@ -60,7 +64,7 @@ def test_vm_autorecovery_reboot_host(target_host):
     for heartbeat in [True, False]:
         LOG.tc_step("Create a flavor and set guest heartbeat to {}".format(heartbeat))
         flavor_id = nova_helper.create_flavor(name='ar_default_hb_{}'.format(heartbeat))[1]
-        ResourceCleanup.add('flavor', flavor_id)
+        # ResourceCleanup.add('flavor', flavor_id)
 
         extra_specs = {FlavorSpec.GUEST_HEARTBEAT: str(heartbeat)}
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
@@ -68,10 +72,12 @@ def test_vm_autorecovery_reboot_host(target_host):
         LOG.tc_step("Boot a vm with above flavor")
         vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
         vms.append(vm_id)
-        ResourceCleanup.add('vm', vm_id)
+        # ResourceCleanup.add('vm', vm_id)
 
     LOG.tc_step("Reboot the only nova host")
     host_helper.reboot_hosts(target_host)
+    host_helper.wait_for_hypervisors_up(target_host)
+    host_helper.wait_for_hosts_in_nova_compute(target_host)
 
     for vm_id_ in vms:
         LOG.tc_step("Verify vm failure event is logged for vm {}".format(vm_id_))
