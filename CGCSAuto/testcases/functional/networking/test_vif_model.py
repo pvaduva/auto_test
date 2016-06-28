@@ -11,7 +11,6 @@ from keywords import vm_helper, nova_helper, host_helper, network_helper, cinder
 
 from testfixtures.resource_mgmt import ResourceCleanup
 
-@mark.sanity
 @mark.parametrize('vif_model', ['avp','e1000','virtio'])
 def test_avp_vms_with_vm_actions(vif_model):
     """

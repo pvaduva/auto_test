@@ -9,6 +9,7 @@ from consts.cgcs import VMStatus, FlavorSpec, NetworkingVmMapping
 from keywords import vm_helper, nova_helper, host_helper, glance_helper,system_helper
 
 @mark.sanity
+@mark.skipif(not system_helper.is_small_footprint(), reason="Only applies to small footprint lab.")
 def test_validate_services_persists_over_controller_reboot():
     """
     Validate Inventory summary over reboot of one of the controller see if data persists over reboot
@@ -60,6 +61,7 @@ def test_validate_services_persists_over_controller_reboot():
 
 
 @mark.sanity
+@mark.skipif(not system_helper.is_small_footprint(), reason="Only applies to small footprint lab.")
 def test_validate_services_persists_over_compute_reboot():
     """
     Validate Inventory summary over reboot of one of the compute node see if data persists over reboot
@@ -105,6 +107,7 @@ def test_validate_services_persists_over_compute_reboot():
 
 
 @mark.sanity
+@mark.skipif(not system_helper.is_small_footprint(), reason="Only applies to small footprint lab.")
 def test_validate_inventory_summary_persists_over_reboot():
     """
     Validate Inventory summary over reboot of one of the compute node see if data persists over reboot

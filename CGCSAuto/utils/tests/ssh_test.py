@@ -12,7 +12,7 @@ from utils.tis_log import LOG
 username = 'wrsroot'
 password = 'li69nux'
 # hostname = '10.10.10.3'
-hostname = '128.224.150.73'
+#hostname = '128.224.150.73'
 # hostname = 'yow-cgcs-ironpass-1.wrs.com'
 
 
