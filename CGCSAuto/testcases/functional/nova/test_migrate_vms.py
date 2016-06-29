@@ -86,6 +86,7 @@ def vm_(request, flavor_):
 
     return vm
 
+@mark.sanity
 @mark.skipif(len(keywords.host_helper.get_hypervisors()) < 2, reason="Less than 2 hypervisor hosts on the system")
 @mark.parametrize(
         "block_migrate", [
@@ -138,6 +139,7 @@ def test_live_migrate_vm(vm_, block_migrate):
     assert exp_code == code, "Expected return code {}. Actual return code: {}; details: {}".format(exp_code, code, msg)
 
 
+@mark.sanity
 @mark.skipif(len(keywords.host_helper.get_hypervisors()) < 2, reason="Less than 2 hypervisor hosts on the system")
 @mark.parametrize(
         "revert", [

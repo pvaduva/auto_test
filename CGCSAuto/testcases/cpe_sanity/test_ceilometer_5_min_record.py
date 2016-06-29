@@ -124,6 +124,7 @@ def cmd_execute(action, param='', check_params=''):
 
 
 @mark.cpe_sanity
+@mark.sanity
 def test_742_ceilometer_5_min_record():
     """Verify that ceilometer records 5 minute pm
         Scenario:

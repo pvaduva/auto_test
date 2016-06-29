@@ -232,6 +232,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 # Overall skipif condition for the whole test function (multiple test iterations)
 # This should be a relatively static condition.i.e., independent with test params values
 #@mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
+@mark.sanity
 @mark.usefixtures('check_alarms')
 @mark.parametrize(
     ('template_name'), [
