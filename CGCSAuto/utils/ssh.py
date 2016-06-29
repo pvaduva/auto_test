@@ -601,7 +601,7 @@ class SSHFromSSH(SSHClient):
                 return
 
             except (OSError, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh) as e:
-                LOG.info("herehere {}".format(e))
+                LOG.info("Exception caught when attempt to ssh to {}: {}".format(self.host, e))
                 # fail login if retry=False
                 if not retry:
                     raise

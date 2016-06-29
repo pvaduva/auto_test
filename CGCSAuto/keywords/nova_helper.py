@@ -777,11 +777,12 @@ def get_vm_storage_type(vm_id, con_ssh=None):
     return extra_specs['aggregate_instance_extra_specs:storage']
 
 
-def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False, strict=True, regex=False, **kwargs):
+def get_vms(vms=None, return_val='ID', con_ssh=None, auth_info=None, all_vms=True, strict=True, regex=False, **kwargs):
     """
     get a list of VM IDs or Names for given tenant in auth_info param.
 
     Args:
+        vms (list): filter vms from this list if not None
         return_val (str): 'ID' or 'Name'
         con_ssh (SSHClient): controller SSHClient.
         auth_info (dict): such as ones in auth.py: auth.ADMIN, auth.TENANT1
@@ -801,6 +802,9 @@ def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False, strict
             positional_args = '--all-tenant'
     table_ = table_parser.table(cli.nova('list', positional_args=positional_args, ssh_client=con_ssh,
                                          auth_info=auth_info))
+    if vms:
+        table_ = table_parser.filter_table(table_, ID=vms)
+
     if kwargs:
         return table_parser.get_values(table_, return_val, strict=strict, regex=regex, **kwargs)
     else:

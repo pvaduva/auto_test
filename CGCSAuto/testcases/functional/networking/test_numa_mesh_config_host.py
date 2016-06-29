@@ -49,7 +49,7 @@ def host_to_config(request):
     return host, ht_enabled, is_small_system
 
 
-class VSwitchCPUReconfig:
+class TestVSwitchCPUReconfig:
 
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required'), [
         # (None, None, None, None),           # Test without reconfig

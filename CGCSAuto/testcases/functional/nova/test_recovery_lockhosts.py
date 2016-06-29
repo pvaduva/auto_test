@@ -35,7 +35,7 @@ def target_host(request):
     return target_host
 
 
-@mark.skipif(True, reason="CGTS-4616")
+@mark.skipif(True, reason="Host reboot undetected JIRA CGTS-4616")
 @mark.p1
 def test_vm_autorecovery_reboot_host(target_host):
     """
@@ -64,7 +64,7 @@ def test_vm_autorecovery_reboot_host(target_host):
     for heartbeat in [True, False]:
         LOG.tc_step("Create a flavor and set guest heartbeat to {}".format(heartbeat))
         flavor_id = nova_helper.create_flavor(name='ar_default_hb_{}'.format(heartbeat))[1]
-        # ResourceCleanup.add('flavor', flavor_id)
+        ResourceCleanup.add('flavor', flavor_id)
 
         extra_specs = {FlavorSpec.GUEST_HEARTBEAT: str(heartbeat)}
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
@@ -72,7 +72,7 @@ def test_vm_autorecovery_reboot_host(target_host):
         LOG.tc_step("Boot a vm with above flavor")
         vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
         vms.append(vm_id)
-        # ResourceCleanup.add('vm', vm_id)
+        ResourceCleanup.add('vm', vm_id)
 
     LOG.tc_step("Reboot the only nova host")
     host_helper.reboot_hosts(target_host)

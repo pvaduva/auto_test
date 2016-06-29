@@ -12,8 +12,8 @@ from keywords import vm_helper, nova_helper, host_helper, network_helper, cinder
 from testfixtures.resource_mgmt import ResourceCleanup
 
 @mark.sanity
-@mark.parametrize('vif_model', ['avp','e1000','virtio'])
-def test_avp_vms_with_vm_actions(vif_model):
+@mark.parametrize('vif_model', ['avp', 'e1000', 'virtio'])
+def test_vif_models(vif_model):
     """
     boot avp,e100 and virtio instance
     KNI is same as avp
@@ -45,12 +45,9 @@ def test_avp_vms_with_vm_actions(vif_model):
     sourceid = glance_helper.get_image_id_from_name('cgcs-guest')
     vm = vm_helper.boot_vm(source='image', source_id=sourceid, nics=nics)[1]
     ResourceCleanup.add('vm', vm)
-    sleep(10)
-    LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm))
-    vm_helper.ping_vms_from_natbox(vm)
 
-    #LOG.tc_step("Ping from VM to external ip 8.8.8.8")
-    #vm_helper.ping_ext_from_vm(vm)
+    LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm))
+    vm_helper.wait_for_vm_pingable_from_natbox(vm, fail_ok=False)
 
     LOG.tc_step("Live-migrate the VM and verify ping from VM")
     vm_helper.live_migrate_vm(vm)

@@ -817,8 +817,11 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
     packet_loss_rate = int(packet_loss_rate)
 
     if packet_loss_rate == 100:
+        msg = "Ping from {} to {} failed.".format(ssh_client.host, server)
         if not fail_ok:
-            raise exceptions.VMNetworkError("Ping from {} to {} failed.".format(ssh_client.host, server))
+            raise exceptions.VMNetworkError(msg)
+        else:
+            LOG.warning(msg)
     elif packet_loss_rate > 0:
         LOG.warning("Some packets dropped when ping from {} to {}. Packet loss rate: {}\%".
                     format(ssh_client.host, server, packet_loss_rate))
@@ -829,7 +832,7 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
 
 
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
-              net_types='mgmt'):
+              net_types='mgmt', retry=3, retry_interval=3):
     """
 
     Args:
@@ -861,20 +864,34 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     if not vms_ips:
         raise ValueError("Invalid net_types or vms ips for given net types are not found.")
 
+    res_bool = False
     res_dict = {}
-    for ip in vms_ips:
-        packet_loss_rate = _ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings, timeout=timeout,
-                                        fail_ok=fail_ok)
-        res_dict[ip] = packet_loss_rate
+    for i in range(retry + 1):
+        for ip in vms_ips:
+            packet_loss_rate = _ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings, timeout=timeout,
+                                            fail_ok=True)
+            res_dict[ip] = packet_loss_rate
 
-    LOG.info("Ping results from {}: {}".format(ssh_client.host, res_dict))
+        res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
+        if res_bool:
+            LOG.info("Ping successful from {}: {}".format(ssh_client.host, res_dict))
+            return res_bool, res_dict
 
-    res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
-    return res_bool, res_dict
+        time.sleep(retry_interval)
+
+    if not res_dict:
+        raise ValueError("Ping res dict contains no result.")
+
+    err_msg = "Ping unsuccessful from {}: {}".format(ssh_client.host, res_dict)
+    if fail_ok:
+        LOG.info(err_msg)
+        return res_bool, res_dict
+    else:
+        raise exceptions.VMNetworkError(err_msg)
 
 
 def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False,
-                         use_fip=False):
+                         use_fip=False, retry=0):
     """
 
     Args:
@@ -886,6 +903,7 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
         fail_ok (bool): When False, test will stop right away if one ping failed. When True, test will continue to ping
             the rest of the vms and return results even if pinging one vm failed.
         use_fip (bool): Whether to ping floating ip only if a vm has more than one management ips
+        retry (int): number of times to retry if ping fails
 
     Returns (tuple): (res (bool), packet_loss_dict (dict))
         Packet loss rate dictionary format:
@@ -899,12 +917,12 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
         natbox_client = NATBoxClient.get_natbox_client()
 
     return _ping_vms(vm_ids=vm_ids, ssh_client=natbox_client, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                     fail_ok=fail_ok, use_fip=use_fip, net_types='mgmt')
+                     fail_ok=fail_ok, use_fip=use_fip, net_types='mgmt', retry=retry)
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
                      num_pings=5, timeout=15, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
-                     net_types='mgmt'):
+                     net_types='mgmt', retry=3, retry_interval=3):
     """
 
     Args:
@@ -923,6 +941,8 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         to_fip (bool): Whether to ping floating ip if a vm has floating ip associated with it
         from_fip (bool): whether to ssh to vm's floating ip if it has floating ip associated with it
         net_types (list|str): 'mgmt' or 'data'
+        retry (int): number of times to retry
+        retry_interval (int): seconds to wait between each retries
 
     Returns (tuple):
         A tuple in form: (res (bool), packet_loss_dict (dict))
@@ -953,9 +973,8 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
                                prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
 
         res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                        fail_ok=fail_ok, use_fip=to_fip, net_types=net_types)
-
-    return res
+                        fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry, retry_interval=retry_interval)
+        return res
 
 
 def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
@@ -1184,8 +1203,8 @@ class VMInfo:
         cls.__instances.pop(vm_id, default="No instance found")
 
 
-def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeout.DELETE, fail_ok=False, con_ssh=None,
-               auth_info=Tenant.ADMIN):
+def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeout.DELETE, fail_ok=False,
+               stop_first=True, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Delete given vm(s) (and attached volume(s)). If None vms given, all vms on the system will be deleted.
 
@@ -1195,6 +1214,7 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
         timeout (int): Max time to wait for delete cli finish and wait for vms actually disappear from system
         delete_volumes (bool): delete attached volume(s) if set to True
         fail_ok (bool):
+        stop_first (bool): whether to stop active vm(s) first before deleting. Best effort only
         con_ssh (SSHClient):
         auth_info (dict):
 
@@ -1234,6 +1254,11 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
             return -1, 'None of the given vm(s) exists on system.'
     else:
         vms_to_del = vms
+
+    if stop_first:  # best effort only
+        active_vms = nova_helper.get_vms(vms=vms_to_del, auth_info=Tenant.ADMIN, con_ssh=con_ssh, all_vms=True,
+                                         Status=VMStatus.ACTIVE)
+        stop_vms(active_vms, fail_ok=True, con_ssh=con_ssh, auth_info=auth_info)
 
     vms_to_del_str = ' '.join(vms_to_del)
 
@@ -1455,10 +1480,10 @@ def reboot_vm(vm_id, hard=False, fail_ok=False, con_ssh=None, auth_info=None):
     return 0, succ_msg
 
 
-def _perform_action_on_vm(vm_id, action, expt_status, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None,
-                          auth_info=None):
+def __perform_vm_action(vm_id, action, expt_status, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None,
+                        auth_info=None):
 
-    LOG.info("{}ing vm {}...".format(action, vm_id))
+    LOG.info("{} vm {} begins...".format(action, vm_id))
     code, output = cli.nova(action, vm_id, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True,
                             timeout=120)
 
@@ -1480,43 +1505,43 @@ def _perform_action_on_vm(vm_id, action, expt_status, timeout=VMTimeout.STATUS_C
             return 3, msg
         raise exceptions.VMPostCheckFailed(msg)
 
-    succ_msg = "VM {}ed successfully.".format(action)
+    succ_msg = "{} VM succeeded.".format(action)
     LOG.info(succ_msg)
     return 0, succ_msg
 
 
 def suspend_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
-    return _perform_action_on_vm(vm_id, 'suspend', VMStatus.SUSPENDED, timeout=timeout, fail_ok=fail_ok,
-                                 con_ssh=con_ssh, auth_info=auth_info)
+    return __perform_vm_action(vm_id, 'suspend', VMStatus.SUSPENDED, timeout=timeout, fail_ok=fail_ok,
+                               con_ssh=con_ssh, auth_info=auth_info)
 
 
 def resume_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
-    return _perform_action_on_vm(vm_id, 'resume', VMStatus.ACTIVE, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
-                                 auth_info=auth_info)
+    return __perform_vm_action(vm_id, 'resume', VMStatus.ACTIVE, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
+                               auth_info=auth_info)
 
 
 def pause_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
-    return _perform_action_on_vm(vm_id, 'pause', VMStatus.PAUSED, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
-                                 auth_info=auth_info)
+    return __perform_vm_action(vm_id, 'pause', VMStatus.PAUSED, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
+                               auth_info=auth_info)
 
 
 def unpause_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
-    return _perform_action_on_vm(vm_id, 'unpause', VMStatus.ACTIVE, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
-                                 auth_info=auth_info)
+    return __perform_vm_action(vm_id, 'unpause', VMStatus.ACTIVE, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
+                               auth_info=auth_info)
 
 
 def stop_vms(vms, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
-    return _perform_action_on_vms(vms, 'stop', VMStatus.STOPPED, timeout, check_interval=1, fail_ok=fail_ok,
-                                  con_ssh=con_ssh, auth_info=auth_info)
+    return _start_or_stop_vms(vms, 'stop', VMStatus.STOPPED, timeout, check_interval=1, fail_ok=fail_ok,
+                              con_ssh=con_ssh, auth_info=auth_info)
 
 
 def start_vms(vms, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
-    return _perform_action_on_vms(vms, 'start', VMStatus.ACTIVE, timeout, check_interval=1, fail_ok=fail_ok,
-                                  con_ssh=con_ssh, auth_info=auth_info)
+    return _start_or_stop_vms(vms, 'start', VMStatus.ACTIVE, timeout, check_interval=1, fail_ok=fail_ok,
+                              con_ssh=con_ssh, auth_info=auth_info)
 
 
-def _perform_action_on_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=False,
-                           con_ssh=None, auth_info=None):
+def _start_or_stop_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=False,
+                       con_ssh=None, auth_info=None):
 
     LOG.info("{}ing vms {}...".format(action, vms))
     action = action.lower()
@@ -1580,3 +1605,40 @@ def get_vm_host_and_numa_nodes(vm_id, con_ssh=None):
         actual_node_vals.append(actual_node_val)
 
     return host, actual_node_vals
+
+
+def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **kwargs):
+    """
+    Perform action on a given vm.
+
+    Args:
+        vm_id (str):
+        action (str): action to perform on vm. Valid_actions: 'start', 'stop', 'suspend', 'resume', 'pause', 'unpause',
+        'reboot', 'live_migrate', or 'cold_migrate'
+        auth_info (dict):
+        con_ssh (SSHClient):
+        **kwargs: extra params to pass to action function, e.g.destination_host='compute-0' when action is live_migrate
+
+    Returns (None):
+
+    """
+    action_function_map = {
+        'start': start_vms,
+        'stop': stop_vms,
+        'suspend': suspend_vm,
+        'resume': resume_vm,
+        'pause': pause_vm,
+        'unpause': unpause_vm,
+        'reboot': reboot_vm,
+        'live_migrate': live_migrate_vm,
+        'cold_migrate': cold_migrate_vm,
+    }
+    if not vm_id:
+        raise ValueError("vm id is not provided.")
+
+    valid_actions = list(action_function_map.keys())
+    action = action.lower().replace(' ', '_')
+    if action not in valid_actions:
+        raise ValueError("Invalid action provided: {}. Valid actions: {}".format(action, valid_actions))
+
+    action_function_map[action](vm_id, con_ssh=con_ssh, auth_info=auth_info, **kwargs)
