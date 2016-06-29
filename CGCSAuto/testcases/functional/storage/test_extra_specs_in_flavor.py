@@ -84,6 +84,8 @@ def flavor_with_disk_spec(request, config_local_volume_group):
     else:
         storage = 'local_'+config_local_volume_group['instance_backing']
 
+    # hot fix wait for storage aggregate to sync up with change in local volume group
+    sleep(20)
     if len(host_helper.get_hosts_by_storage_aggregate(storage_backing=storage)) < 1:
         skip("No host support {} storage backing in current lab".format(storage))
 
