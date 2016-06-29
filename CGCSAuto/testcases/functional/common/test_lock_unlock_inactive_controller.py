@@ -10,6 +10,7 @@ from keywords import host_helper,system_helper
 from setup_consts import P1, P2, P3
 
 @mark.sanity
+@mark.skipif(system_helper.is_small_footprint(), reason="Skip for small footprint lab")
 def test_lock_unlock_inactive_controller():
     """
     Verify Swact is working on two controllers system

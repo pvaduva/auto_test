@@ -2,13 +2,13 @@ from keywords import system_helper
 from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
 
-pv0 = SSHClient('128.224.150.73')
-ControllerClient.set_active_controller(pv0)
-pv0.connect()
-r720 = SSHClient('128.224.150.141')
-r720.connect()
-r730_3_7 = SSHClient('128.224.150.142')
-r730_3_7.connect()
+#pv0 = SSHClient('128.224.150.73')
+#ControllerClient.set_active_controller(pv0)
+#pv0.connect()
+#r720 = SSHClient('128.224.150.141')
+#r720.connect()
+#r730_3_7 = SSHClient('128.224.150.142')
+#r730_3_7.connect()
 
 
 def test_get_info():

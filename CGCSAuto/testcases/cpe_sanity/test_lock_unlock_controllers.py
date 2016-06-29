@@ -1,3 +1,5 @@
+import time
+
 from pytest import mark, fixture
 
 from utils import table_parser, cli
@@ -140,6 +142,7 @@ class TestLockUnlock:
             expt = [1]
 
         LOG.tc_step("Attempt to lock {}...".format(target_host))
+        time.sleep(10)
         code, output = host_helper.lock_host(host=target_host, fail_ok=True, check_first=False)
 
         self.lock_rtn_code = code

@@ -13,7 +13,6 @@ from testfixtures.resource_mgmt import ResourceCleanup
 # Test set memory page size flavor spec #
 #########################################
 
-@mark.sanity
 @mark.parametrize('mem_page_size', [
     'small',
     'large',

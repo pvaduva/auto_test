@@ -140,7 +140,8 @@ def clear_alarms_list():
                 res, out = cmd_execute(cmd)
     time.sleep(2)
 
-@mark.cpe_sanity
+@mark.sanity
+@mark.skipif(system_helper.is_small_footprint(), reason="Skip for small footprint lab")
 def test_1443_system_alarm_list():
     """
     Verify system alarm-list command in the system
@@ -205,7 +206,8 @@ def test_1443_system_alarm_list():
 
     assert (test_result)
 
-@mark.cpe_sanity
+@mark.sanity
+@mark.skipif(system_helper.is_small_footprint(), reason="Skip for small footprint lab")
 def test_1446_system_alarm_show():
     """
     Verify system alarm-show command
