@@ -2,18 +2,17 @@
 This file contains CEPH-related storage test cases.
 """
 
-from pytest import mark
 import random
 import time
-import re
 import ast
 
+from pytest import mark
 from utils import cli, exceptions, table_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper, \
     storage_helper, glance_helper, cinder_helper
-from consts.cgcs import HostAavailabilityState, EventLogID
+from consts.cgcs import EventLogID, IMAGE_DIR
 
 PROC_RESTART_TIME = 30     # number of seconds between process restarts
 RESTARTS_BEFORE_ASSERT = 3 # number of process restarts until error assertion
@@ -115,41 +114,28 @@ def test_ceph_osd_process_kill():
     # Note, we cannot check alarms since the alarms clears too quickly.  Check
     # events instead.
 
-    # storage-1 is degraded due to the failure of its 'ceph (osd.1)' process.
-    # Auto recovery of this major process is in progress. 
     LOG.tc_step('Check events list for OSD failure')
     entity_instance = 'host={}.process=ceph (osd.{})'.format(osd_host, osd_id)
-    system_helper.wait_for_events(30, strict=False, fail_ok=False, 
-        **{'Entity Instance ID': entity_instance, 'Event Log ID':
-        EventLogID.STORAGE_DEGRADE, 'State': 'set'})
+    system_helper.wait_for_events(30, strict=False, fail_ok=False,
+                                  **{'Entity Instance ID': entity_instance,
+                                     'Event Log ID': EventLogID.STORAGE_DEGRADE,
+                                     'State': 'set'})
 
-    # Can't always catch this event - CGTS-4513
-    # Loss of replication in replication group group-0: OSDs are down
-    #LOG.tc_step('Check events list for replication group failure')
-    #reason_text = 'Loss of replication in replication group {}: OSDs are down'.format(storage_group)
-    #system_helper.wait_for_events(30, strict=False, fail_ok=False, 
-    #    **{'Reason Text': reason_text, 'Event Log ID': EventLogID.STORAGE_LOR})
-
+    # Loss of replication is too brief to catch
     # Note, the storage host degrade state is so brief that we cannot check
     # for it.
 
     LOG.tc_step('Check the OSD failure event clears')
     LOG.tc_step('Check events list for OSD failure')
     entity_instance = 'host={}.process=ceph (osd.{})'.format(osd_host, osd_id)
-    system_helper.wait_for_events(45, strict=False, fail_ok=False, 
-        **{'Entity Instance ID': entity_instance, 'Event Log ID':
-        EventLogID.STORAGE_DEGRADE, 'State': 'clear'})
-
-    # Can't always catch this event - CGTS-4513
-    #LOG.tc_step('Check events list for replication group event clear')
-    #reason_text = 'Loss of replication in replication group {}: OSDs are down'.format(storage_group)
-    #system_helper.wait_for_events(30, strict=False, fail_ok=False, 
-    #    **{'Reason Text': reason_text, 'Event Log ID': EventLogID.STORAGE_LOR,
-    #    State: 'clear'})
+    system_helper.wait_for_events(45, strict=False, fail_ok=False,
+                                  **{'Entity Instance ID': entity_instance,
+                                     'Event Log ID': EventLogID.STORAGE_DEGRADE,
+                                     'State': 'clear'})
 
     # Give Ceph a bit of time to return to health ok state
     # TODO: Do better than just sleeping
-    time.sleep(10)
+    time.sleep(20)
 
     LOG.tc_step('Verify the health cluster is healthy')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
@@ -242,48 +228,43 @@ def test_ceph_mon_process_kill(monitor):
     # Note, we cannot check alarms since the alarms clears too quickly.  Check
     # events instead.
 
-    # Alarm #1
-    # controller-1 is degraded due to the failure of its 'ceph
-    # (mon.controller-1)' process. Auto recovery of this major process is in
-    # progress.
-    # Alarm #2
-    # Storage Alarm Condition: 1 mons down, quorum 0,2
-    # controller-0,storage-0
     LOG.tc_step('Check events list for ceph monitor failure')
-    entity_instance = 'host={}.process=ceph (mon.{})'.format(monitor,
-        monitor)
+    entity_instance = 'host={}.process=ceph (mon.{})'.format(monitor, monitor)
     system_helper.wait_for_events(30, strict=False, fail_ok=False,
-        **{'Entity Instance ID': entity_instance, 'Event Log ID':
-        EventLogID.STORAGE_DEGRADE, 'State': 'set'})
+                                  **{'Entity Instance ID': entity_instance,
+                                     'Event Log ID':
+                                     EventLogID.STORAGE_DEGRADE, 'State':
+                                     'set'})
 
-    # This is not being seen.  CGTS-4520.  Instead we see:
-    # Storage Alarm Condition: Pgs are degraded/stuck/blocked. Please check
-    # 'ceph -s' for more details
-    #LOG.tc_step('Check events list for storage alarm condition')
-    #reason_text = 'Storage Alarm Condition: 1 mons down'
-    #system_helper.wait_for_events(30, strict=False, fail_ok=False,
-    #    **{'Reason Text': reason_text, 'Event Log ID':
-    #    EventLogID.STORAGE_ALARM_COND, 'State': 'set'})
+    LOG.tc_step('Check events list for storage alarm condition')
+    reason_text = 'Storage Alarm Condition: HEALTH_WARN'
+    system_helper.wait_for_events(30, strict=False, fail_ok=False,
+                                  **{'Reason Text': reason_text,
+                                     'Event Log ID':
+                                     EventLogID.STORAGE_ALARM_COND,
+                                     'State': 'set'})
 
     # Note, the storage host degrade state is so brief that we cannot check
     # for it.
 
-    # Sleep to give time for events to clear 
+    # Sleep to give time for events to clear
     time.sleep(20)
 
     LOG.tc_step('Check events list for ceph monitor clear')
     entity_instance = 'host={}.process=ceph (mon.{})'.format(monitor,
-        monitor)
-    system_helper.wait_for_events(45, strict=False, fail_ok=False, 
-        **{'Entity Instance ID': entity_instance, 'Event Log ID':
-        EventLogID.STORAGE_DEGRADE, 'State': 'clear'})
+                                                             monitor)
+    system_helper.wait_for_events(45, strict=False, fail_ok=False,
+                                  **{'Entity Instance ID': entity_instance,
+                                     'Event Log ID':
+                                     EventLogID.STORAGE_DEGRADE, 'State':
+                                     'clear'})
 
-    # FAIL due to CGTS-4520
-    #LOG.tc_step('Check events list for storage alarm condition')
-    #reason_text = 'Storage Alarm Condition: 1 mons down'
-    #system_helper.wait_for_events(45, strict=False, fail_ok=False,
-    #**{'Reason Text': reason_text, 'Event Log ID':
-    #EventLogID.STORAGE_ALARM_COND, 'State': 'clear'})
+    LOG.tc_step('Check events list for storage alarm condition')
+    reason_text = 'Storage Alarm Condition: HEALTH_WARN'
+    system_helper.wait_for_events(45, strict=False, fail_ok=False,
+                                  **{'Reason Text': reason_text, 'Event Log ID':
+                                     EventLogID.STORAGE_ALARM_COND, 'State':
+                                     'clear'})
 
     # Give Ceph a bit of time to return to health ok state
     # TODO: Do better than just sleeping
@@ -325,10 +306,10 @@ def test_ceph_reboot_storage_node():
         1.  CGTS-2975
     """
     con_ssh = ControllerClient.get_active_controller()
-    
+
     storage_nodes = system_helper.get_storage_nodes(con_ssh)
 
-    for host in storage_nodes: 
+    for host in storage_nodes:
         LOG.tc_step('Reboot {}'.format(host))
         results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
         LOG.tc_step("Results: {}".format(results))
@@ -339,7 +320,7 @@ def test_ceph_reboot_storage_node():
         assert not ceph_healthy, msg
         LOG.info(msg)
 
-        # TODO: Alarms that are seen.  Only look for the ceph ones. 
+        # TODO: Alarms that are seen.  Only look for the ceph ones.
         # 1. storage-0 experienced a service-affecting failure. Auto-recovery in
         #    progress. 200.004
         # 2. Loss of replication in replication group group-0: OSDs are down
@@ -349,7 +330,7 @@ def test_ceph_reboot_storage_node():
         # 4. storage-0 experienced a service-affecting failure. Auto-recovery in
         #    progress. 200.004
         # 5. storage-1 experienced a persistent critical 'Management Network'
-        #    communication failure. 
+        #    communication failure.
         # 6. storage-1 experienced a persistent critical 'Infrastructure
         #    Network' communication failure.
 
@@ -453,15 +434,6 @@ def test_lock_stor_check_osds_down(host):
     msg = "Alarm {} was not found in alarm-list".format(EventLogID.HOST_LOCK)
     assert EventLogID.HOST_LOCK in str(alarms_table), msg
 
-    # We no longer see the Storage Alarm Condition: 1 mons down alarm
-    #if host == 'storage-0':
-    #    alarms_table = system_helper.get_alarms(query_key='alarm_id',
-    #                                            query_value=EventLogID.STORAGE_ALARM_COND,
-    #                                            query_type='string')
-    #    LOG.info(alarms_table)
-    #    msg = 'Alarm {} not found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
-    #    assert len(alarms_table) == 2, msg
-
     LOG.tc_step('Check health of CEPH cluster')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
     assert not ceph_healthy, msg
@@ -497,7 +469,7 @@ def test_lock_stor_check_osds_down(host):
                                             query_type='string')
     LOG.info(alarms_table)
     msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_ALARM_COND)
-    assert EventLogID.STORAGE_ALARM_COND in str(alarms_table), msg 
+    assert EventLogID.STORAGE_ALARM_COND in str(alarms_table), msg
 
     LOG.tc_step('Unlock storage node')
     rtn_code, out = host_helper.unlock_host(host)
@@ -514,30 +486,23 @@ def test_lock_stor_check_osds_down(host):
                                             query_type='string')
     LOG.info(alarms_table)
     msg = "Alarm {} found in alarm-list".format(EventLogID.HOST_LOCK)
-    assert not EventLogID.HOST_LOCK in str(alarms_table), msg
+    assert EventLogID.HOST_LOCK not in str(alarms_table), msg
 
     LOG.tc_step('Check that the replication group alarm is cleared')
     alarms_table = system_helper.get_alarms(con_ssh)
     LOG.info(alarms_table)
     ids = table_parser.get_values(alarms_table, 'Alarm ID')
-    for id in ids:
-        assert id != EventLogID.STORAGE_LOR, \
+    for alarm_id in ids:
+        assert alarm_id != EventLogID.STORAGE_LOR, \
             'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_LOR)
 
     LOG.tc_step('Check that the Storage Alarm Condition is cleared')
     alarms_table = system_helper.get_alarms(con_ssh)
     LOG.info(alarms_table)
     ids = table_parser.get_values(alarms_table, 'Alarm ID')
-    for id in ids:
-        assert id != EventLogID.STORAGE_ALARM_COND, \
+    for alarm_id in ids:
+        assert alarm_id != EventLogID.STORAGE_ALARM_COND, \
             'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
-
-    # Skipping until the alarm defect is resolved
-    # If storage host is a storage monitor, ensure the monitor alarm clears
-    #if host == 'storage-0':
-    #    msg = 'Storage Alarm Condition: 1 mons down'
-    #    assert re.search(msg, reasons), \
-    #        'Alarm reason {} found in alarm-list'.format(msg)
 
     LOG.tc_step('Check health of CEPH cluster')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
@@ -549,7 +514,7 @@ def test_lock_stor_check_osds_down(host):
         msg = 'OSD ID {} should be up but is not'.format(osd_id)
         assert osd_up, msg
 
-# Pass on PV0 603.47 seconds 
+# Pass on PV0 603.47 seconds
 @mark.usefixtures('ceph_precheck')
 def test_lock_cont_check_mon_down():
     """
@@ -587,12 +552,6 @@ def test_lock_cont_check_mon_down():
     LOG.tc_step('Lock standby controller node {}'.format(host))
     rtn_code, out = host_helper.lock_host(host)
     assert rtn_code == 0, out
-
-    # Instead of mon down, we're seeing the following alarm:
-    # Storage Alarm Condition: Pgs are degraded/stuck/blocked. Please check
-    # 'ceph -s' for more details
-    # We also see:
-    # controller-1 was administratively locked to take it out-of-service.
 
     # Wait a bit for alarms to be raised
     time.sleep(5)
@@ -638,14 +597,14 @@ def test_lock_cont_check_mon_down():
                                             query_type='string')
     LOG.info(alarms_table)
     msg = "Alarm {} not found in alarm-list".format(EventLogID.HOST_LOCK)
-    assert not EventLogID.HOST_LOCK in str(alarms_table), msg
+    assert EventLogID.HOST_LOCK not in str(alarms_table), msg
 
     LOG.tc_step('Check that the Storage Alarm Condition is cleared')
     alarms_table = system_helper.get_alarms(con_ssh)
     LOG.info(alarms_table)
     ids = table_parser.get_values(alarms_table, 'Alarm ID')
-    for id in ids:
-        assert id != EventLogID.STORAGE_ALARM_COND, \
+    for alarm_id in ids:
+        assert alarm_id != EventLogID.STORAGE_ALARM_COND, \
             'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
 
     LOG.tc_step('Check health of CEPH cluster')
@@ -704,15 +663,15 @@ def test_storgroup_semantic_checks():
         LOG.tc_step('Lock {} in the {} group:'.format(host, storage_group))
         rtn_code, out = host_helper.lock_host(host)
         assert rtn_code == 0, out
-    
+
         LOG.tc_step("Verify CEPH cluster health reflects the OSD being down")
         ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
         assert not ceph_healthy, msg
 
         LOG.tc_step('Check that alarms are raised when {} is locked'.format(host))
         alarms_table = system_helper.get_alarms(query_key='alarm_id',
-                                            query_value=EventLogID.HOST_LOCK,
-                                            query_type='string')
+                                                query_value=EventLogID.HOST_LOCK,
+                                                query_type='string')
         LOG.info(alarms_table)
         msg = "Alarm {} not found in alarm-list".format(EventLogID.HOST_LOCK)
         assert len(alarms_table) == 2, msg
@@ -774,25 +733,25 @@ def test_storgroup_semantic_checks():
         alarms_table = system_helper.get_alarms(con_ssh)
         LOG.info(alarms_table)
         ids = table_parser.get_values(alarms_table, 'Alarm ID')
-        for id in ids:
+        for alarm_id in ids:
             LOG.info("This is ID: {}".format(id))
-            assert id != EventLogID.HOST_LOCK, \
+            assert alarm_id != EventLogID.HOST_LOCK, \
                 'Alarm ID {} was found in alarm-list'.format(EventLogID.HOST_LOCK)
 
         LOG.tc_step('Check that the replication group alarm is cleared')
         alarms_table = system_helper.get_alarms(con_ssh)
         LOG.info(alarms_table)
         ids = table_parser.get_values(alarms_table, 'Alarm ID')
-        for id in ids:
-            assert id != EventLogID.STORAGE_LOR, \
+        for alarm_id in ids:
+            assert alarm_id != EventLogID.STORAGE_LOR, \
                 'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_LOR)
 
         LOG.tc_step('Check that the Storage Alarm Condition is cleared')
         alarms_table = system_helper.get_alarms(con_ssh)
         LOG.info(alarms_table)
         ids = table_parser.get_values(alarms_table, 'Alarm ID')
-        for id in ids:
-            assert id != EventLogID.STORAGE_ALARM_COND, \
+        for alarm_id in ids:
+            assert alarm_id != EventLogID.STORAGE_ALARM_COND, \
                 'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
 
         # TODO: If storage host is a storage monitor, ensure the monitor alarm clears
@@ -864,7 +823,7 @@ def test_import_with_cache_raw():
             img_dest=img_dest, con_ssh=con_ssh)
 
     LOG.tc_step('Import qcow2 images into glance')
-    for image in image_names: 
+    for image in image_names:
         source_image_loc = img_dest + "/" + image
         img_name = 'testimage_{}'.format(image)
         ret = glance_helper.create_image(source_image_file=source_image_loc,
@@ -890,10 +849,10 @@ def test_import_with_cache_raw():
 
         LOG.tc_step('Create volume from the imported image')
         volume_id = cinder_helper.create_volume(name=img_name, \
-            image_id=rbd_img_id, \
-            size=flav_size,
-            con_ssh=con_ssh, \
-            rtn_exist=False)[1]
+                                                image_id=rbd_img_id, \
+                                                size=flav_size,
+                                                con_ssh=con_ssh, \
+                                                rtn_exist=False)[1]
         msg = "Unable to create volume"
         assert volume_id, msg
 
@@ -968,18 +927,15 @@ def test_import_raw_with_cache_raw():
     if not image_names:
         LOG.info('No raw images were found on the controller')
         LOG.tc_step('Rsyncing images from controller-0')
-        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o
-        StrictHostKeyChecking=no " {} controller-1:{}'.format(IMAGE_DIR,
-        IMAGE_DIR)
+        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no " {} controller-1:{}'.format(IMAGE_DIR, IMAGE_DIR)
         con_ssh.exec_cmd(rsync_images)
         image_names = storage_helper.find_images(con_ssh, image_type='raw')
         msg = 'No images found on controller'
         assert not image_names, msg
 
     LOG.tc_step('Import raw images into glance with --cache-raw')
-    for image in image_names: 
+    for image in image_names:
         source_image_loc = IMAGE_DIR + image
-        img_name = 'testimage_{}'.format(image)
         ret = glance_helper.create_image(source_image_file=source_image_loc,
                                          disk_format='raw', \
                                          container_format='bare', \
@@ -1001,11 +957,11 @@ def test_import_raw_with_cache_raw():
     #TODO: Clean up resources used
 
 
-# INPROGRESS 
+# INPROGRESS
 @mark.usefixtures('ceph_precheck')
 def test_exceed_size_of_img_pool():
     """
-    Verify that system behaviour when we exceed the size of the rbd image pool. 
+    Verify that system behaviour when we exceed the size of the rbd image pool.
 
     This is US68056_tc3_neg_exceed_size_of_image_pool adapted from
     us68056_glance_backend_to_storage_node.odt
@@ -1018,7 +974,8 @@ def test_exceed_size_of_img_pool():
         - Requires external connectivity to download images
 
     Test Steps:
-        1.  
+        1. Fill up the ceph img pool
+        2. Ensure the system alarms
     """
 
 
@@ -1055,8 +1012,8 @@ def test_exceed_size_of_img_pool():
     # Please check 'ceph -s' for more details
     LOG.tc_step('Query alarms for ceph alarms')
     alarms_table = system_helper.get_alarms(query_key='alarm_id',
-        query_value=EventLogID.STORAGE_ALARM_COND,
-        query_type='string')
+                                            query_value=EventLogID.STORAGE_ALARM_COND,
+                                            query_type='string')
     LOG.info(alarms_table)
     msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_ALARM_COND)
     assert EventLogID.STORAGE_ALARM_COND in str(alarms_table)
@@ -1065,18 +1022,17 @@ def test_exceed_size_of_img_pool():
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
     assert ceph_healthy, msg
 
-
     LOG.info("glance ids {}".format(glance_ids))
-    # Not checking ceph -s for images pool full since this is generic openstack
 
     #LOG.tc_step('Delete Image(s) {}'.format(glance_ids))
     #glance_helper.delete_images(glance_ids)
+
 
 @mark.usefixtures('ceph_precheck')
 def test_import_large_images_with_cache_raw():
     """
     Verify that system behaviour when we attempt to import large images, i.e.
-    20-40GB, with cache-raw enabled. 
+    20-40GB, with cache-raw enabled.
 
     This is US68056_tc4_import_large_images_with_cache_raw
     us68056_glance_backend_to_storage_node.odt
@@ -1107,6 +1063,7 @@ def test_import_large_images_with_cache_raw():
     base_img = img + '.img'
     qcow2_img = img + '.qcow2'
     new_img = '40GB' + base_img
+    vm_list = []
 
     # Check that we have the cgcs-guest.img available
     # If we are on controller-1, we may need to rsync image files from
@@ -1115,9 +1072,7 @@ def test_import_large_images_with_cache_raw():
     image_names = storage_helper.find_images(con_ssh)
     if base_img not in image_names:
         LOG.tc_step('Rsyncing images from controller-0')
-        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o
-        StrictHostKeyChecking=no " {} controller-1:{}'.format(IMAGE_DIR,
-        IMAGE_DIR)
+        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no " {} controller-1:{}'.format(IMAGE_DIR, IMAGE_DIR)
         con_ssh.exec_cmd(rsync_images)
         image_names = storage_helper.find_images(con_ssh)
         msg = '{} was not found in {}'.format(base_img, IMAGE_DIR)
@@ -1131,15 +1086,16 @@ def test_import_large_images_with_cache_raw():
     cmd = 'qemu-img resize {} -f raw 40G'.format(new_img)
     rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=600)
     assert not rtn_code, out
-    
+
     # Confirm the virtual size is 40GB
-    size = find_image_size(con_ssh, image_name=new_img)
+    size = storage_helper.find_image_size(con_ssh, image_name=new_img)
     msg = 'Image was not resized to 40GB'
     assert size == '40', msg
 
     # Convert the image to qcow2
     LOG.tc_step('Convert the raw image to qcow2')
-    cmd = 'qemu-img convert -f raw -O qcow2 {}/{} {}/{}'.format(IMAGE_DIR, new_img, IMAGE_DIR, qcow2_img)
+    args = '{}/{} {}/{}'.format(IMAGE_DIR, new_img, IMAGE_DIR, qcow2_img)
+    cmd = 'qemu-img convert -f raw -O qcow2' + ' ' + args
     rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=600)
     assert not rtn_code, out
 
@@ -1158,26 +1114,26 @@ def test_import_large_images_with_cache_raw():
     assert out[0] == 0, msg
 
     LOG.tc_step('Create volume from the imported image')
-    volume_id = cinder_helper.create_volume(name=img_name, \
-        image_id=out[1], \
-        size=flav_size,
-        con_ssh=con_ssh, \
-        rtn_exist=False)[1]
+    volume_id = cinder_helper.create_volume(name=image_names[0],
+                                            image_id=out[1],
+                                            size='40G',
+                                            con_ssh=con_ssh,
+                                            rtn_exist=False)[1]
     msg = "Unable to create volume"
     assert volume_id, msg
 
     LOG.tc_step('Create flavor of sufficient size for VM')
-    flv = nova_helper.create_flavor(name=img_name, root_disk=size)
+    flv = nova_helper.create_flavor(name=image_names[0], root_disk=size)
     assert flv[0] == 0, flv[1]
 
     LOG.tc_step('Launch VM from created volume')
-    vm_id = vm_helper.boot_vm(name=img_name, flavor=flv[1], \
+    vm_id = vm_helper.boot_vm(name=image_names[0], flavor=flv[1], \
         source='volume', source_id=volume_id)[1]
     vm_list.append(vm_id)
 
     # When spawning, make sure we don't download the image
     LOG.tc_step('Launch VM from image')
-    img_name2 = img_name + '_fromimage'
+    img_name2 = image_names[0] + '_fromimage'
     vm_id2 = vm_helper.boot_vm(name=img_name2, flavor=flv[1], \
         source='image', source_id=out[1])[1]
     vm_list.append(vm_id2)
@@ -1188,12 +1144,12 @@ def test_import_large_images_with_cache_raw():
     LOG.tc_step('Delete Flavor(s) {}'.format(flv[1]))
     nova_helper.delete_flavors(flv[1])
 
-    LOG.tc_step('Delete Image(s) {}'.format(rbd_img_id))
+    LOG.tc_step('Delete Image(s) {}'.format(out[1]))
     glance_helper.delete_images(out[1])
 
 
 @mark.usefixtures('ceph_precheck')
-def test_modify_ceph_pool_size:
+def test_modify_ceph_pool_size():
     """
     Verify that the user can modify the size of the ceph images pool.
 
@@ -1213,9 +1169,7 @@ def test_modify_ceph_pool_size:
         controllers)
     """
 
-    con_ssh = ControllerClient.get_active_controller()
-
-    LC.tc_step('Query the size of the CEPH storage pools')
+    LOG.tc_step('Query the size of the CEPH storage pools')
     table_ = table_parser.table(cli.system('storagepool-show'))
     glance_pool_gib = int(table_parser.get_values(table_, 'glance_pool_gib'))
     cinder_pool_gib = int(table_parser.get_values(table_, 'cinder_pool_gib'))
@@ -1227,8 +1181,8 @@ def test_modify_ceph_pool_size:
     if total_used != ceph_total_space_gib:
         # Check for 800.003 Ceph cluster has free space unused by storage pool quotas
         alarms_table = system_helper.get_alarms(query_key='alarm_id',
-            query_value=EventLogID.STORAGE_POOLQUOTA,
-            query_type='string')
+                                                query_value=EventLogID.STORAGE_POOLQUOTA,
+                                                query_type='string')
         LOG.info(alarms_table)
         msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_POOLQUOTA)
         assert EventLogID.STORAGE_POOLQUOTA in str(alarms_table)
@@ -1238,8 +1192,8 @@ def test_modify_ceph_pool_size:
         new_value = glance_pool_gib + total_available
         args = 'glance_pool_gib=' + str(new_value)
         rtn_code, out = cli.system('storagepool-modify', args)
-        msg = 'Failed to change glance storage pool quota from {} to
-        {}'.format(glance_pool_gib, new_value)
+        msg = 'Unable to change pool quota from {} to {}'.format(glance_pool_gib,
+                                                                 new_value)
         assert rtn_code == 0, msg
 
         # Now, let's wait a bit for the free space alarm to clear
@@ -1247,15 +1201,15 @@ def test_modify_ceph_pool_size:
 
         # Check for 800.003 Ceph cluster has free space unused by storage pool quotas
         alarms_table = system_helper.get_alarms(query_key='alarm_id',
-            query_value=EventLogID.STORAGE_POOLQUOTA,
-            query_type='string')
+                                                query_value=EventLogID.STORAGE_POOLQUOTA,
+                                                query_type='string')
         LOG.info(alarms_table)
         msg = "Alarm {} found in alarm-list".format(EventLogID.STORAGE_POOLQUOTA)
-        assert not EventLogID.STORAGE_POOLQUOTA in str(alarms_table)
+        assert EventLogID.STORAGE_POOLQUOTA not in str(alarms_table), msg
 
     else:
         # Else we have used up all the space we have available, so let's take some
-        # space from the other pools. 
+        # space from the other pools.
         # We check because in some cases ephemeral pool can be set to 0
         if ephemeral_pool_gib > 10:
             other_args = 'ephemeral_pool_gib=' + str(ephemeral_pool_gib - 10)
@@ -1266,20 +1220,21 @@ def test_modify_ceph_pool_size:
         args = glance_args + " " + other_args
         new_value = glance_pool_gib + 10
         rtn_code, out = cli.system('storagepool-modify', args)
-        msg = 'Failed to change glance storage pool quota from {} to
-        {}'.format(glance_pool_gib, new_value)
+        msg = 'Failed to change glance storage pool quota from {} to {}'.format(glance_pool_gib,
+                                                                                new_value)
         assert rtn_code == 0, msg
 
     LOG.info('Check the ceph images pool is set to the right value')
     table_ = table_parser.table(cli.system('storagepool-show'))
     glance_pool_gib = table_parser.get_values(table_, 'glance_pool_gib')
 
-    msg = 'Glance pool size was supposed to be {} but is {} instead'.format(new_value, glance_pool_gib)
+    msg = 'Glance pool size was supposed to be {} but is {} instead'.format(new_value,
+                                                                            glance_pool_gib)
     assert int(glance_pool_gib) == new_value, msg
 
 
 @mark.usefixtures('ceph_precheck')
-def test_modify_ceph_pool_size:
+def test_modify_ceph_pool_size_neg():
     """
     Verify that the user can modify the size of the ceph images pool.
 
@@ -1306,6 +1261,7 @@ def test_modify_ceph_pool_size:
     LOG.tc_step('Query the size of the CEPH storage pools')
     table_ = table_parser.table(cli.system('storagepool-show'))
     glance_pool_gib = int(table_parser.get_values(table_, 'glance_pool_gib'))
+    ephemeral_pool_gib = int(table_parser.get_values(table_, 'ephemeral_pool_gib'))
 
     LOG.tc_step('Determine what qcow2 images we have available')
     image_names = storage_helper.find_images(con_ssh)
@@ -1324,7 +1280,6 @@ def test_modify_ceph_pool_size:
                                          container_format='bare', \
                                          cache_raw=True, wait=True,
                                          fail_ok=True)
-        glance_ids.append(ret[1])
 
         if ret[0] == 1:
             break
@@ -1335,26 +1290,26 @@ def test_modify_ceph_pool_size:
     args = glance_args + " " + eph_args
     new_value = glance_pool_gib - 10
     rtn_code, out = cli.system('storagepool-modify', args)
-    msg = 'Unexpectedly changed glance storage pool quota from {} to
-    {}'.format(glance_pool_gib, new_value)
+    msg = 'Unexpectedly changed glance storage pool quota from {} to {}'.format(glance_pool_gib,
+                                                                                new_value)
     assert rtn_code != 0, msg
 
-    LOG.tc_step('Increase the pool quota and ensure you can import images
-    again')
+    LOG.tc_step('Increase the pool quota and ensure you can import images again')
     glance_args = 'glance_pool_gib=' + str(glance_pool_gib + 20)
     eph_args = 'ephemeral_pool_gib=' + str(ephemeral_pool_gib - 20)
     args = glance_args + " " + eph_args
     new_value = glance_pool_gib + 20
     rtn_code, out = cli.system('storagepool-modify', args)
-    msg = 'Could not change glance storage pool quota from {} to {}'.format(glance_pool_gib, new_value)
+    msg = 'Unable to change pool quota from {} to {}'.format(glance_pool_gib,
+                                                             new_value)
     assert rtn_code == 0, msg
 
     LOG.tc_step('Import one more image')
     ret = glance_helper.create_image(source_image_file=source_img,
-                                        disk_format='qcow2', \
-                                        container_format='bare', \
-                                        cache_raw=True, wait=True,
-                                        fail_ok=True)
+                                     disk_format='qcow2', \
+                                     container_format='bare', \
+                                     cache_raw=True, wait=True,
+                                     fail_ok=True)
     msg = 'Was not able to import another image after increasing the quota'
     assert ret[0] == 0, msg
 

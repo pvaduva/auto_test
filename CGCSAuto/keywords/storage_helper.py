@@ -3,15 +3,12 @@ This module provides helper functions for storage based testing, with a focus
 on CEPH-related helper functions.
 """
 
-import time
 import re
 
 from utils import table_parser, cli
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient, SSHFromSSH
+from utils.ssh import ControllerClient
 from keywords import system_helper, host_helper
-from consts.cgcs import Prompt
-from consts.auth import Host
 
 
 def is_ceph_healthy(con_ssh=None):
@@ -328,11 +325,11 @@ def find_images(con_ssh, image_type='qcow2', location='~/images'):
     Arguments:
         - image_type(string): image format, e.g. 'qcow2', 'raw', etc.
           - if the user specifies 'all', return all images
-        - location(string): where to find images, e.g. '~/images' 
+        - location(string): where to find images, e.g. '~/images'
 
     Test Steps:
         1.  Cycle through the files in a given location
-        2.  Create a list of image names of the expected type 
+        2.  Create a list of image names of the expected type
 
     Return:
         - image_names(list): list of image names of a given type, e.g.
@@ -346,7 +343,7 @@ def find_images(con_ssh, image_type='qcow2', location='~/images'):
     rtn_code, out = con_ssh.exec_cmd(cmd)
     image_list = out.split()
     LOG.info('Found the following files: {}'.format(image_list))
-    if image_type='all':
+    if image_type == 'all':
         return image_list
 
     # Return a list of image names where the image type matches what the user
@@ -364,15 +361,15 @@ def find_images(con_ssh, image_type='qcow2', location='~/images'):
 
 def find_image_size(con_ssh, image_name='cgcs-guest.img', location='~/images'):
     '''
-    This function uses qemu-img info to determine what size of flavor to use. 
+    This function uses qemu-img info to determine what size of flavor to use.
 
     Arguments:
         - con_ssh: ssh connection
         - image_name(string): e.g. 'cgcs-guest.img'
-        - location(string): where to find images, e.g. '~/images' 
+        - location(string): where to find images, e.g. '~/images'
 
     Test Steps:
-        1.  Parse qemu-img info for the image size 
+        1.  Parse qemu-img info for the image size
 
     Return:
         - image_size(int): e.g. 8
