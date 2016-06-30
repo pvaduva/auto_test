@@ -38,6 +38,7 @@ class SysInvTimeout:
 
 class CMDTimeout:
     HOST_CPU_MODIFY = 30
+    RESOURCE_LIST = 60
 
 
 class ImageTimeout:

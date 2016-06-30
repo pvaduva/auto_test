@@ -102,7 +102,7 @@ class TestRetentionPeriod:
 
         def restore_rention_period():
             LOG.info('Restore Retention Period to its orignal value {}'.format(self.retention_period))
-            system_helper.set_retention_period(fail_ok=True, con_ssh=None, retention_period=self.retention_period)
+            system_helper.set_retention_period(fail_ok=True, con_ssh=None, period=int(self.retention_period))
 
         request.addfinalizer(restore_rention_period)
 
@@ -145,7 +145,7 @@ class TestRetentionPeriod:
             expect_fail = False
         LOG.tc_step('Attempt to change to new value:{}'.format(new_retention_period))
         code, msg = system_helper.set_retention_period(fail_ok=expect_fail, con_ssh=None, auth_info=Tenant.ADMIN,
-                                                       retention_period=new_retention_period)
+                                                       period=new_retention_period)
         LOG.tc_step('Check if CLI succeeded')
         if expect_fail:
             assert 1 == code, msg
