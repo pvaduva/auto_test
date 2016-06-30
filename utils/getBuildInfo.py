@@ -14,19 +14,24 @@ of an applicable Wind River license agreement.
 '''
 modification history:
 ---------------------
+30jun16,amf  Use server path if buildinfo on the lab is not present
 11jun16,amf  Creation
 
 '''
 
 import os
+import subprocess
 import sys
 import openSSHConnUtils as sshU
 from optparse import OptionParser
 
-def get_build_info(lab):
+def get_build_info(options):
     ''' Get build information from the lab that the test was executed on. 
     '''
 
+    lab = options.sshIp
+    serverPath = options.server_path
+    serverName = options.server_name
     # establish SSH connection auth keys
     nodeSSH = sshU.SshConn(host=lab,
                            username='wrsroot',
@@ -44,14 +49,13 @@ def get_build_info(lab):
             build = idx.split('=')[-1].strip('"')
             if "n/a" not in build:
                 break
-        # use the build date
+        # use the server path
         elif 'BUILD_DATE' in idx:
-            build = idx.split('=')[-1].strip('"')
-            build = '%s_%s' % (build.split(' ')[0],'Centos') 
+            cmd = "ssh -q -o ConnectTimeout=2000 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no `whoami`@%s ls -l %s/*|grep 'latest_build '| awk '{print $11}' | awk -F / '{print $6}'" % (serverName, serverPath)
+            build = subprocess.check_output(cmd, shell=True).decode('ascii')
             break
         else:
             build = ' '
-
 
     return build
 
@@ -66,8 +70,12 @@ if __name__ == '__main__':
 
     parser.add_option('--ip', '-i', dest='sshIp',
                       help='Provide ip address of lab')
+    parser.add_option('--server', '-s', dest='server_path',
+                      help='Provide path to build location on server')
+    parser.add_option('--servername', '-n', dest='server_name',
+                      help='Provide hostname of the build server')
 
     (options, args) = parser.parse_args()
 
-    build = get_build_info(options.sshIp)
+    build = get_build_info(options)
     print (build)
