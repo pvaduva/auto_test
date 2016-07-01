@@ -395,40 +395,64 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
         pass
 
 
-def set_retention_period(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, retention_period=None):
+def set_retention_period(fail_ok=True, check_first=True, con_ssh=None, auth_info=Tenant.ADMIN, period=None):
     """
-    Modify the Retention Period of the system performance manager.
-
+    Sets the PM retention period
     Args:
-        fail_ok (bool):
-        con_ssh (SSHClient):
-        auth_info (dict):
-        retention_period (int):   retention period in seconds
+        period (int): the length of time to set the retention period (in seconds)
+        fail_ok: True or False
+        check_first: True or False
+        con_ssh (str):
+        auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT_1,Tenant.TENANT_2
 
-    Returns: (int, str)
-         0  - success
-         1  - error
+    Returns (tuple): (rtn_code (int), msg (str))
+        (-1, "Retention period not specified")
+        (-1, "The retention period is already set to that")
+        (0, "Current retention period is: <retention_period>")
+        (1, "Current retention period is still: <retention_period>")
 
-    Test Steps:
-        - Set the value via system pm_modify retention_secs=<new_retention_period_in_seconds
-
-    Notes:
-        -
     """
-    if retention_period is None:
-        raise ValueError("Please specify the Retention Period.")
 
-    args_ = ' retention_secs="{}"'.format(int(retention_period))
-    code, output = cli.system('pm-modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_list=True, timeout=SysInvTimeout.RETENTION_PERIOD_MDOIFY)
+    if not isinstance(period, int):
+        raise ValueError("Retention period has to be an integer. Value provided: {}".format(period))
+    if check_first:
+        retention = get_retention_period()
+        if period == retention:
+            msg = "The retention period is already set to {}".format(period)
+            LOG.info(msg)
+            return -1, msg
+
+    code, output = cli.system('pm-modify', 'retention_secs={}'.format(period), auth_info=auth_info, ssh_client=con_ssh,
+                              timeout=SysInvTimeout.RETENTION_PERIOD_MDOIFY, fail_ok=fail_ok, rtn_list=True)
 
     if code == 1:
         return 1, output
-    elif code == 0:
-        return 0, ''
-    else:
-        # should not get here: cli.system() should already have been handled these cases
-        pass
+
+    new_retention = get_retention_period()
+
+    if period != new_retention:
+        err_msg = "Current retention period is still: {}".format(new_retention)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        raise exceptions.CeilometerError(err_msg)
+
+    return 0, "Retention period is successfully set to: {}".format(new_retention)
+
+
+def get_retention_period(con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Returns the current retention period
+    Args:
+        con_ssh (SSHClient):
+        auth_info (dict)
+
+    Returns (int): Current PM retention period
+
+    """
+    table_ = table_parser.table(cli.system('pm-show', ssh_client=con_ssh, auth_info=auth_info))
+    ret_per = table_parser.get_value_two_col_table(table_, 'retention_secs')
+    return int(ret_per)
 
 
 def get_dns_servers(con_ssh=None):

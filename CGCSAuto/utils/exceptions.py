@@ -135,3 +135,7 @@ class NeutronError(TiSError):
 
 class HeatError(TiSError):
     message = "Heat error."
+
+
+class CeilometerError(TiSError):
+    message = "Ceilometer error"
