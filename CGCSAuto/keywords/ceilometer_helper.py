@@ -33,4 +33,4 @@ def get_alarms(name=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
     if name is None:
         return table_
 
-    return table_parser.get_values(table, 'Alarm ID', Name='STACK1', strict=strict)
+    return table_parser.get_values(table_, 'Alarm ID', Name='STACK1', strict=strict)

@@ -70,7 +70,7 @@ class HostsToRecover():
 
     @staticmethod
     def _recover_hosts(hostnames):
-        hostnames = sorted(hostnames)
+        hostnames = sorted(set(hostnames))
         table_ = table_parser.table(cli.system('host-list'))
         table_ = table_parser.filter_table(table_, hostname=hostnames)
 
@@ -89,5 +89,11 @@ class HostsToRecover():
                                                       fail_ok=True, availability=['available', 'degraded'])
             if not res2:
                 err_msg.append("Some host(s) from {} are not available.".format(unlocked_hosts))
+
+        hypervisors = host_helper.get_hypervisors()
+        hypervisors_recovered = list(set(hypervisors) & set(hostnames))
+        res, down_hosts = host_helper.wait_for_hypervisors_up(hypervisors_recovered, fail_ok=True)
+        if not res:
+            err_msg.append("Host(s) {} are not up in hypervisor-list".format(down_hosts))
 
         assert not err_msg, '\n'.join(err_msg)

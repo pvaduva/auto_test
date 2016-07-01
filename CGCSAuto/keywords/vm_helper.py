@@ -832,7 +832,7 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
 
 
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
-              net_types='mgmt', retry=3, retry_interval=3):
+              net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True):
     """
 
     Args:
@@ -856,13 +856,34 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     if isinstance(net_types, str):
         net_types = [net_types]
 
+    valid_net_types = ['mgmt', 'data', 'internal']
+    if not set(net_types) <= set(valid_net_types):
+        raise ValueError("Invalid net type(s) provided. Valid net_types: {}. net_types given: {}".
+                         format(valid_net_types, net_types))
+
     vms_ips = []
-    if 'data' in net_types:
-        vms_ips += network_helper.get_data_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
     if 'mgmt' in net_types:
-        vms_ips += network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
-    if not vms_ips:
-        raise ValueError("Invalid net_types or vms ips for given net types are not found.")
+        mgmt_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
+        vms_ips += mgmt_ips
+        if not mgmt_ips:
+            raise exceptions.VMNetworkError("Management net ip is not found for vms {}".format(vm_ids))
+
+    if 'data' in net_types:
+        data_ips = network_helper.get_data_ips_for_vms(vms=vm_ids, con_ssh=con_ssh)
+        vms_ips += data_ips
+        if not data_ips:
+            raise exceptions.VMNetworkError("Data network ip is not found for vms {}".format(vm_ids))
+
+    if 'internal' in net_types:
+        internal_ips = network_helper.get_internal_ips_for_vms(vms=vm_ids, con_ssh=con_ssh)
+        if not internal_ips:
+            raise exceptions.VMNetworkError("Internal net ip is not found for vms {}".format(vm_ids))
+        if vlan_zero_only:
+            internal_ips = network_helper.filter_ips_with_subnet_vlan_id(internal_ips, vlan_id=0, con_ssh=con_ssh)
+            if not internal_ips:
+                raise exceptions.VMNetworkError("Internal net ip with subnet vlan id 0 is not found for vms {}".
+                                                format(vm_ids))
+        vms_ips += internal_ips
 
     res_bool = False
     res_dict = {}
@@ -922,7 +943,7 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
                      num_pings=5, timeout=15, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
-                     net_types='mgmt', retry=3, retry_interval=3):
+                     net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True):
     """
 
     Args:
@@ -940,9 +961,11 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         from_vm_ip (str): vm ip to ssh to if given. from_fip flag will be considered only if from_vm_ip=None
         to_fip (bool): Whether to ping floating ip if a vm has floating ip associated with it
         from_fip (bool): whether to ssh to vm's floating ip if it has floating ip associated with it
-        net_types (list|str): 'mgmt' or 'data'
+        net_types (list|str): 'mgmt', 'data', or 'internal'
         retry (int): number of times to retry
         retry_interval (int): seconds to wait between each retries
+        vlan_zero_only (bool): used if 'internal' is included in net_types. Ping vm over internal net with vlan id 0 if
+        True, otherwise ping all the internal net ips assigned to vm.
 
     Returns (tuple):
         A tuple in form: (res (bool), packet_loss_dict (dict))
@@ -973,7 +996,8 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
                                prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
 
         res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                        fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry, retry_interval=retry_interval)
+                        fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry,
+                        retry_interval=retry_interval, vlan_zero_only=vlan_zero_only)
         return res
 
 
@@ -1258,7 +1282,8 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
     if stop_first:  # best effort only
         active_vms = nova_helper.get_vms(vms=vms_to_del, auth_info=Tenant.ADMIN, con_ssh=con_ssh, all_vms=True,
                                          Status=VMStatus.ACTIVE)
-        stop_vms(active_vms, fail_ok=True, con_ssh=con_ssh, auth_info=auth_info)
+        if active_vms:
+            stop_vms(active_vms, fail_ok=True, con_ssh=con_ssh, auth_info=auth_info)
 
     vms_to_del_str = ' '.join(vms_to_del)
 

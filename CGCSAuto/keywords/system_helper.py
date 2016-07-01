@@ -347,11 +347,6 @@ def get_storage_monitors_count():
     raise NotImplementedError
 
 
-def get_local_storage_backing(host, con_ssh=None):
-    table_ = table_parser.table(cli.system('host-lvg-show', host + ' nova-local', ssh_client=con_ssh))
-    return eval(table_parser.get_value_two_col_table(table_, 'parameters'))['instance_backing']
-
-
 def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     """
     Modify the System Information.

@@ -21,21 +21,21 @@ from testfixtures.resource_mgmt import ResourceCleanup
 @fixture(scope='module')
 def router_info(request):
     router_id = network_helper.get_tenant_router()
+    network_helper.update_router_ext_gateway_snat(router_id, enable_snat=False)
     is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN))
-    LOG.info("Update router to DVR if not already done.")
+    LOG.info("Disable SNAT and update router to DVR if not already done.")
     if not is_dvr:
         network_helper.update_router_distributed(router_id, distributed=True)
 
     def teardown():
         if eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN)) != is_dvr:
             network_helper.update_router_distributed(router_id, distributed=is_dvr)
-        network_helper.update_router_ext_gateway_snat(enable_snat=True)
     request.addfinalizer(teardown)
 
     return router_id
 
 
-def test_update_router_distributed(router_info):
+def test_dvr_update_routerd(router_info):
     """
     Test update router to distributed and non-distributed
 
@@ -80,7 +80,7 @@ def test_update_router_distributed(router_info):
     (3, 'affinity'),
     (3, 'anti-affinity'),
 ])
-def test_vms_network_connection(vms_num, srv_grp_policy, server_groups):
+def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups):
     """
     Test vms East West connection by pinging vms' data network from vm
 
@@ -104,7 +104,7 @@ def test_vms_network_connection(vms_num, srv_grp_policy, server_groups):
         skip("Only one nova host on the system.")
 
     LOG.tc_step("Boot {} vms with server group policy {}".format(vms_num, srv_grp_policy))
-    affinity_grp, anti_affinity_grp = server_groups()
+    affinity_grp, anti_affinity_grp = server_groups(best_effort=True)
     srv_grp_id = affinity_grp if srv_grp_policy == 'affinity' else anti_affinity_grp
 
     vms = []
@@ -117,9 +117,10 @@ def test_vms_network_connection(vms_num, srv_grp_policy, server_groups):
             {'net-id': internal_net_id, 'vif-model': 'avp'}]
     for i in range(vms_num):
         vol = cinder_helper.create_volume(rtn_exist=False)[1]
+        ResourceCleanup.add(resource_type='volume', resource_id=vol)
         vm_id = vm_helper.boot_vm('dvr_ew_traffic', source='volume', source_id=vol, nics=nics,
                                   hint={'group': srv_grp_id})[1]
-        ResourceCleanup.add(resource_type='vm', resource_id=vm_id, del_vm_vols=True)
+        ResourceCleanup.add(resource_type='vm', resource_id=vm_id)
         vms.append(vm_id)
         LOG.tc_step("Wait for vm {} pingable from NatBox".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)

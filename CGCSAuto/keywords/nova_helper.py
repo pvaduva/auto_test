@@ -423,7 +423,7 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
     """
     # process server group metadata
     if name is not None and rtn_exist:
-        existing_grp = get_server_groups(name=name, con_ssh=con_ssh, auth_info=auth_info)
+        existing_grp = get_server_groups(name=name, strict=False, con_ssh=con_ssh, auth_info=auth_info)
         if existing_grp:
             LOG.debug("Returning existing server group {}".format(existing_grp[0]))
             return -1, existing_grp[0]
@@ -431,9 +431,9 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
     args = ''
     if best_effort is not None or max_group_size is not None or metadata:
         tmp_list = []
-        if best_effort:
+        if best_effort is not None:
             tmp_list.append('{}={}'.format(ServerGroupMetadata.BEST_EFFORT, best_effort))
-        if max_group_size:
+        if max_group_size is not None:
             tmp_list.append('{}={}'.format(ServerGroupMetadata.GROUP_SIZE, max_group_size))
         if metadata:
             for key, value in metadata.items():

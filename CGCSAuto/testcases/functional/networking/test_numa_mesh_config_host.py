@@ -36,7 +36,7 @@ def host_to_config(request):
     def revert():
         post_vswitch_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch', core_type='log_core')
         post_pform_dict = host_helper.get_host_cpu_cores_for_function(host, function='platform', core_type='log_core')
-
+        HostsToRecover.add(host, scope='module')
         if vswitch_proc_core_dict != post_vswitch_dict or pform_proc_core_dict != post_pform_dict:
             host_helper.lock_host(host)
             host_helper.modify_host_cpu(host, 'vswitch', p0=vswitch_original_num_p0, p1=vswitch_original_num_p1)
@@ -47,6 +47,11 @@ def host_to_config(request):
     ht_enabled = system_helper.is_hyperthreading_enabled(host)
     LOG.info("{} is selected. Hyper-threading is {}enabled".format(host, "not " if ht_enabled else ""))
     return host, ht_enabled, is_small_system
+
+
+def id_params_cores(val):
+    if isinstance(val, tuple):
+        return '_'.join([str(i) for i in val])
 
 
 class TestVSwitchCPUReconfig:
@@ -61,8 +66,8 @@ class TestVSwitchCPUReconfig:
         ((2, 0), (1, 0), False, True),      # CPE only
         ((2, 0), (2, 0), None, True),       # CPE only
         ((1, 0), (2, 0), None, False),      # Standard lab only
-    ])
-    def test_vswitch_cpu_reconfig(self, host_to_config, platform, vswitch, ht_required, cpe_required):
+    ], ids=id_params_cores)
+    def test_vswitch_cpu_reconfig_positive(self, host_to_config, platform, vswitch, ht_required, cpe_required):
         """
         Test valid vswitch cpu reconfigurations, and verify vm can still be hosted on the modified host
 
@@ -135,7 +140,6 @@ class TestVSwitchCPUReconfig:
         if not nova_helper.get_vm_host(vm_id) == host:
             vm_helper.live_migrate_vm(vm_id, host)
 
-
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required', 'expt_err'), [
         mark.p1(((1, 1), (5, 5), False, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
         ((7, 9), (2, 2), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES"),   # Assume total<=10 cores/per proc & thread
@@ -145,8 +149,8 @@ class TestVSwitchCPUReconfig:
         mark.p1(((5, 5), (6, 5), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),  # Assume total<=10core/proc&thread
         ((1, 1), (8, 10), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES"),  # Assume total <= 10 cores/per proc&thread
         mark.p3(((2, 0), (0, 0), None, None, "CpuAssignment.VSWITCH_INSUFFICIENT_CORES")),
-    ])
-    def test_vswitch_cpu_reconfig_negative(host_to_config, platform, vswitch, ht_required, cpe_required, expt_err):
+    ], ids=id_params_cores)
+    def test_vswitch_cpu_reconfig_negative(self, host_to_config, platform, vswitch, ht_required, cpe_required, expt_err):
         """
         Test negative cases for setting vSwitch cores.
         Args:
@@ -170,6 +174,8 @@ class TestVSwitchCPUReconfig:
 
         """
         host, ht_enabled, is_cpe = host_to_config
+        HostsToRecover.add(host, scope='class')
+
         if ht_required is not None and ht_required is not ht_enabled:
             skip("Hyper-threading for {} is not {}".format(host, ht_required))
 
@@ -219,10 +225,13 @@ class TestVMSchedulingLockHosts:
     @fixture(scope='class', autouse=True)
     def lock_hosts(self, host_to_config):
         host_to_set = host_to_config[0]
-        vm_helper.delete_vms(fail_ok=True, delete_volumes=False)
         nova_hosts = host_helper.get_nova_hosts()
+        assert host_to_set in nova_hosts, "{} is not in nova host-list. Check previous test case.".format(host_to_set)
+
         nova_hosts.remove(host_to_set)
         HostsToRecover.add(nova_hosts, scope='class')
+
+        vm_helper.delete_vms(fail_ok=True, delete_volumes=False)
         for host in nova_hosts:
             host_helper.lock_host(host)
 
@@ -249,7 +258,7 @@ class TestVMSchedulingLockHosts:
     @mark.parametrize('resize_revert', [
         mark.p1(False),
         mark.p1(True)
-    ])
+    ], ids=['confirm', 'revert'])
     def test_resize_vm_vswitch_node_insufficient(self, host_to_config, resize_revert):
         """
         Test vm moves to non-vSwitch Numa node when resize to a flavor with more vcpus than current numa node
@@ -331,7 +340,7 @@ class TestVMSchedulingLockHosts:
     @mark.parametrize('vswitch', [
         mark.p3((0, 2)),
         mark.p1((2, 0)),
-    ])
+    ], ids=['0_2', '2_0'])
     def test_boot_vm_vswitch_node_full(self, host_to_config, vswitch):
         """
         Test vms are first scheduled on vSwitch numa node until full, then will be scheduled on different numa node

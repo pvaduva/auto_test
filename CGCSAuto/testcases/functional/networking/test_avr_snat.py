@@ -62,7 +62,7 @@ def enable_snat_as_teardown(request):
     'snat_disabled',
     'snat_enabled',
 ])
-def test_ext_access_vm_actions(snat_setups, snat):
+def test_snat_vm_actions(snat_setups, snat):
     """
     Test VM external access over VM launch, live-migration, cold-migration, pause/unpause, etc
 
@@ -134,7 +134,7 @@ def test_ext_access_vm_actions(snat_setups, snat):
     'snat_disabled',
     'snat_enabled',
 ])
-def test_ext_access_host_reboot(snat_setups, snat):
+def test_snat_evacuate_vm(snat_setups, snat):
     """
     Test VM external access after evacuation.
 
@@ -186,7 +186,7 @@ def test_ext_access_host_reboot(snat_setups, snat):
 @mark.slow
 @mark.trylast
 @mark.skipif(True, reason="Host reboot undetected JIRA CGTS-4616")
-def test_ext_access_computes_lock_reboot(snat_setups):
+def test_snat_computes_lock_reboot(snat_setups):
     """
     test vm external access after host compute reboot with all rest of computes locked
 
@@ -247,7 +247,7 @@ def test_ext_access_computes_lock_reboot(snat_setups):
     vm_helper.ping_ext_from_vm(vm_, use_fip=False)
 
 
-def test_reset_router_ext_gateway(snat_setups):
+def test_snat_reset_router_ext_gateway(snat_setups):
     """
     Test VM external access after evacuation.
 

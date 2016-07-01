@@ -11,7 +11,7 @@ from testfixtures.recover_hosts import HostsToRecover
 
 
 @fixture(scope='module')
-def net_setups_():
+def base_setup():
 
     flavor_id = nova_helper.create_flavor(name='dedicated')[1]
     ResourceCleanup.add('flavor', flavor_id, scope='module')
@@ -33,6 +33,10 @@ def net_setups_():
     return base_vm, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id
 
 
+def id_params(val):
+    return '_'.join(val)
+
+
 class TestMutiPortsBasic:
 
     vifs_to_test = [('avp', 'avp'),
@@ -40,19 +44,19 @@ class TestMutiPortsBasic:
                     ('e1000', 'virtio'),
                     ('avp', 'virtio'),]
 
-    @fixture(scope='class', params=vifs_to_test)
-    def vms_to_test(self, request, net_setups_):
+    @fixture(scope='class', params=vifs_to_test, ids=id_params)
+    def vms_to_test(self, request, base_setup):
         """
         Create a vm under test with specified vifs for tenant network
         Args:
             request: pytest param
-            net_setups_ (tuple): base vm, flavor, management net, tenant net, interal net to use
+            base_vm_ (tuple): base vm, flavor, management net, tenant net, interal net to use
 
         Returns (str): id of vm under test
 
         """
         vifs = request.param
-        base_vm, flavor, mgmt_net_id, tenant_net_id, internal_net_id = net_setups_
+        base_vm, flavor, mgmt_net_id, tenant_net_id, internal_net_id = base_setup
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}]
         for vif in vifs:
@@ -80,7 +84,7 @@ class TestMutiPortsBasic:
         (['pause', 'unpause']),
         (['suspend', 'resume']),
         (['auto_recover']),
-    ])
+    ], ids=id_params)
     def test_multiports_on_same_network_vm_actions(self, vms_to_test, vm_actions):
         """
         Test vm actions on vm with multiple ports with given vif models on the same tenant network
@@ -106,7 +110,7 @@ class TestMutiPortsBasic:
             - Delete created vms and flavor
         """
 
-        base_vm, vm_under_test = vms_to_test[0]
+        base_vm, vm_under_test = vms_to_test
 
         if vm_actions[0] == 'auto_recover':
             LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from base vm over "
@@ -149,7 +153,7 @@ class TestMutiPortsBasic:
         Teardown:
             - Delete created vms and flavor
         """
-        base_vm, vm_under_test = vms_to_test[0]
+        base_vm, vm_under_test = vms_to_test
         host = nova_helper.get_vm_host(vm_under_test)
 
         LOG.tc_step("Reboot vm host {}".format(host))
