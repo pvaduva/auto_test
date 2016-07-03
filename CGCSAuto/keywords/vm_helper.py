@@ -1,14 +1,13 @@
 import random
 import re
 import time
-from collections import Counter
 from contextlib import contextmanager
 
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
 from utils.tis_log import LOG
 from consts.auth import Tenant
-from consts.timeout import VMTimeout
+from consts.timeout import VMTimeout, CMDTimeout
 from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 
@@ -780,11 +779,12 @@ def _wait_for_vm_status(vm_id, status, timeout=VMTimeout.STATUS_CHANGE, check_in
         current_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
                                                             auth_info=auth_info)
 
+    err_msg = "Timed out waiting for vm status: {}. Actual vm status: {}".format(status, current_status)
     if fail_ok:
-        LOG.warning("Timed out waiting for vm status: {}. Actual vm status: {}".format(status, current_status))
+        LOG.warning(err_msg)
         return None
     else:
-        raise exceptions.VMTimeout
+        raise exceptions.VMTimeout(err_msg)
 
 
 def _confirm_or_revert_resize(vm, revert=False, con_ssh=None):
@@ -1471,7 +1471,8 @@ def set_vm_state(vm_id, check_first=False, error_state=True, fail_ok=False, auth
     return 0, msg
 
 
-def reboot_vm(vm_id, hard=False, fail_ok=False, con_ssh=None, auth_info=None):
+def reboot_vm(vm_id, hard=False, fail_ok=False, con_ssh=None, auth_info=None, cli_timeout=CMDTimeout.REBOOT_VM,
+              reboot_timeout=VMTimeout.REBOOT):
     vm_status = nova_helper.get_vm_status(vm_id, con_ssh=con_ssh)
     if not vm_status.lower() == 'active':
         LOG.warning("VM is not in active state before rebooting. VM status: {}".format(vm_status))
@@ -1479,7 +1480,8 @@ def reboot_vm(vm_id, hard=False, fail_ok=False, con_ssh=None, auth_info=None):
     extra_arg = '--hard ' if hard else ''
     arg = "{}{}".format(extra_arg, vm_id)
 
-    code, output = cli.nova('reboot', arg, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+    code, output = cli.nova('reboot', arg, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True,
+                            timeout=cli_timeout)
 
     if code == 1:
         return 1, output
@@ -1487,7 +1489,8 @@ def reboot_vm(vm_id, hard=False, fail_ok=False, con_ssh=None, auth_info=None):
     expt_reboot = VMStatus.HARD_REBOOT if hard else VMStatus.SOFT_REBOOT
     _wait_for_vm_status(vm_id, expt_reboot, check_interval=1, fail_ok=False)
 
-    actual_status = _wait_for_vm_status(vm_id, [VMStatus.ACTIVE, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh)
+    actual_status = _wait_for_vm_status(vm_id, [VMStatus.ACTIVE, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh,
+                                        timeout=reboot_timeout)
     if not actual_status:
         msg = "VM {} did not reach active state after reboot.".format(vm_id)
         LOG.warning(msg)
@@ -1545,7 +1548,7 @@ def resume_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=Non
                                auth_info=auth_info)
 
 
-def pause_vm(vm_id, timeout=VMTimeout.STATUS_CHANGE, fail_ok=False, con_ssh=None, auth_info=None):
+def pause_vm(vm_id, timeout=VMTimeout.PAUSE, fail_ok=False, con_ssh=None, auth_info=None):
     return __perform_vm_action(vm_id, 'pause', VMStatus.PAUSED, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
                                auth_info=auth_info)
 

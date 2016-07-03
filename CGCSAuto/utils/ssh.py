@@ -266,6 +266,8 @@ class SSHClient:
                 LOG.warning("No match found for {}!".format(blob_list))
                 LOG.debug("Before: {}; After:{}".format(self._parse_output(self._session.before),
                                                         self._parse_output(self._session.after)))
+                self.send_control('c')
+                self.flush()
                 raise
 
         # Match found, reformat the outputs
@@ -466,6 +468,10 @@ class SSHClient:
 
         return code, output
 
+    def send_control(self, char='c'):
+        self._session.sendcontrol(char=char)
+        self.expect()
+
     def get_current_user(self):
         output = self.exec_cmd('whoami')[1]
         return output.splitlines()[0]
@@ -584,14 +590,16 @@ class SSHFromSSH(SSHClient):
             self.send(self.ssh_cmd)
             try:
                 if use_password:
-                    res_index = self.expect([PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout, fail_ok=retry)
+                    res_index = self.expect([PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout, fail_ok=False)
                     if res_index == 1:
                         self.send('yes')
                         self.expect(PASSWORD_PROMPT)
+
+                    print("You shouldn't appear!!")
                     self.send(self.password)
                     self.expect(prompt, timeout=timeout)
                 else:
-                    res_index = self.expect([Prompt.ADD_HOST, prompt], timeout=timeout, fail_ok=retry)
+                    res_index = self.expect([Prompt.ADD_HOST, prompt], timeout=timeout, fail_ok=False)
                     if res_index == 0:
                         self.send('yes')
                         self.expect(prompt, timeout=timeout)
@@ -603,6 +611,7 @@ class SSHFromSSH(SSHClient):
             except (OSError, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh) as e:
                 LOG.info("Exception caught when attempt to ssh to {}: {}".format(self.host, e))
                 # fail login if retry=False
+                self.parent.send_control('c')
                 if not retry:
                     raise
                 # don't retry if login credentials incorrect

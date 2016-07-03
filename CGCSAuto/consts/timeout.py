@@ -1,4 +1,4 @@
-CLI_TIMEOUT = 10
+CLI_TIMEOUT = 30
 
 
 class HostTimeout:
@@ -10,6 +10,7 @@ class HostTimeout:
     LOCK = 720
     TASK_CLEAR = 180
     FAIL_AFTER_REBOOT = 30
+    HYPERVISOR_UP_AFTER_AVAIL = 90
 
 
 class VMTimeout:
@@ -22,6 +23,8 @@ class VMTimeout:
     VOL_ATTACH = 60
     SSH_LOGIN = 20
     AUTO_RECOVERY = 600
+    REBOOT = 180
+    PAUSE = 180
 
 
 class VolumeTimeout:
@@ -39,6 +42,7 @@ class SysInvTimeout:
 class CMDTimeout:
     HOST_CPU_MODIFY = 30
     RESOURCE_LIST = 60
+    REBOOT_VM = 60
 
 
 class ImageTimeout:

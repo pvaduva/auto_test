@@ -323,6 +323,7 @@ class TestVMSchedulingLockHosts:
         LOG.tc_step("Resize {}vm to a flavor with vcpu number more than the available cores on current numa node".
                     format('and revert ' if resize_revert else ''))
         huge_flavor = nova_helper.create_flavor(name='many_vcpus', vcpus=vswitch_vm_cores_num + 1)[1]
+        ResourceCleanup.add('flavor', huge_flavor)
         nova_helper.set_flavor_extra_specs(huge_flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
         vm_helper.resize_vm(vm_id, flavor_id=huge_flavor, revert=resize_revert)
 

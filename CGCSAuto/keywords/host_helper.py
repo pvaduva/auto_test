@@ -735,7 +735,22 @@ def get_nova_hosts(con_ssh=None, auth_info=Tenant.ADMIN):
     return table_parser.get_values(table_, 'host_name', service='compute', zone='nova')
 
 
-def wait_for_hypervisors_up(hosts, timeout=60, check_interval=3, fail_ok=False, con_ssh=None):
+def wait_for_hypervisors_up(hosts, timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL, check_interval=3, fail_ok=False,
+                            con_ssh=None):
+    """
+    Wait for given hypervisors to be up and enabled in nova hypervisor-list
+    Args:
+        hosts (list|str): names of the hypervisors, such as compute-0
+        timeout (int):
+        check_interval (int):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+
+    Returns (tuple): res_bool(bool), hosts_not_up(list)
+        (True, [])      # all hypervisors given are up and enabled
+        (False, [<hosts_not_up>]    # some hosts are not up and enabled
+
+    """
     if isinstance(hosts, str):
         hosts = [hosts]
     hypervisors = get_hypervisors(con_ssh=con_ssh)
