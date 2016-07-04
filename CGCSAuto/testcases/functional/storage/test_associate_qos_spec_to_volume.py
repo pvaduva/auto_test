@@ -17,6 +17,7 @@ from utils import table_parser
 from consts.auth import Tenant
 from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper,cinder_helper,glance_helper
+from testfixtures.resource_mgmt import ResourceCleanup
 from setup_consts import P1, P2, P3
 
 
@@ -25,32 +26,27 @@ instance_backing_params =['image', 'lvm']
 
 @fixture(scope='module', params=instance_backing_params )
 def config_local_volume_group(request):
-    """
-    fixture to configure the local volume group to have the same storage type as the the type need for testing
-    """
 
     local_volume_group = {'instance_backing': request.param}
-    # check the local volume group of compute-0
-    table_ = table_parser.table(cli.system('host-lvg-show compute-0 nova-local', auth_info=Tenant.ADMIN, fail_ok=False))
+    #check the local volume group of compute-0
 
-    instance_backing = table_parser.get_value_two_col_table(table_,'parameters')
-    inst_back = ast.literal_eval(instance_backing)['instance_backing']
+    inst_back = host_helper.get_local_storage_backing('compute-0', con_ssh=None)
 
     # if already same lvm skip
     if inst_back == request.param:
         return local_volume_group
 
-    #if instance backing is different, set the new instance backing type.
-    lvg_args = "-b "+request.param+" compute-0 nova-local"
-    host_helper.lock_host('compute-0')
-
     # config lvg parameter for instance backing either image/lvm
-    cli.system('host-lvg-modify', lvg_args, auth_info=Tenant.ADMIN, fail_ok=False)
-
-    # unlock the node
-    host_helper.unlock_host('compute-0')
+    host_helper.set_host_local_backing_type('compute-0', inst_type=request.param, vol_group='nova-local')
 
     local_volume_group = {'instance_backing': request.param}
+
+    def reset_local_volume_group():
+        # reset local volume group back to image
+        print("teardown revert host")
+        if request.param != inst_back:
+            host_helper.set_host_local_backing_type('compute-0', inst_type=inst_back, vol_group='nova-local')
+    request.addfinalizer(reset_local_volume_group)
 
     return local_volume_group
 
@@ -172,21 +168,12 @@ def create_vm_with_volume(request, create_volume_with_type):
           }
 
     def delete_vm():
+        # must delete VM before flavors
         vm_helper.delete_vms(vm_id, delete_volumes=True)
+
     request.addfinalizer(delete_vm)
 
     return vm
-
-
-def test_verify_volume_type(create_volume_type):
-    # use cinder type list find the newly create volume id exist
-
-    LOG.tc_step("Compare the expected volume type with created volume type id")
-    vol_type_id_list = cinder_helper.get_type_list()
-    volume_type_id = create_volume_type['id']
-
-    assert volume_type_id in vol_type_id_list, "expected volume type ID {} to be created. Actual ID is not in " \
-                                               "cinder type-list: {}.".format(volume_type_id, vol_type_id_list)
 
 
 def test_verify_qos_specs(create_qos_specs):
@@ -211,20 +198,6 @@ def test_associate_qos_spec_to_volume_type(create_qos_association):
     assert volume_type_id == match_volume_type_id, "After QOS Association with volume type, expect associated volume " \
                                                    "ID to be {}. Actual volume ID is {} instead.".\
         format(volume_type_id, match_volume_type_id)
-
-
-def test_create_volume_with_volume_type(create_volume_with_type):
-    volume_id = create_volume_with_type['id']
-    volume_type_id = create_volume_with_type['volume_type_id']
-    volume_type_name = create_volume_with_type['volume_type_name']
-
-    LOG.tc_step("Compare the expected volume type with actual volume type that was created using cinder list")
-    table_ = table_parser.table(cli.cinder('list --all-tenant', auth_info=Tenant.ADMIN))
-    match_vol_type_name = table_parser.get_values(table_, 'Volume Type', ID=volume_id)
-
-    assert volume_type_name == match_vol_type_name, "After create a volume with ID {} use volume type name: {}. " \
-                                                    "Actual create volume contain volume type name: {}" \
-                                                    "".format(volume_id, volume_type_name, match_vol_type_name)
 
 
 def test_verify_disk_extra_on_virsh(create_vm_with_volume):

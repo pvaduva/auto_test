@@ -14,11 +14,13 @@ from utils import cli
 from utils import table_parser
 from consts.auth import Tenant
 from utils.tis_log import LOG
+from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec
 from keywords import nova_helper, vm_helper, host_helper, system_helper
+from testfixtures.resource_mgmt import ResourceCleanup
 from setup_consts import P1, P2, P3
 
 
-instance_backing_params =['image', 'lvm']
+instance_backing_params =['image','lvm']
 
 
 @fixture(scope='module', params=instance_backing_params )
@@ -26,43 +28,41 @@ def config_local_volume_group(request):
 
     local_volume_group = {'instance_backing': request.param}
     #check the local volume group of compute-0
-    table_ = table_parser.table(cli.system('host-lvg-show compute-0 nova-local', auth_info=Tenant.ADMIN, fail_ok=False))
 
-    instance_backing = table_parser.get_value_two_col_table(table_,'parameters')
-    inst_back = ast.literal_eval(instance_backing)['instance_backing']
+    inst_back = host_helper.get_local_storage_backing('compute-0', con_ssh=None)
 
     # if already same lvm skip
     if inst_back == request.param:
         return local_volume_group
 
-    lvg_args = "-b "+request.param+" compute-0 nova-local"
-    host_helper.lock_host('compute-0')
-    #could be a bug seems to cause host-lvg-modify to fail add timer work around it
-    #sleep(10)
     # config lvg parameter for instance backing either image/lvm
-    cli.system('host-lvg-modify', lvg_args, auth_info=Tenant.ADMIN, fail_ok=False)
-
-    # unlock the node
-    host_helper.unlock_host('compute-0')
+    host_helper.set_host_local_backing_type('compute-0', inst_type=request.param, vol_group='nova-local')
 
     local_volume_group = {'instance_backing': request.param}
+
+    def reset_local_volume_group():
+        # reset local volume group back to image
+        print("teardown revert host")
+        if request.param != inst_back:
+            host_helper.set_host_local_backing_type('compute-0', inst_type=inst_back, vol_group='nova-local')
+    request.addfinalizer(reset_local_volume_group)
 
     return local_volume_group
 
 
 disk_spec_params = [
-        ('quota:disk_read_bytes_sec',   10485769),
-        ('quota:disk_read_bytes_sec',   419430400),
-        ('quota:disk_read_iops_sec',    200),
-        ('quota:disk_read_iops_sec',    5000),
-        ('quota:disk_write_bytes_sec',  10485769),
-        ('quota:disk_write_bytes_sec',  419430400),
-        ('quota:disk_write_iops_sec',   200),
-        ('quota:disk_write_iops_sec',   5000),
-        ('quota:disk_total_bytes_sec',  10000000),
-        ('quota:disk_total_bytes_sec',  419430400),
-        ('quota:disk_total_iops_sec',   500),
-        ('quota:disk_total_iops_sec',   5000),
+        (FlavorSpec.DISK_READ_BYTES,   10485769),
+        (FlavorSpec.DISK_READ_BYTES,   419430400),
+        (FlavorSpec.DISK_READ_IOPS,    200),
+        (FlavorSpec.DISK_READ_IOPS,    5000),
+        (FlavorSpec.DISK_WRITE_BYTES,  10485769),
+        (FlavorSpec.DISK_WRITE_BYTES,  419430400),
+        (FlavorSpec.DISK_WRITE_IOPS,   200),
+        (FlavorSpec.DISK_WRITE_IOPS,   5000),
+        (FlavorSpec.DISK_TOTAL_BYTES,  10000000),
+        (FlavorSpec.DISK_TOTAL_BYTES,  419430400),
+        (FlavorSpec.DISK_TOTAL_IOPS,   500),
+        (FlavorSpec.DISK_TOTAL_IOPS,   5000),
     ]
 
 
@@ -84,11 +84,6 @@ def flavor_with_disk_spec(request, config_local_volume_group):
     else:
         storage = 'local_'+config_local_volume_group['instance_backing']
 
-    # hot fix wait for storage aggregate to sync up with change in local volume group
-    sleep(20)
-    if len(host_helper.get_hosts_by_storage_aggregate(storage_backing=storage)) < 1:
-        skip("No host support {} storage backing in current lab".format(storage))
-
     flavor_id = nova_helper.create_flavor(vcpus=4, ram=1024, root_disk=2, check_storage_backing=False)[1]
     quota_disk_spec = {request.param[0]: request.param[1],
                        'aggregate_instance_extra_specs:storage': storage,
@@ -102,9 +97,9 @@ def flavor_with_disk_spec(request, config_local_volume_group):
               }
 
     def delete_flavor():
+        # must delete VM before flavors
         nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
     request.addfinalizer(delete_flavor)
-
     return flavor
 
 
@@ -115,6 +110,8 @@ def vm_with_disk_spec(request, flavor_with_disk_spec):
     disk_extra_spec = flavor_with_disk_spec['disk_spec']
     storage_extra_spec = flavor_with_disk_spec['storage_spec']
 
+    # must be from image
+    sleep(20)
     boot_source = 'image'
     vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
 
@@ -123,76 +120,13 @@ def vm_with_disk_spec(request, flavor_with_disk_spec):
           'storage_spec': storage_extra_spec
           }
 
-    def delete_disk_spec_vm():
+    def delete_vm():
+        # must delete VM before flavors
         vm_helper.delete_vms(vm_id, delete_volumes=True)
-    request.addfinalizer(delete_disk_spec_vm)
+
+    request.addfinalizer(delete_vm)
 
     return vm
-
-
-def test_disk_extra_spec(flavor_with_disk_spec):
-    """
-    from us77170_StorageTestPlan.pdf
-
-    verify the extra specs are properly set and matching expecte specs
-
-    Args:
-        - Nothing
-
-    Setup:
-        - Setup flavor with specific bytes per second extra specs
-
-
-    Test Steps:
-        -verify the extra spec is set and match to expected specs
-
-    Teardown:
-        - delete specific bytes per second extra specs
-
-    """
-    flavor_id = flavor_with_disk_spec['id']
-    extra_spec = flavor_with_disk_spec['disk_spec']
-
-    flavor_extra_specs = nova_helper.get_flavor_extra_specs(flavor_id)
-    LOG.tc_step("Verify the disk extra spec for specific flavor is setup correctly")
-
-    assert flavor_extra_specs[extra_spec[0]] == str(extra_spec[1]), "Expected extra_spec {} to be {}. However, " \
-                                                                    "it was {}".format(extra_spec, str(extra_spec[1]),
-                                                                                       flavor_extra_specs[extra_spec])
-
-
-def test_verify_disk_extra_on_vm( vm_with_disk_spec):
-    """
-    from us77170_StorageTestPlan.pdf
-    verify the extra specs from flavor is created set on vm
-
-    Args:
-        - Nothing
-
-    Setup:
-        - Setup flavor with specific bytes per second extra specs
-        - create a vm using the created flavor
-
-    Test Steps:
-        -verify the extra spec used by vm is set and match to expected specs
-
-    Teardown:
-        -delete vm
-        -delete specific bytes per second extra specs
-
-    """
-    disk_spec = vm_with_disk_spec['disk_spec']
-    vm_id = vm_with_disk_spec['id']
-    LOG.tc_step("Check vm using nova list then verify the flavor is added to VM")
-    # check vm using nova list then verfiy the flavour is added to vm
-    vm_flavour_id = nova_helper.get_vm_flavor(vm_id)
-    # retrieve flavor id
-    LOG.tc_step("Compare the expected flavor ID with flavor ID attached to VM")
-    vm_flavor_extra_specs = nova_helper.get_flavor_extra_specs(vm_flavour_id)
-
-    assert vm_flavor_extra_specs[disk_spec[0]] == str(disk_spec[1]), "Expected extra_spec {} to be {}. However, it " \
-                                                                     "was {}".format(disk_spec, str(disk_spec[1]),
-                                                                                     vm_flavor_extra_specs[disk_spec])
 
 
 def test_verify_disk_extra_on_virsh(vm_with_disk_spec):
