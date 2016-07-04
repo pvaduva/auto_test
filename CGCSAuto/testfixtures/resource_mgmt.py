@@ -71,7 +71,6 @@ def delete_resources_module(request):
 
     """
     def delete_():
-        print("deleting stuffs")
         ResourceCleanup._delete(ResourceCleanup._get_resources('module'))
         ResourceCleanup._reset('module')
     request.addfinalizer(delete_)

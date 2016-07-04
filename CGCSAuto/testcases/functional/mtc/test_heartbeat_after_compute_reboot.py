@@ -101,7 +101,6 @@ def test_heartbeat_after_compute_lock(heartbeat_flavor_vm):
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 
-
         LOG.tc_step("check heartbeat after compute lock")
         cmd = "ps -ef | grep [h]eartbeat | awk '{print $10}' "
         heartbeat_proc_shown = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False, expt_timeout=3,

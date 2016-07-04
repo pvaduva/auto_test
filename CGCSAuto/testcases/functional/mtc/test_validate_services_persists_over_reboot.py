@@ -42,10 +42,11 @@ def test_validate_services_persists_over_controller_reboot():
     active_controller = system_helper.get_active_controller_name()
 
     # reboot active controller1
+    LOG.tc_step("Reboot active controller {}".format(active_controller))
     host_helper.reboot_hosts(active_controller)
     # now original active controller should be active
     # sleep 20 seconds for services to settle
-    sleep(20)
+    sleep(30)
     after_service_list_table_ = table_parser.table(cli.system('service-list', auth_info=Tenant.ADMIN, fail_ok=False))
     after_neutron_list_table_ = table_parser.table(cli.neutron('agent-list', auth_info=Tenant.ADMIN, fail_ok=False))
 
@@ -72,7 +73,7 @@ def test_validate_services_persists_over_compute_reboot():
 
     Test Steps:
         - capture Inventory summary for list of hosts on system service-list and neutron agent-list
-        - reboot the current Controller-Active
+        - reboot a compute node
         - Wait for reboot to complete
         - Validate key items from inventory persist over reboot
 
@@ -87,10 +88,11 @@ def test_validate_services_persists_over_compute_reboot():
     neutron_list_table_ = table_parser.table(cli.neutron('agent-list', auth_info=Tenant.ADMIN, fail_ok=False))
 
     # reboot compute node
+    LOG.tc_step("Reboot compute node {}".format(a_compute_node))
     host_helper.reboot_hosts(a_compute_node)
     # now controller-0 should be active
-    # sleep 20 seconds for services to settle
-    sleep(20)
+    # sleep 30 seconds for services to settle
+    sleep(30)
     after_service_list_table_ = table_parser.table(cli.system('service-list', auth_info=Tenant.ADMIN, fail_ok=False))
     after_neutron_list_table_ = table_parser.table(cli.neutron('agent-list', auth_info=Tenant.ADMIN, fail_ok=False))
 
@@ -135,10 +137,11 @@ def test_validate_inventory_summary_persists_over_reboot():
     active_controller = system_helper.get_active_controller_name()
 
     # reboot active controller-1
+    LOG.tc_step("Reboot active controller {}".format(active_controller))
     host_helper.reboot_hosts(active_controller)
     # now original active controller should be active
     # sleep 20 seconds for services to settle
-    sleep(20)
+    sleep(30)
     after_host_list_table_ = table_parser.table(cli.system('host-list', auth_info=Tenant.ADMIN, fail_ok=False))
 
     # retrieve system service-list
