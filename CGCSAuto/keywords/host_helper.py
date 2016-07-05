@@ -1178,6 +1178,24 @@ def check_host_local_backing_type(host, storage_type='image', con_ssh=None):
     return True
 
 
+def set_host_local_backing_type(host, inst_type='image',vol_group='noval-local',unlock=True, con_ssh=None):
+    lock_host(host)
+    lvg_args = "-b "+inst_type+" "+host+" "+vol_group
+    # config lvg parameter for instance backing either image/lvm
+    # sleep before for a few second before moidfiy? this is too much..
+    cli.system('host-lvg-modify', lvg_args, auth_info=Tenant.ADMIN, fail_ok=False)
+
+    # unlock the node
+    if unlock:
+        # https://jira.wrs.com:8443/browse/CGTS-4523 need to check for hypervisor or sleep20 sec
+        unlock_host(host,check_hypervisor_up=True)
+        verify_backing = check_host_local_backing_type(host, storage_type=inst_type, con_ssh=None),
+        if verify_backing:
+            return 0, "host local backing was configured and verification passed"
+        return 1, "host_local backing was configured but verification failed "
+
+    return 2, "host local backing was configured and host still in locked state"
+
 def is_host_local_image_backing(host, con_ssh=None):
     return check_host_local_backing_type(host, storage_type='image', con_ssh=con_ssh)
 
