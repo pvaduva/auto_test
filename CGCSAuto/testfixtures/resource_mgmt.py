@@ -3,6 +3,7 @@ from copy import deepcopy
 from pytest import fixture
 
 from utils import exceptions
+from utils.tis_log import LOG
 
 from consts.auth import Tenant
 from consts.heat import Heat
@@ -174,7 +175,8 @@ class ResourceCleanup:
 
         # Attempt all deletions before raising exception.
         if err_msgs:
-            raise exceptions.CommonError("Failed to delete resource(s). Details: {}".format(err_msgs))
+            LOG.error("ERROR: Failed to delete resource(s). \nDetails: {}".format(err_msgs))
+            # raise exceptions.CommonError("Failed to delete resource(s). Details: {}".format(err_msgs))
 
     @classmethod
     def _reset(cls, scope):

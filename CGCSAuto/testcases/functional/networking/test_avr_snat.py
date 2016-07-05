@@ -97,7 +97,7 @@ def test_snat_vm_actions(snat_setups, snat):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=30)
 
     LOG.tc_step("Ping from VM {} to 8.8.8.8".format(vm_))
-    vm_helper.ping_ext_from_vm(vm_, use_fip=False)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Live-migrate the VM and verify ping from VM")
     vm_helper.live_migrate_vm(vm_)
@@ -105,12 +105,12 @@ def test_snat_vm_actions(snat_setups, snat):
 
     LOG.tc_step("Cold-migrate the VM and verify ping from VM")
     vm_helper.cold_migrate_vm(vm_)
-    vm_helper.ping_ext_from_vm(vm_, use_fip=False)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Pause and un-pause the VM and verify ping from VM")
     vm_helper.pause_vm(vm_)
     vm_helper.unpause_vm(vm_)
-    vm_helper.ping_ext_from_vm(vm_, use_fip=False)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Suspend and resume the VM and verify ping from VM")
     vm_helper.suspend_vm(vm_)
@@ -124,7 +124,7 @@ def test_snat_vm_actions(snat_setups, snat):
 
     LOG.tc_step("Reboot the VM and verify ping from VM")
     vm_helper.reboot_vm(vm_)
-    vm_helper.ping_ext_from_vm(vm_, use_fip=False)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 
 @mark.skipif(True, reason="Evacuation JIRA CGTS-4264")
@@ -180,12 +180,12 @@ def test_snat_evacuate_vm(snat_setups, snat):
     assert post_evac_host != host, "VM is on the same host after original host rebooted."
 
     LOG.tc_step("Verify vm can still ping outside")
-    vm_helper.ping_ext_from_vm(vm_, use_fip=False)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 
 @mark.slow
 @mark.trylast
-@mark.skipif(True, reason="Host reboot undetected JIRA CGTS-4616")
+# @mark.skipif(True, reason="Host reboot undetected JIRA CGTS-4616")
 def test_snat_computes_lock_reboot(snat_setups):
     """
     test vm external access after host compute reboot with all rest of computes locked
@@ -244,7 +244,7 @@ def test_snat_computes_lock_reboot(snat_setups):
 
     LOG.tc_step("Verify vm is recovered after host reboot complete and can still ping outside")
     vm_helper._wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
-    vm_helper.ping_ext_from_vm(vm_, use_fip=False)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 
 def test_snat_reset_router_ext_gateway(snat_setups):
@@ -273,8 +273,11 @@ def test_snat_reset_router_ext_gateway(snat_setups):
         - Disable SNAT on router    (module)
     """
     vm_, fip = snat_setups
+    LOG.tc_step("Ping vm management net ip from NatBox")
+    vm_helper.ping_vms_from_natbox(vm_, use_fip=False)
+
     LOG.tc_step("Ping outside from VM".format(vm_))
-    vm_helper.ping_ext_from_vm(vm_, use_fip=False)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Disassociate floatingip from vm and verify it's successful.")
     network_helper.disassociate_floating_ip(floating_ip=fip)
@@ -298,7 +301,7 @@ def test_snat_reset_router_ext_gateway(snat_setups):
 
     LOG.tc_step("Verify vm can ping to and be ping'd from outside")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=30, fail_ok=False)
-    vm_helper.ping_ext_from_vm(vm_, use_fip=False)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 
 def a_test_vm_nat_protocol():

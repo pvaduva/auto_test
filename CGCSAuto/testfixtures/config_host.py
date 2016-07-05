@@ -4,7 +4,7 @@ from keywords import host_helper
 
 @mark.tryfirst
 @fixture(scope='module')
-def config_host(request):
+def config_host_module(request):
     """
     Module level fixture to configure a host.
 

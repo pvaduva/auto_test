@@ -604,13 +604,14 @@ def get_qos(name=None, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
-def get_internal_net_id(net_name=None, con_ssh=None, auth_info=None):
+def get_internal_net_id(net_name=None, strict=False, con_ssh=None, auth_info=None):
     """
     Get internal network id that matches the given net_name of a specific tenant.
 
     Args:
         net_name (str): name of the internal network. This can be a substring of the tenant net name, such as 'net1',
             and it will return id for internal0-net1
+        strict (bool): Whether to perform strict search on given net_name
         con_ssh (SSHClient):
         auth_info (dict): If None, primary tenant will be used.
 
@@ -618,7 +619,7 @@ def get_internal_net_id(net_name=None, con_ssh=None, auth_info=None):
         If multiple ids matches the given name, only the first will return
 
     """
-    net_ids = get_internal_net_ids(net_names=net_name, con_ssh=con_ssh, auth_info=auth_info)
+    net_ids = get_internal_net_ids(net_names=net_name, strict=strict, con_ssh=con_ssh, auth_info=auth_info)
     if not net_ids:
         LOG.warning("No network found with name {}".format(net_name))
         return []
@@ -712,7 +713,12 @@ def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None,
     else:
         if isinstance(net_names, str):
             net_names = [net_names]
-        net_names = ['internal.*{}'.format(net_name) for net_name in net_names if 'internal' not in net_name]
+
+        for i in range(len(net_names)):
+            net_name = net_names[i]
+            if 'internal' not in net_name:
+                net_names[i] = 'internal.*{}'.format(net_name)
+
         table_ = table_parser.filter_table(table_, name=net_names, strict=strict, regex=regex)
         return table_parser.get_column(table_, 'id')
 
@@ -727,7 +733,6 @@ def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         con_ssh (SSHClient): active controller SSHClient object
         auth_info (dict): use admin by default unless specified
         rtn_dict (bool): return list if False, return dict if True
-        use_fip (bool): Whether to return only floating ip(s) if any vm has floating ip(s) associated with it
 
     Returns (list|dict):
         a list of all VM management IPs   # rtn_dict=False
@@ -747,7 +752,6 @@ def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn
         con_ssh (SSHClient): active controller SSHClient object
         auth_info (dict): use admin by default unless specified
         rtn_dict (bool): return list if False, return dict if True
-        use_fip (bool): Whether to return only floating ip(s) if any vm has floating ip(s) associated with it
 
     Returns (list|dict):
         a list of all VM management IPs   # rtn_dict=False
@@ -1416,18 +1420,15 @@ def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=Fal
     return 0, succ_msg
 
 
-def get_provider_net_for_interface(interface='pthru', rtn_val='id', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_pci_interface_info(interface='pthru', filepath=None, con_ssh=None):
     """
-    Get provider net id for SRIOV interface
-
+    Get pci interface override info from lab_setup.conf
     Args:
         interface (str): 'pthru' or 'sriov'
-        rtn_val (str): 'id' or 'name'
-        filepath: lab_setup.conf path to retrive the info from
+        filepath (str): lab_setup.conf file path if not in default location
         con_ssh (SSHClient):
-        auth_info (dict):
 
-    Returns (str):  id of the provider net for SRIOV interface. Returns empty string if not found.
+    Returns (str): such as "ethernet|0000:06:00.1+0|${DATAMTU}|data0b|4". Returns '' if given interface info not found.
 
     """
     valid_interfaces = ['pthru', 'sriov']
@@ -1442,9 +1443,32 @@ def get_provider_net_for_interface(interface='pthru', rtn_val='id', filepath=Non
     with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con0_ssh:
         sriov_if_override = con0_ssh.exec_cmd("cat {} | grep -i {}".format(filepath, interface))[1]
 
+    interface_override_name = "{}_interface".format(interface).upper()
     if not sriov_if_override:
-        LOG.warning("SRIOV interface is not found in lab_setup")
+        LOG.warning("{} is not found in lab_setup".format(interface_override_name))
         return ''
+
+    if 'No such file or directory' in sriov_if_override:
+        raise ValueError("File '{}' cannot be found".format(filepath))
+
+    return sriov_if_override.split(sep='=')[-1]
+
+
+def get_provider_net_for_interface(interface='pthru', rtn_val='id', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get provider net id for SRIOV or PCI-passthrough interface
+
+    Args:
+        interface (str): 'pthru' or 'sriov'
+        rtn_val (str): 'id' or 'name'
+        filepath: lab_setup.conf path to retrive the info from
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (str):  id of the provider net for SRIOV interface. Returns empty string if not found.
+
+    """
+    sriov_if_override = get_pci_interface_info(interface=interface, filepath=filepath, con_ssh=con_ssh)
 
     if 'No such file or directory' in sriov_if_override:
         raise ValueError("File '{}' cannot be found".format(filepath))
@@ -1506,3 +1530,24 @@ def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_s
         LOG.info("IPs with vlan id {}: {}".format(vlan_id, filtered_ips))
 
     return filtered_ips
+
+
+def get_eth_for_mac(ssh_client, mac_addr):
+    """
+    Get the eth name for given mac address on the ssh client provided
+    Args:
+        ssh_client (SSHClient): usually a vm_ssh
+        mac_addr (str): such as "fa:16:3e:45:0d:ec"
+
+    Returns (str): The first matching eth name for given mac. such as "eth3"
+
+    """
+    code, output = ssh_client.exec_cmd('ip addr | grep -B 1 {}'.format(mac_addr))
+    if code != 0:
+        LOG.warning("Cannot find provided mac address {} in 'ip addr'".format(mac_addr))
+        return ''
+
+    # sample output:
+    # 7: eth4: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN qlen 1000
+    # link/ether 90:e2:ba:60:c8:08 brd ff:ff:ff:ff:ff:ff
+    return output.split(sep=':')[1].strip()

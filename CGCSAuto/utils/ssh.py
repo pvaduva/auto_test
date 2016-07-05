@@ -266,8 +266,6 @@ class SSHClient:
                 LOG.warning("No match found for {}!".format(blob_list))
                 LOG.debug("Before: {}; After:{}".format(self._parse_output(self._session.before),
                                                         self._parse_output(self._session.after)))
-                self.send_control('c')
-                self.flush()
                 raise
 
         # Match found, reformat the outputs
@@ -316,7 +314,12 @@ class SSHClient:
         if err_only:
             cmd += ' 1> /dev/null'          # discard stdout
         self.send(cmd, reconnect, reconnect_timeout)
-        self.expect(timeout=expect_timeout)
+        try:
+            self.expect(timeout=expect_timeout)
+        except pxssh.TIMEOUT:
+            self.send_control('c')
+            self.expect()
+            raise
 
         code, output = self.__process_exec_result(cmd, rm_date)
 
@@ -337,9 +340,7 @@ class SSHClient:
         cmd_output = '\n'.join(cmd_output_list)
 
         exit_code = self.get_exit_code()
-        if exit_code == 0:
-            LOG.debug('\'{}\' executed successfully. Exit_code: 0'.format(cmd))
-        else:
+        if exit_code != 0:
             LOG.warning('Issue occurred when executing \'{}\'. Exit_code: {}. Output: {}'.
                         format(cmd, exit_code, cmd_output))
 
@@ -470,7 +471,6 @@ class SSHClient:
 
     def send_control(self, char='c'):
         self._session.sendcontrol(char=char)
-        self.expect()
 
     def get_current_user(self):
         output = self.exec_cmd('whoami')[1]
@@ -590,16 +590,20 @@ class SSHFromSSH(SSHClient):
             self.send(self.ssh_cmd)
             try:
                 if use_password:
-                    res_index = self.expect([PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout, fail_ok=False)
+                    res_index = self.expect([PASSWORD_PROMPT, Prompt.ADD_HOST, self.parent.get_prompt()],
+                                            timeout=timeout, fail_ok=False)
+                    if res_index == 2:
+                        raise exceptions.SSHException("Unable to login to {}".format(self.host))
                     if res_index == 1:
                         self.send('yes')
                         self.expect(PASSWORD_PROMPT)
 
-                    print("You shouldn't appear!!")
                     self.send(self.password)
                     self.expect(prompt, timeout=timeout)
                 else:
-                    res_index = self.expect([Prompt.ADD_HOST, prompt], timeout=timeout, fail_ok=False)
+                    res_index = self.expect([Prompt.ADD_HOST, prompt, self.parent.get_prompt()], timeout=timeout, fail_ok=False)
+                    if res_index == 1:
+                        raise exceptions.SSHException("Unable to login to {}".format(self.host))
                     if res_index == 0:
                         self.send('yes')
                         self.expect(prompt, timeout=timeout)
@@ -610,8 +614,10 @@ class SSHFromSSH(SSHClient):
 
             except (OSError, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh) as e:
                 LOG.info("Exception caught when attempt to ssh to {}: {}".format(self.host, e))
+                if isinstance(e, pexpect.TIMEOUT):
+                    self.parent.send_control('c')
+                    self.parent.expect()
                 # fail login if retry=False
-                self.parent.send_control('c')
                 if not retry:
                     raise
                 # don't retry if login credentials incorrect
@@ -671,6 +677,15 @@ class SSHFromSSH(SSHClient):
                      format(self.host, self.parent.host))
         else:
             LOG.warning("ssh session to {} is not open. Do nothing.".format(self.host))
+
+    def _is_connected(self, fail_ok=True):
+        # Connection is good if send and expect commands can be executed
+        try:
+            self.send()
+        except OSError:    # TODO: add unit test
+            return False
+
+        return self.expect(blob_list=[self.prompt, self.parent.get_prompt()], timeout=3, fail_ok=fail_ok) == 0
 
 
 class VMSSHClient(SSHFromSSH):

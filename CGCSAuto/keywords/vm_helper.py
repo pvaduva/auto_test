@@ -102,6 +102,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         auth_info (dict):
         con_ssh (SSHClient):
         nics (list): [{'net-id': <net_id1>, 'vif-model': <vif1>}, {'net-id': <net_id2>, 'vif-model': <vif2>}, ...]
+            Notes: valid vif-models:
+                virtio, avp, e1000, pci-passthrough, pci-sriov, rtl8139, ne2k_pci, pcnet
+
         hint (dict): key/value pair(s) sent to scheduler for custom use. such as group=<server_group_id>
         fail_ok (bool):
 
@@ -236,7 +239,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     return 0, vm_id, 'VM is booted successfully', new_vol
 
 
-def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=True, con_ssh=None):
+def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None):
     """
     Wait for ping vm from natbox succeeds.
 

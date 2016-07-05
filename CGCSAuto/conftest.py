@@ -307,3 +307,15 @@ def pytest_collection_modifyitems(items):
             print(msg)
             LOG.debug(msg=msg)
             item.add_marker(eval("pytest.mark.known_issue"))
+
+
+def pytest_generate_tests(metafunc):
+    # Modify the order of the fixtures to delete resources before revert host
+    config_host_fixtures = {'class': 'config_host_class', 'module': 'config_host_module'}
+    for key, value in config_host_fixtures.items():
+        delete_res_func = 'delete_resources_{}'.format(key)
+        if value in metafunc.fixturenames and delete_res_func in metafunc.fixturenames:
+            index = list(metafunc.fixturenames).index('delete_resources_{}'.format(key))
+            index = max([0, index-1])
+            metafunc.fixturenames.remove(value)
+            metafunc.fixturenames.insert(index, value)

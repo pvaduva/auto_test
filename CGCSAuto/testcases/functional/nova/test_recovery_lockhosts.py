@@ -35,7 +35,7 @@ def target_host(request):
     return target_host
 
 
-@mark.skipif(True, reason="Host reboot undetected JIRA CGTS-4616")
+# @mark.skipif(True, reason="Host reboot undetected JIRA CGTS-4616")
 @mark.p1
 def test_vm_autorecovery_reboot_host(target_host):
     """
