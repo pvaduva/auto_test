@@ -20,53 +20,67 @@ from testfixtures.resource_mgmt import ResourceCleanup
 from setup_consts import P1, P2, P3
 
 
-instance_backing_params =['image','lvm']
+# instance_backing_params =['image','lvm']
+instance_backing_params = [
+        (FlavorSpec.DISK_READ_BYTES,   10485769,    'image'),
+        (FlavorSpec.DISK_READ_BYTES,   419430400,   'image'),
+        (FlavorSpec.DISK_READ_IOPS,    200,         'image'),
+        (FlavorSpec.DISK_READ_IOPS,    5000,        'image'),
+        (FlavorSpec.DISK_WRITE_BYTES,  10485769,    'image'),
+        (FlavorSpec.DISK_WRITE_BYTES,  419430400,   'image'),
+        (FlavorSpec.DISK_WRITE_IOPS,   200,         'image'),
+        (FlavorSpec.DISK_WRITE_IOPS,   5000,        'image'),
+        (FlavorSpec.DISK_TOTAL_BYTES,  10000000,    'image'),
+        (FlavorSpec.DISK_TOTAL_BYTES,  419430400,   'image'),
+        (FlavorSpec.DISK_TOTAL_IOPS,   500,         'image'),
+        (FlavorSpec.DISK_TOTAL_IOPS,   5000,        'image'),
+        (FlavorSpec.DISK_READ_BYTES,   10485769,    'lvm'),
+        (FlavorSpec.DISK_READ_BYTES,   419430400,   'lvm'),
+        (FlavorSpec.DISK_READ_IOPS,    200,         'lvm'),
+        (FlavorSpec.DISK_READ_IOPS,    5000,        'lvm'),
+        (FlavorSpec.DISK_WRITE_BYTES,  10485769,    'lvm'),
+        (FlavorSpec.DISK_WRITE_BYTES,  419430400,   'lvm'),
+        (FlavorSpec.DISK_WRITE_IOPS,   200,         'lvm'),
+        (FlavorSpec.DISK_WRITE_IOPS,   5000,        'lvm'),
+        (FlavorSpec.DISK_TOTAL_BYTES,  10000000,    'lvm'),
+        (FlavorSpec.DISK_TOTAL_BYTES,  419430400,   'lvm'),
+        (FlavorSpec.DISK_TOTAL_IOPS,   500,         'lvm'),
+        (FlavorSpec.DISK_TOTAL_IOPS,   5000,        'lvm'),
+    ]
 
-
-@fixture(scope='module', params=instance_backing_params )
+@fixture(scope='module', params=instance_backing_params)
 def config_local_volume_group(request):
 
-    local_volume_group = {'instance_backing': request.param}
-    #check the local volume group of compute-0
+    flavor_var= request.param[0]
+    flavor_var_value = request.param[1]
+    local_volume_type = request.param[2]
+    local_volume_group = {
+        'flavor_var': flavor_var,
+        'flavor_var_value': flavor_var_value,
+        'instance_backing': local_volume_type
+    }
 
+    # check the local volume group of compute-0
     inst_back = host_helper.get_local_storage_backing('compute-0', con_ssh=None)
 
     # if already same lvm skip
-    if inst_back == request.param:
+    if inst_back == local_volume_type:
         return local_volume_group
 
     # config lvg parameter for instance backing either image/lvm
-    host_helper.set_host_local_backing_type('compute-0', inst_type=request.param, vol_group='nova-local')
-
-    local_volume_group = {'instance_backing': request.param}
+    host_helper.set_host_local_backing_type('compute-0', inst_type=local_volume_type, vol_group='nova-local')
 
     def reset_local_volume_group():
         # reset local volume group back to image
         print("teardown revert host")
-        if request.param != inst_back:
+        if local_volume_type != inst_back:
             host_helper.set_host_local_backing_type('compute-0', inst_type=inst_back, vol_group='nova-local')
     request.addfinalizer(reset_local_volume_group)
 
     return local_volume_group
 
 
-disk_spec_params = [
-        (FlavorSpec.DISK_READ_BYTES,   10485769),
-        (FlavorSpec.DISK_READ_BYTES,   419430400),
-        (FlavorSpec.DISK_READ_IOPS,    200),
-        (FlavorSpec.DISK_READ_IOPS,    5000),
-        (FlavorSpec.DISK_WRITE_BYTES,  10485769),
-        (FlavorSpec.DISK_WRITE_BYTES,  419430400),
-        (FlavorSpec.DISK_WRITE_IOPS,   200),
-        (FlavorSpec.DISK_WRITE_IOPS,   5000),
-        (FlavorSpec.DISK_TOTAL_BYTES,  10000000),
-        (FlavorSpec.DISK_TOTAL_BYTES,  419430400),
-        (FlavorSpec.DISK_TOTAL_IOPS,   500),
-        (FlavorSpec.DISK_TOTAL_IOPS,   5000),
-    ]
-
-
-@fixture(scope='module', params=disk_spec_params)
+@fixture(scope='module')
 def flavor_with_disk_spec(request, config_local_volume_group):
     """
     Text fixture to create flavor with specific 'ephemeral', 'swap', and 'mem_page_size'
@@ -79,20 +93,23 @@ def flavor_with_disk_spec(request, config_local_volume_group):
          'pagesize': pagesize
         }
     """
+    flavor_var = config_local_volume_group['flavor_var']
+    flavor_var_value = config_local_volume_group['flavor_var_value']
+
     if config_local_volume_group['instance_backing'] == 'remote':
         storage = 'remote'
     else:
         storage = 'local_'+config_local_volume_group['instance_backing']
 
     flavor_id = nova_helper.create_flavor(vcpus=4, ram=1024, root_disk=2, check_storage_backing=False)[1]
-    quota_disk_spec = {request.param[0]: request.param[1],
+    quota_disk_spec = {flavor_var: flavor_var_value,
                        'aggregate_instance_extra_specs:storage': storage,
                        'hw:cpu_policy': 'dedicated'
                        }
 
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **quota_disk_spec)
     flavor = {'id': flavor_id,
-              'disk_spec': [request.param[0], request.param[1]],
+              'disk_spec': [flavor_var, flavor_var_value],
               'storage_spec': storage
               }
 

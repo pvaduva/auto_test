@@ -20,64 +20,83 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper,cinder_h
 from testfixtures.resource_mgmt import ResourceCleanup
 from setup_consts import P1, P2, P3
 
+instance_backing_params = [
+        ('read_bytes_sec',  10485769,   'image'),
+        ('read_bytes_sec',  200000000,  'image'),
+        ('read_bytes_sec',  419430400,  'image'),
+        ('write_bytes_sec', 10485769,   'image'),
+        ('write_bytes_sec', 400000000,  'image'),
+        ('write_bytes_sec', 419430400,  'image'),
+        ('total_bytes_sec', 10485769,   'image'),
+        ('total_bytes_sec', 419430400,  'image'),
+        ('read_iops_sec',   200,        'image'),
+        ('read_iops_sec',   5000,       'image'),
+        ('write_iops_sec',  200,        'image'),
+        ('write_iops_sec',  5000,       'image'),
+        ('total_iops_sec',  200,        'image'),
+        ('total_iops_sec',  5000,       'image'),
+        ('read_bytes_sec',  10485769,   'lvm'),
+        ('read_bytes_sec',  200000000,  'lvm'),
+        ('read_bytes_sec',  419430400,  'lvm'),
+        ('write_bytes_sec', 10485769,   'lvm'),
+        ('write_bytes_sec', 400000000,  'lvm'),
+        ('write_bytes_sec', 419430400,  'lvm'),
+        ('total_bytes_sec', 10485769,   'lvm'),
+        ('total_bytes_sec', 419430400,  'lvm'),
+        ('read_iops_sec',   200,        'lvm'),
+        ('read_iops_sec',   5000,       'lvm'),
+        ('write_iops_sec',  200,        'lvm'),
+        ('write_iops_sec',  5000,       'lvm'),
+        ('total_iops_sec',  200,        'lvm'),
+        ('total_iops_sec',  5000,       'lvm'),
 
-instance_backing_params =['image', 'lvm']
+    ]
 
 
 @fixture(scope='module', params=instance_backing_params )
 def config_local_volume_group(request):
 
-    local_volume_group = {'instance_backing': request.param}
-    #check the local volume group of compute-0
+    qos_var= request.param[0]
+    qos_var_value = request.param[1]
+    local_volume_type = request.param[2]
+    local_volume_group = {
+        'qos_var': qos_var,
+        'qos_var_value': qos_var_value,
+        'instance_backing': local_volume_type
+    }
 
+    # check the local volume group of compute-0
     inst_back = host_helper.get_local_storage_backing('compute-0', con_ssh=None)
 
     # if already same lvm skip
-    if inst_back == request.param:
+    if inst_back == local_volume_type:
         return local_volume_group
 
     # config lvg parameter for instance backing either image/lvm
-    host_helper.set_host_local_backing_type('compute-0', inst_type=request.param, vol_group='nova-local')
-
-    local_volume_group = {'instance_backing': request.param}
+    host_helper.set_host_local_backing_type('compute-0', inst_type=local_volume_type, vol_group='nova-local')
 
     def reset_local_volume_group():
         # reset local volume group back to image
         print("teardown revert host")
-        if request.param != inst_back:
+        if local_volume_type != inst_back:
             host_helper.set_host_local_backing_type('compute-0', inst_type=inst_back, vol_group='nova-local')
     request.addfinalizer(reset_local_volume_group)
 
     return local_volume_group
 
 
-qos_spec_params = [
-        ('read_bytes_sec',  10485769),
-        ('read_bytes_sec',  200000000),
-        ('read_bytes_sec',  419430400),
-        ('write_bytes_sec', 10485769),
-        ('write_bytes_sec', 400000000),
-        ('write_bytes_sec', 419430400),
-        ('total_bytes_sec', 10485769),
-        ('total_bytes_sec', 419430400),
-        ('read_iops_sec',   200),
-        ('read_iops_sec',   5000),
-        ('write_iops_sec',  200),
-        ('write_iops_sec',  5000),
-        ('total_iops_sec',  200),
-        ('total_iops_sec',  5000),
-
-    ]
-
-@fixture(scope='module', params=qos_spec_params)
+@fixture(scope='module')
 def create_qos_specs(request, config_local_volume_group):
 
+    qos_var = config_local_volume_group['qos_var']
+    qos_var_value = config_local_volume_group['qos_var_value']
+
     # consumer must be set to both or xmldump will not display correct tag and data
-    qos_dict = {'consumer':'both', request.param[0]: request.param[1]}
+    qos_dict = {'consumer':'both', qos_var: qos_var_value}
     qos_specs_id = cinder_helper.create_qos_specs("test_qos_specs", **qos_dict)[1]
 
     qos_specs = {'id': qos_specs_id,
-                 'qos_spec': [request.param[0], request.param[1]]
+                 'qos_spec': [qos_var, qos_var_value]
                  }
 
     # associate qos specs to volume_type
