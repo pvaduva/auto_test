@@ -11,6 +11,7 @@ class HostTimeout:
     TASK_CLEAR = 180
     FAIL_AFTER_REBOOT = 30
     HYPERVISOR_UP_AFTER_AVAIL = 90
+    COMPUTE_LOCK = 30
 
 
 class VMTimeout:
@@ -43,6 +44,7 @@ class CMDTimeout:
     HOST_CPU_MODIFY = 120
     RESOURCE_LIST = 60
     REBOOT_VM = 60
+    CPU_PROFILE_APPLY = 30
 
 
 class ImageTimeout:
