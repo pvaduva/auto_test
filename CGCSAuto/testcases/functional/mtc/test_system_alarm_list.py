@@ -13,7 +13,7 @@ from utils import cli, exceptions
 from utils.ssh import ControllerClient, ssh_to_controller0
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
 
-CONTROLLER_PROMPT = ['.*controller\-[01].*\$ ', 'keystone_admin']
+CONTROLLER_PROMPT = '.*controller\-[01].*\$ '
 
 def get_column_value_from_multiple_columns(table, match_header_key,
                                            match_col_value, search_header_key):
@@ -173,7 +173,7 @@ def test_1443_system_alarm_list():
              "a table consist of correct items")
 
     # List existing alarms present in the system
-    cmd = 'source /etc/nova/openrc; system alarm-list --uuid'
+    cmd = 'source /etc/nova/openrc; system alarm-list --nowrap --uuid'
     res, out = cmd_execute(cmd)
     alarm_list = table(out)
 
@@ -190,7 +190,7 @@ def test_1443_system_alarm_list():
     time.sleep(20)
 
     LOG.info("Verify alarm-list command returns list of active alarms")
-    cmd = 'source /etc/nova/openrc; system alarm-list --uuid'
+    cmd = 'source /etc/nova/openrc; system alarm-list --nowrap --uuid'
     res, out = cmd_execute(cmd)
     alarm_list = table(out)
 
@@ -273,7 +273,7 @@ def test_1446_system_alarm_show():
         al_s = get_column_value(alarm_show, val2)
         if val1 == 'Entity Instance ID':
             assert(al_l, re.findall('host={0}'
-                             .format('compute-1'), al_s)[0],
+                             .format(compute_list[0]), al_s)[0],
                              "Alarm ID value in alarm-list is not in " +
                              "sync with alarm-show value {0} != {1}"
                              .format(al_l, al_s))
