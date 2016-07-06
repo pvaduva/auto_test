@@ -1026,6 +1026,130 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
     return 0, msg
 
 
+def compare_host_to_cpuprofile(host, profile_uuid, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Compares the cpu function assignments of a host and a cpu profile.
+
+    Args:
+        host (str): name of host
+        profile_uuid (str): uuid of the cpu profile
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (rtn_code(int), message(str))
+        (0, "The host and cpu profile have the same information")
+        (2, "The function of one of the cores has not been changed correctly: <core number>")
+
+    """
+    if not host or not profile_uuid:
+        raise ValueError("There is either no host or no cpu profile given.")
+
+    def check_range(core_group, core_num):
+        group = []
+        if isinstance(core_group, str):
+            group.append(core_group)
+        elif isinstance(core_group, list):
+            for proc in core_group:
+                group.append(proc)
+
+        for processors in group:
+            parts = processors.split(' ')
+            cores = parts[len(parts) - 1]
+            ranges = cores.split(',')
+            for range in ranges:
+                if range == '':
+                    continue
+                range = range.split('-')
+                if len(range) == 2:
+                    if int(range[0]) <= int(core_num) <= int(range[1]):
+                        LOG.info("Matched {} in range {}".format(core_num, range))
+                        return True
+                elif len(range) == 1:
+                    if int(range[0]) == int(core_num):
+                        LOG.info("Matched {} to {}".format(core_num, range))
+                        return True
+        return False
+
+    table_ = table_parser.table(cli.system('host-cpu-list', host))
+    functions = table_parser.get_column(table_=table_, header='assigned_function')
+    LOG.info(functions)
+
+    table_ = table_parser.table(cli.system('cpuprofile-show', profile_uuid))
+
+    platform_cores = table_parser.get_value_two_col_table(table_, field='platform cores')
+    vswitch_cores = table_parser.get_value_two_col_table(table_, field='vswitch cores')
+    shared_cores = table_parser.get_value_two_col_table(table_, field='shared cores')
+    vm_cores = table_parser.get_value_two_col_table(table_, field='vm cores')
+
+    msg = "The function of one of the cores has not been changed correctly: "
+
+    for i in range(0, len(functions)):
+        if functions[i] == 'Platform':
+            if not check_range(platform_cores, i):
+                LOG.warning(msg + str(i))
+                return 2, msg + str(i)
+        elif functions[i] == 'vSwitch':
+            if not check_range(vswitch_cores, i):
+                LOG.warning(msg + str(i))
+                return 2, msg + str(i)
+        elif functions[i] == 'Shared':
+            if not check_range(shared_cores, i):
+                LOG.warning(msg + str(i))
+                return 2, msg + str(i)
+        elif functions[i] == 'VMs':
+            if not check_range(vm_cores, i):
+                LOG.warning(msg + str(i))
+                return 2, msg + str(i)
+
+
+    msg = "The host and cpu profile have the same information"
+    return 0, msg
+
+
+def apply_cpu_profile(host, profile_uuid, timeout=CMDTimeout.CPU_PROFILE_APPLY, fail_ok=False, con_ssh=None,
+                    auth_info=Tenant.ADMIN):
+    """
+    Apply the given cpu profile to the host.
+    Assumes the host is already locked.
+
+    Args:
+        host (str): name of host
+        profile_uuid (str): uuid of the cpu profile
+        timeout (int): timeout to wait for cli to return
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (rtn_code(int), message(str))
+        (0, "cpu profile applied successfully")
+        (1, <stderr>)   # cli rejected
+        (2, "The function of one of the cores has not been changed correctly: <core number>")
+    """
+    if not host or not profile_uuid:
+        raise ValueError("There is either no host or no cpu profile given.")
+
+    LOG.info("Applying cpu profile: {} to host: {}".format(profile_uuid, host))
+
+    code, output = cli.system('host-apply-cpuprofile', '{} {}'.format(host, profile_uuid), fail_ok=fail_ok,
+                              ssh_client=con_ssh, auth_info=auth_info, timeout=timeout, rtn_list=True)
+
+    if 1 == code:
+        LOG.warning(output)
+        return 1, output
+
+    LOG.info("Post action host-apply-cpuprofile")
+    res, out = compare_host_to_cpuprofile(host, profile_uuid)
+
+    if res != 0:
+        LOG.warning(output)
+        return res, out
+
+    success_msg = "cpu profile applied successfully"
+    LOG.info(success_msg)
+    return 0, success_msg
+
+
 def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log_core', con_ssh=None,
                                     auth_info=Tenant.ADMIN):
     """

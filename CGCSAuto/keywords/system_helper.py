@@ -854,6 +854,7 @@ def get_host_mem_list(host, con_ssh=None, auth_info=Tenant.ADMIN):
     table_ = table_parser.table(output)
     return table_
 
+
 def get_host_cpu_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get the parsed version of the output from system host-cpu-show <host> <proc_num>
@@ -866,13 +867,13 @@ def get_host_cpu_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
     Returns (dict): output of system host-cpu-show <host> <proc_num> parsed by table_parser
 
     """
-    pos_args = host + ' ' + proc_num
+    pos_args = "{} {}".format(host, proc_num)
     output = cli.system('host-cpu-show', positional_args=pos_args, ssh_client=con_ssh, auth_info=auth_info)
     table_ = table_parser.table(output)
     return table_
 
 
-def get_host_mem_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_host_memory_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get the parsed version of the output from system host-memory-list <host> <proc_num>
     Args:
@@ -884,7 +885,7 @@ def get_host_mem_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
         Returns (dict): output of system host-memory-show <host> <proc_num> parsed by table_parser
 
     """
-    pos_args = host + ' ' + proc_num
+    pos_args = "{} {}".format(host, proc_num)
     output = cli.system('host-memory-show', positional_args=pos_args, ssh_client=con_ssh, auth_info=auth_info)
     table_ = table_parser.table(output)
     return table_
