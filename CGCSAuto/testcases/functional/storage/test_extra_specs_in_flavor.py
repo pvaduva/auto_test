@@ -48,7 +48,7 @@ instance_backing_params = [
         (FlavorSpec.DISK_TOTAL_IOPS,   5000,        'lvm'),
     ]
 
-@fixture(scope='module', params=instance_backing_params)
+@fixture(scope='session', params=instance_backing_params)
 def config_local_volume_group(request):
 
     flavor_var= request.param[0]
@@ -69,6 +69,8 @@ def config_local_volume_group(request):
 
     # config lvg parameter for instance backing either image/lvm
     host_helper.set_host_local_backing_type('compute-0', inst_type=local_volume_type, vol_group='nova-local')
+
+    print('local_vol {} and inst_back {}'.format(local_volume_type, inst_back))
 
     def reset_local_volume_group():
         # reset local volume group back to image

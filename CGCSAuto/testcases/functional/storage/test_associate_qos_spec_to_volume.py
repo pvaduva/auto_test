@@ -53,7 +53,7 @@ instance_backing_params = [
     ]
 
 
-@fixture(scope='module', params=instance_backing_params )
+@fixture(scope='session', params=instance_backing_params )
 def config_local_volume_group(request):
 
     qos_var= request.param[0]
@@ -74,6 +74,8 @@ def config_local_volume_group(request):
 
     # config lvg parameter for instance backing either image/lvm
     host_helper.set_host_local_backing_type('compute-0', inst_type=local_volume_type, vol_group='nova-local')
+
+    print('local_vol {} and inst_back {}'.format(local_volume_type, inst_back))
 
     def reset_local_volume_group():
         # reset local volume group back to image
@@ -197,10 +199,9 @@ def create_vm_with_volume(request, create_volume_with_type):
 
 def test_verify_qos_specs(create_qos_specs):
 
-    LOG.tc_step("Compare the expected qos specs id with actually created qos specs id")
     qos_spec_id_list = cinder_helper.get_qos_list()
     qos_spec_id = create_qos_specs['id']
-
+    LOG.tc_step("Compare the expected qos specs id with actually created qos specs id {}".format(qos_spec_id))
     assert qos_spec_id in qos_spec_id_list, "expected QOS specs ID to be {}. Actual ID is not in " \
                                             "cinder qos-list: {}.".format(qos_spec_id, qos_spec_id_list)
 
