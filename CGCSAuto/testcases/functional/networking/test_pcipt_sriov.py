@@ -38,6 +38,7 @@ def incomplete_test_sriov_pcipt_with_vm_actions(vm_type, resource_usage):
 
     LOG.tc_step("Get the actual resource used {} ".format('resource_usage'))
     pnet_id = network_helper.get_provider_net_xxx(vm_type='vm_type') ## need input from yang
+    pnet_id = network_helper.get_provider_net_for_interface(interface='vm_type')
     LOG.tc_step("Get the actual resource used {} ".format('resource_usage'))
 
 
@@ -46,7 +47,6 @@ def incomplete_test_sriov_pcipt_with_vm_actions(vm_type, resource_usage):
     for vm in vms:
         ResourceCleanup.add('vm', vm)
     increment_value = len(vms)
-
 
 
     if not pnet_id:
