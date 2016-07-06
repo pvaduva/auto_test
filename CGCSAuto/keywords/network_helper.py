@@ -1440,12 +1440,12 @@ def get_pci_interface_info(interface='pthru', filepath=None, con_ssh=None):
     if filepath is None:
         filepath = "lab_setup.conf"
 
+    interface_override_name = "{}_interfaces".format(interface)
     with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con0_ssh:
-        sriov_if_override = con0_ssh.exec_cmd("cat {} | grep -i {}".format(filepath, interface))[1]
+        sriov_if_override = con0_ssh.exec_cmd("cat {} | grep -i {}".format(filepath, interface_override_name))[1]
 
-    interface_override_name = "{}_interface".format(interface).upper()
     if not sriov_if_override:
-        LOG.warning("{} is not found in lab_setup".format(interface_override_name))
+        LOG.warning("{} is not found in lab_setup".format(interface_override_name.upper()))
         return ''
 
     if 'No such file or directory' in sriov_if_override:

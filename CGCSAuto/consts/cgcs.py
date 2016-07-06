@@ -187,6 +187,15 @@ class NetworkingVmMapping:
     }
 
 
+class VifMapping:
+    VIF_MAP = {'vswitch': 'DPDKAPPS',
+                   'avp': 'AVPAPPS',
+                   'virtio': 'VIRTIOAPPS',
+                   'sriov': 'SRIOVAPPS',
+                   'pcipt': 'PCIPTAPPS'
+                   }
+
+
 class LocalStorage:
     DIR_PROFILE = 'storage_profiles'
     TYPE_STORAGE_PROFILE = ['storageProfile', 'localstorageProfile']
