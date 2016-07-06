@@ -41,7 +41,7 @@ class SysInvTimeout:
 
 
 class CMDTimeout:
-    HOST_CPU_MODIFY = 120
+    HOST_CPU_MODIFY = 150
     RESOURCE_LIST = 60
     REBOOT_VM = 60
     CPU_PROFILE_APPLY = 30

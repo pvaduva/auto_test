@@ -1,8 +1,6 @@
 import json
 import requests
-import copy
 
-from pytest import fixture, mark, skip
 from consts.auth import Tenant
 from utils import table_parser, cli
 from utils.tis_log import LOG
@@ -13,7 +11,19 @@ def get_ip_addr():
     return ProjVar.get_var('lab')['floating ip']
 
 
-def create_url(ip, port, version, extension):
+def create_url(ip=None, port=None, version=None, extension=None):
+    """
+    Creates a url with the given parameters inn the form:
+    http://<ip address>:<port>/<version>/<extension>
+    Args:
+        ip (str): the main ip address. If set to None will be set to the lab's ip address by default.
+        port (int): the port number to connect to.
+        version (str): for REST API. version number, e.g. "v1", "v2.0"
+        extension (str): extensions to add to the url
+
+    Returns (str): a url created with the given parameters
+
+    """
     url = 'http://'
     if ip:
         url += ip
@@ -47,6 +57,15 @@ def get_user_token(con_ssh=None):
 
 
 def get_request(url, headers):
+    """
+    Sends a GET request to the url
+    Args:
+        url (str): url to send request to
+        headers (dict): header to add to the request
+
+    Returns (dict): The response for the request
+
+    """
     resp = requests.get(url, headers=headers)
 
     if resp.status_code == requests.codes.ok:
@@ -59,6 +78,16 @@ def get_request(url, headers):
 
 
 def post_request(url, data, headers):
+    """
+        Sends a POST request to the url
+        Args:
+            url (str): url to send request to
+            data (dict): data to be sent in the request body
+            headers (dict): header to add to the request
+
+        Returns (dict): The response for the request
+
+        """
     if not isinstance(data, str):
         data = json.dumps(data)
     resp = requests.post(url, headers=headers, data=data)
@@ -73,6 +102,16 @@ def post_request(url, data, headers):
 
 
 def put_request(url, data, headers):
+    """
+        Sends a GET request to the url
+        Args:
+            url (str): url to send request to
+            data (dict): data to be sent in the request body
+            headers (dict): header to add to the request
+
+        Returns (dict): The response for the request
+
+        """
     if not isinstance(data, str):
         data = json.dumps(data)
     resp = requests.put(url, headers=headers, data=data)
@@ -87,6 +126,15 @@ def put_request(url, data, headers):
 
 
 def delete_request(url, headers):
+    """
+        Sends a GET request to the url
+        Args:
+            url (str): url to send request to
+            headers (dict): header to add to the request
+
+        Returns (dict): The response for the request
+
+        """
     resp = requests.delete(url, headers=headers)
 
     if resp.status_code == requests.codes.ok:
@@ -99,6 +147,16 @@ def delete_request(url, headers):
 
 
 def patch_request(url, data, headers):
+    """
+        Sends a GET request to the url
+        Args:
+            url (str): url to send request to
+            data (dict): data to be sent in the request body
+            headers (dict): header to add to the request
+
+        Returns (dict): The response for the request
+
+        """
     if not isinstance(data, str):
         data = json.dumps(data)
     resp = requests.patch(url, headers=headers, data=data)

@@ -203,3 +203,26 @@ class LocalStorage:
 
 class VMNetworkStr:
     NET_IF = r"auto {}\niface {} inet dhcp\n"
+
+
+class HTTPPorts:
+    NEUTRON_PORT = 9696
+    NEUTRON_VER = "v2.0"
+    CEIL_PORT = 8777
+    CEIL_VER = "v2"
+    SYS_PORT = 6385
+    SYS_VER = "v1"
+    CINDER_PORT = 8776
+    CINDER_VER = "v2" #v1 is also supported
+    GLANCE_PORT = 9292
+    GLANCE_VER = "v2"
+    HEAT_PORT = 8004
+    HEAT_VER = "v1"
+    HEAT_CFN_PORT = 8000
+    HEAT_CFN_VER = "v1"
+    NOVA_PORT = 8774
+    NOVA_VER = "v2" #v3 also supported
+    NOVA_EC2_PORT = 8773
+    NOVA_EC2_VER = "v2"
+    PATCHING_PORT = 15491
+    PATCHING_VER = "v1"

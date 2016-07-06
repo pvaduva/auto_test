@@ -1032,7 +1032,7 @@ def compare_host_to_cpuprofile(host, profile_uuid, fail_ok=False, con_ssh=None, 
 
     Args:
         host (str): name of host
-        profile_uuid (str): uuid of the cpu profile
+        profile_uuid (str): name or uuid of the cpu profile
         fail_ok (bool):
         con_ssh (SSHClient):
         auth_info (dict):
@@ -1063,17 +1063,15 @@ def compare_host_to_cpuprofile(host, profile_uuid, fail_ok=False, con_ssh=None, 
                 range = range.split('-')
                 if len(range) == 2:
                     if int(range[0]) <= int(core_num) <= int(range[1]):
-                        LOG.info("Matched {} in range {}".format(core_num, range))
                         return True
                 elif len(range) == 1:
                     if int(range[0]) == int(core_num):
-                        LOG.info("Matched {} to {}".format(core_num, range))
                         return True
+        LOG.warn("Could not match {} in {}".format(core_num, core_group))
         return False
 
     table_ = table_parser.table(cli.system('host-cpu-list', host))
     functions = table_parser.get_column(table_=table_, header='assigned_function')
-    LOG.info(functions)
 
     table_ = table_parser.table(cli.system('cpuprofile-show', profile_uuid))
 
@@ -1115,7 +1113,7 @@ def apply_cpu_profile(host, profile_uuid, timeout=CMDTimeout.CPU_PROFILE_APPLY, 
 
     Args:
         host (str): name of host
-        profile_uuid (str): uuid of the cpu profile
+        profile_uuid (str): name or uuid of the cpu profile
         timeout (int): timeout to wait for cli to return
         fail_ok (bool):
         con_ssh (SSHClient):
