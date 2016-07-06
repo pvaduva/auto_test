@@ -316,10 +316,13 @@ class SSHClient:
         self.send(cmd, reconnect, reconnect_timeout)
         try:
             self.expect(timeout=expect_timeout)
-        except pxssh.TIMEOUT:
+        except pxssh.TIMEOUT as e:
             self.send_control('c')
-            self.expect()
-            raise
+            self.flush()
+            if fail_ok:
+                LOG.warning(e)
+            else:
+                raise
 
         code, output = self.__process_exec_result(cmd, rm_date)
 
@@ -616,7 +619,7 @@ class SSHFromSSH(SSHClient):
                 LOG.info("Exception caught when attempt to ssh to {}: {}".format(self.host, e))
                 if isinstance(e, pexpect.TIMEOUT):
                     self.parent.send_control('c')
-                    self.parent.expect()
+                    self.parent.flush()
                 # fail login if retry=False
                 if not retry:
                     raise
@@ -676,7 +679,8 @@ class SSHFromSSH(SSHClient):
             LOG.info("ssh session to {} is closed and returned to parent session {}".
                      format(self.host, self.parent.host))
         else:
-            LOG.warning("ssh session to {} is not open. Do nothing.".format(self.host))
+            LOG.info("ssh session to {} is not open. Flushing the buffer for parent session.".format(self.host))
+            self.parent.flush()
 
     def _is_connected(self, fail_ok=True):
         # Connection is good if send and expect commands can be executed

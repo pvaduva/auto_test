@@ -169,6 +169,7 @@ class TestMutiPortsBasic:
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
 
 
+@mark.skipif(True, reason="Test development unfinished")
 class TestMutiPortsPCI:
 
     @fixture(scope='class')
@@ -191,7 +192,7 @@ class TestMutiPortsPCI:
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'virtio'},
                 {'net-id': internal_net_id, 'vif-model': 'virtio'},
-                {'net-id': internal_net_id, 'vif-model': 'pci-passthrough'},
+                {'net-id': internal_net_id, 'vif-model': 'pci-sriov'},
                 {'net-id': internal_net_id, 'vif-model': 'avp'}, ]
 
         base_vm_pci = vm_helper.boot_vm(name='auto-sriov', flavor=flavor_id, nics=nics)[1]
@@ -225,13 +226,21 @@ class TestMutiPortsPCI:
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'avp'}]
-        for vif in vifs:
-            nics.append({'net-id': internal_net_id, 'vif-model': vif})
 
         LOG.info("Boot a vm with following vifs on same internal net {}: {}".format(vifs, internal_net_id))
         vm_under_test = vm_helper.boot_vm(nics=nics, flavor=flavor)[1]
         ResourceCleanup.add('vm', vm_under_test, scope='class')
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
+
+        pcipt_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_under_test, vif_model='pci-passthrough')
+        seg_id = network_helper.get_net_info(net_id=internal_net_id, field='segmentation_id', strict=False)
+        if pcipt_nics:
+            with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_under_test) as vm_ssh:
+                for pcipt_nic in pcipt_nics:
+                    mac_addr = pcipt_nic['mac_address']
+                    eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
+                    vm_ssh.exec_cmd("blahblah {} /etc/network/interfaces", fail_ok=False)
+                    vm_ssh.exec_cmd("/etc/init.d/networking restart", expect_timeout=60)
 
         LOG.info("Ping vm's own data and internal (vlan 0 only) network ips")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=['data', 'internal'])
@@ -241,6 +250,7 @@ class TestMutiPortsPCI:
 
         return base_vm_pci, vm_under_test
 
+    # @mark.skipif(True, "Test case development unfinished.")
     @mark.parametrize("vm_actions", [
         (['live_migrate']),
         (['cold_migrate']),

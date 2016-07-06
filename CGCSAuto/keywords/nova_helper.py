@@ -1324,7 +1324,7 @@ def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=Tru
     return int(info_str) if rnt_int else info_str
 
 
-def get_vm_interface_info(vm_id, nic, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Get vm interface info for given nic from nova show
     Args:
@@ -1333,21 +1333,40 @@ def get_vm_interface_info(vm_id, nic, auth_info=Tenant.ADMIN, con_ssh=None):
         auth_info (dict):
         con_ssh (SSHClient):
 
-    Returns (dict): such as {"nic4": {"vif_model": "pci-passthrough", "network": "internal0-net1", "port_id":
-        "33990477-dce6-4447-b153-4dee596fe3f4", "mtu": 9000, "mac_address": "90:e2:ba:60:c8:08", "vif_pci_address": ""}
+    Returns (dict): such as [{"vif_model": "pci-passthrough", "network": "internal0-net1", "port_id":
+        "33990477-dce6-4447-b153-4dee596fe3f4", "mtu": 9000, "mac_address": "90:e2:ba:60:c8:08", "vif_pci_address": ""}]
 
     """
     if not vm_id and vm_id not in ['0', 0]:
         raise ValueError("VM ID is not provided.")
-    if "nic" not in nic:
-        raise ValueError("Invalid nic string provided: {}. Should be in the form of: nic1, nic2, etc.".format(nic))
+    if nic_names is not None:
+        if isinstance(nic_names, str):
+            nic_names = [nic_names]
+        for nic in nic_names:
+            if "nic" not in nic:
+                raise ValueError("Invalid nic(s) provided: {}. Should be in the form of: e.g., nic4".format(nic_names))
 
     table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))
-    nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
-    nics = [eval(nic_) for nic_ in nics]
-    for item in nics:
-        if nic in item:
-            return item[nic]
-    else:
-        LOG.warning("Cannot find nic info for {}".format(nic))
-        return {}
+    all_nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
+    all_nics = [eval(nic_) for nic_ in all_nics]
+
+    nics_to_rtn = list(all_nics)
+    if not nics_to_rtn:
+        LOG.warning("No nics attached to vm {}".format(vm_id))
+        return []
+    elif vif_model or nic_names:
+        for item in all_nics:
+            if vif_model:
+                if vif_model != list(item.values())[0]['vif_model']:
+                    nics_to_rtn.remove(item)
+            if nic_names:
+                for nic_name in nic_names:
+                    if nic_name not in item:
+                        nics_to_rtn.remove(item)
+
+        if not nics_to_rtn:
+            LOG.warning("Cannot find nic info for given nic_names {} and/or vif_model {}".format(nic_names, vif_model))
+            return []
+
+    nics_to_rtn = [list(nic_.values()[0]) for nic_ in nics_to_rtn]
+    return nics_to_rtn

@@ -189,6 +189,8 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
     system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=False,
                                   **{'Entity Instance ID': vm_id, 'Event Log ID': EventLogID.HEARTBEAT_ENABLED})
 
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+
     LOG.tc_step("Login to vm via NatBox")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         LOG.tc_step("Run touch /tmp/unhealthy to put vm into unhealthy state.")
@@ -271,6 +273,8 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
         assert EventLogID.HEARTBEAT_ENABLED == events_1[0], "VM {} heartbeat failed to establish".format(vm_id)
     else:
         assert not events_1, "Heartbeat event generated unexpectedly: {}".format(events_1)
+
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
     LOG.tc_step("Login to vm via NatBox and run touch /tmp/unhealthy")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:

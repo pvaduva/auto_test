@@ -235,8 +235,9 @@ def test_snat_computes_lock_reboot(snat_setups):
         host_helper.lock_host(host_)
         HostsToRecover.add(host_, scope='module')
 
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=30)
     LOG.tc_step("Ping external from vm {}".format(vm_))
-    vm_helper.ping_ext_from_vm(vm_)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Reboot vm host")
     host_helper.reboot_hosts(vm_host)
@@ -244,6 +245,7 @@ def test_snat_computes_lock_reboot(snat_setups):
 
     LOG.tc_step("Verify vm is recovered after host reboot complete and can still ping outside")
     vm_helper._wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 

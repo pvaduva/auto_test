@@ -46,20 +46,24 @@ def test_flavor_vcpu_scheduler_valid(vcpu_num, vcpu_schedulers):
         assert post_extra_spec[FlavorSpec.VCPU_SCHEDULER] == eval(vcpu_scheduler), "Actual flavor extra specs: {}".\
             format(post_extra_spec)
 
+def id_gen(val):
+    if isinstance(val, list):
+        val = '-'.join(val)
+    return val.replace(";", "_")
 
 @mark.parametrize(('vcpu_num', 'vcpu_schedulers', 'expected_err'), [
     mark.p2((1, "fifo:9:1", None)),    # CGTS-2462
-    mark.p2((4, ["fifo:20:1;rr:4-6:4", "fifo:20:1;rr:6:4"], "VCPUSchedulerErr.VCPU_VAL_OUT_OF_RANGE")),
-    mark.p2((3, ["fifo:20:1;rr:-1:2"], "VCPUSchedulerErr.INVALID_PRIORITY")),
-    mark.p3((3, "fifo:20:1;rr:10:0", "VCPUSchedulerErr.CANNOT_SET_VCPU0")),
-    mark.p3((4, ["fifo:20:1;rr:4-6:2", "fifo:20:1;rr:4-6", "fifo:"], "VCPUSchedulerErr.PRIORITY_NOT_INTEGER")),
-    mark.p3((3, "fifo:20:1;rr:4-6:3'", "VCPUSchedulerErr.INVALID_FORMAT")),
-    mark.p3((3, "fifo:20:1;roarr:10:2", "VCPUSchedulerErr.UNSUPPORTED_POLICY")),
-    mark.p3((3, "fifo:20;rr:10:1", "VCPUSchedulerErr.POLICY_MUST_SPECIFIED_LAST")),
-    mark.p3((3, "fifo", "VCPUSchedulerErr.MISSING_PARAMETER")),
-    mark.p3((3, "fifo:20:1_roarr:10", "VCPUSchedulerErr.TOO_MANY_PARAMETERS")),
-    mark.p3((3, "fifo:20:1;roarr:10:1", "VCPUSchedulerErr.VCPU_MULTIPLE_ASSIGNMENT")),
-])
+    mark.p2((4, ["fifo:20:1;rr:4-6:4", "fifo:20:1;rr:6:4"], "VCPU_VAL_OUT_OF_RANGE")),
+    mark.p2((3, ["fifo:20:1;rr:-1:2"], "INVALID_PRIORITY")),
+    mark.p3((3, "fifo:20:1;rr:10:0", "CANNOT_SET_VCPU0")),
+    mark.p3((4, ["fifo:20:1;rr:4-6:2", "fifo:20:1;rr:4-6", "fifo:"], "PRIORITY_NOT_INTEGER")),
+    mark.p3((3, "fifo:20:1;rr:4-6:3'", "INVALID_FORMAT")),
+    mark.p3((3, "fifo:20:1;roarr:10:2", "UNSUPPORTED_POLICY")),
+    mark.p3((3, "fifo:20;rr:10:1", "POLICY_MUST_SPECIFIED_LAST")),
+    mark.p3((3, "fifo", "MISSING_PARAMETER")),
+    mark.p3((3, "fifo:20:1_roarr:10", "TOO_MANY_PARAMETERS")),
+    mark.p3((3, "fifo:20:1;roarr:10:1", "VCPU_MULTIPLE_ASSIGNMENT")),
+], ids=id_gen)
 def test_flavor_vcpu_scheduler_invalid(vcpu_num, vcpu_schedulers, expected_err):
     """
     Test invalid settings of vcpu scheduler flavor specs.
@@ -93,7 +97,7 @@ def test_flavor_vcpu_scheduler_invalid(vcpu_num, vcpu_schedulers, expected_err):
         assert 1 == code, "Set flavor extra spec request is not rejected."
 
         if expected_err:
-            assert eval(expected_err) in output, "Expected error string is not found in CLI output."
+            assert eval("VCPUSchedulerErr." + expected_err) in output, "Expected error string is not found in CLI output."
 
 
 @mark.parametrize(('vcpu_num', 'vcpu_scheduler'), [
