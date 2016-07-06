@@ -1,21 +1,6 @@
 from utils.tis_log import LOG
-from utils import cli, exceptions, table_parser
-from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
-
-
-def get_column_value(table, search_value):
-    """
-    Function for getting column value
-
-    Get value from table with two column
-    :table param: parse table with two columns (dictionary)
-    :search_value param: value in column for checking
-    """
-    column_value = None
-    for col_value in table['values']:
-        if search_value == col_value[0]:
-            column_value = col_value[1]
-    return column_value
+from utils import exceptions, table_parser
+from keywords import host_helper, system_helper
 
 
 def test_show_cpu_data():
@@ -34,30 +19,27 @@ def test_show_cpu_data():
         if host == 'None':
             continue
         LOG.tc_step("Getting cpu data for host: {}".format(host))
-        out = cli.system('host-cpu-list', '{}'.format(host))
-        LOG.info("\n{}".format(out))
-        table_ = table_parser.table(out)
+        table_ = system_helper.get_host_cpu_list(host=host)
 
         for core in table_['values']:
             log_core = core[1]
-            out = cli.system('host-cpu-show', '{} {}'.format(host, log_core))
-            table_2 = table_parser.table(out)
+            table_2 = system_helper.get_host_cpu_values(host=host, proc_num=log_core)
 
             uuid_1 = table_parser.get_values(table_, 'uuid', strict=True, log_core=log_core)[0]
-            uuid_2 = get_column_value(table_2, 'uuid')
+            uuid_2 = table_parser.get_value_two_col_table(table_2, 'uuid')
             assert uuid_1 == uuid_2, "FAIL: Different uuid from each table"
 
             proc_1 = table_parser.get_values(table_, 'processor', strict=True, log_core=log_core)[0]
-            proc_2 = get_column_value(table_2, 'processor (numa_node)')
+            proc_2 = table_parser.get_value_two_col_table(table_2, 'processor (numa_node)')
             assert 0 <= int(proc_1) == int(proc_2), "FAIL: The processor value is invalid"
 
             phy_1 = table_parser.get_values(table_, 'phy_core', strict=True, log_core=log_core)[0]
-            phy_2 = get_column_value(table_2, 'physical_core')
+            phy_2 = table_parser.get_value_two_col_table(table_2, 'physical_core')
             assert 0 <= int(phy_1) == int(phy_2), "FAIL: The phy_core value is invalid"
 
             functions = ['Platform', 'vSwitch', 'Shared', 'VMs']
             funct_1 = table_parser.get_values(table_, 'assigned_function', strict=True, log_core=log_core)[0]
-            funct_2 = get_column_value(table_2, 'assigned_function')
+            funct_2 = table_parser.get_value_two_col_table(table_2, 'assigned_function')
             assert funct_1 == funct_2 and funct_1 in functions, "FAIL: The assigned_function value is invalid"
 
 
@@ -76,9 +58,7 @@ def test_show_mem_data():
         if host == 'None':
             continue
         LOG.tc_step("Getting memory data for host: {}".format(host))
-        out = cli.system('host-memory-list', '{}'.format(host))
-        LOG.info("\n{}".format(out))
-        table_ = table_parser.table(out)
+        table_ = system_helper.get_host_mem_list(host=host)
 
         for processor in table_['values']:
             proc = processor[0]
@@ -91,9 +71,8 @@ def test_show_mem_data():
             hp = table_parser.get_values(table_, 'hugepages(hp)_configured', strict=True, processor=proc)[0]
             assert 'True' == hp or 'False' == hp, "FAIL: Neither True nor False"
 
-            out = cli.system('host-memory-show', '{} {}'.format(host, proc))
-            table_2 = table_parser.table(out)
-            total = get_column_value(table_2, 'Memory: Total     (MiB)')
+            table_2 = system_helper.get_host_mem_values(host=host, proc_num=proc)
+            total = table_parser.get_value_two_col_table(table_2, 'Memory: Total     (MiB)')
             assert mem_tot == total, "FAIL: The two tables don't agree on total memory"
-            pages = get_column_value(table_2, 'Huge Pages Configured')
+            pages = table_parser.get_value_two_col_table(table_2, 'Huge Pages Configured')
             assert hp == pages, "FAIL: The two tables don't agree on huge pages configuration"
