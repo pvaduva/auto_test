@@ -47,7 +47,7 @@ def test_lock_unlock_compute_node():
     sleep(20)
 
     # unlock compute node and verify compute node is successfully unlocked
-    host_helper.unlock_host(lucky_compute_node, timeout=900)
+    host_helper.unlock_host(lucky_compute_node, check_hypervisor_up=True)
     lucky_compute_node_unlocked_state = host_helper.get_hostshow_value(lucky_compute_node,'administrative')
     assert lucky_compute_node_unlocked_state == 'unlocked', 'Test Failed. Compute Node {} should be in unlocked state ' \
                                                           'but is not.'.format(lucky_compute_node)

@@ -91,8 +91,8 @@ def test_validate_services_persists_over_compute_reboot():
     LOG.tc_step("Reboot compute node {}".format(a_compute_node))
     host_helper.reboot_hosts(a_compute_node)
     # now controller-0 should be active
-    # sleep 30 seconds for services to settle
-    sleep(30)
+    # sleep 60 seconds for services to settle
+    sleep(60)
     after_service_list_table_ = table_parser.table(cli.system('service-list', auth_info=Tenant.ADMIN, fail_ok=False))
     after_neutron_list_table_ = table_parser.table(cli.neutron('agent-list', auth_info=Tenant.ADMIN, fail_ok=False))
 
