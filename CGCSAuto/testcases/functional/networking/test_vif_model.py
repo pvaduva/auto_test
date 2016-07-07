@@ -26,7 +26,7 @@ def base_setup():
             {'net-id': tenant_net_id, 'vif-model': 'virtio'},
             {'net-id': internal_net_id, 'vif-model': 'virtio'}
     ]
-    base_vm = vm_helper.boot_vm(flavor=flavor_id, nics=nics)[1]
+    base_vm = vm_helper.boot_vm(name='vif', flavor=flavor_id, nics=nics, reuse_vol=False)[1]
     ResourceCleanup.add('vm', base_vm, scope='module')
 
     return base_vm, mgmt_net_id, tenant_net_id, internal_net_id
@@ -66,7 +66,7 @@ def test_vif_models(vif_model, base_setup):
             {'net-id': internal_net_id, 'vif-model': 'avp'}]
 
     LOG.tc_step("Boot vm with vif_model {} for tenant-net".format(vif_model))
-    vm_under_test = vm_helper.boot_vm(name=vif_model, nics=nics)[1]
+    vm_under_test = vm_helper.boot_vm(name=vif_model, nics=nics, reuse_vol=False)[1]
     ResourceCleanup.add('vm', vm_under_test)
 
     LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_under_test))

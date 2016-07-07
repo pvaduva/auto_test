@@ -12,7 +12,7 @@ def flavor_and_volume():
     Create basic flavor and volume to be used by test cases as test setup, at the beginning of the test module.
     Delete the created flavor and volume as test teardown, at the end of the test module.
     """
-    flavor = nova_helper.create_flavor()[1]
+    flavor = nova_helper.create_flavor(name='vcpu_model')[1]
     volume = cinder_helper.create_volume(name='vol-vcpu_model')[1]
     ResourceCleanup.add('volume', volume, scope='module')
     ResourceCleanup.add('flavor', flavor, scope='module')

@@ -4,6 +4,7 @@ from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, VMStatus
 from consts.reasons import SkipReason
+from consts.auth import Tenant
 from keywords import vm_helper, nova_helper, network_helper, host_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -28,11 +29,13 @@ class TestMutiPortsBasic:
         internal_net_id = network_helper.get_internal_net_id()
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_id, 'vif-model': 'virtio'},
+                {'net-id': tenant_net_id, 'vif-model': 'e1000'},
                 {'net-id': internal_net_id, 'vif-model': 'virtio'}
                 ]
-        base_vm = vm_helper.boot_vm(flavor=flavor_id, nics=nics)[1]
+        base_vm = vm_helper.boot_vm(name='multiports_base', flavor=flavor_id, nics=nics, reuse_vol=False)[1]
         ResourceCleanup.add('vm', base_vm, scope='module')
+        vm_helper.wait_for_vm_pingable_from_natbox(base_vm)
+        vm_helper.ping_vms_from_vm(base_vm, base_vm, net_types='data')
 
         return base_vm, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id
 
@@ -63,7 +66,7 @@ class TestMutiPortsBasic:
         nics.append({'net-id': internal_net_id, 'vif-model': 'avp'})
 
         LOG.info("Boot a vm with following nics: {}".format(nics))
-        vm_under_test = vm_helper.boot_vm(nics=nics, flavor=flavor)[1]
+        vm_under_test = vm_helper.boot_vm(name='multiports', nics=nics, flavor=flavor, reuse_vol=False)[1]
         ResourceCleanup.add('vm', vm_under_test, scope='class')
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
@@ -169,7 +172,6 @@ class TestMutiPortsBasic:
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
 
 
-@mark.skipif(True, reason="Test development unfinished")
 class TestMutiPortsPCI:
 
     @fixture(scope='class')
@@ -195,70 +197,77 @@ class TestMutiPortsPCI:
                 {'net-id': internal_net_id, 'vif-model': 'pci-sriov'},
                 {'net-id': internal_net_id, 'vif-model': 'avp'}, ]
 
-        base_vm_pci = vm_helper.boot_vm(name='auto-sriov', flavor=flavor_id, nics=nics)[1]
+        base_vm_pci = vm_helper.boot_vm(name='multiports_pci_base', flavor=flavor_id, nics=nics, reuse_vol=False)[1]
         ResourceCleanup.add('vm', base_vm_pci, scope='module')
 
         LOG.info("Ping base PCI vm from NatBox over management")
         vm_helper.wait_for_vm_pingable_from_natbox(base_vm_pci, fail_ok=False)
+
         LOG.info("Ping base PCI vm from itself over data, and internal (vlan 0 only) networks")
         vm_helper.ping_vms_from_vm(to_vms=base_vm_pci, from_vm=base_vm_pci, net_types=['data', 'internal'],
                                    vlan_zero_only=True)
 
-        return base_vm_pci, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id
+        seg_id = network_helper.get_net_info(net_id=internal_net_id, field='segmentation_id', strict=False,
+                                             auto_info=Tenant.ADMIN)
+        assert seg_id, 'Segmentation id of internal0-net1 is not found'
 
-    vifs_to_test = [('pci-sriov', 'pci-passthrough'),
-                    ('avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov'),
-                    ('avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov')]
+        return base_vm_pci, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id, seg_id
 
-    @fixture(scope='class', params=vifs_to_test, ids=id_params)
-    def vms_to_test(self, request, base_setup_pci):
-        """
-        Create a vm under test with specified vifs for tenant network
-        Args:
-            request: pytest param
-            base_setup_pci (tuple): base vm, flavor, management net, tenant net, interal net to use
+    # vifs_to_test = [('pci-sriov', 'pci-passthrough'),
+    #                 ('avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov'),
+    #                 ('avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov')]
+    #
+    # @fixture(scope='class', params=vifs_to_test, ids=id_params)
+    # def vms_to_test(self, request, base_setup_pci):
+    #     """
+    #     Create a vm under test with specified vifs for tenant network
+    #     Args:
+    #         request: pytest param
+    #         base_setup_pci (tuple): base vm, flavor, management net, tenant net, interal net to use
+    #
+    #     Returns (str): id of vm under test
+    #
+    #     """
+    #     vifs = request.param
+    #     base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id = base_setup_pci
+    #
+    #     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+    #             {'net-id': tenant_net_id, 'vif-model': 'avp'}]
+    #     for vif in vifs:
+    #         nics.append({'net-id': internal_net_id, 'vif-model': vif})
+    #
+    #     LOG.info("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
+    #     vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor, reuse_vol=False)[1]
+    #     ResourceCleanup.add('vm', vm_under_test, scope='class')
+    #     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
+    #
+    #     seg_id = network_helper.get_net_info(net_id=internal_net_id, field='segmentation_id', strict=False,
+    #                                          auto_info=Tenant.ADMIN)
+    #     assert seg_id, 'Segmentation id of internal0-net1 is not found'
+    #
+    #     vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)
+    #
+    #     LOG.info("Ping vm's own data and internal (vlan 0 only) network ips")
+    #     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=['data', 'internal'])
+    #
+    #     LOG.info("Ping vm_under_test from base_vm over management, data, and internal (vlan 0 only) networks")
+    #     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
+    #
+    #     return base_vm_pci, vm_under_test, seg_id
 
-        Returns (str): id of vm under test
-
-        """
-        vifs = request.param
-        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id = base_setup_pci
-
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_id, 'vif-model': 'avp'}]
-
-        LOG.info("Boot a vm with following vifs on same internal net {}: {}".format(vifs, internal_net_id))
-        vm_under_test = vm_helper.boot_vm(nics=nics, flavor=flavor)[1]
-        ResourceCleanup.add('vm', vm_under_test, scope='class')
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
-
-        pcipt_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_under_test, vif_model='pci-passthrough')
-        seg_id = network_helper.get_net_info(net_id=internal_net_id, field='segmentation_id', strict=False)
-        if pcipt_nics:
-            with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_under_test) as vm_ssh:
-                for pcipt_nic in pcipt_nics:
-                    mac_addr = pcipt_nic['mac_address']
-                    eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
-                    vm_ssh.exec_cmd("blahblah {} /etc/network/interfaces", fail_ok=False)
-                    vm_ssh.exec_cmd("/etc/init.d/networking restart", expect_timeout=60)
-
-        LOG.info("Ping vm's own data and internal (vlan 0 only) network ips")
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=['data', 'internal'])
-
-        LOG.info("Ping vm_under_test from base_vm over management, data, and internal (vlan 0 only) networks")
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
-
-        return base_vm_pci, vm_under_test
-
-    # @mark.skipif(True, "Test case development unfinished.")
-    @mark.parametrize("vm_actions", [
-        (['live_migrate']),
-        (['cold_migrate']),
-        (['pause', 'unpause']),
-        (['suspend', 'resume']),
-        (['auto_recover']),
+    # @mark.parametrize("vm_actions", [
+    #     # (['live_migrate']),   unsupported for pci devices
+    #     (['auto_recover']),
+    #     (['suspend', 'resume']),
+    #     (['cold_migrate']),
+    #     (['pause', 'unpause']),
+    # ], ids=id_params)
+    @mark.parametrize('vifs', [
+        (['pci-sriov', 'pci-passthrough']),
+        (['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov']),
+        (['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov']),
     ], ids=id_params)
-    def test_multiports_on_same_network_pci_vm_actions(self, vms_to_test, vm_actions):
+    def test_multiports_on_same_network_pci_vm_actions(self, base_setup_pci, vifs):
         """
         Test vm actions on vm with multiple ports with given vif models on the same tenant network
 
@@ -271,43 +280,77 @@ class TestMutiPortsPCI:
             - Choose management net, one tenant net, and internal0-net1 to be used by test (class)
             - Boot a base pci-sriov vm - vm1 with above flavor and networks, ping it from NatBox (class)
             - Ping vm1 from itself over data, and internal (vlan 0 only) networks
-            - Boot a vm under test - vm2 with above flavor and with multiple ports on same tenant network with vm1,
-            and ping it from NatBox      (class)
-            - Ping vm2's own data and internal (vlan 0 only) network ips        (class)
-            - Ping vm2 from vm1 to verify management and data networks connection    (class)
 
         Test Steps:
-            - Perform given actions on vm2 (migrate, start/stop, etc)
+            - Boot a vm under test - vm2 with above flavor and with multiple ports on same tenant network with vm1,
+                and ping it from NatBox
+            - Ping vm2's own data and internal (vlan 0 only) network ips
+            - Ping vm2 from vm1 to verify management and data networks connection
+            - Perform one of the following actions on vm2
+                - set to error/ wait for auto recovery
+                - suspend/resume
+                - cold migration
+                - pause/unpause
+            - Update vlan interface to proper eth if pci-passthrough device moves to different eth
             - Verify ping from vm1 to vm2 over management and data networks still works
+            - Repeat last 3 steps with different vm actions
 
         Teardown:
             - Delete created vms and flavor
         """
+        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id = base_setup_pci
 
-        base_vm, vm_under_test = vms_to_test
+        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+                {'net-id': tenant_net_id, 'vif-model': 'avp'}]
+        for vif in vifs:
+            nics.append({'net-id': internal_net_id, 'vif-model': vif})
 
-        if vm_actions[0] == 'auto_recover':
-            LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from base vm over "
-                        "management and data networks")
-            vm_helper.set_vm_state(vm_id=vm_under_test, error_state=True, fail_ok=False)
-            vm_helper.wait_for_vm_values(vm_id=vm_under_test, status=VMStatus.ACTIVE, fail_ok=True, timeout=600)
-        else:
-            LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
-            for action in vm_actions:
-                vm_helper.perform_action_on_vm(vm_under_test, action=action)
+        LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
+        vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor, reuse_vol=False)[1]
+        ResourceCleanup.add('vm', vm_under_test, scope='function')
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
-        LOG.tc_step("Verify ping from base_vm to vm_under_test over management and internal networks still works "
-                    "after {}".format(vm_actions))
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'internal'],
-                                   vlan_zero_only=True)
+        LOG.tc_step("Add vlan to pci-passthrough interface.")
+        vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)
+
+        LOG.tc_step("Ping vm's own data and internal (vlan 0 only) network ips")
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=['data', 'internal'])
+
+        LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal (vlan 0 only) networks")
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
+
+        for vm_actions in [['auto_recover'], ['cold_migrate'], ['suspend', 'resume'], ['pause', 'unpause']]:
+            if vm_actions in ['auto_recover']:
+                LOG.tc_step("Set vm to error state and wait for auto recovery complete, "
+                            "then verify ping from base vm over management and internal networks")
+                vm_helper.set_vm_state(vm_id=vm_under_test, error_state=True, fail_ok=False)
+                vm_helper.wait_for_vm_values(vm_id=vm_under_test, status=VMStatus.ACTIVE, fail_ok=True, timeout=600)
+
+            else:
+                LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
+                for action in vm_actions:
+                    vm_helper.perform_action_on_vm(vm_under_test, action=action)
+
+            LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(vm_under_test))
+            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)
+
+            LOG.tc_step("Verify ping from base_vm to vm_under_test over management and internal networks still works "
+                        "after {}".format(vm_actions))
+            vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'internal'],
+                                       vlan_zero_only=True)
 
     @mark.skipif(True, reason='Evacuation JIRA CGTS-4264')
-    def test_multiports_on_same_network_pci_evacuate_vm(self, vms_to_test):
+    @mark.parametrize('vifs', [
+        # (['pci-sriov', 'pci-passthrough']),
+        (['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov']),
+        # (['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov']),
+    ], ids=id_params)
+    def test_multiports_on_same_network_pci_evacuate_vm(self, base_setup_pci, vifs):
         """
         Test evacuate vm with multiple ports on same network
 
         Args:
-            vms_to_test (tuple): id of base vm and vm under test
+            vms_to_test (tuple): base vm id, vm under test id, segment id for internal0-net1
 
         Setups:
             - create a flavor with dedicated cpu policy (module)
@@ -316,18 +359,38 @@ class TestMutiPortsPCI:
             - Boot a vm under test - vm2 with above flavor and with multiple ports on same tenant network with base vm,
             and ping it from NatBox     (class)
             - Ping vm2's own data network ips       (class)
-            - Ping vm2 from vm1 to verify management and data networks connection   (class)
+            - Ping vm2 from vm1 to verify management and internal networks connection   (class)
 
         Test Steps:
             - Reboot vm2 host
             - Wait for vm2 to be evacuated to other host
             - Wait for vm2 pingable from NatBox
-            - Verify ping from vm1 to vm2 over management and data networks still works
+            - Verify ping from vm1 to vm2 over management and internal networks still works
 
         Teardown:
             - Delete created vms and flavor
         """
-        base_vm, vm_under_test = vms_to_test
+        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id = base_setup_pci
+
+        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+                {'net-id': tenant_net_id, 'vif-model': 'avp'}]
+        for vif in vifs:
+            nics.append({'net-id': internal_net_id, 'vif-model': vif})
+
+        LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
+        vm_under_test = vm_helper.boot_vm(name='multiports_pci_chris', nics=nics, flavor=flavor, reuse_vol=False)[1]
+        ResourceCleanup.add('vm', vm_under_test, scope='function')
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
+
+        LOG.tc_step("Add vlan to pci-passthrough interface.")
+        vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)
+
+        LOG.tc_step("Ping vm's own data and internal (vlan 0 only) network ips")
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=['data', 'internal'])
+
+        LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal (vlan 0 only) networks")
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
+
         host = nova_helper.get_vm_host(vm_under_test)
 
         LOG.tc_step("Reboot vm host {}".format(host))
@@ -342,6 +405,9 @@ class TestMutiPortsPCI:
         LOG.tc_step("Wait for vm pingable from NatBox after evacuation.")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
 
-        LOG.tc_step("Verify ping from base_vm to vm_under_test over management and data networks still works after "
+        LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(vm_under_test))
+        vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)
+
+        LOG.tc_step("Verify ping from base_vm to vm_under_test over management and internal networks still works after "
                     "evacuation.")
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'internal'])
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'internal'])

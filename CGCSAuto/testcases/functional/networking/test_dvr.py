@@ -35,7 +35,7 @@ def router_info(request):
     return router_id
 
 
-def test_dvr_update_routerd(router_info):
+def test_dvr_update_router(router_info):
     """
     Test update router to distributed and non-distributed
 
@@ -60,7 +60,7 @@ def test_dvr_update_routerd(router_info):
     router_id = router_info
 
     LOG.tc_step("Boot a vm before updating router and ping vm from NatBox")
-    vm_id = vm_helper.boot_vm()[1]
+    vm_id = vm_helper.boot_vm(name='dvr_update', reuse_vol=False)[1]
     ResourceCleanup.add('vm', vm_id)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 

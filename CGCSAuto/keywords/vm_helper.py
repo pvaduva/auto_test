@@ -8,7 +8,9 @@ from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
 from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.timeout import VMTimeout, CMDTimeout
-from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping
+from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, \
+    VifMapping, VMNetworkStr
+
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 
 
@@ -83,7 +85,7 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None):
+            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=True):
     """
 
     Args:
@@ -167,9 +169,12 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             volume_id = source_id
         else:
             vol_name = 'vol-' + name
-            is_new, volume_id = cinder_helper.get_any_volume(new_name=vol_name, auth_info=auth_info, con_ssh=con_ssh)
-            if is_new:
-                new_vol = volume_id
+            if reuse_vol:
+                is_new, volume_id = cinder_helper.get_any_volume(new_name=vol_name, auth_info=auth_info, con_ssh=con_ssh)
+                if is_new:
+                    new_vol = volume_id
+            else:
+                new_vol = volume_id = cinder_helper.create_volume(name=vol_name, auth_info=auth_info, con_ssh=con_ssh)[1]
     elif source.lower() == 'image':
         image = source_id if source_id else glance_helper.get_image_id_from_name('cgcs-guest')
     elif source.lower() == 'snapshot':
@@ -255,6 +260,8 @@ def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=
     ping_end_time = time.time() + timeout
     while time.time() < ping_end_time:
         if ping_vms_from_natbox(vm_ids=vm_id, fail_ok=True, con_ssh=con_ssh, num_pings=3)[0]:
+            # give it sometime to settle after vm booted and became pingable
+            time.sleep(3)
             return True
     else:
         msg = "Ping from NatBox to vm {} failed.".format(vm_id)
@@ -909,7 +916,9 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
             LOG.info("Ping successful from {}: {}".format(ssh_client.host, res_dict))
             return res_bool, res_dict
 
-        time.sleep(retry_interval)
+        if i < retry:
+            LOG.info("Retry in {} seconds".format(retry_interval))
+            time.sleep(retry_interval)
 
     if not res_dict:
         raise ValueError("Ping res dict contains no result.")
@@ -1681,3 +1690,66 @@ def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **
         raise ValueError("Invalid action provided: {}. Valid actions: {}".format(action, valid_actions))
 
     action_function_map[action](vm_id, con_ssh=con_ssh, auth_info=auth_info, **kwargs)
+
+
+def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id):
+    """
+    Add vlan for vm pci-passthrough interface and restart networking service.
+    Do nothing if expected vlan interface already exists in 'ip addr'.
+
+    Args:
+        vm_id (str):
+        net_seg_id (int|str): such as 1792
+
+    Returns: None
+
+    Raises: VMNetworkError if vlan interface is not found in 'ip addr' after adding
+
+    """
+    if not vm_id or not net_seg_id:
+        raise ValueError("vm_id and/or net_seg_id not provided.")
+
+    vm_pcipt_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, vif_model='pci-passthrough')
+
+    if not vm_pcipt_nics:
+        LOG.warning("No pci-passthrough device found for vm from nova show {}".format(vm_id))
+        return
+
+    with ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
+        for pcipt_nic in vm_pcipt_nics:
+            mac_addr = pcipt_nic['mac_address']
+            eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
+            if not eth_name:
+                raise exceptions.VMNetworkError("Interface {} is not listed in 'ip addr' in vm {}".format(eth_name,
+                                                                                                          vm_id))
+            vlan_name = "{}.{}".format(eth_name, net_seg_id)
+            print("heyheye {}".format(vlan_name))
+
+            output_pre_ipaddr = vm_ssh.exec_cmd('ip addr', fail_ok=False)[1]
+            if vlan_name in output_pre_ipaddr:
+                LOG.info("{} already in ip addr. Skip.".format(vlan_name))
+                continue
+
+            output_pre = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
+            if vlan_name not in output_pre:
+                if '.' + net_seg_id in output_pre:
+                    LOG.info("Modify existing interface to {} in file.".format(vlan_name))
+                    vm_ssh.exec_cmd(r"sed -i -e 's/eth[0-9]\(.{}\)/{}\1/g' /etc/network/interfaces".
+                                    format(net_seg_id, eth_name), fail_ok=False)
+                else:
+                    LOG.info("Append new interface {} to file".format(vlan_name))
+                    if_to_add = VMNetworkStr.NET_IF.format(vlan_name, vlan_name)
+                    vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
+                                    format(if_to_add), fail_ok=False)
+
+                output_post = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
+                if vlan_name not in output_post:
+                    raise exceptions.VMNetworkError("Failed to add vlan to vm interfaces file")
+
+            LOG.info("Restarting networking service for vm.")
+            vm_ssh.exec_cmd("/etc/init.d/networking restart", expect_timeout=60)
+            output_pre_ipaddr = vm_ssh.exec_cmd('ip addr', fail_ok=False)[1]
+            if vlan_name not in output_pre_ipaddr:
+                raise exceptions.VMNetworkError("vlan {} is not found in 'ip addr' after restarting networking service.".
+                                                format(vlan_name))
+            LOG.info("vlan {} is successfully added.".format(vlan_name))

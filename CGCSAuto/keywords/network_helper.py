@@ -1,12 +1,12 @@
-import re
 import ipaddress
 import math
+import re
 
-from utils import table_parser, cli, exceptions
-from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import NetIP, DNS_NAMESERVERS
 from keywords import common, keystone_helper, host_helper
+from utils import table_parser, cli, exceptions
+from utils.tis_log import LOG
 
 
 def is_valid_ip_address(ip=None):
@@ -174,7 +174,7 @@ def get_subnets(name=None, cidr=None, strict=True, regex=False, auth_info=None, 
     return table_parser.get_column(table_, 'id')
 
 
-def get_net_info(net_id, field='status', strict=True, auto_info=None, con_ssh=None):
+def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.ADMIN, con_ssh=None):
     """
     Get specified info for given network
 

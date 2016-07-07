@@ -184,7 +184,7 @@ class ResourceCleanup:
             cls.__resources_to_cleanup[scope][key] = []
 
     @classmethod
-    def add(cls, resource_type, resource_id, scope='function', del_vm_vols=False):
+    def add(cls, resource_type, resource_id, scope='function', del_vm_vols=True):
         """
         Add resource to cleanup list.
 
@@ -225,4 +225,3 @@ def flavor_id_module():
     ResourceCleanup.add('flavor', resource_id=flavor, scope='module')
 
     return flavor
-

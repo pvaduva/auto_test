@@ -265,7 +265,7 @@ def get_basic_flavor(auth_info=None, con_ssh=None):
     Returns (str): id of the basic flavor
 
     """
-    default_flavor_name = 'flavor-default'
+    default_flavor_name = 'flavor-default-1'
     flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info)
     if flavor_id == '':
         flavor_id = create_flavor(name=default_flavor_name, con_ssh=con_ssh)[1]
@@ -1368,5 +1368,6 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, auth_info=Tena
             LOG.warning("Cannot find nic info for given nic_names {} and/or vif_model {}".format(nic_names, vif_model))
             return []
 
-    nics_to_rtn = [list(nic_.values()[0]) for nic_ in nics_to_rtn]
+    nics_to_rtn = [list(nic_.values())[0] for nic_ in nics_to_rtn]
+    LOG.info("nics with nic_names {} and vif_model {}: {}".format(nic_names, vif_model, nics_to_rtn))
     return nics_to_rtn

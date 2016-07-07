@@ -200,3 +200,6 @@ class LocalStorage:
     DIR_PROFILE = 'storage_profiles'
     TYPE_STORAGE_PROFILE = ['storageProfile', 'localstorageProfile']
 
+
+class VMNetworkStr:
+    NET_IF = r"auto {}\niface {} inet dhcp\n"

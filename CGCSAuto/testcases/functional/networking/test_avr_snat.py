@@ -35,7 +35,7 @@ def snat_setups(request):
             Tenant.set_primary(primary_tenant)
     request.addfinalizer(disable_snat)
 
-    vm_id = vm_helper.boot_vm()[1]
+    vm_id = vm_helper.boot_vm(name='snat', reuse_vol=False)[1]
     ResourceCleanup.add('vm', vm_id, scope='module')
 
     ping_res = vm_helper.ping_vms_from_natbox(vm_id, fail_ok=True, use_fip=False)[0]
