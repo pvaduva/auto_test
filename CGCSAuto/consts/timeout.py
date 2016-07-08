@@ -26,6 +26,8 @@ class VMTimeout:
     AUTO_RECOVERY = 600
     REBOOT = 180
     PAUSE = 180
+    IF_ADD = 30
+    DHCP_IP_ASSIGN = 30
 
 
 class VolumeTimeout:

@@ -1,6 +1,7 @@
 import random
 import re
 import time
+from pexpect import TIMEOUT as ExpectTimeout
 from contextlib import contextmanager
 
 from utils import exceptions, cli, table_parser
@@ -269,7 +270,7 @@ def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=
             LOG.warning(msg)
             return False
         else:
-            raise exceptions.VMPostCheckFailed(msg)
+            raise exceptions.VMNetworkError(msg)
 
 
 def __compose_args(optional_args_dict):
@@ -1692,7 +1693,7 @@ def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **
     action_function_map[action](vm_id, con_ssh=con_ssh, auth_info=auth_info, **kwargs)
 
 
-def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id):
+def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
     """
     Add vlan for vm pci-passthrough interface and restart networking service.
     Do nothing if expected vlan interface already exists in 'ip addr'.
@@ -1700,56 +1701,102 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id):
     Args:
         vm_id (str):
         net_seg_id (int|str): such as 1792
+        retry (int): max number of times to reboot vm to try to recover it from non-exit
 
     Returns: None
 
     Raises: VMNetworkError if vlan interface is not found in 'ip addr' after adding
 
+    Notes:
+        Known openstack issue that will not be fixed: CGTS-4705.
+        Sometimes a non-exist 'rename6' interface will be used for pci-passthrough nic after vm maintenance
+        Sudo reboot from the vm as workaround.
+        By default will try to reboot for a maximum of 3 times
+
     """
     if not vm_id or not net_seg_id:
         raise ValueError("vm_id and/or net_seg_id not provided.")
 
-    vm_pcipt_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, vif_model='pci-passthrough')
+    for i in range(retry):
+        vm_pcipt_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, vif_model='pci-passthrough')
 
-    if not vm_pcipt_nics:
-        LOG.warning("No pci-passthrough device found for vm from nova show {}".format(vm_id))
-        return
+        if not vm_pcipt_nics:
+            LOG.warning("No pci-passthrough device found for vm from nova show {}".format(vm_id))
+            return
 
-    with ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
-        for pcipt_nic in vm_pcipt_nics:
-            mac_addr = pcipt_nic['mac_address']
-            eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
-            if not eth_name:
-                raise exceptions.VMNetworkError("Interface {} is not listed in 'ip addr' in vm {}".format(eth_name,
-                                                                                                          vm_id))
-            vlan_name = "{}.{}".format(eth_name, net_seg_id)
-            print("heyheye {}".format(vlan_name))
+        with ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
+            for pcipt_nic in vm_pcipt_nics:
+                mac_addr = pcipt_nic['mac_address']
+                eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
+                if not eth_name:
+                    raise exceptions.VMNetworkError("Interface with mac {} is not listed in 'ip addr' in vm {}".
+                                                    format(mac_addr, vm_id))
+                elif 'rename' in eth_name:
+                    LOG.warning("Retry {}: non-existing interface {} found on pci-passthrough nic in vm {}, "
+                                "reboot vm to try to recover".format(i + 1, eth_name, vm_id))
+                    sudo_reboot_from_vm(vm_ssh=vm_ssh)
 
-            output_pre_ipaddr = vm_ssh.exec_cmd('ip addr', fail_ok=False)[1]
-            if vlan_name in output_pre_ipaddr:
-                LOG.info("{} already in ip addr. Skip.".format(vlan_name))
-                continue
+                    _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=False)
+                    wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
+                    break
 
-            output_pre = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
-            if vlan_name not in output_pre:
-                if '.' + net_seg_id in output_pre:
-                    LOG.info("Modify existing interface to {} in file.".format(vlan_name))
-                    vm_ssh.exec_cmd(r"sed -i -e 's/eth[0-9]\(.{}\)/{}\1/g' /etc/network/interfaces".
-                                    format(net_seg_id, eth_name), fail_ok=False)
                 else:
-                    LOG.info("Append new interface {} to file".format(vlan_name))
-                    if_to_add = VMNetworkStr.NET_IF.format(vlan_name, vlan_name)
-                    vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
-                                    format(if_to_add), fail_ok=False)
+                    vlan_name = "{}.{}".format(eth_name, net_seg_id)
 
-                output_post = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
-                if vlan_name not in output_post:
-                    raise exceptions.VMNetworkError("Failed to add vlan to vm interfaces file")
+                    output_pre_ipaddr = vm_ssh.exec_cmd('ip addr', fail_ok=False)[1]
+                    if vlan_name in output_pre_ipaddr:
+                        LOG.info("{} already in ip addr. Skip.".format(vlan_name))
+                        continue
 
-            LOG.info("Restarting networking service for vm.")
-            vm_ssh.exec_cmd("/etc/init.d/networking restart", expect_timeout=60)
-            output_pre_ipaddr = vm_ssh.exec_cmd('ip addr', fail_ok=False)[1]
-            if vlan_name not in output_pre_ipaddr:
-                raise exceptions.VMNetworkError("vlan {} is not found in 'ip addr' after restarting networking service.".
-                                                format(vlan_name))
-            LOG.info("vlan {} is successfully added.".format(vlan_name))
+                    output_pre = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
+                    if vlan_name not in output_pre:
+                        if '.' + net_seg_id in output_pre:
+                            LOG.info("Modify existing interface to {} in file.".format(vlan_name))
+                            vm_ssh.exec_cmd(r"sed -i -e 's/eth[0-9]\(.{}\)/{}\1/g' /etc/network/interfaces".
+                                            format(net_seg_id, eth_name), fail_ok=False)
+                        else:
+                            LOG.info("Append new interface {} to file".format(vlan_name))
+                            if_to_add = VMNetworkStr.NET_IF.format(vlan_name, vlan_name)
+                            vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
+                                            format(if_to_add), fail_ok=False)
+
+                        output_post = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
+                        if vlan_name not in output_post:
+                            raise exceptions.VMNetworkError("Failed to add vlan to vm interfaces file")
+
+                    LOG.info("Restarting networking service for vm.")
+                    vm_ssh.exec_cmd("/etc/init.d/networking restart", expect_timeout=60)
+                    output_pre_ipaddr = vm_ssh.exec_cmd('ip addr', fail_ok=False)[1]
+                    if vlan_name not in output_pre_ipaddr:
+                        raise exceptions.VMNetworkError("vlan {} is not found in 'ip addr' after restarting networking "
+                                                        "service.".format(vlan_name))
+                    LOG.info("vlan {} is successfully added.".format(vlan_name))
+            else:
+                return
+
+            LOG.info("Reboot vm completed. Retry started.")
+
+    else:
+        raise exceptions.VMNetworkError("pci-passthrough interface(s) not found in vm {}".format(vm_id))
+
+
+def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
+    def _sudo_reboot(vm_ssh_):
+        vm_ssh_.exec_sudo_cmd('reboot')
+        try:
+            index = vm_ssh_.expect(['The system is going down for reboot', vm_ssh.prompt], timeout=60)
+            if index == 1:
+                raise exceptions.VMOperationFailed("Unable to reboot vm {}")
+            vm_ssh_.parent.flush()
+        except ExpectTimeout:
+            vm_ssh_.send_control('c')
+            vm_ssh_.expect()
+            raise
+
+    if not vm_ssh:
+            if not vm_id:
+                raise ValueError("vm_id or vm_ssh needs to be provided")
+            with ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+                _sudo_reboot(vm_ssh)
+    else:
+        _sudo_reboot(vm_ssh)

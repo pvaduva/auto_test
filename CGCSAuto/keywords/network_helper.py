@@ -1,9 +1,11 @@
 import ipaddress
 import math
 import re
+import time
 
 from consts.auth import Tenant
 from consts.cgcs import NetIP, DNS_NAMESERVERS
+from consts.timeout import VMTimeout
 from keywords import common, keystone_helper, host_helper
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
@@ -1532,22 +1534,29 @@ def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_s
     return filtered_ips
 
 
-def get_eth_for_mac(ssh_client, mac_addr):
+def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD):
     """
     Get the eth name for given mac address on the ssh client provided
     Args:
         ssh_client (SSHClient): usually a vm_ssh
         mac_addr (str): such as "fa:16:3e:45:0d:ec"
+        timeout (int): max time to wait for the given mac address appear in ip addr
 
     Returns (str): The first matching eth name for given mac. such as "eth3"
 
     """
-    code, output = ssh_client.exec_cmd('ip addr | grep -B 1 {}'.format(mac_addr))
-    if code != 0:
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        if mac_addr in ssh_client.exec_cmd('ip addr'.format(mac_addr))[1]:
+
+            code, output = ssh_client.exec_cmd('ip addr | grep -B 1 {}'.format(mac_addr))
+            # sample output:
+            # 7: eth4: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN qlen 1000
+            # link/ether 90:e2:ba:60:c8:08 brd ff:ff:ff:ff:ff:ff
+
+            return output.split(sep=':')[1].strip()
+
+        time.sleep(1)
+    else:
         LOG.warning("Cannot find provided mac address {} in 'ip addr'".format(mac_addr))
         return ''
-
-    # sample output:
-    # 7: eth4: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN qlen 1000
-    # link/ether 90:e2:ba:60:c8:08 brd ff:ff:ff:ff:ff:ff
-    return output.split(sep=':')[1].strip()

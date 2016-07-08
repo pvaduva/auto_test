@@ -27,7 +27,7 @@ def delete_resources_func(request):
 
     """
     def delete_():
-        ResourceCleanup._delete(ResourceCleanup._get_resources('function'))
+        ResourceCleanup._delete(ResourceCleanup._get_resources('function'), scope='function')
         ResourceCleanup._reset('function')
     request.addfinalizer(delete_)
 
@@ -49,7 +49,7 @@ def delete_resources_class(request):
 
     """
     def delete_():
-        ResourceCleanup._delete(ResourceCleanup._get_resources('class'))
+        ResourceCleanup._delete(ResourceCleanup._get_resources('class'), scope='class')
         ResourceCleanup._reset('class')
     request.addfinalizer(delete_)
 
@@ -71,7 +71,7 @@ def delete_resources_module(request):
 
     """
     def delete_():
-        ResourceCleanup._delete(ResourceCleanup._get_resources('module'))
+        ResourceCleanup._delete(ResourceCleanup._get_resources('module'), scope='module')
         ResourceCleanup._reset('module')
     request.addfinalizer(delete_)
 
@@ -104,7 +104,7 @@ class ResourceCleanup:
         return cls.__resources_to_cleanup[scope]
 
     @staticmethod
-    def _delete(resources):
+    def _delete(resources, scope):
         vms_with_vols = resources['vms_with_vols']
         vms_no_vols = resources['vms_no_vols']
         volumes = resources['volumes']
@@ -117,53 +117,64 @@ class ResourceCleanup:
         heat_stacks = resources['heat_stacks']
         err_msgs = []
         if vms_with_vols:
+            LOG.fixture_step("({}) Attempt to delete following vms and attached volumes: {}".format(scope, vms_with_vols))
             code, msg = vm_helper.delete_vms(vms_with_vols, delete_volumes=True, fail_ok=True, auth_info=Tenant.ADMIN)
             if code not in [0, -1]:
                 err_msgs.append(msg)
 
         if vms_no_vols:
+            LOG.fixture_step("({}) Attempt to delete following vms: {}".format(scope, vms_no_vols))
             code, msg = vm_helper.delete_vms(vms_no_vols, delete_volumes=False, fail_ok=True, auth_info=Tenant.ADMIN)
             if code not in [0, -1]:
                 err_msgs.append(msg)
 
         if volumes:
+            LOG.fixture_step("({}) Attempt to delete following volumes: {}".format(scope, volumes))
             code, msg = cinder_helper.delete_volumes(volumes, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
 
         if flavors:
+            LOG.fixture_step("({}) Attempt to delete following flavors: {}".format(scope, flavors))
             code, msg = nova_helper.delete_flavors(flavors, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
 
         if images:
+            LOG.fixture_step("({}) Attempt to delete following images: {}".format(scope, images))
             code, msg = glance_helper.delete_images(images, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
 
         if server_groups:
+            LOG.fixture_step("({}) Attempt to delete following server groups: {}".format(scope, server_groups))
             code, msg = nova_helper.delete_server_groups(server_groups, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
 
         if floating_ips:
+            LOG.fixture_step("({}) Attempt to delete following floating ips: {}".format(scope, floating_ips))
             for fip in floating_ips:
                 code, msg = network_helper.delete_floating_ip(fip, fip_val='ip', fail_ok=True, auth_info=Tenant.ADMIN)
                 if code > 0:
                     err_msgs.append(msg)
 
         if routers:
+            LOG.fixture_step("{}) Attempt to delete following routers: {}".format(scope, routers))
             for router in routers:
                 code, msg = network_helper.delete_router(router, fail_ok=True, auth_info=Tenant.ADMIN)
                 if code > 0:
                     err_msgs.append(msg)
 
         if subnets:
+            LOG.fixture_step("({}) Attempt to delete following subnets: {}".format(scope, subnets))
             for subnet in subnets:
                 code, msg = network_helper.delete_subnet(subnet_id=subnet, fail_ok=True, auth_info=Tenant.ADMIN)
                 if code > 0:
                     err_msgs.append(msg)
+
         if heat_stacks:
+            LOG.fixture_step("({}) Attempt to delete following heat stacks: {}".format(scope, heat_stacks))
             auth_info = None
             for stack in heat_stacks:
                 heat_user = getattr(Heat, stack)['heat_user']

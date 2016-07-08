@@ -18,15 +18,15 @@ def teardown_module():
 
 
 def test_nova():
-    LOG.tc_start()
+    LOG.tc_func_start()
     cli.nova('list')
     cli.source_admin()
     cli.nova('list', auth_info=None)
-    LOG.tc_end()
+    LOG.tc_func_end()
 
 
 def test_system():
-    LOG.tc_start()
+    LOG.tc_func_start()
     cli.system('host-list')
     cli.system('host-show', 1)
     try:
@@ -36,13 +36,13 @@ def test_system():
         LOG.info("nova test passed without authentication")
     cli.source_admin()
     cli.system('host-list', auth_info=None)
-    LOG.tc_end()
+    LOG.tc_func_end()
 
 
 def test_auth_tenant():
-    LOG.tc_start()
+    LOG.tc_func_start()
     cli.nova('list', auth_info=auth.TENANT_1)
-    LOG.tc_end()
+    LOG.tc_func_end()
 
 if __name__ == '__main__':
     ssh_client = SSHClient('128.224.150.142')

@@ -26,7 +26,7 @@ def setup():
 
 
 def test_reconnect_after_swact():
-    LOG.tc_start()
+    LOG.tc_func_start()
     setup()
     # TODO: dynamically determine active controller
     ssh_client.exec_cmd("system host-swact controller-0")
@@ -35,33 +35,33 @@ def test_reconnect_after_swact():
     ssh_client.send("date")
     ssh_client.expect()
     assert ssh_client._is_connected()
-    LOG.tc_end()
+    LOG.tc_func_end()
 
 
 def test_credential_incorrect():
-    LOG.tc_start()
+    LOG.tc_func_start()
     ssh_client1 = SSHClient(host=hostname, user='wrsroot', password='imwrong69')
     try:
         ssh_client1.connect(retry=True)
         fail("Test failed, how can connect pass??")
     except pxssh.ExceptionPxssh as e:
         assert "permission denied" in e.__str__()
-        LOG.tc_end()
+        LOG.tc_func_end()
 
 
 def test_connection_close():
-    LOG.tc_start()
+    LOG.tc_func_start()
     setup()
     ssh_client.close()
     try:
         ssh_client.send('echo "hello \nworld2"')
         fail("Connection closed already, shouldn't be able to send cmd!")
     except:
-        LOG.tc_end("hello world throwed exception.")
+        LOG.tc_func_end("hello world throwed exception.")
 
 
 def test_send_cmd():
-    LOG.tc_start()
+    LOG.tc_func_start()
     ssh_client.connect()
     ssh_client.send('/sbin/ip route')
     ssh_client.expect('default')
@@ -74,7 +74,7 @@ def test_send_cmd():
     ssh_client.expect()
     exit_code, output = ssh_client.exec_cmd('system host-list')
     assert exit_code == 0
-    LOG.tc_end()
+    LOG.tc_func_end()
 
 
 def test_config_fixture(tis_ssh):
@@ -85,7 +85,7 @@ def test_config_fixture(tis_ssh):
 
 
 def test_ssh_from_ssh():
-    LOG.tc_start()
+    LOG.tc_func_start()
     ssh_client.connect()
     compute_ssh = SSHFromSSH(ssh_client, 'compute-0', 'wrsroot', 'li69nux')
     compute_ssh.connect()
@@ -95,11 +95,11 @@ def test_ssh_from_ssh():
     compute_ssh.close()
     assert not compute_ssh._is_connected()
     assert ssh_client._is_connected()
-    LOG.tc_end()
+    LOG.tc_func_end()
 
 
 def test_expect_list():
-    LOG.tc_start()
+    LOG.tc_func_start()
     ssh_client.connect()
     ssh_client.send(r'source /etc/nova/openrc')
     ssh_client.expect('.*keystone_admin.*')
@@ -108,7 +108,7 @@ def test_expect_list():
     ssh_client.expect([r'compute\-0', r'controller\-1'])
     ssh_client.expect([r'compute\-0', r'compute\-1'])
     ssh_client.flush()
-    LOG.tc_end()
+    LOG.tc_func_end()
 
 if __name__ == "__main__":
     test_reconnect_after_swact()

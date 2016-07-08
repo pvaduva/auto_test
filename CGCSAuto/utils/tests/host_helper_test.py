@@ -16,15 +16,15 @@ def test_get_info():
     assert 'storage-0' in pv0_storage_nodes and 'storage-1' in pv0_storage_nodes
     assert not system_helper.get_storage_nodes(r720)
     assert not system_helper.is_small_footprint()
-    LOG.tc_start()
+    LOG.tc_func_start()
     assert system_helper.is_small_footprint(r720)
-    LOG.tc_end()
-    LOG.tc_start()
+    LOG.tc_func_end()
+    LOG.tc_func_start()
     assert not system_helper.is_small_footprint(r730_3_7)
-    LOG.tc_end()
-    LOG.tc_start()
+    LOG.tc_func_end()
+    LOG.tc_func_start()
     assert not system_helper.get_storage_nodes(r730_3_7)
-    LOG.tc_end()
+    LOG.tc_func_end()
 
 if __name__ == '__main__':
     test_get_info()

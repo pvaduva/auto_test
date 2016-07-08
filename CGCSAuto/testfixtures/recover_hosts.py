@@ -1,6 +1,7 @@
 from pytest import fixture
 
 from utils import table_parser, cli, exceptions
+from utils.tis_log import LOG
 from consts.timeout import HostTimeout
 from keywords import host_helper
 
@@ -69,7 +70,7 @@ class HostsToRecover():
         return cls.__hosts_to_recover[scope]
 
     @staticmethod
-    def _recover_hosts(hostnames):
+    def _recover_hosts(hostnames, scope):
         hostnames = sorted(set(hostnames))
         table_ = table_parser.table(cli.system('host-list'))
         table_ = table_parser.filter_table(table_, hostname=hostnames)
@@ -79,12 +80,14 @@ class HostsToRecover():
 
         err_msg = []
         if locked_hosts:
+            LOG.fixture_step("({}) Unlock hosts: {}".format(scope, locked_hosts))
             res1 = host_helper.unlock_hosts(hosts=locked_hosts, fail_ok=True)
             for host in res1:
                 if res1[host][0] not in [0, 4]:
                     err_msg.append("Not all host(s) unlocked successfully. Detail: {}".format(res1))
 
         if unlocked_hosts:
+            LOG.fixture_step("({}) Wait for hosts to becomes available or degraded: {}".format(scope, unlocked_hosts))
             res2 = host_helper._wait_for_hosts_states(unlocked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,
                                                       fail_ok=True, availability=['available', 'degraded'])
             if not res2:
@@ -92,8 +95,10 @@ class HostsToRecover():
 
         hypervisors = host_helper.get_hypervisors()
         hypervisors_recovered = list(set(hypervisors) & set(hostnames))
-        res, down_hosts = host_helper.wait_for_hypervisors_up(hypervisors_recovered, fail_ok=True)
-        if not res:
-            err_msg.append("Host(s) {} are not up in hypervisor-list".format(down_hosts))
+        if hypervisors_recovered:
+            LOG.fixture_step("({}) Wait for unlocked hypervisors up: {}".format(scope, hypervisors_recovered))
+            res, down_hosts = host_helper.wait_for_hypervisors_up(hypervisors_recovered, fail_ok=True)
+            if not res:
+                err_msg.append("Host(s) {} are not up in hypervisor-list".format(down_hosts))
 
         assert not err_msg, '\n'.join(err_msg)

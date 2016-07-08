@@ -185,13 +185,13 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
     logging_msg = '\n{}{} {}'.format(separator, msg, nodeid)
     print(print_msg)
     if log_type == 'tc_end':
-        LOG.tc_end(msg=msg, tc_name=nodeid)
+        LOG.tc_func_end(msg=msg, tc_name=nodeid)
     elif log_type == 'tc_start':
-        LOG.tc_start(nodeid)
+        LOG.tc_func_start(nodeid)
     elif log_type == 'tc_setup':
-        LOG.tc_setup(nodeid)
+        LOG.tc_setup_start(nodeid)
     elif log_type == 'tc_teardown':
-        LOG.tc_teardown(nodeid)
+        LOG.tc_teardown_start(nodeid)
     else:
         LOG.debug(logging_msg)
 

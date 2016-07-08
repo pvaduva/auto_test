@@ -51,7 +51,6 @@ def incomplete_test_sriov_pcipt_with_vm_actions(vm_type, resource_usage):
 
     if not pnet_id:
         skip("The lab does not support {}".format(vm_type))
-    print(pnet_id)
 
     actual_resource_value = nova_helper.get_provider_net_info(pnet_id, field='resource_usage')
 

@@ -189,7 +189,7 @@ def tes_live_migrate_v2(prepare_hosts, storage, interface, with_block):
 
     # Define skip conditions first if any, once a skip() is called, test will end right away.
 
-    LOG.tc_start()
+    LOG.tc_func_start()
 
     LOG.step("Checking if live-migration allowed for given VM, and determine the expected return code")
     vm_id = vm_helper.VMInfo.get_vms(storage, interface)[0]
@@ -205,7 +205,7 @@ def tes_live_migrate_v2(prepare_hosts, storage, interface, with_block):
     LOG.step("Verify return code")
     assert expected_code == actual_code, message
 
-    LOG.tc_end()
+    LOG.tc_func_end()
 
 
 ########################################################################################################################
