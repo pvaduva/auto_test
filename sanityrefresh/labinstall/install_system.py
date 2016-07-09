@@ -613,7 +613,7 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
     '''
 
     patch_names = []
-
+    pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
     for dir_path in patch_dir_paths.split(","):
         if bld_server_conn.exec_cmd("test -d " + dir_path)[0] != 0:
             msg = "Patch directory path {} not found".format(dir_path)
@@ -637,7 +637,7 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
             log.info("Found patch named: " + patch_name)
             patch_names.append(patch_name)
 
-        bld_server_conn.rsync(dir_path + "/", WRSROOT_USERNAME, node.host_ip, WRSROOT_PATCHES_DIR)
+        bld_server_conn.rsync(dir_path + "/", WRSROOT_USERNAME, node.host_ip, WRSROOT_PATCHES_DIR, pre_opts=pre_opts)
 
     log.info("List of patches:\n" + "\n".join(patch_names))
 
@@ -686,11 +686,10 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
         log.error(msg)
         wr_exit()._exit(1, msg)
 
-    node.telnet_conn.exec_cmd("echo " + WRSROOT_PASSWORD + " | sudo -S reboot")
-
+    node.telnet_conn.write_line("echo " + WRSROOT_PASSWORD + " | sudo -S reboot")
     log.info("Patch application requires a reboot.")
     log.info("Controller0 reboot has started")
-    node.telnet_conn.get_read_until("Rebooting...")
+    #node.telnet_conn.get_read_until("Rebooting...")
     node.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
 
 def wait_until_drbd_sync_complete(controller0, timeout=600, check_interval=180):
