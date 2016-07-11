@@ -35,6 +35,7 @@ CUSTOM_LAB_SETTINGS_FILENAME = "settings.ini"
 LIC_FILENAME = "license.lic"
 LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-full-dec2016.lic"
 SFP_LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-CPE-full-dec2016.lic"
+#SFP_LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-CPE-full.lic"
 WRSROOT_ETC_PROFILE = "/etc/profile"
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards"
 CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
@@ -120,7 +121,7 @@ VLM_CMDS_REQ_RESERVE = [VLM_UNRESERVE, VLM_TURNON, VLM_TURNOFF, VLM_REBOOT]
 INSTALLATION_RESERVE_NOTE = "AUTO: Lab installation"
 
 # Servers
-BLD_SERVERS = ["yow-cgts1-lx", "yow-cgts2-lx", "yow-cgts3-lx"]
+BLD_SERVERS = ["yow-cgts1-lx", "yow-cgts2-lx", "yow-cgts3-lx", "yow-cgts4-lx"]
 DEFAULT_BLD_SERVER = "yow-cgts3-lx"
 TUXLAB_SERVERS = ["yow-tuxlab", "yow-tuxlab2"]
 DEFAULT_TUXLAB_SERVER = "yow-tuxlab2"
