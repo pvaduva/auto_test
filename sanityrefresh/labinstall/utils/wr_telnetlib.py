@@ -939,7 +939,7 @@ class Telnet:
                 if index == 0:
                     match = match.group(1).decode('utf-8','ignore')
                     log.info("Matched: " + match)
-                    if re.search(boot_device_regex, match):
+                    if re.search(boot_device_regex, match, re.IGNORECASE):
                         log.info("Found boot device {}".format(boot_device_regex))
                         time.sleep(1)
                         log.info("Pressing ENTER key")
@@ -1037,7 +1037,7 @@ class Telnet:
                 if index == 0:
                     match = match.group(1).decode('utf-8','ignore')
                     log.info("Matched: " + match)
-                    if re.search(boot_device_regex, match):
+                    if re.search(boot_device_regex, match, re.IGNORECASE):
                         log.info("Found boot device {}".format(boot_device_regex))
                         time.sleep(1)
                         log.info("Pressing ENTER key")
@@ -1154,7 +1154,7 @@ class Telnet:
                 if index == 0:
                     match = match.group(1).decode('utf-8','ignore')
                     log.info("Matched: " + match)
-                    if re.search(boot_device_regex, match):
+                    if re.search(boot_device_regex, match, re.IGNORECASE):
                         log.info("Found boot device {}".format(boot_device_regex))
                         time.sleep(1)
                         log.info("Pressing ENTER key")
