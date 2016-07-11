@@ -9,6 +9,7 @@ import setups
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
+from testfixtures.resource_mgmt import *
 
 natbox_ssh = None
 con_ssh = None
@@ -184,13 +185,13 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
     logging_msg = '\n{}{} {}'.format(separator, msg, nodeid)
     print(print_msg)
     if log_type == 'tc_end':
-        LOG.tc_end(msg=msg, tc_name=nodeid)
+        LOG.tc_func_end(msg=msg, tc_name=nodeid)
     elif log_type == 'tc_start':
-        LOG.tc_start(nodeid)
+        LOG.tc_func_start(nodeid)
     elif log_type == 'tc_setup':
-        LOG.tc_setup(nodeid)
+        LOG.tc_setup_start(nodeid)
     elif log_type == 'tc_teardown':
-        LOG.tc_teardown(nodeid)
+        LOG.tc_teardown_start(nodeid)
     else:
         LOG.debug(logging_msg)
 
@@ -306,3 +307,15 @@ def pytest_collection_modifyitems(items):
             print(msg)
             LOG.debug(msg=msg)
             item.add_marker(eval("pytest.mark.known_issue"))
+
+
+def pytest_generate_tests(metafunc):
+    # Modify the order of the fixtures to delete resources before revert host
+    config_host_fixtures = {'class': 'config_host_class', 'module': 'config_host_module'}
+    for key, value in config_host_fixtures.items():
+        delete_res_func = 'delete_resources_{}'.format(key)
+        if value in metafunc.fixturenames and delete_res_func in metafunc.fixturenames:
+            index = list(metafunc.fixturenames).index('delete_resources_{}'.format(key))
+            index = max([0, index-1])
+            metafunc.fixturenames.remove(value)
+            metafunc.fixturenames.insert(index, value)

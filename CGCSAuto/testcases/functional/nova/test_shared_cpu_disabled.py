@@ -165,11 +165,11 @@ def test_resize_vm_shared_cpu_negative(vcpus, cpu_policy, shared_vcpu, basic_vm)
     """
     LOG.tc_step("Create a flavor with {} vcpus. Set extra specs with: {} cpu_policy, {} shared_vcpu".format(
             vcpus, cpu_policy, shared_vcpu))
-    flavor = nova_helper.create_flavor(vcpus=vcpus)[1]
-    ResourceCleanup.add('flavor', flavor, scope='function')
+    flavor = nova_helper.create_flavor(name='shared_vcpu', vcpus=vcpus)[1]
+    ResourceCleanup.add('flavor', flavor, scope='module')
     nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: cpu_policy})
     nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.SHARED_VCPU: shared_vcpu})
 
-    LOG.tc_step("Attempt to resize vm with invlid flavor, and verify resize request is rejected.")
+    LOG.tc_step("Attempt to resize vm with invalid flavor, and verify resize request is rejected.")
     code, msg = vm_helper.resize_vm(basic_vm, flavor, fail_ok=True)
     assert code == 1 and 'No valid host found for resize' in msg

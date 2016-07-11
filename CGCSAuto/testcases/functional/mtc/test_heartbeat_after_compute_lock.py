@@ -58,7 +58,8 @@ def heartbeat_flavor_vm(request):
         nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
         host_helper.unlock_host(vm_host)
         # wait for hostname to be back in host list in nova
-        host_helper.wait_for_hosts_in_nova(vm_host)
+        host_helper.wait_for_hypervisors_up(vm_host)
+        host_helper.wait_for_hosts_in_nova_compute(vm_host)
     request.addfinalizer(unlock_host)
 
     return vm

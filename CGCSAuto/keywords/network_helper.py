@@ -1,13 +1,14 @@
-import re
 import ipaddress
-
 import math
+import re
+import time
 
+from consts.auth import Tenant
+from consts.cgcs import NetIP, DNS_NAMESERVERS
+from consts.timeout import VMTimeout
+from keywords import common, keystone_helper, host_helper
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
-from consts.auth import Tenant
-from consts.cgcs import MGMT_IP, DATA_IP, DNS_NAMESERVERS
-from keywords import common, keystone_helper, host_helper
 
 
 def is_valid_ip_address(ip=None):
@@ -175,7 +176,7 @@ def get_subnets(name=None, cidr=None, strict=True, regex=False, auth_info=None, 
     return table_parser.get_column(table_, 'id')
 
 
-def get_net_info(net_id, field='status', strict=True, auto_info=None, con_ssh=None):
+def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.ADMIN, con_ssh=None):
     """
     Get specified info for given network
 
@@ -525,11 +526,12 @@ def get_neutron_port(name=None, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
-def get_provider_nets(name=None, con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN):
+def get_provider_nets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN):
     """
     Get the neutron provider net list based on name if given for ADMIN user.
 
     Args:
+        rtn_val (str): id or name
         con_ssh (SSHClient): If None, active controller ssh will be used.
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
         name (str): Given name for the provider network to filter
@@ -541,9 +543,9 @@ def get_provider_nets(name=None, con_ssh=None, strict=False, regex=False, auth_i
     """
     table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is None:
-        return table_parser.get_values(table_, 'id')
+        return table_parser.get_values(table_, rtn_val)
 
-    return table_parser.get_values(table_, 'id', strict=strict, regex=regex, name=name)
+    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, name=name)
 
 
 def get_provider_net_ranges(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
@@ -604,13 +606,14 @@ def get_qos(name=None, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
-def get_internal_net_id(net_name=None, con_ssh=None, auth_info=None):
+def get_internal_net_id(net_name=None, strict=False, con_ssh=None, auth_info=None):
     """
     Get internal network id that matches the given net_name of a specific tenant.
 
     Args:
         net_name (str): name of the internal network. This can be a substring of the tenant net name, such as 'net1',
             and it will return id for internal0-net1
+        strict (bool): Whether to perform strict search on given net_name
         con_ssh (SSHClient):
         auth_info (dict): If None, primary tenant will be used.
 
@@ -618,7 +621,7 @@ def get_internal_net_id(net_name=None, con_ssh=None, auth_info=None):
         If multiple ids matches the given name, only the first will return
 
     """
-    net_ids = get_internal_net_ids(net_names=net_name, con_ssh=con_ssh, auth_info=auth_info)
+    net_ids = get_internal_net_ids(net_names=net_name, strict=strict, con_ssh=con_ssh, auth_info=auth_info)
     if not net_ids:
         LOG.warning("No network found with name {}".format(net_name))
         return []
@@ -712,12 +715,17 @@ def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None,
     else:
         if isinstance(net_names, str):
             net_names = [net_names]
-        net_names = ['internal.*{}'.format(net_name) for net_name in net_names if 'internal' not in net_name]
+
+        for i in range(len(net_names)):
+            net_name = net_names[i]
+            if 'internal' not in net_name:
+                net_names[i] = 'internal.*{}'.format(net_name)
+
         table_ = table_parser.filter_table(table_, name=net_names, strict=strict, regex=regex)
         return table_parser.get_column(table_, 'id')
 
 
-def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, use_fip=False):
+def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False):
     """
     This function returns the management IPs for all VMs on the system.
     We make the assumption that the management IPs start with "192".
@@ -727,14 +735,32 @@ def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         con_ssh (SSHClient): active controller SSHClient object
         auth_info (dict): use admin by default unless specified
         rtn_dict (bool): return list if False, return dict if True
-        use_fip (bool): Whether to return only floating ip(s) if any vm has floating ip(s) associated with it
 
     Returns (list|dict):
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(ip_pattern=DATA_IP, vms=vms, con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict,
-                                use_fip=use_fip)
+    return _get_net_ips_for_vms(name_substr=NetIP.DATA_NET_NAME, ip_pattern=NetIP.DATA_IP, vms=vms, con_ssh=con_ssh,
+                                auth_info=auth_info, rtn_dict=rtn_dict)
+
+
+def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False):
+    """
+    This function returns the management IPs for all VMs on the system.
+    We make the assumption that the management IPs start with "192".
+    Args:
+        vms (str|list|None): vm ids list. If None, management ips for ALL vms with given Tenant(via auth_info) will be
+            returned.
+        con_ssh (SSHClient): active controller SSHClient object
+        auth_info (dict): use admin by default unless specified
+        rtn_dict (bool): return list if False, return dict if True
+
+    Returns (list|dict):
+        a list of all VM management IPs   # rtn_dict=False
+        dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
+    """
+    return _get_net_ips_for_vms(name_substr=NetIP.INTERNAL_NET_NAME, ip_pattern=NetIP.INTERNAL_IP, vms=vms,
+                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, use_fip=False)
 
 
 def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, use_fip=False):
@@ -753,11 +779,12 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(ip_pattern=MGMT_IP, vms=vms, con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict,
-                                use_fip=use_fip)
+    return _get_net_ips_for_vms(name_substr=NetIP.MGMT_NET_NAME, ip_pattern=NetIP.MGMT_IP, vms=vms, con_ssh=con_ssh,
+                                auth_info=auth_info, rtn_dict=rtn_dict, use_fip=use_fip)
 
 
-def _get_net_ips_for_vms(ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, use_fip=False):
+def _get_net_ips_for_vms(name_substr, ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False,
+                         use_fip=False):
 
     table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=auth_info))
     if vms:
@@ -770,29 +797,40 @@ def _get_net_ips_for_vms(ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.AD
     vm_ids = table_parser.get_column(table_, 'ID')
     if not vm_ids:
         raise ValueError("No vm is on the system. Please boot vm(s) first.")
-    vm_nets = table_parser.get_column(table_, 'Networks')
+    vms_nets = table_parser.get_column(table_, 'Networks')
 
     if use_fip:
         floatingips = get_floating_ips(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
 
     for i in range(len(vm_ids)):
         vm_id = vm_ids[i]
-        ips_for_vm = ip_reg.findall(vm_nets[i])
+        vm_nets = vms_nets[i].split(sep=';')
+        targeted_ips_str = ''
+        for vm_net in vm_nets:
+            if name_substr in vm_net:
+                targeted_ips_str += vm_net
+
+        if not targeted_ips_str:
+            LOG.warning("No network found for vm {} with net name sub-string: {}".format(vm_id, name_substr))
+            continue
+
+        ips_for_vm = ip_reg.findall(targeted_ips_str)
         if not ips_for_vm:
             LOG.warning("No ip found for vm {} with pattern {}".format(vm_id, ip_pattern))
-        else:
-            if use_fip:
-                vm_fips = []
-                # ping floating ips only if any associated to vm, otherwise ping all the ips
-                if len(ips_for_vm) > 1:
-                    for ip in ips_for_vm:
-                        if ip in floatingips:
-                            vm_fips.append(ip)
-                    if vm_fips:
-                        ips_for_vm = vm_fips
+            continue
 
-            all_ips_dict[vm_id] = ips_for_vm
-            all_ips += ips_for_vm
+        if use_fip:
+            vm_fips = []
+            # ping floating ips only if any associated to vm, otherwise ping all the ips
+            if len(ips_for_vm) > 1:
+                for ip in ips_for_vm:
+                    if ip in floatingips:
+                        vm_fips.append(ip)
+                if vm_fips:
+                    ips_for_vm = vm_fips
+
+        all_ips_dict[vm_id] = ips_for_vm
+        all_ips += ips_for_vm
 
     if not all_ips:
         raise ValueError("No ip found for any of these vms {} with pattern: {}".format(vm_ids, ip_pattern))
@@ -1384,12 +1422,47 @@ def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=Fal
     return 0, succ_msg
 
 
-def get_provider_net_for_interface(interface='pcipt', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_pci_interface_info(interface='pthru', filepath=None, con_ssh=None):
     """
-    Get provider net id for SRIOV interface
+    Get pci interface override info from lab_setup.conf
+    Args:
+        interface (str): 'pthru' or 'sriov'
+        filepath (str): lab_setup.conf file path if not in default location
+        con_ssh (SSHClient):
+
+    Returns (str): such as "ethernet|0000:06:00.1+0|${DATAMTU}|data0b|4". Returns '' if given interface info not found.
+
+    """
+    valid_interfaces = ['pthru', 'sriov']
+    interface = 'pthru' if interface == 'pcipt' else interface
+
+    if interface not in valid_interfaces:
+        raise ValueError("Interface has to be one of the following: {}".format(valid_interfaces))
+
+    if filepath is None:
+        filepath = "lab_setup.conf"
+
+    interface_override_name = "{}_interfaces".format(interface)
+    with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con0_ssh:
+        sriov_if_override = con0_ssh.exec_cmd("cat {} | grep -i {}".format(filepath, interface_override_name))[1]
+
+    if not sriov_if_override:
+        LOG.warning("{} is not found in lab_setup".format(interface_override_name.upper()))
+        return ''
+
+    if 'No such file or directory' in sriov_if_override:
+        raise ValueError("File '{}' cannot be found".format(filepath))
+
+    return sriov_if_override.split(sep='=')[-1]
+
+
+def get_provider_net_for_interface(interface='pthru', rtn_val='id', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get provider net id for SRIOV or PCI-passthrough interface
 
     Args:
-        interface (str): 'pcipt' or 'sriov'
+        interface (str): 'pthru' or 'sriov'
+        rtn_val (str): 'id' or 'name'
         filepath: lab_setup.conf path to retrive the info from
         con_ssh (SSHClient):
         auth_info (dict):
@@ -1397,25 +1470,93 @@ def get_provider_net_for_interface(interface='pcipt', filepath=None, con_ssh=Non
     Returns (str):  id of the provider net for SRIOV interface. Returns empty string if not found.
 
     """
-    valid_interfaces = ['pcipt', 'sriov']
-    interface = 'pthru' if interface == 'pcipt' else interface
-    if interface not in valid_interfaces:
-        raise ValueError("Interface has to be one of the following: {}".format(valid_interfaces))
-
-    if filepath is None:
-        filepath = "lab_setup.conf"
-
-    with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con0_ssh:
-        sriov_if_override = con0_ssh.exec_cmd("cat {} | grep -i {}".format(filepath, interface))[1]
-
-    if not sriov_if_override:
-        LOG.warning("SRIOV interface is not found in lab_setup")
-        return ''
+    sriov_if_override = get_pci_interface_info(interface=interface, filepath=filepath, con_ssh=con_ssh)
 
     if 'No such file or directory' in sriov_if_override:
         raise ValueError("File '{}' cannot be found".format(filepath))
 
-    provider_net_name = re.findall('\{DATAMTU\}\|(.*)\|', sriov_if_override)[0]
+    provider_net_name = re.findall('\{DATAMTU\}\|(.*)[\|,\"]', sriov_if_override)
+    if not provider_net_name:
+        return ''
 
-    return get_provider_nets(name='.*{}'.format(provider_net_name), con_ssh=con_ssh, strict=True, regex=True,
-                             auth_info=auth_info)[0]
+    return get_provider_nets(name='.*{}'.format(provider_net_name), rtn_val=rtn_val, con_ssh=con_ssh, strict=True,
+                             regex=True, auth_info=auth_info)[0]
+
+
+def get_networks_on_providernet(providernet_name, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        con_ssh:
+        providernet_name:
+        auth_info:
+
+    Returns:
+        statue (0 or 1) and the list of network IDs
+    """
+    table_ = table_parser.table(cli.neutron(cmd='net-list-on-providernet', positional_args=providernet_name,
+                                            auth_info=auth_info, ssh_client=con_ssh))
+
+    return table_parser.get_values(table_, 'id')
+
+
+def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Filter out ips with given subnet vlan id.
+    This is mainly used by finding vlan 0 ip to ping from a list of internal net ips.
+    Args:
+        ips (list):
+        vlan_id (int):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (list): list of filtered ips. Empty list if none of the ips belongs to subnet with required the vlan id.
+
+    """
+    if not ips:
+        raise ValueError("No ips provided.")
+
+    table_ = table_parser.table(cli.neutron('subnet-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.filter_table(table_, strict=True, **{'wrs-net:vlan_id': str(vlan_id)})
+
+    cidrs = table_parser.get_column(table_, 'cidr')
+    filtered_ips = []
+    for ip in ips:
+        for cidr in cidrs:
+            if ipaddress.ip_address(ip) in ipaddress.ip_network(cidr):
+                filtered_ips.append(ip)
+
+    if not filtered_ips:
+        LOG.warning("None of the ips from {} belongs to a subnet with vlan id {}".format(ips, vlan_id))
+    else:
+        LOG.info("IPs with vlan id {}: {}".format(vlan_id, filtered_ips))
+
+    return filtered_ips
+
+
+def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD):
+    """
+    Get the eth name for given mac address on the ssh client provided
+    Args:
+        ssh_client (SSHClient): usually a vm_ssh
+        mac_addr (str): such as "fa:16:3e:45:0d:ec"
+        timeout (int): max time to wait for the given mac address appear in ip addr
+
+    Returns (str): The first matching eth name for given mac. such as "eth3"
+
+    """
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        if mac_addr in ssh_client.exec_cmd('ip addr'.format(mac_addr))[1]:
+
+            code, output = ssh_client.exec_cmd('ip addr | grep -B 1 {}'.format(mac_addr))
+            # sample output:
+            # 7: eth4: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN qlen 1000
+            # link/ether 90:e2:ba:60:c8:08 brd ff:ff:ff:ff:ff:ff
+
+            return output.split(sep=':')[1].strip()
+
+        time.sleep(1)
+    else:
+        LOG.warning("Cannot find provided mac address {} in 'ip addr'".format(mac_addr))
+        return ''

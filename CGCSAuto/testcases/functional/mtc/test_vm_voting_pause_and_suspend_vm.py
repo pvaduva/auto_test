@@ -51,11 +51,11 @@ def heartbeat_flavor_vm(request):
           'heartbeat': heartbeat
           }
 
-    #def delete_flavor_vm():
-    #    # must delete VM before flavors
-    #    vm_helper.delete_vms(vm_id, delete_volumes=True)
-    #    nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
-    #request.addfinalizer(delete_flavor_vm)
+    def delete_flavor_vm():
+        # must delete VM before flavors
+        vm_helper.delete_vms(vm_id, delete_volumes=True)
+        nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
+    request.addfinalizer(delete_flavor_vm)
 
     return vm
 

@@ -114,6 +114,14 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         return -1, msg
 
     hostnames = sorted(hostnames)
+    hosts_in_rebooting = _wait_for_hosts_states(
+            hostnames, timeout=HostTimeout.FAIL_AFTER_REBOOT, check_interval=10, duration=8, con_ssh=con_ssh,
+            availability=[HostAavailabilityState.OFFLINE, HostAavailabilityState.FAILED])
+
+    if not hosts_in_rebooting:
+        hosts_info = get_host_show_values_for_hosts(hostnames, 'task', 'availability', con_ssh=con_ssh)
+        raise exceptions.HostError("Some hosts are not rebooting. \nHosts info:{}".format(hosts_info))
+
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
     unlocked_hosts_all = table_parser.get_values(table_, 'hostname', administrative='unlocked')
     locked_hosts_all = table_parser.get_values(table_, 'hostname', administrative='locked')
@@ -154,6 +162,15 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         return 1, err_msg
     else:
         raise exceptions.HostPostCheckFailed(err_msg)
+
+
+def get_host_show_values_for_hosts(hostnames, *fields, con_ssh):
+    states_vals = {}
+    for host in hostnames:
+        vals = get_hostshow_values(host, con_ssh, *fields)
+        states_vals[host] = vals
+
+    return states_vals
 
 
 def __hosts_stay_in_states(hosts, duration=10, con_ssh=None, **states):
@@ -720,7 +737,22 @@ def get_nova_hosts(con_ssh=None, auth_info=Tenant.ADMIN):
     return table_parser.get_values(table_, 'host_name', service='compute', zone='nova')
 
 
-def wait_for_hypervisors_up(hosts, timeout=60, check_interval=3, fail_ok=False, con_ssh=None):
+def wait_for_hypervisors_up(hosts, timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL, check_interval=3, fail_ok=False,
+                            con_ssh=None):
+    """
+    Wait for given hypervisors to be up and enabled in nova hypervisor-list
+    Args:
+        hosts (list|str): names of the hypervisors, such as compute-0
+        timeout (int):
+        check_interval (int):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+
+    Returns (tuple): res_bool(bool), hosts_not_up(list)
+        (True, [])      # all hypervisors given are up and enabled
+        (False, [<hosts_not_up>]    # some hosts are not up and enabled
+
+    """
     if isinstance(hosts, str):
         hosts = [hosts]
     hypervisors = get_hypervisors(con_ssh=con_ssh)
@@ -752,7 +784,7 @@ def wait_for_hypervisors_up(hosts, timeout=60, check_interval=3, fail_ok=False, 
         raise exceptions.HostTimeout(msg)
 
 
-def wait_for_hosts_in_nova(hosts, timeout=90, check_interval=3, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def wait_for_hosts_in_nova_compute(hosts, timeout=90, check_interval=3, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
 
     if isinstance(hosts, str):
         hosts = [hosts]
@@ -996,6 +1028,128 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
     return 0, msg
 
 
+def compare_host_to_cpuprofile(host, profile_uuid, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Compares the cpu function assignments of a host and a cpu profile.
+
+    Args:
+        host (str): name of host
+        profile_uuid (str): name or uuid of the cpu profile
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (rtn_code(int), message(str))
+        (0, "The host and cpu profile have the same information")
+        (2, "The function of one of the cores has not been changed correctly: <core number>")
+
+    """
+    if not host or not profile_uuid:
+        raise ValueError("There is either no host or no cpu profile given.")
+
+    def check_range(core_group, core_num):
+        group = []
+        if isinstance(core_group, str):
+            group.append(core_group)
+        elif isinstance(core_group, list):
+            for proc in core_group:
+                group.append(proc)
+
+        for processors in group:
+            parts = processors.split(' ')
+            cores = parts[len(parts) - 1]
+            ranges = cores.split(',')
+            for range in ranges:
+                if range == '':
+                    continue
+                range = range.split('-')
+                if len(range) == 2:
+                    if int(range[0]) <= int(core_num) <= int(range[1]):
+                        return True
+                elif len(range) == 1:
+                    if int(range[0]) == int(core_num):
+                        return True
+        LOG.warn("Could not match {} in {}".format(core_num, core_group))
+        return False
+
+    table_ = table_parser.table(cli.system('host-cpu-list', host))
+    functions = table_parser.get_column(table_=table_, header='assigned_function')
+
+    table_ = table_parser.table(cli.system('cpuprofile-show', profile_uuid))
+
+    platform_cores = table_parser.get_value_two_col_table(table_, field='platform cores')
+    vswitch_cores = table_parser.get_value_two_col_table(table_, field='vswitch cores')
+    shared_cores = table_parser.get_value_two_col_table(table_, field='shared cores')
+    vm_cores = table_parser.get_value_two_col_table(table_, field='vm cores')
+
+    msg = "The function of one of the cores has not been changed correctly: "
+
+    for i in range(0, len(functions)):
+        if functions[i] == 'Platform':
+            if not check_range(platform_cores, i):
+                LOG.warning(msg + str(i))
+                return 2, msg + str(i)
+        elif functions[i] == 'vSwitch':
+            if not check_range(vswitch_cores, i):
+                LOG.warning(msg + str(i))
+                return 2, msg + str(i)
+        elif functions[i] == 'Shared':
+            if not check_range(shared_cores, i):
+                LOG.warning(msg + str(i))
+                return 2, msg + str(i)
+        elif functions[i] == 'VMs':
+            if not check_range(vm_cores, i):
+                LOG.warning(msg + str(i))
+                return 2, msg + str(i)
+
+
+    msg = "The host and cpu profile have the same information"
+    return 0, msg
+
+
+def apply_cpu_profile(host, profile_uuid, timeout=CMDTimeout.CPU_PROFILE_APPLY, fail_ok=False, con_ssh=None,
+                    auth_info=Tenant.ADMIN):
+    """
+    Apply the given cpu profile to the host.
+    Assumes the host is already locked.
+
+    Args:
+        host (str): name of host
+        profile_uuid (str): name or uuid of the cpu profile
+        timeout (int): timeout to wait for cli to return
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (rtn_code(int), message(str))
+        (0, "cpu profile applied successfully")
+        (1, <stderr>)   # cli rejected
+        (2, "The function of one of the cores has not been changed correctly: <core number>")
+    """
+    if not host or not profile_uuid:
+        raise ValueError("There is either no host or no cpu profile given.")
+
+    LOG.info("Applying cpu profile: {} to host: {}".format(profile_uuid, host))
+
+    code, output = cli.system('host-apply-cpuprofile', '{} {}'.format(host, profile_uuid), fail_ok=fail_ok,
+                              ssh_client=con_ssh, auth_info=auth_info, timeout=timeout, rtn_list=True)
+
+    if 1 == code:
+        LOG.warning(output)
+        return 1, output
+
+    LOG.info("Post action host-apply-cpuprofile")
+    res, out = compare_host_to_cpuprofile(host, profile_uuid)
+
+    if res != 0:
+        LOG.warning(output)
+        return res, out
+
+    success_msg = "cpu profile applied successfully"
+    LOG.info(success_msg)
+    return 0, success_msg
+
+
 def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log_core', con_ssh=None,
                                     auth_info=Tenant.ADMIN):
     """
@@ -1147,6 +1301,24 @@ def check_host_local_backing_type(host, storage_type='image', con_ssh=None):
 
     return True
 
+
+def set_host_local_backing_type(host, inst_type='image',vol_group='noval-local',unlock=True, con_ssh=None):
+    lock_host(host)
+    lvg_args = "-b "+inst_type+" "+host+" "+vol_group
+    # config lvg parameter for instance backing either image/lvm
+    # sleep before for a few second before moidfiy? this is too much..
+    cli.system('host-lvg-modify', lvg_args, auth_info=Tenant.ADMIN, fail_ok=False)
+
+    # unlock the node
+    if unlock:
+        # https://jira.wrs.com:8443/browse/CGTS-4523 need to check for hypervisor or sleep20 sec
+        unlock_host(host,check_hypervisor_up=True)
+        verify_backing = check_host_local_backing_type(host, storage_type=inst_type, con_ssh=None),
+        if verify_backing:
+            return 0, "host local backing was configured and verification passed"
+        return 1, "host_local backing was configured but verification failed "
+
+    return 2, "host local backing was configured and host still in locked state"
 
 def is_host_local_image_backing(host, con_ssh=None):
     return check_host_local_backing_type(host, storage_type='image', con_ssh=con_ssh)

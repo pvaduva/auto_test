@@ -1,10 +1,12 @@
 from pytest import fixture, mark
+
+from utils.tis_log import LOG
 from keywords import host_helper
 
 
 @mark.tryfirst
 @fixture(scope='module')
-def config_host(request):
+def config_host_module(request):
     """
     Module level fixture to configure a host.
 
@@ -28,29 +30,7 @@ def config_host(request):
         see 'add_shared_cpu' fixture in nova/test_shared_cpu_enabled.py for usage.
 
     """
-    def config_host_func(host, modify_func=None, revert_func=None, *args, **kwargs):
-        if modify_func is not None:
-            host_helper.lock_host(host=host)
-
-        # add teardown before running modify (as long as host is locked successfully) in case modify or unlock fails.
-        if revert_func is not None:
-            def revert_host():
-                host_helper.lock_host(host=host)
-                try:
-                    revert_func(host)
-                except:
-                    raise
-                finally:
-                    # Put it in finally block in case revert_func fails - host will still be unlocked for other tests.
-                    host_helper.unlock_host(host=host)
-
-            request.addfinalizer(revert_host)
-
-        if modify_func is not None:
-            modify_func(host, *args, **kwargs)
-            host_helper.unlock_host(host=host)
-
-    return config_host_func
+    __config_host_base(scope='module', request=request)
 
 
 @mark.tryfirst
@@ -79,24 +59,36 @@ def config_host_class(request):
         see 'add_shared_cpu' fixture in nova/test_shared_cpu_enabled.py for usage.
 
     """
+    __config_host_base(scope='class', request=request)
+
+
+def __config_host_base(scope, request):
+
     def config_host_func(host, modify_func, revert_func=None, *args, **kwargs):
+
+        LOG.fixture_step("({}) Lock host: {}".format(scope, host))
         host_helper.lock_host(host=host)
 
         # add teardown before running modify (as long as host is locked successfully) in case modify or unlock fails.
         if revert_func is not None:
             def revert_host():
+                LOG.fixture_step("({}) Lock host: {}".format(scope, host))
                 host_helper.lock_host(host=host)
                 try:
                     revert_func(host)
                 except:
                     raise
                 finally:
+                    LOG.fixture_step("({}) Unlock host: {}".format(scope, host))
                     # Put it in finally block in case revert_func fails - host will still be unlocked for other tests.
                     host_helper.unlock_host(host=host)
 
             request.addfinalizer(revert_host)
 
+        LOG.fixture_step("{}: Execute modify function: {}".format(scope, modify_func))
         modify_func(host, *args, **kwargs)
+
+        LOG.fixture_step("{}: Unlock host: {}".format(scope, host))
         host_helper.unlock_host(host=host)
 
     return config_host_func

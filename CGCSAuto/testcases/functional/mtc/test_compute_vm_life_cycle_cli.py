@@ -225,6 +225,7 @@ def check_process_exists(cmd_output=None, process_name=None,
     else:
         LOG.info('Unexpected process: %s' % lines)
 
+@mark.sanity
 @mark.usefixtures('check_computes_availability')
 def test_435_launching_guest_instances_on_first_compute():
     """
@@ -255,6 +256,7 @@ def test_435_launching_guest_instances_on_first_compute():
                                 instance_name1=vm_name1,
                                 instance_name2=vm_name2)
 
+@mark.sanity
 @mark.usefixtures('check_computes_availability')
 def test_437_launching_guest_instances_on_second_compute():
     """
@@ -284,6 +286,7 @@ def test_437_launching_guest_instances_on_second_compute():
                                 instance_name1=vm_name1,
                                 instance_name2=vm_name2)
 
+@mark.sanity
 def test_438_launching_cgcs_guest_instances_on_second_compute():
     """
     Test launching Guest cgcs-guest instances on 2nd Compute

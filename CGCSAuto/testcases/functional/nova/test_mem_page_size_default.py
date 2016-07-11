@@ -13,7 +13,6 @@ from testfixtures.resource_mgmt import ResourceCleanup
 # Test set memory page size flavor spec #
 #########################################
 
-@mark.sanity
 @mark.parametrize('mem_page_size', [
     'small',
     'large',
@@ -128,7 +127,6 @@ def test_vm_mem_pool(flavor_1g, mem_page_size, volume_):
         total = table_parser.get_column(pre_computes_tab, header)[0]
         if isinstance(total, list):
             total = sum([int(item) for item in total if item != ''])
-        print(total)
         pre_avail_mems += total
     # pre_avail_mems = [int(mem) for mem in pre_avail_mems]
 
@@ -141,7 +139,6 @@ def test_vm_mem_pool(flavor_1g, mem_page_size, volume_):
         total = table_parser.get_column(post_computes_tab, header)[0]
         if isinstance(total, list):
             total = sum([int(item) for item in total if item != ''])
-        print(total)
         post_avail_mems += total
     # post_avail_mems = [int(mem) for mem in post_avail_mems]
 

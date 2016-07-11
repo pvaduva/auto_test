@@ -4,12 +4,13 @@
 
 from pytest import fixture, mark, skip
 import random
-
+from time import sleep
 from utils.tis_log import LOG
 from keywords import host_helper,system_helper
 from setup_consts import P1, P2, P3
 
 @mark.sanity
+@mark.skipif(system_helper.is_small_footprint(), reason="Skip for small footprint lab")
 def test_lock_unlock_compute_node():
     """
     Verify Swact is working on two controllers system
@@ -36,14 +37,17 @@ def test_lock_unlock_compute_node():
         assert False, 'Selected compute node {} is in locked state. When the test lab should have no locked compute ' \
                       'node'.format(lucky_compute_node)
     # lock compute node and verify compute node is successfully unlocked
-    host_helper.lock_host(lucky_compute_node)
+    host_helper.lock_host(lucky_compute_node, timeout=600)
 
     lucky_compute_node_locked_state = host_helper.get_hostshow_value(lucky_compute_node,'administrative')
     assert lucky_compute_node_locked_state == 'locked', 'Test Failed. Compute Node {} should be in locked state but ' \
                                                         'is not.'.format(lucky_compute_node)
 
+    # wait for services to stabilize before unlocking
+    sleep(20)
+
     # unlock compute node and verify compute node is successfully unlocked
-    host_helper.unlock_host(lucky_compute_node)
+    host_helper.unlock_host(lucky_compute_node, check_hypervisor_up=True)
     lucky_compute_node_unlocked_state = host_helper.get_hostshow_value(lucky_compute_node,'administrative')
     assert lucky_compute_node_unlocked_state == 'unlocked', 'Test Failed. Compute Node {} should be in unlocked state ' \
                                                           'but is not.'.format(lucky_compute_node)

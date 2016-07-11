@@ -179,7 +179,7 @@ def swift(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cl
 
     return exec_cli('swift', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=False, timeout=timeout, rtn_list=rtn_list)
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list)
 
 
 def glance(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
@@ -187,14 +187,12 @@ def glance(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cl
 
     return exec_cli('glance', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=False, timeout=timeout, rtn_list=rtn_list)
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list)
 
 
 def keystone(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
              auth_info=Tenant.ADMIN, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
 
-
     return exec_cli('keystone', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=False, timeout=timeout, rtn_list=rtn_list)
-
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list)

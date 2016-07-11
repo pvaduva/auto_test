@@ -240,7 +240,8 @@ class TestLockWithVMs:
             nova_helper.delete_flavors(all_new_flavors)
             for host_to_unlock in self.hosts_locked:
                 host_helper.unlock_host(host_to_unlock, check_hypervisor_up=True)
-                host_helper.wait_for_hosts_in_nova(host_to_unlock)
+                host_helper.wait_for_hypervisors_up(host_to_unlock)
+                host_helper.wait_for_hosts_in_nova_compute(host_to_unlock)
         request.addfinalizer(teardown)
 
         return target_hosts, storages_to_test
