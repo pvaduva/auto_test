@@ -836,21 +836,6 @@ def main():
 
     print("\nRunning as user: " + USERNAME + "\n")
 
-    if tis_on_tis:
-        controller_dict = create_cumulus_node_dict((0, 1), CONTROLLER)
-        compute_dict = create_cumulus_node_dict((0, 1), COMPUTE)
-    else:
-        controller_dict = create_node_dict(controller_nodes, CONTROLLER)
-
-    global controller0
-    controller0 = controller_dict[CONTROLLER0]
-
-    if compute_nodes is not None:
-        compute_dict = create_node_dict(compute_nodes, COMPUTE)
-
-    if storage_nodes is not None:
-        storage_dict = create_node_dict(storage_nodes, STORAGE)
-
     bld_server_conn = SSHClient(log_path=output_dir + "/" + bld_server + ".ssh.log")
     bld_server_conn.connect(hostname=bld_server, username=USERNAME,
                             password=PASSWORD)
@@ -907,7 +892,22 @@ def main():
                             'lab_cfg_path': lab_cfg_path}
 
         cumulus = Cumulus_TiS(**tis_on_tis_info)
+        
+    if tis_on_tis:
+        controller_dict = create_cumulus_node_dict((0, 1), CONTROLLER)
+        compute_dict = create_cumulus_node_dict(range(0, cumulus.get_number_of_computes()), COMPUTE)
+        storage_dict = create_cumulus_node_dict(range(0, cumulus.get_number_of_storages()), STORAGE)
+    else:
+        controller_dict = create_node_dict(controller_nodes, CONTROLLER)
 
+    global controller0
+    controller0 = controller_dict[CONTROLLER0]
+
+    if compute_nodes is not None:
+        compute_dict = create_node_dict(compute_nodes, COMPUTE)
+
+    if storage_nodes is not None:
+        storage_dict = create_node_dict(storage_nodes, STORAGE)
 
     executed = False
     if not executed:
@@ -1204,6 +1204,7 @@ def main():
                 wr_exit()._exit(1, msg)
 
     # Bring up other hosts
+    tis_on_tis_storage = False
     executed = False
     if not executed:
         if not tis_on_tis:
@@ -1226,7 +1227,7 @@ def main():
         else:
             cumulus.launch_controller1()
             # Set controller-1 personality after virtual controller finish spawning
-            time.sleep(60)
+            time.sleep(120)
             cmd = "source /etc/nova/openrc; system host-list | grep None"
             rc, output = controller0.ssh_conn.exec_cmd(cmd)
             if rc is 0:
@@ -1240,26 +1241,69 @@ def main():
                 msg = "Launching controller-1 failed"
                 log.error(msg)
                 wr_exit()._exit(1, msg)
+            
+            # storages
+            current_host = 3
+            cumulus.launch_storages()
+            storage_count = cumulus.get_number_of_storages()
 
-            cumulus.launch_computes()
-            time.sleep(60)
-            cmd = "source /etc/nova/openrc; system host-list | awk \'/None/ { print $2 }\'"
-            rc, ids = controller0.ssh_conn.exec_cmd(cmd)
-            if rc is 0:
-                cmd0 = "source /etc/nova/openrc;system host-update 3 " \
-                       "personality=compute hostname=compute-0 " \
-                       "rootfs_device=vda boot_device=vda"
-                cmd1 = "source /etc/nova/openrc;system host-update 4 " \
-                       "personality=compute hostname=compute-1 " \
-                       "rootfs_device=vda boot_device=vda"
-
-                rc0 = controller0.ssh_conn.exec_cmd(cmd0)[0]
-                rc1 = controller0.ssh_conn.exec_cmd(cmd1)[0]
-                if rc0 is not 0 or rc1 is not 0:
-                    msg = "Failed to set compute personality"
+            if storage_count > 0:
+                tis_on_tis_storage = True
+                # update osd config for lab_setup.sh
+                current_osd = 'b' # /dev/vdb
+                osd_string = 'OSD_DEVICES="'
+                for i in range(0, storage_count):
+                    osd_string += "\/dev\/vd" + current_osd + " "
+                    current_osd = chr(ord(current_osd) + 1)   
+                osd_string += '"'             
+                cmd =  "sed -i 's/#OSD_STRING/" + osd_string + "/g' lab_setup.conf"
+                rc, output = controller0.ssh_conn.exec_cmd(cmd)
+                if rc is not 0:
+                    msg = "Failed to update osd config for lab_setup.sh"
                     log.error(msg)
                     wr_exit()._exit(1, msg)
 
+            time.sleep(120)
+            cmd =  "source /etc/nova/openrc; system host-list | awk \'/None/ { print $2 }\'"
+            rc, ids = controller0.ssh_conn.exec_cmd(cmd)
+            if rc is 0:
+                for i in range(0, storage_count):
+
+                    cmd = "source /etc/nova/openrc;system host-update " + str(current_host) + " " +\
+                          "personality=storage " \
+                          "rootfs_device=vda boot_device=vda"
+
+                    rc = controller0.ssh_conn.exec_cmd(cmd)[0]
+                    if rc is not 0:
+                        msg = "Failed to set storage personality"
+                        log.error(msg)
+                        wr_exit()._exit(1, msg)
+                    current_host += 1
+            else:
+                msg = "Launching storages failed"
+                log.error(msg)
+                wr_exit()._exit(1, msg)            
+
+            # computes
+            cumulus.launch_computes()
+            compute_count = cumulus.get_number_of_computes()
+
+            time.sleep(120)
+            cmd =  "source /etc/nova/openrc; system host-list | awk \'/None/ { print $2 }\'"
+            rc, ids = controller0.ssh_conn.exec_cmd(cmd)
+            if rc is 0:
+                for i in range(0, compute_count):
+
+                    cmd = "source /etc/nova/openrc;system host-update " + str(current_host) + " " +\
+                          "personality=compute hostname=compute-" + str(i) + " " \
+                          "rootfs_device=vda boot_device=vda"
+
+                    rc = controller0.ssh_conn.exec_cmd(cmd)[0]
+                    if rc is not 0:
+                        msg = "Failed to set compute personality"
+                        log.error(msg)
+                        wr_exit()._exit(1, msg)
+                    current_host += 1
             else:
                 msg = "Launching computes failed"
                 log.error(msg)
@@ -1267,7 +1311,7 @@ def main():
 
     # STORAGE LAB INSTALL
     executed = False
-    if not executed and storage_nodes is not None:
+    if not executed and (storage_nodes is not None or tis_on_tis_storage == True):
         log.info("Beginning lab setup procedure for storage lab")
 
         # Remove controller-0 from the nodes list since it's up
@@ -1387,7 +1431,7 @@ def main():
 
     # REGULAR LAB PROCEDURE
     executed = False
-    if not executed and not storage_nodes and not small_footprint:
+    if not executed and not storage_nodes and not small_footprint and not tis_on_tis_storage:
         log.info("Beginning lab setup procedure for regular lab")
 
         # Remove controller-0 from the nodes list since it's up
