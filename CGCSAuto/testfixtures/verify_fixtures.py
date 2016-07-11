@@ -124,20 +124,22 @@ def ping_vm_from_vm(request):
     request.addfinalizer(verify_vms_ping)
     return
 
+
 @fixture()
-def ceph_precheck(request):
+def ceph_precheck(request): # yang TODO: can be auto used if needed
     """
     Run test pre-checks before running CEPH storage tests.
 
     Args:
         request: caller of this fixture. i.e., test func.
     """
-    
+    # yang TODO: probably can remove
     con_ssh = ControllerClient.get_active_controller()
 
     LOG.info('Ensure the system has storage nodes')
     nodes = system_helper.get_storage_nodes(con_ssh)
     LOG.info('System has the following storage nodes {}'.format(nodes))
+    # yang TODO: better to skip
     assert nodes, 'SUT does not have storage nodes'
 
     LOG.info('Verify the health of the CEPH cluster')
@@ -151,4 +153,3 @@ def ceph_precheck(request):
 
     return
 
-    

@@ -109,7 +109,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
 
     time.sleep(30)
     if not wait_for_reboot_finish:
-        return -1, "Reboot hosts command sent."
+        msg = "Reboot hosts command sent."
+        LOG.info(msg)
+        return -1, msg
 
     hostnames = sorted(hostnames)
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))

@@ -28,6 +28,10 @@ def is_ceph_healthy(con_ssh=None):
     health_warn = 'HEALTH_WARN'
     cmd = 'ceph -s'
 
+    # TODO: Get con_ssh if None
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
     rtn_code, out = con_ssh.exec_cmd(cmd)
 
     if health_ok in out:
@@ -121,7 +125,7 @@ def get_osd_pid(osd_host, osd_id):
     Given the id of an OSD, return the pid.
     Args:
         osd_host (string) - the host to ssh into, e.g. 'storage-0'
-        osd_id (string) - osd_id to get the pid of, e.g. '0'
+        osd_id (int|str) - osd_id to get the pid of, e.g. '0'
     Returns:
         - (integer) pid if found, or -1 if pid not found
         - (string) message

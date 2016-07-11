@@ -14,8 +14,8 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper, \
     storage_helper, glance_helper, cinder_helper
 from consts.cgcs import EventLogID, IMAGE_DIR
 
-PROC_RESTART_TIME = 30     # number of seconds between process restarts
-RESTARTS_BEFORE_ASSERT = 3 # number of process restarts until error assertion
+PROC_RESTART_TIME = 30          # number of seconds between process restarts
+RESTARTS_BEFORE_ASSERT = 3      # number of process restarts until error assertion
 
 # Runtime: 208 seconds - pass on wildcat-7-12 and PV0
 # CGTS-4513 Loss of replication group alarm not always seen
@@ -64,7 +64,7 @@ def test_ceph_osd_process_kill():
     LOG.info('We will kill the process of OSD ID {}'.format(osd_id))
 
     LOG.tc_step('Determine host of OSD ID {}'.format(osd_id))
-    osd_host, msg = storage_helper.get_osd_host(str(osd_id), con_ssh)
+    osd_host, msg = storage_helper.get_osd_host(osd_id, con_ssh)
     assert osd_host, msg
     LOG.info(msg)
 
@@ -84,25 +84,29 @@ def test_ceph_osd_process_kill():
 
     # We're doing this twice, move to function
     LOG.tc_step('Check the OSD process is restarted with a different pid')
-    for i in range(0, PROC_RESTART_TIME):
+    endtime = time.time() + PROC_RESTART_TIME
+    osd_pid2 = osd_pid
+    while time.time() < endtime:
         osd_pid2, msg = storage_helper.get_osd_pid(osd_host, osd_id)
         if osd_pid2 != osd_pid:
             break
         time.sleep(1)
+    # yang TODO updated. Better to move to keywords and remove assert altogether
     msg = 'Process did not restart in time'
     assert osd_pid2 != osd_pid, msg
+
     LOG.info('Old pid is {} and new pid is {}'.format(osd_pid, osd_pid2))
 
     # Note, there is an impact to ceph health going from HEALTH_OK to
     # HEALTH_WARN but it is too brief to look for.
 
-    LOG.tc_step('Repeatedly kill the OSD process until we alarm')
+    LOG.tc_step('Repeatedly kill the OSD process until we alarm')       # yang TODO: Better to add a keyword for this
     for i in range(0, RESTARTS_BEFORE_ASSERT):
         osd_pid, msg = storage_helper.get_osd_pid(osd_host, osd_id)
         assert osd_pid, msg
         proc_killed, msg = storage_helper.kill_process(osd_host, osd_pid)
         assert proc_killed, msg
-        for i in range(0, PROC_RESTART_TIME):
+        for i in range(0, PROC_RESTART_TIME):                   # yang TODO: update func to use while, or rename i
             osd_pid2, msg = storage_helper.get_osd_pid(osd_host, osd_id)
             if osd_pid2 != osd_pid:
                 break
@@ -183,7 +187,7 @@ def test_ceph_mon_process_kill(monitor):
         1.  CGTS-2975
 
     """
-
+    # TODO: remove
     con_ssh = ControllerClient.get_active_controller()
 
     LOG.tc_step('Determine the pid of the ceph-mon process on {}'.format(monitor))
@@ -271,7 +275,7 @@ def test_ceph_mon_process_kill(monitor):
     time.sleep(10)
 
     LOG.tc_step('Verify the health cluster is healthy')
-    ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+    ceph_healthy, msg = storage_helper.is_ceph_healthy()
 
 # Pass on 700 seconds on PV0
 @mark.usefixtures('ceph_precheck')
@@ -312,7 +316,7 @@ def test_ceph_reboot_storage_node():
     for host in storage_nodes:
         LOG.tc_step('Reboot {}'.format(host))
         results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-        LOG.tc_step("Results: {}".format(results))
+        LOG.tc_step("Results: {}".format(results))          # yang TODO log added to keyword, still needed?
         assert results[0] != 0
 
         LOG.tc_step('Check health of CEPH cluster')
@@ -343,7 +347,7 @@ def test_ceph_reboot_storage_node():
             msg = 'OSD ID {} is down as expected'.format(osd_id)
             LOG.info(msg)
 
-        if not host_helper._wait_for_host_states(host, availability='available'):
+        if not host_helper._wait_for_host_states(host, availability='available'):   # yang TODO use fail_ok flag?
             msg = 'Host {} did not come available in the expected time'.format(host)
             raise exceptions.HostPostCheckFailed(msg)
 
@@ -356,12 +360,12 @@ def test_ceph_reboot_storage_node():
             msg = 'OSD ID {} is up as expected'.format(osd_id)
             LOG.info(msg)
 
-        #LOG.tc_step('Get alarms list')
-        #alarms_table = system_helper.get_alarms(con_ssh=None)
-        #reasons = table_parser.get_values(alarms_table, 'Reason Text')
-        #msg = '{0} \'ceph mon\' process has failed'.format(host)
-        #assert not re.search(msg, reasons), \
-        #    'Alarm {} system alarm-list'.format(msg)
+        # LOG.tc_step('Get alarms list')
+        # alarms_table = system_helper.get_alarms(con_ssh=None)
+        # reasons = table_parser.get_values(alarms_table, 'Reason Text')
+        # msg = '{0} \'ceph mon\' process has failed'.format(host)
+        # assert not re.search(msg, reasons), \
+        #     'Alarm {} system alarm-list'.format(msg)
 
         LOG.tc_step('Check health of CEPH cluster')
         ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
@@ -419,7 +423,7 @@ def test_lock_stor_check_osds_down(host):
 
     LOG.tc_step('Lock storage node {}'.format(host))
     rtn_code, out = host_helper.lock_host(host)
-    assert rtn_code == 0, out
+    assert rtn_code == 0, out       # yang TODO assert unnecessary here, can set check_first to false if needed.
 
     LOG.tc_step('Determine the storage group for host {}'.format(host))
     storage_group, msg = storage_helper.get_storage_group(host)
@@ -714,15 +718,15 @@ def test_storgroup_semantic_checks():
         for node in hosts:
             LOG.tc_step('Attempt to lock the {}'.format(node))
             rtn_code, out = host_helper.lock_host(node, fail_ok=True)
-            assert rtn_code != 0, out
+            assert rtn_code != 0, out       # yang TODO perhaps should assert 1 here for cli rejection.
 
             LOG.tc_step('Attempt to force lock {}'.format(node))
-            rtn_code, out = host_helper.lock_host(node, fail_ok=True, \
-                force=True)
+            rtn_code, out = host_helper.lock_host(node, fail_ok=True, force=True)
+            # yang: TODO: Should the return code be checked?
 
         LOG.tc_step('Unlock storage host {}'.format(host))
         rtn_code, out = host_helper.unlock_host(host)
-        assert rtn_code == 0, out
+        assert rtn_code == 0, out           # yang TODO this may not be correct since host is never locked.
 
         # Waita bit for alarms to clear
         # TODO: Why does it take so long to clear?
@@ -766,6 +770,7 @@ def test_storgroup_semantic_checks():
             osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
             msg = 'OSD ID {} should be up but is not'.format(osd_id)
             assert osd_up, msg
+
 
 # Pass with workaround for defect
 # PV0 pass in 186.00
@@ -819,7 +824,7 @@ def test_import_with_cache_raw():
     if not image_names:
         LOG.info('No qcow2 images were found on the system')
         LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
-        image_names = storage_helper.download_images(dload_type='ubuntu', \
+        image_names = storage_helper.download_images(dload_type='ubuntu',
             img_dest=img_dest, con_ssh=con_ssh)
 
     LOG.tc_step('Import qcow2 images into glance')
@@ -827,8 +832,8 @@ def test_import_with_cache_raw():
         source_image_loc = img_dest + "/" + image
         img_name = 'testimage_{}'.format(image)
         ret = glance_helper.create_image(source_image_file=source_image_loc,
-                                         disk_format='qcow2', \
-                                         container_format='bare', \
+                                         disk_format='qcow2',
+                                         container_format='bare',
                                          cache_raw=True, wait=True)
         LOG.info("ret {}".format(ret))
         assert ret[0] == 0, ret[2]
@@ -848,10 +853,10 @@ def test_import_with_cache_raw():
         flav_size = storage_helper.find_image_size(con_ssh, image)
 
         LOG.tc_step('Create volume from the imported image')
-        volume_id = cinder_helper.create_volume(name=img_name, \
-                                                image_id=rbd_img_id, \
+        volume_id = cinder_helper.create_volume(name=img_name,
+                                                image_id=rbd_img_id,
                                                 size=flav_size,
-                                                con_ssh=con_ssh, \
+                                                con_ssh=con_ssh,
                                                 rtn_exist=False)[1]
         msg = "Unable to create volume"
         assert volume_id, msg
@@ -861,15 +866,14 @@ def test_import_with_cache_raw():
         assert flv[0] == 0, flv[1]
 
         LOG.tc_step('Launch VM from created volume')
-        vm_id = vm_helper.boot_vm(name=img_name, flavor=flv[1], \
+        vm_id = vm_helper.boot_vm(name=img_name, flavor=flv[1],
             source='volume', source_id=volume_id)[1]
         vm_list.append(vm_id)
 
         # When spawning, make sure we don't download the image
         LOG.tc_step('Launch VM from image')
         img_name2 = img_name + '_fromimage'
-        vm_id2 = vm_helper.boot_vm(name=img_name2, flavor=flv[1], \
-            source='image', source_id=rbd_img_id)[1]
+        vm_id2 = vm_helper.boot_vm(name=img_name2, flavor=flv[1], source='image', source_id=rbd_img_id)[1]
         vm_list.append(vm_id2)
 
         LOG.tc_step('Delete VMs {}'.format(vm_list))
@@ -889,6 +893,7 @@ def test_import_with_cache_raw():
         assert rbd_img_id not in out, msg
         msg = '{} was found in rbd image pool'.format(rbd_raw_img_id)
         assert rbd_raw_img_id not in out, msg
+
 
 # Pass PV0 52.55 seconds
 @mark.usefixtures('ceph_precheck')
@@ -916,8 +921,6 @@ def test_import_raw_with_cache_raw():
         3.  Ensure you can launch a VM from image using the imported image
         4.  Ensure you can launch a VM from volume using the imported image
     """
-
-
     con_ssh = ControllerClient.get_active_controller()
 
     # Return a list of images of a given type
@@ -927,18 +930,19 @@ def test_import_raw_with_cache_raw():
     if not image_names:
         LOG.info('No raw images were found on the controller')
         LOG.tc_step('Rsyncing images from controller-0')
-        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no " {} controller-1:{}'.format(IMAGE_DIR, IMAGE_DIR)
+        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no " {} ' \
+                       'controller-1:{}'.format(IMAGE_DIR, IMAGE_DIR)
         con_ssh.exec_cmd(rsync_images)
         image_names = storage_helper.find_images(con_ssh, image_type='raw')
         msg = 'No images found on controller'
-        assert not image_names, msg
+        assert not image_names, msg     # yang: TODO: Assert no images, but error msg is the opposite
 
     LOG.tc_step('Import raw images into glance with --cache-raw')
     for image in image_names:
         source_image_loc = IMAGE_DIR + image
         ret = glance_helper.create_image(source_image_file=source_image_loc,
-                                         disk_format='raw', \
-                                         container_format='bare', \
+                                         disk_format='raw',
+                                         container_format='bare',
                                          cache_raw=True)
         LOG.info("ret {}".format(ret))
         assert ret[0] == 0, ret[2]
@@ -952,7 +956,7 @@ def test_import_raw_with_cache_raw():
         msg = '{} was not found in rbd image pool'.format(rbd_img_id)
         assert rbd_img_id in out, msg
         msg = '{} was found in rbd image pool'.format(rbd_raw_img_id)
-        assert not rbd_raw_img_id in out, msg
+        assert rbd_raw_img_id not in out, msg
 
     #TODO: Clean up resources used
 
@@ -978,7 +982,6 @@ def test_exceed_size_of_img_pool():
         2. Ensure the system alarms
     """
 
-
     con_ssh = ControllerClient.get_active_controller()
     glance_ids = []
 
@@ -994,7 +997,7 @@ def test_exceed_size_of_img_pool():
 
     LOG.tc_step('Import qcow2 images into glance until pool is full')
     source_img = IMAGE_DIR + "/" + image_names[0]
-    while True:
+    while True:     # yang TODO would ret[0] = 1 happen for sure? otherwise it might become a indefinite loop
         ret = glance_helper.create_image(source_image_file=source_img,
                                          disk_format='qcow2', \
                                          container_format='bare', \
@@ -1016,9 +1019,9 @@ def test_exceed_size_of_img_pool():
                                             query_type='string')
     LOG.info(alarms_table)
     msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_ALARM_COND)
-    assert EventLogID.STORAGE_ALARM_COND in str(alarms_table)
+    assert EventLogID.STORAGE_ALARM_COND in str(alarms_table), msg
 
-    LOG.tc_step('Verify the health cluster is not healthy')
+    LOG.tc_step('Verify the health cluster is not healthy')         # yang TODO verify healthy or unhealthy?
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
     assert ceph_healthy, msg
 
@@ -1057,7 +1060,6 @@ def test_import_large_images_with_cache_raw():
         9.  Cleanup flavors and VMs
     """
 
-
     con_ssh = ControllerClient.get_active_controller()
     img = 'cgcs-guest'
     base_img = img + '.img'
@@ -1072,7 +1074,8 @@ def test_import_large_images_with_cache_raw():
     image_names = storage_helper.find_images(con_ssh)
     if base_img not in image_names:
         LOG.tc_step('Rsyncing images from controller-0')
-        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no " {} controller-1:{}'.format(IMAGE_DIR, IMAGE_DIR)
+        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no " {} ' \
+                       'controller-1:{}'.format(IMAGE_DIR, IMAGE_DIR)
         con_ssh.exec_cmd(rsync_images)
         image_names = storage_helper.find_images(con_ssh)
         msg = '{} was not found in {}'.format(base_img, IMAGE_DIR)
@@ -1097,7 +1100,7 @@ def test_import_large_images_with_cache_raw():
     args = '{}/{} {}/{}'.format(IMAGE_DIR, new_img, IMAGE_DIR, qcow2_img)
     cmd = 'qemu-img convert -f raw -O qcow2' + ' ' + args
     rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=600)
-    assert not rtn_code, out
+    assert not rtn_code, out    # yang TODO can use fail_ok=False if needed
 
     # Check the image type is updated
     image_names = storage_helper.find_images(con_ssh, image_type='qcow2')
@@ -1116,7 +1119,7 @@ def test_import_large_images_with_cache_raw():
     LOG.tc_step('Create volume from the imported image')
     volume_id = cinder_helper.create_volume(name=image_names[0],
                                             image_id=out[1],
-                                            size='40G',
+                                            size=40,
                                             con_ssh=con_ssh,
                                             rtn_exist=False)[1]
     msg = "Unable to create volume"
@@ -1135,9 +1138,10 @@ def test_import_large_images_with_cache_raw():
     LOG.tc_step('Launch VM from image')
     img_name2 = image_names[0] + '_fromimage'
     vm_id2 = vm_helper.boot_vm(name=img_name2, flavor=flv[1], \
-        source='image', source_id=out[1])[1]
+        source='image', source_id=out[1])[1]        # yang TODO 120 chars limit instead of 80
     vm_list.append(vm_id2)
 
+    # yang TODO use ResourceCleanup in case of test fail.
     LOG.tc_step('Delete VMs {}'.format(vm_list))
     vm_helper.delete_vms(vms=vm_list, con_ssh=con_ssh)
 
@@ -1270,7 +1274,7 @@ def test_modify_ceph_pool_size_neg():
         LOG.info('No qcow2 images were found on the system')
         LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
         image_names = storage_helper.download_images(dload_type='ubuntu', \
-            img_dest=IMAGE_DIR, con_ssh=con_ssh)
+            img_dest=IMAGE_DIR, con_ssh=con_ssh)    # TODO for Yang: perhaps a session level fixture should be added
 
     LOG.tc_step('Import qcow2 images into glance until pool is full')
     source_img = IMAGE_DIR + "/" + image_names[0]
@@ -1289,7 +1293,7 @@ def test_modify_ceph_pool_size_neg():
     eph_args = 'ephemeral_pool_gib=' + str(ephemeral_pool_gib + 10)
     args = glance_args + " " + eph_args
     new_value = glance_pool_gib - 10
-    rtn_code, out = cli.system('storagepool-modify', args)
+    rtn_code, out = cli.system('storagepool-modify', args)      # TODO for Yang: keyword needed
     msg = 'Unexpectedly changed glance storage pool quota from {} to {}'.format(glance_pool_gib,
                                                                                 new_value)
     assert rtn_code != 0, msg
