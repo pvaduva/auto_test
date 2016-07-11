@@ -20,12 +20,12 @@ def check_alarms(request):
     Args:
         request: caller of this fixture. i.e., test func.
     """
-    LOG.info("Gathering system alarms info before test begins.")
+    LOG.fixture_step("(function) Gathering system alarms info before test begins.")
     before_tab = system_helper.get_alarms()
     before_rows = table_parser.get_all_rows(before_tab)
 
     def verify_alarms():
-        LOG.debug("Verifying system alarms after test ended...")
+        LOG.fixture_step("(function) Verifying system alarms after test ended...")
         after_tab = system_helper.get_alarms()
         after_rows = table_parser.get_all_rows(after_tab)
         new_alarms = []
@@ -40,7 +40,7 @@ def check_alarms(request):
 
 @fixture()
 def check_hosts(request):
-    LOG.debug("Gathering systems hosts status before test begins.")
+    LOG.fixture_step("Gathering systems hosts status before test begins.")
     raise NotImplementedError
 
 
@@ -52,11 +52,11 @@ def check_vms(request):
     Args:
         request: caller of this fixture. i.e., test func.
     """
-    LOG.info("Gathering system VMs info before test begins.")
+    LOG.fixture_step("Gathering system VMs info before test begins.")
     before_vms_status = nova_helper.get_field_by_vms(field="Status", auth_info=Tenant.ADMIN)
 
     def verify_vms():
-        LOG.debug("Verifying system VMs after test ended...")
+        LOG.fixture_step("Verifying system VMs after test ended...")
         after_vms_status = nova_helper.get_field_by_vms(field="Status", auth_info=Tenant.ADMIN)
 
         # compare status between the status of each VMs before/after the test

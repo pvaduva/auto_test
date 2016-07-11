@@ -189,6 +189,8 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
     system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=False,
                                   **{'Entity Instance ID': vm_id, 'Event Log ID': EventLogID.HEARTBEAT_ENABLED})
 
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+
     LOG.tc_step("Login to vm via NatBox")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         LOG.tc_step("Run touch /tmp/unhealthy to put vm into unhealthy state.")
@@ -272,6 +274,8 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
     else:
         assert not events_1, "Heartbeat event generated unexpectedly: {}".format(events_1)
 
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+
     LOG.tc_step("Login to vm via NatBox and run touch /tmp/unhealthy")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         vm_ssh.exec_cmd("touch /tmp/unhealthy")
@@ -329,7 +333,7 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat):
 
     LOG.tc_step("Kill the kvm processes on vm host: {}".format(target_host))
     with host_helper.ssh_to_host(target_host) as host_ssh:
-        exit_code, output = host_ssh.exec_sudo_cmd('killall -s KILL kvm')
+        exit_code, output = host_ssh.exec_sudo_cmd('killall -s KILL qemu-kvm')
         if not exit_code == 0:
             raise exceptions.SSHExecCommandFailed("Failed to kill host kvm processes. Details: {}".format(output))
 

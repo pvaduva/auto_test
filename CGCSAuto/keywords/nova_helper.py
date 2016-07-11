@@ -6,7 +6,7 @@ from utils import table_parser
 from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec
-from keywords import keystone_helper, host_helper
+from keywords import keystone_helper, host_helper, common
 from keywords.common import Count
 
 
@@ -47,23 +47,26 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
     table_ = table_parser.table(cli.nova('flavor-list', ssh_client=con_ssh, auth_info=auth_info))
     existing_names = table_parser.get_column(table_, 'Name')
 
-    if name is not None:
-        flavor_name = name
-        if name in existing_names:
-            for i in range(50):
-                tmp_name = '-'.join([name, str(i)])
-                if tmp_name not in existing_names:
-                    flavor_name = tmp_name
-                    break
-    else:
+    if name is None:
         name = 'flavor'
-        for i in range(10):
-            tmp_name = '-'.join([name, str(Count.get_flavor_count())])
-            if tmp_name not in existing_names:
-                flavor_name = tmp_name
-                break
-        else:
-            exceptions.FlavorError("Unable to get a proper name for flavor creation.")
+    flavor_name = common.get_unique_name(name_str=name, existing_names=existing_names, resource_type='flavor')
+    # if name is not None:
+    #     flavor_name = name
+    #     if name in existing_names:
+    #         for i in range(50):
+    #             tmp_name = '-'.join([name, str(i)])
+    #             if tmp_name not in existing_names:
+    #                 flavor_name = tmp_name
+    #                 break
+    # else:
+    #     name = 'flavor'
+    #     for i in range(10):
+    #         tmp_name = '-'.join([name, str(Count.get_flavor_count())])
+    #         if tmp_name not in existing_names:
+    #             flavor_name = tmp_name
+    #             break
+    #     else:
+    #         exceptions.FlavorError("Unable to get a proper name for flavor creation.")
 
     mandatory_args = ' '.join([flavor_name, flavor_id, str(ram), str(root_disk), str(vcpus)])
 
@@ -262,7 +265,7 @@ def get_basic_flavor(auth_info=None, con_ssh=None):
     Returns (str): id of the basic flavor
 
     """
-    default_flavor_name = 'flavor-default'
+    default_flavor_name = 'flavor-default-1'
     flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info)
     if flavor_id == '':
         flavor_id = create_flavor(name=default_flavor_name, con_ssh=con_ssh)[1]
@@ -423,7 +426,7 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
     """
     # process server group metadata
     if name is not None and rtn_exist:
-        existing_grp = get_server_groups(name=name, con_ssh=con_ssh, auth_info=auth_info)
+        existing_grp = get_server_groups(name=name, strict=False, con_ssh=con_ssh, auth_info=auth_info)
         if existing_grp:
             LOG.debug("Returning existing server group {}".format(existing_grp[0]))
             return -1, existing_grp[0]
@@ -431,9 +434,9 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
     args = ''
     if best_effort is not None or max_group_size is not None or metadata:
         tmp_list = []
-        if best_effort:
+        if best_effort is not None:
             tmp_list.append('{}={}'.format(ServerGroupMetadata.BEST_EFFORT, best_effort))
-        if max_group_size:
+        if max_group_size is not None:
             tmp_list.append('{}={}'.format(ServerGroupMetadata.GROUP_SIZE, max_group_size))
         if metadata:
             for key, value in metadata.items():
@@ -777,11 +780,12 @@ def get_vm_storage_type(vm_id, con_ssh=None):
     return extra_specs['aggregate_instance_extra_specs:storage']
 
 
-def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False, strict=True, regex=False, **kwargs):
+def get_vms(vms=None, return_val='ID', con_ssh=None, auth_info=None, all_vms=True, strict=True, regex=False, **kwargs):
     """
     get a list of VM IDs or Names for given tenant in auth_info param.
 
     Args:
+        vms (list): filter vms from this list if not None
         return_val (str): 'ID' or 'Name'
         con_ssh (SSHClient): controller SSHClient.
         auth_info (dict): such as ones in auth.py: auth.ADMIN, auth.TENANT1
@@ -801,6 +805,9 @@ def get_vms(return_val='ID', con_ssh=None, auth_info=None, all_vms=False, strict
             positional_args = '--all-tenant'
     table_ = table_parser.table(cli.nova('list', positional_args=positional_args, ssh_client=con_ssh,
                                          auth_info=auth_info))
+    if vms:
+        table_ = table_parser.filter_table(table_, ID=vms)
+
     if kwargs:
         return table_parser.get_values(table_, return_val, strict=strict, regex=regex, **kwargs)
     else:
@@ -1315,3 +1322,52 @@ def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=Tru
     table_ = table_parser.table(cli.nova('providernet-show', providernet_id, ssh_client=con_ssh, auth_info=auth_info))
     info_str = table_parser.get_value_two_col_table(table_, field, strict=strict)
     return int(info_str) if rnt_int else info_str
+
+
+def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Get vm interface info for given nic from nova show
+    Args:
+        vm_id (str): id of the vm to get interface info for
+        nic (str): such as nic1 or nic2 ...
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (dict): such as [{"vif_model": "pci-passthrough", "network": "internal0-net1", "port_id":
+        "33990477-dce6-4447-b153-4dee596fe3f4", "mtu": 9000, "mac_address": "90:e2:ba:60:c8:08", "vif_pci_address": ""}]
+
+    """
+    if not vm_id and vm_id not in ['0', 0]:
+        raise ValueError("VM ID is not provided.")
+    if nic_names is not None:
+        if isinstance(nic_names, str):
+            nic_names = [nic_names]
+        for nic in nic_names:
+            if "nic" not in nic:
+                raise ValueError("Invalid nic(s) provided: {}. Should be in the form of: e.g., nic4".format(nic_names))
+
+    table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))
+    all_nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
+    all_nics = [eval(nic_) for nic_ in all_nics]
+
+    nics_to_rtn = list(all_nics)
+    if not nics_to_rtn:
+        LOG.warning("No nics attached to vm {}".format(vm_id))
+        return []
+    elif vif_model or nic_names:
+        for item in all_nics:
+            if vif_model:
+                if vif_model != list(item.values())[0]['vif_model']:
+                    nics_to_rtn.remove(item)
+            if nic_names:
+                for nic_name in nic_names:
+                    if nic_name not in item:
+                        nics_to_rtn.remove(item)
+
+        if not nics_to_rtn:
+            LOG.warning("Cannot find nic info for given nic_names {} and/or vif_model {}".format(nic_names, vif_model))
+            return []
+
+    nics_to_rtn = [list(nic_.values())[0] for nic_ in nics_to_rtn]
+    LOG.info("nics with nic_names {} and vif_model {}: {}".format(nic_names, vif_model, nics_to_rtn))
+    return nics_to_rtn

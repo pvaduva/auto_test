@@ -32,7 +32,7 @@ class SSHException(TiSError):
     Base class for SSH Exceptions. All SSH exceptions thrown from utils > ssh.py module should inherit this class.
     Examples: SSHRetryTimeout(SSHException)
     """
-    pass
+    message = "SSH error."
 
 
 class SSHRetryTimeout(SSHException):
@@ -72,7 +72,7 @@ class CLIRejected(TiSError):
 
 class HostError(TiSError):
     """Generic Host error"""
-    message = "Host not found"
+    message = "Host error."
 
 
 class HostPostCheckFailed(HostError):
@@ -89,7 +89,7 @@ class HostTimeout(HostError):
 
 
 class VMError(TiSError):
-    pass
+    message = "VM error."
 
 
 class VMPostCheckFailed(VMError):
@@ -97,7 +97,7 @@ class VMPostCheckFailed(VMError):
 
 
 class VMNetworkError(VMError):
-    message = "VM network connection error."
+    message = "VM network error."
 
 
 class VMTimeout(VMError):
@@ -135,3 +135,7 @@ class NeutronError(TiSError):
 
 class HeatError(TiSError):
     message = "Heat error."
+
+
+class CeilometerError(TiSError):
+    message = "Ceilometer error"

@@ -39,7 +39,6 @@ def cmd_execute(action, param=''):
 
     return alarms_found
 
-@mark.cpe_sanity
 def test_tc4693_verify_no_alarms():
     """Method to list alarms
     """

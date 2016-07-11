@@ -314,7 +314,15 @@ class SSHClient:
         if err_only:
             cmd += ' 1> /dev/null'          # discard stdout
         self.send(cmd, reconnect, reconnect_timeout)
-        self.expect(timeout=expect_timeout)
+        try:
+            self.expect(timeout=expect_timeout)
+        except pxssh.TIMEOUT as e:
+            self.send_control('c')
+            self.flush()
+            if fail_ok:
+                LOG.warning(e)
+            else:
+                raise
 
         code, output = self.__process_exec_result(cmd, rm_date)
 
@@ -323,7 +331,7 @@ class SSHClient:
 
         return code, output
 
-    def __process_exec_result(self, cmd, rm_date):
+    def __process_exec_result(self, cmd, rm_date=True):
         cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
         # LOG.debug("cmd output list: {}".format(cmd_output_list))
         # cmd_output_list[0] = ''                                       # exclude command, already done in expect
@@ -335,9 +343,7 @@ class SSHClient:
         cmd_output = '\n'.join(cmd_output_list)
 
         exit_code = self.get_exit_code()
-        if exit_code == 0:
-            LOG.debug('\'{}\' executed successfully. Exit_code: 0'.format(cmd))
-        else:
+        if exit_code != 0:
             LOG.warning('Issue occurred when executing \'{}\'. Exit_code: {}. Output: {}'.
                         format(cmd, exit_code, cmd_output))
 
@@ -364,7 +370,8 @@ class SSHClient:
     def get_hostname(self):
         return self.exec_cmd('hostname')[1].splitlines()[0]
 
-    def rsync(self, source, dest_user, dest_server, dest, extra_opts=None, pre_opts=None, timeout=60):
+    def rsync(self, source, dest_server, dest, dest_user='wrsroot', extra_opts=None, pre_opts=None, timeout=60,
+              fail_ok=False):
         if extra_opts:
             extra_opts_str = ' '.join(extra_opts) + ' '
         else:
@@ -376,9 +383,18 @@ class SSHClient:
         ssh_opts = 'ssh {}'.format(' '.join(RSYNC_SSH_OPTIONS))
         cmd = "{} rsync -ave {} {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
-        if self.exec_cmd(cmd, expect_timeout=timeout)[0] > 0:
-            msg = "Rsync failed. Command: {}".format(cmd)
-            raise exceptions.SSHExecCommandFailed(msg)
+        self.send(cmd)
+        index = self.expect([self.prompt, PASSWORD_PROMPT], timeout=timeout)
+        if index == 1:
+            self.send(self.password)
+            self.expect(timeout=timeout)
+
+        code, output = self.__process_exec_result(cmd, rm_date=True)
+        if code != 0 and not fail_ok:
+            raise exceptions.SSHExecCommandFailed("Non-zero return code for rsync cmd: {}".format(cmd))
+
+        return code, output
+
 
     def scp_files_to_local_host(self, source_file, dest_password, dest_user=None, dest_folder_name=None, timeout=10):
 
@@ -455,6 +471,9 @@ class SSHClient:
             raise exceptions.SSHExecCommandFailed("Non-zero return code for sudo cmd: {}".format(cmd))
 
         return code, output
+
+    def send_control(self, char='c'):
+        self._session.sendcontrol(char=char)
 
     def get_current_user(self):
         output = self.exec_cmd('whoami')[1]
@@ -574,14 +593,20 @@ class SSHFromSSH(SSHClient):
             self.send(self.ssh_cmd)
             try:
                 if use_password:
-                    res_index = self.expect([PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout, fail_ok=retry)
+                    res_index = self.expect([PASSWORD_PROMPT, Prompt.ADD_HOST, self.parent.get_prompt()],
+                                            timeout=timeout, fail_ok=False)
+                    if res_index == 2:
+                        raise exceptions.SSHException("Unable to login to {}".format(self.host))
                     if res_index == 1:
                         self.send('yes')
                         self.expect(PASSWORD_PROMPT)
+
                     self.send(self.password)
                     self.expect(prompt, timeout=timeout)
                 else:
-                    res_index = self.expect([Prompt.ADD_HOST, prompt], timeout=timeout, fail_ok=retry)
+                    res_index = self.expect([Prompt.ADD_HOST, prompt, self.parent.get_prompt()], timeout=timeout, fail_ok=False)
+                    if res_index == 1:
+                        raise exceptions.SSHException("Unable to login to {}".format(self.host))
                     if res_index == 0:
                         self.send('yes')
                         self.expect(prompt, timeout=timeout)
@@ -591,7 +616,10 @@ class SSHFromSSH(SSHClient):
                 return
 
             except (OSError, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh) as e:
-                LOG.info("herehere {}".format(e))
+                LOG.info("Exception caught when attempt to ssh to {}: {}".format(self.host, e))
+                if isinstance(e, pexpect.TIMEOUT):
+                    self.parent.send_control('c')
+                    self.parent.flush()
                 # fail login if retry=False
                 if not retry:
                     raise
@@ -651,7 +679,17 @@ class SSHFromSSH(SSHClient):
             LOG.info("ssh session to {} is closed and returned to parent session {}".
                      format(self.host, self.parent.host))
         else:
-            LOG.warning("ssh session to {} is not open. Do nothing.".format(self.host))
+            LOG.info("ssh session to {} is not open. Flushing the buffer for parent session.".format(self.host))
+            self.parent.flush()
+
+    def _is_connected(self, fail_ok=True):
+        # Connection is good if send and expect commands can be executed
+        try:
+            self.send()
+        except OSError:    # TODO: add unit test
+            return False
+
+        return self.expect(blob_list=[self.prompt, self.parent.get_prompt()], timeout=3, fail_ok=fail_ok) == 0
 
 
 class VMSSHClient(SSHFromSSH):

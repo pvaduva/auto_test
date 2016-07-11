@@ -254,6 +254,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
         P1(('OS_Cinder_VolumeAttachment.yaml')),
         P1(('OS_Nova_Server.yaml')),
         P1(('OS_Heat_AccessPolicy.yaml')),
+        P1(('OS_Heat_AutoScalingGroup.yaml')),
 
     ])
 # can add test fixture to configure hosts to be certain storage backing

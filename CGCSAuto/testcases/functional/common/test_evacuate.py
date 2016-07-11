@@ -1,6 +1,8 @@
 from pytest import mark, fixture
 
 from utils.tis_log import LOG
+from consts.cgcs import VMStatus
+from consts.timeout import VMTimeout
 from keywords import vm_helper, host_helper, nova_helper, cinder_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
@@ -56,11 +58,14 @@ def test_reboot_with_vms(vms_):
 
     LOG.tc_step("Reboot target host.")
     host_helper.reboot_hosts(target_host)
+    host_helper.wait_for_hypervisors_up(target_host)
+    host_helper.wait_for_hosts_in_nova_compute(target_host)
 
     post_vms_status = nova_helper.get_vms_info(vms_to_check, field='Status')
 
     LOG.tc_step("Check vms are evacuated to different host and vms are in Active state or original state.")
     for vm, status in post_vms_status.items():
         assert nova_helper.get_vm_host(vm) != target_host, "VM {} is not evacuated to other host.".format(vm)
-        assert status.lower() == 'active' or status == pre_vms_status[vm], \
-            "VM {} status changed and is not in Active state. VMs status post reboot: {}".format(vm, post_vms_status)
+        vm_helper.wait_for_vm_values(vm, timeout=VMTimeout.AUTO_RECOVERY, fail_ok=False,
+                                     status=[VMStatus.ACTIVE, pre_vms_status])
+

@@ -15,10 +15,11 @@ def _revert(host):
 
 
 @fixture(scope='module', autouse=True)
-def add_shared_cpu(config_host):
+def add_shared_cpu(config_host_module):
     host = host_helper.get_nova_host_with_min_or_max_vms(rtn_max=False)
-    config_host(host=host, modify_func=_modify, revert_func=_revert)
-    host_helper.wait_for_hosts_in_nova(host)
+    config_host_module(host=host, modify_func=_modify, revert_func=_revert)
+    host_helper.wait_for_hypervisors_up(host)
+    host_helper.wait_for_hosts_in_nova_compute(host)
 
 
 @mark.parametrize(('vcpus', 'cpu_policy', 'numa_nodes', 'numa_node0', 'shared_vcpu'), [

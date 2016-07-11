@@ -155,6 +155,7 @@ def cmd_execute(action, param='', check_params=''):
 
 
 @mark.cpe_sanity
+@mark.sanity
 def test_tc402_validate_statistics_for_one_meter():
     """
     Validate statistics for one meter
@@ -183,6 +184,7 @@ def test_tc402_validate_statistics_for_one_meter():
             assert(not(float(column_value) == 0.0))
 
 
+@mark.sanity
 def test_401_validate_ceilometer_meters_exist():
     """
     Validate ceilometer meters exist

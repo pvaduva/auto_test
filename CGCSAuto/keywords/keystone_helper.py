@@ -35,17 +35,3 @@ def get_user_ids(user_name=None, con_ssh=None):
         user_name = Tenant.get_primary()['user']
     table_ = table_parser.table(cli.openstack('user list', ssh_client=con_ssh))
     return table_parser.get_values(table_, 'ID', Name=user_name)
-
-
-def get_user_token(con_ssh=None):
-    """
-    Return an authentication token for the admin.
-
-    Args:
-        con_ssh (SSHClient):
-
-    Returns (list): a list containing at most one authentication token
-
-    """
-    table_ = table_parser.table(cli.openstack('token issue', ssh_client=con_ssh))
-    return table_parser.get_values(table_, 'Value', Field='id')
