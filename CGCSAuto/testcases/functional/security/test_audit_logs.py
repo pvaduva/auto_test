@@ -45,6 +45,7 @@ def test_sudo_log():
 
     for line in out:
         for i in range(0, len(searching_for)):
+            LOG.tc_step("Searching for logs containing: {}".format(searching_for[i]))
             regex = re.compile(searching_for[i])
             if searching_for[i] not in found and re.search(regex, line):
                 found.append(searching_for[i])
@@ -67,6 +68,7 @@ def test_sudo_log():
 
     for line in out:
         for i in range(0, len(searching_for)):
+            LOG.tc_step("Searching for logs containing: {}".format(searching_for[i]))
             regex = re.compile(searching_for[i])
             if searching_for[i] not in found and re.search(regex, line):
                 found.append(searching_for[i])
@@ -96,6 +98,7 @@ def test_postgress():
     found = []
     for line in logs:
         for i in range(0, len(searching_for)):
+            LOG.tc_step("Searching for logs containing: {}".format(searching_for[i]))
             regex = re.compile(searching_for[i])
             if searching_for[i] not in found and re.search(regex, line):
                 found.append(searching_for[i])
@@ -111,6 +114,7 @@ def test_postgress():
         logs = out.split('\n')
         for line in logs:
             for i in range(0, len(searching_for)):
+                LOG.tc_step("Searching for logs containing: {}".format(searching_for[i]))
                 regex = re.compile(searching_for[i])
                 if searching_for[i] not in found and re.search(regex, line):
                     found.append(searching_for[i])
@@ -142,12 +146,13 @@ def test_sudo_su():
                      'su: info pam_unix\(su-l:session\): session opened for user root by wrsroot\(uid=0\)']
     found = []
 
-    LOG.tc_step("Loging in as su")
+    LOG.tc_step("Logging in as su")
     with ssh.login_as_root() as root:
         code, out = root.exec_cmd('tail /var/log/auth.log')
         out = out.split('\n')
         for line in out:
             for i in range(0, len(searching_for)):
+                LOG.tc_step("Searching for logs containing: {}".format(searching_for[i]))
                 regex = re.compile(searching_for[i])
                 if searching_for[i] not in found and re.search(regex, line):
                     found.append(searching_for[i])
@@ -174,6 +179,7 @@ def test_sudo_su():
 
     for line in out:
         for i in range(0, len(searching_for)):
+            LOG.tc_step("Searching for logs containing: {}".format(searching_for[i]))
             regex = re.compile(searching_for[i])
             if searching_for[i] not in found and re.search(regex, line):
                 found.append(searching_for[i])
