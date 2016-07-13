@@ -1,4 +1,4 @@
-from pytest import fixture, mark
+from pytest import fixture, mark, skip
 
 from consts.auth import Tenant
 from utils import table_parser
@@ -126,7 +126,7 @@ def ping_vm_from_vm(request):
 
 
 @fixture()
-def ceph_precheck(request): # yang TODO: can be auto used if needed
+def ceph_precheck(request):
     """
     Run test pre-checks before running CEPH storage tests.
 
@@ -139,8 +139,8 @@ def ceph_precheck(request): # yang TODO: can be auto used if needed
     LOG.info('Ensure the system has storage nodes')
     nodes = system_helper.get_storage_nodes(con_ssh)
     LOG.info('System has the following storage nodes {}'.format(nodes))
-    # yang TODO: better to skip
-    assert nodes, 'SUT does not have storage nodes'
+    if not nodes:
+        skip('SUT does not have storage nodes')
 
     LOG.info('Verify the health of the CEPH cluster')
     rtn, msg = storage_helper.is_ceph_healthy(con_ssh)

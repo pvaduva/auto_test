@@ -13,6 +13,7 @@ from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper, \
     storage_helper, glance_helper, cinder_helper
 from consts.cgcs import EventLogID, IMAGE_DIR
+from testfixtures.recover_hosts import HostsToRecover
 
 PROC_RESTART_TIME = 30          # number of seconds between process restarts
 RESTARTS_BEFORE_ASSERT = 3      # number of process restarts until error assertion
@@ -187,8 +188,6 @@ def test_ceph_mon_process_kill(monitor):
         1.  CGTS-2975
 
     """
-    # TODO: remove
-    con_ssh = ControllerClient.get_active_controller()
 
     LOG.tc_step('Determine the pid of the ceph-mon process on {}'.format(monitor))
     mon_pid, msg = storage_helper.get_mon_pid(monitor)
@@ -277,6 +276,7 @@ def test_ceph_mon_process_kill(monitor):
     LOG.tc_step('Verify the health cluster is healthy')
     ceph_healthy, msg = storage_helper.is_ceph_healthy()
 
+
 # Pass on 700 seconds on PV0
 @mark.usefixtures('ceph_precheck')
 def test_ceph_reboot_storage_node():
@@ -317,7 +317,6 @@ def test_ceph_reboot_storage_node():
         LOG.tc_step('Reboot {}'.format(host))
         results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
         LOG.tc_step("Results: {}".format(results))          # yang TODO log added to keyword, still needed?
-        assert results[0] != 0
 
         LOG.tc_step('Check health of CEPH cluster')
         ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
@@ -347,7 +346,7 @@ def test_ceph_reboot_storage_node():
             msg = 'OSD ID {} is down as expected'.format(osd_id)
             LOG.info(msg)
 
-        if not host_helper._wait_for_host_states(host, availability='available'):   # yang TODO use fail_ok flag?
+        if not host_helper._wait_for_host_states(host, availability='available', fail_ok=False):   # yang TODO use fail_ok flag?
             msg = 'Host {} did not come available in the expected time'.format(host)
             raise exceptions.HostPostCheckFailed(msg)
 
@@ -422,8 +421,9 @@ def test_lock_stor_check_osds_down(host):
         host = 'storage-' + str(node_id)
 
     LOG.tc_step('Lock storage node {}'.format(host))
-    rtn_code, out = host_helper.lock_host(host)
-    assert rtn_code == 0, out       # yang TODO assert unnecessary here, can set check_first to false if needed.
+    host_helper.lock_host(host, check_first=False)
+    HostsToRecover.add(host)
+    # assert rtn_code == 0, out       # yang TODO assert unnecessary here, can set check_first to false if needed.
 
     LOG.tc_step('Determine the storage group for host {}'.format(host))
     storage_group, msg = storage_helper.get_storage_group(host)
@@ -456,7 +456,7 @@ def test_lock_stor_check_osds_down(host):
         LOG.info(msg)
 
     # Wait for alarms to be raised
-    time.sleep(10)
+    time.sleep(15)
 
     # 800.011   Loss of replication in replication group group-0: OSDs are down
     alarms_table = system_helper.get_alarms(query_key='alarm_id',
@@ -718,15 +718,15 @@ def test_storgroup_semantic_checks():
         for node in hosts:
             LOG.tc_step('Attempt to lock the {}'.format(node))
             rtn_code, out = host_helper.lock_host(node, fail_ok=True)
-            assert rtn_code != 0, out       # yang TODO perhaps should assert 1 here for cli rejection.
+            assert 1 == rtn_code, out       # yang TODO perhaps should assert 1 here for cli rejection.
 
             LOG.tc_step('Attempt to force lock {}'.format(node))
             rtn_code, out = host_helper.lock_host(node, fail_ok=True, force=True)
-            # yang: TODO: Should the return code be checked?
+            assert 1 == rtn_code, out
 
         LOG.tc_step('Unlock storage host {}'.format(host))
         rtn_code, out = host_helper.unlock_host(host)
-        assert rtn_code == 0, out           # yang TODO this may not be correct since host is never locked.
+        assert rtn_code == 0, out
 
         # Waita bit for alarms to clear
         # TODO: Why does it take so long to clear?
@@ -935,7 +935,7 @@ def test_import_raw_with_cache_raw():
         con_ssh.exec_cmd(rsync_images)
         image_names = storage_helper.find_images(con_ssh, image_type='raw')
         msg = 'No images found on controller'
-        assert not image_names, msg     # yang: TODO: Assert no images, but error msg is the opposite
+        assert image_names, msg
 
     LOG.tc_step('Import raw images into glance with --cache-raw')
     for image in image_names:
@@ -992,15 +992,15 @@ def test_exceed_size_of_img_pool():
     if not image_names:
         LOG.info('No qcow2 images were found on the system')
         LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
-        image_names = storage_helper.download_images(dload_type='ubuntu', \
+        image_names = storage_helper.download_images(dload_type='ubuntu',
             img_dest=IMAGE_DIR, con_ssh=con_ssh)
 
     LOG.tc_step('Import qcow2 images into glance until pool is full')
     source_img = IMAGE_DIR + "/" + image_names[0]
-    while True:     # yang TODO would ret[0] = 1 happen for sure? otherwise it might become a indefinite loop
+    while True:
         ret = glance_helper.create_image(source_image_file=source_img,
-                                         disk_format='qcow2', \
-                                         container_format='bare', \
+                                         disk_format='qcow2',
+                                         container_format='bare',
                                          cache_raw=True, wait=True,
                                          fail_ok=True)
         glance_ids.append(ret[1])
@@ -1099,8 +1099,7 @@ def test_import_large_images_with_cache_raw():
     LOG.tc_step('Convert the raw image to qcow2')
     args = '{}/{} {}/{}'.format(IMAGE_DIR, new_img, IMAGE_DIR, qcow2_img)
     cmd = 'qemu-img convert -f raw -O qcow2' + ' ' + args
-    rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=600)
-    assert not rtn_code, out    # yang TODO can use fail_ok=False if needed
+    con_ssh.exec_cmd(cmd, expect_timeout=600, fail_ok=False)
 
     # Check the image type is updated
     image_names = storage_helper.find_images(con_ssh, image_type='qcow2')
@@ -1130,15 +1129,13 @@ def test_import_large_images_with_cache_raw():
     assert flv[0] == 0, flv[1]
 
     LOG.tc_step('Launch VM from created volume')
-    vm_id = vm_helper.boot_vm(name=image_names[0], flavor=flv[1], \
-        source='volume', source_id=volume_id)[1]
+    vm_id = vm_helper.boot_vm(name=image_names[0], flavor=flv[1], source='volume', source_id=volume_id)[1]
     vm_list.append(vm_id)
 
     # When spawning, make sure we don't download the image
     LOG.tc_step('Launch VM from image')
     img_name2 = image_names[0] + '_fromimage'
-    vm_id2 = vm_helper.boot_vm(name=img_name2, flavor=flv[1], \
-        source='image', source_id=out[1])[1]        # yang TODO 120 chars limit instead of 80
+    vm_id2 = vm_helper.boot_vm(name=img_name2, flavor=flv[1], source='image', source_id=out[1])[1]
     vm_list.append(vm_id2)
 
     # yang TODO use ResourceCleanup in case of test fail.
@@ -1273,15 +1270,14 @@ def test_modify_ceph_pool_size_neg():
     if not image_names:
         LOG.info('No qcow2 images were found on the system')
         LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
-        image_names = storage_helper.download_images(dload_type='ubuntu', \
-            img_dest=IMAGE_DIR, con_ssh=con_ssh)    # TODO for Yang: perhaps a session level fixture should be added
+        image_names = storage_helper.download_images(dload_type='ubuntu', img_dest=IMAGE_DIR, con_ssh=con_ssh)    # TODO for Yang: perhaps a session level fixture should be added
 
     LOG.tc_step('Import qcow2 images into glance until pool is full')
     source_img = IMAGE_DIR + "/" + image_names[0]
     while True:
         ret = glance_helper.create_image(source_image_file=source_img,
-                                         disk_format='qcow2', \
-                                         container_format='bare', \
+                                         disk_format='qcow2',
+                                         container_format='bare',
                                          cache_raw=True, wait=True,
                                          fail_ok=True)
 

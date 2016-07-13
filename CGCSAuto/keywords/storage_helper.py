@@ -82,7 +82,7 @@ def get_osd_host(osd_id, con_ssh=None):
     for host in storage_hosts:
         table_ = table_parser.table(cli.system('host-stor-list', host))
         osd_list = table_parser.get_values(table_, 'osdid')
-        if osd_id in osd_list:
+        if str(osd_id) in osd_list:
             msg = 'OSD ID {} is on host {}'.format(osd_id, host)
             return host, msg
 
