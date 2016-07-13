@@ -939,7 +939,7 @@ class Telnet:
                 if index == 0:
                     match = match.group(1).decode('utf-8','ignore')
                     log.info("Matched: " + match)
-                    if re.search(boot_device_regex, match):
+                    if re.search(boot_device_regex, match, re.IGNORECASE):
                         log.info("Found boot device {}".format(boot_device_regex))
                         time.sleep(1)
                         log.info("Pressing ENTER key")
@@ -1025,7 +1025,8 @@ class Telnet:
             down_press_count = 0
             while count < MAX_SEARCH_ATTEMPTS:
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
-                regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)\s+(.*?)\|")
+                #regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)\s+(.*?)\|")
+                regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*?)\|")
                 #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
                 try:
                     index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
@@ -1036,7 +1037,7 @@ class Telnet:
                 if index == 0:
                     match = match.group(1).decode('utf-8','ignore')
                     log.info("Matched: " + match)
-                    if re.search(boot_device_regex, match):
+                    if re.search(boot_device_regex, match, re.IGNORECASE):
                         log.info("Found boot device {}".format(boot_device_regex))
                         time.sleep(1)
                         log.info("Pressing ENTER key")
@@ -1153,7 +1154,7 @@ class Telnet:
                 if index == 0:
                     match = match.group(1).decode('utf-8','ignore')
                     log.info("Matched: " + match)
-                    if re.search(boot_device_regex, match):
+                    if re.search(boot_device_regex, match, re.IGNORECASE):
                         log.info("Found boot device {}".format(boot_device_regex))
                         time.sleep(1)
                         log.info("Pressing ENTER key")

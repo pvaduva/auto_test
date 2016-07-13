@@ -34,7 +34,7 @@ def test_func(test1_param1, test_param2):
 
     # skip condition check based on test data set and system status
 
-    LOG.tc_start()
+    LOG.tc_func_start()
 
     LOG.tc_step("I'm a test step")
     # content of the step
@@ -44,4 +44,4 @@ def test_func(test1_param1, test_param2):
 
     # assert test result
 
-    LOG.tc_end()
+    LOG.tc_func_end()

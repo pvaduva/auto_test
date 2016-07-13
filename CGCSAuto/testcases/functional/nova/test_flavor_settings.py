@@ -62,10 +62,10 @@ def obsolete_test_flavor_set_storage(flavor_to_test):
 
 
 @mark.parametrize(('extra_spec_name', 'values'), [
-    mark.sanity((FlavorSpec.STORAGE_BACKING, ['local_lvm', 'remote', 'local_image'])),
-    mark.sanity((FlavorSpec.VCPU_MODEL, ['Nehalem', 'SandyBridge', 'Westmere', 'Haswell'])),
-    mark.sanity((FlavorSpec.CPU_POLICY, ['dedicated', 'shared'])),
-    mark.sanity((FlavorSpec.NUMA_NODES, [1])),
+    ((FlavorSpec.STORAGE_BACKING, ['local_lvm', 'remote', 'local_image'])),
+    ((FlavorSpec.VCPU_MODEL, ['Nehalem', 'SandyBridge', 'Westmere', 'Haswell'])),
+    ((FlavorSpec.CPU_POLICY, ['dedicated', 'shared'])),
+    ((FlavorSpec.NUMA_NODES, [1])),
     mark.p2((FlavorSpec.AUTO_RECOVERY, ['true', 'false', 'TRUE', 'FALSE'])),
 ])
 def test_set_flavor_extra_specs(flavor_to_test, extra_spec_name, values):

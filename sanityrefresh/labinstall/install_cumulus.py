@@ -297,18 +297,25 @@ class Cumulus_TiS(object):
 
     def launch_computes(self):
 
-        rc, output = self.ssh_conn.exec_cmd("./instances/launch_virtual-compute-0.sh")
-        if rc is not 0:
-            msg = " Fail to launch a virtual compute-0."
-            self.log.error(msg)
-            wr_exit()._exit(1,msg)
+        compute_count = self.get_number_of_computes()
+        
+        for i in range(0, compute_count):
+            rc, output = self.ssh_conn.exec_cmd("./instances/launch_virtual-compute-" + str(i) + ".sh")
+            if rc is not 0:
+                msg = " Fail to launch a virtual compute-" + str(i) + "."
+                self.log.error(msg)
+                wr_exit()._exit(1,msg)
 
-        rc, output = self.ssh_conn.exec_cmd("./instances/launch_virtual-compute-1.sh")
-        if rc is not 0:
-            msg = " Fail to launch a virtual compute-1."
-            self.log.error(msg)
-            wr_exit()._exit(1,msg)
+    def launch_storages(self):
 
+        storage_count = self.get_number_of_storages()
+        
+        for i in range(0, storage_count):
+            rc, output = self.ssh_conn.exec_cmd("./instances/launch_virtual-storage-" + str(i) + ".sh")
+            if rc is not 0:
+                msg = " Fail to launch a virtual storage-" + str(i) + "."
+                self.log.error(msg)
+                wr_exit()._exit(1,msg)
 
     def parse_cumulus_conf(self, filename):
 
@@ -337,4 +344,14 @@ class Cumulus_TiS(object):
         else:
             options = None
         return options
+    
+    def get_number_of_computes(self):
+        if not 'COMPUTES' in self.cumulus_options.keys():
+            return 0
+        return int(self.cumulus_options['COMPUTES'])
+
+    def get_number_of_storages(self):
+        if not 'STORAGES' in self.cumulus_options.keys():
+            return 0
+        return int(self.cumulus_options['STORAGES'])
 

@@ -124,8 +124,8 @@ def prepare_hosts(request):
         Restore hosts to original state
     """
     expected_storage_backing = request.param
-    avail_hosts = keywords.host_helper.get_hosts_by_storage_aggregate(storage_backing=expected_storage_backing)
-    all_hosts = keywords.host_helper.get_hypervisors()
+    avail_hosts = host_helper.get_hosts_by_storage_aggregate(storage_backing=expected_storage_backing)
+    all_hosts = host_helper.get_hypervisors()
     modified_hosts = {}
     locked_hosts = []
     avail_num = len(avail_hosts)
@@ -133,7 +133,7 @@ def prepare_hosts(request):
     # Try to convert all available hypervisor hosts to the expected storage backing
     for host in all_hosts:
         if host not in avail_hosts:
-            original_storage = keywords.system_helper.get_local_storage_backing(host)
+            original_storage = host_helper.get_local_storage_backing(host)
             return_code, msg = host_helper.modify_host_storage_backing(host=host, storage=expected_storage_backing,
                                                                   fail_ok=True)
             if return_code == 0:
@@ -189,7 +189,7 @@ def tes_live_migrate_v2(prepare_hosts, storage, interface, with_block):
 
     # Define skip conditions first if any, once a skip() is called, test will end right away.
 
-    LOG.tc_start()
+    LOG.tc_func_start()
 
     LOG.step("Checking if live-migration allowed for given VM, and determine the expected return code")
     vm_id = vm_helper.VMInfo.get_vms(storage, interface)[0]
@@ -205,7 +205,7 @@ def tes_live_migrate_v2(prepare_hosts, storage, interface, with_block):
     LOG.step("Verify return code")
     assert expected_code == actual_code, message
 
-    LOG.tc_end()
+    LOG.tc_func_end()
 
 
 ########################################################################################################################

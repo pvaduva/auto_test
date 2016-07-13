@@ -111,7 +111,7 @@ def get_volumes_attached_to_vms(volumes=None, vms=None, con_ssh=None, auth_info=
 
 def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snapshot_id=None, vol_type=None, size=1,
                   avail_zone=None, metadata=None, bootable=True, fail_ok=False, auth_info=None, con_ssh=None,
-                  rtn_exist=True):
+                  rtn_exist=False):
     """
     Create a volume with given criteria.
 

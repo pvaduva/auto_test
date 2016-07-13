@@ -3,12 +3,6 @@ DATE_OUTPUT = r'[0-2]\d:[0-5]\d:[0-5]\d\s[A-Z]{3}\s\d{4}$'
 
 EXT_IP = '8.8.8.8'
 
-# such as 192.168.11.6
-MGMT_IP = r'mgmt-net\d?=.*(192.168\.\d{1,3}\.\d{1,3})'
-
-# such as 172.16.1.11
-DATA_IP = r'tenant\d?-net\d?=.*(172.\d{1,3}\.\d{1,3}\.\d{1,3})'
-
 # such as in string '5 packets transmitted, 0 received, 100% packet loss, time 4031ms', number 100 will be found
 PING_LOSS_RATE = r'\, (\d{1,3})\% packet loss\,'
 
@@ -30,6 +24,19 @@ DNS_NAMESERVERS = ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
 HOME = '/home/wrsroot/'
 # Heat template path
 HEAT_PATH = 'heat/templates/hot/simple/'
+HEAT_SCENARIO_PATH = 'heat/templates/hot/scenario/'
+
+
+class NetIP:
+    MGMT_NET_NAME = 'mgmt-net'
+    DATA_NET_NAME = 'tenant'
+    INTERNAL_NET_NAME = 'internal'
+    # such as 192.168.11.6
+    MGMT_IP = r'192.168\.\d{1,3}\.\d{1,3}'
+    # such as 172.16.1.11
+    DATA_IP = r'172.\d{1,3}\.\d{1,3}\.\d{1,3}'
+    # such as 10.1.1.44
+    INTERNAL_IP = r'10.\d{1,3}\.\d{1,3}\.\d{1,3}'
 
 
 class SystemType:
@@ -109,6 +116,12 @@ class FlavorSpec:
     SHARED_VCPU = 'hw:wrs:shared_vcpu'
     STORAGE_BACKING = 'aggregate_instance_extra_specs:storage'
     # LOCAL_STORAGE = 'aggregate_instance_extra_specs:localstorage'
+    DISK_READ_BYTES = 'quota:disk_read_bytes_sec'
+    DISK_READ_IOPS = 'quota:disk_read_iops_sec'
+    DISK_WRITE_BYTES = 'quota:disk_write_bytes_sec'
+    DISK_WRITE_IOPS = 'quota:disk_write_iops_sec'
+    DISK_TOTAL_BYTES = 'quota:disk_total_bytes_sec'
+    DISK_TOTAL_IOPS = 'quota:disk_total_iops_sec'
     NUMA_NODES = 'hw:numa_nodes'
     NUMA_0 = 'hw:numa_node.0'
     NUMA_1 = 'hw:numa_node.1'
@@ -174,7 +187,42 @@ class NetworkingVmMapping:
     }
 
 
+class VifMapping:
+    VIF_MAP = {'vswitch': 'DPDKAPPS',
+                   'avp': 'AVPAPPS',
+                   'virtio': 'VIRTIOAPPS',
+                   'sriov': 'SRIOVAPPS',
+                   'pcipt': 'PCIPTAPPS'
+                   }
+
+
 class LocalStorage:
     DIR_PROFILE = 'storage_profiles'
     TYPE_STORAGE_PROFILE = ['storageProfile', 'localstorageProfile']
 
+
+class VMNetworkStr:
+    NET_IF = r"auto {}\niface {} inet dhcp\n"
+
+
+class HTTPPorts:
+    NEUTRON_PORT = 9696
+    NEUTRON_VER = "v2.0"
+    CEIL_PORT = 8777
+    CEIL_VER = "v2"
+    SYS_PORT = 6385
+    SYS_VER = "v1"
+    CINDER_PORT = 8776
+    CINDER_VER = "v2" #v1 is also supported
+    GLANCE_PORT = 9292
+    GLANCE_VER = "v2"
+    HEAT_PORT = 8004
+    HEAT_VER = "v1"
+    HEAT_CFN_PORT = 8000
+    HEAT_CFN_VER = "v1"
+    NOVA_PORT = 8774
+    NOVA_VER = "v2" #v3 also supported
+    NOVA_EC2_PORT = 8773
+    NOVA_EC2_VER = "v2"
+    PATCHING_PORT = 15491
+    PATCHING_VER = "v1"

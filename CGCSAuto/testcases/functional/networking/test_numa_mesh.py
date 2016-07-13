@@ -6,7 +6,7 @@ from keywords import host_helper
 
 
 @mark.p1
-def test_setting_denied_unlocked_host():
+def test_set_cpu_cores_denied_unlocked_host():
     nova_hosts = host_helper.get_nova_hosts()
 
     assert nova_hosts, "No nova host is up."
@@ -30,7 +30,7 @@ def test_setting_denied_unlocked_host():
 
 # TODO: Add parameter for lab support split and lab that doesn't
 @mark.p1
-def test_ports_cores_mapping():
+def test_vswitch_ports_cores_mapping():
     nova_hosts = host_helper.get_nova_hosts()
     assert nova_hosts, "No nova host is up."
 
