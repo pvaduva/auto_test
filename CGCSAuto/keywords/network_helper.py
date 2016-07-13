@@ -526,7 +526,8 @@ def get_neutron_port(name=None, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
-def get_provider_nets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN):
+def get_provider_nets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN,
+                      **kwargs):
     """
     Get the neutron provider net list based on name if given for ADMIN user.
 
@@ -535,39 +536,17 @@ def get_provider_nets(name=None, rtn_val='id', con_ssh=None, strict=False, regex
         con_ssh (SSHClient): If None, active controller ssh will be used.
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
         name (str): Given name for the provider network to filter
-        strict (bool): Whether to perform strict search on provider net name provided
-        regex (bool): Whether to use regex to perform search on provider net name
+        strict (bool): Whether to perform strict search on provider net name or kwargs values
+        regex (bool): Whether to use regex to perform search on given values
 
     Returns (str): Neutron provider net ids
 
     """
     table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is None:
-        return table_parser.get_values(table_, rtn_val)
+        return table_parser.get_values(table_, rtn_val, **kwargs)
 
-    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, name=name)
-
-
-def get_provider_nets_by_type(type=None, rtn_val='name', con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN):
-    """
-    Get the neutron provider net list based on name if given for ADMIN user.
-
-    Args:
-        rtn_val (str): id or name
-        con_ssh (SSHClient): If None, active controller ssh will be used.
-        auth_info (dict): Tenant dict. If None, primary tenant will be used.
-        name (str): Given name for the provider network to filter
-        strict (bool): Whether to perform strict search on provider net name provided
-        regex (bool): Whether to use regex to perform search on provider net name
-
-    Returns (str): Neutron provider net ids
-
-    """
-    table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
-    if type is None:
-        return table_parser.get_values(table_, rtn_val)
-
-    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, type=type)
+    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, name=name, **kwargs)
 
 
 def get_provider_net_ranges(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
@@ -1518,8 +1497,8 @@ def get_networks_on_providernet(providernet_name, con_ssh=None, auth_info=Tenant
     Returns:
         statue (0 or 1) and the list of network IDsbase_vm
     """
-    table_ = table_parser.table(cli.neutron(cmd = 'net-list-on-providernet', positional_args = providernet_name,
-                                            auth_info = auth_info, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.neutron(cmd='net-list-on-providernet', positional_args=providernet_name,
+                                            auth_info=auth_info, ssh_client=con_ssh))
 
     return table_parser.get_values(table_, 'id')
 
@@ -1586,10 +1565,25 @@ def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD):
         return ''
 
 
-def create_vxlan_providernet_range(provider, name = None, range_min = 100, range_max = 105,
-                                   group = '239.0.0.0', port = 4789, ttl = 1, auth_info=Tenant.ADMIN,
-                                   con_ssh=None, fail_ok=True):
+def create_vxlan_providernet_range(provider, name=None, range_min=100, range_max=105, group='239.0.0.0', port=4789,
+                                   ttl=1, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=True):
+    """
 
+    Args:
+        provider:
+        name:
+        range_min:
+        range_max:
+        group:
+        port:
+        ttl:
+        auth_info:
+        con_ssh:
+        fail_ok:
+
+    Returns:
+        statue 0 for success, any other are error; and the message
+    """
     if not name:
         name = provider + 'l2'
 
@@ -1601,13 +1595,23 @@ def create_vxlan_providernet_range(provider, name = None, range_min = 100, range
     args += ' --port {}'.format(port)
     args += ' --ttl {}'.format(ttl)
 
-
     code, output = cli.neutron('providernet-range-create', args, ssh_client=con_ssh, auth_info=auth_info,
                                fail_ok=fail_ok, rtn_list=True)
     return code, output
 
 
-def delete_vxlan_providernet_range(name = None, con_ssh = None, auth_info=Tenant.ADMIN):
+def delete_vxlan_providernet_range(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        name:
+        con_ssh:
+        auth_info:
+
+    Returns:
+        statue 0 for success, any other are error; and the message
+
+    """
 
     code, output = cli.neutron('providernet-range-delete', name, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
                                fail_ok=True)
