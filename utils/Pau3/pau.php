@@ -231,8 +231,10 @@ function randomize_fname($name) {
   			echo "<option value=\"Ottawa_ironpass-20-27\">Ottawa_ironpass-20-27</option>";
   			echo "<option value=\"wcp7-12\">wcp7-12</option>";
  			echo "<option value=\"Ottawa_R720-1-2\">Ottawa_R720-1-2</option>";
+ 			echo "<option value=\"Ottawa_R720-3-7\">Ottawa_R720-3-7</option>";
  			echo "<option value=\"cgcs-pv-0\">cgcs-pv-0</option>";
- 			echo "<option value=\"cgcs-pv-1\">cgcs-pv-0</option>";
+ 			echo "<option value=\"cgcs-pv-1\">cgcs-pv-1</option>";
+ 			echo "<option value=\"yow-cgcs-wildcat-7-12\">yow-cgcs-wildcat-7-12 </option>";
   			echo "<option value=\"Other\">Other</option>";
 			echo "<option value=\"Virtual_Box\" selected=\"selected\">Virtual_Box</option>";
 		echo "</select>";
@@ -364,8 +366,8 @@ function randomize_fname($name) {
         echo "Release Name:";
         echo "</td><td>";
         echo "<select name=\"release_name\">";
-        echo "<option value=\"Titanium Server 15.12\">Titanium Server 15.12</option>";
         echo "<option value=\"Titanium Server R3\">Titanium Server R3</option>";
+        echo "<option value=\"Titanium Server 15.12\">Titanium Server 15.12</option>";
         echo "</select>";
         echo "</td></tr><tr><td>";
         ?>
