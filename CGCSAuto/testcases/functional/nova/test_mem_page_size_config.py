@@ -35,6 +35,8 @@ def _revert(host):
 def add_1g_and_4k_pages(config_host_module):
     host = host_helper.get_nova_host_with_min_or_max_vms(rtn_max=False)
     config_host_module(host=host, modify_func=_modify, revert_func=_revert)
+    host_helper.wait_for_hosts_in_nova_compute(host)
+    return host
 
 
 testdata = [None, 'any', 'large', 'small', '2048', '1048576']
@@ -128,7 +130,7 @@ def volume_():
     '1048576',
     'large',
 ])
-def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_):
+def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_, add_1g_and_4k_pages):
     """
     Test memory used by vm is taken from the expected memory pool
 
@@ -155,9 +157,10 @@ def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_):
 
     """
     LOG.tc_step("Set memory page size extra spec in flavor")
-    nova_helper.set_flavor_extra_specs(flavor_2g, **{FlavorSpec.CPU_POLICY: 'dedicated', 
+    nova_helper.set_flavor_extra_specs(flavor_2g, **{FlavorSpec.CPU_POLICY: 'dedicated',
                                                      FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
-    
+
+    host_helper.wait_for_hosts_in_nova_compute(add_1g_and_4k_pages)
     pre_computes_tab = system_helper.get_vm_topology_tables('computes')[0]
 
     LOG.tc_step("Boot a vm with mem page size spec - {}".format(mem_page_size))
@@ -166,6 +169,7 @@ def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_):
     assert 0 == code, "VM is not successfully booted."
 
     vm_host = nova_helper.get_vm_host(vm_id)
+    assert add_1g_and_4k_pages == vm_host, "VM is not created on the configured host {}".format(vm_host)
     LOG.tc_step("Calculate memory change on vm host - {}".format(vm_host))
 
     pre_computes_tab = table_parser.filter_table(pre_computes_tab, Host=vm_host)
