@@ -1656,6 +1656,105 @@ def get_vm_host_and_numa_nodes(vm_id, con_ssh=None):
     return host, actual_node_vals
 
 
+def get_instance_topology(vm_id, con_ssh=None):
+    """
+    Get instance_topology from 'vm-topology -s servers'
+
+    Args:
+        vm_id (str):
+        # rtn_list (bool):
+        con_ssh (SSHClient):
+
+    Returns (list|dict):
+
+    """
+    servers_tab = system_helper.get_vm_topology_tables('servers', con_ssh=con_ssh)[0]
+    servers_tab = table_parser.filter_table(servers_tab, ID=vm_id)
+
+    instance_topology = table_parser.get_column(servers_tab, 'instance_topology')[0]
+    if isinstance(instance_topology, str):
+        instance_topology = [instance_topology]
+
+    instance_topology_all = []
+    for topology_for_numa_node in instance_topology:
+        instance_topology_dict = {}
+        items = topology_for_numa_node.split(sep=', ')
+        for item in items:
+            item_list = item.strip().split(sep=':')
+            if len(item_list) == 2:
+                key_ = item_list[0]
+                value_ = item_list[1]
+                if key_ in ['node']:
+                    value_ = int(value_)
+                elif key_ in ['vcpus', 'pcpus']:
+                    values = value_.split(sep=',')
+                    for val in value_.split(sep=','):
+                        # convert '3-6' to [3, 4, 5, 6]
+                        if '-' in val:
+                            values.remove(val)
+                            min_, max_ = val.split(sep='-')
+                            values += list(range(int(min_), int(max_) + 1))
+
+                    value_ = [int(val) for val in values]
+
+                elif key_ == 'siblings':
+                    value_ = eval(value_)
+                instance_topology_dict[key_] = value_
+
+            elif len(item_list) == 1:
+                value_ = item_list[0]
+                if re.match(InstanceTopology.TOPOLOGY, value_):
+                    instance_topology_dict['topology'] = value_
+                # TODO add mem size
+
+        if 'siblings' not in instance_topology_dict:
+            instance_topology_dict['siblings'] = None
+
+        instance_topology_all.append(instance_topology_dict)
+        LOG.info('Instance topology for vm {}: {}'.format(vm_id, instance_topology_all))
+        return instance_topology_all
+
+    #     instance_topology_dict[node_val] = {}
+    #     instance_topology_dict[node_val]['node'] = topology_for_numa_node
+    #
+    #     pgsize = re.findall(InstanceTopology.PGSIZE, topology_for_numa_node)[0].strip()
+    #     instance_topology_dict[node_val]['pgsize'] = pgsize
+    #
+    #     pcpus = re.findall(InstanceTopology.PCPUS, topology_for_numa_node)
+    #     if pcpus:
+    #         pcpus = pcpus[0].strip().split(sep=',')
+    #         pcpus = [int(pcpu) for pcpu in pcpus]
+    #         instance_topology_dict[node_val]['pcpus'] = pcpus
+    #     else:
+    #         instance_topology_dict[node_val]['pcpus'] = None
+    #
+    #     vcpus = re.findall(InstanceTopology.VCPUS, topology_for_numa_node)
+    #     if vcpus:
+    #         vcpus = vcpus[0].strip().split(sep=',')
+    #         vcpus = [int(vcpu) for vcpu in vcpus]
+    #         instance_topology_dict[node_val]['vcpus'] = vcpus
+    #     else:
+    #         instance_topology_dict[node_val]['vcpus'] = None
+    #
+    #     siblings = re.findall(InstanceTopology.SIBLINGS, topology_for_numa_node)
+    #     if siblings:
+    #         instance_topology_dict[node_val]['siblings'] = eval(siblings[0])
+    #     else:
+    #         instance_topology_dict[node_val]['siblings'] = None
+    #
+    #     cpu_policy = re.findall(InstanceTopology.CPU_POLICY, topology_for_numa_node)[0]
+    #     instance_topology_dict[node_val]['pol'] = cpu_policy
+    #
+    #     thread_policy = re.findall(InstanceTopology.THREAD_POLICY, topology_for_numa_node)[0]
+    #     instance_topology_dict[node_val]['thr'] = thread_policy
+    #
+    # LOG.info('Instance topology for vm {}: {}'.format(vm_id, instance_topology_dict))
+    # if rtn_list:
+    #     return list(instance_topology_dict.values())
+    # else:
+    #     return instance_topology_dict
+
+
 def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **kwargs):
     """
     Perform action on a given vm.
@@ -1800,3 +1899,7 @@ def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
                 _sudo_reboot(vm_ssh)
     else:
         _sudo_reboot(vm_ssh)
+
+
+def get_proc_num_from_vm(vm_ssh):
+    return int(vm_ssh.exec_cmd('cat /proc/cpuinfo | grep processor | wc -l', fail_ok=False)[1])

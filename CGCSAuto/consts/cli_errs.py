@@ -23,3 +23,12 @@ class CpuAssignment:
     NO_VM_CORE = "There must be at least one unused core for VMs."
     VSWITCH_INSUFFICIENT_CORES = "The vswitch function must have at least {} core(s)"
 
+
+class CPUThreadErr:
+    INVALID_POLICY = "Invalid hw:cpu_threads_policy '{}', must be one of: require, isolate."
+    DEDICATED_CPU_REQUIRED = 'Cannot set cpu thread pinning policy in a non dedicated cpu pinning policy'
+    VCPU_NUM_UNDIVISIBLE = "(NUMATopologyFilter) Cannot use 'require' cpu threads policy as requested #VCPUs: {}, " \
+                           "is not divisible by number of threads: 2"
+    INSUFFICIENT_CORES_FOR_ISOLATE = "{}: (NUMATopologyFilter) Cannot pin instance as requested VCPUs: {}, is " \
+                                     "greater than available CPUs: {}, with 'isolate' threads policy"
+

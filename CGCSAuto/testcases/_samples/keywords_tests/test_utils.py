@@ -3,7 +3,7 @@ import pexpect
 
 from keywords import host_helper, vm_helper
 from utils.ssh import ssh_to_controller0, ControllerClient
-from utils import exceptions
+from utils import exceptions, cli
 from utils.tis_log import LOG
 
 con_ssh = ControllerClient.get_active_controller()
@@ -68,3 +68,21 @@ def test_cmd_timeout():
     LOG.tc_step("tc4")
     with host_helper.ssh_to_host('compute-1'):
         LOG.info("yeah test passed.")
+
+
+def test_cli_timeout():
+    LOG.tc_step("event-list")
+    cli.system('event-list', fail_ok=True, timeout=3)
+
+    LOG.tc_step("nova list")
+    cli.nova('list', '--a', fail_ok=False)
+
+    LOG.tc_step("cat log")
+    # This fails because of the terminal display is slower than cat cmd. No easy solution so far.
+    # This is an issue automation should fix anyways.
+    # http://stackoverflow.com/questions/18607570/how-to-terminate-cat-command
+    # http://unix.stackexchange.com/questions/176917/how-to-kill-a-runaway-cat
+    con_ssh.exec_cmd('cat /var/log/sm-scheduler.log', expect_timeout=3)
+
+    LOG.tc_step('nova list')
+    cli.nova('list', '--a', fail_ok=False)

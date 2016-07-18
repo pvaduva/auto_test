@@ -53,7 +53,7 @@ class SSHClient:
     """
 
     def __init__(self, host, user='wrsroot', password='li69nux', force_password=True, initial_prompt=CONTROLLER_PROMPT,
-                 timeout=20):
+                 timeout=20, session=None):
         """
         Initiate an object for connecting to remote host
         Args:
@@ -70,12 +70,12 @@ class SSHClient:
         self.password = password
         self.initial_prompt = initial_prompt
         self.prompt = initial_prompt
-        self._session = None
-        self.cmd_sent = ''
-        self.cmd_output = ''
+        self._session = session
+        # self.cmd_sent = ''
+        # self.cmd_output = ''
         self.force_password = force_password
         self.timeout = timeout
-        self.logpath = None
+        # self.logpath = None
 
     def __get_logpath(self):
         lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith('__')]
@@ -110,7 +110,7 @@ class SSHClient:
             try:
                 LOG.info("Attempt to connect to host - {}".format(self.host))
                 self._session = pxssh.pxssh(encoding='utf-8')
-                
+
                 # set to ignore ssh host fingerprinting
                 self._session.SSH_OPTS = _SSH_OPTS
                 self._session.force_password = self.force_password
@@ -142,6 +142,8 @@ class SSHClient:
             # at all. But leave as is in case pxssh fix it in future releases.
             except (OSError, pexpect.TIMEOUT, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh) as e:
                 # fail login if retry=False
+                # LOG.debug("Reset session.after upon ssh error")
+                # self._session.after = ''
                 if not retry:
                     raise
 
@@ -203,7 +205,7 @@ class SSHClient:
         try:
             rtn = self._session.sendline(cmd)
         # TODO: use specific exception to catch unexpected disconnection with remote host such as swact
-        except OSError:
+        except Exception:
             if not reconnect:
                 raise
             else:
@@ -216,14 +218,16 @@ class SSHClient:
         self.cmd_sent = cmd
         return str(rtn)
 
-    def flush(self):
+    def flush(self, timeout=3):
         """
         flush before sending the next command.
         Returns:
 
         """
-        self.expect(fail_ok=True, timeout=3)
+        # LOG.error("heree preflush after {}".format(self._session.after))
+        self.expect(fail_ok=True, timeout=timeout)
         LOG.debug("Buffer is flushed by reading out the rest of the output")
+        # LOG.error("heree postflush after {}".format(self._session.after))
 
     def expect(self, blob_list=None, timeout=10, fail_ok=False, rm_date=False):
         """
@@ -258,14 +262,15 @@ class SSHClient:
             LOG.debug("Expecting exit code...")
 
         try:
-            index = self._session.expect(blob_list, timeout)
-        except (pexpect.EOF, pexpect.TIMEOUT):
+            index = self._session.expect(blob_list, timeout=timeout)
+        except (pexpect.EOF, pexpect.TIMEOUT) as e:
+            # LOG.warning("No match found for {}!\npexpect exception caught: {}".format(blob_list, e.__str__()))
+            # LOG.debug("Before: {}; After:{}".format(self._parse_output(self._session.before),
+            #                                         self._parse_output(self._session.after)))
             if fail_ok:
                 return -1
             else:
-                LOG.warning("No match found for {}!".format(blob_list))
-                LOG.debug("Before: {}; After:{}".format(self._parse_output(self._session.before),
-                                                        self._parse_output(self._session.after)))
+                LOG.warning("No match found for {}!\nPexpect exception caught: {}".format(blob_list, e.__str__()))
                 raise
 
         # Match found, reformat the outputs
@@ -316,9 +321,9 @@ class SSHClient:
         self.send(cmd, reconnect, reconnect_timeout)
         try:
             self.expect(timeout=expect_timeout)
-        except pxssh.TIMEOUT as e:
+        except pexpect.TIMEOUT as e:
             self.send_control('c')
-            self.flush()
+            self.flush(timeout=10)
             if fail_ok:
                 LOG.warning(e)
             else:
@@ -473,6 +478,7 @@ class SSHClient:
         return code, output
 
     def send_control(self, char='c'):
+        LOG.debug("Sending ctrl+{}".format(char))
         self._session.sendcontrol(char=char)
 
     def get_current_user(self):
@@ -555,10 +561,13 @@ class SSHFromSSH(SSHClient):
 
         """
         super(SSHFromSSH, self).__init__(host=host, user=user, password=password, force_password=force_password,
-                                         initial_prompt=initial_prompt, timeout=timeout)
+                                         initial_prompt=initial_prompt, timeout=timeout, session=ssh_client._session)
         self.parent = ssh_client
         self.ssh_cmd = '/usr/bin/ssh{} {}@{}'.format(_SSH_OPTS, self.user, self.host)
         self.timeout = timeout
+        # self._session = self.parent._session
+        # self.logpath = self.parent.logpath
+        # self._session.logfile = self.parent._session.logfile
 
     def connect(self, retry=False, retry_interval=3, retry_timeout=300, prompt=None,
                 use_current=True, use_password=True, timeout=None):
@@ -577,6 +586,9 @@ class SSHFromSSH(SSHClient):
             return the ssh client
 
         """
+        self.logpath = self.parent.logpath
+        self._session.logfile = self.parent._session.logfile
+
         if timeout is None:
             timeout = self.timeout
         if prompt is None:
@@ -618,8 +630,10 @@ class SSHFromSSH(SSHClient):
             except (OSError, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh) as e:
                 LOG.info("Exception caught when attempt to ssh to {}: {}".format(self.host, e))
                 if isinstance(e, pexpect.TIMEOUT):
+                    # LOG.debug("Reset _session.after for {} session".format(self.host))
+                    # self._session.after = ''
                     self.parent.send_control('c')
-                    self.parent.flush()
+                    self.parent.flush(timeout=3)
                 # fail login if retry=False
                 if not retry:
                     raise
@@ -639,38 +653,38 @@ class SSHFromSSH(SSHClient):
             raise exceptions.SSHRetryTimeout("Host: {}, User: {}, Password: {}".
                                              format(self.host, self.user, self.password))
 
-    def expect(self, blob_list=None, timeout=10, fail_ok=False, rm_date=False):
-        """
-        Look for match in the output. Stop if 1) match is found, 2) match is not found and prompt is reached, 3) match
-        is not found and timeout is reached. For scenario 2 and 3, either throw timeout exception or return False based
-        on the 'fail' argument.
-        Args:
-            blob_list(list|str): pattern(s) to expect
-            timeout: max timeout value to wait for pattern
-            fail_ok: True or False. When False: throws exception if match not found. When True: return -1 when match not
-                found.
-            rm_date (bool): Weather to remove the date output before expecting
+    # def expect(self, blob_list=None, timeout=10, fail_ok=False, rm_date=False):
+    #     """
+    #     Look for match in the output. Stop if 1) match is found, 2) match is not found and prompt is reached, 3) match
+    #     is not found and timeout is reached. For scenario 2 and 3, either throw timeout exception or return False based
+    #     on the 'fail' argument.
+    #     Args:
+    #         blob_list(list|str): pattern(s) to expect
+    #         timeout: max timeout value to wait for pattern
+    #         fail_ok: True or False. When False: throws exception if match not found. When True: return -1 when match not
+    #             found.
+    #         rm_date (bool): Weather to remove the date output before expecting
+    #
+    #     Returns: the index of the pattern matched in the output, assuming that blob can be a list.
+    #
+    #     Examples:
+    #         expect(): to wait for prompt
+    #         expect('good'): to wait for a match starts with 'good'
+    #         expect(['good', 'bad'], 10, False): to wait for a match start with 'good' or 'bad' with 10seconds timeout
+    #
+    #     """
+    #     if not blob_list:
+    #         blob_list = self.prompt
+    #
+    #     response = self.parent.expect(blob_list, timeout, fail_ok, rm_date=rm_date)
+    #     self.cmd_output = self.parent.cmd_output
+    #     return response
 
-        Returns: the index of the pattern matched in the output, assuming that blob can be a list.
-
-        Examples:
-            expect(): to wait for prompt
-            expect('good'): to wait for a match starts with 'good'
-            expect(['good', 'bad'], 10, False): to wait for a match start with 'good' or 'bad' with 10seconds timeout
-
-        """
-        if not blob_list:
-            blob_list = self.prompt
-
-        response = self.parent.expect(blob_list, timeout, fail_ok, rm_date=rm_date)
-        self.cmd_output = self.parent.cmd_output
-        return response
-
-    def send(self, cmd='', reconnect=False, reconnect_timeout=300, flush=False):
-        if flush:
-            self.flush()
-        self.parent.send(cmd, reconnect, reconnect_timeout)
-        self.cmd_sent = self.parent.cmd_sent
+    # def send(self, cmd='', reconnect=False, reconnect_timeout=300, flush=False):
+    #     if flush:
+    #         self.flush()
+    #     self.parent.send(cmd, reconnect, reconnect_timeout)
+    #     self.cmd_sent = self.parent.cmd_sent
 
     def close(self, force=False):
         if force or self._is_connected():
@@ -689,7 +703,8 @@ class SSHFromSSH(SSHClient):
         except OSError:    # TODO: add unit test
             return False
 
-        return self.expect(blob_list=[self.prompt, self.parent.get_prompt()], timeout=3, fail_ok=fail_ok) == 0
+        index = self.expect(blob_list=[self.prompt, self.parent.get_prompt()], timeout=3, fail_ok=fail_ok)
+        return 0 == index
 
 
 class VMSSHClient(SSHFromSSH):

@@ -151,6 +151,14 @@ class Labs:
         # 'auth_url': 'http://192.168.204.102:5000/v2.0/',
     }
 
+    WCP_35_60 = {
+        'short_name': 'wcp_35_60',
+        'name': 'yow-cgcs-wildcat-35_60',
+        'floating ip': '128.224.150.234',
+        'controller-0 ip': '128.224.150.232',
+        'controller-1 ip': '128.224.150.233'
+    }
+
     VBOX = {
         'short_name': 'vbox',
         'name': 'vbox',

@@ -114,6 +114,7 @@ class FlavorSpec:
     CPU_POLICY = 'hw:cpu_policy'
     VCPU_MODEL = 'hw:cpu_model'
     SHARED_VCPU = 'hw:wrs:shared_vcpu'
+    CPU_THREAD_POLICY = 'hw:cpu_threads_policy'
     STORAGE_BACKING = 'aggregate_instance_extra_specs:storage'
     # LOCAL_STORAGE = 'aggregate_instance_extra_specs:localstorage'
     DISK_READ_BYTES = 'quota:disk_read_bytes_sec'
@@ -147,10 +148,13 @@ class ServerGroupMetadata:
 
 class InstanceTopology:
     NODE = 'node:(\d),'
-    PGSIZE = 'pgsize:(\d{1,3})M,'
+    PGSIZE = 'pgsize:(\d{1,3}),'
     VCPUS = 'vcpus:(\d{1,2}),'
-    PCPUS = 'pcpus:(.*),\s'     # find a string separated by ',' if multiple numa nodes
+    PCPUS = 'pcpus:(\d{1,2}),\s'     # find a string separated by ',' if multiple numa nodes
     CPU_POLICY = 'pol:(.*),'
+    SIBLINGS = 'siblings:(.*),'
+    THREAD_POLICY = 'thr:(.*)$|thr:(.*),'
+    TOPOLOGY = '\d{1,2}s,\d{1,2}c,\d{1,2}t'
 
 
 class RouterStatus:

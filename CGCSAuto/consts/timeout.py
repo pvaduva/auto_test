@@ -1,4 +1,4 @@
-CLI_TIMEOUT = 30
+CLI_TIMEOUT = 120
 
 
 class HostTimeout:

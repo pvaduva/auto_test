@@ -82,7 +82,7 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
     elif '::' in test_name:
         test_name = test_name.split('::')[-1]
     
-    test_name = test_name.replace(" ", "_").replace('(', '_').replace(')', '_')
+    test_name = test_name.replace(" ", "_").replace('(', '_').replace(')', '_').replace(';', '_')
     # get the results of the test execution
     if result is None:
         result = options['result'] 
