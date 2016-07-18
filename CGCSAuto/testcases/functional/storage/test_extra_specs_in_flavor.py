@@ -57,26 +57,23 @@ def config_local_volume_group(request):
     local_volume_group = {
         'flavor_var': flavor_var,
         'flavor_var_value': flavor_var_value,
-        'instance_backing': local_volume_type
+        'instance_backing': request.param[2]
     }
 
     # check the local volume group of compute-0
     inst_back = host_helper.get_local_storage_backing('compute-0', con_ssh=None)
 
     # if already same lvm skip
-    if inst_back == local_volume_type:
+    if inst_back == request.param[2]:
         return local_volume_group
 
     # config lvg parameter for instance backing either image/lvm
-    host_helper.set_host_local_backing_type('compute-0', inst_type=local_volume_type, vol_group='nova-local')
-
-    print('local_vol {} and inst_back {}'.format(local_volume_type, inst_back))
+    host_helper.set_host_local_backing_type('compute-0', inst_type=request.param[2], vol_group='nova-local')
 
     def reset_local_volume_group():
         # reset local volume group back to image
-        print("teardown revert host")
-        if local_volume_type != inst_back:
-            host_helper.set_host_local_backing_type('compute-0', inst_type=inst_back, vol_group='nova-local')
+        if request.param[2] != 'image':
+            host_helper.set_host_local_backing_type('compute-0', inst_type='image', vol_group='nova-local')
     request.addfinalizer(reset_local_volume_group)
 
     return local_volume_group
