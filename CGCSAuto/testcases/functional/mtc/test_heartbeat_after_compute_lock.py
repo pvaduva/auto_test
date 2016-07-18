@@ -1,5 +1,5 @@
 ###
-#from us63135_tc11: validate_heartbeat_works_after_compute_node_reboot
+#from us63135_tc11: validate_heartbeat_works_after_compute_lock
 ###
 
 
@@ -56,7 +56,6 @@ def heartbeat_flavor_vm(request):
         # must delete VM before flavors
         vm_helper.delete_vms(vm_id, delete_volumes=True)
         nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
-        host_helper.unlock_host(vm_host)
         # wait for hostname to be back in host list in nova
         host_helper.wait_for_hypervisors_up(vm_host)
         host_helper.wait_for_hosts_in_nova_compute(vm_host)
@@ -99,8 +98,9 @@ def test_heartbeat_after_compute_lock(heartbeat_flavor_vm):
     vm_host = table_parser.get_values(vm_host_table,'host', ID=vm_id)[0]
 
     host_helper.lock_host(vm_host)
+    host_helper.unlock_host(vm_host, check_hypervisor_up=True)
     compute_list = system_helper.get_computes()
-    print(compute_list)
+
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 

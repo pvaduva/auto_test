@@ -1,5 +1,5 @@
 ###
-#from us63135_tc9: validate_heartbeat_works_after_compute_node_reboot
+#from us63135_tc8: validate_heartbeat_works_after_vim_restart
 ###
 
 
@@ -47,7 +47,7 @@ def heartbeat_flavor_vm(request):
           'heartbeat': heartbeat
           }
 
-    ResourceCleanup.add('vm', vm_id, scope='module')
+    #ResourceCleanup.add('vm', vm_id, scope='module')
 
     return vm
 
@@ -80,23 +80,16 @@ def test_heartbeat_after_vim_restart(heartbeat_flavor_vm):
     heartbeat_type = heartbeat_flavor_vm['heartbeat']
 
     LOG.tc_step("Kill the nfv-vim.pid process on active controller")
-    # find the compute node where the vm is located
-
-    vm_host_table = system_helper.get_vm_topology_tables('servers')[0]
-    vm_host = table_parser.get_values(vm_host_table, 'host', ID=vm_id)[0]
 
     #restart vim process
     #run this from active controller
     ssh_client = ControllerClient.get_active_controller()
-    controller = system_helper.get_active_controller_name()
     first_cmd = "cat /var/volatile/run/nfv-vim.pid"
     code, output = ssh_client.exec_sudo_cmd(first_cmd)
     second_cmd = "kill -9 "+output
     ssh_client.exec_sudo_cmd(second_cmd)
 
-
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-
 
         LOG.tc_step("check heartbeat after restart vim nfv-vim.pid ")
         cmd = "ps -ef | grep [h]eartbeat | awk '{print $10}' "

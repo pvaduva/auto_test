@@ -1,5 +1,5 @@
 ###
-#from us63135_tc9: validate_heartbeat_works_after_compute_node_reboot
+#from us63135_tc10: validate_heartbeat_works_after_compute_node_reboot
 ###
 
 
@@ -11,7 +11,7 @@ from utils.tis_log import LOG
 from consts.cgcs import EventLogID, FlavorSpec
 from consts.timeout import EventLogTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
-
+from testfixtures.resource_mgmt import ResourceCleanup
 
 # heartbeat Type
 flavor_params = ['True']
@@ -34,6 +34,7 @@ def heartbeat_flavor_vm(request):
     flavor_id = nova_helper.create_flavor()[1]
     heartbeat_spec = {FlavorSpec.GUEST_HEARTBEAT: heartbeat}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
+    ResourceCleanup.add('flavor', flavor_id,scope='module')
 
     # use volume to boot a vm by default
     vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
@@ -50,21 +51,14 @@ def heartbeat_flavor_vm(request):
           'heartbeat': heartbeat
           }
 
-    vm_host = nova_helper.get_vm_host(vm_id)
 
-    def unlock_host():
-        # must delete VM before flavors
-        vm_helper.delete_vms(vm_id, delete_volumes=True)
-        nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
-        # wait for hostname to be back in host list in nova
-        host_helper.wait_for_hypervisors_up(vm_host)
-        host_helper.wait_for_hosts_in_nova_compute(vm_host)
-    request.addfinalizer(unlock_host)
+    #ResourceCleanup.add('vm', vm_id, scope='module')
+
 
     return vm
 
 
-def test_heartbeat_after_compute_lock(heartbeat_flavor_vm):
+def test_heartbeat_after_compute_reboot(heartbeat_flavor_vm):
     """
     from us63135_tc11: validate_heartbeat_works_after_compute_node_reboot
 
@@ -96,10 +90,13 @@ def test_heartbeat_after_compute_lock(heartbeat_flavor_vm):
     vm_host = nova_helper.get_vm_host(vm_id)
 
     host_helper.reboot_hosts(vm_host)
+    # wait for hostname to be back in host list in nova
+    host_helper.wait_for_hypervisors_up(vm_host)
+    host_helper.wait_for_hosts_in_nova_compute(vm_host)
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 
-        LOG.tc_step("check heartbeat after compute lock")
+        LOG.tc_step("check heartbeat after compute reboot")
         cmd = "ps -ef | grep [h]eartbeat | awk '{print $10}' "
         heartbeat_proc_shown = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False, expt_timeout=3,
                                                           check_interval=2)

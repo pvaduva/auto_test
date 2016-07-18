@@ -24,7 +24,7 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
     if not hostname:
         raise exceptions.HostError("Expected a valid hostname but got nothing instead")
 
-    # get the port_uuid for oam type interface only
+    # get the port_uuid for network_type interface only
     table_ = system_helper.get_interfaces(hostname, con_ssh=None)
     port_uuid_list = table_parser.get_values(table_, 'uuid', **{'network type': network_type})
     imtu = " --imtu "+mtu
@@ -45,7 +45,6 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
     # unlock the node
     LOG.tc_step('unlock the standby')
     host_helper.unlock_host(hostname)
-
 
 
 @mark.parametrize('mtu', ['1400', '1500'])
