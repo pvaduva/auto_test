@@ -186,6 +186,7 @@ def test_snat_evacuate_vm(snat_setups, snat):
 @mark.slow
 @mark.trylast
 # @mark.skipif(True, reason="Host reboot undetected JIRA CGTS-4616")
+@mark.skipif(True, reason="Host cannot recover after reboot. JIRA: CGTS-4768")
 def test_snat_computes_lock_reboot(snat_setups):
     """
     test vm external access after host compute reboot with all rest of computes locked

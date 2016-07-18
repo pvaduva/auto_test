@@ -31,4 +31,13 @@ class CPUThreadErr:
                            "is not divisible by number of threads: 2"
     INSUFFICIENT_CORES_FOR_ISOLATE = "{}: (NUMATopologyFilter) Cannot pin instance as requested VCPUs: {}, is " \
                                      "greater than available CPUs: {}, with 'isolate' threads policy"
+    HT_HOST_UNAVAIL = "(NUMATopologyFilter) Host not useable. Requested threads policy: '{}'; from flavor or image " \
+                      "is not allowed on non-hyperthreaded host"
+    UNSET_SHARED_VCPU = "Cannot set hw:cpu_threads_policy to {} if hw:wrs:shared_vcpu is set. Either unset " \
+                        "hw:cpu_threads_policy or unset hw:wrs:shared_vcpu"
+    UNSET_MIN_VCPUS = "Cannot set hw:cpu_threads_policy to {} if hw:wrs:min_vcpus is set. Either unset " \
+                      "hw:cpu_threads_policy, set it to another policy, or unset hw:wrs:min_vcpus"
 
+
+class SharedCPUErr:
+    DEDICATED_CPU_REQUIRED = "hw:wrs:shared_vcpu is only valid when hw:cpu_policy is 'dedicated'"

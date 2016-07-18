@@ -4,45 +4,86 @@ from pytest import mark, fixture, skip
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec
-from consts.cli_errs import CPUThreadErr
+from consts.cli_errs import CPUThreadErr, SharedCPUErr
 
 from keywords import nova_helper, system_helper, vm_helper, host_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-@mark.parametrize(('cpu_policy', 'cpu_thread_policy', 'expt_err'), [
-    mark.p1((None, 'isolate', 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
-    mark.p1((None, 'require', 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
-    mark.p1(('shared', 'isolate', 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
-    mark.p1(('shared', 'require', 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
-    mark.p3(('dedicated', '', 'CPUThreadErr.INVALID_POLICY')),
-    mark.p3(('dedicated', 'requi', 'CPUThreadErr.INVALID_POLICY')),
-    mark.p3(('dedicated', '', 'CPUThreadErr.INVALID_POLICY')),
-    mark.p3(('dedicated', 'REQUIRE', 'CPUThreadErr.INVALID_POLICY')),
-    mark.p3(('dedicated', 'AOID', 'CPUThreadErr.INVALID_POLICY')),
-    mark.p3(('dedicated', 'ISOLATE', 'CPUThreadErr.INVALID_POLICY')),
+@mark.parametrize(('cpu_policy', 'cpu_thread_policy', 'shared_vcpu', 'min_vcpus', 'expt_err'), [
+    mark.p1((None, 'isolate', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
+    mark.p1((None, 'require', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
+    mark.p1(('shared', 'isolate', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
+    mark.p1(('shared', 'require', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
+    mark.p3(('dedicated', '', None, None, 'CPUThreadErr.INVALID_POLICY')),
+    mark.p3(('dedicated', 'requi', None, None, 'CPUThreadErr.INVALID_POLICY')),
+    mark.p3(('dedicated', '', None, None, 'CPUThreadErr.INVALID_POLICY')),
+    mark.p3(('dedicated', 'REQUIRE', None, None, 'CPUThreadErr.INVALID_POLICY')),
+    mark.p3(('dedicated', 'AOID', None, None, 'CPUThreadErr.INVALID_POLICY')),
+    mark.p3(('dedicated', 'ISOLATE', None, None, 'CPUThreadErr.INVALID_POLICY')),
+    mark.p3((None, None, '1', None, 'SharedCPUErr.DEDICATED_CPU_REQUIRED')),
+    mark.p3(('shared', None, '0', None, 'SharedCPUErr.DEDICATED_CPU_REQUIRED')),
+    mark.p2(('dedicated', 'isolate', '0', None, 'CPUThreadErr.UNSET_SHARED_VCPU')),
+    mark.p2(('dedicated', 'require', '1', None, 'CPUThreadErr.UNSET_SHARED_VCPU')),
+    mark.p2(('dedicated', 'require', None, '2', 'CPUThreadErr.UNSET_MIN_VCPUS')),     # Allowed with isolate
+
 ])
-def test_cpu_thread_flavor_add_negative(cpu_policy, cpu_thread_policy, expt_err):
-    LOG.tc_step("Create a flavor without any extra specs specified")
-    flavor_id = nova_helper.create_flavor(name='cpu_thread_neg1', check_storage_backing=False)[1]
+def test_cpu_thread_flavor_set_negative(cpu_policy, cpu_thread_policy, shared_vcpu, min_vcpus, expt_err):
+    LOG.tc_step("Create a flavor with 2 vcpus")
+    flavor_id = nova_helper.create_flavor(name='cpu_thread_neg1', check_storage_backing=False, vcpus=2)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
-    specs = {FlavorSpec.CPU_THREAD_POLICY: cpu_thread_policy}
-    if cpu_policy is not None:
-        specs[FlavorSpec.CPU_POLICY] = cpu_policy
+    specs_dict = {FlavorSpec.CPU_POLICY: cpu_policy,
+                  FlavorSpec.CPU_THREAD_POLICY: cpu_thread_policy,
+                  FlavorSpec.SHARED_VCPU: shared_vcpu,
+                  FlavorSpec.MIN_VCPUS: min_vcpus
+                  }
 
-    LOG.tc_step("Attempt to set following flavor extra specs: {}".format(specs))
-    code, output = nova_helper.set_flavor_extra_specs(flavor_id, fail_ok=True, **specs)
+    specs_to_set = {}
+    for key, value in specs_dict.items():
+        if value is not None:
+            specs_to_set[key] = value
+
+    LOG.tc_step("Attempt to set following flavor extra specs: {}".format(specs_to_set))
+    code, output = nova_helper.set_flavor_extra_specs(flavor_id, fail_ok=True, **specs_to_set)
 
     LOG.tc_step("Verify cli rejected invalid extra specs setting with proper error message.")
     expt_err_eval = eval(expt_err)
-    if expt_err == 'CPUThreadErr.INVALID_POLICY':
+    if expt_err in ['CPUThreadErr.INVALID_POLICY', 'CPUThreadErr.UNSET_SHARED_VCPU', 'CPUThreadErr.UNSET_MIN_VCPUS']:
         expt_err_eval = expt_err_eval.format(cpu_thread_policy)
 
-    assert 1 == code, 'Set cpu thread policy is not rejected when cpu policy is unset.'
+    assert 1 == code, 'Set flavor extra spec is not rejected with invalid extra spec settings: {}.'.format(specs_to_set)
     assert expt_err_eval in output
 
 
+@mark.parametrize(('specs_preset', 'specs_to_set', 'expt_err'), [
+    mark.p2(({FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.CPU_THREAD_POLICY: 'isolate'}, {FlavorSpec.SHARED_VCPU: '1'}, 'CPUThreadErr.UNSET_SHARED_VCPU')),
+    mark.p2(({FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.SHARED_VCPU: '0'}, {FlavorSpec.CPU_THREAD_POLICY: 'require'}, 'CPUThreadErr.UNSET_SHARED_VCPU')),
+])
+def test_cpu_thread_flavor_add_negative(specs_preset, specs_to_set, expt_err):
+    LOG.tc_step("Create a flavor with 2 vcpus")
+    flavor_id = nova_helper.create_flavor(name='cpu_thread_neg1', check_storage_backing=False, vcpus=2)[1]
+    ResourceCleanup.add('flavor', flavor_id)
+
+    LOG.tc_step("Set following extra specs: {}".format(specs_preset))
+    nova_helper.set_flavor_extra_specs(flavor_id, **specs_preset)
+
+    LOG.tc_step("Attempt to set following flavor extra specs: {}".format(specs_to_set))
+    code, output = nova_helper.set_flavor_extra_specs(flavor_id, fail_ok=True, **specs_to_set)
+
+    LOG.tc_step("Verify cli rejected invalid extra specs setting with proper error message.")
+    expt_err_eval = eval(expt_err)
+    if expt_err == 'CPUThreadErr.UNSET_SHARED_VCPU':
+        all_specs = specs_preset.copy()
+        all_specs.update(specs_to_set)
+        expt_err_eval = expt_err_eval.format(all_specs[FlavorSpec.CPU_THREAD_POLICY])
+
+    assert 1 == code, 'Set flavor extra spec is not rejected. Existing specs: {}. Specs to set: {}'.format(
+            specs_preset, specs_to_set)
+    assert expt_err_eval in output
+
+
+@mark.p1
 @mark.parametrize('cpu_thread_policy', [
     'isolate',
     'require',
@@ -80,10 +121,11 @@ class TestHTEnabled:
         LOG.info('Hyper-threading enabled hosts: {}'.format(ht_hosts))
         return ht_hosts
 
+    @mark.p1
     @mark.parametrize('cpu_thread_policy', [
         'isolate',
         'require',
-        None
+        None        # this one might need updates
     ])
     def test_boot_vm_cpu_thread_positive(self, cpu_thread_policy, ht_hosts):
         LOG.tc_step("Create flavor with 2 vcpus")
@@ -123,7 +165,7 @@ class TestHTEnabled:
                     "siblings, pcpus")
         instance_topology = vm_helper.get_instance_topology(vm_id)
         log_cores_siblings = host_helper.get_logcore_siblings(host=vm_host)
-        for topology_on_numa_node in instance_topology:     # TODO is it possible to be on two numa nodes?
+        for topology_on_numa_node in instance_topology:     # Cannot be on two numa nodes unless specified in flavor
             assert 'ded' == topology_on_numa_node['pol'], "CPU policy is not dedicated in vm-topology"
 
             actual_thread_policy = topology_on_numa_node['thr']
@@ -231,6 +273,7 @@ class TestHTEnabled:
         left_over_isolate_cores = left_over_unpinned_cpus / 2
         return ht_host, max_vm_num, flavor_id, left_over_isolate_cores
 
+    @mark.p2
     def test_boot_multiple_vms_cpu_thread_isolate(self, prepare_multi_vm_env):
         ht_host, max_vm_num, flavor_id, left_over_isolate_cores = prepare_multi_vm_env
         log_cores_siblings = host_helper.get_logcore_siblings(host=ht_host)
@@ -299,3 +342,48 @@ class TestHTEnabled:
         fault_msg = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
         assert "No valid host was found" in fault_msg
         assert CPUThreadErr.INSUFFICIENT_CORES_FOR_ISOLATE.format(ht_host, 4, left_over_isolate_cores) in fault_msg
+
+
+class TestHTDisabled:
+
+    @fixture(scope='class', autouse=True)
+    def ht_hosts(self):
+        LOG.fixture_step("Check if all hosts have hyper-threading disabled.")
+        nova_hosts = host_helper.get_nova_hosts()
+        ht_hosts = []
+        for host in nova_hosts:
+            if system_helper.is_hyperthreading_enabled(host):
+                ht_hosts.append(host)
+
+        if ht_hosts:
+            skip("Some nova host(s) has Hyper-threading enabled.")
+
+        LOG.info('Hyper-threading enabled hosts: {}'.format(ht_hosts))
+        return nova_hosts
+
+    @mark.p1
+    @mark.parametrize(('vcpus', 'cpu_thread_policy', 'expt_err'), [
+        (2, 'require', 'CPUThreadErr.HT_HOST_UNAVAIL'),
+        (2, 'isolate', 'CPUThreadErr.HT_HOST_UNAVAIL')
+    ])
+    def test_boot_vm_cpu_thread_ht_disable_negative(self, vcpus, cpu_thread_policy, expt_err):
+        LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
+        flavor_id = nova_helper.create_flavor(name='cpu_thread_negative', vcpus=vcpus)[1]
+        ResourceCleanup.add('flavor', flavor_id)
+
+        specs = {FlavorSpec.CPU_THREAD_POLICY: cpu_thread_policy, FlavorSpec.CPU_POLICY: 'dedicated'}
+        LOG.tc_step("Set following extra specs: {}".format(specs))
+        nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+
+        LOG.tc_step("Boot a vm with above flavor and check it failed booted.")
+        code, vm_id, msg, vol_id = vm_helper.boot_vm(name='cpu_thread_{}'.format(cpu_thread_policy),
+                                                     flavor=flavor_id, fail_ok=True)
+        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+        ResourceCleanup.add('volume', vol_id)
+
+        assert 1 == code, "Boot vm cli is not rejected. Details: {}".format(msg)
+
+        LOG.tc_step("Check expected fault message displayed in nova show")
+        fault_msg = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
+        assert eval(expt_err).format(cpu_thread_policy) in fault_msg
+

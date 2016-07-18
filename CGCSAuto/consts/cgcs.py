@@ -115,6 +115,8 @@ class FlavorSpec:
     VCPU_MODEL = 'hw:cpu_model'
     SHARED_VCPU = 'hw:wrs:shared_vcpu'
     CPU_THREAD_POLICY = 'hw:cpu_threads_policy'
+    VCPU_SCHEDULER = 'hw:wrs:vcpu:scheduler'
+    MIN_VCPUS = "hw:wrs:min_vcpus"
     STORAGE_BACKING = 'aggregate_instance_extra_specs:storage'
     # LOCAL_STORAGE = 'aggregate_instance_extra_specs:localstorage'
     DISK_READ_BYTES = 'quota:disk_read_bytes_sec'
@@ -129,8 +131,6 @@ class FlavorSpec:
     MEM_PAGE_SIZE = 'hw:mem_page_size'
     AUTO_RECOVERY = 'sw:wrs:auto_recovery'
     GUEST_HEARTBEAT = 'sw:wrs:guest:heartbeat'
-    VCPU_SCHEDULER = 'hw:wrs:vcpu:scheduler'
-    MIN_VCPUS = "hw:wrs:min_vcpus"
     SRV_GRP_MSG = "sw:wrs:srv_grp_messaging"
     NIC_ISOLATION = "hw:wrs:nic_isolation"
 

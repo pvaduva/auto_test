@@ -1479,6 +1479,8 @@ def get_provider_net_for_interface(interface='pthru', rtn_val='id', filepath=Non
     if not provider_net_name:
         return ''
 
+    provider_net_name = provider_net_name[0]
+
     return get_provider_nets(name='.*{}'.format(provider_net_name), rtn_val=rtn_val, con_ssh=con_ssh, strict=True,
                              regex=True, auth_info=auth_info)[0]
 
