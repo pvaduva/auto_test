@@ -12,7 +12,7 @@ def hosts_recover_func(request):
         hosts = HostsToRecover._get_hosts_to_recover(scope='function')
         if hosts:
             HostsToRecover._reset('function')
-            HostsToRecover._recover_hosts(hosts)
+            HostsToRecover._recover_hosts(hosts, 'function')
     request.addfinalizer(recover_)
 
 
@@ -22,7 +22,7 @@ def hosts_recover_class(request):
         hosts = HostsToRecover._get_hosts_to_recover(scope='class')
         if hosts:
             HostsToRecover._reset('class')
-            HostsToRecover._recover_hosts(hosts)
+            HostsToRecover._recover_hosts(hosts, 'class')
     request.addfinalizer(recover_hosts)
 
 
@@ -32,7 +32,7 @@ def hosts_recover_module(request):
         hosts = HostsToRecover._get_hosts_to_recover(scope='module')
         if hosts:
             HostsToRecover._reset('module')
-            HostsToRecover._recover_hosts(hosts)
+            HostsToRecover._recover_hosts(hosts, 'module')
     request.addfinalizer(recover_hosts)
 
 

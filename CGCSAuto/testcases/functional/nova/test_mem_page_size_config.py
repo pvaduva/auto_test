@@ -176,6 +176,8 @@ def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_, add_1g_and_4k_pages):
     pre_used_mems = [int(mem) for mem in table_parser.get_column(pre_computes_tab, 'U:memory')[0]]
     pre_avail_mems = table_parser.get_column(pre_computes_tab, 'A:mem_1G')[0]
     pre_avail_mems = [int(mem) for mem in pre_avail_mems]
+    # FIXME: if large is set, check if vm_host has 1G pre vm boot, if not, 2M mem should be used.
+    # if mem_page_size == 'large':
 
     post_computes_tab = system_helper.get_vm_topology_tables('computes')[0]
     post_computes_tab = table_parser.filter_table(post_computes_tab, Host=vm_host)

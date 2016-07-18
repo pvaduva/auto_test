@@ -117,7 +117,7 @@ def pytest_runtest_makereport(item, call, __multicall__):
             res_in_log = 'Test Failed at {}'.format(fail_at)
 
         # Log test result
-        testcase_log(msg=res_in_log, nodeid=test_name, log_type='tc_end')
+        testcase_log(msg=res_in_log, nodeid=test_name, log_type='tc_res')
 
         if 'Test Passed' in res_in_log:
             res_in_tests = 'Passed'
@@ -184,8 +184,8 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
     print_msg = separator + '\n' + msg
     logging_msg = '\n{}{} {}'.format(separator, msg, nodeid)
     print(print_msg)
-    if log_type == 'tc_end':
-        LOG.tc_func_end(msg=msg, tc_name=nodeid)
+    if log_type == 'tc_res':
+        LOG.tc_result(msg=msg, tc_name=nodeid)
     elif log_type == 'tc_start':
         LOG.tc_func_start(nodeid)
     elif log_type == 'tc_setup':
@@ -262,7 +262,7 @@ def pytest_addoption(parser):
 def config_logger(log_dir):
     # logger for log saved in file
     file_name = log_dir + '/TIS_AUTOMATION.log'
-    formatter_file = "'%(asctime)s %(levelname)-5s %(filename)-10s %(funcName)-10s: %(message)s'"
+    formatter_file = "'%(asctime)s %(lineno)-4d%(levelname)-5s %(filename)-10s %(funcName)-10s: %(message)s'"
     logging.basicConfig(level=logging.NOTSET, format=formatter_file, filename=file_name, filemode='w')
 
     # logger for stream output
@@ -294,6 +294,7 @@ def pytest_unconfigure():
 
 def pytest_collection_modifyitems(items):
     for item in items:
+        # known issue marker
         feature_marker = item.get_marker('features')
         if feature_marker is not None:
             features = feature_marker.args

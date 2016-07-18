@@ -65,11 +65,17 @@ def test_vm_vcpu_model(flavor_and_volume, vcpu_model):
         LOG.tc_step("Check vcpu model successfully applied to vm")
         with host_helper.ssh_to_host(host) as host_ssh:
             code, output = host_ssh.exec_cmd("ps aux | grep --color='never' -i {}".format(vm), fail_ok=False)
-        assert ' -cpu {} '.format(vcpu_model).lower() in output.lower(), 'cpu_model {} not found for vm {}'.\
-            format(vcpu_model, vm)
+
+        if vcpu_model == 'Haswell':
+            assert ' -cpu  haswell ' in output.lower() or ' -cpu haswell-notsx ' in output.lower, \
+                'cpu_model Haswell or Haswell-noTSX not found for vm {}'.format(vm)
+        else:
+            assert ' -cpu {} '.format(vcpu_model).lower() in output.lower(), 'cpu_model {} not found for vm {}'.\
+                format(vcpu_model, vm)
     else:
         LOG.tc_step("Check vm in error state due to vcpu model unsupported by hosts.")
         assert 1 == code, "boot vm cli exit code is not 1. Actual fail reason: {}".format(msg)
+
         expt_fault = "No valid host was found.*vcpu_model.*required.*"
         res_bool, vals = vm_helper.wait_for_vm_values(vm, 10, regex=True, strict=False, status='ERROR', fault=expt_fault)
         assert res_bool, "VM did not reach expected error state. Actual: {}".format(vals)

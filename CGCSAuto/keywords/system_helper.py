@@ -517,14 +517,14 @@ def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, nameserv
         pass
 
 
-def get_vm_topology_tables(*table_names, con_ssh=None):
+def get_vm_topology_tables(*table_names, con_ssh=None, combine_multiline=False):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
     show_args = ','.join(table_names)
 
     tables_ = table_parser.tables(con_ssh.exec_cmd('vm-topology -s {}'.format(show_args), expect_timeout=30)[1],
-                                  combine_multiline_entry=False)
+                                  combine_multiline_entry=combine_multiline)
     return tables_
 
 

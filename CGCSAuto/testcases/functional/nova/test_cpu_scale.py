@@ -12,6 +12,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
     mark.p2((1, 'dedicated', 2, "MinCPUErr.VAL_LARGER_THAN_VCPUS")),
     mark.p3((1, 'dedicated', [0, -1], "MinCPUErr.VAL_LESS_THAN_1")),
     mark.p3((2, 'shared', 1, "MinCPUErr.CPU_POLICY_NOT_DEDICATED")),
+    mark.p3((2, None, 1, "MinCPUErr.CPU_POLICY_NOT_DEDICATED")),
 ])
 def test_flavor_min_vcpus_invalid(vcpu_num, cpu_policy, min_vcpus, expected_err):
     """
@@ -33,7 +34,8 @@ def test_flavor_min_vcpus_invalid(vcpu_num, cpu_policy, min_vcpus, expected_err)
     LOG.tc_step("Create flavor with {} vcpus".format(vcpu_num))
     flavor_id = nova_helper.create_flavor('vcpu_scheduler_invalid', vcpus=vcpu_num)[1]
     ResourceCleanup.add('flavor', flavor_id)
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **{FlavorSpec.CPU_POLICY: cpu_policy})
+    if cpu_policy is not None:
+        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **{FlavorSpec.CPU_POLICY: cpu_policy})
 
     if isinstance(min_vcpus, int):
         min_vcpus = [min_vcpus]
