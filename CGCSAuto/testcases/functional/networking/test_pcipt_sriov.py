@@ -89,10 +89,10 @@ class TestSriovPciptResourceUsage:
 
         LOG.info("Tne resource usage {} is equal to expected value {}".format(resource_value, increment_value))
 
-        if actual_resource_value == increment_value:
+        if resource_value == increment_value:
             LOG.info("Tne resource usage {} is equal to expected value {}".format(resource_value, increment_value))
         else:
-            assert actual_resource_value == increment_value, "The resource usage is not equal to expected value"
+            assert resource_value == increment_value, "The resource usage is not equal to expected value"
             LOG.info("The resource usage {} is not equal to expected value {}".format(resource_value,increment_value))
         return base_vm, vm_under_test
 
