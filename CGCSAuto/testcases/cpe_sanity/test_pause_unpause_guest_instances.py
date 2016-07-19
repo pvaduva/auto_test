@@ -41,7 +41,7 @@ def vm_1(request, flavor_):
 
     # Teardown to remove the vm and flavor
     def restore_hosts():
-        LOG.tc_step("Cleaning up vms..")
+        LOG.fixture_step("Cleaning up vms..")
         vm_helper.delete_vms(vm_id, delete_volumes=True)
 
     request.addfinalizer(restore_hosts)
@@ -60,7 +60,7 @@ def vm_2(request, flavor_):
 
     # Teardown to remove the vm and flavor
     def restore_hosts():
-        LOG.tc_step("Cleaning up vms..")
+        LOG.fixture_step("Cleaning up vms..")
         vm_helper.delete_vms(vm_id, delete_volumes=True)
 
     request.addfinalizer(restore_hosts)
