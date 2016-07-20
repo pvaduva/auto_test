@@ -169,9 +169,14 @@ class TestHTEnabled:
             assert 'ded' == topology_on_numa_node['pol'], "CPU policy is not dedicated in vm-topology"
 
             actual_thread_policy = topology_on_numa_node['thr']
-            assert actual_thread_policy in cpu_thread_policy, \
-                'cpu thread policy in vm topology is {} while flavor spec is {}'.\
-                format(actual_thread_policy, cpu_thread_policy)
+            if cpu_thread_policy:
+                assert actual_thread_policy in cpu_thread_policy, \
+                    'cpu thread policy in vm topology is {} while flavor spec is {}'.\
+                    format(actual_thread_policy, cpu_thread_policy)
+            else:
+                assert actual_thread_policy == 'no', \
+                    'cpu thread policy in vm topology is {} while flavor spec is {}'.\
+                    format(actual_thread_policy, cpu_thread_policy)
 
             expt_siblings = None if cpu_thread_policy == 'isolate' else {0, 1}
             assert expt_siblings == topology_on_numa_node['siblings'], "siblings should be displayed for 'require' only"
@@ -180,10 +185,11 @@ class TestHTEnabled:
             assert expt_topology in topology_on_numa_node['topology'], 'vm topology is not as expected'
 
             pcpus = topology_on_numa_node['pcpus']
+            pcpus_reverse = pcpus.reverse()
             if cpu_thread_policy == 'isolate':
-                assert pcpus not in log_cores_siblings
+                assert pcpus not in log_cores_siblings and pcpus_reverse not  in log_cores_siblings
             else:
-                assert pcpus in log_cores_siblings
+                assert pcpus in log_cores_siblings or pcpus_reverse in log_cores_siblings
 
         expt_core_sib_list = ['0', '1'] if cpu_thread_policy == 'isolate' else ['0-1']
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
