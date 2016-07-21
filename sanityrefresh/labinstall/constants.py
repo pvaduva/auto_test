@@ -14,7 +14,7 @@ LAB_YOW_REL_PATH = EXPORT_LAB_REL_PATH + "/yow"
 LAB_SCRIPTS_REL_PATH = EXPORT_LAB_REL_PATH + "/scripts"
 #CENTOS_LAB_BASE_PATH = "/localdisk/designer/jenkins/Secure_Src_Pull_CGCS_DEV_0016/wrlinux-x/addons/wr-cgcs/layers/cgcs/extras.ND/lab/"
 CENTOS_LAB_BASE_PATH = "/localdisk/designer/jenkins/CGCS_3.0_Centos_Pull_CGCS_DEV_0016/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/"
-CENTOS_LAB_REL_PATH = "/repos/addons/wr-cgcs/layers/cgcs/extras.ND/lab"
+CENTOS_LAB_REL_PATH = "/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/"
 CENTOS_LAB_SCRIPTS = CENTOS_LAB_BASE_PATH + "scripts/"
 CENTOS_CFG_FILES = CENTOS_LAB_BASE_PATH + "yow/"
 
