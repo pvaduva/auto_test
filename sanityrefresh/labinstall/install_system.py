@@ -293,7 +293,9 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_o
         lab_cfg_rel_path = LAB_YOW_REL_PATH + "/" + lab_cfg_location
         lab_cfg_path = load_path + "/" + lab_cfg_rel_path
     else:
-        lab_cfg_path = CENTOS_CFG_FILES + lab_cfg_location
+        lab_cfg_rel_path = CENTOS_LAB_REL_PATH + "/" lab_cfg_location
+        lab_cfg_path = load_path + "/" + lab_cfg_rel_path
+        #lab_cfg_path = CENTOS_CFG_FILES + lab_cfg_location
 
     cmd = "test -d " + lab_cfg_path
     if bld_server_conn.exec_cmd(cmd)[0] != 0:
