@@ -1488,7 +1488,6 @@ def get_provider_net_for_interface(interface='pthru', rtn_val='id', filepath=Non
 
 def get_networks_on_providernet(providernet_id, con_ssh=None, auth_info=Tenant.ADMIN):
     """
-
     Args:
         con_ssh (SSHClient):
         providernet_id:
