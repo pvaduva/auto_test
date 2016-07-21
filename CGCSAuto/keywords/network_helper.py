@@ -1486,18 +1486,18 @@ def get_provider_net_for_interface(interface='pthru', rtn_val='id', filepath=Non
                              regex=True, auth_info=auth_info)[0]
 
 
-def get_networks_on_providernet(providernet_name, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_networks_on_providernet(providernet_id, con_ssh=None, auth_info=Tenant.ADMIN):
     """
 
     Args:
-        con_ssh:
-        providernet_name:
+        con_ssh (SSHClient):
+        providernet_id:
         auth_info:
 
     Returns:
-        statue (0 or 1) and the list of network IDsbase_vm
+        statue (0 or 1) and the list of network ID
     """
-    table_ = table_parser.table(cli.neutron(cmd='net-list-on-providernet', positional_args=providernet_name,
+    table_ = table_parser.table(cli.neutron(cmd='net-list-on-providernet', positional_args=providernet_id,
                                             auth_info=auth_info, ssh_client=con_ssh))
 
     return table_parser.get_values(table_, 'id')
@@ -1565,13 +1565,13 @@ def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD):
         return ''
 
 
-def create_vxlan_providernet_range(provider, name=None, range_min=100, range_max=105, group='239.0.0.0', port=4789,
-                                   ttl=1, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=True):
+def create_providernet_range(provider_id, range_name, range_min, range_max, group, port, ttl,
+                             auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
     """
 
     Args:
-        provider:
-        name:
+        provider_id:
+        range_name:
         range_min:
         range_max:
         group:
@@ -1582,14 +1582,16 @@ def create_vxlan_providernet_range(provider, name=None, range_min=100, range_max
         fail_ok:
 
     Returns:
-        statue 0 for success, any other are error; and the message
+        0, providernet-range-id: for success,
+        1, error_message
+        2, the range has been created but with wrong min and/or max ranges
     """
-    if not name:
-        name = provider + 'l2'
+    if not range_name:
+        name = provider_id + 'l2'
 
-    args = provider
+    args = provider_id
 
-    args += ' --name {} --shared'.format(name)
+    args += ' --name {} --shared'.format(range_name)
     args += ' --range {}-{}'.format(range_min, range_max)
     args += ' --group {}'.format(group)
     args += ' --port {}'.format(port)
@@ -1597,23 +1599,58 @@ def create_vxlan_providernet_range(provider, name=None, range_min=100, range_max
 
     code, output = cli.neutron('providernet-range-create', args, ssh_client=con_ssh, auth_info=auth_info,
                                fail_ok=fail_ok, rtn_list=True)
-    return code, output
+
+    if code == 1:
+        return 1, output
+
+    table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
+    range = table_parser.get_values(table_, 'ranges', strict=False, id=provider_id)[0]
+
+    range = eval(range)
+    if range_min != range['minimum'] or range_max != range['maximum']:
+        LOG.warning("Provider-net range is created but not correct")
+        return 2, output
+
+    table_ = table_parser.table(output)
+    range_id = table_parser.get_value_two_col_table(table_, 'id')
+
+    LOG.info("Providene-range has been create successfully")
+    return code, range_id
 
 
-def delete_vxlan_providernet_range(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def delete_vxlan_providernet_range(range_name, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
     """
 
     Args:
-        name:
+        range_name:
         con_ssh:
         auth_info:
 
     Returns:
-        statue 0 for success, any other are error; and the message
+        0 for success
+        -1 for do nothing
+        1 error
+        2 can not be deleted
 
     """
 
-    code, output = cli.neutron('providernet-range-delete', name, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+    if range_name is None:
+        msg = "Nothing to delete. Do nothing."
+        LOG.info(msg)
+        return -1, msg
+
+    code, output = cli.neutron('providernet-range-delete', range_name, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
                                fail_ok=True)
+
+    if code == 1:
+            return code, output
+
+    table_ = table_parser.table(cli.neutron('providernet-range-list', ssh_client=con_ssh, auth_info=auth_info))
+    range = table_parser.get_values(table_, 'id', strict=False, name=range_name)
+
+    if range:
+        msg = "The range {} not been deleted".format(range_name)
+        LOG.info(msg)
+        return 2, msg
 
     return code, output
