@@ -17,6 +17,7 @@ CENTOS_LAB_BASE_PATH = "/localdisk/designer/jenkins/CGCS_3.0_Centos_Pull_CGCS_DE
 CENTOS_LAB_REL_PATH = "/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/"
 CENTOS_LAB_SCRIPTS = CENTOS_LAB_BASE_PATH + "scripts/"
 CENTOS_CFG_FILES = CENTOS_LAB_BASE_PATH + "yow/"
+HEAT_TEMPLATES_PATH = "/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates/"
 
 #TODO: Not all labs define their config_controller file as "system_config"
 #      E.g. some refer to it as cgcs_config or TiS_config.ini
@@ -44,6 +45,7 @@ RPM_INSTALL_REL_PATH = "export/RPM_INSTALL"
 WRSROOT_HOME_DIR = "/home/wrsroot"
 WRSROOT_PATCHES_DIR = WRSROOT_HOME_DIR + "/patches"
 WRSROOT_IMAGES_DIR = WRSROOT_HOME_DIR + "/images"
+WRSROOT_HEAT_DIR = WRSROOT_HOME_DIR + "/heat"
 JIRA_LOGS_DIR = "/folk/cgts/logs"
 CERTIFICATE_FILE_PATH = "/folk/cgts/lab/server-with-key-with-passwd.pem"
 CERTIFICATE_FILE_NAME = "server-with-key.pem"
