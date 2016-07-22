@@ -265,9 +265,14 @@ class TestHTEnabled:
             assert 'ded' == topology_on_numa_node['pol'], "CPU policy is not dedicated in vm-topology"
 
             actual_thread_policy = topology_on_numa_node['thr']
-            assert actual_thread_policy in cpu_thread_policy, \
-                'cpu thread policy in vm topology is {} while flavor spec is {}'.\
-                format(actual_thread_policy, cpu_thread_policy)
+            if cpu_thread_policy:
+                assert actual_thread_policy in cpu_thread_policy, \
+                    'cpu thread policy in vm topology is {} while flavor spec is {}'.\
+                    format(actual_thread_policy, cpu_thread_policy)
+            else:
+                assert actual_thread_policy == 'no', \
+                    'cpu thread policy in vm topology is {} while flavor spec is {}'.\
+                    format(actual_thread_policy, cpu_thread_policy)
 
             actual_siblings = topology_on_numa_node['siblings']
             if cpu_thread_policy == 'isolate':
@@ -282,6 +287,7 @@ class TestHTEnabled:
             assert expt_topology in topology_on_numa_node['topology'], 'vm topology is not as expected'
 
             pcpus = topology_on_numa_node['pcpus']
+
             expt_core_len_in_pair = 1 if cpu_thread_policy == 'isolate' else 2
             for pair in log_cores_siblings:
                 assert len(set(pair) & set(pcpus)) in [0, expt_core_len_in_pair]

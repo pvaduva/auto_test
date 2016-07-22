@@ -67,7 +67,7 @@ def test_vm_vcpu_model(flavor_and_volume, vcpu_model):
             code, output = host_ssh.exec_cmd("ps aux | grep --color='never' -i {}".format(vm), fail_ok=False)
 
         if vcpu_model == 'Haswell':
-            assert ' -cpu  haswell ' in output.lower() or ' -cpu haswell-notsx ' in output.lower, \
+            assert ' -cpu  haswell ' in output.lower() or ' -cpu haswell-notsx ' in output.lower(), \
                 'cpu_model Haswell or Haswell-noTSX not found for vm {}'.format(vm)
         else:
             assert ' -cpu {} '.format(vcpu_model).lower() in output.lower(), 'cpu_model {} not found for vm {}'.\
