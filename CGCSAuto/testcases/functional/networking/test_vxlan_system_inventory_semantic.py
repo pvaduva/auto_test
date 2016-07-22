@@ -4,51 +4,60 @@ from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
 from consts.auth import Tenant
-from keywords import host_helper, system_helper
+from keywords import host_helper, system_helper, common
 from testfixtures.recover_hosts import HostsToRecover
+from consts.cli_errs import NetworkingErr
 
+pro_net_name = 'provider_vxlan'
 
 @fixture(scope='module')
 def get_interface_(request):
 
-    provider_, new_interface_ = 'neutron_provider_net_vxlan', 'test0if'
-
-    compute_ = random.choice(host_helper.get_nova_hosts())
+    provider_ = common.get_unique_name(pro_net_name, resource_type='other')
+    new_interface_ = 'test0if'
 
     # (a) create providernet
-    LOG.info("Create provider networks {}".format(provider_))
     args = provider_ + ' --type=vxlan'
     code, output = cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, fail_ok=True, rtn_list=True)
 
     if code > 0 and "already exists" not in output:
-        skip("Create provider network failed")
+        assert False, ("Create provider network failed")
+
+    nova_hosts = host_helper.get_hosts(personality='compute')
+
+    # find a free interface
+    find = False
+    for nova_host in nova_hosts:
+        args = '{} {}'.format(nova_host , "-a")
+        table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
+        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'networktype': 'None'})
+
+        if list_interfaces:
+            find = True
+            break
+
+    if not find:
+        assert find, "Can not find a free data interface "
 
     # now lock the computer
-    host_helper.lock_host(compute_)
-    HostsToRecover.add(compute_, scope='module')
+    host_helper.lock_host(nova_host )
+    HostsToRecover.add(nova_host , scope='module')
 
-    # (b)create interface
-    table_ = system_helper.get_interfaces(compute_, con_ssh=None)
-    list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'network type': 'None'})
-    if not list_interfaces:
-        skip("Can not find data interface ")
     interface = random.choice(list_interfaces)
 
     LOG.info("Create interface associated with the provider-net")
     the_mtu = 1600
-    args = compute_ + ' ' + new_interface_ + ' ae ' + provider_ + ' ' + interface + ' -nt data -m {}'.format(the_mtu)
-    code, err_info = cli.system('host-if-add', args, fail_ok=True, rtn_list=True)
-    if code > 0 and "Name must be unique" not in err_info:
-        skip("can not create interface {}".format(err_info))
+    args = nova_host + ' ' + new_interface_ + ' ae ' + provider_ + ' ' + interface + ' -nt data -m {}'.format(the_mtu)
+    cli.system('host-if-add', args, rtn_list=True)
 
     def fin():
         # clean up
         LOG.info("Clean the interface and provider network")
-        cli.system('host-if-delete', '{} {}'.format(compute_, new_interface_))
+        cli.system('host-if-delete', '{} {}'.format(nova_host , new_interface_))
         cli.neutron('providernet-delete', provider_, auth_info=Tenant.ADMIN)
     request.addfinalizer(fin)
 
-    return compute_, provider_, new_interface_
+    return nova_host, provider_, new_interface_
 
 
 @fixture(scope='module')
@@ -56,8 +65,8 @@ def set_interface_ip_(get_interface_):
     compute, provider, new_interface_ = get_interface_
 
     LOG.info("change the ip mode to static ")
-    args_mode = '-nt data -p {} {} {} --ipv4-mode=static'.format(provider, compute, new_interface_)
-    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=True, rtn_list=True)
+    args_mode = '-nt data -p {} {} {} --ipv4-mode=static --ipv6-mode=static'.format(provider, compute, new_interface_)
+    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
 
     if code > 0:
         LOG.info("modify interface failed")
@@ -67,21 +76,32 @@ def set_interface_ip_(get_interface_):
     args_ip = '{} {} {} 24'.format(compute, new_interface_, ip)
     code, err_info = cli.system('host-addr-add', args_ip, fail_ok=True, rtn_list=True)
     if code > 0 and "already exists" not in err_info:
-        skip("can not create ip address: |{}|".format(err_info))
+        assert False, "can not create ip address: |{}|".format(err_info)
+
+    ip="2001:470:27:37e::2"
+    args_ip = '{} {} {} 64'.format(compute, new_interface_, ip)
+    code, err_info = cli.system('host-addr-add', args_ip, fail_ok=True, rtn_list=True)
+    if code > 0 and "already exists" not in err_info:
+        assert False, "can not create ip address: |{}|".format(err_info)
 
     return compute, provider, new_interface_
 
 
-def test_1_if_no_addr(get_interface_):
+def test_providernet_requires_ip_on_interface_before_assignment(get_interface_):
 
     """
     1) vxLan provider network requires an IP address on interface before assignment
-        (a) create providernet with type=vxlan
-        (b) create interface associate with providernet
-        (c) unlock the compute will fail:
 
     Args:
         get_interface_:
+
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet without create IP address
+
+    Test Steps:
+        unlock the compute fail:
 
     Returns:
 
@@ -89,20 +109,32 @@ def test_1_if_no_addr(get_interface_):
 
     nova_host, provider, new_interface_ = get_interface_
 
+    LOG.tc_step("Unlock the host {}".format(nova_host))
     code, err_info = host_helper.unlock_host(nova_host, fail_ok=True)
+
+    LOG.tc_step("Verify the host unlock statue, should be failed")
     if code > 0:
         LOG.info("Expected error: {}".format(err_info))
-        assert "requires an IP address" in err_info
+        assert NetworkingErr.VXLAN_MISSING_IP_ON_INTERFACE in err_info
+
     else:
         assert 1 == code, "There is no ip address add in interface yet, so the host can not be unlock"
 
 
-def test_3_provider_net_requires_ip(get_interface_):
+def test_wrong_ip_addressing_mode(get_interface_):
     """
     TC3) data interface address mode must be set to “static” before allowing any IP address
 
     Args:
         get_interface_:
+
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode as default, not static
+
+    Test Steps:
+        create ip addr for the interface
 
     Returns:
 
@@ -110,17 +142,19 @@ def test_3_provider_net_requires_ip(get_interface_):
 
     compute, provider, new_interface_ = get_interface_
 
-    LOG.tc_step("TC3: create ip addr when the mode is not static")
+    LOG.tc_step("Create ip address when the mode is not static")
     args_ip = '{} {} 111.11.11.11 24'.format(compute, new_interface_)
     code, err_info = cli.system('host-addr-add', args_ip, fail_ok=True, rtn_list=True)
+
+    LOG.tc_step("Verify the ip address creation should be failed")
     if code > 0:
         LOG.info("Expect fail: set the ip mode to static before assign a address |{}|".format(err_info))
-        assert "interface address mode must be 'static'" in err_info
+        assert NetworkingErr.WRONG_IF_ADDR_MODE in err_info
     else:
         assert 1 == code, "Should not be here."
 
 
-def test_4_provider_net_requires_ip(get_interface_):
+def test_set_data_if_ip_address_mode_to_none_static_when_ip_exist(get_interface_):
     """
     TC4: setting data interface address mode to anything but “static” should not be allowed if addresses
     still exist on interface
@@ -129,28 +163,42 @@ def test_4_provider_net_requires_ip(get_interface_):
     Args:
         get_interface_:
 
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode as default, not static
+
+    Test Steps:
+        set ip addressing mode to static
+        create ip addr for the interface
+        set the ip addressing mode to pool should be fail
+
+    Test Teardown:
+        delete ip address just created
+
     Returns:
 
     """
     compute, provider, new_interface_ = get_interface_
 
+    LOG.tc_step("TC4: set the mode to 'static' ")
     args_mode = '-nt data -p {} {} {} --ipv4-mode=static'.format(provider, compute, new_interface_)
-    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=True, rtn_list=True)
+    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
     if code > 0:
         LOG.info("modify interface failed")
 
-    # now create the ip again after mode set to static
+    LOG.tc_step("create the ip again after mode set to static")
     args = '{} {} 111.11.11.11 24'.format(compute, new_interface_)
-    code, err_info = cli.system('host-addr-add', args, fail_ok=True, rtn_list=True)
-    if not code:
-        LOG.info("Success set the ip")
+    code, err_info = cli.system('host-addr-add', args, fail_ok=False, rtn_list=True)
+    if code:
+        assert False, "create ip address for if failed"
 
     LOG.tc_step("TC4: set the mode to 'pool' when the ip still exist")
     args = '-nt data -p {} {} {} --ipv4-mode="pool" --ipv4-pool=management'.format(provider, compute, new_interface_)
     code, err_info = cli.system('host-if-modify', args, fail_ok=True, rtn_list=True)
     if code > 0:
         LOG.info("modify interface failed")
-        assert 'addresses still exist on interfac' in err_info
+        assert NetworkingErr.SET_IF_ADDR_MODE_WHEN_IP_EXIST in err_info
     else:
         assert 1 == code, 'should not be here'
 
@@ -159,127 +207,201 @@ def test_4_provider_net_requires_ip(get_interface_):
     cli.system('host-addr-delete', table_parser.get_values(table_, 'uuid', **{'ifname': new_interface_}))
 
 
-def test_5_provider_net_requires_ip(get_interface_):
+def test_create_null_ip_addr(get_interface_):
     """
     TC5: IP address must not be zero
 
     Args:
         get_interface_:
 
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode as default, not static
+
+    Test Steps:
+        set ip addressing mode to static
+        create ip addr for the interface
+
     Returns:
 
     """
 
     compute, provider, new_interface_ = get_interface_
+
+    LOG.tc_step("TC5: set the mode to 'static' ")
+    args_mode = '-nt data -p {} {} {} --ipv4-mode=static'.format(provider, compute, new_interface_)
+    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
+    if code > 0:
+        LOG.info("modify interface failed")
 
     LOG.tc_step("TC5: create ip addr with all zero")
     args_ip = '{} {} 0.0.0.0 24'.format(compute, new_interface_)
     code, err_info = cli.system('host-addr-add', args_ip, fail_ok=True, rtn_list=True)
     if code > 0:
         LOG.info("Expect fail: {}".format(err_info))
-        assert 'Address must not be null' == err_info
+        assert NetworkingErr.NULL_IP_ADDR in err_info
     else:
         assert 1 == code, 'should not be here'
 
 
-def test_6_provider_net_requires_ip(get_interface_):
+def test_null_ip_network_partion(get_interface_):
     """
     TC6: IP address network portion must not be zero
 
     Args:
         get_interface_:
 
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode as default, not static
+
+    Test Steps:
+        set ip addressing mode to static
+        create ip addr for the interface
+
     Returns:
 
     """
 
     compute, provider, new_interface_ = get_interface_
+
+    LOG.tc_step("TC6: set the mode to 'static' ")
+    args_mode = '-nt data -p {} {} {} --ipv4-mode=static'.format(provider, compute, new_interface_)
+    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
+    if code > 0:
+        LOG.info("modify interface failed")
 
     LOG.tc_step("TC6: create ip addr with network partion zero")
     args_ip = '{} {} 0.0.0.33 24'.format(compute, new_interface_)
     code, err_info = cli.system('host-addr-add', args_ip, fail_ok=True, rtn_list=True)
     if code > 0:
         LOG.info("Expect fail: |{}|".format(err_info))
-        assert 'Network must not be null' == err_info
+        assert NetworkingErr.NULL_NETWORK_ADDR == err_info
     else:
         assert 1 == code, 'should not be here'
 
 
-# TC7: 7) IP address host portion must not be zero
-def test_7_provider_net_requires_ip(get_interface_):
+def test_null_ip_host_portion(get_interface_):
     """
     TC7: 7) IP address host portion must not be zero
 
     Args:
         get_interface_:
 
+
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode as default, not static
+
+    Test Steps:
+        set ip addressing mode to static
+        create ip addr for the interface
+
     Returns:
 
     """
 
     compute, provider, new_interface_ = get_interface_
+
+    LOG.tc_step("TC7: set the mode to 'static' ")
+    args_mode = '-nt data -p {} {} {} --ipv4-mode=static'.format(provider, compute, new_interface_)
+    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
+    if code > 0:
+        LOG.info("modify interface failed")
 
     LOG.tc_step("TC7: create ip addr with host partion zero")
     args_ip = '{} {} 192.168.0.0 16'.format(compute, new_interface_)
     code, err_info = cli.system('host-addr-add', args_ip, fail_ok=True, rtn_list=True)
     if code > 0:
         LOG.info("Expect fail: |{}|".format(err_info))
-        assert 'Host bits must not be zero' == err_info
+        assert NetworkingErr.NULL_HOST_PARTION_ADDR in err_info
     else:
         assert 1 == code, 'should not be here'
 
 
-def test_8_provider_net_requires_ip(get_interface_):
+def test_ip_should_be_unicast_address(get_interface_):
     """
     TC8: 8) IP address should be a unicast address (ie., not multicast and not broadcast)
 
     Args:
         get_interface_:
 
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode as default, not static
+
+    Test Steps:
+        set ip addressing mode to static
+        create ip addr for the interface using multicast ip should be failed
+        create ip addr for the interface using broadcast ip should be failed
+
     Returns:
 
     """
     compute, provider, new_interface_ = get_interface_
 
-    LOG.tc_step("TC8: try to set multicast ip addr: 224.0.0.0 to 239.225.225.225")
+    LOG.tc_step("TC8: set the mode to 'static' ")
+    args_mode = '-nt data -p {} {} {} --ipv4-mode=static'.format(provider, compute, new_interface_)
+    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
+    if code > 0:
+        LOG.info("modify interface failed")
+
+    LOG.tc_step("TC8: set multicast ip addr: 224.0.0.0 to 239.225.225.225")
     args_ip = '{} {} 225.168.2.2 16'.format(compute, new_interface_)
     code, err_info = cli.system('host-addr-add', args_ip, fail_ok=True, rtn_list=True)
     if code > 0:
-        LOG.info("Expect fail: |{}|".format(err_info))
-        assert 'Address must be a unicast address' == err_info
+        LOG.info("Expect fail: {}".format(err_info))
+        assert NetworkingErr.NOT_UNICAST_ADDR in err_info
     else:
         assert 1 == code, 'should not be here'
 
-    LOG.tc_step("TC8: try to set broadcast ip addr")
+    LOG.tc_step("TC8: set broadcast ip addr")
     args_ip = '{} {} 255.255.255.255 24'.format(compute, new_interface_)
     code, err_info = cli.system('host-addr-add', args_ip, fail_ok=True, rtn_list=True)
     if code > 0:
         LOG.info("Expect fail: |{}|".format(err_info))
-        assert 'Address cannot be the network broadcast address' == err_info
+        assert NetworkingErr.NOT_BROADCAST_ADDR in err_info
     else:
         assert 1 == code, 'should not be here'
 
 
-def test_10_provider_net_requires_ip(get_interface_):
+def test_ip_unique_across_all_compute_nodes(get_interface_):
     """
     TC10 ) IP address should be unique across all compute nodes
 
     Args:
         get_interface_:
 
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode as default, not static
+
+    Test Steps:
+        set ip addressing mode to static
+        random choise another compute node and get a ip address and their prefix
+        using this ip to create ip addr for the interface
+        verify the ip address creation statue
+
     Returns:
 
     """
 
     compute, provider, new_interface_ = get_interface_
 
-    args_mode = '-nt data -p {} {} {} --ipv4-mode=static'.format(provider, compute, new_interface_)
-    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=True, rtn_list=True)
+    LOG.tc_step("Change the ip addressing mode to static")
+    args_mode = '-nt data -p {} {} {} --ipv4-mode=static --ipv6-mode=static'.format(provider, compute, new_interface_)
+    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
     if code > 0:
         LOG.info("modify interface failed")
 
+    LOG.tc_step("random get a ip from any compute node")
     # randomly get a compute
-    cmp = random.choice(host_helper.get_nova_hosts())
+    cmp = random.choice(host_helper.get_hosts(personality='compute'))
 
     table_ = table_parser.table(cli.system('host-addr-list', cmp))
     ip = random.choice(table_parser.get_values(table_, 'address'))
@@ -290,19 +412,19 @@ def test_10_provider_net_requires_ip(get_interface_):
     code, err_info = cli.system('host-addr-add', args_ip, fail_ok=True, rtn_list=True)
     if code > 0:
         LOG.info("Expect fail: {}".format(err_info))
-        assert 'already exists on this interface' in err_info
+        assert NetworkingErr.DUPLICATE_IP_ADDR in err_info
     else:
         assert 1 == code, 'should not be here'
 
 
-@mark.parametrize(('prefix', 'status'), [
-    (33, False),    # fail expected
-    (345, False),    # fail expected
-    (23, True),    # ok
-    (24, True),    # ok
-    (25, True),    # ok
+@mark.parametrize(('prefix', 'status', 'ipv'), [
+    (33, False, 4),    # fail expected
+    (345, False, 4),    # fail expected
+    (23, True, 4),    # ok
+    (129, False, 6),    # ok
+    (124, True, 6),    # ok
 ])
-def test_15_route_prefix_validation(set_interface_ip_, prefix, status):
+def test_route_prefix_validation(set_interface_ip_, prefix, status, ipv):
     """
     15) IP route network prefix must be valid for family (i.e., 1-32 for IPv4, 1-128 for IP6)
 
@@ -310,35 +432,48 @@ def test_15_route_prefix_validation(set_interface_ip_, prefix, status):
         set_interface_ip_:
         prefix:
         status:
+        ipv   ipv4 or ipv6
+
+
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode to static for both ipv4 and ipv6
+        (d) create ip addr for the interface
+
+    Test Steps:
+        add route with the given prefix
+        verify the route adding status
 
     Returns:
 
     """
     compute, provider, new_interface_ = set_interface_ip_
-
-    gateway = "192.168.3.0"
-
-    LOG.tc_step("TC15: add route with prefix {}".format(prefix))
-
-    nt = '192.168.102.0'
     metric = 16
 
-    args = '{} {} {} {} {} {}'.format(compute, new_interface_, nt, prefix, gateway, metric)
-    code, err_info = cli.system('host-route-add', args, fail_ok=True, rtn_list=True)
+    LOG.tc_step("TC15: add route with prefix {}".format(prefix))
+    if ipv == 4:
+        gateway = "192.168.3.0"
+        nt = '192.168.102.0'
+
+        args = '{} {} {} {} {} {}'.format(compute, new_interface_, nt, prefix, gateway, metric)
+        code, err_info = cli.system('host-route-add', args, fail_ok=True, rtn_list=True)
+    else: # ipv = 6
+        gateway = "2001:470:27:37e::1"
+        nt = "2001:470:27:37::"
+
+        args = '{} {} {} {} {} {}'.format(compute, new_interface_, nt, prefix, gateway, metric)
+        code, err_info = cli.system('host-route-add', args, fail_ok=True, rtn_list=True)
+
+    LOG.tc_step("TC15: verify the route adding status")
     if code > 0:
         if not status:
             LOG.info("Expect fail: {}".format(err_info))
-            assert 'Invalid IP address and prefix' in err_info
+            assert NetworkingErr.INVALID_IP_OR_PREFIX in err_info
         else:
             LOG.info("Error: {}".format(err_info))
             assert code, 'Should be failed'
     else:
-        # delete router for next one
-        # LOG.info("*******: {}".format(err_info))
-        # table_ = table_parser.table(err_info)
-        # uuid = table_parser.get_values(table_, 'Value', **{'Property': 'uuid'})
-        # cli.system('host-route-delete', uuid)
-
         if not status:
             LOG.info("Error: {}".format(err_info))
             assert 0 == code, 'should not be here'
@@ -346,13 +481,22 @@ def test_15_route_prefix_validation(set_interface_ip_, prefix, status):
             LOG.info("Pass ok: {}".format(err_info))
 
 
-def test_16_route_prefix_validation(set_interface_ip_):
+def test_route_gateway_validation(set_interface_ip_):
     """
     16) IP route gateway address must not be null (e.g., ::, 0.0.0.0)
 
     Args:
         set_interface_ip_:
 
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode to static for ipv4
+        (d) create ip addr for the interface
+
+    Test Steps:
+        add route with the given gateway
+        verify the route adding status
     Returns:
 
     """
@@ -370,18 +514,27 @@ def test_16_route_prefix_validation(set_interface_ip_):
     code, err_info = cli.system('host-route-add', args, fail_ok=True, rtn_list=True)
     if code > 0:
         LOG.info("Expected error: {}".format(err_info))
-        assert 'Gateway address must not be null' == err_info
+        assert NetworkingErr.NULL_GATEWAY_ADDR in err_info
     else:
         assert 1 == code, 'should not be here'
 
 
-def test_17_route_network_ip_validation(set_interface_ip_):
+def test_route_network_ip_validation(set_interface_ip_):
     """
     17) IP route network address must be valid
 
     Args:
         set_interface_ip_:
 
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode to static for both ipv4 and ipv6
+        (d) create ip addr for the interface
+
+    Test Steps:
+        add route with the given invalid network ip
+        verify the route adding status
     Returns:
 
     """
@@ -398,18 +551,27 @@ def test_17_route_network_ip_validation(set_interface_ip_):
     code, err_info = cli.system('host-route-add', args, fail_ok=True, rtn_list=True)
     if code > 0:
         LOG.info("Expected error: {}".format(err_info))
-        assert 'Invalid IP network' in err_info
+        assert NetworkingErr.INVALID_IP_NETWORK in err_info
     else:
         assert 1 == code, 'should not be here'
 
 
-def test_18_route_gateway_ip_validation(set_interface_ip_):
+def test_route_gateway_ip_validation(set_interface_ip_):
     """
     18) IP route gateway address must be valid
 
     Args:
         set_interface_ip_:
 
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode to static for both ipv4 and ipv6
+        (d) create ip addr for the interface
+
+    Test Steps:
+        add route with the given invalide gateway
+        verify the route adding status
     Returns:
 
     """
@@ -424,21 +586,19 @@ def test_18_route_gateway_ip_validation(set_interface_ip_):
 
     args = '{} {} {} {} {} {}'.format(compute, new_interface_, nt, prefix, gateway, metric)
     code, err_info = cli.system('host-route-add', args, fail_ok=True, rtn_list=True)
-    err_msg = "Route gateway {} is not reachable".format(gateway)
+
     if code > 0:
         LOG.info("Expected error: {}".format(err_info))
-        assert err_msg in err_info
+        assert NetworkingErr.ROUTE_GATEWAY_UNREACHABLE in err_info
     else:
         assert 1 == code, 'should not be here'
 
 
 @mark.parametrize(('gateway', 'nt', 'prefix'), [
-    ('192.168.3.0', 'FE80::0202:B3FF:FE1E:0000', 24),    # fail expected
+    ('192.168.102.0', 'FE80::', 64),    # fail expected
     ('FE80:0000:0000:0000:0202:B3FF:FE1E:0000', '192.168.102.0', 24),    # fail expected
-    ('192.168.3.0', 'FE80::0202:B3FF:FE1E:0000', 64),    # fail expected
-    ('FE80:0000:0000:0000:0202:B3FF:FE1E:0000', '192.168.102.0', 64),    # fail expected
 ])
-def test_19_route_network_gateway_ip_in_same_families(set_interface_ip_, gateway, nt, prefix):
+def test_route_network_gateway_ip_in_same_families(set_interface_ip_, gateway, nt, prefix):
     """
     19) IP route network and gateway families must be the same (i.e., both IPv4 or both IPv6)
 
@@ -448,6 +608,15 @@ def test_19_route_network_gateway_ip_in_same_families(set_interface_ip_, gateway
         nt:
         prefix:
 
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode to static for both ipv4 and ipv6
+        (d) create ip addr for the interface
+
+    Test Steps:
+        add route with the given network and gateway which are not in same families
+        verify the route adding status
     Returns:
 
     """
@@ -462,7 +631,7 @@ def test_19_route_network_gateway_ip_in_same_families(set_interface_ip_, gateway
     code, err_info = cli.system('host-route-add', args, fail_ok=True, rtn_list=True)
     if code > 0:
         LOG.info("Expected error: {}".format(err_info))
-        assert 'Network and gateway IP versions must match' or 'Invalid IP network' in err_info
+        assert NetworkingErr.IP_VERSION_NOT_MATCH in err_info
     else:
         assert 1 == code, 'should not be here'
 
@@ -474,7 +643,7 @@ def test_19_route_network_gateway_ip_in_same_families(set_interface_ip_, gateway
     ("192.168.3.255"),  #  brodcast addr
     ("192.168.2.1"),    #  other network gateway addr
 ])
-def test_20(set_interface_ip_, gateway):
+def test_route_gateway_addr_validation(set_interface_ip_, gateway):
     """
     20) IP route gateway address must not be part of the destination subnet
     21) IP route gateway must be a unicast address
@@ -485,6 +654,15 @@ def test_20(set_interface_ip_, gateway):
         set_interface_ip_:
         gateway:
 
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode to static for ipv4
+        (d) create ip addr for the interface
+
+    Test Steps:
+        add route with the given gateway
+        verify the route adding status
     Returns:
 
     """
@@ -498,9 +676,9 @@ def test_20(set_interface_ip_, gateway):
 
     args = '{} {} {} {} {} {}'.format(compute, new_interface_, nt, prefix, gateway, metric)
     code, err_info = cli.system('host-route-add', args, fail_ok=True, rtn_list=True)
-    err_msg_tc20 = "Gateway address must not be within destination subnet"
-    err_msg_tc21 = "Network and gateway IP addresses must be different"
-    err_msg_tc25 = "not reachable by any address"
+    err_msg_tc20 = NetworkingErr.GATEWAY_IP_IN_SUBNET
+    err_msg_tc21 = NetworkingErr.NETWORK_IP_EQUAL_TO_GATEWAY
+    err_msg_tc25 = NetworkingErr.ROUTE_GATEWAY_UNREACHABLE
     if code > 0:
         LOG.info("Expected error: {}".format(err_info))
         assert err_msg_tc20 or err_msg_tc21 or err_msg_tc25 in err_info
@@ -513,13 +691,23 @@ def test_20(set_interface_ip_, gateway):
     ('192.168.3.2'),    # try DHCP addr
     ('192.168.3.255'),  # try broadcase addr
 ])
-def test_22_network_addr_must_be_unicast_addr(set_interface_ip_, nt):
+def test_route_network_addr_must_be_unicast(set_interface_ip_, nt):
     """
     22) IP route network must be a unicast address
 
     Args:
         set_interface_ip_:
         nt:
+
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode to static for both ipv4 and ipv6
+        (d) create ip addr for the interface
+
+    Test Steps:
+        add route with the given network ip
+        verify the route adding status
 
     Returns:
 
@@ -534,21 +722,29 @@ def test_22_network_addr_must_be_unicast_addr(set_interface_ip_, nt):
 
     args = '{} {} {} {} {} {}'.format(compute, new_interface_, nt, prefix, gateway, metric)
     code, err_info = cli.system('host-route-add', args, fail_ok=True, rtn_list=True)
-    err_msg = "Invalid IP network"
     if code > 0:
         LOG.info("Expected error: {}".format(err_info))
-        assert err_msg in err_info
+        assert NetworkingErr.INVALID_IP_NETWORK in err_info
     else:
         assert 1 == code, 'should not be here'
 
 
-def test_27_route_unique(set_interface_ip_):
+def test_route_unique(set_interface_ip_):
     """
     27) IP route must be unique (network + prefix + gateway)
 
     Args:
         set_interface_ip_:
 
+    Test Setups:
+        (a) create providernet with type=vxlan
+        (b) lock the host
+        (c) create interface associate with providernet set the ip addressing mode to static for both ipv4 and ipv6
+        (d) create ip addr for the interface
+
+    Test Steps:
+        add route with the network, prefix and gateway twice
+        verify the second time route adding status
     Returns:
 
     """
@@ -561,13 +757,11 @@ def test_27_route_unique(set_interface_ip_):
     nt = '200.10.0.0'
     LOG.tc_step("TC27: add first route address {}".format(nt))
     args = '{} {} {} {} {} {}'.format(compute, new_interface_, nt, prefix, gateway, metric)
-    code, err_info = cli.system('host-route-add', args, fail_ok=True, rtn_list=True)
-    if code > 0:
-        skip('Can not add route')
+    cli.system('host-route-add', args, rtn_list=True)
 
     LOG.tc_step("TC27: add second route with same ip will fail")
     code, err_info = cli.system('host-route-add', args, fail_ok=True, rtn_list=True)
-    err_msg = "already exists"
+    err_msg = NetworkingErr.DUPLICATE_IP_ADDR
     if code > 0:
         LOG.info("Expected error: {}".format(err_info))
         assert err_msg in err_info
