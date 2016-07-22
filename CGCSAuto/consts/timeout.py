@@ -1,4 +1,4 @@
-CLI_TIMEOUT = 30
+CLI_TIMEOUT = 120
 
 
 class HostTimeout:
@@ -19,7 +19,7 @@ class VMTimeout:
     STATUS_VERIFY_RESIZE = 30
     LIVE_MIGRATE_COMPLETE = 120
     COLD_MIGRATE_CONFIRM = 120
-    BOOT_VM = 180
+    BOOT_VM = 300
     DELETE = 180
     VOL_ATTACH = 60
     SSH_LOGIN = 20

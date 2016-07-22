@@ -30,7 +30,7 @@ def config_host_module(request):
         see 'add_shared_cpu' fixture in nova/test_shared_cpu_enabled.py for usage.
 
     """
-    __config_host_base(scope='module', request=request)
+    return __config_host_base(scope='module', request=request)
 
 
 @mark.tryfirst
@@ -59,7 +59,7 @@ def config_host_class(request):
         see 'add_shared_cpu' fixture in nova/test_shared_cpu_enabled.py for usage.
 
     """
-    __config_host_base(scope='class', request=request)
+    return __config_host_base(scope='class', request=request)
 
 
 def __config_host_base(scope, request):

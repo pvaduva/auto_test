@@ -11,7 +11,7 @@ from consts.auth import Tenant
 from consts.cgcs import HostAavailabilityState, HostAdminState
 from consts.timeout import HostTimeout, CMDTimeout
 
-from keywords import system_helper
+from keywords import system_helper, common
 from keywords.security_helper import LinuxUser
 
 
@@ -1183,7 +1183,7 @@ def get_logcores_counts(host, proc_ids=(0, 1), con_ssh=None):
         proc_ids:
         con_ssh:
 
-    Returns (tuple):
+    Returns (dict):
 
     """
     table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh))
@@ -1193,7 +1193,7 @@ def get_logcores_counts(host, proc_ids=(0, 1), con_ssh=None):
     for i in proc_ids:
         rtns.append(len(table_parser.get_values(table_, 'log_core', processor=str(i))))
 
-    return tuple(rtns)
+    return rtns
 
 
 def get_host_threads_count(host, con_ssh=None):
@@ -1218,6 +1218,12 @@ def get_host_threads_count(host, con_ssh=None):
 
     pattern = "Threads/Core=(\d),"
     return int(re.findall(pattern, output)[0])
+
+
+def get_host_procs(hostname, con_ssh=None):
+    table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    procs = table_parser.get_column(table_, 'processor')
+    return sorted(set(procs))
 
 
 def get_vswitch_port_engine_map(host_ssh):
@@ -1357,4 +1363,243 @@ def get_hosts_with_local_storage_backing_type(storage_type=None, con_ssh=None):
     for h in get_hypervisors(state='up', status='enabled', con_ssh=con_ssh):
         if check_host_local_backing_type(h, storage_type=storage_type, con_ssh=con_ssh):
             hosts.append(h)
+    return hosts
+
+
+def __parse_total_cpus(output):
+    last_line = output.split()[-1]
+    # Total usable vcpus: 64.0, total allocated vcpus: 56.0 >> 56
+    total = int(last_line.split(sep=':')[-1].split(sep='.')[0])
+    return total
+
+
+def get_total_allocated_vcpus_in_log(host, con_ssh=None):
+    with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+        output = host_ssh.exec_cmd('cat /var/log/nova/nova-compute.log | grep -i "total allocated vcpus" | tail -n 3',
+                                   fail_ok=False)[1]
+        total_allocated_vcpus = __parse_total_cpus(output)
+        return total_allocated_vcpus
+
+
+def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeout=60):
+    """
+    Wait for total allocated vcpus in nova-compute.log gets updated to a value that is different than given value
+
+    Args:
+        host_ssh (SSHFromSSH):
+        prev_cpus (list):
+        timeout (int):
+
+    Returns (int): New value of total allocated vcpus
+
+    """
+    cmd = 'cat /var/log/nova/nova-compute.log | grep -i "total allocated vcpus" | tail -n 3'
+
+    end_time = time.time() + timeout
+    if prev_cpus is None:
+        prev_output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
+        prev_cpus = __parse_total_cpus(prev_output)
+
+    while time.time() < end_time:
+        output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
+        allocated_cpus = __parse_total_cpus(output)
+        if allocated_cpus != prev_cpus:
+            return allocated_cpus
+    else:
+        raise exceptions.HostTimeout("total allocated vcpus is not updated within timeout in nova-compute.log")
+
+
+def get_vcpus_for_computes(hosts=None, rtn_val='used_now', con_ssh=None):
+    """
+
+    Args:
+        hosts:
+        rtn_val (str): valid values: used_now, used_max, total
+        con_ssh:
+
+    Returns (dict): host(str),cpu_val(float) pairs as dictionary
+
+    """
+    if hosts is None:
+        hosts = get_nova_hosts(con_ssh=con_ssh)
+    elif isinstance(hosts, str):
+        hosts = [hosts]
+
+    hosts_cpus = {}
+    for host in hosts:
+        table_ = table_parser.table(cli.nova('host-describe', host, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+        cpus_str = table_parser.get_values(table_, target_header='cpu', strict=False, PROJECT=rtn_val)[0]
+        hosts_cpus[host] = float(cpus_str)
+
+    LOG.debug("Hosts {} cpus: {}".format(rtn_val, hosts_cpus))
+    return hosts_cpus
+
+
+def _get_host_logcores_per_thread(host, con_ssh=None):
+    table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh))
+    threads = list(set(table_parser.get_column(table_, 'thread')))
+    cores_per_thread = {}
+    for thread in threads:
+        table_thread = table_parser.filter_table(table_, strict=True, regex=False, thread=thread)
+        cores_str = table_parser.get_column(table_thread, 'log_core')
+        cores_per_thread[int(thread)] = [int(core) for core in cores_str]
+
+    return cores_per_thread
+
+
+def get_thread_num_for_cores(log_cores, host, con_ssh=None):
+    cores_per_thread = _get_host_logcores_per_thread(host=host, con_ssh=con_ssh)
+
+    core_thread_dict = {}
+    for thread, cores_for_thread in cores_per_thread.items():
+        for core in log_cores:
+            if int(core) in cores_for_thread:
+                core_thread_dict[core] = thread
+
+        if len(core_thread_dict) == len(log_cores):
+            return core_thread_dict
+    else:
+        raise exceptions.HostError("Cannot find thread num for all cores provided. Cores provided: {}. Threads found: "
+                                   "{}".format(log_cores, core_thread_dict))
+
+
+def get_logcore_siblings(host, con_ssh=None):
+    """
+    Get cpu pairs for given host.
+    Args:
+        host (str): such as compute-1
+        con_ssh (SSHClient):
+
+    Returns (list): list of log_core_siblings(tuple). Output examples:
+        - HT enabled: [[0, 20], [1, 21], ..., [19, 39]]
+        - HT disabled: [[0], [1], ..., [19]]
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    host_topology = con_ssh.exec_cmd("vm-topology -s topology | awk '/{}/, /^[ ]*$/'".format(host), fail_ok=False)[1]
+    table_ = table_parser.table(host_topology)
+
+    siblings_tab = table_parser.filter_table(table_, cpu_id='sibling_id')
+    cpu_ids = [int(cpu_id) for cpu_id in siblings_tab['headers'][1:]]
+    sibling_ids = siblings_tab['values'][0][1:]
+
+    if sibling_ids[0] == '-':
+        LOG.warning("{} has no sibling cores. Hyper-threading needs to be enabled to have sibling cores.")
+        return [[cpu_id] for cpu_id in cpu_ids]
+
+    sibling_ids = [int(sibling_id) for sibling_id in sibling_ids]
+    # find pairs and sort the cores in pair and convert to tuple (set() cannot be applied to item as list)
+    sibling_pairs = [tuple(sorted(sibling_pair)) for sibling_pair in list(zip(cpu_ids, sibling_ids))]
+    sibling_pairs = sorted(list(set(sibling_pairs)))       # remove dup pairs and sort it to start from smallest number
+    sibling_pairs = [list(sibling_pair) for sibling_pair in sibling_pairs]
+
+    LOG.info("Sibling cores for {} from vm-topology: {}".format(host, sibling_pairs))
+    return sibling_pairs
+
+
+def get_vcpus_info_in_log(host_ssh, numa_nodes=None, rtn_list=False, con_ssh=None):
+    """
+    Get vcpus info from nova-compute.log on nova compute host
+    Args:
+        host_ssh (SSHClient):
+        numa_nodes (list): such as [0, 1]
+        rtn_list (bool): whether to return dictionary or list
+        con_ssh:
+
+    Returns (dict|list):
+        Examples: { 0: {'pinned_cpulist': [], 'unpinned_cpulist': [3, 4, 5,...], 'cpu_usage': 0.0, 'pinned': 0, ...},
+                    1: {....}}
+
+    """
+    hostname = host_ssh.get_hostname()
+    if numa_nodes is None:
+        numa_nodes = get_host_procs(hostname, con_ssh=con_ssh)
+
+    res_dict = {}
+    for numa_node in numa_nodes:
+        res_dict[numa_node] = {}
+
+        # sample output:
+        # 2016-07-15 16:20:50.302 99972 INFO nova.compute.resource_tracker [req-649d9338-ee0b-477c-8848-
+        # 89cc94114b58 - - - - -] Numa node=1; cpu_usage:32.000, pcpus:36, pinned:32, shared:0.000, unpinned:4;
+        # pinned_cpulist:18-19,21-26,28-35,54-55,57-62,64-71, unpinned_cpulist:20,27,56,63
+        output = host_ssh.exec_cmd('cat /var/log/nova/nova-compute.log | grep -i -E "Numa node={}; .*unpinned:" '
+                                   '| tail -n 1'.format(numa_node), fail_ok=False)[1]
+
+        output = ''.join(output.split(sep='\n'))
+        cpu_info = output.split(sep="Numa node={}; ".format(numa_node))[-1].replace('; ', ', '). split(sep=', ')
+
+        print("Cpu info: {}".format(cpu_info))
+        for info in cpu_info:
+            key, value = info.split(sep=':')
+
+            if key in ['pinned_cpulist', 'unpinned_cpulist']:
+                value = common._parse_cpus_list(value)
+            elif key in ['cpu_usage', 'shared']:
+                value = float(value)
+            else:
+                value = int(value)
+
+            res_dict[numa_node][key] = value
+
+    LOG.info("VCPU info for {} parsed from compute-nova.log: {}".format(host_ssh.get_hostname(), res_dict))
+    if rtn_list:
+        return [res_dict[node] for node in numa_nodes]
+
+    return res_dict
+
+
+def get_vcpus_for_instance_via_virsh(host_ssh, instance_name, rtn_list=False):
+    """
+    Get a list of pinned vcpus for given instance via 'sudo virsh vcpupin <instance_name>'
+
+    Args:
+        host_ssh (SSHFromSSH):
+        instance_name (str):
+        vm_id (str):
+        con_ssh (SSHClient):
+
+    Returns (list|dict): list of vcpus ids used by specified instance such as [8, 9], or {0: 8, 1: 9}
+
+    """
+
+    output = host_ssh.exec_sudo_cmd("virsh vcpupin {} | grep -v '^[ \t]*$'".format(instance_name), fail_ok=False)[1]
+
+    # sample output:
+    # VCPU: CPU Affinity
+    # ----------------------------------
+    #   0: 8
+    #   1: 9
+
+    vcpu_lines = output.split(sep='----\n')[1].split(sep='\n')
+    print("vcpus_lines: {}".format(vcpu_lines))
+    vcpus = {}
+    for line in vcpu_lines:
+        # line example: '  0: 8'
+        key, pcpus = line.strip().split(sep=': ')
+        vcpus[int(key)] = common._parse_cpus_list(pcpus.strip())
+
+    if rtn_list:
+        return sorted(list(vcpus.values()))
+
+    return vcpus
+
+
+def get_hosts_per_storage_backing(con_ssh=None):
+    """
+    Get hosts for each possible storage backing
+    Args:
+        con_ssh:
+
+    Returns (dict): {'local_image': <cow hosts list>,
+                    'local_lvm': <lvm hosts list>,
+                    'remote': <remote hosts list>
+                    }
+    """
+
+    hosts = {'local_image': get_hosts_by_storage_aggregate('local_image', con_ssh=con_ssh),
+             'local_lvm': get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh),
+             'remote': get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh)}
+
     return hosts

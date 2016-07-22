@@ -13,8 +13,8 @@ from testfixtures.recover_hosts import HostsToRecover
 def host_to_config(request):
     LOG.info("Looking for a host to reconfigure.")
     nova_hosts = host_helper.get_nova_hosts()
-    if len(nova_hosts) < 2:
-        skip("Less than 2 nova hosts in the system, no host to lock and reconfigure.")
+    if len(nova_hosts) < 1 and nova_helper.get_vms_on_hypervisor():
+        skip("No nova compute host available in the system, no host to lock and reconfigure.")
 
     is_small_system = system_helper.is_small_footprint()
     if is_small_system:

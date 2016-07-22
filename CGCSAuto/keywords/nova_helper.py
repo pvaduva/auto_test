@@ -207,7 +207,7 @@ def delete_flavors(flavor_ids, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
 
 
 def get_flavor_id(name=None, memory=None, disk=None, ephemeral=None, swap=None, vcpu=None, rxtx=None, is_public=None,
-                  con_ssh=None, auth_info=None):
+                  con_ssh=None, auth_info=None, strict=True):
     """
     Get a flavor id with given criteria. If no criteria given, a random flavor will be returned.
 
@@ -222,6 +222,7 @@ def get_flavor_id(name=None, memory=None, disk=None, ephemeral=None, swap=None, 
         is_public (bool):
         con_ssh (SSHClient):
         auth_info (dict):
+        strict (bool): whether or not to perform strict search on provided values
 
     Returns (str): id of a flavor
 
@@ -249,7 +250,7 @@ def get_flavor_id(name=None, memory=None, disk=None, ephemeral=None, swap=None, 
     if not final_dict:
         ids = table_parser.get_column(table_, 'ID')
     else:
-        ids = table_parser.get_values(table_, 'ID', **final_dict)
+        ids = table_parser.get_values(table_, 'ID', strict=strict, **final_dict)
     if not ids:
         return ''
     return random.choice(ids)
@@ -266,7 +267,7 @@ def get_basic_flavor(auth_info=None, con_ssh=None):
 
     """
     default_flavor_name = 'flavor-default-1'
-    flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info)
+    flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)
     if flavor_id == '':
         flavor_id = create_flavor(name=default_flavor_name, con_ssh=con_ssh)[1]
 
@@ -1301,7 +1302,7 @@ def copy_flavor(from_flavor_id, new_name=None, con_ssh=None):
 
 
 def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=True, auth_info=Tenant.ADMIN,
-                          con_ssh=None, rnt_int=True):
+                          con_ssh=None, rtn_int=True):
     """
     Get provider net info from "nova providernet-show"
 
@@ -1311,7 +1312,7 @@ def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=Tru
         strict (bool): whether to perform a strict search on field name
         auth_info (dict):
         con_ssh (SSHClient):
-        rnt_int (bool): whether to return integer or string
+        rtn_int (bool): whether to return integer or string
 
     Returns (int|str): value of specified field. Convert to integer by default unless rnt_int=False.
 
@@ -1321,7 +1322,7 @@ def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=Tru
 
     table_ = table_parser.table(cli.nova('providernet-show', providernet_id, ssh_client=con_ssh, auth_info=auth_info))
     info_str = table_parser.get_value_two_col_table(table_, field, strict=strict)
-    return int(info_str) if rnt_int else info_str
+    return int(info_str) if rtn_int else info_str
 
 
 def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, auth_info=Tenant.ADMIN, con_ssh=None):
@@ -1371,3 +1372,7 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, auth_info=Tena
     nics_to_rtn = [list(nic_.values())[0] for nic_ in nics_to_rtn]
     LOG.info("nics with nic_names {} and vif_model {}: {}".format(nic_names, vif_model, nics_to_rtn))
     return nics_to_rtn
+
+
+def get_vm_instance_name(vm_id, con_ssh=None):
+    return get_vm_nova_show_value(vm_id, ":instance_name", strict=False, con_ssh=con_ssh)

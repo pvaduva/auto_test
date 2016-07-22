@@ -114,6 +114,9 @@ class FlavorSpec:
     CPU_POLICY = 'hw:cpu_policy'
     VCPU_MODEL = 'hw:cpu_model'
     SHARED_VCPU = 'hw:wrs:shared_vcpu'
+    CPU_THREAD_POLICY = 'hw:cpu_threads_policy'
+    VCPU_SCHEDULER = 'hw:wrs:vcpu:scheduler'
+    MIN_VCPUS = "hw:wrs:min_vcpus"
     STORAGE_BACKING = 'aggregate_instance_extra_specs:storage'
     # LOCAL_STORAGE = 'aggregate_instance_extra_specs:localstorage'
     DISK_READ_BYTES = 'quota:disk_read_bytes_sec'
@@ -128,8 +131,6 @@ class FlavorSpec:
     MEM_PAGE_SIZE = 'hw:mem_page_size'
     AUTO_RECOVERY = 'sw:wrs:auto_recovery'
     GUEST_HEARTBEAT = 'sw:wrs:guest:heartbeat'
-    VCPU_SCHEDULER = 'hw:wrs:vcpu:scheduler'
-    MIN_VCPUS = "hw:wrs:min_vcpus"
     SRV_GRP_MSG = "sw:wrs:srv_grp_messaging"
     NIC_ISOLATION = "hw:wrs:nic_isolation"
 
@@ -138,6 +139,8 @@ class ImageMetadata:
     MEM_PAGE_SIZE = 'hw_mem_page_size'
     AUTO_RECOVERRY = 'sw_wrs_auto_recovery'
     VIF_MODEL = 'hw_vif_model'
+    CPU_THREAD_POLICY = 'hw_cpu_threads_policy'
+    CPU_POLICY = 'hw_cpu_policy'
 
 
 class ServerGroupMetadata:
@@ -147,10 +150,13 @@ class ServerGroupMetadata:
 
 class InstanceTopology:
     NODE = 'node:(\d),'
-    PGSIZE = 'pgsize:(\d{1,3})M,'
+    PGSIZE = 'pgsize:(\d{1,3}),'
     VCPUS = 'vcpus:(\d{1,2}),'
-    PCPUS = 'pcpus:(.*),\s'     # find a string separated by ',' if multiple numa nodes
+    PCPUS = 'pcpus:(\d{1,2}),\s'     # find a string separated by ',' if multiple numa nodes
     CPU_POLICY = 'pol:(.*),'
+    SIBLINGS = 'siblings:(.*),'
+    THREAD_POLICY = 'thr:(.*)$|thr:(.*),'
+    TOPOLOGY = '\d{1,2}s,\d{1,2}c,\d{1,2}t'
 
 
 class RouterStatus:
