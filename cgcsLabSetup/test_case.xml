@@ -306,6 +306,28 @@ WAIT 300 SEC
 # TYPE glance image-create --name cgcs-guest --is-public true --container-format bare --disk-format raw --file ~/images/cgcs-guest.img \n
 # WAIT 30 SEC
 
+
+##############################################################################################
+# Starting 2016 July 22 in dev_0017 during Mitaka glance --is-public changed to --visibility
+# If we run pre Mitaka sanity; R2 or earlier these commands will fail silently
+TYPE glance image-create --name wrl5-avp --visibility public --container-format bare --disk-format qcow2 --file ~/images/cgcs-guest.img --property hw_vif_model=avp \n
+WAIT 30 SEC
+DELAY 5 SEC
+
+TYPE glance image-create --name wrl5-virtio --visibility public --container-format bare --disk-format qcow2 --file ~/images/cgcs-guest.img --property hw_vif_model=virtio \n
+WAIT 30 SEC
+DELAY 5 SEC
+
+TYPE glance image-create --name wrl5 --visibility public --container-format bare --disk-format qcow2 --file ~/images/cgcs-guest.img \n
+WAIT 30 SEC
+DELAY 5 SEC
+
+TYPE glance image-create --name ubuntu-precise-amd64 --visibility public --container-format bare --disk-format qcow2 --file ~/images/precise-server-cloudimg-amd64-disk1.img \n
+WAIT 300 SEC
+##############################################################################################
+
+
+
 TYPE nova flavor-create wrl5.dpdk.big 100 4096 1 3\n
 WAIT 30 SEC
 
