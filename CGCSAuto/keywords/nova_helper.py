@@ -1372,3 +1372,7 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, auth_info=Tena
     nics_to_rtn = [list(nic_.values())[0] for nic_ in nics_to_rtn]
     LOG.info("nics with nic_names {} and vif_model {}: {}".format(nic_names, vif_model, nics_to_rtn))
     return nics_to_rtn
+
+
+def get_vm_instance_name(vm_id, con_ssh=None):
+    return get_vm_nova_show_value(vm_id, ":instance_name", strict=False, con_ssh=con_ssh)

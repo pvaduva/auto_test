@@ -37,7 +37,19 @@ class CPUThreadErr:
                         "hw:cpu_threads_policy or unset hw:wrs:shared_vcpu"
     UNSET_MIN_VCPUS = "Cannot set hw:cpu_threads_policy to {} if hw:wrs:min_vcpus is set. Either unset " \
                       "hw:cpu_threads_policy, set it to another policy, or unset hw:wrs:min_vcpus"
+    CONFLICT_FLV_IMG = "Image property 'hw_cpu_thread_policy' is not permitted to override CPU thread pinning policy " \
+                       "set against the flavor"
+
+
+class CPUPolicyErr:
+    CONFLICT_FLV_IMG = "Image property 'hw_cpu_policy' is not permitted to override CPU pinning policy set against " \
+                       "the flavor "
 
 
 class SharedCPUErr:
     DEDICATED_CPU_REQUIRED = "hw:wrs:shared_vcpu is only valid when hw:cpu_policy is 'dedicated'"
+
+
+class ColdMigrateErr:
+    HT_HOST_REQUIRED = "(NUMATopologyFilter) Host not useable. Requested threads policy: {}; from flavor or " \
+                       "image is not allowed on non-hyperthreaded host"

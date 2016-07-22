@@ -208,7 +208,7 @@ def get_unique_name(name_str, existing_names=None, resource_type='other'):
     return unique_name
 
 
-def _parse_cpus_list(pcpus):
+def _parse_cpus_list(cpus):
     """
     Convert human friendly pcup list to list of integers.
     e.g., '5-7,41-42, 45' >> [5, 6, 7, 41, 42, 45]
@@ -220,12 +220,12 @@ def _parse_cpus_list(pcpus):
     Returns (list): list of integers
 
     """
-    if isinstance(pcpus, str):
-        pcpus = pcpus.split(sep=',')
+    if isinstance(cpus, str):
+        cpus = cpus.split(sep=',')
 
-    cpus_list = list(pcpus)
+    cpus_list = list(cpus)
 
-    for val in pcpus:
+    for val in cpus:
         # convert '3-6' to [3, 4, 5, 6]
         if '-' in val:
             cpus_list.remove(val)
@@ -235,4 +235,4 @@ def _parse_cpus_list(pcpus):
             if min_ != '':
                 cpus_list += list(range(int(min_), int(max_) + 1))
 
-    return [int(val) for val in cpus_list]
+    return sorted([int(val) for val in cpus_list])

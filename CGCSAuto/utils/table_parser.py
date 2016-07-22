@@ -431,8 +431,15 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
         return get_column(table_, target_header)
 
     row_indexes = []
-    for header, value in kwargs.items():
-        kwarg_row_indexes = _get_row_indexes(table_, header, value, strict=strict, regex=regex)
+    for header, values in kwargs.items():
+        if not isinstance(values, list):
+            print("you shouldn't be here. type: {}".format(type(values)))
+            values = [values]
+
+        kwarg_row_indexes = []
+        for value in values:
+            kwarg_row_indexes += _get_row_indexes(table_, header, value, strict=strict, regex=regex)
+
         if kwarg_row_indexes:
             row_indexes.append(kwarg_row_indexes)
 

@@ -1220,6 +1220,12 @@ def get_host_threads_count(host, con_ssh=None):
     return int(re.findall(pattern, output)[0])
 
 
+def get_host_procs(hostname, con_ssh=None):
+    table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    procs = table_parser.get_column(table_, 'processor')
+    return sorted(set(procs))
+
+
 def get_vswitch_port_engine_map(host_ssh):
     """
     Get vswitch cores mapping on host from /etc/vswitch/vswitch.ini
@@ -1375,21 +1381,32 @@ def get_total_allocated_vcpus_in_log(host, con_ssh=None):
         return total_allocated_vcpus
 
 
-def wait_for_total_allocated_vcpus_update_in_log(host, prev_cpus=None, timeout=60, con_ssh=None):
-    cmd = 'cat /var/log/nova/nova-compute.log | grep -i "total allocated vcpus" | tail -n 3'
-    with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
-        end_time = time.time() + timeout
-        if prev_cpus is None:
-            prev_output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
-            prev_cpus = __parse_total_cpus(prev_output)
+def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeout=60):
+    """
+    Wait for total allocated vcpus in nova-compute.log gets updated to a value that is different than given value
 
-        while time.time() < end_time:
-            output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
-            allocated_cpus = __parse_total_cpus(output)
-            if allocated_cpus != prev_cpus:
-                return allocated_cpus
-        else:
-            raise exceptions.HostTimeout("total allocated vcpus is not updated within timeout in nova-compute.log")
+    Args:
+        host_ssh (SSHFromSSH):
+        prev_cpus (list):
+        timeout (int):
+
+    Returns (int): New value of total allocated vcpus
+
+    """
+    cmd = 'cat /var/log/nova/nova-compute.log | grep -i "total allocated vcpus" | tail -n 3'
+
+    end_time = time.time() + timeout
+    if prev_cpus is None:
+        prev_output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
+        prev_cpus = __parse_total_cpus(prev_output)
+
+    while time.time() < end_time:
+        output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
+        allocated_cpus = __parse_total_cpus(output)
+        if allocated_cpus != prev_cpus:
+            return allocated_cpus
+    else:
+        raise exceptions.HostTimeout("total allocated vcpus is not updated within timeout in nova-compute.log")
 
 
 def get_vcpus_for_computes(hosts=None, rtn_val='used_now', con_ssh=None):
@@ -1481,50 +1498,108 @@ def get_logcore_siblings(host, con_ssh=None):
     return sibling_pairs
 
 
-def get_vcpus_info_in_log(host, numa_nodes=None, rtn_list=False, con_ssh=None):
+def get_vcpus_info_in_log(host_ssh, numa_nodes=None, rtn_list=False, con_ssh=None):
     """
-
+    Get vcpus info from nova-compute.log on nova compute host
     Args:
-        host:
-        numa_nodes (list): [0, 1]
+        host_ssh (SSHClient):
+        numa_nodes (list): such as [0, 1]
+        rtn_list (bool): whether to return dictionary or list
         con_ssh:
 
-    Returns:
+    Returns (dict|list):
+        Examples: { 0: {'pinned_cpulist': [], 'unpinned_cpulist': [3, 4, 5,...], 'cpu_usage': 0.0, 'pinned': 0, ...},
+                    1: {....}}
 
     """
+    hostname = host_ssh.get_hostname()
     if numa_nodes is None:
-        numa_nodes = [0, 1]
+        numa_nodes = get_host_procs(hostname, con_ssh=con_ssh)
 
     res_dict = {}
-    with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
-        for numa_node in numa_nodes:
-            res_dict[numa_node] = {}
+    for numa_node in numa_nodes:
+        res_dict[numa_node] = {}
 
-            # sample output:
-            # 2016-07-15 16:20:50.302 99972 INFO nova.compute.resource_tracker [req-649d9338-ee0b-477c-8848-
-            # 89cc94114b58 - - - - -] Numa node=1; cpu_usage:32.000, pcpus:36, pinned:32, shared:0.000, unpinned:4;
-            # pinned_cpulist:18-19,21-26,28-35,54-55,57-62,64-71, unpinned_cpulist:20,27,56,63
-            output = host_ssh.exec_cmd('cat /var/log/nova/nova-compute.log | grep -i -E "Numa node={}; .*unpinned:" '
-                                       '| tail -n 1'.format(numa_node), fail_ok=False)[1]
+        # sample output:
+        # 2016-07-15 16:20:50.302 99972 INFO nova.compute.resource_tracker [req-649d9338-ee0b-477c-8848-
+        # 89cc94114b58 - - - - -] Numa node=1; cpu_usage:32.000, pcpus:36, pinned:32, shared:0.000, unpinned:4;
+        # pinned_cpulist:18-19,21-26,28-35,54-55,57-62,64-71, unpinned_cpulist:20,27,56,63
+        output = host_ssh.exec_cmd('cat /var/log/nova/nova-compute.log | grep -i -E "Numa node={}; .*unpinned:" '
+                                   '| tail -n 1'.format(numa_node), fail_ok=False)[1]
 
-            output = ''.join(output.split(sep='\n'))
-            cpu_info = output.split(sep="Numa node={}; ".format(numa_node))[-1].replace('; ', ', '). split(sep=', ')
+        output = ''.join(output.split(sep='\n'))
+        cpu_info = output.split(sep="Numa node={}; ".format(numa_node))[-1].replace('; ', ', '). split(sep=', ')
 
-            print("Cpu info: {}".format(cpu_info))
-            for info in cpu_info:
-                key, value = info.split(sep=':')
+        print("Cpu info: {}".format(cpu_info))
+        for info in cpu_info:
+            key, value = info.split(sep=':')
 
-                if key in ['pinned_cpulist', 'unpinned_cpulist']:
-                    value = common._parse_cpus_list(value)
-                elif key in ['cpu_usage', 'shared']:
-                    value = float(value)
-                else:
-                    value = int(value)
+            if key in ['pinned_cpulist', 'unpinned_cpulist']:
+                value = common._parse_cpus_list(value)
+            elif key in ['cpu_usage', 'shared']:
+                value = float(value)
+            else:
+                value = int(value)
 
-                res_dict[numa_node][key] = value
+            res_dict[numa_node][key] = value
 
-    LOG.info("VCPU info for {} parsed from compute-nova.log: {}".format(host, res_dict))
+    LOG.info("VCPU info for {} parsed from compute-nova.log: {}".format(host_ssh.get_hostname(), res_dict))
     if rtn_list:
         return [res_dict[node] for node in numa_nodes]
 
     return res_dict
+
+
+def get_vcpus_for_instance_via_virsh(host_ssh, instance_name, rtn_list=False):
+    """
+    Get a list of pinned vcpus for given instance via 'sudo virsh vcpupin <instance_name>'
+
+    Args:
+        host_ssh (SSHFromSSH):
+        instance_name (str):
+        vm_id (str):
+        con_ssh (SSHClient):
+
+    Returns (list|dict): list of vcpus ids used by specified instance such as [8, 9], or {0: 8, 1: 9}
+
+    """
+
+    output = host_ssh.exec_sudo_cmd("virsh vcpupin {} | grep -v '^[ \t]*$'".format(instance_name), fail_ok=False)[1]
+
+    # sample output:
+    # VCPU: CPU Affinity
+    # ----------------------------------
+    #   0: 8
+    #   1: 9
+
+    vcpu_lines = output.split(sep='----\n')[1].split(sep='\n')
+    print("vcpus_lines: {}".format(vcpu_lines))
+    vcpus = {}
+    for line in vcpu_lines:
+        # line example: '  0: 8'
+        key, pcpus = line.strip().split(sep=': ')
+        vcpus[int(key)] = common._parse_cpus_list(pcpus.strip())
+
+    if rtn_list:
+        return sorted(list(vcpus.values()))
+
+    return vcpus
+
+
+def get_hosts_per_storage_backing(con_ssh=None):
+    """
+    Get hosts for each possible storage backing
+    Args:
+        con_ssh:
+
+    Returns (dict): {'local_image': <cow hosts list>,
+                    'local_lvm': <lvm hosts list>,
+                    'remote': <remote hosts list>
+                    }
+    """
+
+    hosts = {'local_image': get_hosts_by_storage_aggregate('local_image', con_ssh=con_ssh),
+             'local_lvm': get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh),
+             'remote': get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh)}
+
+    return hosts

@@ -161,11 +161,6 @@ def _get_active_standby(controller='active', con_ssh=None):
     return controllers
 
 
-def get_interfaces(host, con_ssh=None):
-    table_ = table_parser.table(cli.system('host-if-list --nowrap', host, ssh_client=con_ssh))
-    return table_
-
-
 def get_alarms(uuid=False, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
                auth_info=Tenant.ADMIN):
     """
@@ -804,12 +799,12 @@ def to_delete_apply_storage_profile(host, profile=None, con_ssh=None, fail_ok=Fa
     return code, output
 
 
-def delete_stroage_profile(profile='', con_ssh=None):
+def delete_storage_profile(profile='', con_ssh=None):
     """
     Delete a storage profile
 
     Args:
-        profile_name (str): name of the profile to create
+        profile (str): name of the profile to create
         con_ssh (SSHClient):
 
     Returns (): no return if success, will raise exception otherwise
@@ -889,3 +884,126 @@ def get_host_memory_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN)
     output = cli.system('host-memory-show', positional_args=pos_args, ssh_client=con_ssh, auth_info=auth_info)
     table_ = table_parser.table(output)
     return table_
+
+
+def get_host_ports_info(host, header='name', if_name=None, pci_addr=None, proc=None, dev_type=None, strict=True,
+                   regex=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+    """
+    Get
+    Args:
+        host:
+        header:
+        if_name:
+        pci_addr:
+        proc:
+        dev_type:
+        strict:
+        regex:
+        con_ssh:
+        auth_info:
+        **kwargs:
+
+    Returns:
+
+    """
+    table_ = table_parser.table(cli.system('host-port-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
+
+    args_tmp = {
+        'name': if_name,
+        'pci address': pci_addr,
+        'processor': proc,
+        'device type': dev_type
+    }
+
+    for key, value in args_tmp.items():
+        if value is not None:
+            kwargs[key] = value
+
+    return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
+
+
+def get_host_interfaces_info(host, header='name', net_type=None, if_type=None, uses_ifs=None, used_by_ifs=None,
+                             show_all=False, strict=True, regex=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+    """
+    Get specified interfaces info for given host via system host-if-list
+
+    Args:
+        host (str):
+        header (str): header for return info
+        net_type (str): valid values: 'data', 'infra', 'mgmt', 'None' (string 'None' as opposed to None type)
+        if_type (str): possible values: 'ethernet', 'ae', 'vlan'
+        uses_ifs (str):
+        used_by_ifs (str):
+        show_all (bool): whether or not to show unused interfaces
+        strict (bool):
+        regex (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+        **kwargs: extraheader=value pairs to further filter out info. such as attributes='MTU=1500'.
+
+    Returns (list|dict):
+
+    """
+
+    args = ' --nowrap'
+    args += ' --a' if show_all else ''
+    args += host
+
+    table_ = table_parser.table(cli.system('host-if-list', args, ssh_client=con_ssh, auth_info=auth_info))
+
+    args_tmp = {
+        'network type': net_type,
+        'type': if_type,
+        'uses i/f': uses_ifs,
+        'used by i/f': used_by_ifs
+    }
+
+    for key, value in args_tmp.items():
+        if value is not None:
+            kwargs[key] = value
+
+    info = table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
+    if header in ['ports', 'used by i/f', 'uses i/f']:
+        info = eval(info)
+
+    return info
+
+
+def get_host_ports_for_net_type(host, net_type='data', rtn_list=True, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        host:
+        net_type:
+        rtn_list:
+        con_ssh:
+        auth_info:
+
+    Returns:
+
+    """
+    table_ = table_parser.table(cli.system('host-if-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
+    net_ifs_names = table_parser.get_values(table_, 'name', **{'network type': net_type})
+    total_ports = {}
+    for if_name in net_ifs_names:
+        ports = eval(table_parser.get_values(table_, 'ports', name=if_name)[0])
+
+        if not ports:
+            uses_ifs = eval(table_parser.get_values(table_, 'uses i/f', name=if_name)[0])
+            for use_if in uses_ifs:
+                useif_ports = eval(table_parser.get_values(table_, 'ports', name=use_if)[0])
+                ports += useif_ports
+
+        total_ports[if_name] = ports
+
+    LOG.info("{} network ports for host are: {}".format(net_type, total_ports))
+
+    if rtn_list:
+        total_ports_list = []
+        for ports in list(total_ports.values()):
+            total_ports_list += ports
+
+        total_ports_list = list(set(total_ports_list))
+        return total_ports_list
+
+    return total_ports

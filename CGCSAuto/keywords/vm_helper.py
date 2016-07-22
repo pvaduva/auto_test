@@ -594,8 +594,8 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     if exitcode == 1:
         vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
         if len(host_helper.get_nova_hosts_with_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
-            LOG.info("Cold migration of vm {} rejected as expected due to no valid host to cold migrate to.".
-                     format(vm_id))
+            LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
+                     "migrate to.".format(vm_id))
             return 1, output
         elif fail_ok:
             LOG.warning("Cold migration of vm {} is rejected.".format(vm_id))
@@ -1695,10 +1695,13 @@ def get_instance_topology(vm_id, con_ssh=None):
                             min_, max_ = val.split(sep='-')
                             values += list(range(int(min_), int(max_) + 1))
 
-                    value_ = [int(val) for val in values]
+                    value_ = sorted([int(val) for val in values])
 
                 elif key_ == 'siblings':
-                    value_ = eval(value_)
+                    # example: siblings:{0,1},{2,3},{5,6,8-10}
+                    # initial value_ parsed: ['0,1', '2,3', '5,6,8-10']
+                    value_ = re.findall('{([^}]*)}', value_)
+                    value_ = [common._parse_cpus_list(item) for item in value_]
                 instance_topology_dict[key_] = value_
 
             elif len(item_list) == 1:
@@ -1707,52 +1710,15 @@ def get_instance_topology(vm_id, con_ssh=None):
                     instance_topology_dict['topology'] = value_
                 # TODO add mem size
 
-        if 'siblings' not in instance_topology_dict:
-            instance_topology_dict['siblings'] = None
-
+        # Add as None if item is not displayed in vm-topology
+        all_keys = ['node', 'pgsize', 'vcpus', 'pcpus', 'pol', 'thr', 'siblings', 'topology']   # TODO: add mem
+        for key in all_keys:
+            if key not in instance_topology_dict:
+                instance_topology_dict[key] = None
         instance_topology_all.append(instance_topology_dict)
-        LOG.info('Instance topology for vm {}: {}'.format(vm_id, instance_topology_all))
-        return instance_topology_all
 
-    #     instance_topology_dict[node_val] = {}
-    #     instance_topology_dict[node_val]['node'] = topology_for_numa_node
-    #
-    #     pgsize = re.findall(InstanceTopology.PGSIZE, topology_for_numa_node)[0].strip()
-    #     instance_topology_dict[node_val]['pgsize'] = pgsize
-    #
-    #     pcpus = re.findall(InstanceTopology.PCPUS, topology_for_numa_node)
-    #     if pcpus:
-    #         pcpus = pcpus[0].strip().split(sep=',')
-    #         pcpus = [int(pcpu) for pcpu in pcpus]
-    #         instance_topology_dict[node_val]['pcpus'] = pcpus
-    #     else:
-    #         instance_topology_dict[node_val]['pcpus'] = None
-    #
-    #     vcpus = re.findall(InstanceTopology.VCPUS, topology_for_numa_node)
-    #     if vcpus:
-    #         vcpus = vcpus[0].strip().split(sep=',')
-    #         vcpus = [int(vcpu) for vcpu in vcpus]
-    #         instance_topology_dict[node_val]['vcpus'] = vcpus
-    #     else:
-    #         instance_topology_dict[node_val]['vcpus'] = None
-    #
-    #     siblings = re.findall(InstanceTopology.SIBLINGS, topology_for_numa_node)
-    #     if siblings:
-    #         instance_topology_dict[node_val]['siblings'] = eval(siblings[0])
-    #     else:
-    #         instance_topology_dict[node_val]['siblings'] = None
-    #
-    #     cpu_policy = re.findall(InstanceTopology.CPU_POLICY, topology_for_numa_node)[0]
-    #     instance_topology_dict[node_val]['pol'] = cpu_policy
-    #
-    #     thread_policy = re.findall(InstanceTopology.THREAD_POLICY, topology_for_numa_node)[0]
-    #     instance_topology_dict[node_val]['thr'] = thread_policy
-    #
-    # LOG.info('Instance topology for vm {}: {}'.format(vm_id, instance_topology_dict))
-    # if rtn_list:
-    #     return list(instance_topology_dict.values())
-    # else:
-    #     return instance_topology_dict
+    LOG.info('Instance topology for vm {}: {}'.format(vm_id, instance_topology_all))
+    return instance_topology_all
 
 
 def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **kwargs):

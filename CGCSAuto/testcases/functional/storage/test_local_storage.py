@@ -53,7 +53,7 @@ class TestLocalStorage(object):
             old_new_types = self._get_cleanup_list('local_storage_type')
             try:
                 while profiles_created:
-                    system_helper.delete_stroage_profile(profile=profiles_created.pop())
+                    system_helper.delete_storage_profile(profile=profiles_created.pop())
 
                 while computes_locked:
                     host_helper.unlock_host(computes_locked.pop())

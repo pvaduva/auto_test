@@ -25,7 +25,7 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
         raise exceptions.HostError("Expected a valid hostname but got nothing instead")
 
     # get the port_uuid for network_type interface only
-    table_ = system_helper.get_interfaces(hostname, con_ssh=None)
+    table_ = table_parser.table(cli.system('host-if-list --nowrap', hostname))
     port_uuid_list = table_parser.get_values(table_, 'uuid', **{'network type': network_type})
     imtu = " --imtu "+mtu
 
@@ -90,12 +90,12 @@ def test_oam_intf_mtu_modified(mtu):
     modify_mtu_on_interface(second_host, mtu, 'oam')
 
     # check mtu is updated
-    table_ = system_helper.get_interfaces(first_host, con_ssh=None)
+    table_ = table_ = table_parser.table(cli.system('host-if-list --nowrap', first_host))
     mtu_list = table_parser.get_values(table_, 'attributes', **{'network type': 'oam'})
     # parse the string of MTU=xxxx
     actual_mtu_one = mtu_list[0][4:]
 
-    table_ = system_helper.get_interfaces(second_host, con_ssh=None)
+    table_ = table_parser.table(cli.system('host-if-list --nowrap', second_host))
     mtu_list = table_parser.get_values(table_, 'attributes', **{'network type': 'oam'})
     actual_mtu_two = mtu_list[0][4:]
 
@@ -134,7 +134,7 @@ def test_data_intf_mtu_modified(mtu):
         modify_mtu_on_interface(host, mtu, 'data')
 
         # check mtu is updated
-        table_ = system_helper.get_interfaces(host, con_ssh=None)
+        table_ = table_parser.table(cli.system('host-if-list --nowrap', host))
         mtu_list = table_parser.get_values(table_, 'attributes', **{'network type': 'data'})
         # parse the string of MTU=xxxx
 

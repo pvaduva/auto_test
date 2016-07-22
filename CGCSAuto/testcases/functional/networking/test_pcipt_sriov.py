@@ -87,14 +87,11 @@ class TestSriovPciptResourceUsage:
         # LOG.info("Ping vm_under_test from base_vm to verify management, data & internal networks connection")
         # vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'internal'], vlan_zero_only=True)
 
-        LOG.info("Tne resource usage {} is equal to expected value {}".format(resource_value, increment_value))
+        LOG.info("Tne resource usage {} is not equal to expected value {}".format(resource_value, increment_value))
 
-        if actual_resource_value == increment_value:
-            LOG.info("Tne resource usage {} is equal to expected value {}".format(resource_value, increment_value))
-        else:
-            assert actual_resource_value == increment_value, "The resource usage is not equal to expected value"
-            LOG.info("The resource usage {} is not equal to expected value {}".format(resource_value,increment_value))
-        return base_vm, vm_under_test
+        assert resource_value == increment_value, "The resource usage is not equal to expected value"
+
+        return base_vm, vm_under_test, resource_usage
 
 
     @mark.parametrize("vm_actions", [
