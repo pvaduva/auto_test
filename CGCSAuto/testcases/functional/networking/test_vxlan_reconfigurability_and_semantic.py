@@ -21,10 +21,7 @@ def providernet_(request):
 
     provider = common.get_unique_name(pro_net_name, resource_type='other')
     args = provider + ' --type=vxlan'
-    code, output= cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, fail_ok=True, rtn_list=True)
-
-    if code > 0:
-        skip("Provider-net creation failed")
+    cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, rtn_list=True)
 
     range_name = provider + '_range'
 
@@ -112,7 +109,7 @@ def test_vxlan_valid_multicast_addr_negative(addr, providernet_):
     LOG.tc_step("Verify the segmentation range creation should be failed")
     if code > 0:
         LOG.info("Expect fail when the multicast group addresses are not in (224.0.0.0 to 239.255.255.255).")
-        assert  NetworkingErr.INVALID_MULTICAST_IP_ADDRESS in err_info
+        assert NetworkingErr.INVALID_MULTICAST_IP_ADDRESS in err_info
     else:
         network_helper.delete_vxlan_providernet_range(range_name)
         assert 1 == code, "Should not pass when multicast addresses are out of range"
@@ -202,8 +199,7 @@ def test_vxlan_valid_ttl_negative(the_ttl, providernet_):
     # the two error message one for ttl=0  and another one if for ttl>255
     if code > 0:
         LOG.info("Expect fail when TTL is not in range (1, 255)")
-        assert NetworkingErr.VXLAN_TTL_RANGE_MISSING in err_info or \
-               NetworkingErr.VXLAN_TTL_RANGE_TOO_LARGE in err_info
+        assert NetworkingErr.VXLAN_TTL_RANGE_MISSING in err_info or NetworkingErr.VXLAN_TTL_RANGE_TOO_LARGE in err_info
     else:
         network_helper.delete_vxlan_providernet_range(range_name)
         assert 1 == code, "Should not pass when TTL is our of range 1 to 255"
@@ -293,7 +289,7 @@ def test_vxlan_same_providernet_overlapping_segmentation_negative(r_min, r_max, 
 @fixture(scope='module')
 def locked_nova_host(request):
 
-    nova_host = random.choice(host_helper.get_nova_hosts())
+    nova_host = random.choice(host_helper.get_hosts(personality='compute'))
     host_helper.lock_host(nova_host)
     HostsToRecover.add(nova_host, scope='module')
 
@@ -325,7 +321,6 @@ def multiple_provider_net_range(locked_nova_host, request):
     # Find a free port from host-if-list -a
     args = '{} {}'.format(locked_nova_host, "-a")
     table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
-    LOG.info(" ***** ===== {}".format(table_))
     list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'networktype': 'None'})
     if not list_interfaces:
         skip("Can not find a free interface to create a new one")
@@ -338,10 +333,7 @@ def multiple_provider_net_range(locked_nova_host, request):
     #  args += r'"{},{}" '.format(provider_ids[0], provider_ids[1])   id is not working for if add
     args += r'"{},{}" '.format(providernet_names[0], providernet_names[1])
     args += if_name + ' -nt data -m {}'.format(1600)
-    code, err_info = cli.system('host-if-add', args, auth_info=Tenant.ADMIN, fail_ok=False, rtn_list=True)
-
-    if code > 0:
-        skip("can not create the data interface {}".format(err_info))
+    cli.system('host-if-add', args, auth_info=Tenant.ADMIN, rtn_list=True)
 
     # the name of the range is: providernet_names[0]_range
     range_name = providernet_names[0] + '_range'
@@ -382,8 +374,8 @@ def test_vxlan_same_ranges_on_different_provider_negative(multiple_provider_net_
 
     Args:
         multiple_provider_net_range
-        range1:
-        fail_ok:
+        r_max
+        r_min
 
     Test Setups (module):
         - Create two provider net
@@ -495,7 +487,7 @@ def test_vxlan_mtu_value_negative(prepare_mtu_verification, the_mtu):
     LOG.tc_step("Verify the interface creation should be failed")
     if code > 0:
         LOG.info("Expect fail: MTU value of a provider network must be less than that of its associated data interface")
-        assert  NetworkingErr.INVALID_MTU_VALUE in err_info
+        assert NetworkingErr.INVALID_MTU_VALUE in err_info
     else:
         args = '{} {}'.format(compute, new_interface_)
         cli.system('host-if-delete', args, auth_info=Tenant.ADMIN)
