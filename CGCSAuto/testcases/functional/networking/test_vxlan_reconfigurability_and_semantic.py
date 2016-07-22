@@ -21,7 +21,10 @@ def providernet_(request):
 
     provider = common.get_unique_name(pro_net_name, resource_type='other')
     args = provider + ' --type=vxlan'
-    cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, rtn_list=True)
+
+    table_ = table_parser.table(cli.neutron('providernet-list', auth_info=Tenant.ADMIN))
+    if not table_parser.get_values(table_, 'id', **{'name': provider}):
+        cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, rtn_list=True)
 
     range_name = provider + '_range'
 
@@ -220,9 +223,6 @@ def prepare_segmentation_range(request):
     else:
         provider_id = network_helper.get_provider_nets(strict=True, type='vxlan', name=provider)[0]
 
-    if code == 1 :
-        skip("The segmentation range creation failed")
-
     range_name = provider+"_range"
     create_vxlan_providernet_range(provider_id, range_name, range_min=min_rang, range_max=max_rang)
 
@@ -287,17 +287,7 @@ def test_vxlan_same_providernet_overlapping_segmentation_negative(r_min, r_max, 
 
 
 @fixture(scope='module')
-def locked_nova_host(request):
-
-    nova_host = random.choice(host_helper.get_hosts(personality='compute'))
-    host_helper.lock_host(nova_host)
-    HostsToRecover.add(nova_host, scope='module')
-
-    return nova_host
-
-
-@fixture(scope='module')
-def multiple_provider_net_range(locked_nova_host, request):
+def multiple_provider_net_range(request):
 
     providernet_names = [common.get_unique_name(pro_net_name, resource_type='other'),
                          common.get_unique_name(pro_net_name, resource_type='other')]
@@ -318,18 +308,34 @@ def multiple_provider_net_range(locked_nova_host, request):
 
     # Create interface to associate with the two provider-nets
 
-    # Find a free port from host-if-list -a
-    args = '{} {}'.format(locked_nova_host, "-a")
-    table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
-    list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'networktype': 'None'})
-    if not list_interfaces:
-        skip("Can not find a free interface to create a new one")
+    nova_hosts = host_helper.get_hosts(personality='compute')
 
+        # find a free interface
+    find = False
+    computer = ""
+    for nova_host in nova_hosts:
+        args = '{} {}'.format(nova_host , "-a")
+        table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
+        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'networktype': 'None',
+                                                                     'used byi/f': []})
+
+        if list_interfaces:
+            find = True
+            computer = nova_host
+            break
+
+    if not find:
+        assert find, "Can not find a free data interface "
+
+    # Find a free port from host-if-list -a
     if_name = random.choice(list_interfaces)
+
+    host_helper.lock_host(computer)
+    HostsToRecover.add(nova_host, scope='module')
 
     # Create an interface associate with the two providers just create
     interface = 'test0if'
-    args = locked_nova_host + ' ' + interface + ' ae '
+    args = computer + ' ' + interface + ' ae '
     #  args += r'"{},{}" '.format(provider_ids[0], provider_ids[1])   id is not working for if add
     args += r'"{},{}" '.format(providernet_names[0], providernet_names[1])
     args += if_name + ' -nt data -m {}'.format(1600)
@@ -348,7 +354,7 @@ def multiple_provider_net_range(locked_nova_host, request):
         # Clean up: remove the ranges and providers just created
         network_helper.delete_vxlan_providernet_range(range_name)
 
-        args = '{} {}'.format(locked_nova_host, interface)
+        args = '{} {}'.format(computer, interface)
         cli.system('host-if-delete', args, auth_info=Tenant.ADMIN)
 
         for provider in providernet_names:
@@ -419,25 +425,41 @@ def test_vxlan_same_ranges_on_different_provider_negative(multiple_provider_net_
 
 
 @fixture(scope='module')
-def prepare_mtu_verification(locked_nova_host, request):
+def prepare_mtu_verification(request):
 
     providernet_name = common.get_unique_name(pro_net_name, resource_type='other')
 
     # Create provider networks
     args = providernet_name + ' --type=vxlan'
-    code, output = cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, rtn_list=True)
 
-    if code > 0 and "already exists" not in output:
-        skip("Create provider network failed")
+    table_ = table_parser.table(cli.neutron('providernet-list', auth_info=Tenant.ADMIN))
+    if not table_parser.get_values(table_, 'id', **{'name': providernet_name}):
+        cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, rtn_list=True)
 
-    args = '{} {}'.format(locked_nova_host, "-a")
-    table_ = table_parser.table(cli.system('host-if-list', args, ssh_client=None, auth_info=Tenant.ADMIN))
-    list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'networktype': 'None'})
-    if not list_interfaces:
-        skip("Can not find data interface ")
+    nova_hosts = host_helper.get_hosts(personality='compute')
 
-    # Take one from free interface list
+    # find a free interface
+    find = False
+    computer = ""
+    for nova_host in nova_hosts:
+        args = '{} {}'.format(nova_host , "-a")
+        table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
+
+        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'networktype': 'None'})
+
+
+        if list_interfaces:
+            find = True
+            computer = nova_host
+            break
+
+    if not find:
+        assert find, "Can not find a free data interface "
+
+    # Find a free port from host-if-list -a
     interface = random.choice(list_interfaces)
+
+    host_helper.lock_host(nova_host)
 
     # Clean the provider network")
     def fin():
@@ -445,7 +467,7 @@ def prepare_mtu_verification(locked_nova_host, request):
 
     request.addfinalizer(fin)
 
-    return providernet_name, interface, locked_nova_host
+    return providernet_name, interface, computer
 
 
 @mark.parametrize('the_mtu', [
