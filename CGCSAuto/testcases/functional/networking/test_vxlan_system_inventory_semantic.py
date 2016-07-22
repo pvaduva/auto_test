@@ -18,71 +18,67 @@ def get_interface_(request):
 
     # (a) create providernet
     args = provider_ + ' --type=vxlan'
-    code, output = cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, fail_ok=True, rtn_list=True)
-
-    if code > 0 and "already exists" not in output:
-        assert False, ("Create provider network failed")
+    table_ = table_parser.table(cli.neutron('providernet-list', auth_info=Tenant.ADMIN))
+    if not table_parser.get_values(table_, 'id', **{'name': provider_}):
+        cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, rtn_list=True)
 
     nova_hosts = host_helper.get_hosts(personality='compute')
 
     # find a free interface
     find = False
+    computer = ""
     for nova_host in nova_hosts:
         args = '{} {}'.format(nova_host , "-a")
         table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
-        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'networktype': 'None'})
+        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'networktype': 'None',
+                                                                     'used byi/f': []})
 
         if list_interfaces:
             find = True
+            computer = nova_host
             break
 
     if not find:
         assert find, "Can not find a free data interface "
 
     # now lock the computer
-    host_helper.lock_host(nova_host )
-    HostsToRecover.add(nova_host , scope='module')
+    host_helper.lock_host(computer)
+    HostsToRecover.add(computer, scope='module')
 
     interface = random.choice(list_interfaces)
 
-    LOG.info("Create interface associated with the provider-net")
     the_mtu = 1600
-    args = nova_host + ' ' + new_interface_ + ' ae ' + provider_ + ' ' + interface + ' -nt data -m {}'.format(the_mtu)
+    args = computer + ' ' + new_interface_ + ' ae ' + provider_ + ' ' + interface + ' -nt data -m {}'.format(the_mtu)
     cli.system('host-if-add', args, rtn_list=True)
 
     def fin():
         # clean up
-        LOG.info("Clean the interface and provider network")
-        cli.system('host-if-delete', '{} {}'.format(nova_host , new_interface_))
+        cli.system('host-if-delete', '{} {}'.format(computer, new_interface_))
         cli.neutron('providernet-delete', provider_, auth_info=Tenant.ADMIN)
     request.addfinalizer(fin)
 
-    return nova_host, provider_, new_interface_
+    return computer, provider_, new_interface_
 
 
 @fixture(scope='module')
 def set_interface_ip_(get_interface_):
     compute, provider, new_interface_ = get_interface_
 
-    LOG.info("change the ip mode to static ")
     args_mode = '-nt data -p {} {} {} --ipv4-mode=static --ipv6-mode=static'.format(provider, compute, new_interface_)
-    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
-
-    if code > 0:
-        LOG.info("modify interface failed")
+    cli.system('host-if-modify', args_mode, rtn_list=True)
 
     ip = "192.168.3.3"
-    LOG.info("add ip: {}/24".format(ip))
-    args_ip = '{} {} {} 24'.format(compute, new_interface_, ip)
-    code, err_info = cli.system('host-addr-add', args_ip, fail_ok=True, rtn_list=True)
-    if code > 0 and "already exists" not in err_info:
-        assert False, "can not create ip address: |{}|".format(err_info)
+
+    # check if the ip address already exist
+    table_ = table_parser.table(cli.system('host-addr-list', compute))
+    if not table_parser.get_values(table_, 'uuid', **{'address': ip}):
+        args_ip = '{} {} {} 24'.format(compute, new_interface_, ip)
+        cli.system('host-addr-add', args_ip, rtn_list=True)
 
     ip="2001:470:27:37e::2"
-    args_ip = '{} {} {} 64'.format(compute, new_interface_, ip)
-    code, err_info = cli.system('host-addr-add', args_ip, fail_ok=True, rtn_list=True)
-    if code > 0 and "already exists" not in err_info:
-        assert False, "can not create ip address: |{}|".format(err_info)
+    if not table_parser.get_values(table_, 'uuid', **{'address': ip}):
+        args_ip = '{} {} {} 64'.format(compute, new_interface_, ip)
+        cli.system('host-addr-add', args_ip, rtn_list=True)
 
     return compute, provider, new_interface_
 
