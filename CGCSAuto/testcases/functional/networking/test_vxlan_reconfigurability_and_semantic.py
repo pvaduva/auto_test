@@ -107,7 +107,7 @@ def test_vxlan_valid_multicast_addr_negative(addr, providernet_):
     provider, range_name = providernet_
 
     LOG.tc_step("Create the segmentation range with given multcast group addr {}".format(addr))
-    code, err_info = create_vxlan_providernet_range(provider, range_name, group=addr, range_min = r_min, range_max = r_max)
+    code, err_info = create_vxlan_providernet_range(provider, range_name, group=addr, range_min=r_min, range_max=r_max)
 
     LOG.tc_step("Verify the segmentation range creation should be failed")
     if code > 0:
@@ -153,12 +153,13 @@ def test_vxlan_valid_port_negative(the_port, providernet_):
     provider, range_name = providernet_
 
     LOG.tc_step("Create the segmentation range with the port {}".format(the_port))
-    code, err_info = create_vxlan_providernet_range(provider, range_name, port=the_port, range_min=r_min, range_max=r_max)
+    code, err_info = create_vxlan_providernet_range(provider, range_name, port=the_port,
+                                                    range_min=r_min, range_max=r_max)
 
     LOG.tc_step("Verify the segmentation range creation should be failed")
     if code > 0:
         LOG.info("Expect fail when port is not 4789 or 8472")
-        assert  NetworkingErr.INVALID_VXLAN_PROVISION_PORTS in err_info
+        assert NetworkingErr.INVALID_VXLAN_PROVISION_PORTS in err_info
     else:
         network_helper.delete_vxlan_providernet_range(range_name)
         assert 1 == code, "Should not pass when port is not valid"
@@ -215,7 +216,7 @@ def prepare_segmentation_range(request):
     max_rang = 7020
 
     args = provider + ' --type=vxlan'
-    code, output= cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, fail_ok=True, rtn_list=True)
+    code, output = cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, fail_ok=True, rtn_list=True)
 
     if not code:
         table_ = table_parser.table(output)
@@ -308,61 +309,58 @@ def multiple_provider_net_range(request):
 
     # Create interface to associate with the two provider-nets
 
-    nova_hosts = host_helper.get_hosts(personality='compute')
+    nova_hosts = host_helper.get_hypervisors()
+
+    if not nova_hosts:
+        skip("Can not continue without computer host node")
 
         # find a free interface
-    find = False
-    computer = ""
+    computer_host = ""
     for nova_host in nova_hosts:
-        args = '{} {}'.format(nova_host , "-a")
+        args = '{} {}'.format(nova_host , "-a --nowrap")
         table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
-        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'networktype': 'None',
-                                                                     'used byi/f': []})
+        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'network type': 'None',
+                                                                     'used by i/f': []})
 
         if list_interfaces:
-            find = True
-            computer = nova_host
+            computer_host = nova_host
             break
+    else:
+        assert False, "Can not find a free data interface "
 
-    if not find:
-        assert find, "Can not find a free data interface "
 
     # Find a free port from host-if-list -a
     if_name = random.choice(list_interfaces)
 
-    host_helper.lock_host(computer)
-    HostsToRecover.add(nova_host, scope='module')
+    host_helper.lock_host(computer_host)
+    HostsToRecover.add(computer_host, scope='module')
 
     # Create an interface associate with the two providers just create
     interface = 'test0if'
-    args = computer + ' ' + interface + ' ae '
+    args = computer_host + ' ' + interface + ' ae '
     #  args += r'"{},{}" '.format(provider_ids[0], provider_ids[1])   id is not working for if add
     args += r'"{},{}" '.format(providernet_names[0], providernet_names[1])
-    args += if_name + ' -nt data -m {}'.format(1600)
+    args += if_name + ' -nt data --ipv4-mode=static -m {}'.format(1600)
     cli.system('host-if-add', args, auth_info=Tenant.ADMIN, rtn_list=True)
 
     # the name of the range is: providernet_names[0]_range
     range_name = providernet_names[0] + '_range'
 
-    code, err_info = create_vxlan_providernet_range(provider_ids[0], range_name, range_min=r_min, range_max=r_max)
-
-    if code > 0:
-        msg = "create first provider network segmentation range {}-{} failed with: {}".format(r_min, r_max, err_info)
-        assert False, msg
-
-    def fin():
+    def fin_teardown():
         # Clean up: remove the ranges and providers just created
         network_helper.delete_vxlan_providernet_range(range_name)
-
-        args = '{} {}'.format(computer, interface)
-        cli.system('host-if-delete', args, auth_info=Tenant.ADMIN)
 
         for provider in providernet_names:
             cli.neutron('providernet-delete', provider, auth_info=Tenant.ADMIN)
 
-    request.addfinalizer(fin)
+    request.addfinalizer(fin_teardown)
 
-    return providernet_names, r_min, r_max
+    code, err_info = create_vxlan_providernet_range(provider_ids[0], range_name, range_min=r_min, range_max=r_max)
+    if code > 0:
+        msg = "create first provider network segmentation range {}-{} failed with: {}".format(r_min, r_max, err_info)
+        assert False, msg
+
+    return providernet_names, r_min, r_max, computer_host, if_name, interface
 
 
 @mark.parametrize(('r_min', 'r_max'), [
@@ -403,14 +401,12 @@ def test_vxlan_same_ranges_on_different_provider_negative(multiple_provider_net_
     # system host-if-modify
 
     # create two provider networks
-    providers, low_rang, high_rang = multiple_provider_net_range
-
+    providers, low_rang, high_rang, x, y, z = multiple_provider_net_range
 
     r_min = low_rang + r_min
     r_max = high_rang + r_max
-    LOG.tc_step("Create the second range, first been created in fixture")
 
-    LOG.tc_step("Create the segmentation range")
+    LOG.tc_step("Create the second range, first been created in fixture")
     range_name = providers[1] + '_shared'
     code, output = create_vxlan_providernet_range(providers[1], range_name, range_min=r_min, range_max=r_max)
 
@@ -424,58 +420,12 @@ def test_vxlan_same_ranges_on_different_provider_negative(multiple_provider_net_
         assert 1 == code, "Should not pass when two range overlap and associate to same data if"
 
 
-@fixture(scope='module')
-def prepare_mtu_verification(request):
-
-    providernet_name = common.get_unique_name(pro_net_name, resource_type='other')
-
-    # Create provider networks
-    args = providernet_name + ' --type=vxlan'
-
-    table_ = table_parser.table(cli.neutron('providernet-list', auth_info=Tenant.ADMIN))
-    if not table_parser.get_values(table_, 'id', **{'name': providernet_name}):
-        cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, rtn_list=True)
-
-    nova_hosts = host_helper.get_hosts(personality='compute')
-
-    # find a free interface
-    find = False
-    computer = ""
-    for nova_host in nova_hosts:
-        args = '{} {}'.format(nova_host , "-a")
-        table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
-
-        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'networktype': 'None'})
-
-
-        if list_interfaces:
-            find = True
-            computer = nova_host
-            break
-
-    if not find:
-        assert find, "Can not find a free data interface "
-
-    # Find a free port from host-if-list -a
-    interface = random.choice(list_interfaces)
-
-    host_helper.lock_host(nova_host)
-
-    # Clean the provider network")
-    def fin():
-        cli.neutron('providernet-delete', providernet_name, auth_info=Tenant.ADMIN)
-
-    request.addfinalizer(fin)
-
-    return providernet_name, interface, computer
-
-
 @mark.parametrize('the_mtu', [
     1573,
     1500,
     1400,
 ])
-def test_vxlan_mtu_value_negative(prepare_mtu_verification, the_mtu):
+def test_vxlan_mtu_value_negative(multiple_provider_net_range, the_mtu):
 
     """
     9) MTU value of a provider network must be less than that of its associated data interface.  For vxLan, the data
@@ -483,7 +433,7 @@ def test_vxlan_mtu_value_negative(prepare_mtu_verification, the_mtu):
        (see overview document)
 
     Args:
-        prepare_mtu_verification:
+        multiple_provider_net_range
         the_mtu:
 
     Test Setups:
@@ -499,11 +449,18 @@ def test_vxlan_mtu_value_negative(prepare_mtu_verification, the_mtu):
 
     """
 
-    providernet_name, interface, compute = prepare_mtu_verification
+    providernet_names, x, y, computer_host, if_name, new_interface = multiple_provider_net_range
+
+    args = computer_host
+    table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
+    if table_parser.get_values(table_, 'name', **{'name': new_interface}):
+        args = '{} {}'.format(computer_host, new_interface)
+        cli.system('host-if-delete', args, auth_info=Tenant.ADMIN)
 
     LOG.tc_step("Create interface with MTU={} less then the one from provider MTU=1500+x".format(the_mtu))
-    new_interface_ = 'testif9'
-    args = compute + ' ' + new_interface_ + ' ae ' + providernet_name + ' ' + interface + ' -nt data -m {}'.format(the_mtu)
+    args = computer_host + ' ' + new_interface + ' ae ' + providernet_names[0] + ' ' + if_name
+    args += ' -nt data -m {}'.format(the_mtu)
+
     code, err_info = cli.system('host-if-add', args, auth_info=Tenant.ADMIN, fail_ok=True, rtn_list=True)
 
     LOG.tc_step("Verify the interface creation should be failed")
@@ -511,12 +468,13 @@ def test_vxlan_mtu_value_negative(prepare_mtu_verification, the_mtu):
         LOG.info("Expect fail: MTU value of a provider network must be less than that of its associated data interface")
         assert NetworkingErr.INVALID_MTU_VALUE in err_info
     else:
-        args = '{} {}'.format(compute, new_interface_)
+        args = '{} {}'.format(computer_host, new_interface)
         cli.system('host-if-delete', args, auth_info=Tenant.ADMIN)
         assert 1 == code, "Should not pass when the MTU less than the one in provider"
 
 
 def create_vxlan_providernet_range(provider_id, range_name, range_min, range_max, group='239.0.0.0', port=4789, ttl=1):
+
     return network_helper.create_providernet_range(provider_id, range_name, range_min, range_max, group=group,
                                                    port=port, ttl=ttl, auth_info=Tenant.ADMIN, con_ssh=None,
                                                    fail_ok=True)
