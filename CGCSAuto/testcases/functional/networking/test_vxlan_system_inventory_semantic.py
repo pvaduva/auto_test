@@ -22,42 +22,44 @@ def get_interface_(request):
     if not table_parser.get_values(table_, 'id', **{'name': provider_}):
         cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, rtn_list=True)
 
-    nova_hosts = host_helper.get_hosts(personality='compute')
+    nova_hosts = host_helper.get_hypervisors()
+
+    if not nova_hosts:
+        skip("Can not continue without computer host node")
 
     # find a free interface
     find = False
-    computer = ""
+    computer_host = ""
     for nova_host in nova_hosts:
-        args = '{} {}'.format(nova_host , "-a")
+        args = '{} {}'.format(nova_host , "-a --nowrap")
         table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
-        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'networktype': 'None',
-                                                                     'used byi/f': []})
+        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'network type': 'None',
+                                                                     'used by i/f': []})
 
         if list_interfaces:
             find = True
-            computer = nova_host
+            computer_host = nova_host
             break
-
-    if not find:
+    else:
         assert find, "Can not find a free data interface "
 
     # now lock the computer
-    host_helper.lock_host(computer)
-    HostsToRecover.add(computer, scope='module')
+    host_helper.lock_host(computer_host)
+    HostsToRecover.add(computer_host, scope='module')
 
     interface = random.choice(list_interfaces)
 
     the_mtu = 1600
-    args = computer + ' ' + new_interface_ + ' ae ' + provider_ + ' ' + interface + ' -nt data -m {}'.format(the_mtu)
+    args = computer_host + ' ' + new_interface_ + ' ae ' + provider_ + ' ' + interface + ' -nt data -m {}'.format(the_mtu)
     cli.system('host-if-add', args, rtn_list=True)
 
     def fin():
         # clean up
-        cli.system('host-if-delete', '{} {}'.format(computer, new_interface_))
+        cli.system('host-if-delete', '{} {}'.format(computer_host, new_interface_))
         cli.neutron('providernet-delete', provider_, auth_info=Tenant.ADMIN)
     request.addfinalizer(fin)
 
-    return computer, provider_, new_interface_
+    return computer_host, provider_, new_interface_
 
 
 @fixture(scope='module')
@@ -185,9 +187,7 @@ def test_set_data_if_ip_address_mode_to_none_static_when_ip_exist(get_interface_
 
     LOG.tc_step("create the ip again after mode set to static")
     args = '{} {} 111.11.11.11 24'.format(compute, new_interface_)
-    code, err_info = cli.system('host-addr-add', args, fail_ok=False, rtn_list=True)
-    if code:
-        assert False, "create ip address for if failed"
+    code, err_info = cli.system('host-addr-add', args, rtn_list=True)
 
     LOG.tc_step("TC4: set the mode to 'pool' when the ip still exist")
     args = '-nt data -p {} {} {} --ipv4-mode="pool" --ipv4-pool=management'.format(provider, compute, new_interface_)
