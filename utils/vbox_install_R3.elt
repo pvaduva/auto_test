@@ -54,8 +54,6 @@ Install VirtualBox on Linux or Windows Host
 .	e.g. for windows
 .	./vbox_install.elt -r <windows machine IP> pull_new_image=yes topology=2x1 con=MI_O str=MI com=MI_D
 .	e.g for linux
-w-patch query
-                >sudo sw-patch query-hosts
 	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install.elt pull_new_image=yes topology=1x1 rel2=yes con=MI_O str=MI com=MI_D load=GA2 patch=yes https=no
 .
 . 	Supported topology
@@ -953,9 +951,9 @@ $part=1
 
 ; === install tenant files and guest images
 $install_tenant_files=yes
-$directory=regular
+$directory=R3_files
 ? if $load == GA2 ?[
-	$directory=15.12_files
+	$directory=R2_files
 ]
 ?if $install_sw !=no? [	
 	# get IP address of host (use netstat -an | grep :22)
