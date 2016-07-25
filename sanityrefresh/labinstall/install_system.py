@@ -293,7 +293,8 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_o
         lab_cfg_rel_path = LAB_YOW_REL_PATH + "/" + lab_cfg_location
         lab_cfg_path = load_path + "/" + lab_cfg_rel_path
     else:
-        lab_cfg_path = CENTOS_CFG_FILES + lab_cfg_location
+        lab_cfg_rel_path = CENTOS_LAB_REL_PATH + "/yow/" + lab_cfg_location
+        lab_cfg_path = load_path + "/" + lab_cfg_rel_path
 
     cmd = "test -d " + lab_cfg_path
     if bld_server_conn.exec_cmd(cmd)[0] != 0:
@@ -1047,9 +1048,15 @@ def main():
                               WRSROOT_USERNAME, controller0.host_ip,
                               WRSROOT_HOME_DIR, pre_opts=pre_opts)
         if host_os == "centos":
-            bld_server_conn.rsync(os.path.join(CENTOS_LAB_SCRIPTS, "*"),
+            scripts_path = load_path + "/" + CENTOS_LAB_REL_PATH + "/scripts/"
+            bld_server_conn.rsync(os.path.join(scripts_path, "*"),
                               WRSROOT_USERNAME, controller0.host_ip,
                               WRSROOT_HOME_DIR, pre_opts=pre_opts)
+            heat_path = load_path + "/" + HEAT_TEMPLATES_PATH
+            bld_server_conn.rsync(os.path.join(heat_path, "*"),
+                               WRSROOT_USERNAME, controller0.host_ip, \
+                               WRSROOT_HEAT_DIR + "/",\
+                               pre_opts=pre_opts)
         else:
             bld_server_conn.rsync(os.path.join(load_path, LAB_SCRIPTS_REL_PATH, "*"), 
                               WRSROOT_USERNAME, controller0.host_ip,

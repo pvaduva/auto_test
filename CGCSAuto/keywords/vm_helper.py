@@ -594,8 +594,8 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     if exitcode == 1:
         vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
         if len(host_helper.get_nova_hosts_with_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
-            LOG.info("Cold migration of vm {} rejected as expected due to no valid host to cold migrate to.".
-                     format(vm_id))
+            LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
+                     "migrate to.".format(vm_id))
             return 1, output
         elif fail_ok:
             LOG.warning("Cold migration of vm {} is rejected.".format(vm_id))
@@ -1656,6 +1656,71 @@ def get_vm_host_and_numa_nodes(vm_id, con_ssh=None):
     return host, actual_node_vals
 
 
+def get_instance_topology(vm_id, con_ssh=None):
+    """
+    Get instance_topology from 'vm-topology -s servers'
+
+    Args:
+        vm_id (str):
+        # rtn_list (bool):
+        con_ssh (SSHClient):
+
+    Returns (list|dict):
+
+    """
+    servers_tab = system_helper.get_vm_topology_tables('servers', con_ssh=con_ssh)[0]
+    servers_tab = table_parser.filter_table(servers_tab, ID=vm_id)
+
+    instance_topology = table_parser.get_column(servers_tab, 'instance_topology')[0]
+    if isinstance(instance_topology, str):
+        instance_topology = [instance_topology]
+
+    instance_topology_all = []
+    for topology_for_numa_node in instance_topology:
+        instance_topology_dict = {}
+        items = topology_for_numa_node.split(sep=', ')
+        for item in items:
+            item_list = item.strip().split(sep=':')
+            if len(item_list) == 2:
+                key_ = item_list[0]
+                value_ = item_list[1]
+                if key_ in ['node']:
+                    value_ = int(value_)
+                elif key_ in ['vcpus', 'pcpus']:
+                    values = value_.split(sep=',')
+                    for val in value_.split(sep=','):
+                        # convert '3-6' to [3, 4, 5, 6]
+                        if '-' in val:
+                            values.remove(val)
+                            min_, max_ = val.split(sep='-')
+                            values += list(range(int(min_), int(max_) + 1))
+
+                    value_ = sorted([int(val) for val in values])
+
+                elif key_ == 'siblings':
+                    # example: siblings:{0,1},{2,3},{5,6,8-10}
+                    # initial value_ parsed: ['0,1', '2,3', '5,6,8-10']
+                    value_ = re.findall('{([^}]*)}', value_)
+                    value_ = [common._parse_cpus_list(item) for item in value_]
+                instance_topology_dict[key_] = value_
+
+            elif len(item_list) == 1:
+                value_ = item_list[0]
+                if re.match(InstanceTopology.TOPOLOGY, value_):
+                    instance_topology_dict['topology'] = value_
+                # TODO add mem size
+
+        # Add as None if item is not displayed in vm-topology
+        all_keys = ['node', 'pgsize', 'vcpus', 'pcpus', 'pol', 'thr', 'siblings', 'topology']   # TODO: add mem
+        for key in all_keys:
+            if key not in instance_topology_dict:
+                instance_topology_dict[key] = None
+        instance_topology_all.append(instance_topology_dict)
+
+    LOG.info('Instance topology for vm {}: {}'.format(vm_id, instance_topology_all))
+    return instance_topology_all
+
+
 def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **kwargs):
     """
     Perform action on a given vm.
@@ -1800,3 +1865,7 @@ def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
                 _sudo_reboot(vm_ssh)
     else:
         _sudo_reboot(vm_ssh)
+
+
+def get_proc_num_from_vm(vm_ssh):
+    return int(vm_ssh.exec_cmd('cat /proc/cpuinfo | grep processor | wc -l', fail_ok=False)[1])

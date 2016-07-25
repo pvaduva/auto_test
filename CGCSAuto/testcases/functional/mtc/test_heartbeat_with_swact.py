@@ -1,5 +1,5 @@
 ###
-#us63135_tc11: validate_heartbeat_works_after_controller_swact
+#us63135_tc12: validate_heartbeat_works_after_controller_swact
 ###
 
 
@@ -10,6 +10,7 @@ from utils.tis_log import LOG
 from consts.cgcs import EventLogID, FlavorSpec
 from consts.timeout import EventLogTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
+from testfixtures.resource_mgmt import ResourceCleanup
 
 
 # heartbeat Type
@@ -33,6 +34,7 @@ def heartbeat_flavor_vm(request):
     flavor_id = nova_helper.create_flavor()[1]
     heartbeat_spec = {FlavorSpec.GUEST_HEARTBEAT: heartbeat}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
+    ResourceCleanup.add('flavor', flavor_id,scope='module')
 
     boot_source = 'image'
     vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
@@ -50,11 +52,7 @@ def heartbeat_flavor_vm(request):
           'heartbeat': heartbeat
           }
 
-    def delete_flavor_vm():
-        # must delete VM before flavors
-        vm_helper.delete_vms(vm_id, delete_volumes=True)
-        nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
-    request.addfinalizer(delete_flavor_vm)
+    ResourceCleanup.add('vm', vm_id, scope='module')
 
     return vm
 

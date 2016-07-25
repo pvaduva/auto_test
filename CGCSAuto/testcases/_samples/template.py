@@ -44,4 +44,3 @@ def test_func(test1_param1, test_param2):
 
     # assert test result
 
-    LOG.tc_func_end()

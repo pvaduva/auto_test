@@ -206,3 +206,33 @@ def get_unique_name(name_str, existing_names=None, resource_type='other'):
             raise LookupError("Cannot find unique name.")
 
     return unique_name
+
+
+def _parse_cpus_list(cpus):
+    """
+    Convert human friendly pcup list to list of integers.
+    e.g., '5-7,41-42, 45' >> [5, 6, 7, 41, 42, 45]
+
+    Args:
+        pcpus:
+        val (str): 'str' or 'list'
+
+    Returns (list): list of integers
+
+    """
+    if isinstance(cpus, str):
+        cpus = cpus.split(sep=',')
+
+    cpus_list = list(cpus)
+
+    for val in cpus:
+        # convert '3-6' to [3, 4, 5, 6]
+        if '-' in val:
+            cpus_list.remove(val)
+            min_, max_ = val.split(sep='-')
+
+            # unpinned:20; pinned_cpulist:-, unpinned_cpulist:10-19,30-39
+            if min_ != '':
+                cpus_list += list(range(int(min_), int(max_) + 1))
+
+    return sorted([int(val) for val in cpus_list])

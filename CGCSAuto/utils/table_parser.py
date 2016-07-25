@@ -431,8 +431,15 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
         return get_column(table_, target_header)
 
     row_indexes = []
-    for header, value in kwargs.items():
-        kwarg_row_indexes = _get_row_indexes(table_, header, value, strict=strict, regex=regex)
+    for header, values in kwargs.items():
+        if not isinstance(values, list):
+            print("you shouldn't be here. type: {}".format(type(values)))
+            values = [values]
+
+        kwarg_row_indexes = []
+        for value in values:
+            kwarg_row_indexes += _get_row_indexes(table_, header, value, strict=strict, regex=regex)
+
         if kwarg_row_indexes:
             row_indexes.append(kwarg_row_indexes)
 
@@ -571,12 +578,12 @@ def _get_row_indexes(table_, field, value, strict=True, regex=False, exclude=Fal
             if bool(res_) != exclude:
                 row_indexes.append(j)
     else:
-        row_indexes = __get_row_indexes_string(table_, field, value, strict, exclude)
+        row_indexes = __get_row_indexes_string(table_, field, value, strict=strict, exclude=exclude)
 
     return row_indexes
 
 
-def filter_table(table_, strict=True, regex=False, **kwargs):
+def filter_table(table_, strict=True, regex=False, exclude=False, **kwargs):
     """
     Filter out rows of a table with given criteria (via kwargs)
     Args:
@@ -598,6 +605,7 @@ def filter_table(table_, strict=True, regex=False, **kwargs):
         A table dictionary with original headers and filtered values(rows)
 
     """
+    table_ = table_.copy()
     if not kwargs:
         raise ValueError("At least one header and value(s) pair needs to be specified via kwargs")
     row_indexes = []
@@ -607,7 +615,8 @@ def filter_table(table_, strict=True, regex=False, **kwargs):
             values = [values]
         row_indexes_for_field = []
         for value in values:
-            row_indexes_for_value = _get_row_indexes(table_, field=header, value=value, strict=strict, regex=regex)
+            row_indexes_for_value = _get_row_indexes(table_, field=header, value=value, strict=strict, regex=regex,
+                                                     exclude=exclude)
             row_indexes_for_field = set(row_indexes_for_field) | set(row_indexes_for_value)
 
         if row_indexes_for_field is []:
