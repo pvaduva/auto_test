@@ -1,13 +1,16 @@
 from pytest import fixture, mark
 import time
+import io
 from utils.tis_log import LOG
 from utils import table_parser
 from keywords import host_helper, vm_helper, nova_helper, cinder_helper, glance_helper, network_helper, system_helper
 from consts.cgcs import VMStatus
+from consts.auth import Tenant
 from testfixtures.resource_mgmt import ResourceCleanup
+from utils.ssh import ControllerClient
 
 
-@fixture(scope='module', autouse=True)
+@fixture(scope='function', autouse=True)
 def pre_alarm_():
     """
     Text fixture to get pre-test existing alarm list.
@@ -18,26 +21,11 @@ def pre_alarm_():
     """
     pre_alarms = system_helper.get_alarms()
     pre_list = table_parser.get_all_rows(pre_alarms)
+    # Time stamps are removed before comparing alarms with post test alarms.
+    # The time stamp  is the last item in each alarm row.
+    for n in pre_list:
+        n.pop()
     return pre_list
-
-
-@fixture(scope='module')
-def flavor_id_():
-    """
-    Text fixture to get or create a flavor
-    Args:None
-
-    Returns: flavor_id
-
-    """
-    flavor_name = 'small'
-    if nova_helper.flavor_exists(flavor_name, header="Name"):
-        flavor_id = nova_helper.get_flavor_id(name='small')
-    else:
-        rc, flavor_id = nova_helper.create_flavor(name=flavor_name, vcpus=1, ram=512)
-        ResourceCleanup.add('flavor', flavor_id, scope='module')
-
-    return flavor_id
 
 
 @fixture(scope='module')
@@ -50,31 +38,6 @@ def image_():
 
     """
     return glance_helper.get_image_id_from_name(name='cgcs-guest')
-
-
-@fixture(scope='module')
-def net_():
-    """
-    Text fixture to get tenenat and managment netowrks
-    Args:
-
-    Returns: list of network dict as following:
-        {'net-id' : <net_id> }
-
-    """
-    networks = []
-    net_name = 'tenant1-net1'
-    net_id = network_helper.get_tenant_net_id(net_name)
-
-    network = {'net-id': net_id, }
-    networks.append(network)
-
-    net_id = network_helper.get_mgmt_net_id()
-    if net_id is not None:
-        network = {'net-id': net_id, }
-        networks.append(network)
-        
-    return networks
 
 
 @fixture(scope='function')
@@ -110,13 +73,11 @@ def volumes_(image_):
 
 
 @fixture(scope='function')
-def vms_(volumes_, flavor_id_, net_):
+def vms_(volumes_):
     """
     Text fixture to create cinder volume with specific 'display-name', and 'size'
     Args:
         volumes_: list of two large volumes dict created by volumes_ fixture
-        flavor_id_: flavor id from flavor_id_ fixture
-        net_: tenant and management networks for vm boot.
 
     Returns: volume dict as following:
         {'id': <volume_id>,
@@ -130,8 +91,8 @@ def vms_(volumes_, flavor_id_, net_):
     for vol_params in volumes_:
 
         instance_name = vm_names[index]
-        vm_id = vm_helper.boot_vm(name=instance_name, flavor=flavor_id_,  source='volume',
-                                  source_id=vol_params['id'], nics=net_)[1]
+        vm_id = vm_helper.boot_vm(name=instance_name, source='volume',
+                                  source_id=vol_params['id'])[1]
         vm = {
                 'id': vm_id,
                 'display_name': instance_name,
@@ -143,12 +104,13 @@ def vms_(volumes_, flavor_id_, net_):
 
 
 @mark.skipif(len(system_helper.get_storage_nodes()) < 1, reason="No storage hosts on the system")
-@mark.skipif(len(system_helper.get_computes()) < 2, reason="at least two computes are required")
-def test_vm_with_a_large_volume_live_migrate(vms_):
+@mark.skipif(len(host_helper.get_nova_hosts()) < 2, reason="at least two computes are required")
+def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
     """
     Test instantiate a vm with a large volume ( 20 GB and 40 GB) and live migrate:
     Args:
         vms_ (dict): vms created by vms_ fixture
+        pre_alarm_ (list): alarm lists obtained by pre_alarm_ fixture
 
     Test Setups:
     - get tenant1 and management networks which are already created for lab setup
@@ -173,6 +135,7 @@ def test_vm_with_a_large_volume_live_migrate(vms_):
      - no  storage node
 
     """
+    pre_alarms = pre_alarm_
     for vm in vms_:
 
         LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm['id']))
@@ -199,18 +162,19 @@ def test_vm_with_a_large_volume_live_migrate(vms_):
         assert is_vm_filesystem_rw(vm['id']), 'After live migration rootfs filesystem is not RW as expected for VM {}'.format(vm['display_name'])
 
         LOG.tc_step("Checking for any new system alarm....")
-        rc, new_alarm = is_new_alarm_raised(pre_alarm_)
+        rc, new_alarm = is_new_alarm_raised(pre_alarms)
         assert not rc, " alarm(s) found: {}".format(new_alarm)
 
 
 @mark.skipif(len(system_helper.get_storage_nodes()) < 1, reason="No storage hosts on the system")
-@mark.skipif(len(system_helper.get_computes()) < 2, reason="at least two computes are required")
-def test_vm_with_large_volume_and_evacuation(vms_):
+@mark.skipif(len(host_helper.get_nova_hosts()) < 2, reason="at least two computes are required")
+def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
     """
    Test instantiate a vm with a large volume ( 20 GB and 40 GB) and evacuate:
 
     Args:
         vms_ (dict): vms created by vms_ fixture
+        pre_alarm_ (list): alarm lists obtained by pre_alarm_ fixture
 
     Test Setups:
     - get tenant1 and management networks which are already created for lab setup
@@ -238,7 +202,7 @@ def test_vm_with_large_volume_and_evacuation(vms_):
     - no  storage node
 
     """
-
+    pre_alarms = pre_alarm_
     for vm in vms_:
 
         LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm['id']))
@@ -255,7 +219,7 @@ def test_vm_with_large_volume_and_evacuation(vms_):
             .format(vm['display_name'])
 
         LOG.tc_step("Checking for any system alarm ....")
-        rc, new_alarm = is_new_alarm_raised(pre_alarm_)
+        rc, new_alarm = is_new_alarm_raised(pre_alarms)
         assert not rc, " alarm(s) found: {}".format(new_alarm)
 
     LOG.tc_step("Checking if live migration is required to put the vms to a single compute....")
@@ -286,28 +250,35 @@ def test_vm_with_large_volume_and_evacuation(vms_):
     assert after_evac_host_0 and after_evac_host_0 != host_0, "VM {} evacuation failed; " \
         "current host: {}; expected host: {}".format((vms_[0])['id'], after_evac_host_0, host_1)
 
+
     assert after_evac_host_1 and after_evac_host_1 != host_0, "VM {} evacuation failed; " \
         "current host: {}; expected host: {}".format((vms_[0])['id'], after_evac_host_1, host_1)
 
-    LOG.tc_step("Checking for any system alarm ....")
-    rc, new_alarm = is_new_alarm_raised(pre_alarm_)
-    assert not rc, " alarm(s) found: {}".format(new_alarm)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode....")
     assert is_vm_filesystem_rw((vms_[0])['id']), 'After evacuation the rootfs filesystem is not RW as expected ' \
                                                  'for VM {}'.format((vms_[0])['display_name'])
 
+    LOG.tc_step("Checking for any system alarm ....")
+    rc, new_alarm = is_new_alarm_raised(pre_alarms)
+    assert not rc, " alarm(s) found: {}".format(new_alarm)
+
+    LOG.tc_step("Login to VM and to check filesystem is rw mode....")
     assert is_vm_filesystem_rw((vms_[1])['id']), 'After evacuation the rootfs filesystem is not RW as expected ' \
                                                  'for VM {}'.format((vms_[1])['display_name'])
+    LOG.tc_step("Checking for any system alarm ....")
+    rc, new_alarm = is_new_alarm_raised(pre_alarms)
+    assert not rc, " alarm(s) found: {}".format(new_alarm)
 
 
 @mark.skipif(len(system_helper.get_storage_nodes()) < 1, reason="No storage hosts on the system")
-@mark.skipif(len(system_helper.get_computes()) < 2, reason="at least two computes are required")
-def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_):
+@mark.skipif(len(host_helper.get_nova_hosts()) < 2, reason="at least two computes are required")
+def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_):
     """
     Test instantiate a vm with a large volume ( 20 GB and 40 GB) and cold migrate:
     Args:
         vms_ (dict): vms created by vms_ fixture
+        pre_alarm_ (list): alarm lists obtained by pre_alarm_ fixture
 
     Test Setups:
     - get tenant1 and management networks which are already created for lab setup
@@ -335,6 +306,7 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_):
     LOG.tc_step("Instantiate a vm with large volume.....")
 
     vms = vms_
+    pre_alarms = pre_alarm_
 
     for vm in vms:
 
@@ -363,20 +335,18 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_):
                                               'VM {}'.format(vm['display_name'])
 
         LOG.tc_step("Checking for any system alarm ....")
-        rc, new_alarm = is_new_alarm_raised(pre_alarm_)
+        rc, new_alarm = is_new_alarm_raised(pre_alarms)
         assert not rc, " alarm(s) found: {}".format(new_alarm)
 
 
 @mark.skipif(len(system_helper.get_storage_nodes()) < 1, reason="No storage hosts on the system")
-@mark.skipif(len(system_helper.get_computes()) < 2, reason="at least two computes are required")
-def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_, flavor_id_, net_):
+@mark.skipif(len(host_helper.get_nova_hosts()) < 2, reason="at least two computes are required")
+def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
     """
     Test  a vm with a multiple volumes live, cold  migration and evacuation:
 
     Args:
         image_ (str): the guest image_id
-        flavor_id_ (str): the flavor id created by flavor_id_ fixture
-        net_ (dict): the tenant and management networks from fixture net_
 
     Test Setups:
     - get guest image_id
@@ -412,7 +382,9 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_, flavor_id_, 
     ResourceCleanup.add('volume', vol_id_1, scope='function')
 
     LOG.tc_step("Booting instance vm_0...")
-    rc, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm_0', flavor=flavor_id_, source='volume', source_id=vol_id_0, nics=net_)
+
+    rc, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm_0', source='volume',
+                                                source_id=vol_id_0)
     ResourceCleanup.add('vm', vm_id, scope='function')
     assert rc == 0, "VM vm_0 did not succeed: reaon {}".format(msg)
 
@@ -432,25 +404,21 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_, flavor_id_, 
     assert code == 0, "Expected return code 0. Actual return code: {}; details: {}".format(code,  msg)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode after live migration....")
-    assert is_vm_filesystem_rw(vm_id), 'After live migration vol_0 rootfs filesystem is not RW as expected.'
-    assert is_vm_filesystem_rw(vm_id, rootfs='vdb'), 'After live migration vol_1 rootfs filesystem is not RW ' \
-                                                     'as expected'
-
+    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'After live migration  rootfs filesystem is not RW ' \
+                                                              'as expected'
     LOG.tc_step("Attempting  cold migrate VM...")
     code, msg = vm_helper.cold_migrate_vm(vm_id, fail_ok=True)
     LOG.tc_step("Verify cold migration succeeded...")
     assert code == 0, "Expected return code 0. Actual return code: {}; details: {}".format(code,  msg)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode after live migration....")
-    assert is_vm_filesystem_rw(vm_id), 'After cold migration rootfs filesystem is not RW as expected'
-    assert is_vm_filesystem_rw(vm_id, rootfs='vdb'), 'After cold migration vol_1 rootfs filesystem is not RW ' \
-                                                     'as expected'
-
+    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'After cold migration  rootfs filesystem is not ' \
+                                                              'RW as expected'
     LOG.tc_step("Testing VM evacuation.....")
     before_host_0 = nova_helper.get_vm_host(vm_id)
 
     LOG.tc_step("Rebooting compute {} to initiate vm evacuation .....".format(before_host_0))
-    rc, msg = host_helper.reboot_hosts(before_host_0, fail_ok=True)
+    rc, msg = host_helper.reboot_hosts(before_host_0, fail_ok=False)
 
     assert rc == 0, "{} reboot not succeeded; return code: {}; detail error message: {}".format(before_host_0, rc, msg)
 
@@ -462,28 +430,64 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_, flavor_id_, 
         "previous host: {}; current host: {}".format(vm_id, before_host_0, after_evac_host_0)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode after live migration....")
-    assert is_vm_filesystem_rw(vm_id), 'After evacuation rootfs filesystem is not RW as expected for VM vm_0'
+    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'After evacuation filesystem is not RW as expected ' \
+                                                              'for VM vm_0'
 
 
 def check_vm_boot_time(vm_id):
     start_time = time.time()
-    output = vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    output = vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
     elapsed_time = time.time() - start_time
     return output, elapsed_time
 
 
 def is_vm_filesystem_rw(vm_id, rootfs='vda'):
     with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name='cgcs-guest') as vm_ssh:
-        cmd = "mount | grep {} | grep rw | wc -l".format(rootfs)
-        cmd_output = vm_ssh.exec_sudo_cmd(cmd)[1]
-        return True if cmd_output is '1' else False
+        if isinstance(rootfs, str):
+            rootfs = [rootfs]
+        for fs in rootfs:
+            cmd = "mount | grep {} | grep rw | wc -l".format(fs)
+            cmd_output = vm_ssh.exec_sudo_cmd(cmd)[1]
+            if cmd_output != '1':
+                LOG.info("Filesystem /dev/{} is not rw for VM: {}".format(fs, vm_id))
+                return False
+        return True
 
 
 def is_new_alarm_raised(pre_list):
     alarms = system_helper.get_alarms()
     new_list = table_parser.get_all_rows(alarms)
-    old_list = pre_list()
+
     for alarm in new_list:
-        if alarm not in old_list:
+        alarm.pop()     # to remove the time stamp
+        if alarm not in pre_list:
             return True, new_list
     return False, None
+
+
+def get_user_data_file():
+    """
+    This function is a workaround to adds user_data  for restarting the sshd. The
+    sshd daemon fails to start in VM evacuation testcase.
+
+
+    Returns:(str) - the file path of the userdata text file
+
+    """
+
+    import os.path
+    auth_info = Tenant.get_primary()
+    tenant = auth_info['tenant']
+    user_data_file = "/home/wrsroot/userdata/{}_test_userdata.txt".format(tenant)
+    controller_ssh = ControllerClient.get_active_controller()
+    cmd = "test -e {}".format(user_data_file)
+    rc = controller_ssh.exec_cmd(cmd)[0]
+    if rc != 0:
+        cmd = "cat <<EOF > {}\n" \
+              "#cloud-config\nruncmd: \n - /etc/init.d/sshd restart\n" \
+              "EOF".format(user_data_file)
+        print(cmd)
+        code, output = controller_ssh.exec_cmd(cmd)
+        LOG.info("Code: {} outpu: {}".format(code, output))
+
+    return user_data_file
