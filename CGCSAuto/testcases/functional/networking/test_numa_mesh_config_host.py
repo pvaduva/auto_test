@@ -3,7 +3,7 @@ from pytest import mark, fixture, skip
 from utils.tis_log import LOG
 from consts.cli_errs import CpuAssignment   # Do not remove this. Used in eval()
 from consts.cgcs import FlavorSpec
-from keywords import host_helper, system_helper, vm_helper, nova_helper
+from keywords import host_helper, system_helper, vm_helper, nova_helper, check_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -13,7 +13,7 @@ from testfixtures.recover_hosts import HostsToRecover
 def host_to_config(request):
     LOG.info("Looking for a host to reconfigure.")
     nova_hosts = host_helper.get_nova_hosts()
-    if len(nova_hosts) < 1 and nova_helper.get_vms_on_hypervisor():
+    if len(nova_hosts) < 1:
         skip("No nova compute host available in the system, no host to lock and reconfigure.")
 
     is_small_system = system_helper.is_small_footprint()
@@ -124,10 +124,7 @@ class TestVSwitchCPUReconfig:
             host_helper.unlock_host(host, check_hypervisor_up=True)
 
         LOG.tc_step("Check ports and vswitch cores mapping are correct.")
-        with host_helper.ssh_to_host(host) as host_ssh:
-            expt_vswitch_map = host_helper.get_expected_vswitch_port_engine_map(host_ssh)
-            actual_vswitch_map = host_helper.get_vswitch_port_engine_map(host_ssh)
-            assert expt_vswitch_map == actual_vswitch_map
+        check_helper.check_host_vswitch_port_engine_map(host)
 
         LOG.tc_step("Check {} is still a valid nova host.".format(host))
         host_helper.wait_for_hypervisors_up(host)

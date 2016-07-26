@@ -433,7 +433,6 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
     row_indexes = []
     for header, values in kwargs.items():
         if not isinstance(values, list):
-            print("you shouldn't be here. type: {}".format(type(values)))
             values = [values]
 
         kwarg_row_indexes = []
