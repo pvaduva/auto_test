@@ -7,7 +7,7 @@ from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, ImageMetadata
 from consts.cli_errs import CPUThreadErr, SharedCPUErr, ColdMigrateErr, CPUPolicyErr
 
-from keywords import nova_helper, system_helper, vm_helper, host_helper, glance_helper, cinder_helper, common
+from keywords import nova_helper, system_helper, vm_helper, host_helper, glance_helper, cinder_helper, common, check_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -106,94 +106,6 @@ def test_cpu_thread_flavor_delete_negative(cpu_thread_policy):
     assert CPUThreadErr.DEDICATED_CPU_REQUIRED in output
 
 
-@mark.parametrize(('flv_vcpus', 'flv_pol', 'img_pol', 'create_vol', 'expt_err'), [
-    mark.p2((5, None, 'dedicated', True, None)),
-    mark.p2((3, None, 'shared', False, None)),
-    mark.p2((4, None, None, False, None)),
-    mark.p3((4, 'dedicated', 'dedicated', True, None)),
-    mark.p3((1, 'dedicated', None, False, None)),
-    mark.p3((1, 'shared', 'shared', True, None)),
-    mark.p3((2, 'shared', None, False, None)),
-    mark.p1((3, 'dedicated', 'shared', True, None)),
-    mark.p2((1, 'shared', 'dedicated', False, 'CPUPolicyErr.CONFLICT_FLV_IMG')),
-])
-def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, create_vol, expt_err):
-    LOG.tc_step("Create flavor with {} vcpus".format(flv_vcpus))
-    flavor_id = nova_helper.create_flavor(name='cpu_thread_image', vcpus=flv_vcpus)[1]
-    ResourceCleanup.add('flavor', flavor_id)
-
-    if flv_pol is not None:
-        specs = {FlavorSpec.CPU_POLICY: flv_pol}
-
-        LOG.tc_step("Set following extra specs: {}".format(specs))
-        nova_helper.set_flavor_extra_specs(flavor_id, **specs)
-
-    if img_pol is not None:
-        image_meta = {ImageMetadata.CPU_POLICY: img_pol}
-        LOG.tc_step("Create image with following metadata: {}".format(image_meta))
-        image_id = glance_helper.create_image(name='cpu_thread_{}'.format(img_pol), **image_meta)[1]
-        ResourceCleanup.add('image', image_id)
-    else:
-        image_id = glance_helper.get_image_id_from_name('cgcs-guest')
-
-    if create_vol:
-        LOG.tc_step("Create a volume from image")
-        source_id = cinder_helper.create_volume(name='cpu_thr_img', image_id=image_id)[1]
-        ResourceCleanup.add('volume', source_id)
-        source = 'volume'
-    else:
-        source_id = image_id
-        source = 'image'
-
-    LOG.tc_step("Attempt to boot a vm with above flavor and {}".format(source))
-    code, vm_id, msg, ignore = vm_helper.boot_vm(name='cpu_thread_image', flavor=flavor_id, source=source,
-                                                 source_id=source_id, fail_ok=True)
-    if vm_id:
-        ResourceCleanup.add('vm', vm_id)
-
-    # check for negative tests
-    if expt_err is not None:
-        LOG.tc_step("Check VM failed to boot due to conflict in flavor and image.")
-        assert 4 == code, "Expect boot vm cli reject and no vm booted. Actual: {}".format(msg)
-        assert eval(expt_err) in msg, "Expected error message is not found in cli return."
-        return  # end the test for negative cases
-
-    # Check for positive tests
-    LOG.tc_step("Check vm is successfully booted on a HT enabled host.")
-    assert 0 == code, "Expect vm boot successfully. Actual: {}".format(msg)
-
-    # Calculate expected policy:
-    expt_cpu_pol = 'ded' if 'dedicated' in [img_pol, flv_pol] else 'sha'
-
-    # Check vm-topology
-    LOG.tc_step("Check vm-topology servers table for following vm cpus info: cpu policy, topology, "
-                "siblings, pcpus")
-    instance_topology = vm_helper.get_instance_topology(vm_id)
-
-    for topology_on_numa_node in instance_topology:  # Cannot be on two numa nodes for dedicated vm unless specified
-        assert expt_cpu_pol == topology_on_numa_node['pol'], "CPU policy is not {} in vm-topology".format(expt_cpu_pol)
-
-        actual_siblings = topology_on_numa_node['siblings']
-        actual_topology = topology_on_numa_node['topology']
-        actual_pcpus = topology_on_numa_node['pcpus']
-
-        if expt_cpu_pol == 'ded':
-            assert topology_on_numa_node['thr'] == 'no', "cpu thread policy is in vm topology"
-            if flv_vcpus == 1:
-                assert not actual_siblings, "siblings should not be included with only 1 vcpu"
-            else:
-                assert actual_siblings, "siblings should be included for dedicated vm"
-            assert '1c,{}t'.format(flv_vcpus) in actual_topology, 'vm topology is not as expected.'
-            assert flv_vcpus == len(actual_pcpus), "pcpus number for dedicated vm is not the same as setting in flavor"
-        else:
-            assert topology_on_numa_node['thr'] is None, "cpu thread policy is in vm topology"
-            assert actual_siblings is None, 'siblings should not be included for floating vm'
-            assert actual_topology is None, 'topology should not be included for floating vm'
-            assert actual_pcpus is None, "pcpu should not be included in vm-topology for floating vm"
-
-    # TODO: add check via from compute via taskset -apc 98456 for floating vm's actual vcpus.
-
-
 class TestHTEnabled:
 
     @fixture(scope='class', autouse=True)
@@ -219,7 +131,6 @@ class TestHTEnabled:
         mark.p1((5, 'isolate', None)),
         mark.p1((4, 'isolate', None)),
         mark.p1((4, 'require', None)),
-        # None        # TODO this one needs updates
     ])
     def test_boot_vm_cpu_thread_positive(self, vcpus, cpu_thread_policy, min_vcpus, ht_hosts):
         LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
@@ -246,102 +157,24 @@ class TestHTEnabled:
         vm_host = nova_helper.get_vm_host(vm_id)
         assert vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
 
-        # Check nova host-describe
         prev_cpus = pre_hosts_cpus[vm_host]
 
-        LOG.tc_step('Check total used vcpus for vm host via nova host-describe')
-        expt_increase = vcpus * 2 if cpu_thread_policy == 'isolate' else vcpus
-        post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')
-        assert prev_cpus + expt_increase == post_hosts_cpus[vm_host]
-
-        # Check vm-topology
-        LOG.tc_step("Check vm-topology servers table for following vm cpus info: cpu policy, thread policy, topology, "
-                    "siblings, pcpus")
-        instance_topology = vm_helper.get_instance_topology(vm_id)
-        log_cores_siblings = host_helper.get_logcore_siblings(host=vm_host)
-        pcpus_total = []
-        siblings_total = []
-        for topology_on_numa_node in instance_topology:     # Cannot be on two numa nodes unless specified in flavor
-            assert 'ded' == topology_on_numa_node['pol'], "CPU policy is not dedicated in vm-topology"
-
-            actual_thread_policy = topology_on_numa_node['thr']
-            if cpu_thread_policy:
-                assert actual_thread_policy in cpu_thread_policy, \
-                    'cpu thread policy in vm topology is {} while flavor spec is {}'.\
-                    format(actual_thread_policy, cpu_thread_policy)
-            else:
-                assert actual_thread_policy == 'no', \
-                    'cpu thread policy in vm topology is {} while flavor spec is {}'.\
-                    format(actual_thread_policy, cpu_thread_policy)
-
-            actual_siblings = topology_on_numa_node['siblings']
-            if cpu_thread_policy == 'isolate':
-                assert not actual_siblings, "siblings should not be displayed for 'isolate'"
-            else:
-                assert actual_siblings, "sibling pairs should be included for 'require"
-
-            if actual_siblings is not None:
-                siblings_total += actual_siblings
-
-            expt_topology = '{}c,1t'.format(vcpus) if cpu_thread_policy == 'isolate' else '{}c,2t'.format(int(vcpus/2))
-            assert expt_topology in topology_on_numa_node['topology'], 'vm topology is not as expected'
-
-            pcpus = topology_on_numa_node['pcpus']
-
-            expt_core_len_in_pair = 1 if cpu_thread_policy == 'isolate' else 2
-            for pair in log_cores_siblings:
-                assert len(set(pair) & set(pcpus)) in [0, expt_core_len_in_pair]
-            # if cpu_thread_policy == 'isolate':
-            #     assert pcpus not in log_cores_siblings
-            # else:
-            #     assert pcpus in log_cores_siblings
-            pcpus_total += pcpus
-
-        # Check host side info such as nova-compute.log and virsh pcpupin
-        instance_name = nova_helper.get_vm_instance_name(vm_id)
-        with host_helper.ssh_to_host(vm_host) as host_ssh:
-            LOG.tc_step("Check total allocated vcpus is increased by {} from nova-compute.log on host".format(
-                    expt_increase))
-            post_total_log = host_helper.wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=prev_cpus)
-            assert prev_cpus + expt_increase == post_total_log, 'vcpus increase in nova-compute.log is not as expected'
-
-            LOG.tc_step("Check vcpus for vm is the same via vm-topology and virsh vcpupin")
-            vcpus_for_vm = host_helper.get_vcpus_for_instance_via_virsh(host_ssh, instance_name=instance_name)
-            assert sorted(pcpus_total) == sorted(list(vcpus_for_vm.values())), \
-                'pcpus from vm-topology is different than virsh vcpupin'
-
-            LOG.tc_step("Check sibling pairs in vm-topology is same as virsh vcpupin")
-            for sibling_pair_indexes in siblings_total:
-                sibling_pcpus = []
-                for index in sibling_pair_indexes:
-                    sibling_pcpus.append(vcpus_for_vm[index])
-                assert sorted(sibling_pcpus) in log_cores_siblings
-
-        # Check from vm in /proc/cpuinfo and /sys/devices/.../cpu#/topology/core_siblings_list
-        expt_sib_list = [{vcpu} for vcpu in range(vcpus)] if cpu_thread_policy == 'isolate' else siblings_total
-        actual_sib_list = []
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-            LOG.tc_step("Check vm has {} cores from inside vm via /proc/cpuinfo.".format(vcpus))
-            assert vcpus == vm_helper.get_proc_num_from_vm(vm_ssh)
-
-            LOG.tc_step("Check vm /sys/devices/system/cpu/[cpu#]/topology/core_siblings_list")
-            for cpu in ['cpu{}'.format(i) for i in range(vcpus)]:
-                actual_sib_list_for_cpu = vm_ssh.exec_cmd('cat /sys/devices/system/cpu/{}/topology/core_siblings_list'.
-                                                          format(cpu), fail_ok=False)[1]
-
-                new_sib_pair = set([int(cpu) for cpu in actual_sib_list_for_cpu.split(sep='-')])
-                if new_sib_pair not in actual_sib_list:
-                    actual_sib_list.append(new_sib_pair)
-
-        assert sorted(expt_sib_list) == sorted(actual_sib_list)
+        check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol='dedicated',
+                                          cpu_thr_pol=cpu_thread_policy, vm_host=vm_host)
 
     @mark.parametrize(('flv_vcpus', 'flv_cpu_pol', 'flv_cpu_thr_pol', 'img_cpu_thr_pol', 'img_cpu_pol', 'create_vol', 'expt_err'), [
-        mark.p2((3, None, None, 'isolate', 'dedicated', False, None)),
-        mark.p2((4, None, None, 'require', 'dedicated', True, None)),
+        mark.p1((3, None, None, 'isolate', 'dedicated', False, None)),
+        mark.p1((4, None, None, 'require', 'dedicated', True, None)),
+        mark.p1((2, 'dedicated', None, 'isolate', None, False, None)),
+        mark.p1((2, 'dedicated', None, 'require', None, True, None)),
+        mark.p1((3, 'dedicated', 'isolate', 'isolate', 'dedicated', True, None)),
+        mark.p1((2, 'dedicated', 'require', 'require', 'dedicated', True, None)),
+        mark.p3((2, 'dedicated', 'isolate', 'require', 'dedicated', True, 'CPUThreadErr.CONFLICT_FLV_IMG')),
         mark.p2((2, 'dedicated', 'require', 'isolate', 'dedicated', True, 'CPUThreadErr.CONFLICT_FLV_IMG')),
+        mark.p3((2, 'dedicated', 'require', 'isolate', 'dedicated', False, 'CPUThreadErr.CONFLICT_FLV_IMG')),
         mark.p2((2, None, None, 'isolate', None, True, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
         mark.p2((2, None, None, 'require', None, False, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
+        mark.p2((3, 'dedicated', None, 'require', None, True, 'CPUThreadErr.VCPU_NUM_UNDIVISIBLE')),
     ])
     def test_boot_vm_cpu_thread_image(self, flv_vcpus, flv_cpu_pol, flv_cpu_thr_pol, img_cpu_thr_pol, img_cpu_pol,
                                       create_vol, expt_err, ht_hosts):
@@ -381,10 +214,19 @@ class TestHTEnabled:
 
         # check for negative tests
         if expt_err is not None:
-            LOG.tc_step("Check VM failed to boot due to conflict in flavor and image.")
-            assert 4 == code, "Expect boot vm cli reject and no vm booted. Actual: {}".format(msg)
-            assert eval(expt_err) in msg, "Expected error message is not found in cli return."
-            pass    # end the test for negative cases
+            # error vm booted
+            if 'VCPU_NUM_UNDIVISIBLE' in expt_err:
+                LOG.tc_step("Check vm failed to boot, and expected fault message displayed in nova show")
+                assert 1 == code, "Expect boot vm cli return non-zero, but vm is still booted. Actual: {}".format(msg)
+                fault_msg = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
+                assert eval(expt_err).format(flv_vcpus) in fault_msg
+            # no vm booted
+            else:
+                LOG.tc_step("Check VM failed to boot due to conflict in flavor and image.")
+                assert 4 == code, "Expect boot vm cli reject and no vm booted. Actual: {}".format(msg)
+                assert eval(expt_err) in msg, "Expected error message is not found in cli return."
+
+            return    # end the test for negative cases
 
         # Check for positive tests
         LOG.tc_step("Check vm is successfully booted on a HT enabled host.")
@@ -394,68 +236,15 @@ class TestHTEnabled:
         assert vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
 
         # Calculate expected policy:
-        expt_thr_pol = img_cpu_thr_pol if flv_cpu_thr_pol is None else flv_cpu_thr_pol
+        expt_thr_pol = flv_cpu_thr_pol if flv_cpu_thr_pol else img_cpu_thr_pol
+        expt_cpu_pol = flv_cpu_pol if flv_cpu_pol else img_cpu_pol
 
-        # Check nova host-describe
+        # Check vm topology on controller, compute, vm
         prev_cpus = pre_hosts_cpus[vm_host]
 
-        LOG.tc_step('Check total used vcpus for vm host via nova host-describe')
-        expt_increase = flv_vcpus * 2 if expt_thr_pol == 'isolate' else flv_vcpus
-        post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')
-        assert prev_cpus + expt_increase == post_hosts_cpus[vm_host]
+        check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, prev_total_cpus=prev_cpus, vm_host=vm_host,
+                                          cpu_pol=expt_cpu_pol, cpu_thr_pol=expt_thr_pol)
 
-        # Check vm-topology
-        LOG.tc_step("Check vm-topology servers table for following vm cpus info: cpu policy, thread policy, topology, "
-                    "siblings, pcpus")
-        instance_topology = vm_helper.get_instance_topology(vm_id)
-        log_cores_siblings = host_helper.get_logcore_siblings(host=vm_host)
-        pcpus_total = []
-        siblings_total = []
-        for topology_on_numa_node in instance_topology:     # Cannot be on two numa nodes unless specified in flavor
-            assert 'ded' == topology_on_numa_node['pol'], "CPU policy is not dedicated in vm-topology"
-
-            actual_thread_policy = topology_on_numa_node['thr']
-            assert actual_thread_policy in expt_thr_pol, \
-                'cpu thread policy in vm topology is {} while flavor spec is {}'.\
-                format(actual_thread_policy, expt_thr_pol)
-
-            actual_siblings = topology_on_numa_node['siblings']
-            if expt_thr_pol == 'isolate':
-                assert not actual_siblings, "siblings should not be displayed for 'isolate'"
-            else:
-                assert actual_siblings, "sibling pairs should be included for 'require"
-
-            if actual_siblings is not None:
-                siblings_total += actual_siblings
-
-            expt_topology = '{}c,1t'.format(flv_vcpus) if expt_thr_pol == 'isolate' else '{}c,2t'.format(int(flv_vcpus/2))
-            assert expt_topology in topology_on_numa_node['topology'], 'vm topology is not as expected'
-
-            pcpus = topology_on_numa_node['pcpus']
-            expt_core_len_in_pair = 1 if expt_thr_pol == 'isolate' else 2
-            for pair in log_cores_siblings:
-                assert len(set(pair) & set(pcpus)) in [0, expt_core_len_in_pair]
-
-            pcpus_total += pcpus
-
-        # Check from vm in /proc/cpuinfo and /sys/devices/.../cpu#/topology/core_siblings_list
-        expt_sib_list = [[vcpu] for vcpu in range(flv_vcpus)] if expt_thr_pol == 'isolate' else siblings_total
-        actual_sib_list = []
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-            LOG.tc_step("Check vm has {} cores from inside vm via /proc/cpuinfo.".format(flv_vcpus))
-            assert flv_vcpus == vm_helper.get_proc_num_from_vm(vm_ssh)
-
-            LOG.tc_step("Check vm /sys/devices/system/cpu/[cpu#]/topology/core_siblings_list")
-            for cpu in ['cpu{}'.format(i) for i in range(flv_vcpus)]:
-                actual_sib_list_for_cpu = vm_ssh.exec_cmd('cat /sys/devices/system/cpu/{}/topology/core_siblings_list'.
-                                                          format(cpu), fail_ok=False)[1]
-
-                new_sibs = common._parse_cpus_list(actual_sib_list_for_cpu)
-                if new_sibs not in actual_sib_list:
-                    actual_sib_list.append(new_sibs)
-
-        assert sorted(expt_sib_list) == sorted(actual_sib_list)
 
     @mark.p1
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'expt_err'), [

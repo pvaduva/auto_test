@@ -3,7 +3,7 @@ from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec
-from keywords import vm_helper, nova_helper, system_helper, host_helper
+from keywords import vm_helper, nova_helper, system_helper, host_helper, check_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
@@ -89,6 +89,7 @@ def vm_(request, flavor_):
 
     return vm
 
+@mark.sanity
 @mark.skipif(len(host_helper.get_hypervisors()) < 2, reason="Less than 2 hypervisor hosts on the system")
 @mark.parametrize(
         "block_migrate", [
@@ -236,6 +237,8 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
     LOG.tc_step("Add following extra specs: {}".format(specs))
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
 
+    prev_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
+
     boot_source = 'volume' if vm_type == 'volume' else 'image'
     LOG.tc_step("Boot a vm from {}".format(boot_source))
     vm_id = vm_helper.boot_vm('live-mig', flavor=flavor_id, source=boot_source)[1]
@@ -245,61 +248,14 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
         LOG.tc_step("Attach volume to vm")
         vm_helper.attach_vol_to_vm(vm_id=vm_id)
 
-    LOG.tc_step("Check sudo vcpupin before live mgirating vm")
-    if cpu_pol == 'dedicated':
-        pre_vm_host = nova_helper.get_vm_host(vm_id)
-        # Check host side info such as nova-compute.log and virsh pcpupin
-        instance_name = nova_helper.get_vm_instance_name(vm_id)
-        with host_helper.ssh_to_host(pre_vm_host) as host_ssh:
-
-            LOG.tc_step("Check vcpus for vm is the same via vm-topology and virsh vcpupin")
-            vcpus_for_vm = host_helper.get_vcpus_for_instance_via_virsh(host_ssh, instance_name=instance_name)
-
-            for vcpu in vcpus_for_vm:
-                assert 1 == len(vcpus_for_vm[vcpu]), "More than 1 cpus listed in virsh vcpupin for dedicated vm"
+    prev_vm_host = nova_helper.get_vm_host(vm_id)
+    check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, cpu_pol=cpu_pol, prev_total_cpus=prev_cpus[prev_vm_host])
 
     LOG.tc_step("Live migrate VM and ensure it succeeded")
     block_mig = True if boot_source == 'image' else False
     code, output = vm_helper.live_migrate_vm(vm_id, block_migrate=block_mig)
     assert 0 == code, "Live migrate is not successful. Details: {}".format(output)
 
-    LOG.tc_step("Check vm topology stay unchanged")
-    instance_topology = vm_helper.get_instance_topology(vm_id)
-
-    expt_cpu_pol = 'ded' if cpu_pol == 'dedicated' else 'sha'
-    pcpus_total = []
-    for topology_on_numa_node in instance_topology:  # Cannot be on two numa nodes for dedicated vm unless specified
-        assert expt_cpu_pol == topology_on_numa_node['pol'], "CPU policy is not {} in vm-topology".format(expt_cpu_pol)
-
-        actual_siblings = topology_on_numa_node['siblings']
-        actual_topology = topology_on_numa_node['topology']
-        actual_pcpus = topology_on_numa_node['pcpus']
-        pcpus_total += actual_pcpus
-
-        if expt_cpu_pol == 'ded':
-            assert topology_on_numa_node['thr'] == 'no', "cpu thread policy is in vm topology"
-            if vcpus == 1:
-                assert not actual_siblings, "siblings should not be included with only 1 vcpu"
-            else:
-                assert actual_siblings, "siblings should be included for dedicated vm"
-            assert '1c,{}t'.format(vcpus) in actual_topology, 'vm topology is not as expected.'
-            assert vcpus == len(actual_pcpus), "pcpus number for dedicated vm is not the same as setting in flavor"
-        else:
-            assert topology_on_numa_node['thr'] is None, "cpu thread policy is in vm topology"
-            assert actual_siblings is None, 'siblings should not be included for floating vm'
-            assert actual_topology is None, 'topology should not be included for floating vm'
-            assert actual_pcpus is None, "pcpu should not be included in vm-topology for floating vm"
-
-    if cpu_pol == 'dedicated':
-        post_vm_host = nova_helper.get_vm_host(vm_id)
-        assert pre_vm_host != post_vm_host, "VM host did not change after live migration"
-
-        # Check host side info such as nova-compute.log and virsh pcpupin
-        instance_name = nova_helper.get_vm_instance_name(vm_id)
-        with host_helper.ssh_to_host(post_vm_host) as host_ssh:
-
-            LOG.tc_step("Check vcpus for vm is the same via vm-topology and virsh vcpupin")
-            vcpus_for_vm = host_helper.get_vcpus_for_instance_via_virsh(host_ssh, instance_name=instance_name)
-
-            for vcpu in vcpus_for_vm:
-                assert 1 == len(vcpus_for_vm[vcpu]), "More than 1 cpus listed in virsh vcpupin for dedicated vm"
+    post_vm_host = nova_helper.get_vm_host(vm_id)
+    assert prev_vm_host != post_vm_host
+    check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, cpu_pol=cpu_pol, prev_total_cpus=prev_cpus[post_vm_host])

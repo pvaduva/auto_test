@@ -837,7 +837,7 @@ def get_vm_nova_show_values(vm_id, fields, strict=False, con_ssh=None, auth_info
 
 
 def get_vm_status(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
-    return get_vm_nova_show_value(vm_id, 'status', con_ssh=con_ssh, auth_info=auth_info)
+    return get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)
 
 
 def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, regex=False, fail_ok=True):

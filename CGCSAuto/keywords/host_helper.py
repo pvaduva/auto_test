@@ -1368,12 +1368,21 @@ def get_hosts_with_local_storage_backing_type(storage_type=None, con_ssh=None):
 
 def __parse_total_cpus(output):
     last_line = output.split()[-1]
-    # Total usable vcpus: 64.0, total allocated vcpus: 56.0 >> 56
-    total = int(last_line.split(sep=':')[-1].split(sep='.')[0])
+    # Total usable vcpus: 64.0, total allocated vcpus: 56.0 >> 56.0000
+    total = round(float(last_line.split(sep=':')[-1].strip()), 4)
     return total
 
 
 def get_total_allocated_vcpus_in_log(host, con_ssh=None):
+    """
+
+    Args:
+        host:
+        con_ssh:
+
+    Returns (float): float with 4 digits after decimal point
+
+    """
     with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
         output = host_ssh.exec_cmd('cat /var/log/nova/nova-compute.log | grep -i "total allocated vcpus" | tail -n 3',
                                    fail_ok=False)[1]
@@ -1390,7 +1399,7 @@ def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeo
         prev_cpus (list):
         timeout (int):
 
-    Returns (int): New value of total allocated vcpus
+    Returns (float): New value of total allocated vcpus as float with 4 digits after decimal point
 
     """
     cmd = 'cat /var/log/nova/nova-compute.log | grep -i "total allocated vcpus" | tail -n 3'
@@ -1399,6 +1408,9 @@ def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeo
     if prev_cpus is None:
         prev_output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
         prev_cpus = __parse_total_cpus(prev_output)
+
+    # convert to str
+    prev_cpus = round(prev_cpus, 4)
 
     while time.time() < end_time:
         output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
@@ -1417,7 +1429,7 @@ def get_vcpus_for_computes(hosts=None, rtn_val='used_now', con_ssh=None):
         rtn_val (str): valid values: used_now, used_max, total
         con_ssh:
 
-    Returns (dict): host(str),cpu_val(float) pairs as dictionary
+    Returns (dict): host(str),cpu_val(float with 4 digits after decimal point) pairs as dictionary
 
     """
     if hosts is None:
@@ -1429,7 +1441,7 @@ def get_vcpus_for_computes(hosts=None, rtn_val='used_now', con_ssh=None):
     for host in hosts:
         table_ = table_parser.table(cli.nova('host-describe', host, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
         cpus_str = table_parser.get_values(table_, target_header='cpu', strict=False, PROJECT=rtn_val)[0]
-        hosts_cpus[host] = float(cpus_str)
+        hosts_cpus[host] = round(float(cpus_str), 4)
 
     LOG.debug("Hosts {} cpus: {}".format(rtn_val, hosts_cpus))
     return hosts_cpus
@@ -1560,7 +1572,7 @@ def get_vcpus_for_instance_via_virsh(host_ssh, instance_name, rtn_list=False):
         vm_id (str):
         con_ssh (SSHClient):
 
-    Returns (list|dict): list of vcpus ids used by specified instance such as [8, 9], or {0: 8, 1: 9}
+    Returns (list|dict): list of vcpus ids used by specified instance such as [8, 9], or {0: [8], 1: [9]}
 
     """
 
@@ -1581,7 +1593,10 @@ def get_vcpus_for_instance_via_virsh(host_ssh, instance_name, rtn_list=False):
         vcpus[int(key)] = common._parse_cpus_list(pcpus.strip())
 
     if rtn_list:
-        return sorted(list(vcpus.values()))
+        all_cpus = []
+        for cpus in vcpus.values():
+            all_cpus += cpus
+        return sorted(all_cpus)
 
     return vcpus
 
