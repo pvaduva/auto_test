@@ -123,8 +123,10 @@ def create_image(name=None, image_id=None, source_image_file=None, source_image_
     optional_args = {
         '--id': image_id,
         '--name': name,
-        '--is-public': 'True' if public is None else public,
-        '--is-protected': protected,
+        # '--is-public': 'True' if public is None else public,
+        # '--is-protected': protected,
+        '--visibility': 'private' if public is False else 'public',
+        '--protected': protected,
         '--store': store,
         '--disk-format': disk_format if disk_format else 'raw',
         '--container-format': container_format if container_format else 'bare',

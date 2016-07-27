@@ -1068,6 +1068,8 @@ def _get_vm_volumes(novashow_table):
     Returns (list: A list of volume ids from the novashow_table.
 
     """
+    false = False
+    true = True
     volumes = eval(table_parser.get_value_two_col_table(novashow_table, ':volumes_attached', strict=False))
     return [volume['id'] for volume in volumes]
 

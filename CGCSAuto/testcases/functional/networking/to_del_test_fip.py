@@ -18,7 +18,7 @@ def fip_setups(request):
     vm_id = vm_helper.boot_vm()[1]
     ResourceCleanup.add('vm', vm_id, scope='module')
 
-    network_helper.associate_floating_ip(floating_ip=floating_ip, vm=vm_id)
+    network_helper.associate_floating_ip(floating_ip=floating_ip, vm_id=vm_id)
 
     return vm_id, floating_ip
 

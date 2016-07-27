@@ -117,7 +117,14 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
     with open(report_file_name, mode='a') as f:
         f.write("Mongo upload results for test case: %s\n" % test_name)
         local_child = pexpect.spawn(command=upload_cmd, encoding='utf-8', logfile=f)
-        local_child.expect(pexpect.EOF)
+        try:
+            local_child.expect(pexpect.EOF)
+        except Exception as e:
+            err = "\nTest result failed to upload. Exception caught: {}\n".format(e.__str__())
+            print(err)
+            f.write(err + '\n')
+            return None
+
         upload_output = local_child.before
 
         res = re.search("Finished saving test result .* to database", upload_output)
