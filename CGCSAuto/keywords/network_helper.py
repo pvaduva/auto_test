@@ -1151,7 +1151,7 @@ def router_subnet_exists(router_id, subnet_id, con_ssh=None, auth_info=Tenant.AD
     return subnet_id in subnets_ids
 
 
-def set_router_gateway(router_id=None, extnet_id=None, enable_snat=True, fixed_ip=None, fail_ok=False,
+def set_router_gateway(router_id=None, extnet_id=None, enable_snat=False, fixed_ip=None, fail_ok=False,
                        auth_info=Tenant.ADMIN, con_ssh=None, clear_first=True):
     """
     Set router gateway with given snat, ip settings.
@@ -1180,7 +1180,7 @@ def set_router_gateway(router_id=None, extnet_id=None, enable_snat=True, fixed_i
         args += ' --disable-snat'
 
     if fixed_ip:
-        args += ' --fixed-ip={}'.format(fixed_ip)
+        args += ' --fixed-ip ip_address={}'.format(fixed_ip)
 
     if router_id is None:
         router_id = get_tenant_router(con_ssh=con_ssh)
@@ -1272,14 +1272,17 @@ def clear_router_gateway(router_id=None, fail_ok=False, auth_info=Tenant.ADMIN, 
     return 0, msg
 
 
-def _update_router(field, value, val_type=None, router_id=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def _update_router(admin_state_up=None, distributed=None, no_routes=None, routes=None, external_gateway_info=None,
+                   router_id=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """
 
     Args:
-        field (str): valid fields: distributed, external_gateway_info
-        value:
-        val_type:
-        router_id:
+        admin_state_up (bool|None):
+        distributed (bool):
+        no_routes (bool):
+        routes (list|str):
+        external_gateway_info (str): such as 'network_id=0fc6f9bc-6362-4c81-a9c9-d225778655ca,enable_snat=False'
+        router_id (str):
         fail_ok:
         con_ssh:
         auth_info:
@@ -1294,15 +1297,33 @@ def _update_router(field, value, val_type=None, router_id=None, fail_ok=False, c
     if not isinstance(router_id, str):
         raise ValueError("Expecting string value for router_id. Get {}".format(type(router_id)))
 
-    LOG.info("Updating router {}: {}={}".format(router_id, field, value))
+    args = ''
+    if routes is not None:
+        if no_routes:
+            raise ValueError("'Only one of the: routes', 'no_routes' can be specified.")
+        if isinstance(routes, str):
+            routes = [routes]
 
-    if val_type is not None:
-        val_type_str = 'type={} '.format(val_type)
-    else:
-        val_type_str = ''
+        for route in routes:
+            args += ' --route ' + route
 
-    args = '{} --{} {}{}'.format(router_id, field, val_type_str, value)
+    args_dict = {
+        '--admin-state-up': admin_state_up,
+        '--distributed': distributed,
+        '--no-routes': no_routes,
+        '--external-gateway-info type=dict': external_gateway_info,
+    }
 
+    for key, value in args_dict.items():
+        if value is not None:
+            args += ' {} {}'.format(key, value)
+
+    if not args:
+        raise ValueError("At least of the args need to be specified.")
+
+    LOG.info("Updating router {}: {}".format(router_id, args))
+
+    args = '{} {}'.format(router_id, args.strip())
     return cli.neutron('router-update', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
 
 
@@ -1339,7 +1360,7 @@ def get_router_ext_gateway_subnet(router_id, auth_info=None, con_ssh=None):
         return ext_gateway_info['external_fixed_ips'][0]['subnet_id']
 
 
-def update_router_ext_gateway_snat(router_id=None, ext_net_id=None, enable_snat=True, fail_ok=False, con_ssh=None,
+def update_router_ext_gateway_snat(router_id=None, ext_net_id=None, enable_snat=False, fail_ok=False, con_ssh=None,
                                    auth_info=Tenant.ADMIN):
     """
     Update router external gateway SNAT
@@ -1362,7 +1383,7 @@ def update_router_ext_gateway_snat(router_id=None, ext_net_id=None, enable_snat=
         ext_net_id = get_ext_networks(con_ssh=con_ssh, auth_info=auth_info)[0]
 
     arg = 'network_id={},enable_snat={}'.format(ext_net_id, enable_snat)
-    code, output = _update_router(field='external_gateway_info', val_type='dict', value=arg, router_id=router_id,
+    code, output = _update_router(external_gateway_info=arg, router_id=router_id,
                                   fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
     if code == 1:
         return 1, output
@@ -1378,11 +1399,31 @@ def update_router_ext_gateway_snat(router_id=None, ext_net_id=None, enable_snat=
     return 0, succ_msg
 
 
-def update_router_distributed(router_id=None, distributed=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
-    code, output = _update_router(field='distributed', value=distributed, router_id=router_id,
+def update_router_distributed(router_id=None, distributed=True, admin_state_up=False, admin_up_post_update=True,
+                              fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Update router to distributed or centralized
+
+    Args:
+        router_id (str): id of the router to update
+        distributed (bool): True if set to distributed, False if set to centralized
+        admin_state_up (bool|None): whether to set admin state down when updating the distributed state
+        admin_up_post_update (bool): whether to set admin state up after updating the distributed state
+        fail_ok (bool): whether to throw exception if cli got rejected
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns:
+
+    """
+    code, output = _update_router(distributed=distributed, admin_state_up=admin_state_up, router_id=router_id,
                                   fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
+
     if code == 1:
         return 1, output
+
+    if admin_up_post_update:
+        _update_router(admin_state_up=True, router_id=router_id, fail_ok=False, con_ssh=con_ssh, auth_info=auth_info)
 
     post_distributed_val = get_router_info(router_id, 'distributed', auth_info=Tenant.ADMIN, con_ssh=con_ssh)
     if post_distributed_val.lower() != str(distributed).lower():

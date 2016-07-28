@@ -120,22 +120,23 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
         try:
             local_child.expect(pexpect.EOF)
         except Exception as e:
-            err = "\nTest result failed to upload. Exception caught: {}\n".format(e.__str__())
+            # Don't throw exception otherwise whole test session will end
+            err = "Test result failed to upload. \nException caught: {}\n".format(e.__str__())
             print(err)
-            f.write(err + '\n')
+            f.write('\n' + err + '\n')
             return None
 
         upload_output = local_child.before
 
         res = re.search("Finished saving test result .* to database", upload_output)
-        msg = "\nTest result successfully uploaded to MongoDB" if res else \
-              "\nTest result failed to upload. Please check parameters stored at {}\n{}".format(output, upload_output)
+        msg = "Test result successfully uploaded to MongoDB" if res else \
+              "Test result failed to upload. Please check parameters stored at {}\n{}".format(output, upload_output)
 
         today_date = datetime.datetime.now().strftime("%Y-%m-%d")
         extra_info = '\nDate: %s. Report tag: %s\n\n' % (today_date, tag)
         msg += extra_info
 
-        f.write(msg + "\n")
+        f.write('\n' + msg + "\n")
         print(msg)
 
     return res

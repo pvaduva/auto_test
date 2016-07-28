@@ -5,7 +5,7 @@ from pytest import mark, fixture, skip
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, ImageMetadata
-from consts.cli_errs import CPUThreadErr, SharedCPUErr, ColdMigrateErr, CPUPolicyErr
+from consts.cli_errs import CPUThreadErr, SharedCPUErr, ColdMigrateErr, CPUPolicyErr, ScaleErr
 
 from keywords import nova_helper, system_helper, vm_helper, host_helper, glance_helper, cinder_helper, common, check_helper
 from testfixtures.resource_mgmt import ResourceCleanup
@@ -245,7 +245,6 @@ class TestHTEnabled:
         check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, prev_total_cpus=prev_cpus, vm_host=vm_host,
                                           cpu_pol=expt_cpu_pol, cpu_thr_pol=expt_thr_pol)
 
-
     @mark.p1
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'expt_err'), [
         (1, 'require', 'CPUThreadErr.VCPU_NUM_UNDIVISIBLE'),
@@ -396,6 +395,68 @@ class TestHTEnabled:
         assert "No valid host was found" in fault_msg
         assert CPUThreadErr.INSUFFICIENT_CORES_FOR_ISOLATE.format(ht_host, 4, left_over_isolate_cores) in fault_msg
 
+    @mark.parametrize(('vcpus', 'cpu_thread_pol', 'min_vcpus', 'numa_0'), [
+        mark.p1((6, 'isolate', 1, 0)),
+        mark.p1((6, 'require', 1, 1)),
+        mark.p2((4, 'isolate', 1, None)),
+    ])
+    def test_cpu_scale_cpu_thread_pol(self, vcpus, cpu_thread_pol, min_vcpus, numa_0, ht_hosts):
+        LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
+        flavor_id = nova_helper.create_flavor(name='cpu_thread_scale', vcpus=vcpus)[1]
+        ResourceCleanup.add('flavor', flavor_id)
+
+        specs = {FlavorSpec.CPU_THREAD_POLICY: cpu_thread_pol, FlavorSpec.CPU_POLICY: 'dedicated'}
+        if min_vcpus is not None:
+            specs[FlavorSpec.MIN_VCPUS] = min_vcpus
+        if numa_0 is not None:
+            specs[FlavorSpec.NUMA_0] = numa_0
+
+        LOG.tc_step("Set following extra specs: {}".format(specs))
+        nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+
+        LOG.tc_step("Boot a vm with above flavor and check it booted successfully on a hyperthreaded host.")
+        vm_id = vm_helper.boot_vm(name='vcpu{}_min{}_{}'.format(vcpus, min_vcpus, cpu_thread_pol), flavor=flavor_id)[1]
+        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+
+        assert nova_helper.get_vm_host(vm_id) in ht_hosts, "VM is not on hyperthreaded host"
+
+        LOG.tc_step("Check vm vcpus in nova show is as specified in flavor")
+        expt_min_cpu = vcpus if min_vcpus is None else min_vcpus
+        expt_max_cpu = expt_current_cpu = vcpus
+        check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+
+        # Scale down test
+        if expt_current_cpu > expt_min_cpu:
+            LOG.tc_step("Scale down vm vcpus until it hits the lower limit and ensure scale is successful.")
+            for i in range(expt_current_cpu - expt_min_cpu):
+                vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
+                expt_current_cpu -= 1
+                check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+
+        LOG.tc_step("VM is now at it's minimal vcpus, attempt to scale down and ensure it's rejected")
+        code, output = vm_helper.scale_vm(vm_id, direction='down', resource='cpu', fail_ok=True)
+        assert 1 == code, 'scale down cli is not rejected. Actual: {}'.format(output)
+        assert ScaleErr.SCALE_LIMIT_HIT in output, "Expected error message is not found in cli output"
+
+        LOG.tc_step("Check vm vcpus in nova show did not change")
+        check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+
+        # Scale up test
+        if expt_max_cpu > expt_current_cpu:
+            LOG.tc_step("Scale up vm vcpus until it hits the upper limit and ensure scale is successful.")
+            for i in range(expt_max_cpu - expt_current_cpu):
+                vm_helper.scale_vm(vm_id, direction='up', resource='cpu')
+                expt_current_cpu += 1
+                check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+
+        LOG.tc_step("VM is now at it's maximum vcpus, attemp to scale up and ensure it's rejected")
+        code, output = vm_helper.scale_vm(vm_id, direction='up', resource='cpu', fail_ok=True)
+        assert 1 == code, 'scale up cli is not rejected. Actual: {}'.format(output)
+        assert ScaleErr.SCALE_LIMIT_HIT in output, "Expected error message is not found in cli output"
+
+        LOG.tc_step("Check vm vcpus in nova show did not change")
+        check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+
 
 class TestHTDisabled:
 
@@ -543,4 +604,3 @@ class TestColdMigrate:
             code, output = host_helper.lock_host(host=vm_host, check_first=False, fail_ok=True)
             HostsToRecover.add(vm_host)
             assert 5 == code, "Host lock result unexpected. Details: {}".format(output)
-

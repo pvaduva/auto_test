@@ -13,7 +13,10 @@ def snat_setups(request):
     find_dvr = 'True' if request.param == 'distributed' else 'False'
 
     primary_tenant = Tenant.get_primary()
-    for auth_info in [Tenant.TENANT_1, Tenant.TENANT_2]:
+    primary_tenant_name = common.get_tenant_name(primary_tenant)
+    other_tenant = Tenant.TENANT_1 if primary_tenant_name == 'tenant1' else Tenant.TENANT_2
+
+    for auth_info in [primary_tenant, other_tenant]:
         tenant_router = network_helper.get_tenant_router(auth_info=auth_info)
         is_dvr_router = network_helper.get_router_info(router_id=tenant_router, field='distributed')
         if find_dvr == is_dvr_router:
@@ -33,7 +36,7 @@ def snat_setups(request):
         except:
             raise
         finally:
-            LOG.fixture_step("Revert primary tenant to {}".format(common.get_tenant_name(primary_tenant)))
+            LOG.fixture_step("Revert primary tenant to {}".format(primary_tenant_name))
             Tenant.set_primary(primary_tenant)
     request.addfinalizer(disable_snat)
 
@@ -42,7 +45,7 @@ def snat_setups(request):
     ResourceCleanup.add('vm', vm_id, scope='module')
 
     LOG.fixture_step("Attempt to ping from NatBox and ensure if fails")
-    ping_res = vm_helper.ping_vms_from_natbox(vm_id, fail_ok=True, use_fip=False)[0]
+    ping_res = vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True, use_fip=False)
     assert ping_res is False, "VM can still be ping'd from outside after SNAT enabled without floating ip."
 
     LOG.fixture_step("Create a floating ip and associate it to VM")
@@ -304,7 +307,7 @@ def test_snat_reset_router_ext_gateway(snat_setups):
     assert ping_res is False, "VM can still be ping'd from outside after clearing router gateway."
 
     LOG.tc_step("Set router gateway with the same fixed ip")
-    network_helper.set_router_gateway(clear_first=False, fixed_ip=fixed_ip)
+    network_helper.set_router_gateway(clear_first=False, fixed_ip=fixed_ip, enable_snat=True)
 
     LOG.tc_step("Verify SNAT is enabled by default after setting router gateway.")
     assert network_helper.get_router_ext_gateway_info()['enable_snat'], "SNAT is not enabled by default."

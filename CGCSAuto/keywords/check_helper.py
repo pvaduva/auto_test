@@ -232,3 +232,8 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total):
                 actual_sib_list.append(sib_for_cpu)
 
     assert sorted(expt_sib_list) == sorted(actual_sib_list)
+
+
+def check_vm_vcpus_via_nova_show(vm_id, min_cpu, current_cpu, max_cpu, con_ssh=None):
+    actual_vcpus = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))
+    assert [min_cpu, current_cpu, max_cpu] == actual_vcpus, "vcpus in nova show {} is not as expected".format(vm_id)

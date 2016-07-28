@@ -86,7 +86,7 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=True):
+            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False):
     """
 
     Args:
@@ -110,6 +110,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
         hint (dict): key/value pair(s) sent to scheduler for custom use. such as group=<server_group_id>
         fail_ok (bool):
+        reuse_vol (bool): whether or not to reuse the existing volume
 
     Returns (tuple): (rtn_code(int), new_vm_id_if_any(str), message(str), new_vol_id_if_any(str))
         (0, vm_id, 'VM is booted successfully', <new_vol_id>)   # vm is created successfully and in Active state.
@@ -1627,6 +1628,38 @@ def _start_or_stop_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_CHANGE
         raise exceptions.VMPostCheckFailed(msg)
 
     succ_msg = "Action {} performed successfully on vms.".format(action)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def scale_vm(vm_id, direction, resource='cpu', fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Scale up/down vm cpu
+
+    Args:
+        vm_id (str): id of vm to scale
+        direction (str): up or down
+        resource (str): currently only cpu
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (rtn_code(int), message(str))
+        - 0, vm <resource> is successfully scaled <direction>
+        - 1, Scale vm cli rejected
+
+    """
+    if direction not in ['up', 'down']:
+        raise ValueError("Invalid direction provided. Valid values: 'up', 'down'")
+
+    args = ' '.join([vm_id, resource, direction])
+    code, output = cli.nova('scale', args, fail_ok=fail_ok, rtn_list=True, ssh_client=con_ssh, auth_info=auth_info)
+
+    if code == 1:
+        return 1, output
+
+    # TODO add checking
+    succ_msg = "vm {} is successfully scaled {}".format(resource, direction)
     LOG.info(succ_msg)
     return 0, succ_msg
 

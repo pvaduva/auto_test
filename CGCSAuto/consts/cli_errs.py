@@ -17,6 +17,10 @@ class MinCPUErr:
     CPU_POLICY_NOT_DEDICATED = "min_vcpus is only valid when hw:cpu_policy is 'dedicated'"
 
 
+class ScaleErr:
+    SCALE_LIMIT_HIT = "When scaling, cannot scale beyond limits"
+
+
 class CpuAssignment:
     VSWITCH_TOO_MANY_CORES = "The vswitch function can only be assigned up to 8 core"
     TOTAL_TOO_MANY_CORES = "More total logical cores requested than present on 'Processor {}'"
