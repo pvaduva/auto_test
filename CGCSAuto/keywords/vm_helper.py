@@ -1692,7 +1692,7 @@ def get_vm_host_and_numa_nodes(vm_id, con_ssh=None):
     return host, actual_node_vals
 
 
-def get_instance_topology(vm_id, con_ssh=None):
+def get_instance_topology(vm_id, con_ssh=None, source='vm-topology'):
     """
     Get instance_topology from 'vm-topology -s servers'
 
@@ -1700,14 +1700,19 @@ def get_instance_topology(vm_id, con_ssh=None):
         vm_id (str):
         # rtn_list (bool):
         con_ssh (SSHClient):
+        source (str): 'vm-topology' or 'nova show'
 
     Returns (list|dict):
 
     """
-    servers_tab = system_helper.get_vm_topology_tables('servers', con_ssh=con_ssh)[0]
-    servers_tab = table_parser.filter_table(servers_tab, ID=vm_id)
+    if source == 'vm-topology':
+        servers_tab = system_helper.get_vm_topology_tables('servers', con_ssh=con_ssh)[0]
+        servers_tab = table_parser.filter_table(servers_tab, ID=vm_id)
 
-    instance_topology = table_parser.get_column(servers_tab, 'instance_topology')[0]
+        instance_topology = table_parser.get_column(servers_tab, 'instance_topology')[0]
+    else:
+        instance_topology = nova_helper.get_vm_nova_show_value(vm_id, 'wrs-res:topology', strict=True, con_ssh=con_ssh)
+
     if isinstance(instance_topology, str):
         instance_topology = [instance_topology]
 

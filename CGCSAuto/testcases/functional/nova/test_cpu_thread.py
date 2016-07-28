@@ -418,20 +418,34 @@ class TestHTEnabled:
         vm_id = vm_helper.boot_vm(name='vcpu{}_min{}_{}'.format(vcpus, min_vcpus, cpu_thread_pol), flavor=flavor_id)[1]
         ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
-        assert nova_helper.get_vm_host(vm_id) in ht_hosts, "VM is not on hyperthreaded host"
+        vm_host = nova_helper.get_vm_host(vm_id)
+        # assert vm_host in ht_hosts, "VM is not on hyperthreaded host" TODO add back
 
         LOG.tc_step("Check vm vcpus in nova show is as specified in flavor")
         expt_min_cpu = vcpus if min_vcpus is None else min_vcpus
         expt_max_cpu = expt_current_cpu = vcpus
         check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
+        LOG.tc_step("Get used cpus for all hosts before scaling vm")
+        host_allocated_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')[vm_host]
+
         # Scale down test
         if expt_current_cpu > expt_min_cpu:
             LOG.tc_step("Scale down vm vcpus until it hits the lower limit and ensure scale is successful.")
             for i in range(expt_current_cpu - expt_min_cpu):
+
+                LOG.tc_step("Scale down once and check vm vcpus change in nova show")
                 vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
                 expt_current_cpu -= 1
+                host_allocated_cpus -= 1
                 check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+
+                LOG.tc_step('Check total allocated vcpus for host and pcpus for vm is reduced by 1')
+                pcpus_total = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=host_allocated_cpus,
+                                                                vm_host=vm_host, cpu_pol='dedicated',
+                                                                cpu_thr_pol=cpu_thread_pol, expt_increase=-1)[0]
+                assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
+                assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
 
         LOG.tc_step("VM is now at it's minimal vcpus, attempt to scale down and ensure it's rejected")
         code, output = vm_helper.scale_vm(vm_id, direction='down', resource='cpu', fail_ok=True)
@@ -445,9 +459,19 @@ class TestHTEnabled:
         if expt_max_cpu > expt_current_cpu:
             LOG.tc_step("Scale up vm vcpus until it hits the upper limit and ensure scale is successful.")
             for i in range(expt_max_cpu - expt_current_cpu):
+                LOG.tc_step("Scale down once and check vm vcpus change in nova show")
+
                 vm_helper.scale_vm(vm_id, direction='up', resource='cpu')
                 expt_current_cpu += 1
+                host_allocated_cpus += 1
                 check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+
+                LOG.tc_step('Check total allocated vcpus for host and pcpus for vm is increased by 1')
+                pcpus_total = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=host_allocated_cpus,
+                                                                vm_host=vm_host, cpu_pol='dedicated',
+                                                                cpu_thr_pol=cpu_thread_pol, expt_increase=-1)[0]
+                assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
+                assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
 
         LOG.tc_step("VM is now at it's maximum vcpus, attemp to scale up and ensure it's rejected")
         code, output = vm_helper.scale_vm(vm_id, direction='up', resource='cpu', fail_ok=True)

@@ -43,7 +43,7 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
 
 
 def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=None, cpu_pol=None, cpu_thr_pol=None,
-                         con_ssh=None):
+                         expt_increase=None, con_ssh=None):
     """
     Check vm has the correct topology based on the number of vcpus, cpu policy, cpu threads policy, number of numa nodes
 
@@ -58,6 +58,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
         vm_host (str):
         cpu_pol (str): dedicated or shared
         cpu_thr_pol (str): isolate or require
+        expt_increase (int): expected total vcpu increase on vm host compared to prev_total_cpus
         con_ssh (SSHClient)
 
     """
@@ -67,16 +68,18 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
     if numa_num is None:
         numa_num = 1
 
-    if cpu_pol == 'dedicated':
-        expt_increase = vcpus * 2 if cpu_thr_pol == 'isolate' else vcpus
-    else:
-        expt_increase = vcpus / 16
+    if expt_increase is None:
+        if cpu_pol == 'dedicated':
+            expt_increase = vcpus * 2 if cpu_thr_pol == 'isolate' else vcpus
+        else:
+            expt_increase = vcpus / 16
 
     LOG.tc_step("Check total vcpus for vm host is increased by {} via nova host-describe".format(expt_increase))
     post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')
     assert round(prev_total_cpus + expt_increase, 4) == post_hosts_cpus[vm_host]
 
-    LOG.tc_step('Check vm topology, vcpus, pcpus, siblings, cpu policy, cpu threads policy, via vm-topology')
+    LOG.tc_step('Check vm topology, vcpus, pcpus, siblings, cpu policy, cpu threads policy, via vm-topology and nova '
+                'show')
     pcpus_total, siblings_total = _check_vm_topology_via_vm_topology(vm_id, vcpus=vcpus, cpu_pol=cpu_pol,
                                                                      cpu_thr_pol=cpu_thr_pol, vm_host=vm_host,
                                                                      numa_num=numa_num, con_ssh=con_ssh)
@@ -88,6 +91,8 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
     # Note: floating vm pcpus will not be checked via virsh vcpupin
     _check_vm_topology_on_host(vm_id, vcpus=vcpus, vm_pcpus=pcpus_total, prev_total_cpus=prev_total_cpus,
                                expt_increase=expt_increase, vm_host=vm_host)
+
+    return pcpus_total, siblings_total
 
 
 def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_num, vm_host, con_ssh=None):
@@ -118,6 +123,10 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
 
     expt_cpu_pol = 'ded' if 'ded' in cpu_pol else 'sha'
     instance_topology = vm_helper.get_instance_topology(vm_id, con_ssh=con_ssh)
+    instance_topology_nova_show = vm_helper.get_instance_topology(vm_id, con_ssh=con_ssh, source='nova show')
+
+    for key in instance_topology:
+        assert instance_topology[key] == instance_topology_nova_show[key]
 
     pcpus_total = []
     siblings_total = []

@@ -211,7 +211,7 @@ def get_unique_name(name_str, existing_names=None, resource_type='other'):
 def _parse_cpus_list(cpus):
     """
     Convert human friendly pcup list to list of integers.
-    e.g., '5-7,41-42, 45' >> [5, 6, 7, 41, 42, 45]
+    e.g., '5-7,41-43, 43, 45' >> [5, 6, 7, 41, 42, 43, 43, 45]
 
     Args:
         pcpus:
