@@ -102,6 +102,7 @@ SERIAL_KICKSTART_CONTROLLER_INSTALL = "Serial Kickstart Controller Install"
 MAX_BOOT_MENU_LINES = 15
 
 NIC_INTERFACE = "eth0"
+NIC_INTERFACE_CENTOS = "enp10s0f0"
 
 # BIOS options
 UP = '\x1b' + '[A'

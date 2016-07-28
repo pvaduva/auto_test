@@ -983,13 +983,15 @@ def main():
         if small_footprint and burn_usb:
 
             # Setup network access on the running controller0
-            cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip addr add " + controller0.host_ip + controller0.host_routing_prefix + " dev " + NIC_INTERFACE
+            nic_interface = NIC_INTERFACE_CENTOS if host_os == DEFAULT_HOST_OS else NIC_INTERFACE
+            cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip addr add " + controller0.host_ip + \
+                  controller0.host_routing_prefix + " dev {}".format(nic_interface)
             if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
                 log.error("Warning: Failed to add IP address: " + controller0.host_ip)
 
-            cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip link set dev {} up".format(NIC_INTERFACE)
+            cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip link set dev {} up".format(nic_interface)
             if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
-                log.error("Warning: Failed to bring up {} interface".format(NIC_INTERFACE))
+                log.error("Warning: Failed to bring up {} interface".format(nic_interface))
 
             time.sleep(2)
 
