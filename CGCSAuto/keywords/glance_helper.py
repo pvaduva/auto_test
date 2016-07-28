@@ -177,8 +177,10 @@ def wait_for_image_states(image_id, status='active', timeout=ImageTimeout.STATUS
                           fail_ok=True, con_ssh=None, auth_info=None):
     end_time = time.time() + timeout
     while time.time() < end_time:
-        table_ = table_parser.table(cli.glance('image-list', ssh_client=con_ssh, auth_info=auth_info))
-        actual_status = table_parser.get_values(table_, 'Status', ID=image_id)[0]
+        table_ = table_parser.table(cli.glance('image-show', image_id, ssh_client=con_ssh, auth_info=auth_info))
+        actual_status = table_parser.get_value_two_col_table(table_, 'status')
+        # table_ = table_parser.table(cli.glance('image-list', ssh_client=con_ssh, auth_info=auth_info))
+        # actual_status = table_parser.get_values(table_, 'Status', ID=image_id)[0]
 
         if status.lower() == actual_status.lower():
             LOG.info("Image {} has reached status: {}".format(image_id, status))
