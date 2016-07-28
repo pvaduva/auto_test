@@ -1,6 +1,6 @@
 import logging
 import os
-from time import strftime
+from time import strftime, sleep
 
 import pytest
 
@@ -142,6 +142,7 @@ def pytest_runtest_makereport(item, call, __multicall__):
                 with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
                     f.write('\tUPLOAD_UNSUCC')
 
+    sleep(30)
     return report
 
 
@@ -213,6 +214,7 @@ def pytest_configure(config):
     collect_all = config.getoption('collectall')
     report_all = config.getoption('reportall')
     report_tag = config.getoption('report_tag')
+    resultlog = config.getoption('resultlog')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
     lab = setups.get_lab_dict(lab_arg) if lab_arg else setup_consts.LAB
@@ -223,7 +225,10 @@ def pytest_configure(config):
     report_all = True if report_all else setup_consts.REPORT_ALL
 
     # compute directory for all logs based on the lab and timestamp on local machine
-    log_dir = os.path.expanduser("~") + "/AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
+    if not resultlog:
+        log_dir = os.path.expanduser("~") + "/AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
+    else:
+        log_dir = os.path.expanduser("{}".format(resultlog)) + "/AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
 
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
@@ -233,9 +238,7 @@ def pytest_configure(config):
     config_logger(log_dir)
 
     # set resultlog save location
-    resultlog = config.getoption('resultlog')
-    if not resultlog:
-        config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
+    config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
 
 
 def pytest_addoption(parser):
