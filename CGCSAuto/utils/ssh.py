@@ -131,11 +131,11 @@ class SSHClient:
                     LOG.info("Login successful!")
                     # LOG.debug(self._session)
                     # next 5 lines change ssh window size and flush its buffer
-                    self._session.setwinsize(50, 150)
+                    self._session.setwinsize(150, 250)
                     self.send()
                     self.flush(timeout=10)
                     self.flush(timeout=10)
-                    self.flush(timeout=10)
+                    self.flush(timeout=3)
                     return
 
                 # retry if this line is reached. it would've returned if login succeeded.

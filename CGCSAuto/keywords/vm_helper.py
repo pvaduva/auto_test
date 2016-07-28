@@ -245,7 +245,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     return 0, vm_id, 'VM is booted successfully', new_vol
 
 
-def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None):
+def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None, use_fip=False):
     """
     Wait for ping vm from natbox succeeds.
 
@@ -254,13 +254,14 @@ def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=
         timeout (int): max retry time for pinging vm
         fail_ok (bool): whether to raise exception if vm cannot be ping'd successfully from natbox within timeout
         con_ssh (SSHClient): TiS server ssh handle
+        use_fip (bool): whether or not to ping floating ip only if any
 
     Returns (bool): True if ping vm succeeded, False otherwise.
 
     """
     ping_end_time = time.time() + timeout
     while time.time() < ping_end_time:
-        if ping_vms_from_natbox(vm_ids=vm_id, fail_ok=True, con_ssh=con_ssh, num_pings=3)[0]:
+        if ping_vms_from_natbox(vm_ids=vm_id, fail_ok=True, con_ssh=con_ssh, num_pings=3, use_fip=use_fip)[0]:
             # give it sometime to settle after vm booted and became pingable
             time.sleep(3)
             return True
@@ -1181,6 +1182,8 @@ class VMInfo:
         Returns (tuple): such as (volume_id1, 'volume_id2', ...)
 
         """
+        false = False
+        true = True
         volumes = eval(table_parser.get_value_two_col_table(self.table_, ':volumes_attached', strict=False))
         return tuple([volume['id'] for volume in volumes])
 

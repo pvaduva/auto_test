@@ -28,15 +28,15 @@ HEAT_SCENARIO_PATH = 'heat/templates/hot/scenario/'
 
 
 class NetIP:
-    MGMT_NET_NAME = 'mgmt-net'
-    DATA_NET_NAME = 'tenant'
+    MGMT_NET_NAME = 'tenant\d-mgmt-net'
+    DATA_NET_NAME = 'tenant\d-net'    # this will not exclude tenant-mgmt-net
     INTERNAL_NET_NAME = 'internal'
     # such as 192.168.11.6
-    MGMT_IP = r'192.168\.\d{1,3}\.\d{1,3}'
+    MGMT_IP = r'192.168.\d{1,3}.\d{1,3}'
     # such as 172.16.1.11
-    DATA_IP = r'172.\d{1,3}\.\d{1,3}\.\d{1,3}'
+    DATA_IP = r'172.\d{1,3}.\d{1,3}.\d{1,3}'
     # such as 10.1.1.44
-    INTERNAL_IP = r'10.\d{1,3}\.\d{1,3}\.\d{1,3}'
+    INTERNAL_IP = r'10.\d{1,3}.\d{1,3}.\d{1,3}'
 
 
 class SystemType:

@@ -368,6 +368,8 @@ def get_floating_ips(fixed_ip=None, port_id=None, auth_info=Tenant.ADMIN, con_ss
     if port_id is not None:
         params_dict['port_id'] = port_id
 
+    fips = table_parser.get_values(table_, 'floating_ip_address', **params_dict)
+    LOG.info("Floating ips: {}".format(fips))
     return table_parser.get_values(table_, 'floating_ip_address', **params_dict)
 
 
@@ -445,16 +447,16 @@ def disassociate_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.ADMIN, 
     return 0, succ_msg
 
 
-def associate_floating_ip(floating_ip, vm, fip_val='ip', vm_val='id', auth_info=Tenant.ADMIN, con_ssh=None,
+def associate_floating_ip(floating_ip, vm_id, fip_val='ip', vm_ip=None, auth_info=Tenant.ADMIN, con_ssh=None,
                           fail_ok=False):
     """
     Associate a floating ip to management net ip of given vm.
 
     Args:
         floating_ip (str): ip or id of the floating ip
-        vm (str): vm id or ip
+        vm_id (str): vm id
         fip_val (str): ip or id
-        vm_val (str): id or ip
+        vm_ip (str): management ip of a vm used to find the matching port to attach floating ip to
         auth_info (dict):
         con_ssh (SSHClient):
         fail_ok (bool):
@@ -464,17 +466,18 @@ def associate_floating_ip(floating_ip, vm, fip_val='ip', vm_val='id', auth_info=
         (1, <stderr>)
 
     """
-    # convert vm to vm mgmt ip
-    if vm_val == 'id':
-        vm = get_mgmt_ips_for_vms(vm, con_ssh=con_ssh)[0]
-    args = '--fixed-ip-address {}'.format(vm)
+    # get vm management ip if not given
+    if vm_ip is None:
+        vm_ip = get_mgmt_ips_for_vms(vm_id, con_ssh=con_ssh)[0]
+    args = '--fixed-ip-address {}'.format(vm_ip)
 
     # convert floatingip to id
     if fip_val == 'ip':
+        fip_ip = floating_ip
         floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)[0]
     args += ' ' + floating_ip
 
-    port = get_vm_port(vm=vm, vm_val='ip', con_ssh=con_ssh)
+    port = get_vm_port(vm=vm_ip, vm_val='ip', con_ssh=con_ssh)
     args += ' ' + port
 
     code, output = cli.neutron('floatingip-associate', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
@@ -483,8 +486,27 @@ def associate_floating_ip(floating_ip, vm, fip_val='ip', vm_val='id', auth_info=
         return 1, output
 
     succ_msg = "port {} is successfully associated with floating ip {}".format(port, floating_ip)
+
+    if fip_val != 'ip':
+        fip_ip = get_floating_ip_info(floating_ip, fip_val='id', field='floating_ip_address', con_ssh=con_ssh)
+    _wait_for_ip_in_nova_list(vm_id, ip_addr=fip_ip, fail_ok=False, con_ssh=con_ssh)
+
     LOG.info(succ_msg)
     return 0, succ_msg
+
+
+def _wait_for_ip_in_nova_list(vm_id, ip_addr, timeout=30, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        table_ = table_parser.table(cli.nova('list --a', ssh_client=con_ssh, auth_info=auth_info))
+        if ip_addr in table_parser.get_values(table_, 'Networks', ID=vm_id, merge_lines=True)[0]:
+            return True
+
+    else:
+        msg = "ip address {} is not found in nova show {} within {} seconds".format(ip_addr, vm_id, timeout)
+        if fail_ok:
+            return False
+        raise exceptions.TimeoutException(msg)
 
 
 def get_vm_port(vm, vm_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
@@ -741,7 +763,7 @@ def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(name_substr=NetIP.DATA_NET_NAME, ip_pattern=NetIP.DATA_IP, vms=vms, con_ssh=con_ssh,
+    return _get_net_ips_for_vms(netname_pattern=NetIP.DATA_NET_NAME, ip_pattern=NetIP.DATA_IP, vms=vms, con_ssh=con_ssh,
                                 auth_info=auth_info, rtn_dict=rtn_dict)
 
 
@@ -760,7 +782,7 @@ def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(name_substr=NetIP.INTERNAL_NET_NAME, ip_pattern=NetIP.INTERNAL_IP, vms=vms,
+    return _get_net_ips_for_vms(netname_pattern=NetIP.INTERNAL_NET_NAME, ip_pattern=NetIP.INTERNAL_IP, vms=vms,
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, use_fip=False)
 
 
@@ -780,11 +802,11 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(name_substr=NetIP.MGMT_NET_NAME, ip_pattern=NetIP.MGMT_IP, vms=vms, con_ssh=con_ssh,
+    return _get_net_ips_for_vms(netname_pattern=NetIP.MGMT_NET_NAME, ip_pattern=NetIP.MGMT_IP, vms=vms, con_ssh=con_ssh,
                                 auth_info=auth_info, rtn_dict=rtn_dict, use_fip=use_fip)
 
 
-def _get_net_ips_for_vms(name_substr, ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False,
+def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False,
                          use_fip=False):
 
     table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=auth_info))
@@ -808,11 +830,11 @@ def _get_net_ips_for_vms(name_substr, ip_pattern, vms=None, con_ssh=None, auth_i
         vm_nets = vms_nets[i].split(sep=';')
         targeted_ips_str = ''
         for vm_net in vm_nets:
-            if name_substr in vm_net:
+            if re.search(netname_pattern, vm_net):
                 targeted_ips_str += vm_net
 
         if not targeted_ips_str:
-            LOG.warning("No network found for vm {} with net name sub-string: {}".format(vm_id, name_substr))
+            LOG.warning("No network found for vm {} with net name sub-string: {}".format(vm_id, netname_pattern))
             continue
 
         ips_for_vm = ip_reg.findall(targeted_ips_str)
@@ -820,6 +842,7 @@ def _get_net_ips_for_vms(name_substr, ip_pattern, vms=None, con_ssh=None, auth_i
             LOG.warning("No ip found for vm {} with pattern {}".format(vm_id, ip_pattern))
             continue
 
+        LOG.info('targeted_ip_str: {}, ips for vm: {}'.format(targeted_ips_str, ips_for_vm))
         if use_fip:
             vm_fips = []
             # ping floating ips only if any associated to vm, otherwise ping all the ips
@@ -870,7 +893,8 @@ def get_routers(name=None, distributed=None, ha=None, gateway_ip=None, strict=Tr
         if val is not None:
             final_params[key] = str(val)
 
-    table_ = table_parser.table(cli.neutron('router-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.neutron('router-list', ssh_client=con_ssh, auth_info=auth_info),
+                                combine_multiline_entry=True)
     if name is not None:
         table_ = table_parser.filter_table(table_, strict=strict, name=name)
 
@@ -893,7 +917,8 @@ def get_tenant_router(router_name=None, auth_info=None, con_ssh=None):
         tenant_name = common.get_tenant_name(auth_info=auth_info)
         router_name = tenant_name + '-router'
 
-    table_ = table_parser.table(cli.neutron('router-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.neutron('router-list', ssh_client=con_ssh, auth_info=auth_info),
+                                combine_multiline_entry=True)
     routers = table_parser.get_values(table_, 'id', name=router_name)
     if not routers:
         LOG.warning("No router with name {} found".format(router_name))
@@ -918,7 +943,8 @@ def get_router_info(router_id=None, field='status', strict=True, auth_info=Tenan
     if router_id is None:
         router_id = get_tenant_router(con_ssh=con_ssh)
 
-    table_ = table_parser.table(cli.neutron('router-show', router_id, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.neutron('router-show', router_id, ssh_client=con_ssh, auth_info=auth_info),
+                                combine_multiline_entry=True)
     return table_parser.get_value_two_col_table(table_, field, strict)
 
 
@@ -1154,7 +1180,7 @@ def set_router_gateway(router_id=None, extnet_id=None, enable_snat=True, fixed_i
         args += ' --disable-snat'
 
     if fixed_ip:
-        args += ' --fixed-ip {}'.format(fixed_ip)
+        args += ' --fixed-ip={}'.format(fixed_ip)
 
     if router_id is None:
         router_id = get_tenant_router(con_ssh=con_ssh)
