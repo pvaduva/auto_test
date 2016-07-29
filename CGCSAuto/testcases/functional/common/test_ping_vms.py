@@ -64,8 +64,11 @@ def test_ping_vms_from_vm(tenants_vms):
         assert val[0]
 
 
-@mark.sanity
-def test_ping_between_two_cgcs_guest_vm():
+@mark.parametrize(('image_type'), [
+    mark.sanity('cgcs-guest'),
+    mark.sanity('ubuntu')
+])
+def test_ping_between_two_image_vm(image_type):
     """
     Test ping between two cgcs-guest vms
     Args:
@@ -78,8 +81,8 @@ def test_ping_between_two_cgcs_guest_vm():
     Test Teardown:
         - Delete newly created VMs
     """
-    LOG.tc_step("Boot vms with two cgcs_guest")
-    sourceid = glance_helper.get_image_id_from_name('cgcs-guest')
+    LOG.tc_step("Boot vms with two {} image".format(image_type))
+    sourceid = glance_helper.get_image_id_from_name(image_type)
     vm1 = vm_helper.boot_vm(source='image', source_id=sourceid)[1]
     vm2 = vm_helper.boot_vm(source='image', source_id=sourceid)[1]
 
