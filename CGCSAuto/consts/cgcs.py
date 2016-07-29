@@ -17,6 +17,7 @@ BOOT_FROM_VOLUME = 'Attempt to boot from volume - no image supplied'
 
 
 IMAGE_DIR = '/home/wrsroot/images'
+DEFAULT_GUEST = 'cgcs-guest.img'
 
 DNS_NAMESERVERS = ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
 
@@ -94,6 +95,7 @@ class Prompt:
     CONTROLLER_PROMPT = '.*controller\-[01]\:~\$ '
     ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
+    STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'
     PASSWORD_PROMPT = '.*assword\:.*'
     ADD_HOST = '.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
@@ -176,7 +178,11 @@ class EventLogID:
     VM_DELETED = '700.114'
     VM_CREATED = '700.108'
     VM_FAILED = '700.001'
-
+    STORAGE_DEGRADE = '200.006'
+    STORAGE_ALARM_COND = '800.001'
+    STORAGE_LOR = '800.011'
+    STORAGE_POOLQUOTA = '800.003'
+    HOST_LOCK = '200.001'
 
 class NetworkingVmMapping:
     VSWITCH = {

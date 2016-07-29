@@ -60,7 +60,7 @@ def get_image_id_from_name(name=None, strict=False, con_ssh=None, auth_info=None
 
 def create_image(name=None, image_id=None, source_image_file=None, source_image_url=None, copy_from=None,
                  disk_format=None, container_format=None, min_disk=None, min_ram=None, size=None, public=None,
-                 protected=None, cache_raw=False, store=None, wait=None, timeout=ImageTimeout.CREATE, con_ssh=None,
+                 protected=None, cache_raw=False, store=None, wait=False, timeout=ImageTimeout.CREATE, con_ssh=None,
                  auth_info=Tenant.ADMIN, fail_ok=False, **properties):
     """
     Create an image with given criteria.
@@ -136,11 +136,13 @@ def create_image(name=None, image_id=None, source_image_file=None, source_image_
         '--min-disk': min_disk,
         '--min-ram': min_ram,
         '--file': file_path,
-        '--wait': wait
     }
     optional_args_str = ''
     if cache_raw:
         optional_args_str += ' --cache-raw'
+    # Wait only applies to cache raw
+    if cache_raw and wait:
+        optional_args_str += ' --wait'
     if properties:
         for key, value in properties.items():
             optional_args_str = "{} --property {}={}".format(optional_args_str, key, value)

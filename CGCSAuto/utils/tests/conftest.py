@@ -22,7 +22,7 @@ def setup_primary_tenant():
     Tenant.set_primary('tenant2')
 
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='session', autouse=False)
 def setup_natbox_ssh():
     NATBoxClient.set_natbox_client(NatBoxes.NAT_BOX_HW['ip'])
 
