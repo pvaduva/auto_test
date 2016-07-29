@@ -235,7 +235,7 @@ class NatBoxes:
         'name': 'nat_hw',
         'ip': '128.224.150.11',
         'user': 'cgcs',
-        'password': 'Li69nux*'
+        'password': 'li69nux'
     }
 
     NAT_BOX_CUMULUS = {
