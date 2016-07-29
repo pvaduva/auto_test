@@ -107,7 +107,7 @@ def test_vm_with_health_check_failure(vm_):
         cmd = "ps -ef | grep 'kvm -c' | grep -v grep | awk '{print $2}'"
         exitcode, output = compute_ssh.exec_cmd(cmd, expect_timeout=90)
         time.sleep(10)
-        cmd = "echo 'li69nux' | sudo -S kill -9 %s" % output
+        cmd = "echo 'Li69nux*' | sudo -S kill -9 %s" % output
         exitcode, output = compute_ssh.exec_cmd(cmd, expect_timeout=90)
 
     time.sleep(10)

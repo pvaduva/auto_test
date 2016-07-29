@@ -68,7 +68,7 @@ class Tenant:
 
 class Host:
     USER = 'wrsroot'
-    PASSWORD = "li69nux"
+    PASSWORD = "Li69nux*"
 
     @classmethod
     def set_user(cls, username):

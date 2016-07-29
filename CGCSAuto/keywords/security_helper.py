@@ -2,7 +2,7 @@ from utils.ssh import ControllerClient
 
 
 class LinuxUser:
-    users = {'wrsroot': 'li69nux'}
+    users = {'wrsroot': 'Li69nux*'}
     con_ssh = None
 
     def __init__(self, user, password, con_ssh=None):

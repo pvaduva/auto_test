@@ -12,7 +12,7 @@ from consts.proj_vars import ProjVar
 from keywords import vm_helper, nova_helper, host_helper, glance_helper,system_helper
 
 WRSUSER='wrsroot'
-WRSPASS='li69nux'
+WRSPASS='Li69nux*'
 WRSDIR='/home/wrsroot'
 USER=os.environ['USER']
 WASSP_TESTCASE_BASE='/home/{}/wassp-repos/testcases/cgcs'.format(USER)

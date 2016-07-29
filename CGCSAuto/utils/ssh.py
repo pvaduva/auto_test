@@ -52,14 +52,14 @@ class SSHClient:
             reconnect()         reconnects to session
     """
 
-    def __init__(self, host, user='wrsroot', password='li69nux', force_password=True, initial_prompt=CONTROLLER_PROMPT,
+    def __init__(self, host, user='wrsroot', password='Li69nux*', force_password=True, initial_prompt=CONTROLLER_PROMPT,
                  timeout=20, session=None):
         """
         Initiate an object for connecting to remote host
         Args:
             host: hostname or ip. such as "yow-cgcs-ironpass-1.wrs.com" or "128.224.151.212"
             user: linux username for login to host. such as "wrsroot"
-            password: password for given user. such as "li69nux"
+            password: password for given user. such as "Li69nux*"
 
         Returns:
 
@@ -773,7 +773,7 @@ class VMSSHClient(SSHFromSSH):
 
 
 class FloatingClient(SSHClient):
-    def __init__(self, floating_ip, user='wrsroot', password='li69nux', initial_prompt=CONTROLLER_PROMPT):
+    def __init__(self, floating_ip, user='wrsroot', password='Li69nux*', initial_prompt=CONTROLLER_PROMPT):
 
         # get a list of floating ips for all known labs
         __lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith(r'__')]

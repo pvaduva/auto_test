@@ -7,7 +7,7 @@ from utils.ssh import ControllerClient
 
 
 def scp_to_active_controller(source_path, dest_path='',
-                   dest_user='wrsroot', dest_password='li69nux',
+                   dest_user='wrsroot', dest_password='Li69nux*',
                    timeout=60, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
@@ -18,7 +18,7 @@ def scp_to_active_controller(source_path, dest_path='',
 
 
 def scp_from_active_controller(source_path, dest_path='',
-                               src_user='wrsroot', src_password='li69nux',
+                               src_user='wrsroot', src_password='Li69nux*',
                                timeout=60, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
@@ -29,7 +29,7 @@ def scp_from_active_controller(source_path, dest_path='',
 
 
 def scp_from_local(source_path, dest_ip, dest_path='/home/wrsroot',
-                   dest_user='wrsroot', dest_password='li69nux',
+                   dest_user='wrsroot', dest_password='Li69nux*',
                    timeout=60, is_dir=False):
     """
     Scp file(s) from localhost (i.e., from where the automated tests are executed).
@@ -53,7 +53,7 @@ def scp_from_local(source_path, dest_ip, dest_path='/home/wrsroot',
 
 
 def scp_to_local(source_path, source_ip, dest_path='/home/wrsroot',
-                 source_user='wrsroot', source_password='li69nux',
+                 source_user='wrsroot', source_password='Li69nux*',
                  timeout=60, is_dir=False):
     """
     Scp file(s) to localhost (i.e., to where the automated tests are executed).

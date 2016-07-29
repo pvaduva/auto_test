@@ -94,7 +94,7 @@ def test_vm_with_heartbeat_failure(vm_):
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         cmd = "ps -ef | grep 'heartbeat' | grep -v grep | awk '{print $2}'"
         exitcode, output = vm_ssh.exec_cmd(cmd)
-        cmd = "echo 'li69nux' | sudo -S kill -9 %s" % output
+        cmd = "echo 'Li69nux*' | sudo -S kill -9 %s" % output
         exitcode, output = vm_ssh.exec_cmd(cmd, expect_timeout=90)
 
     LOG.tc_step("Verify an active alarm for the reboot is present")
@@ -109,7 +109,7 @@ def test_vm_with_heartbeat_failure(vm_):
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         cmd = "ps -ef | grep 'heartbeat' | grep -v grep | awk '{print $2}'"
         exitcode, output = vm_ssh.exec_cmd(cmd)
-        cmd = "echo 'li69nux' | sudo -S kill -9 %s" % output
+        cmd = "echo 'Li69nux*' | sudo -S kill -9 %s" % output
         exitcode, output = vm_ssh.exec_cmd(cmd, expect_timeout=90)
     time.sleep(10)
 

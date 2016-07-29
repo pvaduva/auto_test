@@ -23,7 +23,7 @@ class LaunchInstances():
         self.cmdAttrs = {}
         self.host_ip = '128.224.150.141'
         self.host_user_name = 'wrsroot'
-        self.host_password = 'li69nux'
+        self.host_password = 'Li69nux*'
 
 
     def get_column_value_from_multiple_columns(self, table, match_header_key,
@@ -122,7 +122,7 @@ class LaunchInstances():
         ssh = paramiko.SSHClient()
         ssh.load_system_host_keys()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect("%s" % self.host_ip, username="wrsroot", password="li69nux")
+        ssh.connect("%s" % self.host_ip, username="wrsroot", password="Li69nux*")
         ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("source /etc/nova/openrc; %s %s" % (action, param))
         return ssh_stdout.readlines()
         for row in ssh_stdout.readlines():
@@ -142,7 +142,7 @@ class LaunchInstances():
         ssh = paramiko.SSHClient()
         ssh.load_system_host_keys()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect("%s" % self.host_ip, username="wrsroot", password="li69nux")
+        ssh.connect("%s" % self.host_ip, username="wrsroot", password="Li69nux*")
         ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("%s %s" % (action, param))
         while True:
             line = ssh_stdout.readline()
