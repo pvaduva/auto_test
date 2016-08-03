@@ -22,24 +22,26 @@ ubuntu_passwd = 'ubuntu'
 def check_computes_availability(request):
     """"""
 
-    action = 'lock'
-    hosts_table = table_parser.table(cli.system('host-list', ssh_client=None))
-    compute_list = get_active_computes(hosts_table)
+    # action = 'lock'
+    # hosts_table = table_parser.table(cli.system('host-list', ssh_client=None))
+    # compute_list = get_active_computes(hosts_table)
 
     # Restore the host states
     def unlock_computes():
 
-        action = 'unlock'
-        status = 'available'
-        hosts_table = table_parser.table(cli.system('host-list', ssh_client=None))
-        for line in hosts_table['values']:
-            if line[2] == 'compute' and line[3] != 'unlocked':
-                comp_name = line[1]
-                cli.system('host-{} {}'.format(action, comp_name), ssh_client=None)
-                host_helper._wait_for_host_states(comp_name, timeout=600,
-                                                  availability=status,
-                                                  check_interval=10,
-                                                  con_ssh=None)
+        # action = 'unlock'
+        # status = 'available'
+        # hosts_table = table_parser.table(cli.system('host-list', ssh_client=None))
+        hosts = host_helper.get_hypervisors(state='down')
+        host_helper.unlock_hosts(hosts)
+        # for line in hosts_table['values']:
+        #     if line[2] == 'compute' and line[3] != 'unlocked':
+        #         comp_name = line[1]
+        #         cli.system('host-{} {}'.format(action, comp_name), ssh_client=None)
+        #         host_helper._wait_for_host_states(comp_name, timeout=600,
+        #                                           availability=status,
+        #                                           check_interval=10,
+        #                                           con_ssh=None)
 
     request.addfinalizer(unlock_computes)
 
@@ -133,22 +135,27 @@ def wait_until_instance_state_is_changed(instance_name, status,
 
 def _lock_unlock_computes_except_one(host_name, action='lock'):
     """"""
-    hosts_table = table_parser.table(cli.system('host-list', ssh_client=None))
-    compute_list = get_active_computes(hosts_table)
+    # hosts_table = table_parser.table(cli.system('host-list', ssh_client=None))
+    # compute_list = get_active_computes(hosts_table)
+    compute_list = host_helper.get_hypervisors()
     print(compute_list)
 
-    for comp_name in compute_list:
-        if comp_name != host_name:
-            cli.system('host-{} {}'.format(action, comp_name), ssh_client=None)
+    if action == 'unlock':
+        host_helper.unlock_hosts(compute_list)
+    elif action == 'lock':
+        for comp_name in compute_list:
+            if comp_name != host_name:
+                host_helper.lock_host(comp_name)
+            # cli.system('host-{} {}'.format(action, comp_name), ssh_client=None)
 
-    status = '%sed' % (action,)
-
-    for comp_name in compute_list:
-        if comp_name != host_name:
-            host_helper._wait_for_host_states(comp_name, timeout=600,
-                                              administrative=status,
-                                              check_interval=10,
-                                              con_ssh=None)
+    # status = '%sed' % (action,)
+    #
+    # for comp_name in compute_list:
+    #     if comp_name != host_name:
+    #         host_helper._wait_for_host_states(comp_name, timeout=600,
+    #                                           administrative=status,
+    #                                           check_interval=10,
+    #                                           con_ssh=None)
 
 def launch_instance_on_compute(network_name=None,
                                flavor=None,
@@ -184,6 +191,7 @@ def launch_instance_on_compute(network_name=None,
     for name in instance_names:
 
         vm_id = vm_helper.boot_vm(name=instance_names[name])[1]
+        ResourceCleanup.add('vm', vm_id)
         vm_ids.append(vm_id)
         wait_until_instance_state_is_changed(vm_id,'ACTIVE', timeout=120)
 
@@ -205,9 +213,9 @@ def launch_instance_on_compute(network_name=None,
     LOG.tc_step('Unlocking all computes')
     _lock_unlock_computes_except_one(host_name, action='unlock')
 
-    LOG.tc_step('Deleting all instances')
-    for vm_id in vm_ids:
-        vm_helper.delete_vms(vm_id, delete_volumes=True)
+    # LOG.tc_step('Deleting all instances')
+    # for vm_id in vm_ids:
+    #     vm_helper.delete_vms(vm_id, delete_volumes=True)
 
 def check_process_exists(cmd_output=None, process_name=None,
                          existence='+'):

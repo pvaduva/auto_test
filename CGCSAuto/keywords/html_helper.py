@@ -53,7 +53,8 @@ def get_user_token(con_ssh=None):
 
     """
     table_ = table_parser.table(cli.openstack('token issue', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    return table_parser.get_values(table_, 'Value', Field='id')
+    token = table_parser.get_value_two_col_table(table_, 'id')
+    return token
 
 
 def get_request(url, headers):
@@ -66,6 +67,7 @@ def get_request(url, headers):
     Returns (dict): The response for the request
 
     """
+    LOG.info("Sending GET request to {}. Headers: {}".format(url, headers))
     resp = requests.get(url, headers=headers)
 
     if resp.status_code == requests.codes.ok:
@@ -90,6 +92,7 @@ def post_request(url, data, headers):
         """
     if not isinstance(data, str):
         data = json.dumps(data)
+    LOG.info("Sending POST request to {}. Headers: {}. Data: {}".format(url, headers, data))
     resp = requests.post(url, headers=headers, data=data)
 
     if resp.status_code == requests.codes.ok:
@@ -114,6 +117,7 @@ def put_request(url, data, headers):
         """
     if not isinstance(data, str):
         data = json.dumps(data)
+    LOG.info("Sending PUT request to {}. Headers: {}. Data: {}".format(url, headers, data))
     resp = requests.put(url, headers=headers, data=data)
 
     if resp.status_code == requests.codes.ok:
@@ -135,6 +139,7 @@ def delete_request(url, headers):
         Returns (dict): The response for the request
 
         """
+    LOG.info("Sending POST request to {}. Headers: {}".format(url, headers))
     resp = requests.delete(url, headers=headers)
 
     if resp.status_code == requests.codes.ok:
@@ -148,7 +153,7 @@ def delete_request(url, headers):
 
 def patch_request(url, data, headers):
     """
-        Sends a GET request to the url
+        Sends a PATCH request to the url
         Args:
             url (str): url to send request to
             data (dict): data to be sent in the request body
@@ -159,6 +164,7 @@ def patch_request(url, data, headers):
         """
     if not isinstance(data, str):
         data = json.dumps(data)
+    LOG.info("Sending PATCH request to {}. Headers: {}. Data: {}".format(url, headers, data))
     resp = requests.patch(url, headers=headers, data=data)
 
     if resp.status_code == requests.codes.ok:

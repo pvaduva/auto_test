@@ -54,10 +54,11 @@ def vms_(request, flavor_):
     vm_id = vm_helper.boot_vm(name=inst_names[3])[1]
     time.sleep(30)
     vm_ids.append(vm_id)
+    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
 
     # Teardown to remove the vm and flavor
     def remove_vms():
-        LOG.tc_step("Cleaning up vms..")
+        LOG.fixture_step("Cleaning up vms..")
         for idx in range(len(vm_ids)):
             vm_helper.delete_vms(vm_ids[idx], delete_volumes=True)
 

@@ -38,6 +38,7 @@ def heartbeat_flavor_vm(request):
     events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
+    ResourceCleanup.add('vm', vm_id, scope='module')
     if heartbeat == 'True':
         assert events, "VM heartbeat is not enabled."
         assert EventLogID.HEARTBEAT_ENABLED == events[0], "VM heartbeat failed to establish."
@@ -92,7 +93,7 @@ def test_vm_pause_resume_five_time(heartbeat_flavor_vm):
     # find the compute node where the vm is located
     for i in range(0,5):
         vm_helper.pause_vm(vm_id)
-        vm_helper.resume_vm(vm_id)
+        vm_helper.unpause_vm(vm_id)
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 

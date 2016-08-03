@@ -347,9 +347,14 @@ def test_format_of_clear_alarm_list():
 
     # Verify the alarm header is present
     alarm_header = ['UUID', 'Time Stamp', 'Alarm ID', 'Reason Text', 'Entity ID', 'Severity']
-    if (alarm_list['headers'] != alarm_header):
-        LOG.info("Fields in table not correct actual {0} expected {1}"
-              .format(alarm_list['headers'], alarm_header))
-        test_result = False
+    # if (alarm_list['headers'] != alarm_header):
+    #     LOG.info("Fields in table not correct actual {0} expected {1}"
+    #           .format(alarm_list['headers'], alarm_header))
+    #     test_result = False
+    for alarm in alarm_header:
+        if alarm not in alarm_list['headers']:
+            LOG.info("Fields in table not correct actual {0} expected {1}"
+            .format(alarm_list['headers'], alarm_header))
+            test_result = False
 
     assert test_result

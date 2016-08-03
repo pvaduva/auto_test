@@ -47,7 +47,7 @@ def heartbeat_flavor_vm(request):
           'heartbeat': heartbeat
           }
 
-    #ResourceCleanup.add('vm', vm_id, scope='module')
+    ResourceCleanup.add('vm', vm_id, scope='module')
 
     return vm
 

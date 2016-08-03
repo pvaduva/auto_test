@@ -52,7 +52,7 @@ def heartbeat_flavor_vm(request):
           }
 
 
-    #ResourceCleanup.add('vm', vm_id, scope='module')
+    ResourceCleanup.add('vm', vm_id, scope='module')
 
 
     return vm
