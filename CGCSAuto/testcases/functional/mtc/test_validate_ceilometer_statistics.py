@@ -5,12 +5,13 @@
 # of an applicable Wind River license agreement.
 
 import re
+from datetime import datetime
 from pytest import fixture, mark, skip, raises, fail
 from utils.tis_log import LOG
 from utils import cli
 from utils.ssh import ControllerClient
 from utils import table_parser
-from keywords import nova_helper, host_helper
+from keywords import nova_helper, host_helper, check_helper
 from consts.auth import Tenant
 from ast import literal_eval
 
@@ -184,7 +185,6 @@ def test_tc402_validate_statistics_for_one_meter():
         assert isinstance(val, int) or isinstance(val, float)
 
 
-
 @mark.sanity
 def test_401_validate_ceilometer_meters_exist():
     """
@@ -193,6 +193,10 @@ def test_401_validate_ceilometer_meters_exist():
     1. Get ceilometer meter-list
     2. Check meters for router, subnet, image, and vswitch exists
     """
+    time_create = host_helper.get_hostshow_value('controller-1', 'created at')
+    curr_time = datetime.utcnow().timestamp() + 86400
+    if check_helper.compare_times(curr_time, time_create) == 1:
+        skip("Over a day since install. Meters shouldn't exist anymore.")
 
     LOG.tc_step('Get ceilometer meter-list')
     cmd = "ceilometer meter-list"

@@ -7,6 +7,7 @@
 
 import time
 
+from datetime import datetime
 from utils.tis_log import LOG
 from keywords import host_helper, system_helper, vm_helper, nova_helper, common
 
@@ -284,3 +285,40 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total):
 def check_vm_vcpus_via_nova_show(vm_id, min_cpu, current_cpu, max_cpu, con_ssh=None):
     actual_vcpus = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))
     assert [min_cpu, current_cpu, max_cpu] == actual_vcpus, "vcpus in nova show {} is not as expected".format(vm_id)
+
+
+
+def compare_times(time_1, time_2):
+    """
+    Compares 2 times found from datetime.now(), timestamps found from system host-show, time.time(), etc.
+    Args:
+        time_1 (datetime, str, float):
+        time_2 (datetime, str, float):
+
+    Returns (int):
+        -1, time_1 is less than time_2
+        0, time_1 is equal to time_2
+        1, time_1 is greater than time_2
+
+    """
+
+    # get year, month, day, hour, minute, second
+    if isinstance(time_1, str):
+        time_1 = datetime.strptime(time_1.replace('T', ' ').split('.')[0], "%Y-%m-%d %H:%M:%S")
+    if isinstance(time_2, str):
+        time_2 = datetime.strptime(time_2.replace('T', ' ').split('.')[0], "%Y-%m-%d %H:%M:%S")
+
+    if isinstance(time_1, float):
+        time_1 = datetime.fromtimestamp(time_1)
+    if isinstance(time_2, float):
+        time_2 = datetime.fromtimestamp(time_2)
+
+    if time_1 < time_2:
+        LOG.info("{} is before {}".format(time_1, time_2))
+        return -1
+    elif time_1 > time_2:
+        LOG.info("{} is after {}".format(time_1, time_2))
+        return 1
+    elif time_1 == time_2:
+        LOG.info("{} is the same as {}".format(time_1, time_2))
+        return 0

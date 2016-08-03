@@ -68,6 +68,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     Returns (tuple): (rtn_code, message)
         (0, "Host(s) state(s) - <states_dict>.") hosts rebooted and back to available/degraded or online state.
         (1, "Host(s) not in expected availability states or task unfinished. (<states>) (<task>)" )
+        (2, "Hypervisor is not enabled. Hosts <list of hosts>)"
     """
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
@@ -150,6 +151,16 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         if not vals['task'] == '':
             task_unfinished_msg = ' '.join([task_unfinished_msg, "{} still in task: {}.".format(host, vals['task'])])
         states_vals[host] = vals
+
+    if system_helper.is_small_footprint():
+        if not wait_for_hypervisors_up(hostnames, fail_ok=fail_ok, con_ssh=con_ssh,
+                                       timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL)[0]:
+            err_msg = "Hypervisor is not enabled. Hosts {}".format(hostnames)
+            if fail_ok:
+                LOG.warning(err_msg)
+                return 2, err_msg
+            else:
+                raise exceptions.HostPostCheckFailed(err_msg)
 
     message = "Host(s) state(s) - {}.".format(states_vals)
 

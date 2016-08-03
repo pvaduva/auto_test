@@ -351,6 +351,8 @@ def test_format_of_clear_alarm_list():
     #     LOG.info("Fields in table not correct actual {0} expected {1}"
     #           .format(alarm_list['headers'], alarm_header))
     #     test_result = False
+    assert len(alarm_list['headers']) == len(alarm_header), "alarm_list has {} fields, alarm_header has {} fields"\
+                                                 .format(len(alarm_list['headers']), len(alarm_header))
     for alarm in alarm_header:
         if alarm not in alarm_list['headers']:
             LOG.info("Fields in table not correct actual {0} expected {1}"
