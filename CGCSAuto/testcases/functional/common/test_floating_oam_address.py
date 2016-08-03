@@ -133,6 +133,7 @@ def test_417_floating_oam_address():
     host_helper._wait_for_host_states('controller-0', timeout=900, fail_ok=False, task='')
     host_helper._wait_for_host_states('controller-1', timeout=900, fail_ok=False, task='')
 
+    time.sleep(30)
     #ssh to new primary controller
     con_ssh = ControllerClient.get_active_controller()
     config_path = '/opt/platform/config/16.00'
