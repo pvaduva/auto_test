@@ -100,7 +100,7 @@ class TestLockUnlock:
     
     @mark.cpe_sanity
     @mark.skipif(not system_helper.is_small_footprint(), reason="Only applies to small footprint lab.")
-    @mark.usefixtures('vms_', 'unlock_if_locked', 'check_hosts_availability')
+    @mark.usefixtures( 'unlock_if_locked', 'check_hosts_availability')
     @mark.parametrize('host', [
         'active',
         'standby'

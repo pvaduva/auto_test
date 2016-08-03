@@ -183,7 +183,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     table_ = table_parser.table(cmd_output)
     volume_id = table_parser.get_value_two_col_table(table_, 'id')
 
-    if not _wait_for_volume_status(vol_id=volume_id, status='available', fail_ok=fail_ok):
+    if not _wait_for_volume_status(vol_id=volume_id, status='available',auth_info=auth_info, fail_ok=fail_ok):
         LOG.warning("Volume is created, but not in available state.")
         return 2, volume_id
 
