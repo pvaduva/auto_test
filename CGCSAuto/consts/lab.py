@@ -5,7 +5,7 @@ class Labs:
         'floating ip': '128.224.150.189',
         'controller-0 ip': '128.224.150.199',
         'controller-1 ip': '128.224.150.129',
-        'auth_url': 'http://192.168.204.102:5000/v2.0/',
+        'auth_url': 'http://192.168.204.102:5000/v3/',
     }
 
     IP_1_4 = {
@@ -14,7 +14,7 @@ class Labs:
         'floating ip': '128.224.151.212',
         'controller-0 ip': '128.224.151.192',
         'controller-1 ip': '128.224.151.193',
-        'auth_url': 'http://192.168.204.2:5000/v2.0/',
+        'auth_url': 'http://192.168.204.2:5000/v3/',
     }
 
     IP_5_6 = {
@@ -23,7 +23,7 @@ class Labs:
         'floating ip': '128.224.151.216',
         'controller-0 ip': '128.224.151.196',
         'controller-1 ip': '128.224.151.197',
-        'auth_url': 'http://192.168.204.2:5000/v2.0/',
+        'auth_url': 'http://192.168.204.2:5000/v3/',
     }
 
     IP_7_12 = {
@@ -90,7 +90,7 @@ class Labs:
         'floating ip': '128.224.150.73',
         'controller-0 ip': '128.224.150.26',
         'controller-1 ip': '128.224.150.28',
-        'auth_url': 'http://192.168.204.2:5000/v2.0/',
+        'auth_url': 'http://192.168.204.2:5000/3',
     }
 
     PV1 = {
@@ -244,4 +244,3 @@ class NatBoxes:
         'user': '',
         'password': ''
     }
-

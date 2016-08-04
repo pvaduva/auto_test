@@ -1,6 +1,6 @@
 class Tenant:
     __REGION = 'RegionOne'
-    __URL = 'http://192.168.204.2:5000/v2.0/'
+    __URL = 'http://192.168.204.2:5000/v3/'
 
     ADMIN = {
         'user': 'admin',
@@ -68,7 +68,7 @@ class Tenant:
 
 class Host:
     USER = 'wrsroot'
-    PASSWORD = "Li69nux*"
+    PASSWORD = "li69nux"
 
     @classmethod
     def set_user(cls, username):
