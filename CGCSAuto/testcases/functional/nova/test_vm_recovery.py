@@ -297,7 +297,7 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
 @mark.features(Features.AUTO_RECOV, Features.HEARTBEAT)
 @mark.parametrize('heartbeat', [
     mark.p1(True),
-    mark.p1(False)
+    mark.sanity(False)
 ])
 def test_vm_autorecovery_kill_host_kvm(heartbeat):
     """
