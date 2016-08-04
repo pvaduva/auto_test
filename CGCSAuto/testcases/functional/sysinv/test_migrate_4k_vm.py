@@ -101,7 +101,7 @@ def is_enough_4k_page_memory():
         host_helper.unlock_host(a_random_host)
 
 
-def test_get_4kpage_hosts():
+def get_4kpage_hosts():
     # return number of hosts that contain at least one processor with at least 512Mib of 4k pages
     host_4k = 0
     for host in host_helper.get_hypervisors():
@@ -120,7 +120,7 @@ def test_get_4kpage_hosts():
 
 @mark.sanity
 @mark.skipif(len(host_helper.get_hypervisors()) < 2, reason="Less than 2 hypervisor hosts on the system")
-@mark.skipif(test_get_4kpage_hosts() < 2, reason="Less than 2 hosts contain enough 4k memory page for live migrate")
+@mark.skipif(get_4kpage_hosts() < 2, reason="Less than {} hosts contain enough 4k memory page for live migrate".format(get_4kpage_hosts()))
 @mark.parametrize(
         "block_migrate", [
             False,

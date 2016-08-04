@@ -2,8 +2,9 @@ from pytest import fixture, mark
 
 from utils.tis_log import LOG
 from consts.auth import Tenant
-from keywords import vm_helper,glance_helper
+from keywords import vm_helper,glance_helper, storage_helper
 from testfixtures.resource_mgmt import ResourceCleanup
+from consts.cgcs import EventLogID, IMAGE_DIR
 
 @fixture(scope='module')
 def tenants_vms(request):
@@ -64,11 +65,11 @@ def test_ping_vms_from_vm(tenants_vms):
         assert val[0]
 
 
-@mark.parametrize(('image_type'), [
+@mark.parametrize('image_name', [
     mark.sanity('cgcs-guest'),
-    mark.sanity('ubuntu')
+    mark.P1('ubuntu-precise-amd64')
 ])
-def test_ping_between_two_image_vm(image_type):
+def test_ping_between_two_image_vm(image_name):
     """
     Test ping between two cgcs-guest vms
     Args:
@@ -81,8 +82,22 @@ def test_ping_between_two_image_vm(image_type):
     Test Teardown:
         - Delete newly created VMs
     """
-    LOG.tc_step("Boot vms with two {} image".format(image_type))
-    sourceid = glance_helper.get_image_id_from_name(image_type)
+    if image_name == 'ubuntu-precise-amd64':
+        LOG.tc_step('Downloading ubuntuimage(s)... this will take some time')
+        image_names = storage_helper.download_images(dload_type='ubuntu', img_dest=IMAGE_DIR)
+
+        LOG.tc_step('Import ubuntu images into glance')
+        for image in image_names:
+            source_image_loc = IMAGE_DIR + "/" + image
+            img_name = 'ubuntu-precise-amd64'
+            ret = glance_helper.create_image(name=image_name, public=True,
+                                             source_image_file=source_image_loc,
+                                             disk_format='qcow2',
+                                             container_format='bare',
+                                             cache_raw=True, wait=True)
+
+    LOG.tc_step("Boot vms with two {} image".format(image_name))
+    sourceid = glance_helper.get_image_id_from_name(image_name)
     vm1 = vm_helper.boot_vm(source='image', source_id=sourceid)[1]
     vm2 = vm_helper.boot_vm(source='image', source_id=sourceid)[1]
 
