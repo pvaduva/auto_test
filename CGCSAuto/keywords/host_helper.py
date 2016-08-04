@@ -684,6 +684,8 @@ def _wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=30, 
                                                  format(con_ssh.host))
     LOG.info("ssh to {} disconnected, indicating swacting initiated.".format(con_ssh.host))
 
+    # permission denied is received when ssh right after swact initiated. Add delay to avoid sanity failure
+    time.sleep(30)
     con_ssh.connect(retry=True, retry_timeout=floating_ssh_timeout)
 
     # Give it sometime before openstack cmds enables on after host
