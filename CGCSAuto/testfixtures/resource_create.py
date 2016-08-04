@@ -1,7 +1,7 @@
 from pytest import fixture
 
 from utils.tis_log import LOG
-from keywords import nova_helper
+from keywords import nova_helper, glance_helper
 
 
 @fixture(scope='session')
@@ -21,3 +21,29 @@ def server_groups():
         return srv_grps_tenant
 
     return create_server_groups
+
+
+@fixture(scope='session')
+def ubuntu_image():
+    return _create_image('ubuntu')
+
+
+@fixture(scope='session')
+def centos7_image():
+    return _create_image('centos7')
+
+
+@fixture(scope='session')
+def centos7_image():
+    return _create_image('centos6')
+
+
+def _create_image(img_os):
+    image_path = glance_helper._scp_guest_image(img_os='ubuntu')
+
+    img_id = glance_helper.get_image_id_from_name(img_os)
+    if not img_id:
+        img_id = glance_helper.create_image(name=img_os, source_image_file=image_path, disk_format='qcow2',
+                                            container_format='bare')[1]
+
+    return img_id

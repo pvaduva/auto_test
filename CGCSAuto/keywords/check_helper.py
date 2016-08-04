@@ -5,6 +5,8 @@
 # Should be called by test function directly
 ###############################################################
 
+import time
+
 from utils.tis_log import LOG
 from keywords import host_helper, system_helper, vm_helper, nova_helper, common
 
@@ -75,8 +77,16 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
             expt_increase = vcpus / 16
 
     LOG.tc_step("Check total vcpus for vm host is increased by {} via nova host-describe".format(expt_increase))
-    post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')
-    assert round(prev_total_cpus + expt_increase, 4) == post_hosts_cpus[vm_host]
+    expt_used_cpus = round(prev_total_cpus + expt_increase, 4)
+    end_time = time.time() + 60
+    while time.time() < end_time:
+        post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')
+        if expt_used_cpus == post_hosts_cpus[vm_host]:
+            break
+
+    else:
+        post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')
+        assert expt_used_cpus == post_hosts_cpus[vm_host], "Expected host vcpus used is not same as actual value"
 
     LOG.tc_step('Check vm topology, vcpus, pcpus, siblings, cpu policy, cpu threads policy, via vm-topology and nova '
                 'show')
@@ -100,10 +110,10 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
 
     Args:
         vm_id:
-        vcpus:
-        cpu_pol:
-        cpu_thr_pol:
-        numa_num:
+        vcpus (int):
+        cpu_pol (str|None):
+        cpu_thr_pol (str|None):
+        numa_num (int|None):
 
     Returns (tuple): ([pcpus for vm], [siblings for vm])
         e.g., ([7,8,9,10,18,19], [[0,1,2], [3,4,5]])
@@ -121,12 +131,13 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
 
     log_cores_siblings = host_helper.get_logcore_siblings(host=vm_host, con_ssh=con_ssh)
 
-    expt_cpu_pol = 'ded' if 'ded' in cpu_pol else 'sha'
+    expt_cpu_pol = 'sha' if cpu_pol is None or 'sha' in cpu_pol else 'ded'
     instance_topology = vm_helper.get_instance_topology(vm_id, con_ssh=con_ssh)
     instance_topology_nova_show = vm_helper.get_instance_topology(vm_id, con_ssh=con_ssh, source='nova show')
 
-    for key in instance_topology:
-        assert instance_topology[key] == instance_topology_nova_show[key]
+    for i in range(len(instance_topology)):
+        for key in instance_topology[i]:
+            assert instance_topology[i][key] == instance_topology_nova_show[i][key]
 
     pcpus_total = []
     siblings_total = []
@@ -152,46 +163,49 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
             assert actual_pcpus is None, "pcpu should not be included in vm-topology for floating vm"
             assert actual_thread_policy is None, "cpu thread pol should not be included in vm-topology for floating vm"
 
-        elif cpu_thr_pol:
-            # Assumption: hyper-threading must be enabled if vm launched successfully. And thread number is 2.
-            assert actual_thread_policy in cpu_thr_pol, 'cpu thread policy in vm topology is {} while flavor ' \
-                                                        'spec is {}'.format(actual_thread_policy, cpu_thr_pol)
-
-            if cpu_thr_pol == 'isolate':
-                # isolate-5: node:0, 512MB, pgsize:2M, 1s,5c,1t, vcpus:0-4, pcpus:9,24,27,3,26, pol:ded, thr:iso
-                assert not actual_siblings, "siblings should not be included with only 1 vcpu"
-                assert '{}c,1t'.format(vcpus_per_numa) in actual_topology
-            elif cpu_thr_pol == 'require':
-                # require-4: node:0, 512MB, pgsize:2M, 1s,2c,2t, vcpus:0-3, pcpus:25,5,8,28, siblings:{0,1},{2,3}, pol:ded, thr:req
-                assert actual_siblings, "siblings should be included for dedicated vm"
-                assert '{}c,2t'.format(int(vcpus_per_numa / 2)) in actual_topology  # 2 is the host thread number
-
-                siblings_total += actual_siblings
-            else:
-                raise NotImplemented("New cpu threads policy added? Update automation code.")
-
-            expt_core_len_in_pair = 1 if cpu_thr_pol == 'isolate' else 2
-            for pair in log_cores_siblings:
-                assert len(set(pair) & set(actual_pcpus)) in [0, expt_core_len_in_pair]
-
-            pcpus_total += actual_pcpus
-
         else:
-            # node:1,   512MB, pgsize:2M, 1s,1c,3t, vcpus:0-2, pcpus:35,15,10, siblings:{0-2}, pol:ded, thr:no
-            assert topology_on_numa_node['thr'] == 'no', "cpu thread policy is in vm topology"
-            assert '1c,{}t'.format(vcpus_per_numa) in actual_topology, 'vm topology is not as expected'
-            assert vcpus_per_numa == len(actual_pcpus), "vm pcpus number per numa node is not as expected"
-            assert len(actual_siblings[0])
+            assert actual_pcpus, "pcpus is not included in vm-topology for dedicated vm"
+            # TODO assert actual_topology, "vm topology is not included in vm-topology for dedicated vm"
 
-            if 1 == vcpus_per_numa:
-                assert not actual_siblings, "siblings should not be included with only 1 vcpu"
+            if cpu_thr_pol:
+                # Assumption: hyper-threading must be enabled if vm launched successfully. And thread number is 2.
+                assert actual_thread_policy in cpu_thr_pol, 'cpu thread policy in vm topology is {} while flavor ' \
+                                                            'spec is {}'.format(actual_thread_policy, cpu_thr_pol)
+
+                if cpu_thr_pol == 'isolate':
+                    # isolate-5: node:0, 512MB, pgsize:2M, 1s,5c,1t, vcpus:0-4, pcpus:9,24,27,3,26, pol:ded, thr:iso
+                    assert not actual_siblings, "siblings should not be included with only 1 vcpu"
+                    # TODO assert '{}c,1t'.format(vcpus_per_numa) in actual_topology
+                elif cpu_thr_pol == 'require':
+                    # require-4: node:0, 512MB, pgsize:2M, 1s,2c,2t, vcpus:0-3, pcpus:25,5,8,28, siblings:{0,1},{2,3}, pol:ded, thr:req
+                    assert actual_siblings, "siblings should be included for dedicated vm"
+                    # TODO assert '{}c,2t'.format(int(vcpus_per_numa / 2)) in actual_topology  # 2 is the host thread number
+
+                    siblings_total += actual_siblings
+                else:
+                    raise NotImplemented("New cpu threads policy added? Update automation code.")
+
+                expt_core_len_in_pair = 1 if cpu_thr_pol == 'isolate' else 2
+                for pair in log_cores_siblings:
+                    assert len(set(pair) & set(actual_pcpus)) in [0, expt_core_len_in_pair]
+
+                pcpus_total += actual_pcpus
+
             else:
-                assert actual_siblings, 'sibling should be included with dedicated policy and {} vcpus per numa node'.\
-                    format(vcpus_per_numa)
+                # node:1,   512MB, pgsize:2M, 1s,1c,3t, vcpus:0-2, pcpus:35,15,10, siblings:{0-2}, pol:ded, thr:no
+                assert topology_on_numa_node['thr'] == 'no', "cpu thread policy is in vm topology"
+                # TODO assert '1c,{}t'.format(vcpus_per_numa) in actual_topology, 'vm topology is not as expected'
+                assert vcpus_per_numa == len(actual_pcpus), "vm pcpus number per numa node is not as expected"
 
-                siblings_total += actual_siblings
+                if 1 == vcpus_per_numa:
+                    assert not actual_siblings, "siblings should not be included with only 1 vcpu"
+                else:
+                    assert actual_siblings, 'sibling should be included with dedicated policy and {} vcpus per ' \
+                                            'numa node'.format(vcpus_per_numa)
 
-            pcpus_total += actual_pcpus
+                    siblings_total += actual_siblings
+
+                pcpus_total += actual_pcpus
 
     return pcpus_total, siblings_total
 

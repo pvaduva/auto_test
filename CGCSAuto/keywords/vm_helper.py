@@ -393,7 +393,7 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
     return vm_ids
 
 
-def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=False, fail_ok=False,
+def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None, fail_ok=False,
                     auth_info=Tenant.ADMIN):
     """
 
@@ -505,19 +505,20 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=Fals
     return 0, "Live migration is successful."
 
 
-def _is_live_migration_allowed(vm_id, con_ssh=None, block_migrate=False):
+def _is_live_migration_allowed(vm_id, con_ssh=None, block_migrate=None):
     vm_info = VMInfo.get_vm_info(vm_id, con_ssh=con_ssh)
     storage_backing = vm_info.get_storage_type()
+    vm_boot_from = vm_info.boot_info['type']
+    has_volume_attached = vm_info.has_volume_attached()
 
-    if block_migrate:
-        vm_boot_from = vm_info.boot_info['type']
-        has_volume_attached = vm_info.has_volume_attached()
-        if vm_boot_from == 'image' and storage_backing == 'local_image' and not has_volume_attached:
-            return True
-        else:
-            LOG.warning("Live migration with block is not allowed for vm {}".format(vm_id))
-            return False
+    if vm_boot_from == 'image' and storage_backing == 'local_image' and not has_volume_attached:
+        return True
 
+    elif block_migrate:
+        LOG.warning("Live migration with block is not allowed for vm {}".format(vm_id))
+        return False
+
+    # auto choose block-mig with local disk
     elif vm_info.has_local_disks():
         if storage_backing == 'remote':
             return True
@@ -525,6 +526,7 @@ def _is_live_migration_allowed(vm_id, con_ssh=None, block_migrate=False):
             LOG.warning("Live migration without block is not allowed for vm {}".format(vm_id))
             return False
 
+    # auto choose block-mig without local disk
     else:
         return True
 
@@ -1382,7 +1384,17 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
     vms_deleted = []
     end_time = time.time() + timeout
     while time.time() < end_time:
-        table_ = table_parser.table(cli.nova('list --all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+        try:
+            output = cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info)
+        except exceptions.CLIRejected as e:
+            if 'The resource could not be found' in e.__str__():
+                LOG.error("'nova list' failed post vm deletion. Workaround is being applied.")
+                time.sleep(3)
+                output = cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info)
+            else:
+                raise
+
+        table_ = table_parser.table(output)
         existing_vms = table_parser.get_column(table_, header)
         for vm in vms_to_check:
             if vm not in existing_vms:
@@ -1429,9 +1441,9 @@ def _wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=V
     res_fail = {}
     end_time = time.time() + timeout
     while time.time() < end_time:
-        table_ = table_parser.table(cli.nova('list --all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+        table_ = table_parser.table(cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info))
 
-        for vm_id in vms_to_check:
+        for vm_id in list(vms_to_check):
             vm_val = table_parser.get_values(table_, target_header=header, ID=vm_id)[0]
             res_fail[vm_id] = vm_val
             if vm_val in values:

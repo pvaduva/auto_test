@@ -90,7 +90,7 @@ class Labs:
         'floating ip': '128.224.150.73',
         'controller-0 ip': '128.224.150.26',
         'controller-1 ip': '128.224.150.28',
-        'auth_url': 'http://192.168.204.2:5000/3',
+        'auth_url': 'http://192.168.204.2:5000/v3/',
     }
 
     PV1 = {

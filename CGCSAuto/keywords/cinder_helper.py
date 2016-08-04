@@ -67,7 +67,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         if value is not None:
             criteria[key] = value
 
-    table_ = table_parser.table(cli.cinder('list --all-tenant', auth_info=auth_info, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.cinder('list --all-tenants', auth_info=auth_info, ssh_client=con_ssh))
 
     if name is not None:
         table_ = table_parser.filter_table(table_, strict=name_strict, **{'Display Name': name})
@@ -93,7 +93,7 @@ def get_volumes_attached_to_vms(volumes=None, vms=None, con_ssh=None, auth_info=
     Returns (list): a list of volumes ids or [] if no match found
 
     """
-    table_ = table_parser.table(cli.cinder('list --all-tenant', auth_info=auth_info, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.cinder('list --all-tenants', auth_info=auth_info, ssh_client=con_ssh))
 
     # Filter from given volumes if provided
     if volumes is not None:
@@ -326,7 +326,7 @@ def _wait_for_volumes_deleted(volumes, timeout=VolumeTimeout.DELETE, fail_ok=Tru
     vols_deleted = []
     end_time = time.time() + timeout
     while time.time() < end_time:
-        table_ = table_parser.table(cli.cinder('list --all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+        table_ = table_parser.table(cli.cinder('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info))
         existing_vols = table_parser.get_column(table_, 'ID')
 
         for vol in vols_to_check:

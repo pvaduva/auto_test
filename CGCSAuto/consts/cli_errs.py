@@ -51,7 +51,9 @@ class CPUPolicyErr:
 
 
 class SharedCPUErr:
-    DEDICATED_CPU_REQUIRED = "hw:wrs:shared_vcpu is only valid when hw:cpu_policy is 'dedicated'"
+    DEDICATED_CPU_REQUIRED = "hw:wrs:shared_vcpu is only valid when hw:cpu_policy is dedicated"
+    INVALID_VCPU_ID = "hw:wrs:shared_vcpu must be greater than or equal to 0"
+    MORE_THAN_FLAVOR = "hw:wrs:shared_vcpu value ({}) must be less than flavor vcpus ({})"
 
 
 class ColdMigrateErr:

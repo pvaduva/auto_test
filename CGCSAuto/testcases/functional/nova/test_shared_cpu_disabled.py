@@ -2,6 +2,8 @@ from pytest import fixture, mark
 
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
+from consts.cli_errs import SharedCPUErr
+
 from keywords import nova_helper, vm_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
@@ -30,13 +32,13 @@ def test_set_shared_vcpu_spec(flavor_64_vcpus, vcpu_id):
     nova_helper.set_flavor_extra_specs(flavor_64_vcpus, **{FlavorSpec.SHARED_VCPU: vcpu_id})
 
 
-@mark.parametrize(('vcpus', 'cpu_policy', 'vcpu_id'), [
+@mark.parametrize(('vcpus', 'cpu_policy', 'shared_vcpu'), [
     mark.p2((4, 'shared', 3)),
     mark.p3((4, 'dedicated', 5)),
     mark.p3((4, 'dedicated', -1)),
     mark.p3((64, 'dedicated', 64)),
 ])
-def test_set_shared_vcpu_spec_reject(cpu_policy, vcpus, vcpu_id):
+def test_set_shared_vcpu_spec_reject(cpu_policy, vcpus, shared_vcpu):
     """
     Test set shared vcpu id to invalid value will be rejected.
 
@@ -61,19 +63,19 @@ def test_set_shared_vcpu_spec_reject(cpu_policy, vcpus, vcpu_id):
     ResourceCleanup.add('flavor', flavor, scope='function')
     nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: cpu_policy})
 
-    LOG.tc_step("Attempt to set vcpu_id spec to invalid value - {} and verify it's rejected.".format(vcpu_id))
-    code, output = nova_helper.set_flavor_extra_specs(flavor, fail_ok=True, **{FlavorSpec.SHARED_VCPU: vcpu_id})
+    LOG.tc_step("Attempt to set shared_vcpu spec to invalid value - {} and verify it's rejected.".format(shared_vcpu))
+    code, output = nova_helper.set_flavor_extra_specs(flavor, fail_ok=True, **{FlavorSpec.SHARED_VCPU: shared_vcpu})
 
     error_msg = 'undefined'
     if cpu_policy == 'shared':
-        error_msg = "ERROR (BadRequest): hw:wrs:shared_vcpu is only valid when hw:cpu_policy is 'dedicated'.  " \
-                    "Either set an extra spec hw:cpu_policy to 'dedicated' or do not set hw:wrs:shared_vcpu."
-    elif vcpu_id < 0:
-        error_msg = 'ERROR (BadRequest): shared vcpu must be greater than or equal to 0'
-    elif vcpu_id >= vcpus:
-        error_msg = 'ERROR (BadRequest): shared vcpu must be less than flavor vcpus value'
+        error_msg = SharedCPUErr.DEDICATED_CPU_REQUIRED
+    elif shared_vcpu < 0:
+        error_msg = SharedCPUErr.INVALID_VCPU_ID
+    elif shared_vcpu >= vcpus:
+        error_msg = SharedCPUErr.MORE_THAN_FLAVOR.format(shared_vcpu, vcpus)
 
-    assert code == 1 and error_msg in output, "Set vcpu id cli should be rejected. Actual: {}".format(output)
+    assert code == 1, "Set vcpu id cli should be rejected."
+    assert error_msg in output, "Error message mismatch. Actual: {}".format(output)
 
 
 @mark.parametrize(('vcpus', 'cpu_policy', 'numa_nodes', 'numa_node0', 'shared_vcpu'), [

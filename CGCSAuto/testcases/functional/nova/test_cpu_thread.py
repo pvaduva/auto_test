@@ -398,7 +398,8 @@ class TestHTEnabled:
     @mark.parametrize(('vcpus', 'cpu_thread_pol', 'min_vcpus', 'numa_0'), [
         mark.p1((6, 'isolate', 1, 0)),
         mark.p1((6, 'require', 1, 1)),
-        mark.p2((4, 'isolate', 1, None)),
+        mark.p2((5, 'isolate', 2, None)),
+        mark.p1((6, 'require', 2, None))
     ])
     def test_cpu_scale_cpu_thread_pol(self, vcpus, cpu_thread_pol, min_vcpus, numa_0, ht_hosts):
         LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
@@ -437,7 +438,6 @@ class TestHTEnabled:
                 LOG.tc_step("Scale down once and check vm vcpus change in nova show")
                 vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
                 expt_current_cpu -= 1
-                host_allocated_cpus -= 1
                 check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
                 LOG.tc_step('Check total allocated vcpus for host and pcpus for vm is reduced by 1')
@@ -446,6 +446,7 @@ class TestHTEnabled:
                                                                 cpu_thr_pol=cpu_thread_pol, expt_increase=-1)[0]
                 assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
                 assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
+                host_allocated_cpus -= 1
 
         LOG.tc_step("VM is now at it's minimal vcpus, attempt to scale down and ensure it's rejected")
         code, output = vm_helper.scale_vm(vm_id, direction='down', resource='cpu', fail_ok=True)
@@ -463,7 +464,6 @@ class TestHTEnabled:
 
                 vm_helper.scale_vm(vm_id, direction='up', resource='cpu')
                 expt_current_cpu += 1
-                host_allocated_cpus += 1
                 check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
                 LOG.tc_step('Check total allocated vcpus for host and pcpus for vm is increased by 1')
@@ -472,6 +472,8 @@ class TestHTEnabled:
                                                                 cpu_thr_pol=cpu_thread_pol, expt_increase=-1)[0]
                 assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
                 assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
+
+                host_allocated_cpus += 1
 
         LOG.tc_step("VM is now at it's maximum vcpus, attemp to scale up and ensure it's rejected")
         code, output = vm_helper.scale_vm(vm_id, direction='up', resource='cpu', fail_ok=True)

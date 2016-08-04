@@ -55,6 +55,7 @@ class VMStatus:
     # under http://docs.openstack.org/developer/nova/vmstates.html
     ACTIVE = 'ACTIVE'
     BUILD = 'BUILDING'
+    REBUILD = 'REBUILD'
     VERIFY_RESIZE = 'VERIFY_RESIZE'
     RESIZE = 'RESIZED'
     ERROR = 'ERROR'

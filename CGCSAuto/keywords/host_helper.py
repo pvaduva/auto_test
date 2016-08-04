@@ -107,12 +107,12 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         _wait_for_openstack_cli_enable(con_ssh=con_ssh)
         hostnames.append(controller)
 
-    time.sleep(30)
     if not wait_for_reboot_finish:
         msg = "Reboot hosts command sent."
         LOG.info(msg)
         return -1, msg
 
+    time.sleep(30)
     hostnames = sorted(hostnames)
     hosts_in_rebooting = _wait_for_hosts_states(
             hostnames, timeout=HostTimeout.FAIL_AFTER_REBOOT, check_interval=10, duration=8, con_ssh=con_ssh,
@@ -1271,8 +1271,9 @@ def get_expected_vswitch_port_engine_map(host_ssh):
         e.g., {'0': ['1', '2'], '1': ['1', '2']}
 
     """
-    ports_tab = table_parser.table(host_ssh.exec_cmd('''vshell port-list | grep --color='never' -v "avp-"''',
-                                                     fail_ok=False)[1])
+    ports_tab = table_parser.table(host_ssh.exec_cmd("vshell port-list", fail_ok=False)[1])
+    ports_tab = table_parser.filter_table(ports_tab, type='physical')
+
     cores_tab = table_parser.table(host_ssh.exec_cmd("vshell engine-list", fail_ok=False)[1])
 
     header = 'socket' if 'socket' in ports_tab['headers'] else 'socket-id'

@@ -729,7 +729,7 @@ def get_all_vms(return_val='ID', con_ssh=None):
     Returns (list): list of all vms on the system
 
     """
-    table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     return table_parser.get_column(table_, return_val)
 
 
@@ -755,7 +755,7 @@ def get_field_by_vms(vm_ids=None, field="Status", con_ssh=None, auth_info=None):
     if isinstance(vm_ids, str):
         vm_ids = [vm_ids]
 
-    table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=auth_info))
 
     for vm in vm_ids:
         ids_status[vm] = table_parser.get_values(table_=table_, target_header=field, ID=vm)
@@ -803,7 +803,7 @@ def get_vms(vms=None, return_val='ID', con_ssh=None, auth_info=None, all_vms=Tru
         if auth_info is None:
             auth_info = Tenant.get_primary()
         if auth_info['tenant'] == 'admin':
-            positional_args = '--all-tenant'
+            positional_args = '--all-tenants'
     table_ = table_parser.table(cli.nova('list', positional_args=positional_args, ssh_client=con_ssh,
                                          auth_info=auth_info))
     if vms:
@@ -841,7 +841,7 @@ def get_vm_status(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
 
 
 def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, regex=False, fail_ok=True):
-    table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     vm_ids = table_parser.get_values(table_, 'ID', strict=strict, regex=regex, Name=vm_name.strip())
     if not vm_ids:
         if fail_ok:
@@ -852,7 +852,7 @@ def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, regex=False, fail_ok
 
 
 def get_vm_name_from_id(vm_id, con_ssh=None):
-    table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     return table_parser.get_values(table_, 'Name', ID=vm_id)[0]
 
 
@@ -901,7 +901,7 @@ def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADM
     Returns (dict): e.g.,{<vm_id1>: <value of the field for vm1>, <vm_id2>: <value of the field for vm2>}
 
     """
-    table_ = table_parser.table(cli.nova('list --all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info))
     if vm_ids:
         table_ = table_parser.filter_table(table_, ID=vm_ids)
     else:

@@ -49,7 +49,7 @@ def scp_from_local(source_path, dest_ip, dest_path='/home/wrsroot',
     cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{} {}@{}:{}'.format(
             dir_option, source_path, dest_user, dest_ip, dest_path)
 
-    __scp_base(cmd, remote_password=dest_password, timeout=timeout)
+    _scp_base(cmd, remote_password=dest_password, timeout=timeout)
 
 
 def scp_to_local(source_path, source_ip, dest_path='/home/wrsroot',
@@ -72,15 +72,14 @@ def scp_to_local(source_path, source_ip, dest_path='/home/wrsroot',
     cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{}@{}:{} {}'.format(
             dir_option, source_user, source_ip, source_path, dest_path)
 
-    __scp_base(cmd, remote_password=source_password, timeout=timeout)
+    _scp_base(cmd, remote_password=source_password, timeout=timeout)
 
 
-def __scp_base(cmd, remote_password, logdir=None, timeout=60):
+def _scp_base(cmd, remote_password, logdir=None, timeout=60):
     LOG.debug('scp cmd: {}'.format(cmd))
 
     logdir = logdir or ProjVar.get_var('LOG_DIR')
     logfile = os.path.join(logdir, 'scp_files.log')
-
 
     with open(logfile, mode='a') as f:
         local_child = pexpect.spawn(command=cmd, encoding='utf-8', logfile=f)

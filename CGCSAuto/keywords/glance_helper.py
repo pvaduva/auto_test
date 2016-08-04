@@ -3,9 +3,10 @@ import time
 
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
-from consts.auth import Tenant
+from utils.ssh import ControllerClient
+from consts.auth import Tenant, SvcCgcsAuto
 from consts.timeout import ImageTimeout
-from consts.cgcs import IMAGE_DIR
+from consts.cgcs import IMAGE_DIR, Prompt
 from keywords.common import Count
 
 
@@ -58,8 +59,8 @@ def get_image_id_from_name(name=None, strict=False, con_ssh=None, auth_info=None
     return image_id
 
 
-def create_image(name=None, image_id=None, source_image_file=None, source_image_url=None, copy_from=None,
-                 disk_format=None, container_format=None, min_disk=None, min_ram=None, size=None, public=None,
+def create_image(name=None, image_id=None, source_image_file=None,
+                 disk_format=None, container_format=None, min_disk=None, min_ram=None, public=None,
                  protected=None, cache_raw=False, store=None, wait=None, timeout=ImageTimeout.CREATE, con_ssh=None,
                  auth_info=Tenant.ADMIN, fail_ok=False, **properties):
     """
@@ -69,20 +70,10 @@ def create_image(name=None, image_id=None, source_image_file=None, source_image_
         name (str): string to be included in image name
         image_id (str): id for the image to be created
         source_image_file (str): local image file to create image from. '/home/wrsroot/images/cgcs-guest.img' if unset
-
-        source_image_url (str): URL where the data for this image already resides. For
-                        example, if the image data is stored in swift, you
-                        could specify 'swift+http://tenant%3Aaccount:key@auth_
-                        url/v2.0/container/obj'. (Note: '%3A' is ':' URL
-                        encoded.)
-        copy_from (str): Similar to '--location' in usage, but this indicates
-                        that the Glance server should immediately copy the
-                        data and store it in its configured image store.
         disk_format (str): One of these: ami, ari, aki, vhd, vmdk, raw, qcow2, vdi, iso
         container_format (str):  One of these: ami, ari, aki, bare, ovf
         min_disk (int): Minimum size of disk needed to boot image (in gigabytes)
         min_ram (int):  Minimum amount of ram needed to boot image (in megabytes)
-        size (int): Size of image data (in bytes). Only used with '--location' and '--copy_from'
         public (bool): Make image accessible to the public. True if unset.
         protected (bool): Prevent image from being deleted.
         cache_raw (bool): Convert the image to RAW in the background and store it for fast access
@@ -101,12 +92,10 @@ def create_image(name=None, image_id=None, source_image_file=None, source_image_
     """
 
     # Use source image url if url is provided. Else use local img file.
-    if source_image_url:
-        file_path = None
-    else:
-        file_path = source_image_file if source_image_file else IMAGE_DIR + '/cgcs-guest.img'
 
-    source_str = source_image_url if source_image_url else file_path
+    file_path = source_image_file if source_image_file else IMAGE_DIR + '/cgcs-guest.img'
+
+    source_str = file_path
 
     known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros']
     name = name if name else 'auto'
@@ -123,16 +112,11 @@ def create_image(name=None, image_id=None, source_image_file=None, source_image_
     optional_args = {
         '--id': image_id,
         '--name': name,
-        # '--is-public': 'True' if public is None else public,
-        # '--is-protected': protected,
         '--visibility': 'private' if public is False else 'public',
         '--protected': protected,
         '--store': store,
-        '--disk-format': disk_format if disk_format else 'raw',
+        '--disk-format': disk_format if disk_format else 'qcow2',
         '--container-format': container_format if container_format else 'bare',
-        '--size': size,
-        '--copy-from': copy_from,
-        '--location': source_image_url,
         '--min-disk': min_disk,
         '--min-ram': min_ram,
         '--file': file_path,
@@ -338,8 +322,83 @@ def get_image_properties(image, property_keys, auth_info=Tenant.ADMIN, con_ssh=N
     results = {}
     for property_key in property_keys:
         property_key = property_key.strip()
-        value = table_parser.get_value_two_col_table(table_, "Property '{}'".format(property_key), strict=True)
+        value = table_parser.get_value_two_col_table(table_, property_key, strict=True)
         if value:
             results[property_key] = value
 
     return results
+
+
+def _scp_guest_image(img_os='ubuntu', dest_dir=IMAGE_DIR, con_ssh=None):
+    """
+
+    Args:
+        img_os (str): guest image os type. valid values: ubuntu, centos7, centos6
+        dest_dir (str): where to save the downloaded image. Default is '~/images'
+        con_ssh (SSHClient):
+
+    Returns (str): full file name of downloaded image. e.g., '~/images/ubuntu.img'
+
+    """
+    valid_img_os_types = ['ubuntu', 'centos6', 'centos7']
+    if img_os not in valid_img_os_types:
+        raise ValueError("Invalid image OS type provided. Valid values: {}".format(valid_img_os_types))
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    # image_loc_dict = {
+    #     'ubuntu': ['ubuntu.img',
+    #                'https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img'],
+    #     'centos6': ['centos6.qcow2', 'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud.qcow2'],
+    #     'centos7': ['centos7.qcow2', 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2']
+    # }
+
+    image_loc_dict = {
+        'ubuntu': 'ubuntu.img',
+        'centos6': 'centos6.img',
+        'centos7': 'centos7.img',
+    }
+
+    dest_name = image_loc_dict[img_os]
+
+    if dest_dir.endswith('/'):
+        dest_dir = dest_dir[:-1]
+
+    dest_path = '{}/{}'.format(dest_dir, dest_name)
+
+    if con_ssh.file_exists(file_path=dest_path):
+        LOG.info('image file {} already exists. Return existing image path'.format(dest_path))
+        return dest_path
+
+    LOG.debug('Create directory for image storage if not already exists')
+    cmd = 'mkdir -p {}'.format(dest_dir)
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
+    # LOG.info('wget image from {} to {}/{}'.format(img_url, img_dest, new_name))
+    # cmd = 'wget {} --no-check-certificate -P {} -O {}'.format(img_url, img_dest, new_name)
+    # con_ssh.exec_cmd(cmd, expect_timeout=7200, fail_ok=False)
+
+    source_path = '{}/images/{}'.format(SvcCgcsAuto.HOME, dest_name)
+    LOG.info('scp image from test server to active controller')
+    scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}@{}:{} {}'.format(
+            SvcCgcsAuto.USER, SvcCgcsAuto.SERVER, source_path, dest_dir)
+
+    con_ssh.send(scp_cmd)
+    index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=3600)
+    if index == 2:
+        con_ssh.send('yes')
+        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=3600)
+    if index == 1:
+        con_ssh.send(SvcCgcsAuto.PASSWORD)
+        index = con_ssh.expect()
+    if index != 0:
+        raise exceptions.SSHException("Failed to scp files")
+
+    # common._scp_base(cmd, remote_password=SvcCgcsAuto.PASSWORD, timeout=3600)
+
+    if not con_ssh.file_exists(file_path=dest_path):
+        raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
+
+    LOG.info("{} image downloaded successfully and saved to {}".format(img_os, dest_path))
+    return dest_path

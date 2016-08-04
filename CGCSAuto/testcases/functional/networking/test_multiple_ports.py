@@ -161,7 +161,7 @@ class TestMutiPortsBasic:
         HostsToRecover.add(host, scope='function')
 
         LOG.tc_step("Verify vm is evacuated to other host")
-        vm_helper._wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=120, fail_ok=False)
+        vm_helper._wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
         post_evac_host = nova_helper.get_vm_host(vm_under_test)
         assert post_evac_host != host, "VM is on the same host after original host rebooted."
 

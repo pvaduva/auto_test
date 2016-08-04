@@ -118,7 +118,7 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
         f.write("Mongo upload results for test case: %s\n" % test_name)
         local_child = pexpect.spawn(command=upload_cmd, encoding='utf-8', logfile=f)
         try:
-            local_child.expect(pexpect.EOF)
+            local_child.expect(pexpect.EOF, timeout=60)
         except Exception as e:
             # Don't throw exception otherwise whole test session will end
             err = "Test result failed to upload. \nException caught: {}\n".format(e.__str__())

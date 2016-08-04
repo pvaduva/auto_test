@@ -133,9 +133,15 @@ class SSHClient:
                     # next 5 lines change ssh window size and flush its buffer
                     self._session.setwinsize(150, 250)
                     self.send()
-                    self.flush(timeout=10)
-                    self.flush(timeout=10)
-                    self.flush(timeout=3)
+
+                    end_time = time.time() + 20
+                    while time.time() < end_time:
+                        index = self.expect(timeout=3, fail_ok=True)
+                        if index != 0:
+                            break
+                    else:
+                        LOG.warning("Still getting prompt from the buffer. Buffer might not be cleared yet.")
+
                     return
 
                 # retry if this line is reached. it would've returned if login succeeded.
@@ -230,10 +236,9 @@ class SSHClient:
         Returns:
 
         """
-        # LOG.error("heree preflush after {}".format(self._session.after))
         self.expect(fail_ok=True, timeout=timeout)
+
         LOG.debug("Buffer is flushed by reading out the rest of the output")
-        # LOG.error("heree postflush after {}".format(self._session.after))
 
     def expect(self, blob_list=None, timeout=10, fail_ok=False, rm_date=False):
         """
@@ -269,14 +274,20 @@ class SSHClient:
 
         try:
             index = self._session.expect(blob_list, timeout=timeout)
-        except (pexpect.EOF, pexpect.TIMEOUT) as e:
+        except pexpect.EOF:
             # LOG.warning("No match found for {}!\npexpect exception caught: {}".format(blob_list, e.__str__()))
             # LOG.debug("Before: {}; After:{}".format(self._parse_output(self._session.before),
             #                                         self._parse_output(self._session.after)))
             if fail_ok:
                 return -1
             else:
-                LOG.warning("No match found for {}!\nPexpect exception caught: {}".format(blob_list, e.__str__()))
+                LOG.warning("No match found for {}!\nEOF caught.".format(blob_list))
+                raise
+        except pexpect.TIMEOUT:
+            if fail_ok:
+                return -2
+            else:
+                LOG.warning("No match found for {}. \nexpect timeout.".format(blob_list))
                 raise
 
         # Match found, reformat the outputs

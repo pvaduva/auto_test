@@ -102,3 +102,11 @@ class Guest:
     @classmethod
     def set_password(cls, image_name, password):
         cls.CREDS[image_name]['password'] = password
+
+
+class SvcCgcsAuto:
+    SERVER = '128.224.150.21'
+    USER = 'svc-cgcsauto'
+    PASSWORD = ')OKM0okm'
+    HOME = '/home/svc-cgcsauto'
+

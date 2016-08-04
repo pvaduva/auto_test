@@ -202,7 +202,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
         index = natbox_ssh.expect("Power button pressed", timeout=60, fail_ok=True)
 
         if not expt_autorecovery:
-            assert -1 == index, "VM is rebooted automatically even though Auto Recovery is set to false."
+            assert 0 > index, "VM is rebooted automatically even though Auto Recovery is set to false."
 
         else:
             assert 0 == index, "Auto recovery to reboot the vm is not kicked off within timeout."

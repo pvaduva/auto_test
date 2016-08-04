@@ -521,6 +521,7 @@ def get_value_two_col_table(table_, field, strict=True, regex=False, merge_lines
                 break
     else:
         LOG.warning("Field {} is not found in table.".format(field))
+        LOG.debug("Field {} is not found in table: {}.".format(field, table_))
         val = ''
 
     # handle multi-line value

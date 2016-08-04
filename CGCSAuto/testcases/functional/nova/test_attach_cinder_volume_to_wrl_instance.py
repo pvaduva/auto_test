@@ -7,7 +7,6 @@ from keywords import vm_helper, glance_helper, cinder_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-@mark.sanity
 @mark.parametrize(('vm_name', 'image_name'), [
     ('test-wrl-avp-1', 'wrl5-avp'),
     ('test-wrl-virtio-0', 'wrl5-virtio'),
