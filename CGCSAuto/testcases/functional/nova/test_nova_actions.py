@@ -12,6 +12,7 @@ def id_gen(val):
         return '-'.join(val)
 
 
+@mark.sanity
 @mark.parametrize(('guest_os', 'cpu_pol', 'actions'), [
     ('ubuntu', 'dedicated', ['pause', 'unpause']),
     ('ubuntu', 'shared', ['stop', 'start']),

@@ -118,7 +118,6 @@ def get_4kpage_hosts():
 
     return host_4k
 
-@mark.sanity
 @mark.skipif(len(host_helper.get_hypervisors()) < 2, reason="Less than 2 hypervisor hosts on the system")
 @mark.skipif(get_4kpage_hosts() < 2, reason="Less than {} hosts contain enough 4k memory page for live migrate".format(get_4kpage_hosts()))
 @mark.parametrize(
