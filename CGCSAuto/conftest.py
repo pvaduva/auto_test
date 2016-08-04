@@ -296,7 +296,13 @@ def pytest_unconfigure():
 
 
 def pytest_collection_modifyitems(items):
+    move_to_last = []
     for item in items:
+        # re-order tests:
+        trylast_marker = item.get_marker('trylast')
+        if trylast_marker:
+            move_to_last.append(item)
+
         # known issue marker
         feature_marker = item.get_marker('features')
         if feature_marker is not None:
@@ -311,6 +317,11 @@ def pytest_collection_modifyitems(items):
             print(msg)
             LOG.debug(msg=msg)
             item.add_marker(eval("pytest.mark.known_issue"))
+
+    # add trylast tests to the end
+    for item in move_to_last:
+        items.remove(item)
+        items.append(item)
 
 
 def pytest_generate_tests(metafunc):
