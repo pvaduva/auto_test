@@ -10,6 +10,7 @@ from keywords import vm_helper, glance_helper, cinder_helper, network_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
+@mark.p3
 @mark.parametrize(('vol_vif'), [
     ('e1000'),
     ('avp'),
@@ -76,6 +77,7 @@ def test_attach_cinder_volume_to_instance(vol_vif):
 @mark.parametrize(('img_vif'), [
     mark.sanity('avp'),
     mark.p2('virtio'),
+    mark.p3('e1000')
 ])
 def test_vif_model_from_image(img_vif):
 

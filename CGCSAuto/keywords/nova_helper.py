@@ -1378,10 +1378,3 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, auth_info=Tena
 
 def get_vm_instance_name(vm_id, con_ssh=None):
     return get_vm_nova_show_value(vm_id, ":instance_name", strict=False, con_ssh=con_ssh)
-
-
-def get_vm_nics(vm_id, con_ssh=None):
-
-        raw_nics = table_parser.get_value_two_col_table(table_, 'wrs-if:nics')
-        nics = [eval(nic) for nic in raw_nics]
-        return nics
