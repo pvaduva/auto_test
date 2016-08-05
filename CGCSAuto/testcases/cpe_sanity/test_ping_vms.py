@@ -1,5 +1,6 @@
 from pytest import mark, skip
 
+import time
 import keywords.cinder_helper
 import keywords.glance_helper
 from consts.auth import Tenant
@@ -12,7 +13,7 @@ _skip = False
 def test_4700_ping_vm_from_external_network():
     vm_ids = vm_helper.get_any_vms(count=2)
     assert vm_ids != []
-
+    time.sleep(10)
     vm_helper.ping_vms_from_natbox(vm_ids=vm_ids, fail_ok=False)
 
 
@@ -22,7 +23,7 @@ def test_4701_ping_internal_between_vms():
     vm_ids = vm_helper.get_any_vms(count=2)
 
     assert vm_ids != ()
-
+    time.sleep(10)
     vm_helper.ping_vms_from_vm(to_vms=vm_ids, from_vm=from_vm, fail_ok=False)
 
 

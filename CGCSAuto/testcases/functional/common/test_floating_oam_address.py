@@ -70,7 +70,7 @@ def test_417_floating_oam_address():
     compute_table = table_parser.table(output)
     ip_value = get_column_value(compute_table, 'mgmt_ip')
     LOG.info("Configured mgmt address of active: %s" % ip_value)
-    time.sleep(3)
+    time.sleep(10)
 
     LOG.tc_step("Extract the floating IP address as well as the static IP addresses")
     with host_helper.ssh_to_host('controller-0') as con_ssh:
