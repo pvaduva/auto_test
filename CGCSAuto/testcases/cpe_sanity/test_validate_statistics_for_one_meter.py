@@ -11,6 +11,8 @@ import re
 from pytest import fixture, mark, skip, raises, fail
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
+from ast import literal_eval
+
 
 CONTROLLER_PROMPT = '.*controller\-[01].*\$ '
 PROMPT = '.* '
@@ -124,6 +126,7 @@ def cmd_execute(action, param='', check_params=''):
 
 
 @mark.cpe_sanity
+@mark.sanity
 def test_tc402_validate_statistics_for_one_meter():
     """
     Validate statistics for one meter
@@ -146,7 +149,8 @@ def test_tc402_validate_statistics_for_one_meter():
                                                                'Period',
                                                                first_value,
                                                                column_name)
-        if (float(column_value) == 0.0):
-            print("Parameter %s value is equal to 0" % column_name)
-            assert(not(float(column_value) == 0.0))
+
+        val = literal_eval(column_value)
+        assert isinstance(val, int) or isinstance(val, float)
+
 
