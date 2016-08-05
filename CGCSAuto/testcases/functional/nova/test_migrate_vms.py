@@ -297,7 +297,7 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
     ('ubuntu', 'live', 'dedicated'),
     ('ubuntu', 'cold', 'dedicated'),
     ('cgcs-guest', 'live', None),
-    ('cgcs-guest', 'cold', None),
+    mark.cpe_sanity('cgcs-guest', 'cold', None),
 ])
 def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu_image):
     LOG.tc_step("Create a flavor with 1 vcpu")

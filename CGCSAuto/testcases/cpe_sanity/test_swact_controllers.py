@@ -28,7 +28,7 @@ def check_hosts_availability(request):
 
     request.addfinalizer(restore_hosts_availability)
 
-@mark.cpe_sanity
+
 @mark.usefixtures('check_hosts_availability')
 @mark.parametrize(('hostname', 'timeout', 'fail_ok'), [
     ('controller-0', 90, False),

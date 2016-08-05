@@ -93,7 +93,7 @@ def get_column_value(table, search_value):
     return column_value
 
 
-@mark.cpe_sanity
+#@mark.cpe_sanity
 def test_tc4699_cold_migration_guest_instances(vm_1, vm_2):
     """Method to list a host subfunctions
     """

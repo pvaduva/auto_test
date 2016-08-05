@@ -31,7 +31,8 @@ def test_volume_based_vm():
 
 
 @mark.sanity
-@mark.skipif(system_helper.is_small_footprint(), reason="Skip for small footprint lab")
+@mark.cpe_sanity
+#@mark.skipif(system_helper.is_small_footprint(), reason="Skip for small footprint lab")
 def test_swact_controllers():
     """
     Verify Swact is working on two controllers system
