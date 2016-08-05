@@ -47,29 +47,25 @@ def test_ping_between_two_vms_avp_virtio(guest_os, ubuntu_image):
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
 
-    LOG.tc_step("Create a {}G volume from {} image".format(size, guest_os))
-    vol_id = cinder_helper.create_volume(name='vol-{}'.format(guest_os), image_id=image_id, size=size)[1]
-    ResourceCleanup.add('volume', vol_id)
-
-    LOG.tc_step("Boot a {} vm from above flavor and volume".format(guest_os))
-    vm_id = vm_helper.boot_vm('nova_actions', flavor=flavor_id, source='volume', source_id=vol_id)[1]
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-
     vms = []
     for vif_model in ['avp', 'virtio']:
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': vif_model},
                 {'net-id': internal_net_id, 'vif-model': vif_model}]
 
-        LOG.tc_step("Boot vm with vif_model {} for tenant and internal networks".format(vif_model))
-        vm_name = '{}_{}'.format(guest_os, vif_model)
-        vm_under_test = vm_helper.boot_vm(name=vm_name, nics=nics, reuse_vol=False)[1]
-        ResourceCleanup.add('vm', vm_under_test)
+        LOG.tc_step("Create a {}G volume from {} image".format(size, guest_os))
+        vol_id = cinder_helper.create_volume(name='vol-{}'.format(guest_os), image_id=image_id, size=size)[1]
+        ResourceCleanup.add('volume', vol_id)
 
-        LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_under_test))
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
+        LOG.tc_step("Boot a {} vm with {} nics from above flavor and volume".format(guest_os, vif_model))
+        vm_id = vm_helper.boot_vm('{}_{}'.format(guest_os, vif_model), flavor=flavor_id, source='volume',
+                                  source_id=vol_id, nics=nics)[1]
+        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
-        vms.append(vm_under_test)
+        LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
+
+        vms.append(vm_id)
 
     LOG.info("Ping between two vms over management, data, and internal networks")
     vm_helper.ping_vms_from_vm(to_vms=vms[0], from_vm=vms[1], net_types=['mgmt', 'data', 'internal'])

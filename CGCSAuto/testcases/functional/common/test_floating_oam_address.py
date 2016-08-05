@@ -34,7 +34,7 @@ def get_column_value(table, search_value):
             column_value = col_value[1]
     return column_value
 
-@mark.sanity
+
 def test_417_floating_oam_address():
     """
     Floating OAM Address: Verify configuration and use of both the fixed

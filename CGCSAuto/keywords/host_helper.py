@@ -676,7 +676,9 @@ def _wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=30, 
     end_swact_start = start + swact_start_timeout
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
+
     while con_ssh._is_connected(fail_ok=True):
+
         if time.time() > end_swact_start:
             if fail_ok:
                 return 3, "Swact did not start within {}".format(swact_start_timeout)

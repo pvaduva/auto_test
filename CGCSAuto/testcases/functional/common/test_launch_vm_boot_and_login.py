@@ -12,7 +12,7 @@ from consts.timeout import EventLogTimeout
 from keywords import nova_helper, vm_helper, glance_helper,cinder_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
-@mark.sanity
+
 def test_launch_vm_boot_and_login():
     """
     Verify the lab is able to boot up an VM from image and login through natbox

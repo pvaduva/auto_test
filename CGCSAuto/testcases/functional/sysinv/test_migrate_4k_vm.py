@@ -118,7 +118,7 @@ def get_4kpage_hosts():
 
     return host_4k
 
-@mark.sanity
+
 @mark.skipif(len(host_helper.get_hypervisors()) < 2, reason="Less than 2 hypervisor hosts on the system")
 @mark.skipif(get_4kpage_hosts() < 2, reason="Less than {} hosts contain enough 4k memory page for live migrate".format(get_4kpage_hosts()))
 @mark.parametrize(
@@ -126,7 +126,7 @@ def get_4kpage_hosts():
             False,
             True,
         ])
-def test_live_migrate_vm(vm_, block_migrate):
+def test_live_migrate_4k_vm(vm_, block_migrate):
     """
     Test live migrate vm with 4k page config.
     This is almost a direct copy of /functional/nova/test_migrate_vms.py with minor differences
@@ -170,5 +170,3 @@ def test_live_migrate_vm(vm_, block_migrate):
         check_msg = "Verify live migration succeeded..."
     LOG.tc_step(check_msg)
     assert exp_code == code, "Expected return code {}. Actual return code: {}; details: {}".format(exp_code, code, msg)
-
-

@@ -51,14 +51,13 @@ def vms_():
     ResourceCleanup.add('vm', vm4, scope='module', del_vm_vols=True)
     vm_helper.wait_for_vm_pingable_from_natbox(vm4)
 
-    return {vm1: vm1_name, vm2: vm2_name, vm3: vm3_name, vm4: vm4_name}
+    return [vm1, vm2, vm3, vm4]
 
 
 @mark.trylast
 @mark.sanity
 def test_evacuate_vms(vms_):
-    vms_ids = vms_.keys()
-    vm1, vm2, vm3, vm4 = vms_ids
+    vm1, vm2, vm3, vm4 = vms_
 
     # vm2 cannot be live migrated so choose its host as target host
     target_host = nova_helper.get_vm_host(vm2)
@@ -78,13 +77,13 @@ def test_evacuate_vms(vms_):
     HostsToRecover.add(target_host)
 
     LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-    vm_helper._wait_for_vms_values(vms_ids, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
+    vm_helper._wait_for_vms_values(vms_, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
 
     LOG.tc_step("Check vms are in Active state and moved to other host(s) after host reboot")
-    res, active_vms, inactive_vms = vm_helper._wait_for_vms_values(vms=vms_ids, values=VMStatus.ACTIVE, timeout=600)
+    res, active_vms, inactive_vms = vm_helper._wait_for_vms_values(vms=vms_, values=VMStatus.ACTIVE, timeout=600)
 
     vms_host_err = []
-    for vm in vms_ids:
+    for vm in vms_:
         if nova_helper.get_vm_host(vm) == target_host:
             vms_host_err.append(vm)
 
@@ -94,4 +93,4 @@ def test_evacuate_vms(vms_):
     assert not inactive_vms, "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
 
     LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
-    vm_helper.ping_vms_from_natbox(vms_ids)
+    vm_helper.ping_vms_from_natbox(vms_)

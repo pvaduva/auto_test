@@ -105,7 +105,6 @@ def get_column_value(table, search_value):
 
 
 @mark.cpe_sanity
-@mark.sanity
 def test_tc4696_pause_unpause_guest_instances(vm_1, vm_2):
     """Method to list a host subfunctions
     """
