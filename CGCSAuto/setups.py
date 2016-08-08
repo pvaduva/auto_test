@@ -83,9 +83,10 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path):
             con_0_ssh.send()    # Repeat passphrase
             con_0_ssh.expect(Prompt.CONTROLLER_0)
 
-        cmd_1 = 'cp /home/wrsroot/.ssh/id_rsa ' + keyfile_path
-        cmd_2 = 'chmod 600 ' + keyfile_path
-        cmd_3 = 'scp {} {}@{}:~/'.format(keyfile_path, natbox['user'], natbox['ip'])
+        keyfile_name = keyfile_path.split(sep='/')[-1]
+        cmd_1 = 'cp /home/wrsroot/.ssh/id_rsa ' + keyfile_name
+        cmd_2 = 'chmod 600 ' + keyfile_name
+        cmd_3 = 'scp {} {}@{}:{}'.format(keyfile_name, natbox['user'], natbox['ip'], keyfile_path)
 
         rtn_1 = con_0_ssh.exec_cmd(cmd_1)[0]
         if not rtn_1 == 0:

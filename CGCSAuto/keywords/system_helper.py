@@ -275,7 +275,7 @@ def __process_query_args(args, query_key, query_value, query_type):
     return args
 
 
-def wait_for_events(timeout=30, num=10, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,
+def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,
                     fail_ok=True, rtn_val='Event Log ID', con_ssh=None, auth_info=Tenant.ADMIN, regex=False,
                     strict=True, check_interval=3, **kwargs):
     """

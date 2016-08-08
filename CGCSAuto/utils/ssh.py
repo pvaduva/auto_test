@@ -742,16 +742,17 @@ class VMSSHClient(SSHFromSSH):
 
         """
         LOG.debug("vm_image_name: {}".format(vm_img_name))
+        if vm_img_name is None:
+            vm_img_name = ''
+
         vm_img_name = vm_img_name.strip().lower()
+
         if not natbox_client:
             natbox_client = NATBoxClient.get_natbox_client()
-        force_password = True
+
         if user:
             if not password:
                 password = user
-        elif 'centos' in vm_img_name or 'centos' in vm_name:
-            user = 'centos'
-            force_password = False
         else:
             for image_name in Guest.CREDS:
                 if image_name in vm_img_name or image_name in vm_name:
@@ -763,7 +764,7 @@ class VMSSHClient(SSHFromSSH):
                 user = 'root'
                 password = 'root'
                 known_guests = list(Guest.CREDS.keys())
-                known_guests.append('centos')
+
                 LOG.warning("User/password are not provided, and VM image type is not in the list: {}. "
                             "Use root/root to login.".format(known_guests))
 
@@ -774,12 +775,12 @@ class VMSSHClient(SSHFromSSH):
                                           initial_prompt=prompt, timeout=timeout)
 
         # This needs to be modified in centos case.
-        if not force_password:
-            ssh_options = " -i {}".format(ProjVar.get_var('KEYFILE_NAME'))
+        if not password:
+            ssh_options = " -i {}".format(ProjVar.get_var('KEYFILE_PATH'))
         else:
             ssh_options = _SSH_OPTS
-        self.ssh_cmd = '/usr/bin/ssh{} {}@{}'.format(ssh_options, self.user, self.host)
-        self.connect(use_password=force_password, retry=retry, retry_timeout=retry_timeout)
+        self.ssh_cmd = 'ssh {} {}@{}'.format(ssh_options, self.user, self.host)
+        self.connect(use_password=password, retry=retry, retry_timeout=retry_timeout)
         self.exec_cmd("TMOUT=0")
 
 

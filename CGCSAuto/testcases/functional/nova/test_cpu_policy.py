@@ -84,7 +84,7 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
 def test_cpu_pol_vm_actions(flv_vcpus, flv_pol, boot_source):
     LOG.tc_step("Create flavor with {} vcpus".format(flv_vcpus))
     flavor_id = nova_helper.create_flavor(name='cpu_pol_image', vcpus=flv_vcpus)[1]
-    # TODO ResourceCleanup.add('flavor', flavor_id)
+    ResourceCleanup.add('flavor', flavor_id)
 
     if flv_pol is not None:
         specs = {FlavorSpec.CPU_POLICY: flv_pol}
@@ -96,7 +96,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, flv_pol, boot_source):
 
     LOG.tc_step("Boot a vm from {} with above flavor and check vm topology is as expected".format(boot_source))
     vm_id = vm_helper.boot_vm(name='cpu_pol_{}_{}'.format(flv_pol, flv_vcpus), flavor=flavor_id, source=boot_source)[1]
-    # TODO ResourceCleanup.add('vm', vm_id)
+    ResourceCleanup.add('vm', vm_id)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     vm_host = nova_helper.get_vm_host(vm_id)

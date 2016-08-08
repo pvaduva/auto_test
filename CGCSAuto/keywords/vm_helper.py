@@ -5,9 +5,9 @@ from pexpect import TIMEOUT as ExpectTimeout
 from contextlib import contextmanager
 
 from utils import exceptions, cli, table_parser
-from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
+from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
 from utils.tis_log import LOG
-from consts.auth import Tenant
+from consts.auth import Tenant, SvcCgcsAuto
 from consts.timeout import VMTimeout, CMDTimeout
 from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, \
     VifMapping, VMNetworkStr
@@ -86,7 +86,7 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False):
+            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os=''):
     """
 
     Args:
@@ -191,6 +191,10 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
 
     avail_zone = 'nova:{}'.format(vm_host) if vm_host else None
+
+    if not user_data and 'ubuntu' in guest_os:
+        _scp_ubuntu_init()
+        user_data = '/home/wrsroot/userdata/ubuntu_if_config.sh'
 
     optional_args_dict = {'--flavor': flavor,
                           '--image': image,
@@ -1020,6 +1024,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
 
+        from_vm_ssh.exec_cmd("ip addr")
         res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
                         fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry,
                         retry_interval=retry_interval, vlan_zero_only=vlan_zero_only)
@@ -1922,3 +1927,40 @@ def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
 
 def get_proc_num_from_vm(vm_ssh):
     return int(vm_ssh.exec_cmd('cat /proc/cpuinfo | grep processor | wc -l', fail_ok=False)[1])
+
+
+def _scp_ubuntu_init():
+    con_ssh = ControllerClient.get_active_controller()
+
+    dest_dir = '/home/wrsroot/userdata/'
+    dest_name = 'ubuntu_if_config.sh'
+    dest_path = dest_dir + dest_name
+
+    if con_ssh.file_exists(file_path=dest_path):
+        LOG.info('userdata {} already exists. Return existing path'.format(dest_path))
+        return dest_path
+
+    LOG.debug('Create userdata directory if not already exists')
+    cmd = 'mkdir -p {}'.format(dest_dir)
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
+    # LOG.info('wget image from {} to {}/{}'.format(img_url, img_dest, new_name))
+    # cmd = 'wget {} --no-check-certificate -P {} -O {}'.format(img_url, img_dest, new_name)
+    # con_ssh.exec_cmd(cmd, expect_timeout=7200, fail_ok=False)
+
+    source_path = '{}/userdata/{}'.format(SvcCgcsAuto.HOME, dest_name)
+    LOG.info('scp image from test server to active controller')
+
+    scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}@{}:{} {}'.format(
+            SvcCgcsAuto.USER, SvcCgcsAuto.SERVER, source_path, dest_dir)
+
+    con_ssh.send(scp_cmd)
+    index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=3600)
+    if index == 2:
+        con_ssh.send('yes')
+        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=3600)
+    if index == 1:
+        con_ssh.send(SvcCgcsAuto.PASSWORD)
+        index = con_ssh.expect()
+    if index != 0:
+        raise exceptions.SSHException("Failed to scp files")

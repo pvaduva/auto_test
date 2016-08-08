@@ -14,7 +14,7 @@ def snat_setups(request):
 
     primary_tenant = Tenant.get_primary()
     primary_tenant_name = common.get_tenant_name(primary_tenant)
-    other_tenant = Tenant.TENANT_1 if primary_tenant_name == 'tenant1' else Tenant.TENANT_2
+    other_tenant = Tenant.TENANT_2 if primary_tenant_name == 'tenant1' else Tenant.TENANT_1
 
     for auth_info in [primary_tenant, other_tenant]:
         tenant_router = network_helper.get_tenant_router(auth_info=auth_info)
@@ -137,7 +137,7 @@ def test_snat_vm_actions(snat_setups, snat):
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 
-@mark.skipif(True, reason="Evacuation JIRA CGTS-4264")
+@mark.skipif(True, reason="Evacuation JIRA CGTS-4917")
 @mark.slow
 @mark.usefixtures('enable_snat_as_teardown')
 @mark.parametrize('snat', [
@@ -198,7 +198,8 @@ def test_snat_evacuate_vm(snat_setups, snat):
 @mark.slow
 @mark.trylast
 # @mark.skipif(True, reason="Host reboot undetected JIRA CGTS-4616")
-@mark.skipif(True, reason="Host cannot recover after reboot. JIRA: CGTS-4768")
+# @mark.skipif(True, reason="Host cannot recover after reboot. JIRA: CGTS-4768")
+@mark.skipif(True, reason="Evacuation JIRA CGTS-4917")
 def test_snat_computes_lock_reboot(snat_setups):
     """
     test vm external access after host compute reboot with all rest of computes locked

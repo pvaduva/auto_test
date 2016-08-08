@@ -1,7 +1,8 @@
 from pytest import fixture
 
 from utils.tis_log import LOG
-from keywords import nova_helper, glance_helper
+from utils.ssh import ControllerClient
+from keywords import nova_helper, glance_helper, common
 
 
 @fixture(scope='session')
@@ -34,12 +35,12 @@ def centos7_image():
 
 
 @fixture(scope='session')
-def centos7_image():
+def centos6_image():
     return _create_image('centos6')
 
 
 def _create_image(img_os):
-    image_path = glance_helper._scp_guest_image(img_os='ubuntu')
+    image_path = glance_helper._scp_guest_image(img_os=img_os)
 
     img_id = glance_helper.get_image_id_from_name(img_os)
     if not img_id:

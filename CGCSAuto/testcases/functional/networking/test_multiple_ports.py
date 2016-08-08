@@ -127,7 +127,7 @@ class TestMutiPortsBasic:
                     format(vm_actions))
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
 
-    @mark.skipif(True, reason='Evacuation JIRA CGTS-4264')
+    @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
     def test_multiports_on_same_network_evacuate_vm(self, vms_to_test):
         """
         Test evacuate vm with multiple ports on same network
@@ -302,7 +302,7 @@ class TestMutiPortsPCI:
             vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'internal'],
                                        vlan_zero_only=True)
 
-    @mark.skipif(True, reason='Evacuation JIRA CGTS-4264')
+    @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
     @mark.parametrize('vifs', [
         # (['pci-sriov', 'pci-passthrough']),
         (['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov']),

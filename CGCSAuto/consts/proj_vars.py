@@ -7,7 +7,7 @@ class ProjVar:
         labname = lab['short_name']
 
         cls.__var_dict = {
-            'KEYFILE_PATH': 'keyfile_{}.pem'.format(labname),
+            'KEYFILE_PATH': '/home/cgcs/priv_keys/keyfile_{}.pem'.format(labname),
             'KEYFILE_NAME': '/home/wrsroot/.ssh/' + 'keyfile_{}.pem'.format(labname),
             'LOG_DIR': logdir,
             'TCLIST_PATH': logdir + '/test_results.log',

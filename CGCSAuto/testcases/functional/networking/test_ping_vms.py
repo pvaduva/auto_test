@@ -14,7 +14,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
     'cgcs-guest',
     'ubuntu',
 ])
-def test_ping_between_two_vms_avp_virtio(guest_os, ubuntu_image):
+def test_ping_between_two_vms(guest_os, ubuntu_image):
     """
     Ping between two cgcs-guest/ubuntu vms with virtio and avp vif models
 
@@ -48,8 +48,9 @@ def test_ping_between_two_vms_avp_virtio(guest_os, ubuntu_image):
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
 
+    vif_models = ['avp', 'virtip'] if guest_os == 'cgcs-guest' else ['virtio', 'virtio']
     vms = []
-    for vif_model in ['avp', 'virtio']:
+    for vif_model in vif_models:
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': vif_model},
                 {'net-id': internal_net_id, 'vif-model': vif_model}]
@@ -60,11 +61,13 @@ def test_ping_between_two_vms_avp_virtio(guest_os, ubuntu_image):
 
         LOG.tc_step("Boot a {} vm with {} nics from above flavor and volume".format(guest_os, vif_model))
         vm_id = vm_helper.boot_vm('{}_{}'.format(guest_os, vif_model), flavor=flavor_id, source='volume',
-                                  source_id=vol_id, nics=nics)[1]
+                                  source_id=vol_id, nics=nics, guest_os=guest_os)[1]
         ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
         LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
+
+        # vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['data', 'internal'])
 
         vms.append(vm_id)
 

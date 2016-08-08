@@ -81,17 +81,20 @@ class Host:
 
 class Guest:
     CREDS = {
+
         'cgcs-guest': {
             'user': 'root',
             'password': 'root'
         },
+
         'ubuntu': {
             'user': 'ubuntu',
-            'password': 'ubuntu'
+            'password': None
         },
-        'wrl5': {
-            'user': '',
-            'password': '',
+
+        'centos': {
+            'user': 'centos',
+            'password': None
         }
     }
 
