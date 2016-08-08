@@ -9,7 +9,7 @@ from keywords import nova_helper, vm_helper
 
 _skip = False
 
-@mark.cpe_sanity
+#@mark.cpe_sanity
 def test_4700_ping_vm_from_external_network():
     vm_ids = vm_helper.get_any_vms(count=2)
     assert vm_ids != []
@@ -17,7 +17,7 @@ def test_4700_ping_vm_from_external_network():
     vm_helper.ping_vms_from_natbox(vm_ids=vm_ids, fail_ok=False)
 
 
-@mark.cpe_sanity
+#@mark.cpe_sanity
 def test_4701_ping_internal_between_vms():
     from_vm = vm_helper.get_any_vms(count=1)[0]
     vm_ids = vm_helper.get_any_vms(count=2)

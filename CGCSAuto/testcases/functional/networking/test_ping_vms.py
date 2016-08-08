@@ -9,6 +9,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 
 @mark.sanity
+@mark.cpe_sanity
 @mark.parametrize('guest_os', [
     'cgcs-guest',
     'ubuntu',

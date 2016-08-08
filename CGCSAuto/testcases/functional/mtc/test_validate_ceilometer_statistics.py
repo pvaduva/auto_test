@@ -12,6 +12,7 @@ from utils.ssh import ControllerClient
 from utils import table_parser
 from keywords import nova_helper, host_helper
 from consts.auth import Tenant
+from ast import literal_eval
 
 CONTROLLER_PROMPT = 'wrsroot.*controller.* '
 
@@ -164,10 +165,9 @@ def test_tc402_validate_statistics_for_one_meter():
     # List with column names
     column_names_list = ['Count', 'Min', 'Max', 'Avg']
 
-    LOG.tc_step('Get ceilometer statistics table')
+    LOG.debug('Get ceilometer statistics table')
     # Verify that all the instances were successfully launched
     res, out = cmd_execute('source /etc/nova/openrc; ceilometer statistics -m image.size')
-
     stats_table = table(out)
 
     # Get first table value in first column
@@ -179,9 +179,10 @@ def test_tc402_validate_statistics_for_one_meter():
                                                                'Period',
                                                                first_value,
                                                                column_name)
-        if (float(column_value) == 0.0):
-            print("Parameter %s value is equal to 0" % column_name)
-            assert(not(float(column_value) == 0.0))
+
+        val = literal_eval(column_value)
+        assert isinstance(val, int) or isinstance(val, float)
+
 
 
 @mark.sanity
