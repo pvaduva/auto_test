@@ -1,9 +1,10 @@
 import re
+import time
 import traceback
 
 from utils import exceptions
 from utils.tis_log import LOG
-from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient
+from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
 from consts.auth import Tenant
 from consts.cgcs import Prompt
 from consts.lab import Labs, add_lab_entry, NatBoxes
@@ -21,6 +22,7 @@ def setup_tis_ssh(lab):
         ControllerClient.set_active_controller(con_ssh)
     if 'auth_url' in lab:
         Tenant._set_url(lab['auth_url'])
+
     return con_ssh
 
 
@@ -212,3 +214,49 @@ def get_build_id(con_ssh):
                 build_id = ' '
 
     return build_id
+
+
+def copy_files_to_con1():
+
+    LOG.info("rsync test files from controller-0 to controller-1 if not already done")
+
+    try:
+        with host_helper.ssh_to_host("controller-1") as con_1_ssh:
+            if con_1_ssh.file_exists('/home/wrsroot/heat'):
+                LOG.info("Test files already exist on controller-1. Skip scp.")
+                return
+
+    except Exception as e:
+        LOG.error("Cannot ssh to controller-1. Skip scp. \nException caught: {}".format(e.__str__()))
+        return
+
+    # cmd = 'scp -q -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null controller-0:/home/wrsroot/* ' \
+    #       'controller-1:/home/wrsroot/'
+    cmd = "rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' " \
+          "/home/wrsroot/* controller-1:/home/wrsroot/"
+
+    timeout = 120
+
+    with host_helper.ssh_to_host("controller-0") as con_0_ssh:
+        con_0_ssh.send(cmd)
+
+        end_time = time.time() + timeout
+
+        while time.time() < end_time:
+            index = con_0_ssh.expect([con_0_ssh.prompt, PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout)
+            if index == 2:
+                con_0_ssh.send('yes')
+
+            if index == 1:
+                con_0_ssh.send("Li69nux*")
+
+            if index == 0:
+                output = int(con_0_ssh.exec_cmd('echo $?')[1])
+                if output in [0, 23]:
+                    LOG.info("Test files are successfully copied to controller-1 from controller-0")
+                    break
+                else:
+                    raise exceptions.SSHExecCommandFailed("Failed to rsync files from controller-0 to controller-1")
+
+        else:
+            raise exceptions.TimeoutException("Timed out rsync files to controller-1")

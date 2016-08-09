@@ -417,7 +417,6 @@ class SSHClient:
 
         return code, output
 
-
     def scp_files_to_local_host(self, source_file, dest_password, dest_user=None, dest_folder_name=None, timeout=10):
 
         # Process destination info
@@ -432,7 +431,7 @@ class SSHClient:
         to_user = (dest_user if dest_user is not None else local_host.get_user()) + '@'
 
         destination = to_user + to_host + dest_path
-        scp_cmd = ' '.join(['scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source_file,
+        scp_cmd = ' '.join(['scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source_file,
                             destination]).strip()
         LOG.info("Copying files from ssh client to {}: {}".format(to_host, scp_cmd))
         self.send(scp_cmd)

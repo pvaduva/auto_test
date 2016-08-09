@@ -35,7 +35,7 @@ def test_attach_cinder_volume_to_instance(vol_vif):
     """
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
-    internal_net_id = network_helper.get_internal_net_id(net_name='internal0-net1', strict=True)
+    internal_net_id = network_helper.get_internal_net_id()
 
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
             {'net-id': tenant_net_id},
@@ -44,6 +44,8 @@ def test_attach_cinder_volume_to_instance(vol_vif):
 
     LOG.tc_step("Boot up VM from default cgcs-guest image")
     vm_id = vm_helper.boot_vm(name='vm_attach_vol_{}'.format(vol_vif), source='image', nics=nics)[1]
+
+    pre_nics = network_helper.get_vm_nics(vm_id)
 
     # added to resource mangement for vm teardown
     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
@@ -62,16 +64,9 @@ def test_attach_cinder_volume_to_instance(vol_vif):
     # teardown: delete vm and volume will happen automatically
 
     LOG.tc_step("Check vm nics vif models are not changed")
+    post_nics = network_helper.get_vm_nics(vm_id)
 
-    table_ = table_parser.table(cli.nova('show', vm_id, auth_info=Tenant.ADMIN))
-    actual_nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
-    actual_nics = [eval(nic_) for nic_ in actual_nics]
-
-    assert 'virtio' == list(actual_nics[0].values())[0]['vif_model']
-    assert 'avp' == list(actual_nics[2].values())[0]['vif_model']
-
-    # default is virtio when unspecified anywhere
-    assert 'virtio' == list(actual_nics[1].values())[0]['vif_model']
+    assert pre_nics == post_nics
 
 
 @mark.parametrize(('img_vif'), [
@@ -91,7 +86,7 @@ def test_vif_model_from_image(img_vif):
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
-    internal_net_id = network_helper.get_internal_net_id(net_name='internal0-net1', strict=True)
+    internal_net_id = network_helper.get_internal_net_id()
 
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
             {'net-id': tenant_net_id},

@@ -133,15 +133,15 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     # Handle mandatory arg - flavor
     if flavor is None:
-        flavor = nova_helper.get_basic_flavor(auth_info=auth_info, con_ssh=con_ssh)
+        flavor = nova_helper.get_basic_flavor(auth_info=auth_info, con_ssh=con_ssh, guest_os=guest_os)
 
     # Handle mandatory arg - nics
     if not nics:
         mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=auth_info, con_ssh=con_ssh)
         tenant_net_id = network_helper.get_tenant_net_id(auth_info=auth_info, con_ssh=con_ssh)
-        tenant_vif = random.choice(['virtio', 'avp'])
+        # tenant_vif = random.choice(['virtio', 'avp'])
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_id, 'vif-model': tenant_vif}]
+                {'net-id': tenant_net_id, 'vif-model': 'virtio'}]
     if isinstance(nics, dict):
         nics = [nics]
 
@@ -150,6 +150,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     for nic in nics:
         nic_args_list = []
         for key, val in nic.items():
+            print("key: {}, val: {}".format(key, val))
             key = key.strip().lower()
             val = val.strip().lower()
             if key not in possible_keys:
@@ -172,18 +173,25 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         else:
             vol_name = 'vol-' + name
             if reuse_vol:
-                is_new, volume_id = cinder_helper.get_any_volume(new_name=vol_name, auth_info=auth_info, con_ssh=con_ssh)
+                is_new, volume_id = cinder_helper.get_any_volume(new_name=vol_name, auth_info=auth_info,
+                                                                 con_ssh=con_ssh)
                 if is_new:
                     new_vol = volume_id
             else:
-                new_vol = volume_id = cinder_helper.create_volume(name=vol_name, auth_info=auth_info, con_ssh=con_ssh)[1]
+                size = 9 if 'ubuntu' in guest_os else 1
+                new_vol = volume_id = cinder_helper.create_volume(name=vol_name, size=size, auth_info=auth_info,
+                                                                  con_ssh=con_ssh)[1]
+
     elif source.lower() == 'image':
-        image = source_id if source_id else glance_helper.get_image_id_from_name('cgcs-guest')
+        img_name = guest_os if guest_os else 'cgcs-guest'
+        image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=False)
+
     elif source.lower() == 'snapshot':
         if not snapshot_id:
             snapshot_id = cinder_helper.get_snapshot_id(auth_info=auth_info, con_ssh=con_ssh)
             if not snapshot_id:
                 raise ValueError("snapshot id is required to boot vm; however no snapshot exists on the system.")
+
     # Handle mandatory arg - key_name
     key_name = key_name if key_name is not None else get_any_keypair(auth_info=auth_info, con_ssh=con_ssh)
 

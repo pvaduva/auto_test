@@ -647,7 +647,7 @@ def get_internal_net_id(net_name=None, strict=False, con_ssh=None, auth_info=Non
     net_ids = get_internal_net_ids(net_names=net_name, strict=strict, con_ssh=con_ssh, auth_info=auth_info)
     if not net_ids:
         LOG.warning("No network found with name {}".format(net_name))
-        return []
+        return ''
 
     return net_ids[0]
 
@@ -688,7 +688,7 @@ def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
     net_ids = get_tenant_net_ids(net_names=net_name, con_ssh=con_ssh, auth_info=auth_info)
     if not net_ids:
         LOG.warning("No network found with name {}".format(net_name))
-        return []
+        return ''
 
     return net_ids[0]
 
@@ -1720,3 +1720,26 @@ def delete_vxlan_providernet_range(range_name, con_ssh=None, auth_info=Tenant.AD
         return 2, msg
 
     return code, output
+
+
+def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get nics of vm as a list of dictionaries.
+
+    Args:
+        vm_id (str):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (list): list of dictionaries. Such as:
+        [{"vif_model": "virtio", "network": "external-net0", "port_id": "ba23cd33-b0c5-4e37-b331-013dfc12560b",
+            "mtu": 1500, "mac_address": "fa:16:3e:72:d4:24", "vif_pci_address": ""},
+        {"vif_model": "virtio", "network": "internal0-net0", "port_id": "2ccec5e9-bbd5-4007-9c28-9116da15d925",
+            "mtu": 9000, "mac_address": "fa:16:3e:0d:5a:5e", "vif_pci_address": ""}]
+
+    """
+    table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))
+    nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
+    nics = [eval(nic_) for nic_ in nics]
+
+    return nics

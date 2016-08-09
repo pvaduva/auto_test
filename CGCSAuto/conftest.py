@@ -24,12 +24,18 @@ def setup_test_session():
     Setup primary tenant and Nax Box ssh before the first test gets executed.
     TIS ssh was already set up at collecting phase.
     """
-    global natbox_ssh
+    global build_id
+    build_id = setups.get_build_id(con_ssh)
 
     os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     setups.set_env_vars(con_ssh)
+
+    setups.copy_files_to_con1()
+
+    global natbox_ssh
     natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'))
+
     setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
 
@@ -152,8 +158,6 @@ def pytest_collectstart():
     """
     global con_ssh
     con_ssh = setups.setup_tis_ssh(ProjVar.get_var("LAB"))
-    global build_id
-    build_id = setups.get_build_id(con_ssh)
 
 
 def pytest_runtest_setup(item):

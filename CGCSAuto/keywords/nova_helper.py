@@ -256,7 +256,7 @@ def get_flavor_id(name=None, memory=None, disk=None, ephemeral=None, swap=None, 
     return random.choice(ids)
 
 
-def get_basic_flavor(auth_info=None, con_ssh=None):
+def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     """
     Get a basic flavor with the default arg values and without adding extra specs.
     Args:
@@ -266,10 +266,17 @@ def get_basic_flavor(auth_info=None, con_ssh=None):
     Returns (str): id of the basic flavor
 
     """
-    default_flavor_name = 'flavor-default-1'
+    size = 1
+    if guest_os and 'cgcs-guest' not in guest_os:
+        if 'ubuntu' in guest_os:
+            size = 9
+        elif 'centos' in guest_os:
+            size = 4
+
+    default_flavor_name = 'flavor-default-size{}'.format(size)
     flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)
     if flavor_id == '':
-        flavor_id = create_flavor(name=default_flavor_name, con_ssh=con_ssh)[1]
+        flavor_id = create_flavor(name=default_flavor_name, root_disk=size, con_ssh=con_ssh)[1]
 
     return flavor_id
 

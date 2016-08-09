@@ -101,6 +101,7 @@ def wait_for_vm_to_scale(vm_name=None, expected_count=0, time_out=120, check_int
         # P1(('scale_up_swact_scale_down')),
     ])
 # can add test fixture to configure hosts to be certain storage backing
+# FIXME test func args are unused.
 def test_heat_vm_scale(template_name, action):
     """
     Basic Heat template testing:
