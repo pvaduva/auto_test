@@ -48,7 +48,7 @@ def test_ping_between_two_vms(guest_os, ubuntu_image):
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
 
-    vif_models = ['avp', 'virtip'] if guest_os == 'cgcs-guest' else ['virtio', 'virtio']
+    vif_models = ['avp', 'virtio'] if guest_os == 'cgcs-guest' else ['virtio', 'virtio']
     vms = []
     for vif_model in vif_models:
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
