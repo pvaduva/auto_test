@@ -14,10 +14,10 @@ def id_gen(val):
 
 @mark.sanity
 @mark.parametrize(('guest_os', 'cpu_pol', 'actions'), [
-    mark.cpe_sanity('ubuntu', 'dedicated', ['pause', 'unpause']),
+    mark.cpe_sanity(('ubuntu', 'dedicated', ['pause', 'unpause'])),
     ('ubuntu', 'shared', ['stop', 'start']),
     ('ubuntu', 'dedicated', ['auto_recover']),
-    mark.cpe_sanity('cgcs-guest', 'dedicated', ['suspend', 'resume']),
+    mark.cpe_sanity(('cgcs-guest', 'dedicated', ['suspend', 'resume'])),
     ('cgcs-guest', 'shared', ['auto_recover']),
 ], ids=id_gen)
 def test_nova_actions(guest_os, cpu_pol, actions, ubuntu_image):
