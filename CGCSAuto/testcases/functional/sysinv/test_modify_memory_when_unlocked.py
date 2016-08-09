@@ -53,6 +53,8 @@ def test_modify_memory_when_unlocked(hostname):
 
     """
 
+    if system_helper.is_small_footprint():
+        hostname = system_helper.get_standby_controller_name()
     # Check if the node is locked
     LOG.tc_step("Verify that the host is in unlocked state and unlock it if it's not")
     host_helper.unlock_host(hostname, fail_ok=False)
