@@ -359,7 +359,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
 
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
-                check_hypervisor_up=False):
+                check_hypervisor_up=False, check_webservice_up=False):
     """
     Unlock given host
     Args:
@@ -369,6 +369,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
         con_ssh (SSHClient):
         auth_info (dict):
         check_hypervisor_up (bool): Whether to check if host is up in nova hypervisor-list
+        check_webservice_up (bool): Whether to check if host's web-service is active in system servicegroup-list
 
     Returns (tuple):
         (-1, "Host already unlocked. Do nothing")
@@ -416,6 +417,10 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
     if check_hypervisor_up:
         if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[0]:
             return 6, "Host is not up in nova hypervisor-list"
+
+    if check_webservice_up:
+        if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[0]:
+            return 7, "Host is not active in system servicegroup-list"
 
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
@@ -820,6 +825,40 @@ def wait_for_hosts_in_nova_compute(hosts, timeout=90, check_interval=3, fail_ok=
         time.sleep(check_interval)
     else:
         msg = "Host(s) {} did not shown in nova host-list within timeout".format(hosts_to_check)
+        if fail_ok:
+            LOG.warning(msg)
+            return False, hosts_to_check
+        raise exceptions.HostTimeout(msg)
+
+
+def wait_for_webservice_up(hosts, timeout=90, check_interval=3, fail_ok=False, con_ssh=None):
+
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    hosts_to_check = list(hosts)
+    LOG.info("Waiting for {} to be active for web-service in system servicegroup-list...".format(hosts))
+    end_time = time.time() + timeout
+
+    while time.time() < end_time:
+
+        table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh))
+        table_ = table_parser.filter_table(table_, service_group_name='web-services')
+        #need to check for strict True because 'go-active' state is not 'active' state
+        active_hosts = table_parser.get_values(table_, 'hostname', state='active', strict=True)
+
+        for host in hosts_to_check:
+            if host in active_hosts:
+                hosts_to_check.remove(host)
+
+        if not hosts_to_check:
+            msg = "Host(s) {} are active for web-service in system servicegroup-list".format(hosts)
+            LOG.info(msg)
+            return True, hosts_to_check
+
+        time.sleep(check_interval)
+    else:
+        msg = "Host(s) {} are not active for web-service in system servicegroup-list within timeout".format(hosts_to_check)
         if fail_ok:
             LOG.warning(msg)
             return False, hosts_to_check
