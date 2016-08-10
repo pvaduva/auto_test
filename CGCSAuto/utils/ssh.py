@@ -29,6 +29,8 @@ CONNECTION_REFUSED = '.*Connection refused.*'
 _SSH_OPTS = (' -o RSAAuthentication=no' + ' -o PubkeyAuthentication=no' + ' -o StrictHostKeyChecking=no' +
              ' -o UserKnownHostsFile=/dev/null')
 
+_SSH_OPTS_UBUNTU_VM = (' -o RSAAuthentication=no' + ' -o StrictHostKeyChecking=no' + ' -o UserKnownHostsFile=/dev/null')
+
 EXIT_CODE_CMD = 'echo $?'
 TIMEOUT_EXPECT = 10
 
@@ -632,9 +634,11 @@ class SSHFromSSH(SSHClient):
                     self.send(self.password)
                     self.expect(prompt, timeout=timeout)
                 else:
-                    res_index = self.expect([Prompt.ADD_HOST, prompt, self.parent.get_prompt()], timeout=timeout, fail_ok=False)
-                    if res_index == 1:
+                    res_index = self.expect([Prompt.ADD_HOST, prompt, self.parent.get_prompt()], timeout=timeout,
+                                            fail_ok=False)
+                    if res_index == 2:
                         raise exceptions.SSHException("Unable to login to {}".format(self.host))
+
                     if res_index == 0:
                         self.send('yes')
                         self.expect(prompt, timeout=timeout)
@@ -775,7 +779,7 @@ class VMSSHClient(SSHFromSSH):
 
         # This needs to be modified in centos case.
         if not password:
-            ssh_options = " -i {}".format(ProjVar.get_var('KEYFILE_PATH'))
+            ssh_options = " -i {}{}".format(ProjVar.get_var('KEYFILE_PATH'), _SSH_OPTS_UBUNTU_VM)
         else:
             ssh_options = _SSH_OPTS
         self.ssh_cmd = 'ssh {} {}@{}'.format(ssh_options, self.user, self.host)

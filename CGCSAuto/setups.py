@@ -1,14 +1,15 @@
 import re
 import time
-import traceback
 
 from utils import exceptions
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
+
 from consts.auth import Tenant
 from consts.cgcs import Prompt
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar
+
 from keywords import vm_helper, host_helper
 from keywords.common import scp_to_local
 
@@ -223,11 +224,11 @@ def copy_files_to_con1():
     try:
         with host_helper.ssh_to_host("controller-1") as con_1_ssh:
             if con_1_ssh.file_exists('/home/wrsroot/heat'):
-                LOG.info("Test files already exist on controller-1. Skip scp.")
+                LOG.info("Test files already exist on controller-1. Skip rsync.")
                 return
 
     except Exception as e:
-        LOG.error("Cannot ssh to controller-1. Skip scp. \nException caught: {}".format(e.__str__()))
+        LOG.error("Cannot ssh to controller-1. Skip rsync. \nException caught: {}".format(e.__str__()))
         return
 
     # cmd = 'scp -q -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null controller-0:/home/wrsroot/* ' \

@@ -147,18 +147,21 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     possible_keys = ['net-id', 'v4-fixed-ip', 'v6-fixed-ip', 'port-id', 'vif-model', 'vif-pci-address']
     nics_args_list = []
+
     for nic in nics:
         nic_args_list = []
+
         for key, val in nic.items():
-            print("key: {}, val: {}".format(key, val))
             key = key.strip().lower()
             val = val.strip().lower()
             if key not in possible_keys:
                 raise ValueError("{} is not a valid option. Valid options: {}".format(key, possible_keys))
             nic_arg_val = '='.join([key, val])
             nic_args_list.append(nic_arg_val)
+
         nic_args = '--nic ' + ','.join(nic_args_list)
         nics_args_list.append(nic_args)
+
     nics_args = ' '.join(nics_args_list)
 
     # Handle mandatory arg - boot source id
@@ -1935,6 +1938,53 @@ def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
 
 def get_proc_num_from_vm(vm_ssh):
     return int(vm_ssh.exec_cmd('cat /proc/cpuinfo | grep processor | wc -l', fail_ok=False)[1])
+
+
+def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=None, con_ssh=None):
+    """
+    cpu affinity list for vm via taskset -pc
+    Args:
+        vm_id (str):
+        con_ssh (SSHClient):
+
+    Returns (list): such as [10, 30]
+
+    """
+    cmd = '''ps-sched.sh | grep qemu | grep {} | grep -v grep | awk '{{print $2;}}' | xargs -i /bin/sh -c "taskset -pc {{}}"'''
+
+    if host_ssh:
+        if not vm_host or not instance_name:
+            raise ValueError("vm_host and instance_name have to be provided together with host_ssh")
+
+        output = host_ssh.exec_cmd(cmd.format(instance_name))[1]
+
+    else:
+        vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+        instance_name = nova_helper.get_vm_instance_name(vm_id, con_ssh=con_ssh)
+
+        with host_helper.ssh_to_host(vm_host) as host_ssh:
+            output = host_ssh.exec_cmd(cmd.format(instance_name))[1]
+
+    # Sample output:
+    # pid 6376's current affinity list: 10
+    # pid 6380's current affinity list: 10
+    # pid 6439's current affinity list: 10
+    # pid 6441's current affinity list: 10
+    # pid 6442's current affinity list: 30
+    # pid 6445's current affinity list: 10
+    # pid 24142's current affinity list: 10
+
+    all_cpus = []
+    lines = output.split()
+    for line in lines:
+        cpu_str = line.split(sep=':')[-1].strip()
+        cpus = common._parse_cpus_list(cpus=cpu_str)
+        all_cpus += cpus
+
+    all_cpus = sorted(list(set(all_cpus)))
+    LOG.info("Affined cpus on host {} for vm {}: {}".format(vm_id, vm_host, all_cpus))
+
+    return all_cpus
 
 
 def _scp_ubuntu_init():
