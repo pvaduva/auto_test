@@ -646,7 +646,7 @@ def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_i
     Returns (tuple):
 
     """
-    LOG.info("Setting 4k memory to: {}".format(smallpage_num))
+    LOG.info("Setting host {}'s proc_id {} to contain {} 4k pages".format(host, proc_id, smallpage_num))
     mem_vals = get_host_mem_values(
             host, ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'vm_hp_avail_2M', 'mem_avail(MiB)', ],
             proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)

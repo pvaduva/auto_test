@@ -1363,7 +1363,7 @@ def check_host_local_backing_type(host, storage_type='image', con_ssh=None):
     return True
 
 
-def set_host_local_backing_type(host, inst_type='image',vol_group='noval-local',unlock=True, con_ssh=None):
+def set_host_local_backing_type(host, inst_type='image',vol_group='noval-local',unlock_host=True, con_ssh=None):
     lock_host(host)
     lvg_args = "-b "+inst_type+" "+host+" "+vol_group
     # config lvg parameter for instance backing either image/lvm
@@ -1371,7 +1371,7 @@ def set_host_local_backing_type(host, inst_type='image',vol_group='noval-local',
     cli.system('host-lvg-modify', lvg_args, auth_info=Tenant.ADMIN, fail_ok=False)
 
     # unlock the node
-    if unlock:
+    if unlock_host:
         # https://jira.wrs.com:8443/browse/CGTS-4523 need to check for hypervisor or sleep20 sec
         unlock_host(host,check_hypervisor_up=True)
         verify_backing = check_host_local_backing_type(host, storage_type=inst_type, con_ssh=None),
