@@ -72,7 +72,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
     table_ = table_parser.table(cli.cinder('list --all-tenants', auth_info=auth_info, ssh_client=con_ssh))
 
     if name is not None:
-        table_ = table_parser.filter_table(table_, strict=name_strict, **{'Display Name': name})
+        table_ = table_parser.filter_table(table_, strict=name_strict, **{'Name': name})
 
     if criteria:
         table_ = table_parser.filter_table(table_, **criteria)

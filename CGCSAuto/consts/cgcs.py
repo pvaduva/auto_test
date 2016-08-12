@@ -25,7 +25,7 @@ DNS_NAMESERVERS = ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
 HOME = '/home/wrsroot/'
 # Heat template path
 HEAT_PATH = 'heat/hot/simple/'
-HEAT_SCENARIO_PATH = 'heat/hot/scenario/'
+HEAT_SCENARIO_PATH = 'heat/hot/scenarios/'
 
 class NetIP:
     MGMT_NET_NAME = 'tenant\d-mgmt-net'
