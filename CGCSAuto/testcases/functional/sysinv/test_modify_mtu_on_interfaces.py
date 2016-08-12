@@ -44,11 +44,9 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
 
     # unlock the node
     LOG.tc_step('unlock the standby')
-    if hostname in host_helper.get_hypervisors():
-        check_hypervisor = True
-    else:
-        check_hypervisor= False
-    host_helper.unlock_host(hostname, check_hypervisor_up=check_hypervisor)
+    
+    # check webservice are up when host are unlocked
+    host_helper.unlock_host(hostname, check_webservice_up=True)
 
 
 @mark.parametrize('mtu', ['1400', '1500'])
@@ -113,7 +111,7 @@ def test_data_intf_mtu_modified(mtu):
     """
     23) Change the MTU value of the data interface using CLI
     Verify that MTU on data interfaces on all compute node can be modified by cli
-
+    The min mtu for data interface can be 1500,9000 or 9216, in which case MTU is unchangable. Need to confirm
     Args:
         mtu (str): A string that contain the mtu want to be tested
 

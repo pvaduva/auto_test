@@ -68,6 +68,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     Returns (tuple): (rtn_code, message)
         (0, "Host(s) state(s) - <states_dict>.") hosts rebooted and back to available/degraded or online state.
         (1, "Host(s) not in expected availability states or task unfinished. (<states>) (<task>)" )
+        (2, "Hypervisor is not enabled. Hosts <list of hosts>)"
     """
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
@@ -150,6 +151,16 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         if not vals['task'] == '':
             task_unfinished_msg = ' '.join([task_unfinished_msg, "{} still in task: {}.".format(host, vals['task'])])
         states_vals[host] = vals
+
+    if system_helper.is_small_footprint():
+        if not wait_for_hypervisors_up(hostnames, fail_ok=fail_ok, con_ssh=con_ssh,
+                                       timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL)[0]:
+            err_msg = "Hypervisor is not enabled. Hosts {}".format(hostnames)
+            if fail_ok:
+                LOG.warning(err_msg)
+                return 2, err_msg
+            else:
+                raise exceptions.HostPostCheckFailed(err_msg)
 
     message = "Host(s) state(s) - {}.".format(states_vals)
 
@@ -348,7 +359,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
 
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
-                check_hypervisor_up=False):
+                check_hypervisor_up=False, check_webservice_up=False):
     """
     Unlock given host
     Args:
@@ -358,6 +369,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
         con_ssh (SSHClient):
         auth_info (dict):
         check_hypervisor_up (bool): Whether to check if host is up in nova hypervisor-list
+        check_webservice_up (bool): Whether to check if host's web-service is active in system servicegroup-list
 
     Returns (tuple):
         (-1, "Host already unlocked. Do nothing")
@@ -405,6 +417,10 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
     if check_hypervisor_up:
         if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[0]:
             return 6, "Host is not up in nova hypervisor-list"
+
+    if check_webservice_up:
+        if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[0]:
+            return 7, "Host is not active in system servicegroup-list"
 
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
@@ -809,6 +825,40 @@ def wait_for_hosts_in_nova_compute(hosts, timeout=90, check_interval=3, fail_ok=
         time.sleep(check_interval)
     else:
         msg = "Host(s) {} did not shown in nova host-list within timeout".format(hosts_to_check)
+        if fail_ok:
+            LOG.warning(msg)
+            return False, hosts_to_check
+        raise exceptions.HostTimeout(msg)
+
+
+def wait_for_webservice_up(hosts, timeout=90, check_interval=3, fail_ok=False, con_ssh=None):
+
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    hosts_to_check = list(hosts)
+    LOG.info("Waiting for {} to be active for web-service in system servicegroup-list...".format(hosts))
+    end_time = time.time() + timeout
+
+    while time.time() < end_time:
+
+        table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh))
+        table_ = table_parser.filter_table(table_, service_group_name='web-services')
+        #need to check for strict True because 'go-active' state is not 'active' state
+        active_hosts = table_parser.get_values(table_, 'hostname', state='active', strict=True)
+
+        for host in hosts_to_check:
+            if host in active_hosts:
+                hosts_to_check.remove(host)
+
+        if not hosts_to_check:
+            msg = "Host(s) {} are active for web-service in system servicegroup-list".format(hosts)
+            LOG.info(msg)
+            return True, hosts_to_check
+
+        time.sleep(check_interval)
+    else:
+        msg = "Host(s) {} are not active for web-service in system servicegroup-list within timeout".format(hosts_to_check)
         if fail_ok:
             LOG.warning(msg)
             return False, hosts_to_check
@@ -1313,7 +1363,7 @@ def check_host_local_backing_type(host, storage_type='image', con_ssh=None):
     return True
 
 
-def set_host_local_backing_type(host, inst_type='image',vol_group='noval-local',unlock=True, con_ssh=None):
+def set_host_local_backing_type(host, inst_type='image',vol_group='noval-local',unlock_host=True, con_ssh=None):
     lock_host(host)
     lvg_args = "-b "+inst_type+" "+host+" "+vol_group
     # config lvg parameter for instance backing either image/lvm
@@ -1321,7 +1371,7 @@ def set_host_local_backing_type(host, inst_type='image',vol_group='noval-local',
     cli.system('host-lvg-modify', lvg_args, auth_info=Tenant.ADMIN, fail_ok=False)
 
     # unlock the node
-    if unlock:
+    if unlock_host:
         # https://jira.wrs.com:8443/browse/CGTS-4523 need to check for hypervisor or sleep20 sec
         unlock_host(host,check_hypervisor_up=True)
         verify_backing = check_host_local_backing_type(host, storage_type=inst_type, con_ssh=None),
