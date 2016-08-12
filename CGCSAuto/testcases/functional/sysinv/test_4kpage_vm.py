@@ -113,13 +113,14 @@ def test_4k_page_vm(boot_source):
                                         "However, output is {} ".format(attribute[2])
 
 
-
+@mark.skipif(True, reason="Evacuation JIRA CGTS-4972")
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'block_mig'), [
-    mark.p2(('local_image', 0, 0, None, 1, 'volume', False)),
+    mark.p2(('local_image', 0, 0, None, 1, 'volume', True)),
     mark.p1(('local_image', 0, 0, None, 1, 'image',True)),
-    mark.p2(('local_lvm', 0, 0, None, 1, 'volume', False)),
+    mark.p1(('local_image', 0, 0, None, 3, 'image', True)),
+    mark.p2(('local_lvm', 0, 0, None, 1, 'volume', True)),
     mark.p2(('local_lvm', 0, 0, None, 1, 'image',True)),
-    mark.p2(('remote', 1, 1, None, 1, 'image', True)),
+    mark.p2(('remote', 1, 1, None, 1, 'volume', True)),
     mark.p2(('remote', 0, 0, None, 2, 'image',True)),
 ])
 def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, block_mig,
@@ -129,20 +130,23 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type)
 
+    # make sure the VM is up and pingable from natbox
+    LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
+
     # check vm-topology make sure the created vm's page size is 4k
     LOG.tc_step("Verify cpu info for vm {} via vm-topology.".format(vm_id))
     con_ssh = ControllerClient.get_active_controller()
     # retrieve the correct table from the vm-topology
     nova_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers', expect_timeout=30)[1],
                                    combine_multiline_entry=False)[0]
-    print(nova_tab)
     vm_row = [row for row in nova_tab['values'] if row[1] == vm_id][0]
     attribute = vm_row[11].split(', ')
     assert attribute[2] == 'pgsize:4K', "expected result to be pgsize:4K. " \
                                         "However, output is {} ".format(attribute[2])
 
+    # start live migration
     prev_vm_host = nova_helper.get_vm_host(vm_id)
-
     LOG.tc_step("Live migrate VM and ensure it succeeded")
     # block_mig = True if boot_source == 'image' else False
     code, output = vm_helper.live_migrate_vm(vm_id, block_migrate=block_mig)
@@ -151,7 +155,7 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
     post_vm_host = nova_helper.get_vm_host(vm_id)
     assert prev_vm_host != post_vm_host
 
-
+@mark.skipif(True, reason="Evacuation JIRA CGTS-4972")
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type'), [
     mark.p2(('local_image', 0, 0, None, 1, 'volume')),
     mark.p2(('local_lvm', 0, 0, None, 1, 'volume')),
@@ -165,6 +169,10 @@ def test_cold_migrate_4k_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm
         skip("Less than two hosts have {} storage backing".format(storage_backing))
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type)
+
+    # make sure the VM is up and pingable from natbox
+    LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
     # check vm-topology make sure the created vm's page size is 4k
     LOG.tc_step("Verify cpu info for vm {} via vm-topology.".format(vm_id))
@@ -209,7 +217,7 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 
     boot_source = 'volume' if vm_type == 'volume' else 'image'
     LOG.tc_step("Boot a vm from {}".format(boot_source))
-    vm_id = vm_helper.boot_vm('live-mig', flavor=flavor_id, source=boot_source)[1]
+    vm_id = vm_helper.boot_vm('mig', flavor=flavor_id, source=boot_source)[1]
     ResourceCleanup.add('vm', vm_id)
 
     if vm_type == 'image_with_vol':
