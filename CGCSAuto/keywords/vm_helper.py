@@ -9,8 +9,10 @@ from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
 from utils.tis_log import LOG
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.timeout import VMTimeout, CMDTimeout
+from consts.proj_vars import ProjVar
 from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, \
     VifMapping, VMNetworkStr
+from consts.filepaths import TiSPath, VMPath
 
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 
@@ -181,9 +183,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                 if is_new:
                     new_vol = volume_id
             else:
-                size = 9 if 'ubuntu' in guest_os else 1
-                new_vol = volume_id = cinder_helper.create_volume(name=vol_name, size=size, auth_info=auth_info,
-                                                                  con_ssh=con_ssh)[1]
+                new_vol = volume_id = cinder_helper.create_volume(name=vol_name, auth_info=auth_info,
+                                                                  con_ssh=con_ssh, guest_image=guest_os)[1]
 
     elif source.lower() == 'image':
         img_name = guest_os if guest_os else 'cgcs-guest'
@@ -203,9 +204,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     avail_zone = 'nova:{}'.format(vm_host) if vm_host else None
 
-    if not user_data and 'ubuntu' in guest_os:
-        _scp_ubuntu_init()
-        user_data = '/home/wrsroot/userdata/ubuntu_if_config.sh'
+    # create userdata cloud init file to run right after vm initialization to get ip on interfaces other than eth0.
+    if guest_os and not user_data and 'cgcs-guest' not in guest_os:
+        user_data = _create_cloud_init_if_conf(guest_os, nics_num=len(nics))
 
     optional_args_dict = {'--flavor': flavor,
                           '--image': image,
@@ -1660,6 +1661,50 @@ def _start_or_stop_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_CHANGE
     return 0, succ_msg
 
 
+def rebuild_vm(vm_id, image_id=None, new_name=None, preserve_ephemeral=None, fail_ok=False, con_ssh=None,
+               auth_info=Tenant.ADMIN, **metadata):
+
+    if image_id is None:
+        image_id = glance_helper.get_image_id_from_name('cgcs-guest')
+
+    args = '{} {}'.format(vm_id, image_id)
+
+    if new_name:
+        args += ' --name {}'.format(new_name)
+
+    if preserve_ephemeral:
+        args += ' --preserve-ephemeral'
+
+    for key, value in metadata.items():
+        args += ' --meta {}={}'.format(key, value)
+
+    LOG.info("Rebuilding vm {}".format(vm_id))
+    code, output = cli.nova('rebuild', args, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    if code == 1:
+        return code, output
+
+    LOG.info("Check vm status after vm rebuild")
+    _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=fail_ok, con_ssh=con_ssh)
+    actual_status = _wait_for_vm_status(vm_id, [VMStatus.ACTIVE, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh,
+                                        timeout=VMTimeout.REBUILD)
+
+    if not actual_status:
+        msg = "VM {} did not reach active state after rebuild.".format(vm_id)
+        LOG.warning(msg)
+        return 2, msg
+
+    if actual_status.lower() == VMStatus.ERROR.lower():
+        msg = "VM is in error state after rebuild."
+        if fail_ok:
+            LOG.warning(msg)
+            return 3, msg
+        raise exceptions.VMPostCheckFailed(msg)
+
+    succ_msg = "VM rebuilded successfully."
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
 def scale_vm(vm_id, direction, resource='cpu', fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Scale up/down vm cpu
@@ -1813,8 +1858,10 @@ def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **
         'pause': pause_vm,
         'unpause': unpause_vm,
         'reboot': reboot_vm,
+        'rebuild': rebuild_vm,
         'live_migrate': live_migrate_vm,
         'cold_migrate': cold_migrate_vm,
+        'cold_mig_revert': cold_migrate_vm,
     }
     if not vm_id:
         raise ValueError("vm id is not provided.")
@@ -1823,6 +1870,9 @@ def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **
     action = action.lower().replace(' ', '_')
     if action not in valid_actions:
         raise ValueError("Invalid action provided: {}. Valid actions: {}".format(action, valid_actions))
+
+    if action == 'cold_mig_revert':
+        kwargs['revert'] = True
 
     action_function_map[action](vm_id, con_ssh=con_ssh, auth_info=auth_info, **kwargs)
 
@@ -1975,23 +2025,29 @@ def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=No
     # pid 24142's current affinity list: 10
 
     all_cpus = []
-    lines = output.split()
+    lines = output.splitlines()
     for line in lines:
-        cpu_str = line.split(sep=':')[-1].strip()
+        cpu_str = line.split(sep=': ')[-1].strip()
         cpus = common._parse_cpus_list(cpus=cpu_str)
         all_cpus += cpus
 
     all_cpus = sorted(list(set(all_cpus)))
-    LOG.info("Affined cpus on host {} for vm {}: {}".format(vm_id, vm_host, all_cpus))
+    LOG.info("Affined cpus on host {} for vm {}: {}".format(vm_host, vm_id, all_cpus))
 
     return all_cpus
 
 
-def _scp_ubuntu_init():
+def _scp_net_config_cloud_init(guest_os):
     con_ssh = ControllerClient.get_active_controller()
 
     dest_dir = '/home/wrsroot/userdata/'
-    dest_name = 'ubuntu_if_config.sh'
+    if 'ubuntu' in guest_os:
+        dest_name = 'ubuntu_cloud_init_if_conf.sh'
+    elif 'centos' in guest_os:
+        dest_name = 'centos_cloud_init_if_conf.sh'
+    else:
+        raise ValueError("Unknown guest_os")
+
     dest_path = dest_dir + dest_name
 
     if con_ssh.file_exists(file_path=dest_path):
@@ -2022,3 +2078,73 @@ def _scp_ubuntu_init():
         index = con_ssh.expect()
     if index != 0:
         raise exceptions.SSHException("Failed to scp files")
+
+
+def _create_cloud_init_if_conf(guest_os, nics_num):
+    """
+
+    Args:
+        guest_os:
+        nics_num:
+
+    Returns (str): file path of the cloud init userdata file for given guest os and number of nics
+        Sample file content for Centos vm:
+            #!/bin/bash
+            sudo cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth1
+            sudo sed -i 's/eth0/eth1/g' /etc/sysconfig/network-scripts/ifcfg-eth1
+            sudo ifup eth1
+
+        Sample file content for Ubuntu vm:
+
+
+    """
+
+    file_dir = TiSPath.USERDATA
+
+    if 'ubuntu' in guest_os:
+        guest_os = 'ubuntu'
+        # vm_if_path = VMPath.VM_IF_PATH_UBUNTU
+        eth_path = VMPath.ETH_PATH_UBUNTU
+    elif 'centos' in guest_os:
+        guest_os = guest_os
+        # vm_if_path = VMPath.VM_IF_PATH_CENTOS
+        eth_path = VMPath.ETH_PATH_CENTOS
+
+    else:
+        raise ValueError("Unknown guest os")
+
+    eth0_path = eth_path.format('eth0')
+    file_name = '{}_{}nic_cloud_init_if_conf.sh'.format(guest_os, nics_num)
+
+    file_path = file_dir + file_name
+    con_ssh = ControllerClient.get_active_controller()
+    if con_ssh.file_exists(file_path=file_path):
+        LOG.info('userdata {} already exists. Return existing path'.format(file_path))
+        return file_path
+
+    LOG.debug('Create userdata directory if not already exists')
+    cmd = 'mkdir -p {}'.format(file_dir)
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
+    tmp_file = ProjVar.get_var('TEMP_DIR') + file_name
+    if 'centos7' in guest_os:
+        shell = '/usr/bin/bash'
+        cmd_path = '/usr/bin/'
+        ifup_path = '/usr/sbin/'
+    else:
+        shell = '/bin/bash'
+        cmd_path = ''
+        ifup_path = ''
+
+    with open(tmp_file, mode='a') as f:
+        f.write('#!{}\n\n'.format(shell))
+        for i in range(nics_num-1):
+            ethi_name = 'eth{}'.format(i+1)
+            ethi_path = eth_path.format(ethi_name)
+            f.write('sudo {}cp {} {}\n'.format(cmd_path, eth0_path, ethi_path))
+            f.write("sudo {}sed -i 's/eth0/{}/g' {}\n".format(cmd_path, ethi_name, ethi_path))
+            f.write('sudo {}ifup {}\n'.format(ifup_path, ethi_name))
+
+    common.scp_to_active_controller(source_path=tmp_file, dest_path=file_path, is_dir=False)
+
+    return file_path

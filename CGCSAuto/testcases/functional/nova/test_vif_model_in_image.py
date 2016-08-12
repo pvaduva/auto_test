@@ -69,7 +69,7 @@ def test_attach_cinder_volume_to_instance(vol_vif):
     assert pre_nics == post_nics
 
 
-@mark.parametrize(('img_vif'), [
+@mark.parametrize('img_vif', [
     mark.sanity('avp'),
     mark.p2('virtio'),
     mark.p3('e1000')

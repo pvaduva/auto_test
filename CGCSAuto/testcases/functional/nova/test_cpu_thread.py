@@ -4,7 +4,8 @@ from pytest import mark, fixture, skip
 
 from utils.tis_log import LOG
 
-from consts.cgcs import FlavorSpec, ImageMetadata
+from consts.reasons import SkipReason
+from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus
 from consts.cli_errs import CPUThreadErr, SharedCPUErr, ColdMigrateErr, CPUPolicyErr, ScaleErr
 
 from keywords import nova_helper, system_helper, vm_helper, host_helper, glance_helper, cinder_helper, common, check_helper
@@ -483,6 +484,285 @@ class TestHTEnabled:
         LOG.tc_step("Check vm vcpus in nova show did not change")
         check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
+    def id_gen(self, val):
+        if isinstance(val, list):
+            return '-'.join(val)
+
+    @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol',  'min_vcpus', 'numa_0', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'host_action'), [
+        (1, 'dedicated', 'isolate', None, None, None, 'volume', 'live_migrate', None),
+        (2, 'dedicated', 'isolate', None, None, None, 'image', 'live_migrate', None),
+        (4, 'dedicated', 'require', 2, None, 'strict', 'volume', 'live_migrate', None),
+        (6, 'dedicated', 'isolate', 4, 0, None, 'volume', 'cold_migrate', None),
+        (4, 'dedicated', 'require', None, None, 'strict', 'volume', 'cold_migrate', None),
+        (2, 'dedicated', 'require', None, None, None, 'volume', 'cold_mig_revert', None),
+        (3, 'dedicated', 'isolate', None, None, 'strict', 'volume', 'cold_mig_revert', None),
+        (4, 'dedicated', 'isolate', None, None, None, 'volume', ['suspend', 'resume', 'rebuild'], None),
+        (6, 'dedicated', 'require', 2, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None),
+        mark.skipif(True, reason="Evacuation JIRA CGTS-4917")((2, 'dedicated', 'isolate', None, None, 'strict', 'volume', ['cold_migrate', 'live_migrate'], 'evacuate')),
+
+    ], ids=id_gen)
+    def test_cpu_thread_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol,  min_vcpus, numa_0,
+                                                 vs_numa_affinity, boot_source, nova_actions, host_action, ht_hosts):
+
+        if len(ht_hosts) < 2:
+            skip(SkipReason.LESS_THAN_TWO_HT_HOSTS)
+
+        # Boot vm with given requirements and check vm is booted with correct topology
+        LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
+        flavor_id = nova_helper.create_flavor(name='cpu_thr_{}_{}'.format(cpu_thr_pol, vcpus), vcpus=vcpus)[1]
+        ResourceCleanup.add('flavor', flavor_id)
+
+        specs_dict = {
+            FlavorSpec.CPU_POLICY: cpu_pol,
+            FlavorSpec.CPU_THREAD_POLICY: cpu_thr_pol,
+            FlavorSpec.MIN_VCPUS: min_vcpus,
+            FlavorSpec.NUMA_0: numa_0,
+            FlavorSpec.VSWITCH_NUMA_AFFINITY: vs_numa_affinity
+        }
+        specs = {}
+        for key, value in specs_dict.items():
+            if value is not None:
+                specs[key] = value
+
+        if specs:
+            LOG.tc_step("Set following extra specs: {}".format(specs))
+            nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+
+        LOG.tc_step("Get used cpus for all hosts before booting vm")
+        pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=ht_hosts, rtn_val='used_now')
+
+        LOG.tc_step("Boot a vm with above flavor and ensure it's booted on a HT enabled host.")
+        vm_name = 'cpu_thr_{}_{}'.format(cpu_thr_pol, vcpus)
+        vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, source=boot_source)[1]
+        ResourceCleanup.add('vm', vm_id)
+
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
+        if vs_numa_affinity == 'strict':
+            LOG.tc_step("Check VM is booted on vswitch numa nodes, when vswitch numa affinity set to strict")
+            check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
+
+        vm_host = nova_helper.get_vm_host(vm_id)
+        assert vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
+
+        prev_cpus = pre_hosts_cpus[vm_host]
+
+        check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
+                                          cpu_thr_pol=cpu_thr_pol, vm_host=vm_host)
+
+        # Perform Nova action(s) and check vm topology
+        LOG.tc_step("Perform following nova action(s) on vm {}: {}".format(vm_id, nova_actions))
+        if isinstance(nova_actions, str):
+            nova_actions = [nova_actions]
+
+        for action in nova_actions:
+            vm_helper.perform_action_on_vm(vm_id, action=action)
+
+        LOG.tc_step("Check vm is on HT host")
+        post_vm_host = nova_helper.get_vm_host(vm_id)
+        assert post_vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
+
+        LOG.tc_step("Check VM topology is still correct after {}".format(nova_actions))
+        check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
+                                          cpu_thr_pol=cpu_thr_pol, vm_host=post_vm_host)
+
+        if vs_numa_affinity == 'strict':
+            LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
+            check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
+
+        LOG.tc_step("Check VM still pingable from NatBox after Nova action(s)")
+        vm_helper.ping_vms_from_natbox(vm_id)
+
+        # Perform host action and check vm topology
+        if host_action == 'evacuate':
+            target_host = post_vm_host
+            LOG.tc_step("Reboot vm host {}".format(target_host))
+            host_helper.reboot_hosts(target_host, wait_for_reboot_finish=False)
+            HostsToRecover.add(target_host)
+
+            LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
+            vm_helper._wait_for_vms_values(vm_id, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
+
+            LOG.tc_step("Check vms are in Active state and moved to other host(s) after host reboot")
+            vm_helper._wait_for_vms_values(vms=vm_id, values=VMStatus.ACTIVE, timeout=600, fail_ok=False)
+            vm_host_post_evac = nova_helper.get_vm_host(vm_id)
+            assert target_host != vm_host_post_evac, "VM stuck on the same host upon host reboot"
+
+            LOG.tc_step("Check VM topology is still correct after host reboot")
+            check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
+                                              cpu_thr_pol=cpu_thr_pol, vm_host=vm_host_post_evac)
+
+            if vs_numa_affinity == 'strict':
+                LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
+                check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
+
+            LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
+            vm_helper.ping_vms_from_natbox(vm_id)
+
+    @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'cpu_thr_in_flv'), [
+        (2, 'dedicated', 'isolate', None, 'volume', 'live_migrate', False),
+        (4, 'dedicated', 'require', 'strict', 'image', 'live_migrate', False),
+        (3, 'dedicated', 'isolate', None, 'volume', 'cold_migrate', False),
+        (2, 'dedicated', 'require', None, 'volume', 'cold_mig_revert', False),
+        (4, 'dedicated', 'isolate', None, 'image', ['suspend', 'resume', 'rebuild'], False),
+        (6, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False),
+        (4, 'dedicated', 'require', None, 'volume', 'live_migrate', True),
+        (1, 'dedicated', 'isolate', 'image', 'image', 'live_migrate', True),
+
+    ], ids=id_gen)
+    def test_cpu_thread_image_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol, vs_numa_affinity,
+                                                       boot_source, nova_actions, cpu_thr_in_flv, ht_hosts):
+        if len(ht_hosts) < 2:
+            skip(SkipReason.LESS_THAN_TWO_HT_HOSTS)
+
+        name_str = 'cpu_thr_{}_in_img'.format(cpu_pol)
+
+        LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
+        flavor_id = nova_helper.create_flavor(name='vcpus{}'.format(vcpus), vcpus=vcpus)[1]
+        ResourceCleanup.add('flavor', flavor_id)
+
+        specs = {}
+        if vs_numa_affinity:
+            specs[FlavorSpec.VSWITCH_NUMA_AFFINITY] = vs_numa_affinity
+
+        if cpu_thr_in_flv:
+            specs[FlavorSpec.CPU_POLICY] = cpu_pol
+            specs[FlavorSpec.CPU_THREAD_POLICY] = cpu_thr_pol
+
+        if specs:
+            LOG.tc_step("Set following extra specs: {}".format(specs))
+            nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+
+        image_meta = {ImageMetadata.CPU_POLICY: cpu_pol, ImageMetadata.CPU_THREAD_POLICY: cpu_thr_pol}
+        LOG.tc_step("Create image with following metadata: {}".format(image_meta))
+        image_id = glance_helper.create_image(name=name_str, **image_meta)[1]
+        ResourceCleanup.add('image', image_id)
+
+        if boot_source == 'volume':
+            LOG.tc_step("Create a volume from above image")
+            source_id = cinder_helper.create_volume(name=name_str, image_id=image_id)[1]
+            ResourceCleanup.add('volume', source_id)
+        else:
+            source_id = image_id
+
+        LOG.tc_step("Get used cpus for all hosts before booting vm")
+        pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=ht_hosts, rtn_val='used_now')
+
+        LOG.tc_step("Boot a vm from {} with above flavor".format(boot_source))
+        vm_id = vm_helper.boot_vm(name=name_str, flavor=flavor_id, source=boot_source, source_id=source_id)[1]
+        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+
+        LOG.tc_step("Check vm is booted on a HT host")
+        vm_host = nova_helper.get_vm_host(vm_id)
+        assert vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
+
+        if vs_numa_affinity == 'strict':
+            LOG.tc_step("Check VM is booted on vswitch numa node, when vswitch numa affinity set to strict")
+            check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
+
+        prev_cpus = pre_hosts_cpus[vm_host]
+
+        check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
+                                          cpu_thr_pol=cpu_thr_pol, vm_host=vm_host)
+
+        LOG.tc_step("Perform following nova action(s) on vm {}: {}".format(vm_id, nova_actions))
+        for action in nova_actions:
+            vm_helper.perform_action_on_vm(vm_id, action=action)
+
+        LOG.tc_step("Check vm is still on HT host")
+        post_vm_host = nova_helper.get_vm_host(vm_id)
+        assert post_vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
+
+        LOG.tc_step("Check VM topology is still correct after {}".format(nova_actions))
+        check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
+                                          cpu_thr_pol=cpu_thr_pol, vm_host=post_vm_host)
+
+        if vs_numa_affinity == 'strict':
+            LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
+            check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
+
+    @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol', 'cpu_thr_source', 'vs_numa_affinity', 'boot_source'), [
+        (2, 'dedicated', 'isolate', 'flavor', 'strict', 'volume'),
+        (1, 'dedicated', 'isolate', 'flavor', None, 'image'),
+        (4, 'dedicated', 'require', 'flavor', None, 'volume'),
+        (3, 'dedicated', 'isolate', 'image', None, 'volume'),
+        (2, 'dedicated', 'require', 'image', None, 'image')
+    ])
+    def test_cpu_thr_live_mig_negative(self, vcpus, cpu_pol, cpu_thr_pol, cpu_thr_source, vs_numa_affinity, boot_source, ht_hosts):
+
+        LOG.tc_step("Ensure system has only one HT host")
+
+        if len(ht_hosts) > 1:
+            skip(SkipReason.MORE_THAN_ONE_HT_HOSTS)
+
+        if len(host_helper.get_nova_hosts()) < 2:
+            skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+
+        specs = {}
+        if cpu_thr_source == 'flavor':
+            flv_name = 'cpu_thr_{}_{}'.format(cpu_thr_pol, vcpus)
+            specs_dict = {
+                FlavorSpec.CPU_POLICY: cpu_pol,
+                FlavorSpec.CPU_THREAD_POLICY: cpu_thr_pol,
+                FlavorSpec.VSWITCH_NUMA_AFFINITY: vs_numa_affinity
+            }
+            for key, value in specs_dict.items():
+                if value is not None:
+                    specs[key] = value
+
+            source_id = None
+        else:
+            name_str = 'cpu_thr_{}_in_img'.format(cpu_thr_pol)
+            flv_name = 'vcpus{}'.format(vcpus)
+            if vs_numa_affinity:
+                specs[FlavorSpec.VSWITCH_NUMA_AFFINITY] = vs_numa_affinity
+
+            image_meta = {ImageMetadata.CPU_POLICY: cpu_pol, ImageMetadata.CPU_THREAD_POLICY: cpu_thr_pol}
+            LOG.tc_step("Create image with following metadata: {}".format(image_meta))
+            image_id = glance_helper.create_image(name=name_str, **image_meta)[1]
+            ResourceCleanup.add('image', image_id)
+
+            if boot_source == 'volume':
+                LOG.tc_step("Create a volume from above image")
+                source_id = cinder_helper.create_volume(name=name_str, image_id=image_id)[1]
+                ResourceCleanup.add('volume', source_id)
+            else:
+                source_id = image_id
+
+        LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
+        flavor_id = nova_helper.create_flavor(name=flv_name, vcpus=vcpus)[1]
+        ResourceCleanup.add('flavor', flavor_id)
+
+        if specs:
+            LOG.tc_step("Set following extra specs: {}".format(specs))
+            nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+
+        LOG.tc_step("Get used cpus for all hosts before booting vm")
+        pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=ht_hosts, rtn_val='used_now')
+
+        LOG.tc_step("Boot a vm from {} with above flavor and ensure it's booted on HT host.".format(boot_source))
+        vm_name = 'cpu_thr_{}_{}_{}'.format(cpu_thr_pol, cpu_thr_source, vcpus)
+        vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, source=boot_source, source_id=source_id)[1]
+        ResourceCleanup.add('vm', vm_id)
+
+        vm_host = nova_helper.get_vm_host(vm_id)
+        assert vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
+
+        if vs_numa_affinity == 'strict':
+            LOG.tc_step("Check VM is booted on vswitch numa nodes, when vswitch numa affinity set to strict")
+            check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
+
+        prev_cpus = pre_hosts_cpus[vm_host]
+
+        check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
+                                          cpu_thr_pol=cpu_thr_pol, vm_host=vm_host)
+
+        LOG.tc_step("Attempt to live migrate vm and ensure it's rejected due to no other HT host")
+        code, output = vm_helper.live_migrate_vm(vm_id, fail_ok=True)
+        assert 2 == code, "Expect live migration request to be rejected. Actual: {}".format(output)
+        # TODO: update error string
+        assert ColdMigrateErr.HT_HOST_REQUIRED.format(cpu_thr_pol) in output
+
 
 class TestHTDisabled:
 
@@ -532,7 +812,7 @@ class TestHTDisabled:
         assert eval(expt_err).format(cpu_thread_policy) in fault_msg
 
 
-class TestColdMigrate:
+class TestMigrateResize:
 
     @fixture(scope='class', autouse=True, params=['two_plus_ht', 'one_ht'])
     def ht_and_nonht_hosts(self, request):
@@ -579,22 +859,22 @@ class TestColdMigrate:
         LOG.info('Hyper-threading disabled hosts: {}'.format(non_ht_hosts))
         return ht_hosts, non_ht_hosts
 
-    @mark.p1
-    @mark.parametrize(('cpu_thread_policy', 'min_vcpus'), [
-        mark.p1(('isolate', None)),
-        mark.p1(('require', None)),
-        mark.p1(('isolate', '2'))
+    @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus'), [
+        mark.p1((2, 'isolate', None)),
+        mark.p1((2, 'require', None)),
+        mark.p1((2, 'isolate', 2)),
     ])
-    def test_cold_migrate_vm_cpu_thread(self, cpu_thread_policy, min_vcpus, ht_and_nonht_hosts):
+    def test_cold_migrate_vm_cpu_thread(self, vcpus, cpu_thread_policy, min_vcpus, ht_and_nonht_hosts):
         ht_hosts, non_ht_hosts = ht_and_nonht_hosts
 
         LOG.tc_step("Create flavor with 2 vcpus")
-        flavor_id = nova_helper.create_flavor(name='cpu_thread_{}'.format(cpu_thread_policy), vcpus=2)[1]
+        flavor_id = nova_helper.create_flavor(name='cpu_thread_{}'.format(cpu_thread_policy), vcpus=vcpus)[1]
         ResourceCleanup.add('flavor', flavor_id)
 
         specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
         if cpu_thread_policy is not None:
             specs[FlavorSpec.CPU_THREAD_POLICY] = cpu_thread_policy
+
         if min_vcpus is not None:
             specs[FlavorSpec.MIN_VCPUS] = min_vcpus
 
@@ -611,12 +891,14 @@ class TestColdMigrate:
         LOG.tc_step("Attempt to cold migrate VM")
         code, output = vm_helper.cold_migrate_vm(vm_id, fail_ok=True)
 
+        # Check cold migration result
         if len(ht_hosts) == 1:
             LOG.tc_step("Check cold migration is rejected due to no other ht host available")
             assert 2 == code, "Cold migrate request is not rejected while no other ht host available."
             assert ColdMigrateErr.HT_HOST_REQUIRED.format(cpu_thread_policy) in output
 
             assert vm_host == nova_helper.get_vm_host(vm_id), "VM host changed even though cold migration rejected"
+
         else:
             LOG.tc_step("Check cold migration succeeded and vm is migrated to another HT host")
             assert 0 == code, "Cold migration failed unexpectedly. Details: {}".format(output)
@@ -625,8 +907,10 @@ class TestColdMigrate:
             assert post_vm_host in ht_hosts, "VM is migrated to a host that is not in ht_hosts list. non_ht_hosts " \
                                              "list: {}".format(non_ht_hosts)
 
+        # Check lock host rejected if no other hyperthreaded host
         if len(ht_hosts) == 1:
             LOG.tc_step("Attempt to lock host and ensure lock is rejected due to no other HT host to migrate vm to")
             code, output = host_helper.lock_host(host=vm_host, check_first=False, fail_ok=True)
             HostsToRecover.add(vm_host)
             assert 5 == code, "Host lock result unexpected. Details: {}".format(output)
+

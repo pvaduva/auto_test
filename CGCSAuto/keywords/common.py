@@ -213,8 +213,7 @@ def _parse_cpus_list(cpus):
     e.g., '5-7,41-43, 43, 45' >> [5, 6, 7, 41, 42, 43, 43, 45]
 
     Args:
-        pcpus:
-        val (str): 'str' or 'list'
+        cpus (str):
 
     Returns (list): list of integers
 

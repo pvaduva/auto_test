@@ -51,7 +51,7 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
     prev_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
 
     LOG.tc_step("Attempt to boot a vm from above {} with above flavor".format(boot_source))
-    code, vm_id, msg, ignore = vm_helper.boot_vm(name='cpu_thread_image', flavor=flavor_id, source=boot_source,
+    code, vm_id, msg, ignore = vm_helper.boot_vm(name='cpu_pol', flavor=flavor_id, source=boot_source,
                                                  source_id=source_id, fail_ok=True)
     if vm_id:
         ResourceCleanup.add('vm', vm_id)
@@ -64,11 +64,12 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
         return  # end the test for negative cases
 
     # Check for positive tests
-    LOG.tc_step("Check vm is successfully booted on a HT enabled host.")
+    LOG.tc_step("Check vm is successfully booted.")
     assert 0 == code, "Expect vm boot successfully. Actual: {}".format(msg)
 
     # Calculate expected policy:
     expt_cpu_pol = flv_pol if flv_pol else img_pol
+    expt_cpu_pol = expt_cpu_pol if expt_cpu_pol else 'shared'
 
     vm_host = nova_helper.get_vm_host(vm_id)
     check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=expt_cpu_pol, vm_host=vm_host,

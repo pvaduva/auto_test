@@ -1,4 +1,5 @@
 import time
+from utils.tis_log import LOG
 from keywords import vm_helper, network_helper
 
 
@@ -18,3 +19,9 @@ def test_boot_vms(ubuntu_image):
 
         time.sleep(30)
         vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['mgmt', 'data', 'internal'])
+
+
+def test_vm_topo_check():
+    vm_id = vm_helper.boot_vm()[1]
+    affined_cpus = vm_helper.get_affined_cpus_for_vm(vm_id)
+    LOG.info(affined_cpus)

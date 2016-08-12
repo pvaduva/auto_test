@@ -64,6 +64,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
         con_ssh (SSHClient)
 
     """
+    cpu_pol = cpu_pol if cpu_pol else 'shared'
     log_cores_siblings = host_helper.get_logcore_siblings(host=vm_host, con_ssh=con_ssh)
 
     if vm_host is None:
@@ -92,10 +93,9 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
 
     LOG.tc_step('Check vm topology, vcpus, pcpus, siblings, cpu policy, cpu threads policy, via vm-topology and nova '
                 'show')
-    pcpus_total, siblings_total = _check_vm_topology_via_vm_topology(vm_id, vcpus=vcpus, cpu_pol=cpu_pol,
-                                                                     cpu_thr_pol=cpu_thr_pol, vm_host=vm_host,
-                                                                     numa_num=numa_num, con_ssh=con_ssh,
-                                                                     host_log_core_siblings=log_cores_siblings)
+    pcpus_total, siblings_total = _check_vm_topology_via_vm_topology(
+            vm_id, vcpus=vcpus, cpu_pol=cpu_pol, cpu_thr_pol=cpu_thr_pol, vm_host=vm_host,
+            numa_num=numa_num, con_ssh=con_ssh, host_log_core_siblings=log_cores_siblings)
 
     LOG.tc_step("Check vm vcpus, siblings on vm via /sys/devices/system/cpu/<cpu>/topology/core_siblings_list")
     _check_vm_topology_on_vm(vm_id, vcpus=vcpus, siblings_total=siblings_total)
@@ -133,7 +133,7 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
         #                                  node:1,   256MB, pgsize:2M, vcpus:2,3, pol:sha
     """
     if not host_log_core_siblings:
-        host_log_cores_siblings = host_helper.get_logcore_siblings(host=vm_host, con_ssh=con_ssh)
+        host_log_core_siblings = host_helper.get_logcore_siblings(host=vm_host, con_ssh=con_ssh)
 
     expt_cpu_pol = 'sha' if cpu_pol is None or 'sha' in cpu_pol else 'ded'
     instance_topology = vm_helper.get_instance_topology(vm_id, con_ssh=con_ssh)
@@ -147,8 +147,9 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
     siblings_total = []
 
     vcpus_per_numa = int(vcpus / numa_num)
-
+    # numa_nodes = []
     for topology_on_numa_node in instance_topology:  # Cannot be on two numa nodes for dedicated vm unless specified
+        # numa_nodes.append(topology_on_numa_node['node'])
         actual_vcpus = topology_on_numa_node['vcpus']
 
         assert expt_cpu_pol == topology_on_numa_node['pol'], "CPU policy is not {} in vm-topology".format(expt_cpu_pol)
@@ -190,7 +191,7 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
                     raise NotImplemented("New cpu threads policy added? Update automation code.")
 
                 expt_core_len_in_pair = 1 if cpu_thr_pol == 'isolate' else 2
-                for pair in host_log_cores_siblings:
+                for pair in host_log_core_siblings:
                     assert len(set(pair) & set(actual_pcpus)) in [0, expt_core_len_in_pair]
 
                 pcpus_total += actual_pcpus
@@ -214,7 +215,8 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
     return pcpus_total, siblings_total
 
 
-def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total_cpus, vm_host, cpu_pol, cpu_thr_pol, host_log_core_siblings):
+def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total_cpus, vm_host, cpu_pol, cpu_thr_pol,
+                               host_log_core_siblings):
 
     # Check host side info such as nova-compute.log and virsh pcpupin
     instance_name = nova_helper.get_vm_instance_name(vm_id)
@@ -237,27 +239,43 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
         else:
             LOG.warning('Skip pcpus check in virsh vcpupin for floating vm')
 
-        LOG.tc_step("Check cpu affinity list for vm via taskset -pc")
+        LOG.tc_step("Get cpu affinity list for vm via taskset -pc")
         affined_cpus = vm_helper.get_affined_cpus_for_vm(vm_id, host_ssh=host_ssh, vm_host=vm_host,
                                                          instance_name=instance_name)
 
         if 'ded' in cpu_pol:
+
             if cpu_thr_pol == 'isolate':
+                LOG.tc_step("Check affined cpus for isolate vm is its pcpus plus the siblings of those pcpus")
                 expt_affined_cpus = []
+
                 for pcpu in vm_pcpus:
                     for host_sibling_pair in host_log_core_siblings:
                         if pcpu in host_sibling_pair:
                             expt_affined_cpus += host_sibling_pair
                 expt_affined_cpus = sorted(list(set(expt_affined_cpus)))
+
             else:
+                LOG.tc_step("Check affined cpus for dedicated vm is the same as its pcpus shown in vm-topology")
                 expt_affined_cpus = vm_pcpus
 
             assert len(affined_cpus) <= len(expt_affined_cpus) + 2
             assert set(expt_affined_cpus) <= set(affined_cpus)
 
         else:
-            # TODO  assert affined none of the pcpus on host is in the list
-            assert len(affined_cpus) <= vcpus + 2
+            LOG.tc_step("Check affined cpus for floating vm is the same as unpinned cpus on vm host")
+            # TODO count all numa nodes for floating vm. Any way to get numa nodes dynamically without  cli?
+            cpus_info = host_helper.get_vcpus_info_in_log(host_ssh=host_ssh, rtn_list=True, numa_nodes=[0, 1])
+            unpinned_cpus = []
+
+            for item in cpus_info:
+                unpinned_cpus_for_numa = item['unpinned_cpulist']
+                unpinned_cpus += unpinned_cpus_for_numa
+            unpinned_cpus = sorted(unpinned_cpus)
+
+            err_msg = "Affined cpus for vm: {}, Unpinned cpus on vm host: {}".format(affined_cpus, unpinned_cpus)
+            assert affined_cpus == unpinned_cpus, 'Affined cpus for floating vm are different than unpinned cpus ' \
+                                                  'on vm host {}\n{}'.format(vm_host, err_msg)
 
 
 def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total):
@@ -284,3 +302,17 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total):
 def check_vm_vcpus_via_nova_show(vm_id, min_cpu, current_cpu, max_cpu, con_ssh=None):
     actual_vcpus = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))
     assert [min_cpu, current_cpu, max_cpu] == actual_vcpus, "vcpus in nova show {} is not as expected".format(vm_id)
+
+
+def check_vm_numa_nodes(vm_id, on_vswitch_nodes=True):
+    vm_host, vm_numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
+    vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(vm_host, function='vSwitch')
+    vswitch_procs = list(vswitch_cores_dict.keys())
+
+    if on_vswitch_nodes:
+        assert set(vm_numa_nodes) <= set(vswitch_procs), "VM {} is on numa nodes {} instead of vswitch numa nodes {}" \
+                                                         "".format(vm_id, vm_numa_nodes, vswitch_procs)
+    else:
+        assert not (set(vm_numa_nodes) & set(vswitch_procs)), "VM {} is on vswitch numa node(s). VM numa nodes: {}, " \
+                                                              "vSwitch numa nodes: {}" .format(vm_id, vm_numa_nodes,
+                                                                                               vswitch_procs)

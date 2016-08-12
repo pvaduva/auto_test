@@ -1,6 +1,6 @@
 import logging
 import os
-from time import strftime, sleep
+from time import strftime
 
 import pytest
 
@@ -99,7 +99,6 @@ class MakeReport:
             return cls(item)
 
 
-@pytest.mark.tryfirst
 def pytest_runtest_makereport(item, call, __multicall__):
     report = __multicall__.execute()
     my_rep = MakeReport.get_report(item)
@@ -148,7 +147,6 @@ def pytest_runtest_makereport(item, call, __multicall__):
                 with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
                     f.write('\tUPLOAD_UNSUCC')
 
-    sleep(30)
     return report
 
 
@@ -331,8 +329,10 @@ def pytest_collection_modifyitems(items):
 def pytest_generate_tests(metafunc):
     # Modify the order of the fixtures to delete resources before revert host
     config_host_fixtures = {'class': 'config_host_class', 'module': 'config_host_module'}
+
     for key, value in config_host_fixtures.items():
         delete_res_func = 'delete_resources_{}'.format(key)
+
         if value in metafunc.fixturenames and delete_res_func in metafunc.fixturenames:
             index = list(metafunc.fixturenames).index('delete_resources_{}'.format(key))
             index = max([0, index-1])

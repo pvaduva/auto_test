@@ -27,6 +27,7 @@ class VMTimeout:
     REBOOT = 180
     PAUSE = 180
     IF_ADD = 30
+    REBUILD = 300
     DHCP_IP_ASSIGN = 30
 
 

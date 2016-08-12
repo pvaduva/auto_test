@@ -1533,7 +1533,7 @@ def get_vcpus_info_in_log(host_ssh, numa_nodes=None, rtn_list=False, con_ssh=Non
     """
     hostname = host_ssh.get_hostname()
     if numa_nodes is None:
-        numa_nodes = get_host_procs(hostname, con_ssh=con_ssh)
+        numa_nodes = [0, 1]
 
     res_dict = {}
     for numa_node in numa_nodes:

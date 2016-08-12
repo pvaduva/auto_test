@@ -13,7 +13,7 @@ class ProjVar:
             'TCLIST_PATH': logdir + '/test_results.log',
             'PYTESTLOG_PATH': logdir + '/pytestlog.log',
             'LAB_NAME': lab['short_name'],
-            'TEMP_DIR': logdir + '/tmp_files',
+            'TEMP_DIR': logdir + '/tmp_files/',
             'PRIMARY_TENANT': tenant,
             'LAB': lab,
             'BOOT_VMS': is_boot,

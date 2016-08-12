@@ -2,7 +2,7 @@ from pytest import fixture
 
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
-from keywords import nova_helper, glance_helper, common
+from keywords import nova_helper, glance_helper, vm_helper
 
 
 @fixture(scope='session')
@@ -40,6 +40,14 @@ def centos6_image():
 
 
 def _create_image(img_os):
+    # vm_helper._scp_net_config_cloud_init(img_os)
+    # centos_image_location = \
+    #     ['http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2',
+    #      'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud.qcow2']
+    #
+    # ubuntu_image_location = \
+    #     ['https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img']
+
     image_path = glance_helper._scp_guest_image(img_os=img_os)
 
     img_id = glance_helper.get_image_id_from_name(img_os)

@@ -1,3 +1,4 @@
+import time
 from pytest import mark
 
 from utils.tis_log import LOG
@@ -8,11 +9,10 @@ from keywords import vm_helper, glance_helper, nova_helper, network_helper, cind
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-@mark.sanity
 @mark.cpe_sanity
 @mark.parametrize('guest_os', [
-    'cgcs-guest',
-    'ubuntu',
+    mark.sanity('cgcs-guest'),
+    mark.sanity('ubuntu'),
 ])
 def test_ping_between_two_vms(guest_os, ubuntu_image):
     """
@@ -74,3 +74,18 @@ def test_ping_between_two_vms(guest_os, ubuntu_image):
     LOG.info("Ping between two vms over management, data, and internal networks")
     vm_helper.ping_vms_from_vm(to_vms=vms[0], from_vm=vms[1], net_types=['mgmt', 'data', 'internal'])
     vm_helper.ping_vms_from_vm(to_vms=vms[1], from_vm=vms[0], net_types=['mgmt', 'data', 'internal'])
+
+
+@mark.usefixtures('centos7_image', 'centos6_image', 'ubuntu_image')
+@mark.parametrize('guest_os', [
+    'centos7',  # image has issue cloudinit always fails
+    'centos6',
+    'ubuntu'
+])
+def test_ping_vm_basic(guest_os):
+    vm_id = vm_helper.boot_vm(name=guest_os, guest_os=guest_os)[1]
+    ResourceCleanup.add('vm', vm_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+
+    time.sleep(30)
+    vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['mgmt', 'data'])

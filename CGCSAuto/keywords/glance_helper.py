@@ -100,14 +100,17 @@ def create_image(name=None, image_id=None, source_image_file=None,
     known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros']
     name = name if name else 'auto'
     for img_str in known_imgs:
-        if img_str in source_str:
-            name_prefix = img_str
+        if img_str in name:
+            break
+        elif img_str in source_str:
+            name = img_str + '_' + name
             break
     else:
         name_prefix = source_str.split(sep='/')[-1]
         name_prefix = name_prefix.split(sep='.')[0]
+        name = name_prefix + '_' + name
 
-    name = '_'.join([name_prefix, name, str(Count.get_image_count())])
+    name = '_'.join([name, str(Count.get_image_count())])
 
     optional_args = {
         '--id': image_id,
@@ -381,7 +384,7 @@ def _scp_guest_image(img_os='ubuntu', dest_dir=IMAGE_DIR, con_ssh=None):
 
     source_path = '{}/images/{}'.format(SvcCgcsAuto.HOME, dest_name)
     LOG.info('scp image from test server to active controller')
-    scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}@{}:{} {}'.format(
+    scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}@{}:{} {}'.format(
             SvcCgcsAuto.USER, SvcCgcsAuto.SERVER, source_path, dest_dir)
 
     con_ssh.send(scp_cmd)

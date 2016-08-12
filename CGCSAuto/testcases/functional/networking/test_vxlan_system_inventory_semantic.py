@@ -472,9 +472,7 @@ def test_route_prefix_validation(set_interface_ip_, prefix, status, ipv):
     else:
         if not status:
             LOG.info("Error: {}".format(err_info))
-            assert 0 == code, 'should not be here'
-        else:
-            LOG.info("Pass ok: {}".format(err_info))
+            assert 0 == code, 'Test should fail, but it passed'
 
 
 def test_route_gateway_validation(set_interface_ip_):
