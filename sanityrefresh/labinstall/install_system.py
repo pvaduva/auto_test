@@ -374,14 +374,14 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
             bld_server_conn.sendline("cd " + load_path)
             bld_server_conn.find_prompt()
             bld_server_conn.rsync(CENTOS_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete"])
-            bld_server_conn.rsync("extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
+            bld_server_conn.rsync("export/extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
         else:
             bld_server_conn.rsync(load_path + "/" + RPM_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete"])
 
             bld_server_conn.sendline("cd " + load_path)
             bld_server_conn.find_prompt()
 
-            bld_server_conn.rsync("extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
+            bld_server_conn.rsync("export/extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
             bld_server_conn.rsync(RPM_INSTALL_REL_PATH + "/boot/isolinux/vmlinuz", USERNAME, tuxlab_server, feed_path)
             bld_server_conn.rsync(RPM_INSTALL_REL_PATH + "/boot/isolinux/initrd", USERNAME, tuxlab_server, feed_path + "/initrd.img")
 
