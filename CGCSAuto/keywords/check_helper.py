@@ -34,15 +34,17 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
 
         # check expected mapping is a subset of actual mapping
         for port, engines in expt_vswitch_map.items():
-            assert port in actual_vswitch_map, "port {} is not included in vswitch.ini on {}".format(port, host)
-            assert engines == actual_vswitch_map[port], 'engine list for port {} on {} is not as expected'. \
-                format(host, port)
+            assert port in actual_vswitch_map, "port {} is not included in vswitch.ini on {}. Actual vSwitch map: {}".\
+                format(port, host, actual_vswitch_map)
+            assert engines == actual_vswitch_map[port], 'engine list for port {} on {} is not as expected. ' \
+                'Expected engines: {}; Actual engines: {}'.format(host, port, engines, actual_vswitch_map[port])
 
     else:
         LOG.tc_step("No Mellanox device used on {} data interfaces. Perform strict check on port-engine map.".
                     format(host))
 
-        assert expt_vswitch_map == actual_vswitch_map
+        assert expt_vswitch_map == actual_vswitch_map, "vSwitch mapping unexpected. Expect: {}; Actual: {}".format(
+                expt_vswitch_map, actual_vswitch_map)
 
 
 def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=None, cpu_pol=None, cpu_thr_pol=None,
@@ -90,7 +92,8 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
 
     else:
         post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')
-        assert expt_used_cpus == post_hosts_cpus[vm_host], "Expected host vcpus used is not same as actual value"
+        assert expt_used_cpus == post_hosts_cpus[vm_host], "Used vcpus on host {} is not as expected. " \
+            "Expected: {}; Actual: {}".format(vm_host, expt_used_cpus, post_hosts_cpus[vm_host])
 
     LOG.tc_step('Check vm topology, vcpus, pcpus, siblings, cpu policy, cpu threads policy, via vm-topology and nova '
                 'show')
@@ -140,9 +143,11 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
     instance_topology = vm_helper.get_instance_topology(vm_id, con_ssh=con_ssh)
     instance_topology_nova_show = vm_helper.get_instance_topology(vm_id, con_ssh=con_ssh, source='nova show')
 
+    LOG.tc_step("Check instance topology in vm-topology and nova show are identical")
     for i in range(len(instance_topology)):
         for key in instance_topology[i]:
-            assert instance_topology[i][key] == instance_topology_nova_show[i][key]
+            assert instance_topology[i][key] == instance_topology_nova_show[i][key], "vm {} {} on numa node {} is " \
+                "different in vm-topology than nova show".format(vm_id, key, i)
 
     pcpus_total = []
     siblings_total = []
@@ -153,8 +158,10 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
         # numa_nodes.append(topology_on_numa_node['node'])
         actual_vcpus = topology_on_numa_node['vcpus']
 
-        assert expt_cpu_pol == topology_on_numa_node['pol'], "CPU policy is not {} in vm-topology".format(expt_cpu_pol)
-        assert vcpus_per_numa == len(actual_vcpus), 'vm vcpus number per numa node is not as expected'
+        assert expt_cpu_pol == topology_on_numa_node['pol'], "CPU policy is {} instead of {} in vm-topology".\
+            format(topology_on_numa_node['pol'], expt_cpu_pol)
+        assert vcpus_per_numa == len(actual_vcpus), 'vm vcpus number per numa node is {} instead of {}'.format(
+            len(actual_vcpus), vcpus_per_numa)
 
         actual_siblings = topology_on_numa_node['siblings']
         actual_topology = topology_on_numa_node['topology']
@@ -163,7 +170,7 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
 
         if expt_cpu_pol == 'sha':
             # node:0,   512MB, pgsize:2M, vcpus:0-4, pol:sha
-            assert topology_on_numa_node['thr'] is None, "cpu thread policy is in vm topology"
+            assert topology_on_numa_node['thr'] is None, "cpu thread policy should not be included for floating vm"
             assert actual_siblings is None, 'siblings should not be included for floating vm'
             assert actual_topology is None, 'topology should not be included for floating vm'
             assert actual_pcpus is None, "pcpu should not be included in vm-topology for floating vm"
@@ -193,7 +200,8 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
 
                 expt_core_len_in_pair = 1 if cpu_thr_pol == 'isolate' else 2
                 for pair in host_log_core_siblings:
-                    assert len(set(pair) & set(actual_pcpus)) in [0, expt_core_len_in_pair]
+                    assert len(set(pair) & set(actual_pcpus)) in [0, expt_core_len_in_pair], "Host sibling pair: {}, " \
+                        "VM pcpus:{}. Expected cores per pair: {}".format(pair, actual_pcpus, expt_core_len_in_pair)
 
                 pcpus_total += actual_pcpus
 
@@ -201,7 +209,8 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
                 # node:1,   512MB, pgsize:2M, 1s,1c,3t, vcpus:0-2, pcpus:35,15,10, siblings:{0-2}, pol:ded, thr:no
                 assert topology_on_numa_node['thr'] == 'no', "cpu thread policy is in vm topology"
                 # TODO assert '1c,{}t'.format(vcpus_per_numa) in actual_topology, 'vm topology is not as expected'
-                assert vcpus_per_numa == len(actual_pcpus), "vm pcpus number per numa node is not as expected"
+                assert vcpus_per_numa == len(actual_pcpus), "vm pcpus number per numa node is {} instead of {}".format(
+                        len(actual_pcpus), vcpus_per_numa)
 
                 if 1 == vcpus_per_numa:
                     assert not actual_siblings, "siblings should not be included with only 1 vcpu"

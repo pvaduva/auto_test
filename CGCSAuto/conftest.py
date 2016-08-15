@@ -230,7 +230,9 @@ def pytest_configure(config):
     if not resultlog:
         log_dir = os.path.expanduser("~") + "/AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
     else:
-        log_dir = os.path.expanduser("{}".format(resultlog)) + "/AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
+        if not resultlog.endwith('/'):
+            resultlog += '/'
+        log_dir = resultlog + "AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
 
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,

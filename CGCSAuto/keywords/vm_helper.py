@@ -88,7 +88,7 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os=''):
+            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=None):
     """
 
     Args:
@@ -118,7 +118,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         (0, vm_id, 'VM is booted successfully', <new_vol_id>)   # vm is created successfully and in Active state.
         (1, vm_id, <stderr>, <new_vol_id_if_any>)      # boot vm cli command failed, but vm is still booted
         (2, vm_id, "VM building is not 100% complete.", <new_vol_id>)   # boot vm cli accepted, but vm building is not
-            100% completed.
+            100% completed. Only applicable when poll=True
         (3, vm_id, "VM <uuid> did not reach ACTIVE state within <seconds>. VM status: <status>", <new_vol_id>)
             # vm is not in Active state after created.
         (4, '', <stderr>, <new_vol_id>): create vm cli command failed, vm is not booted
@@ -220,13 +220,16 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--user-data': user_data,
                           '--block-device': block_device,
                           '--hint': hint,
-                          '--availability-zone': avail_zone
+                          '--availability-zone': avail_zone,
                           }
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
 
+    if poll:
+        args_ += ' --poll'
+
     LOG.info("Booting VM {}...".format(name))
-    exitcode, output = cli.nova('boot --poll', positional_args=args_, ssh_client=con_ssh,
+    exitcode, output = cli.nova('boot', positional_args=args_, ssh_client=con_ssh,
                                 fail_ok=fail_ok, rtn_list=True, timeout=VMTimeout.BOOT_VM, auth_info=auth_info)
 
     table_ = table_parser.table(output)
@@ -238,7 +241,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         return 4, '', output, new_vol     # new_vol = '' if no new volume created. Pass this to test for proper teardown
 
     LOG.info("Post action check...")
-    if "100% complete" not in output:
+    if poll and "100% complete" not in output:
         message = "VM building is not 100% complete."
         if fail_ok:
             LOG.warning(message)
@@ -2027,6 +2030,12 @@ def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=No
     all_cpus = []
     lines = output.splitlines()
     for line in lines:
+
+        # skip line if below output occurs due to timing in executing cmds
+        # taskset: failed to get pid 17125's affinity: No such process
+        if "No such process" in line:
+            continue
+
         cpu_str = line.split(sep=': ')[-1].strip()
         cpus = common._parse_cpus_list(cpus=cpu_str)
         all_cpus += cpus
@@ -2129,21 +2138,17 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     tmp_file = ProjVar.get_var('TEMP_DIR') + file_name
     if 'centos7' in guest_os:
         shell = '/usr/bin/bash'
-        cmd_path = '/usr/bin/'
-        ifup_path = '/usr/sbin/'
     else:
         shell = '/bin/bash'
-        cmd_path = ''
-        ifup_path = ''
 
     with open(tmp_file, mode='a') as f:
         f.write('#!{}\n\n'.format(shell))
         for i in range(nics_num-1):
             ethi_name = 'eth{}'.format(i+1)
             ethi_path = eth_path.format(ethi_name)
-            f.write('sudo {}cp {} {}\n'.format(cmd_path, eth0_path, ethi_path))
-            f.write("sudo {}sed -i 's/eth0/{}/g' {}\n".format(cmd_path, ethi_name, ethi_path))
-            f.write('sudo {}ifup {}\n'.format(ifup_path, ethi_name))
+            f.write('cp {} {}\n'.format(eth0_path, ethi_path))
+            f.write("sed -i 's/eth0/{}/g' {}\n".format(ethi_name, ethi_path))
+            f.write('ifup {}\n'.format(ethi_name))
 
     common.scp_to_active_controller(source_path=tmp_file, dest_path=file_path, is_dir=False)
 

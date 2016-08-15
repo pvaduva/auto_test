@@ -9,6 +9,7 @@ class VCPUSchedulerErr:
     MISSING_PARAMETER = "missing required parameter"
     TOO_MANY_PARAMETERS = "too many parameters"
     VCPU_MULTIPLE_ASSIGNMENT = "specified multiple times, specification is ambiguous"
+    CPU_MODEL_UNAVAIL = "No valid host was found.*Host VCPU model.*required.*"
 
 
 class MinCPUErr:
@@ -55,6 +56,9 @@ class SharedCPUErr:
     INVALID_VCPU_ID = "hw:wrs:shared_vcpu must be greater than or equal to 0"
     MORE_THAN_FLAVOR = "hw:wrs:shared_vcpu value ({}) must be less than flavor vcpus ({})"
 
+
+class ResizeVMErr:
+    RESIZE_ERR = "Error resizing server"
 
 class ColdMigrateErr:
     HT_HOST_REQUIRED = "(NUMATopologyFilter) Host not useable. Requested threads policy: {}; from flavor or " \

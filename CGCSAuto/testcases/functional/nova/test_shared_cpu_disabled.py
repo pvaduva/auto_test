@@ -2,7 +2,7 @@ from pytest import fixture, mark
 
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
-from consts.cli_errs import SharedCPUErr
+from consts.cli_errs import SharedCPUErr, ResizeVMErr
 
 from keywords import nova_helper, vm_helper
 from testfixtures.resource_mgmt import ResourceCleanup
@@ -174,4 +174,4 @@ def test_resize_vm_shared_cpu_negative(vcpus, cpu_policy, shared_vcpu, basic_vm)
 
     LOG.tc_step("Attempt to resize vm with invalid flavor, and verify resize request is rejected.")
     code, msg = vm_helper.resize_vm(basic_vm, flavor, fail_ok=True)
-    assert code == 1 and 'No valid host found for resize' in msg
+    assert code == 1 and ResizeVMErr.RESIZE_ERR in msg

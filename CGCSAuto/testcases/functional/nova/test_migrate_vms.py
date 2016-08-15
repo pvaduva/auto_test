@@ -238,19 +238,37 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
     assert prev_vm_host != post_vm_host
 
 
-@mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type'), [
-    mark.p1(('local_image', 0, 0, None, 1, 'volume')),
-    mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume')),
-    mark.p1(('local_image', 1, 0, 'shared', 2, 'image')),
-    mark.p1(('local_image', 0, 1, 'dedicated', 1, 'image')),
-    mark.p1(('local_lvm', 0, 0, None, 1, 'volume')),
-    mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'volume')),
-    mark.p1(('remote', 0, 0, None, 2, 'volume')),
-    mark.p1(('remote', 1, 0, None, 1, 'volume')),
-    mark.p1(('remote', 1, 1, None, 1, 'image')),
-    mark.p1(('remote', 0, 1, None, 2, 'image_with_vol')),
+@mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'resize'), [
+    mark.p1(('local_image', 0, 0, None, 1, 'volume', 'confirm')),
+    mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume', 'confirm')),
+    mark.p1(('local_image', 1, 0, 'shared', 2, 'image', 'confirm')),
+    mark.p1(('local_image', 0, 1, 'dedicated', 1, 'image', 'confirm')),
+    mark.p1(('local_image', 0, 0, None, 1, 'image_with_vol', 'confirm')),
+    mark.p1(('local_lvm', 0, 0, None, 1, 'volume', 'confirm')),
+    mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'image', 'confirm')),
+    mark.p1(('local_lvm', 0, 0, 'dedicated', 1, 'image_with_vol', 'confirm')),
+    mark.p1(('local_lvm', 0, 1, None, 2, 'volume', 'confirm')),
+    mark.p1(('local_lvm', 1, 1, 'dedicated', 2, 'volume', 'confirm')),
+    mark.p1(('remote', 0, 0, None, 2, 'volume', 'confirm')),
+    mark.p1(('remote', 1, 0, None, 1, 'volume', 'confirm')),
+    mark.p1(('remote', 1, 1, None, 1, 'image', 'confirm')),
+    mark.p1(('remote', 0, 0, None, 2, 'image_with_vol', 'confirm')),
+    mark.p1(('local_image', 0, 0, None, 2, 'volume', 'revert')),
+    mark.p1(('local_image', 0, 0, 'dedicated', 1, 'volume', 'revert')),
+    mark.p1(('local_image', 1, 0, 'shared', 2, 'image', 'revert')),
+    mark.p1(('local_image', 0, 1, 'dedicated', 1, 'image', 'revert')),
+    mark.p1(('local_image', 0, 0, 'dedicated', 2, 'image_with_vol', 'revert')),
+    mark.p1(('local_lvm', 0, 0, None, 2, 'volume', 'revert')),
+    mark.p1(('local_lvm', 0, 0, 'dedicated', 1, 'volume', 'revert')),
+    mark.p1(('local_lvm', 0, 1, None, 1, 'volume', 'revert')),
+    mark.p1(('local_lvm', 1, 0, 'dedicated', 2, 'image', 'revert')),
+    mark.p1(('local_lvm', 0, 0, 'dedicated', 1, 'image_with_vol', 'revert')),
+    mark.p1(('remote', 0, 0, None, 2, 'volume', 'revert')),
+    mark.p1(('remote', 1, 1, None, 1, 'volume', 'revert')),
+    mark.p1(('remote', 0, 0, None, 1, 'image', 'revert')),
+    mark.p1(('remote', 1, 0, None, 2, 'image_with_vol', 'revert')),
 ])
-def test_cold_migrate_vm_2(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, hosts_per_stor_backing):
+def test_cold_migrate_vm_2(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, resize, hosts_per_stor_backing):
     if len(hosts_per_stor_backing[storage_backing]) < 2:
         skip("Less than two hosts have {} storage backing".format(storage_backing))
 
@@ -259,7 +277,9 @@ def test_cold_migrate_vm_2(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_
 
     LOG.tc_step("Cold migrate VM and ensure it succeeded")
     # block_mig = True if boot_source == 'image' else False
-    code, output = vm_helper.cold_migrate_vm(vm_id)
+
+    revert = True if resize == 'revert' else False
+    code, output = vm_helper.cold_migrate_vm(vm_id, revert=revert)
     assert 0 == code, "Cold migrate is not successful. Details: {}".format(output)
 
     post_vm_host = nova_helper.get_vm_host(vm_id)

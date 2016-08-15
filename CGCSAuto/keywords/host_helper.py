@@ -66,6 +66,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         wait_for_reboot_finish (bool): whether to wait for reboot finishes before return
 
     Returns (tuple): (rtn_code, message)
+        (-1, "Reboot host command sent") Reboot host command is sent, but did not wait for host to be back up
         (0, "Host(s) state(s) - <states_dict>.") hosts rebooted and back to available/degraded or online state.
         (1, "Host(s) not in expected availability states or task unfinished. (<states>) (<task>)" )
         (2, "Hypervisor is not enabled. Hosts <list of hosts>)"
