@@ -160,7 +160,7 @@ def _get_active_standby(controller='active', con_ssh=None):
     return controllers
 
 
-def get_alarms(uuid=False, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
+def get_alarms(uuid=True, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
                auth_info=Tenant.ADMIN):
     """
     Get active alarms dictionary with given criteria
@@ -323,6 +323,60 @@ def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=No
         return []
     else:
         raise exceptions.TimeoutException(msg)
+
+
+def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Delete active alarms
+
+    Args:
+        alarms (list|str): UUID(s) of alarms to delete
+        fail_ok (bool): whether or not to raise exception if any alarm failed to delete
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (rtn_code(int), message(str))
+        0, "Alarms deleted successfully"
+        1, "Some alarm(s) still exist on system after attempt to delete: <alarms_uuids>"
+
+    """
+    if alarms is None:
+        alarms_tab = get_alarms(uuid=True)
+        alarms = table_parser.get_column(alarms_tab, 'UUID')
+
+    if isinstance(alarms, str):
+        alarms = [alarms]
+
+    LOG.info("Deleting following alarms: {}".format(alarms))
+
+    res = {}
+    failed_clis = []
+    for alarm in alarms:
+        code, out = cli.system('alarm-delete', alarm, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
+        res[alarm] = code, out
+
+        if code != 0:
+            failed_clis.append(alarm)
+
+    post_alarms_tab = get_alarms(uuid=True)
+    post_alarms = table_parser.get_column(post_alarms_tab, 'UUID')
+
+    undeleted_alarms = list(set(alarms) & set(post_alarms))
+    if undeleted_alarms:
+        err_msg = "Some alarm(s) still exist on system after attempt to delete: {}\nAlarm delete results: {}".\
+            format(undeleted_alarms, res)
+
+        if fail_ok:
+            return 1, err_msg
+        raise exceptions.SysinvError(err_msg)
+
+    elif failed_clis:
+        LOG.warning("Some alarm-delete cli(s) rejected, but alarm no longer exists.\nAlarm delete results: {}".
+                    format(res))
+
+    succ_msg = "Alarms deleted successfully"
+    LOG.info(succ_msg)
+    return 0, succ_msg
 
 
 def host_exists(host, field='hostname', con_ssh=None):

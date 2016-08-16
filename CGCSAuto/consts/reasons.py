@@ -3,3 +3,4 @@ class SkipReason:
     LESS_THAN_TWO_HT_HOSTS = "Less than two hyperthreaded hosts available"
     MORE_THAN_ONE_HT_HOSTS = "More than one hyperthreaded hosts available"
     LESS_THAN_TWO_HYPERVISORS = "Less than two hypervisors available"
+    CPE_DETECTED = "Skip for small footprint lab"

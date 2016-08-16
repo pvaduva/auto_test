@@ -54,7 +54,8 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
             host_ssh.close()
 
 
-def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False, wait_for_reboot_finish=True):
+def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False, wait_for_reboot_finish=True,
+                 check_hypervisor_up=True, check_webservice_up=True):
     """
     Reboot one or multiple host(s)
 
@@ -64,12 +65,15 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         con_ssh (SSHClient): Active controller ssh
         fail_ok (bool): Whether it is okay or not for rebooting to fail on any host
         wait_for_reboot_finish (bool): whether to wait for reboot finishes before return
+        check_hypervisor_up (bool):
+        check_webservice_up (bool):
 
     Returns (tuple): (rtn_code, message)
         (-1, "Reboot host command sent") Reboot host command is sent, but did not wait for host to be back up
         (0, "Host(s) state(s) - <states_dict>.") hosts rebooted and back to available/degraded or online state.
         (1, "Host(s) not in expected availability states or task unfinished. (<states>) (<task>)" )
-        (2, "Hypervisor is not enabled. Hosts <list of hosts>)"
+        (2, "Hosts not up in nova hypervisor-list: <list of hosts>)"
+        (3, "Hosts web-services not active in system servicegroup-list")
     """
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
@@ -145,6 +149,38 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         unlocked_hosts_in_states = _wait_for_hosts_states(unlocked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,
                                                           con_ssh=con_ssh, availability=['available', 'degraded'])
 
+        if unlocked_hosts_in_states:
+            hosts_tab = table_parser.table(cli.system('host-list --nowrap', ssh_client=con_ssh))
+            hosts_to_check_tab = table_parser.filter_table(hosts_tab, hostname=unlocked_hosts)
+            hosts_avail = table_parser.get_values(hosts_to_check_tab, 'hostname',
+                                                  availability=HostAavailabilityState.AVAILABLE)
+
+            if hosts_avail and (check_hypervisor_up or check_webservice_up):
+
+                all_nodes = system_helper._get_nodes(con_ssh)
+                computes = list(set(hosts_avail) & set(list(all_nodes['computes'])))
+                controllers = list(set(hosts_avail) & set(list(all_nodes['controllers'])))
+                if system_helper.is_small_footprint(con_ssh):
+                    computes += controllers
+
+                if check_hypervisor_up and computes:
+                    res, hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)
+                    if not res:
+                        err_msg = "Hosts not up in nova hypervisor-list: {}".format(hosts_hypervisordown)
+                        if fail_ok:
+                            return 2, err_msg
+                        else:
+                            raise exceptions.HostPostCheckFailed(err_msg)
+
+                if check_webservice_up and controllers:
+                    res, hosts_webdown = wait_for_webservice_up(controllers, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)
+                    if not res:
+                        err_msg = "Hosts web-services not active in system servicegroup-list: {}".format(hosts_webdown)
+                        if fail_ok:
+                            return 3, err_msg
+                        else:
+                            raise exceptions.HostPostCheckFailed(err_msg)
+
     states_vals = {}
     task_unfinished_msg = ''
     for host in hostnames:
@@ -153,20 +189,12 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
             task_unfinished_msg = ' '.join([task_unfinished_msg, "{} still in task: {}.".format(host, vals['task'])])
         states_vals[host] = vals
 
-    if system_helper.is_small_footprint():
-        if not wait_for_hypervisors_up(hostnames, fail_ok=fail_ok, con_ssh=con_ssh,
-                                       timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL)[0]:
-            err_msg = "Hypervisor is not enabled. Hosts {}".format(hostnames)
-            if fail_ok:
-                LOG.warning(err_msg)
-                return 2, err_msg
-            else:
-                raise exceptions.HostPostCheckFailed(err_msg)
-
     message = "Host(s) state(s) - {}.".format(states_vals)
 
     if locked_hosts_in_states and unlocked_hosts_in_states and task_unfinished_msg == '':
-        return 0, message
+        succ_msg = "Hosts {} rebooted successfully".format(hostnames)
+        LOG.info(succ_msg)
+        return 0, succ_msg
 
     err_msg = "Host(s) not in expected states or task unfinished. " + message + task_unfinished_msg
     if fail_ok:
@@ -360,7 +388,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
 
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
-                check_hypervisor_up=False, check_webservice_up=False):
+                check_hypervisor_up=True, check_webservice_up=True):
     """
     Unlock given host
     Args:
@@ -380,7 +408,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
         (3, "Host state did not change to available or degraded within timeout")    # only applicable if fail_ok
         (4, "Host is in degraded state after unlocked.")
         (5, "Task is not cleared within 180 seconds after host goes available")
-        (6, "Host is not up in nova hypervisor-list")
+        (6, "Host is not up in nova hypervisor-list")   # Host with compute function only
+        (7, "Host web-services is not active in system servicegroup-list") # controllers only
 
     """
     LOG.info("Unlocking {}...".format(host))
@@ -415,19 +444,31 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
         LOG.warning("Host is in degraded state after unlocked.")
         return 4, "Host is in degraded state after unlocked."
 
-    if check_hypervisor_up:
-        if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[0]:
-            return 6, "Host is not up in nova hypervisor-list"
+    if check_hypervisor_up or check_webservice_up:
 
-    if check_webservice_up:
-        if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[0]:
-            return 7, "Host is not active in system servicegroup-list"
+        table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
+
+        subfunc = table_parser.get_value_two_col_table(table_, 'subfunctions')
+        personality = table_parser.get_value_two_col_table(table_, 'personality')
+        string_total = subfunc + personality
+
+        is_controller = 'controller' in string_total
+        is_compute = 'compute' in string_total
+
+        if check_hypervisor_up and is_compute:
+            if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[0]:
+                return 6, "Host is not up in nova hypervisor-list"
+
+        if check_webservice_up and is_controller:
+            if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[0]:
+                return 7, "Host web-services is not active in system servicegroup-list"
 
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
 
 
-def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN):
+def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN,
+                 check_hypervisor_up=False, check_webservice_up=False):
     """
     Unlock given hosts. Please use unlock_host() keyword if only one host needs to be unlocked.
     Args:
@@ -436,6 +477,9 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
         fail_ok (bool):
         con_ssh (SSHClient):
         auth_info (dict):
+        check_hypervisor_up (bool): Whether to check if host is up in nova hypervisor-list
+        check_webservice_up (bool): Whether to check if host's web-service is active in system servicegroup-list
+
 
     Returns (dict): {host_0: res_0, host_1: res_1, ...}
         where res is a tuple as below, and scenario 1, 2, 3 only applicable if fail_ok=True
@@ -445,6 +489,8 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
         (2, "Host is not in unlocked state")
         (3, "Host is not in available or degraded state.")
         (4, "Host is in degraded state after unlocked.")
+        (5, "Host is not up in nova hypervisor-list")   # Host with compute function only
+        (6, "Host web-services is not active in system servicegroup-list") # controllers only
 
     """
     if not hosts:
@@ -502,6 +548,27 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
         res[host] = 4, "Host is in degraded state after unlocked."
     for host in hosts_other:
         res[host] = 3, "Host is not in available or degraded state."
+
+    if hosts_avail and (check_hypervisor_up or check_webservice_up):
+
+        all_nodes = system_helper._get_nodes(con_ssh)
+        computes = list(set(hosts_avail) & set(list(all_nodes['computes'])))
+        controllers = list(set(hosts_avail) & set(list(all_nodes['controllers'])))
+        if system_helper.is_small_footprint(con_ssh):
+            computes += controllers
+
+        if check_hypervisor_up and computes:
+            hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[1]
+            for host in hosts_hypervisordown:
+                res[host] = 5, "Host is not up in nova hypervisor-list"
+                hosts_avail = list(set(hosts_avail) - set(hosts_hypervisordown))
+
+        if check_webservice_up and controllers:
+            hosts_webdown = wait_for_webservice_up(controllers, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[1]
+            for host in hosts_webdown:
+                res[host] = 6, "Host web-services is not active in system servicegroup-list"
+            hosts_avail = list(set(hosts_avail) - set(hosts_webdown))
+
     for host in hosts_avail:
         res[host] = 0, "Host is unlocked and in available state."
 
@@ -667,8 +734,14 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
         _wait_for_host_states(hostname, timeout=swact_start_timeout, fail_ok=False, con_ssh=con_ssh, task='')
         return 2, "{} is not active controller host, thus swact request failed as expected.".format(hostname)
 
-    return _wait_for_swact_complete(hostname, con_ssh, swact_start_timeout=swact_start_timeout,
-                                    swact_complete_timeout=swact_complete_timeout, fail_ok=fail_ok)
+    rtn = _wait_for_swact_complete(hostname, con_ssh, swact_start_timeout=swact_start_timeout,
+                                   swact_complete_timeout=swact_complete_timeout, fail_ok=fail_ok)
+    if rtn[0] == 0:
+        res = wait_for_webservice_up(system_helper.get_active_controller_name(), fail_ok=fail_ok, con_ssh=con_ssh)[0]
+        if not res:
+            return 5, "Web-services for new controller is not active"
+
+    return rtn
 
 
 def _wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=30, swact_complete_timeout=30,
@@ -815,9 +888,11 @@ def wait_for_hosts_in_nova_compute(hosts, timeout=90, check_interval=3, fail_ok=
     end_time = time.time() + timeout
     while time.time() < end_time:
         hosts_in_nova = get_nova_hosts(con_ssh=con_ssh, auth_info=auth_info)
-        for host in hosts_to_check:
+
+        for host in hosts:
             if host in hosts_in_nova:
                 hosts_to_check.remove(host)
+
         if not hosts_to_check:
             msg = "Host(s) {} appeared in nova host-list".format(hosts)
             LOG.info(msg)
@@ -845,10 +920,10 @@ def wait_for_webservice_up(hosts, timeout=90, check_interval=3, fail_ok=False, c
 
         table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh))
         table_ = table_parser.filter_table(table_, service_group_name='web-services')
-        #need to check for strict True because 'go-active' state is not 'active' state
+        # need to check for strict True because 'go-active' state is not 'active' state
         active_hosts = table_parser.get_values(table_, 'hostname', state='active', strict=True)
 
-        for host in hosts_to_check:
+        for host in hosts:
             if host in active_hosts:
                 hosts_to_check.remove(host)
 

@@ -34,7 +34,6 @@ def get_alarms(name=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
     return table_parser.get_values(table_, 'Alarm ID', Name='STACK1', strict=strict)
 
 
-
 def get_resources(header='Resource ID', limit=10, timeout=CMDTimeout.RESOURCE_LIST, con_ssh=None,
                   auth_info=Tenant.ADMIN):
     """
@@ -56,22 +55,28 @@ def get_resources(header='Resource ID', limit=10, timeout=CMDTimeout.RESOURCE_LI
     return values
 
 
-def get_samples(header='Resource ID', limit=10, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+def get_samples(header='Resource ID', limit=10, meter=None, con_ssh=None, auth_info=Tenant.ADMIN, **queries):
     """
     Gets the values from the header column from the list of samples
     Args:
         header (str): the header of the column to get values from
         limit (int): the max number of entries to return
+        meter (str): Name of meter to show samples for
         con_ssh (SSHClient):
         auth_info (dict):
-        **kwargs (dict): key/value pairs to filter the list
+        **queries (dict): key/value query pairs to filter the list
+            format: key[op]data_type::value; list.
+                    data_type is optional, but if supplied must be string, integer, float, or boolean.
 
     Returns (list): The values from the header column for all samples that match kwargs
 
     """
     args_ = '--limit={} '.format(limit)
-    for key in kwargs:
-        args_ += '--{} {} '.format(key, kwargs[key])
+    if meter is not None:
+        args_ += ' --meter {}'.format(meter)
+
+    for key in queries:
+        args_ += ' --query {}::{} '.format(key, queries[key])
     table_ = table_parser.table(cli.ceilometer('sample-list', args_, auth_info=auth_info, ssh_client=con_ssh))
     values = table_parser.get_values(table_, header)
     return values
@@ -107,3 +112,37 @@ def delete_samples():
     LOG.info("Deleting expired ceilometer resources.")
     ssh_client = ControllerClient.get_active_controller()
     ssh_client.exec_sudo_cmd('/usr/bin/ceilometer-expirer', fail_ok=False)
+
+
+def get_statistics_table(meter, period=None, groupby=None, aggregate=None, auth_info=Tenant.ADMIN, con_ssh=None, **query):
+    """
+    Get ceilometer statistics
+    Args:
+        meter (str): Name of meter to list statistics for
+        period (int): seconds over which to group samples
+        groupby (str): field for group by
+        aggregate (str): <FUNC>[<-<PARAM>]
+        **query: key/value pair
+            format: key[op]data_type::value; list.
+            data_type is optional, but if supplied must be string, integer, float, or boolean.
+
+    Returns (dict): {'headers': [<headers>], 'values': [[<row[0] values>], ...]}
+
+    """
+    args_ = '--meter {}'.format(meter)
+
+    for key in query:
+        args_ = '--query {}::{} '.format(key, query[key]) + args_
+
+    if period is not None:
+        args_ += ' --period {}'.format(period)
+
+    if groupby is not None:
+        args_ += ' --groupby {}'.format(groupby)
+
+    if aggregate is not None:
+        args_ += ' --aggregate {}'.format(aggregate)
+
+    table_ = table_parser.table(cli.ceilometer('statistics', args_, auth_info=auth_info, ssh_client=con_ssh))
+
+    return table_

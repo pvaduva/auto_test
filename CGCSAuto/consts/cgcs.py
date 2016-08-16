@@ -242,3 +242,6 @@ class HTTPPorts:
     PATCHING_VER = "v1"
 
 
+class CeilometerSamples:
+    VSWITCH_PORT_TRANSMIT_UTIL = "vswitch.port.transmit.util"
+    VSWITCH_ENGINE_UTIL = "vswitch.engine.util"
