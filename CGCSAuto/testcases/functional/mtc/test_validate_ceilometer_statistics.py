@@ -81,4 +81,3 @@ def test_401_validate_ceilometer_meters_exist():
     vswitch_engines_meters = table_parser.get_values(vswitch_util_meters_tab, 'Resource ID', Name='vswitch.engine.util')
 
     assert len(hypervisors) <= len(vswitch_engines_meters), "Each nova hypervisor should have at least one vSwitch core"
-

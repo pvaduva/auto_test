@@ -227,13 +227,13 @@ def pytest_configure(config):
     collect_all = True if collect_all else setup_consts.COLLECT_ALL
     report_all = True if report_all else setup_consts.REPORT_ALL
 
-    # compute directory for all logs based on the lab and timestamp on local machine
-    if not resultlog:
-        log_dir = os.path.expanduser("~") + "/AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
-    else:
-        if not resultlog.endwith('/'):
-            resultlog += '/'
-        log_dir = resultlog + "AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
+    # compute directory for all logs based on resultlog arg, lab, and timestamp on local machine
+    resultlog = resultlog if resultlog else os.path.expanduser("~")
+    if '/AUTOMATION_LOGS' in resultlog:
+        resultlog = resultlog.split(sep='/AUTOMATION_LOGS')[0]
+    if not resultlog.endswith('/'):
+        resultlog += '/'
+    log_dir = resultlog + "AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
 
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
