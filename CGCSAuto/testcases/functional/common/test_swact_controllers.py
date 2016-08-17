@@ -30,7 +30,7 @@ def test_swact_controllers():
     assert 0 == exit_code, "{} is not recognized as active controller".format(pre_active_controller)
 
     LOG.tc_step("Verify standby controller and active controller are swapped")
-    post_active_controller = system_helper.get_standby_controller_name()
+    post_active_controller = system_helper.get_active_controller_name()
     post_standby_controller = system_helper.get_standby_controller_name()
 
     assert pre_standby_controller == post_active_controller, "Prev standby: {}; Post active: {}".format(
