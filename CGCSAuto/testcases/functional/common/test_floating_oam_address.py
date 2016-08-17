@@ -34,7 +34,7 @@ def get_column_value(table, search_value):
             column_value = col_value[1]
     return column_value
 
-@mark.sanity
+
 def test_417_floating_oam_address():
     """
     Floating OAM Address: Verify configuration and use of both the fixed
@@ -70,7 +70,7 @@ def test_417_floating_oam_address():
     compute_table = table_parser.table(output)
     ip_value = get_column_value(compute_table, 'mgmt_ip')
     LOG.info("Configured mgmt address of active: %s" % ip_value)
-    time.sleep(3)
+    time.sleep(10)
 
     LOG.tc_step("Extract the floating IP address as well as the static IP addresses")
     with host_helper.ssh_to_host('controller-0') as con_ssh:
@@ -133,6 +133,7 @@ def test_417_floating_oam_address():
     host_helper._wait_for_host_states('controller-0', timeout=900, fail_ok=False, task='')
     host_helper._wait_for_host_states('controller-1', timeout=900, fail_ok=False, task='')
 
+    time.sleep(30)
     #ssh to new primary controller
     con_ssh = ControllerClient.get_active_controller()
     config_path = '/opt/platform/config/16.00'

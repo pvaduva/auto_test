@@ -1,7 +1,4 @@
-import logging
 import time
-import re
-import sys
 
 from datetime import datetime
 from pytest import fixture
@@ -75,7 +72,7 @@ def test_retention_sample():
     out = ceilometer_helper.get_resources(header='Resource ID')
     res_id = out[0]
 
-    #create fake timestamp
+    # create fake timestamp
     curr_time = datetime.utcnow()
     curr_secs = curr_time.timestamp()
     new_time = datetime.fromtimestamp(curr_secs - 3540)
@@ -93,9 +90,9 @@ def test_retention_sample():
     LOG.tc_step("Ensuring the sample is listed")
 
     ceilometer_helper.delete_samples()
-    #sample-create uses meter-name for the name of the sample.
-    #sample-list uses meter to specify the name to search for.
-    #probably will have to change at least one of them when they become consistent.
+    # sample-create uses meter-name for the name of the sample.
+    # sample-list uses meter to specify the name to search for.
+    # probably will have to change at least one of them when they become consistent.
     samples = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
     assert 1 == len(samples), "FAIL: The sample is not in the list"
 

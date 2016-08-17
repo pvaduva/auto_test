@@ -24,10 +24,6 @@ def flavor_(request):
     extra_specs = {FlavorSpec.GUEST_HEARTBEAT: 'True'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
-    def delete_flavor():
-        nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
-
-    request.addfinalizer(delete_flavor)
     return flavor_id
 
 
@@ -39,16 +35,12 @@ def vm_1(request, flavor_):
 
     vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id)[1]
     time.sleep(30)
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
 
     # Teardown to remove the vm and flavor
-    def restore_hosts():
-        LOG.tc_step("Cleaning up vms..")
-        vm_helper.delete_vms(vm_id, delete_volumes=True)
-
-    request.addfinalizer(restore_hosts)
+    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
 
     return vm_id
+
 
 @fixture(scope='module')
 def vm_2(request, flavor_):
@@ -58,14 +50,8 @@ def vm_2(request, flavor_):
 
     vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id)[1]
     time.sleep(30)
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
-
     # Teardown to remove the vm and flavor
-    def restore_hosts():
-        LOG.tc_step("Cleaning up vms..")
-        vm_helper.delete_vms(vm_id, delete_volumes=True)
-
-    request.addfinalizer(restore_hosts)
+    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
 
     return vm_id
 
@@ -107,7 +93,7 @@ def get_column_value(table, search_value):
     return column_value
 
 
-@mark.cpe_sanity
+#@mark.cpe_sanity
 def test_tc4699_cold_migration_guest_instances(vm_1, vm_2):
     """Method to list a host subfunctions
     """

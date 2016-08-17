@@ -145,7 +145,7 @@ class TestSriovPciptResourceUsage:
         LOG.info("Tne resource usage {} is equal to expected value {}".format(resource_value, increment_value))
         assert resource_value == increment_value, "The resource usage is not equal to expected value"
 
-    @mark.skipif(True, reason='Evacuation JIRA CGTS-4264')
+    @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
     def test_pcipt_sriov_evacuate_vm(self, vms_to_test):
         """
         Test evacuate vm with multiple ports on same network

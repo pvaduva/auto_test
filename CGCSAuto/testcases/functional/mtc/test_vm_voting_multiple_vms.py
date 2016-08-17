@@ -54,10 +54,11 @@ def vms_(request, flavor_):
     vm_id = vm_helper.boot_vm(name=inst_names[3])[1]
     time.sleep(30)
     vm_ids.append(vm_id)
+    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
 
     # Teardown to remove the vm and flavor
     def remove_vms():
-        LOG.tc_step("Cleaning up vms..")
+        LOG.fixture_step("Cleaning up vms..")
         for idx in range(len(vm_ids)):
             vm_helper.delete_vms(vm_ids[idx], delete_volumes=True)
 
@@ -95,7 +96,7 @@ def test_vm_voting_multiple_vms(vms_):
      for vm: {0:s}".format(vm_id))
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         LOG.tc_step("Verify vm heartbeat is running in vm: %s" % vm_id)
-        exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat")
+        exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat| grep -v grep")
         assert (output is not None)
 
         LOG.tc_step("Set the voting criteria in vm: %s" % vm_id)
@@ -118,7 +119,7 @@ def test_vm_voting_multiple_vms(vms_):
      for vm: {0:s}".format(vm_id))
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         LOG.tc_step("Verify vm heartbeat is running in vm: %s" % vm_id)
-        exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat")
+        exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat | grep -v grep")
         assert (output is not None)
 
         LOG.tc_step("Set the no rebooting voting criteria in vm: %s" % vm_id)
@@ -141,14 +142,14 @@ def test_vm_voting_multiple_vms(vms_):
      for vm: {0:s}".format(vm_id))
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         LOG.tc_step("Verify vm heartbeat is running in vm: %s" % vm_id)
-        exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat")
+        exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat | grep -v grep")
         assert (output is not None)
 
         LOG.tc_step("Set the no stop voting criteria in vm: %s" % vm_id)
         vm_ssh.exec_cmd(voting_list[2])
 
     LOG.tc_step("Verify that attempts to stop the VM is not allowed")
-    time.sleep(10)
+    time.sleep(20)
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
         exitcode, output = cli.nova('stop', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN, rtn_list=True, fail_ok=True)
         assert ('Unable to stop the specified server' in output)
@@ -158,7 +159,7 @@ def test_vm_voting_multiple_vms(vms_):
      for vm: {0:s} that has no heartbeat extension".format(vm_id))
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         LOG.tc_step("Verify that no heartbeat is running in the vm: %s" % vm_id)
-        exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat")
+        exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat | grep -v grep")
         assert (output is None)
 
         LOG.tc_step("Set the no migration voting criteria in vm: %s" % vm_id)
@@ -173,7 +174,7 @@ def test_vm_voting_multiple_vms(vms_):
 
     LOG.tc_step("Verify that attempts to cold migrate the VM is allowed")
     time.sleep(10)
-    return_code, message = vm_helper.cold_migrate_vm(vm_id, fail_ok=True)
+    return_code, message = vm_helper.cold_migrate_vm(vm_id, fail_ok=True, revert=False)
     assert ('action-rejected' not in message)
 
 

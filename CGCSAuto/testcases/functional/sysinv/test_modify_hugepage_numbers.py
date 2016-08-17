@@ -1,4 +1,4 @@
-
+import time
 from pytest import fixture, mark, skip
 
 from utils import cli
@@ -19,8 +19,10 @@ def less_than_two_hypervisors():
 def modify_huge_page(request):
     # setup up huge page on compute-1
 
-
-    hostname = request.param[0]
+    if system_helper.is_small_footprint():
+        hostname = system_helper.get_standby_controller_name() + " "
+    else:
+        hostname = request.param[0]
     processor = request.param[1]
     page_config = request.param[2]
     host_processor = hostname + processor
@@ -92,6 +94,7 @@ def test_valid_huge_page_input(modify_huge_page):
     host_helper.unlock_host(hostname)
 
     LOG.tc_step("Using system host-memory-show to retrieve update Hugepage infos")
+    time.sleep(20)
     table_ = table_parser.table(cli.system('host-memory-show', show_args, auth_info=Tenant.ADMIN, fail_ok=False))
     actual_huge_page = table_parser.get_value_two_col_table(table_, 'VM  Huge Pages (1G): Total')
 
@@ -125,6 +128,7 @@ def test_invalid_huge_page_input(modify_huge_page):
         - Might be good idea to reset the host memory to what it was before
 
     """
+
     hostname = modify_huge_page['hostname']
     processor = modify_huge_page['processor']
     expected_huge_page = modify_huge_page['huge_page']

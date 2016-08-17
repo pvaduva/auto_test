@@ -800,6 +800,7 @@ def main():
     if tis_on_tis:
         logutils.print_name_value("TiS-on-TiS", tis_on_tis)
 
+    logutils.print_name_value("Logs location:", 'http://128.224.150.21/install_logs/')
     logutils.print_name_value("Lab config location", lab_cfg_location)
 
     if not tis_on_tis:

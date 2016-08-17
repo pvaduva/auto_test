@@ -256,7 +256,7 @@ def get_flavor_id(name=None, memory=None, disk=None, ephemeral=None, swap=None, 
     return random.choice(ids)
 
 
-def get_basic_flavor(auth_info=None, con_ssh=None):
+def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     """
     Get a basic flavor with the default arg values and without adding extra specs.
     Args:
@@ -266,10 +266,17 @@ def get_basic_flavor(auth_info=None, con_ssh=None):
     Returns (str): id of the basic flavor
 
     """
-    default_flavor_name = 'flavor-default-1'
+    size = 1
+    if guest_os and 'cgcs-guest' not in guest_os:
+        if 'ubuntu' in guest_os:
+            size = 9
+        elif 'centos' in guest_os:
+            size = 9
+
+    default_flavor_name = 'flavor-default-size{}'.format(size)
     flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)
     if flavor_id == '':
-        flavor_id = create_flavor(name=default_flavor_name, con_ssh=con_ssh)[1]
+        flavor_id = create_flavor(name=default_flavor_name, root_disk=size, con_ssh=con_ssh)[1]
 
     return flavor_id
 
@@ -729,7 +736,7 @@ def get_all_vms(return_val='ID', con_ssh=None):
     Returns (list): list of all vms on the system
 
     """
-    table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     return table_parser.get_column(table_, return_val)
 
 
@@ -755,7 +762,7 @@ def get_field_by_vms(vm_ids=None, field="Status", con_ssh=None, auth_info=None):
     if isinstance(vm_ids, str):
         vm_ids = [vm_ids]
 
-    table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=auth_info))
 
     for vm in vm_ids:
         ids_status[vm] = table_parser.get_values(table_=table_, target_header=field, ID=vm)
@@ -803,7 +810,7 @@ def get_vms(vms=None, return_val='ID', con_ssh=None, auth_info=None, all_vms=Tru
         if auth_info is None:
             auth_info = Tenant.get_primary()
         if auth_info['tenant'] == 'admin':
-            positional_args = '--all-tenant'
+            positional_args = '--all-tenants'
     table_ = table_parser.table(cli.nova('list', positional_args=positional_args, ssh_client=con_ssh,
                                          auth_info=auth_info))
     if vms:
@@ -837,11 +844,11 @@ def get_vm_nova_show_values(vm_id, fields, strict=False, con_ssh=None, auth_info
 
 
 def get_vm_status(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
-    return get_vm_nova_show_value(vm_id, 'status', con_ssh=con_ssh, auth_info=auth_info)
+    return get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)
 
 
 def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, regex=False, fail_ok=True):
-    table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     vm_ids = table_parser.get_values(table_, 'ID', strict=strict, regex=regex, Name=vm_name.strip())
     if not vm_ids:
         if fail_ok:
@@ -852,7 +859,7 @@ def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, regex=False, fail_ok
 
 
 def get_vm_name_from_id(vm_id, con_ssh=None):
-    table_ = table_parser.table(cli.nova('list', '--all-tenant', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     return table_parser.get_values(table_, 'Name', ID=vm_id)[0]
 
 
@@ -901,7 +908,7 @@ def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADM
     Returns (dict): e.g.,{<vm_id1>: <value of the field for vm1>, <vm_id2>: <value of the field for vm2>}
 
     """
-    table_ = table_parser.table(cli.nova('list --all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info))
     if vm_ids:
         table_ = table_parser.filter_table(table_, ID=vm_ids)
     else:
@@ -1068,6 +1075,8 @@ def _get_vm_volumes(novashow_table):
     Returns (list: A list of volume ids from the novashow_table.
 
     """
+    false = False
+    true = True
     volumes = eval(table_parser.get_value_two_col_table(novashow_table, ':volumes_attached', strict=False))
     return [volume['id'] for volume in volumes]
 

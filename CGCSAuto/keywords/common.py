@@ -1,5 +1,7 @@
 import os
 import pexpect
+from datetime import datetime, timedelta
+
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
@@ -7,7 +9,7 @@ from utils.ssh import ControllerClient
 
 
 def scp_to_active_controller(source_path, dest_path='',
-                   dest_user='wrsroot', dest_password='li69nux',
+                   dest_user='wrsroot', dest_password='Li69nux*',
                    timeout=60, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
@@ -18,7 +20,7 @@ def scp_to_active_controller(source_path, dest_path='',
 
 
 def scp_from_active_controller(source_path, dest_path='',
-                               src_user='wrsroot', src_password='li69nux',
+                               src_user='wrsroot', src_password='Li69nux*',
                                timeout=60, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
@@ -29,7 +31,7 @@ def scp_from_active_controller(source_path, dest_path='',
 
 
 def scp_from_local(source_path, dest_ip, dest_path='/home/wrsroot',
-                   dest_user='wrsroot', dest_password='li69nux',
+                   dest_user='wrsroot', dest_password='Li69nux*',
                    timeout=60, is_dir=False):
     """
     Scp file(s) from localhost (i.e., from where the automated tests are executed).
@@ -49,11 +51,11 @@ def scp_from_local(source_path, dest_ip, dest_path='/home/wrsroot',
     cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{} {}@{}:{}'.format(
             dir_option, source_path, dest_user, dest_ip, dest_path)
 
-    __scp_base(cmd, remote_password=dest_password, timeout=timeout)
+    _scp_base(cmd, remote_password=dest_password, timeout=timeout)
 
 
 def scp_to_local(source_path, source_ip, dest_path='/home/wrsroot',
-                 source_user='wrsroot', source_password='li69nux',
+                 source_user='wrsroot', source_password='Li69nux*',
                  timeout=60, is_dir=False):
     """
     Scp file(s) to localhost (i.e., to where the automated tests are executed).
@@ -72,15 +74,14 @@ def scp_to_local(source_path, source_ip, dest_path='/home/wrsroot',
     cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{}@{}:{} {}'.format(
             dir_option, source_user, source_ip, source_path, dest_path)
 
-    __scp_base(cmd, remote_password=source_password, timeout=timeout)
+    _scp_base(cmd, remote_password=source_password, timeout=timeout)
 
 
-def __scp_base(cmd, remote_password, logdir=None, timeout=60):
+def _scp_base(cmd, remote_password, logdir=None, timeout=60):
     LOG.debug('scp cmd: {}'.format(cmd))
 
     logdir = logdir or ProjVar.get_var('LOG_DIR')
     logfile = os.path.join(logdir, 'scp_files.log')
-
 
     with open(logfile, mode='a') as f:
         local_child = pexpect.spawn(command=cmd, encoding='utf-8', logfile=f)
@@ -211,11 +212,10 @@ def get_unique_name(name_str, existing_names=None, resource_type='other'):
 def _parse_cpus_list(cpus):
     """
     Convert human friendly pcup list to list of integers.
-    e.g., '5-7,41-42, 45' >> [5, 6, 7, 41, 42, 45]
+    e.g., '5-7,41-43, 43, 45' >> [5, 6, 7, 41, 42, 43, 43, 45]
 
     Args:
-        pcpus:
-        val (str): 'str' or 'list'
+        cpus (str):
 
     Returns (list): list of integers
 
@@ -236,3 +236,22 @@ def _parse_cpus_list(cpus):
                 cpus_list += list(range(int(min_), int(max_) + 1))
 
     return sorted([int(val) for val in cpus_list])
+
+
+def get_timedelta_for_isotimes(time1, time2):
+    """
+
+    Args:
+        time1 (str): such as "2016-08-16T12:59:45.440697+00:00"
+        time2 (str):
+
+    Returns:
+
+    """
+    time1 = time1.split(sep='.')[0]
+    time1_datetime = datetime.strptime(time1, "%Y-%m-%dT%H:%M:%S")
+
+    time2 = time2.split(sep='.')[0]
+    time2_datetime = datetime.strptime(time2, "%Y-%m-%dT%H:%M:%S")
+
+    return time2_datetime - time1_datetime

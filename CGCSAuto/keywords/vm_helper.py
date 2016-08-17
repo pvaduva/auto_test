@@ -5,12 +5,14 @@ from pexpect import TIMEOUT as ExpectTimeout
 from contextlib import contextmanager
 
 from utils import exceptions, cli, table_parser
-from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient
+from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
 from utils.tis_log import LOG
-from consts.auth import Tenant
+from consts.auth import Tenant, SvcCgcsAuto
 from consts.timeout import VMTimeout, CMDTimeout
+from consts.proj_vars import ProjVar
 from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, \
     VifMapping, VMNetworkStr
+from consts.filepaths import TiSPath, VMPath
 
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 
@@ -86,7 +88,7 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=True):
+            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=None):
     """
 
     Args:
@@ -110,12 +112,13 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
         hint (dict): key/value pair(s) sent to scheduler for custom use. such as group=<server_group_id>
         fail_ok (bool):
+        reuse_vol (bool): whether or not to reuse the existing volume
 
     Returns (tuple): (rtn_code(int), new_vm_id_if_any(str), message(str), new_vol_id_if_any(str))
         (0, vm_id, 'VM is booted successfully', <new_vol_id>)   # vm is created successfully and in Active state.
         (1, vm_id, <stderr>, <new_vol_id_if_any>)      # boot vm cli command failed, but vm is still booted
         (2, vm_id, "VM building is not 100% complete.", <new_vol_id>)   # boot vm cli accepted, but vm building is not
-            100% completed.
+            100% completed. Only applicable when poll=True
         (3, vm_id, "VM <uuid> did not reach ACTIVE state within <seconds>. VM status: <status>", <new_vol_id>)
             # vm is not in Active state after created.
         (4, '', <stderr>, <new_vol_id>): create vm cli command failed, vm is not booted
@@ -132,22 +135,24 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     # Handle mandatory arg - flavor
     if flavor is None:
-        flavor = nova_helper.get_basic_flavor(auth_info=auth_info, con_ssh=con_ssh)
+        flavor = nova_helper.get_basic_flavor(auth_info=auth_info, con_ssh=con_ssh, guest_os=guest_os)
 
     # Handle mandatory arg - nics
     if not nics:
         mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=auth_info, con_ssh=con_ssh)
         tenant_net_id = network_helper.get_tenant_net_id(auth_info=auth_info, con_ssh=con_ssh)
-        tenant_vif = random.choice(['virtio', 'avp'])
+        # tenant_vif = random.choice(['virtio', 'avp'])
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_id, 'vif-model': tenant_vif}]
+                {'net-id': tenant_net_id, 'vif-model': 'virtio'}]
     if isinstance(nics, dict):
         nics = [nics]
 
     possible_keys = ['net-id', 'v4-fixed-ip', 'v6-fixed-ip', 'port-id', 'vif-model', 'vif-pci-address']
     nics_args_list = []
+
     for nic in nics:
         nic_args_list = []
+
         for key, val in nic.items():
             key = key.strip().lower()
             val = val.strip().lower()
@@ -155,8 +160,10 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                 raise ValueError("{} is not a valid option. Valid options: {}".format(key, possible_keys))
             nic_arg_val = '='.join([key, val])
             nic_args_list.append(nic_arg_val)
+
         nic_args = '--nic ' + ','.join(nic_args_list)
         nics_args_list.append(nic_args)
+
     nics_args = ' '.join(nics_args_list)
 
     # Handle mandatory arg - boot source id
@@ -171,18 +178,24 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         else:
             vol_name = 'vol-' + name
             if reuse_vol:
-                is_new, volume_id = cinder_helper.get_any_volume(new_name=vol_name, auth_info=auth_info, con_ssh=con_ssh)
+                is_new, volume_id = cinder_helper.get_any_volume(new_name=vol_name, auth_info=auth_info,
+                                                                 con_ssh=con_ssh)
                 if is_new:
                     new_vol = volume_id
             else:
-                new_vol = volume_id = cinder_helper.create_volume(name=vol_name, auth_info=auth_info, con_ssh=con_ssh)[1]
+                new_vol = volume_id = cinder_helper.create_volume(name=vol_name, auth_info=auth_info,
+                                                                  con_ssh=con_ssh, guest_image=guest_os)[1]
+
     elif source.lower() == 'image':
-        image = source_id if source_id else glance_helper.get_image_id_from_name('cgcs-guest')
+        img_name = guest_os if guest_os else 'cgcs-guest'
+        image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=False)
+
     elif source.lower() == 'snapshot':
         if not snapshot_id:
             snapshot_id = cinder_helper.get_snapshot_id(auth_info=auth_info, con_ssh=con_ssh)
             if not snapshot_id:
                 raise ValueError("snapshot id is required to boot vm; however no snapshot exists on the system.")
+
     # Handle mandatory arg - key_name
     key_name = key_name if key_name is not None else get_any_keypair(auth_info=auth_info, con_ssh=con_ssh)
 
@@ -190,6 +203,10 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
 
     avail_zone = 'nova:{}'.format(vm_host) if vm_host else None
+
+    # create userdata cloud init file to run right after vm initialization to get ip on interfaces other than eth0.
+    if guest_os and not user_data and 'cgcs-guest' not in guest_os:
+        user_data = _create_cloud_init_if_conf(guest_os, nics_num=len(nics))
 
     optional_args_dict = {'--flavor': flavor,
                           '--image': image,
@@ -203,13 +220,16 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--user-data': user_data,
                           '--block-device': block_device,
                           '--hint': hint,
-                          '--availability-zone': avail_zone
+                          '--availability-zone': avail_zone,
                           }
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
 
+    if poll:
+        args_ += ' --poll'
+
     LOG.info("Booting VM {}...".format(name))
-    exitcode, output = cli.nova('boot --poll', positional_args=args_, ssh_client=con_ssh,
+    exitcode, output = cli.nova('boot', positional_args=args_, ssh_client=con_ssh,
                                 fail_ok=fail_ok, rtn_list=True, timeout=VMTimeout.BOOT_VM, auth_info=auth_info)
 
     table_ = table_parser.table(output)
@@ -221,7 +241,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         return 4, '', output, new_vol     # new_vol = '' if no new volume created. Pass this to test for proper teardown
 
     LOG.info("Post action check...")
-    if "100% complete" not in output:
+    if poll and "100% complete" not in output:
         message = "VM building is not 100% complete."
         if fail_ok:
             LOG.warning(message)
@@ -245,7 +265,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     return 0, vm_id, 'VM is booted successfully', new_vol
 
 
-def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None):
+def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None, use_fip=False):
     """
     Wait for ping vm from natbox succeeds.
 
@@ -254,13 +274,14 @@ def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=
         timeout (int): max retry time for pinging vm
         fail_ok (bool): whether to raise exception if vm cannot be ping'd successfully from natbox within timeout
         con_ssh (SSHClient): TiS server ssh handle
+        use_fip (bool): whether or not to ping floating ip only if any
 
     Returns (bool): True if ping vm succeeded, False otherwise.
 
     """
     ping_end_time = time.time() + timeout
     while time.time() < ping_end_time:
-        if ping_vms_from_natbox(vm_ids=vm_id, fail_ok=True, con_ssh=con_ssh, num_pings=3)[0]:
+        if ping_vms_from_natbox(vm_ids=vm_id, fail_ok=True, con_ssh=con_ssh, num_pings=3, use_fip=use_fip)[0]:
             # give it sometime to settle after vm booted and became pingable
             time.sleep(3)
             return True
@@ -391,7 +412,7 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
     return vm_ids
 
 
-def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=False, fail_ok=False,
+def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None, fail_ok=False,
                     auth_info=Tenant.ADMIN):
     """
 
@@ -503,19 +524,20 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=Fals
     return 0, "Live migration is successful."
 
 
-def _is_live_migration_allowed(vm_id, con_ssh=None, block_migrate=False):
+def _is_live_migration_allowed(vm_id, con_ssh=None, block_migrate=None):
     vm_info = VMInfo.get_vm_info(vm_id, con_ssh=con_ssh)
     storage_backing = vm_info.get_storage_type()
+    vm_boot_from = vm_info.boot_info['type']
+    has_volume_attached = vm_info.has_volume_attached()
 
-    if block_migrate:
-        vm_boot_from = vm_info.boot_info['type']
-        has_volume_attached = vm_info.has_volume_attached()
-        if vm_boot_from == 'image' and storage_backing == 'local_image' and not has_volume_attached:
-            return True
-        else:
-            LOG.warning("Live migration with block is not allowed for vm {}".format(vm_id))
-            return False
+    if vm_boot_from == 'image' and storage_backing == 'local_image' and not has_volume_attached:
+        return True
 
+    elif block_migrate:
+        LOG.warning("Live migration with block is not allowed for vm {}".format(vm_id))
+        return False
+
+    # auto choose block-mig with local disk
     elif vm_info.has_local_disks():
         if storage_backing == 'remote':
             return True
@@ -523,6 +545,7 @@ def _is_live_migration_allowed(vm_id, con_ssh=None, block_migrate=False):
             LOG.warning("Live migration without block is not allowed for vm {}".format(vm_id))
             return False
 
+    # auto choose block-mig without local disk
     else:
         return True
 
@@ -1016,6 +1039,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
 
+        from_vm_ssh.exec_cmd("ip addr")
         res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
                         fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry,
                         retry_interval=retry_interval, vlan_zero_only=vlan_zero_only)
@@ -1181,6 +1205,8 @@ class VMInfo:
         Returns (tuple): such as (volume_id1, 'volume_id2', ...)
 
         """
+        false = False
+        true = True
         volumes = eval(table_parser.get_value_two_col_table(self.table_, ':volumes_attached', strict=False))
         return tuple([volume['id'] for volume in volumes])
 
@@ -1378,7 +1404,17 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
     vms_deleted = []
     end_time = time.time() + timeout
     while time.time() < end_time:
-        table_ = table_parser.table(cli.nova('list --all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+        try:
+            output = cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info)
+        except exceptions.CLIRejected as e:
+            if 'The resource could not be found' in e.__str__():
+                LOG.error("'nova list' failed post vm deletion. Workaround is being applied.")
+                time.sleep(3)
+                output = cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info)
+            else:
+                raise
+
+        table_ = table_parser.table(output)
         existing_vms = table_parser.get_column(table_, header)
         for vm in vms_to_check:
             if vm not in existing_vms:
@@ -1425,9 +1461,9 @@ def _wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=V
     res_fail = {}
     end_time = time.time() + timeout
     while time.time() < end_time:
-        table_ = table_parser.table(cli.nova('list --all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+        table_ = table_parser.table(cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info))
 
-        for vm_id in vms_to_check:
+        for vm_id in list(vms_to_check):
             vm_val = table_parser.get_values(table_, target_header=header, ID=vm_id)[0]
             res_fail[vm_id] = vm_val
             if vm_val in values:
@@ -1628,6 +1664,82 @@ def _start_or_stop_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_CHANGE
     return 0, succ_msg
 
 
+def rebuild_vm(vm_id, image_id=None, new_name=None, preserve_ephemeral=None, fail_ok=False, con_ssh=None,
+               auth_info=Tenant.ADMIN, **metadata):
+
+    if image_id is None:
+        image_id = glance_helper.get_image_id_from_name('cgcs-guest')
+
+    args = '{} {}'.format(vm_id, image_id)
+
+    if new_name:
+        args += ' --name {}'.format(new_name)
+
+    if preserve_ephemeral:
+        args += ' --preserve-ephemeral'
+
+    for key, value in metadata.items():
+        args += ' --meta {}={}'.format(key, value)
+
+    LOG.info("Rebuilding vm {}".format(vm_id))
+    code, output = cli.nova('rebuild', args, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    if code == 1:
+        return code, output
+
+    LOG.info("Check vm status after vm rebuild")
+    _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=fail_ok, con_ssh=con_ssh)
+    actual_status = _wait_for_vm_status(vm_id, [VMStatus.ACTIVE, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh,
+                                        timeout=VMTimeout.REBUILD)
+
+    if not actual_status:
+        msg = "VM {} did not reach active state after rebuild.".format(vm_id)
+        LOG.warning(msg)
+        return 2, msg
+
+    if actual_status.lower() == VMStatus.ERROR.lower():
+        msg = "VM is in error state after rebuild."
+        if fail_ok:
+            LOG.warning(msg)
+            return 3, msg
+        raise exceptions.VMPostCheckFailed(msg)
+
+    succ_msg = "VM rebuilded successfully."
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def scale_vm(vm_id, direction, resource='cpu', fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Scale up/down vm cpu
+
+    Args:
+        vm_id (str): id of vm to scale
+        direction (str): up or down
+        resource (str): currently only cpu
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (rtn_code(int), message(str))
+        - 0, vm <resource> is successfully scaled <direction>
+        - 1, Scale vm cli rejected
+
+    """
+    if direction not in ['up', 'down']:
+        raise ValueError("Invalid direction provided. Valid values: 'up', 'down'")
+
+    args = ' '.join([vm_id, resource, direction])
+    code, output = cli.nova('scale', args, fail_ok=fail_ok, rtn_list=True, ssh_client=con_ssh, auth_info=auth_info)
+
+    if code == 1:
+        return 1, output
+
+    # TODO add checking
+    succ_msg = "vm {} is successfully scaled {}".format(resource, direction)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
 def get_vm_host_and_numa_nodes(vm_id, con_ssh=None):
     """
     Get vm host and numa nodes used for the vm on the host
@@ -1656,7 +1768,7 @@ def get_vm_host_and_numa_nodes(vm_id, con_ssh=None):
     return host, actual_node_vals
 
 
-def get_instance_topology(vm_id, con_ssh=None):
+def get_instance_topology(vm_id, con_ssh=None, source='vm-topology'):
     """
     Get instance_topology from 'vm-topology -s servers'
 
@@ -1664,14 +1776,19 @@ def get_instance_topology(vm_id, con_ssh=None):
         vm_id (str):
         # rtn_list (bool):
         con_ssh (SSHClient):
+        source (str): 'vm-topology' or 'nova show'
 
     Returns (list|dict):
 
     """
-    servers_tab = system_helper.get_vm_topology_tables('servers', con_ssh=con_ssh)[0]
-    servers_tab = table_parser.filter_table(servers_tab, ID=vm_id)
+    if source == 'vm-topology':
+        servers_tab = system_helper.get_vm_topology_tables('servers', con_ssh=con_ssh)[0]
+        servers_tab = table_parser.filter_table(servers_tab, ID=vm_id)
 
-    instance_topology = table_parser.get_column(servers_tab, 'instance_topology')[0]
+        instance_topology = table_parser.get_column(servers_tab, 'instance_topology')[0]
+    else:
+        instance_topology = nova_helper.get_vm_nova_show_value(vm_id, 'wrs-res:topology', strict=True, con_ssh=con_ssh)
+
     if isinstance(instance_topology, str):
         instance_topology = [instance_topology]
 
@@ -1744,8 +1861,10 @@ def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **
         'pause': pause_vm,
         'unpause': unpause_vm,
         'reboot': reboot_vm,
+        'rebuild': rebuild_vm,
         'live_migrate': live_migrate_vm,
         'cold_migrate': cold_migrate_vm,
+        'cold_mig_revert': cold_migrate_vm,
     }
     if not vm_id:
         raise ValueError("vm id is not provided.")
@@ -1754,6 +1873,9 @@ def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **
     action = action.lower().replace(' ', '_')
     if action not in valid_actions:
         raise ValueError("Invalid action provided: {}. Valid actions: {}".format(action, valid_actions))
+
+    if action == 'cold_mig_revert':
+        kwargs['revert'] = True
 
     action_function_map[action](vm_id, con_ssh=con_ssh, auth_info=auth_info, **kwargs)
 
@@ -1869,3 +1991,165 @@ def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
 
 def get_proc_num_from_vm(vm_ssh):
     return int(vm_ssh.exec_cmd('cat /proc/cpuinfo | grep processor | wc -l', fail_ok=False)[1])
+
+
+def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=None, con_ssh=None):
+    """
+    cpu affinity list for vm via taskset -pc
+    Args:
+        vm_id (str):
+        con_ssh (SSHClient):
+
+    Returns (list): such as [10, 30]
+
+    """
+    cmd = '''ps-sched.sh | grep qemu | grep {} | grep -v grep | awk '{{print $2;}}' | xargs -i /bin/sh -c "taskset -pc {{}}"'''
+
+    if host_ssh:
+        if not vm_host or not instance_name:
+            raise ValueError("vm_host and instance_name have to be provided together with host_ssh")
+
+        output = host_ssh.exec_cmd(cmd.format(instance_name))[1]
+
+    else:
+        vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+        instance_name = nova_helper.get_vm_instance_name(vm_id, con_ssh=con_ssh)
+
+        with host_helper.ssh_to_host(vm_host) as host_ssh:
+            output = host_ssh.exec_cmd(cmd.format(instance_name))[1]
+
+    # Sample output:
+    # pid 6376's current affinity list: 10
+    # pid 6380's current affinity list: 10
+    # pid 6439's current affinity list: 10
+    # pid 6441's current affinity list: 10
+    # pid 6442's current affinity list: 30
+    # pid 6445's current affinity list: 10
+    # pid 24142's current affinity list: 10
+
+    all_cpus = []
+    lines = output.splitlines()
+    for line in lines:
+
+        # skip line if below output occurs due to timing in executing cmds
+        # taskset: failed to get pid 17125's affinity: No such process
+        if "No such process" in line:
+            continue
+
+        cpu_str = line.split(sep=': ')[-1].strip()
+        cpus = common._parse_cpus_list(cpus=cpu_str)
+        all_cpus += cpus
+
+    all_cpus = sorted(list(set(all_cpus)))
+    LOG.info("Affined cpus on host {} for vm {}: {}".format(vm_host, vm_id, all_cpus))
+
+    return all_cpus
+
+
+def _scp_net_config_cloud_init(guest_os):
+    con_ssh = ControllerClient.get_active_controller()
+
+    dest_dir = '/home/wrsroot/userdata/'
+    if 'ubuntu' in guest_os:
+        dest_name = 'ubuntu_cloud_init_if_conf.sh'
+    elif 'centos' in guest_os:
+        dest_name = 'centos_cloud_init_if_conf.sh'
+    else:
+        raise ValueError("Unknown guest_os")
+
+    dest_path = dest_dir + dest_name
+
+    if con_ssh.file_exists(file_path=dest_path):
+        LOG.info('userdata {} already exists. Return existing path'.format(dest_path))
+        return dest_path
+
+    LOG.debug('Create userdata directory if not already exists')
+    cmd = 'mkdir -p {}'.format(dest_dir)
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
+    # LOG.info('wget image from {} to {}/{}'.format(img_url, img_dest, new_name))
+    # cmd = 'wget {} --no-check-certificate -P {} -O {}'.format(img_url, img_dest, new_name)
+    # con_ssh.exec_cmd(cmd, expect_timeout=7200, fail_ok=False)
+
+    source_path = '{}/userdata/{}'.format(SvcCgcsAuto.HOME, dest_name)
+    LOG.info('scp image from test server to active controller')
+
+    scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}@{}:{} {}'.format(
+            SvcCgcsAuto.USER, SvcCgcsAuto.SERVER, source_path, dest_dir)
+
+    con_ssh.send(scp_cmd)
+    index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=3600)
+    if index == 2:
+        con_ssh.send('yes')
+        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=3600)
+    if index == 1:
+        con_ssh.send(SvcCgcsAuto.PASSWORD)
+        index = con_ssh.expect()
+    if index != 0:
+        raise exceptions.SSHException("Failed to scp files")
+
+
+def _create_cloud_init_if_conf(guest_os, nics_num):
+    """
+
+    Args:
+        guest_os:
+        nics_num:
+
+    Returns (str): file path of the cloud init userdata file for given guest os and number of nics
+        Sample file content for Centos vm:
+            #!/bin/bash
+            sudo cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth1
+            sudo sed -i 's/eth0/eth1/g' /etc/sysconfig/network-scripts/ifcfg-eth1
+            sudo ifup eth1
+
+        Sample file content for Ubuntu vm:
+
+
+    """
+
+    file_dir = TiSPath.USERDATA
+
+    if 'ubuntu' in guest_os:
+        guest_os = 'ubuntu'
+        # vm_if_path = VMPath.VM_IF_PATH_UBUNTU
+        eth_path = VMPath.ETH_PATH_UBUNTU
+    elif 'centos' in guest_os:
+        guest_os = guest_os
+        # vm_if_path = VMPath.VM_IF_PATH_CENTOS
+        eth_path = VMPath.ETH_PATH_CENTOS
+
+    else:
+        raise ValueError("Unknown guest os")
+
+    eth0_path = eth_path.format('eth0')
+    file_name = '{}_{}nic_cloud_init_if_conf.sh'.format(guest_os, nics_num)
+
+    file_path = file_dir + file_name
+    con_ssh = ControllerClient.get_active_controller()
+    if con_ssh.file_exists(file_path=file_path):
+        LOG.info('userdata {} already exists. Return existing path'.format(file_path))
+        return file_path
+
+    LOG.debug('Create userdata directory if not already exists')
+    cmd = 'mkdir -p {}'.format(file_dir)
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
+    tmp_file = ProjVar.get_var('TEMP_DIR') + file_name
+    if 'centos7' in guest_os:
+        shell = '/usr/bin/bash'
+    else:
+        shell = '/bin/bash'
+
+    with open(tmp_file, mode='a') as f:
+        f.write('#!{}\n\n'.format(shell))
+        for i in range(nics_num-1):
+            ethi_name = 'eth{}'.format(i+1)
+            ethi_path = eth_path.format(ethi_name)
+            f.write('cp {} {}\n'.format(eth0_path, ethi_path))
+            f.write("sed -i 's/eth0/{}/g' {}\n".format(ethi_name, ethi_path))
+            f.write('ifup {}\n'.format(ethi_name))
+
+    common.scp_to_active_controller(source_path=tmp_file, dest_path=file_path, is_dir=False)
+
+    return file_path

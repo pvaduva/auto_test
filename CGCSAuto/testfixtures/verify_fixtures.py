@@ -1,10 +1,10 @@
-from pytest import fixture, mark
+from pytest import fixture, mark, skip
 
 from consts.auth import Tenant
 from utils import table_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
-from keywords import system_helper, vm_helper, nova_helper, cinder_helper
+from keywords import system_helper, vm_helper, nova_helper, cinder_helper, storage_helper
 
 
 ########################
@@ -123,3 +123,33 @@ def ping_vm_from_vm(request):
         LOG.info("Ping from VM to other VMs verified.")
     request.addfinalizer(verify_vms_ping)
     return
+
+
+@fixture()
+def ceph_precheck(request):
+    """
+    Run test pre-checks before running CEPH storage tests.
+
+    Args:
+        request: caller of this fixture. i.e., test func.
+    """
+    # yang TODO: probably can remove
+    con_ssh = ControllerClient.get_active_controller()
+
+    LOG.info('Ensure the system has storage nodes')
+    nodes = system_helper.get_storage_nodes(con_ssh)
+    LOG.info('System has the following storage nodes {}'.format(nodes))
+    if not nodes:
+        skip('SUT does not have storage nodes')
+
+    LOG.info('Verify the health of the CEPH cluster')
+    rtn, msg = storage_helper.is_ceph_healthy(con_ssh)
+    LOG.info('{}'.format(msg))
+
+    LOG.info('Verify if there are OSDs provisioned')
+    osds = storage_helper.get_num_osds(con_ssh)
+    LOG.info('System has {} OSDS'.format(osds))
+    assert osds != 0, 'There are no OSDs assigned'
+
+    return
+

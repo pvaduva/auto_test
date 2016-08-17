@@ -54,10 +54,10 @@ def test_vm_reboot_with_heartbeat():
     time.sleep(30)
 
     LOG.tc_step("Verify vm heartbeat is on via event logs")
-    #event = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=False,
-    #                                      **{'Entity Instance ID': vm_id, 'Event Log ID': [
-    #                                         EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})[0]
-    #assert event == EventLogID.HEARTBEAT_ENABLED, "Heartbeat is disabled for vm {}".format(vm_id)
+    event = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=False,
+                                         **{'Entity Instance ID': vm_id, 'Event Log ID': [
+                                            EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})[0]
+    assert event == EventLogID.HEARTBEAT_ENABLED, "Heartbeat is disabled for vm {}".format(vm_id)
 
     # Determine which compute the vm is on
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
@@ -66,18 +66,18 @@ def test_vm_reboot_with_heartbeat():
         compute_name = table_parser.get_value_two_col_table(vm_table, table_param)
 
     # Login to the compute and verify the vm heart is beating
-    cat_log = 'cat /var/log/guestServer.log'
+    cat_log = 'cat /var/log/guestServer.log | grep \'is heartbeating\''
     with host_helper.ssh_to_host(compute_name) as compute_ssh:
-        exitcode, output = compute_ssh.exec_cmd(cat_log, expect_timeout=900)
-        assert ('is heartbeating' in output)
+        exitcode, output = compute_ssh.exec_cmd(cat_log, expect_timeout=90)
+        assert (output)
 
     LOG.tc_step("Login to vm: %s via NatBox and verify heartbeat is enabled" % vm_name)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 
         # verify that the heartbeat is running on the vm
-        check_log = 'cat /var/log/daemon.log'
-        exitcode, output = vm_ssh.exec_cmd(check_log, expect_timeout=900)
-        assert('heartbeat state change from enabling to enabled' in output)
+        check_log = 'cat /var/log/daemon.log | grep \'heartbeat state change from enabling to enabled\''
+        exitcode, output = vm_ssh.exec_cmd(check_log, expect_timeout=90)
+        assert(output)
 
         LOG.tc_step("Run touch /tmp/unhealthy to put vm into unhealthy state.")
         vm_ssh.exec_cmd("touch /tmp/unhealthy")
@@ -87,9 +87,9 @@ def test_vm_reboot_with_heartbeat():
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 
         # verify that the heartbeat is running on the vm
-        check_log = 'cat /var/log/daemon.log'
-        exitcode, output = vm_ssh.exec_cmd(check_log, expect_timeout=900)
-        assert('heartbeat state change from enabling to enabled' in output)
+        check_log = 'cat /var/log/daemon.log | grep \'heartbeat state change from enabling to enabled\''
+        exitcode, output = vm_ssh.exec_cmd(check_log, expect_timeout=90)
+        assert(output)
 
         #step_str = "is rebooted automatically" if autorecovery_enabled else "is not rebooted"
         #LOG.tc_step("Verify vm {} with auto recovery set to {}".format(step_str, autorecovery_enabled))
