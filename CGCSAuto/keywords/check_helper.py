@@ -327,38 +327,3 @@ def check_vm_numa_nodes(vm_id, on_vswitch_nodes=True):
                                                               "vSwitch numa nodes: {}" .format(vm_id, vm_numa_nodes,
                                                                                                vswitch_procs)
 
-def compare_times(time_1, time_2):
-    """
-    Compares 2 times found from datetime.now(), timestamps found from system host-show, time.time(), etc.
-    Args:
-        time_1 (datetime, str, float):
-        time_2 (datetime, str, float):
-
-    Returns (int):
-        -1, time_1 is less than time_2
-        0, time_1 is equal to time_2
-        1, time_1 is greater than time_2
-
-    """
-
-    # get year, month, day, hour, minute, second
-    if isinstance(time_1, str):
-        time_1 = datetime.strptime(time_1.replace('T', ' ').split('.')[0], "%Y-%m-%d %H:%M:%S")
-    if isinstance(time_2, str):
-        time_2 = datetime.strptime(time_2.replace('T', ' ').split('.')[0], "%Y-%m-%d %H:%M:%S")
-
-    if isinstance(time_1, float):
-        time_1 = datetime.fromtimestamp(time_1)
-    if isinstance(time_2, float):
-        time_2 = datetime.fromtimestamp(time_2)
-
-    if time_1 < time_2:
-        LOG.info("{} is before {}".format(time_1, time_2))
-        return -1
-    elif time_1 > time_2:
-        LOG.info("{} is after {}".format(time_1, time_2))
-        return 1
-    elif time_1 == time_2:
-        LOG.info("{} is the same as {}".format(time_1, time_2))
-        return 0
-

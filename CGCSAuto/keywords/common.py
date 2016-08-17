@@ -1,5 +1,7 @@
 import os
 import pexpect
+from datetime import datetime, timedelta
+
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
@@ -234,3 +236,22 @@ def _parse_cpus_list(cpus):
                 cpus_list += list(range(int(min_), int(max_) + 1))
 
     return sorted([int(val) for val in cpus_list])
+
+
+def get_timedelta_for_isotimes(time1, time2):
+    """
+
+    Args:
+        time1 (str): such as "2016-08-16T12:59:45.440697+00:00"
+        time2 (str):
+
+    Returns:
+
+    """
+    time1 = time1.split(sep='.')[0]
+    time1_datetime = datetime.strptime(time1, "%Y-%m-%dT%H:%M:%S")
+
+    time2 = time2.split(sep='.')[0]
+    time2_datetime = datetime.strptime(time2, "%Y-%m-%dT%H:%M:%S")
+
+    return time2_datetime - time1_datetime
