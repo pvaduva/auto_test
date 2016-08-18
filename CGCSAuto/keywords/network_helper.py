@@ -1625,6 +1625,44 @@ def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_s
     Returns (list): list of filtered ips. Empty list if none of the ips belongs to subnet with required the vlan id.
 
     """
+
+    if common._execute_with_openstack_cli():
+        return __filter_ips_with_subnet_vlan_id_openstack(ips, vlan_id=vlan_id, auth_info=auth_info, con_ssh=con_ssh)
+
+    if not ips:
+        raise ValueError("No ips provided.")
+
+    table_ = table_parser.table(cli.neutron('subnet-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.filter_table(table_, strict=True, **{'wrs-net:vlan_id': str(vlan_id)})
+
+    cidrs = table_parser.get_column(table_, 'cidr')
+    filtered_ips = []
+    for ip in ips:
+        for cidr in cidrs:
+            if ipaddress.ip_address(ip) in ipaddress.ip_network(cidr):
+                filtered_ips.append(ip)
+
+    if not filtered_ips:
+        LOG.warning("None of the ips from {} belongs to a subnet with vlan id {}".format(ips, vlan_id))
+    else:
+        LOG.info("IPs with vlan id {}: {}".format(vlan_id, filtered_ips))
+
+    return filtered_ips
+
+
+def __filter_ips_with_subnet_vlan_id_openstack(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Filter out ips with given subnet vlan id.
+    This is mainly used by finding vlan 0 ip to ping from a list of internal net ips.
+    Args:
+        ips (list):
+        vlan_id (int):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (list): list of filtered ips. Empty list if none of the ips belongs to subnet with required the vlan id.
+
+    """
     if not ips:
         raise ValueError("No ips provided.")
 
