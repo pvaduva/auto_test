@@ -414,7 +414,9 @@ def get_floating_ip_info(fip, fip_val='ip', field='fixed_ip_address', auth_info=
         fip = fips[0]
 
     table_ = table_parser.table(cli.neutron('floatingip-show', fip, ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_value_two_col_table(table_, field)
+    val = table_parser.get_value_two_col_table(table_, field)
+    val = None if val == 'None' else val
+    return val
 
 
 def disassociate_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
@@ -441,6 +443,15 @@ def disassociate_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.ADMIN, 
 
     if code == 1:
         return 1, output
+
+    fixed_ip = get_floating_ip_info(floating_ip, fip_val='id', field='fixed_ip_address', auth_info=auth_info,
+                                    con_ssh=con_ssh)
+    if fixed_ip is not None:
+        err_msg = "Fixed ip address is {} instead of None for floating ip {}".format(fixed_ip, floating_ip)
+        if fail_ok:
+            return 2, err_msg
+        else:
+            raise exceptions.NeutronError(err_msg)
 
     succ_msg = "Floating ip {} is successfully disassociated with fixed ip".format(floating_ip)
     LOG.info(succ_msg)
@@ -548,8 +559,8 @@ def get_neutron_port(name=None, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
-def get_provider_nets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN,
-                      **kwargs):
+def get_providernets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN,
+                     **kwargs):
     """
     Get the neutron provider net list based on name if given for ADMIN user.
 
@@ -571,23 +582,55 @@ def get_provider_nets(name=None, rtn_val='id', con_ssh=None, strict=False, regex
     return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, name=name, **kwargs)
 
 
-def get_provider_net_ranges(name=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_providernet_ranges(rtn_val='name', range_name=None, providernet_name=None, providernet_type=None, strict=False,
+                           auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+
+    Args:
+        rtn_val (str): 'name' or 'id'
+        range_name (str):
+        providernet_name (str):
+        providernet_type (str):
+        strict (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (list): list of range names or ids
+
+    """
+
+    table_ = table_parser.table(cli.neutron('providernet-range-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    kwargs = {}
+    if providernet_name is not None:
+        kwargs['providernet'] = providernet_name
+
+    if range_name is not None:
+        kwargs['name'] = range_name
+
+    if providernet_type is not None:
+        kwargs['type'] = providernet_type
+
+    return table_parser.get_values(table_, rtn_val, strict=strict, **kwargs)
+
+
+def get_providernet_ranges_dict(providernet_name=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get the neutron provider net ranges based on name if given for ADMIN user.
 
     Args:
         con_ssh (SSHClient): If None, active controller ssh will be used.
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
-        name (str): Given name for the provider network to filter
+        providernet_name (str): Given name for the provider network to filter
 
     Returns (dict): Neutron provider network ranges of admin user.
 
     """
     table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
-    if name is None:
+    if providernet_name is None:
         ranges = table_parser.get_values(table_, 'ranges')
     else:
-        ranges = table_parser.get_values(table_, 'ranges', strict=False, name=name)
+        ranges = table_parser.get_values(table_, 'ranges', strict=False, name=providernet_name)
 
     return ranges
 
@@ -1524,7 +1567,7 @@ def get_pci_interface_info(interface='pthru', filepath=None, con_ssh=None):
     return sriov_if_override.split(sep='=')[-1]
 
 
-def get_provider_net_for_interface(interface='pthru', rtn_val='id', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_providernet_for_interface(interface='pthru', rtn_val='id', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get provider net id for SRIOV or PCI-passthrough interface
 
@@ -1549,8 +1592,8 @@ def get_provider_net_for_interface(interface='pthru', rtn_val='id', filepath=Non
 
     provider_net_name = provider_net_name[0]
 
-    return get_provider_nets(name='.*{}'.format(provider_net_name), rtn_val=rtn_val, con_ssh=con_ssh, strict=True,
-                             regex=True, auth_info=auth_info)[0]
+    return get_providernets(name='.*{}'.format(provider_net_name), rtn_val=rtn_val, con_ssh=con_ssh, strict=True,
+                            regex=True, auth_info=auth_info)[0]
 
 
 def get_networks_on_providernet(providernet_id, con_ssh=None, auth_info=Tenant.ADMIN):
@@ -1586,14 +1629,22 @@ def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_s
         raise ValueError("No ips provided.")
 
     table_ = table_parser.table(cli.neutron('subnet-list', ssh_client=con_ssh, auth_info=auth_info))
-    table_ = table_parser.filter_table(table_, strict=True, **{'wrs-net:vlan_id': str(vlan_id)})
+    # table_ = table_parser.filter_table(table_, strict=True, **{'wrs-net:vlan_id': str(vlan_id)})
 
-    cidrs = table_parser.get_column(table_, 'cidr')
-    filtered_ips = []
+    cidrs = table_parser.get_column(table_, 'Subnet')
+    # filtered_ips = []
+    subnets = {}
     for ip in ips:
         for cidr in cidrs:
             if ipaddress.ip_address(ip) in ipaddress.ip_network(cidr):
-                filtered_ips.append(ip)
+                subnets[table_parser.get_values(table_, 'ID', Subnet=cidr)[0]] = ip
+                # filtered_ips.append(ip)
+
+    filtered_ips = []
+    for subnet in subnets:
+        subnet_show_tab = table_parser.table(cli.neutron('subnet-show', subnet, ssh_client=con_ssh, auth_info=auth_info))
+        if eval(table_parser.get_value_two_col_table(subnet_show_tab, 'wrs-net:vlan_id')) == vlan_id:
+            filtered_ips.append(subnets[subnet])
 
     if not filtered_ips:
         LOG.warning("None of the ips from {} belongs to a subnet with vlan id {}".format(ips, vlan_id))
@@ -1631,66 +1682,91 @@ def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD):
         return ''
 
 
-def create_providernet_range(provider_id, range_name, range_min, range_max, group, port, ttl,
-                             auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+def create_providernet_range(providernet, range_min, range_max, rtn_val='id', range_name=None, shared=True, tenant_id=None,
+                             group=None, port=None, ttl=None, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
     """
-
+    Create a provider net range for given providernet with specified min and max range values
     Args:
-        provider_id:
-        range_name:
-        range_min:
-        range_max:
-        group:
-        port:
-        ttl:
-        auth_info:
-        con_ssh:
-        fail_ok:
+        providernet (str):
+        range_min (int):
+        range_max (int):
+        rtn_val (str):
+        range_name (str):
+        shared (bool):
+        tenant_id (str):
+        group (str):
+        port (int):
+        ttl (int):
+        auth_info (dict):
+        con_ssh (SSHClient):
+        fail_ok (bool):
 
-    Returns:
-        0, providernet-range-id: for success,
-        1, error_message
-        2, the range has been created but with wrong min and/or max ranges
+    Returns (tuple):
+        0, <range name or id>     - Range created successfully
+        1, <std_err>              - Range create cli rejected
+
     """
-    if not range_name:
-        name = provider_id + 'l2'
+    range_min = int(range_min)
+    range_max = int(range_max)
 
-    args = provider_id
+    existing_ranges = get_providernet_ranges(rtn_val='name')
+    if range_name is None:
+        range_name = providernet + '-r-auto'
 
-    args += ' --name {} --shared'.format(range_name)
-    args += ' --range {}-{}'.format(range_min, range_max)
-    args += ' --group {}'.format(group)
-    args += ' --port {}'.format(port)
-    args += ' --ttl {}'.format(ttl)
+    range_name = common.get_unique_name(range_name, existing_names=existing_ranges)
 
+    args = '--range {}-{} --name {}'.format(range_min, range_max, range_name)
+
+    if shared:
+        args += ' --shared'
+
+    args_dict = {
+        '--tenant-id': tenant_id,
+        '--group': group,
+        '--ttl': ttl,
+        '--port': port
+    }
+    for key, val in args_dict.items():
+        if val is not None:
+            args += " {} {}".format(key, val)
+
+    args += ' ' + providernet
+
+    LOG.info("Creating range {} for providernet {}".format(range_name, providernet))
     code, output = cli.neutron('providernet-range-create', args, ssh_client=con_ssh, auth_info=auth_info,
                                fail_ok=fail_ok, rtn_list=True)
 
     if code == 1:
         return 1, output
 
-    table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
-    range = table_parser.get_values(table_, 'ranges', strict=False, id=provider_id)[0]
+    post_ranges_tab = table_parser.table(cli.neutron('providernet-range-list', ssh_client=con_ssh, auth_info=auth_info))
+    post_range_tab = table_parser.filter_table(post_ranges_tab, name=range_name)
+    post_min_range = int(table_parser.get_column(post_range_tab, 'minimum')[0])
+    post_max_range = int(table_parser.get_column(post_range_tab, 'maximum')[0])
 
-    range = eval(range)
-    if range_min != range['minimum'] or range_max != range['maximum']:
-        LOG.warning("Provider-net range is created but not correct")
-        return 2, output
+    if post_max_range != range_max or post_min_range != range_min:
+        err_msg = "MIN or MAX range incorrect. Expected: {}-{}. Actual: {}-{}".format(
+                range_min, range_max, post_min_range, post_max_range)
+        raise exceptions.NeutronError(err_msg)
 
-    table_ = table_parser.table(output)
-    range_id = table_parser.get_value_two_col_table(table_, 'id')
+    LOG.info("Provider net range {}-{} is successfully created for providernet {}".format(
+            range_min, range_max, providernet))
 
-    LOG.info("Providene-range has been create successfully")
-    return code, range_id
+    if rtn_val == 'id':
+        return 0, table_parser.get_column(post_range_tab, 'id')
+    else:
+        return 0, range_name
 
 
-def delete_vxlan_providernet_range(range_name, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+def delete_providernet_range(providernet_range, range_val='name', con_ssh=None, auth_info=Tenant.ADMIN,
+                             fail_ok=False):
     """
 
     Args:
         range_name:
         con_ssh:
         auth_info:
+        fail_ok
 
     Returns:
         0 for success
@@ -1700,26 +1776,32 @@ def delete_vxlan_providernet_range(range_name, con_ssh=None, auth_info=Tenant.AD
 
     """
 
-    if range_name is None:
-        msg = "Nothing to delete. Do nothing."
-        LOG.info(msg)
-        return -1, msg
+    if not providernet_range:
+        raise ValueError("Range name cannot be empty")
 
-    code, output = cli.neutron('providernet-range-delete', range_name, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
-                               fail_ok=True)
+    if range_val == 'id':
+        providernet_range = get_providernet_range_name_from_id(providernet_range, con_ssh=con_ssh)
+
+    LOG.info("Deleting provider net range {}".format(providernet_range))
+    code, output = cli.neutron('providernet-range-delete', providernet_range, ssh_client=con_ssh, auth_info=auth_info,
+                               rtn_list=True, fail_ok=fail_ok)
 
     if code == 1:
-            return code, output
+        return code, output
 
     table_ = table_parser.table(cli.neutron('providernet-range-list', ssh_client=con_ssh, auth_info=auth_info))
-    range = table_parser.get_values(table_, 'id', strict=False, name=range_name)
+    providernet_range = table_parser.get_values(table_, 'id', strict=True, name=providernet_range)
 
-    if range:
-        msg = "The range {} not been deleted".format(range_name)
-        LOG.info(msg)
-        return 2, msg
+    if providernet_range:
+        raise exceptions.NeutronError("Range {} is not successfully deleted".format(providernet_range))
 
-    return code, output
+    LOG.info("Provider net range {} is successfully deleted".format(providernet_range))
+    return 0, output
+
+
+def get_providernet_range_name_from_id(range_id, auth_info=Tenant.ADMIN, con_ssh=None):
+    table_ = table_parser.table(cli.neutron('providernet-range-list', ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_values(table_, 'name', id=range_id)[0]
 
 
 def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):

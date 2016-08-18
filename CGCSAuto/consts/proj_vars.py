@@ -2,7 +2,7 @@ class ProjVar:
     __var_dict = {}
 
     @classmethod
-    def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all, report_tag):
+    def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all, report_tag, openstack_cli):
 
         labname = lab['short_name']
 
@@ -20,7 +20,8 @@ class ProjVar:
             'NATBOX': natbox,
             'COLLECT_ALL': collect_all,
             'REPORT_ALL': report_all,
-            'REPORT_TAG': report_tag
+            'REPORT_TAG': report_tag,
+            'OPENSTACK_CLI': openstack_cli
         }
 
     @classmethod

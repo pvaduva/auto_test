@@ -57,7 +57,7 @@ class TestSriovPciptResourceUsage:
                 {'net-id': tenant_net_id, 'vif-model': 'avp'},
                 {'net-id': internal_net_id, 'vif-model': vif_model}]
 
-        pnet_id = network_helper.get_provider_net_for_interface(interface=vm_type)
+        pnet_id = network_helper.get_providernet_for_interface(interface=vm_type)
         LOG.info("provider net id {} for {}".format(pnet_id, vif_model))
 
         if not pnet_id:
