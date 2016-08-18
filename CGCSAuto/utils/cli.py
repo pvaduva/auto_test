@@ -46,7 +46,8 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
     flags = __convert_args(flags)
 
     if auth_info:
-        auth_args = ('--os-username {} --os-password {} --os-tenant-name {} --os-auth-url {} --os-region-name {}'.
+        auth_args = ('--os-username {} --os-password {} --os-project-name {} --os-auth-url {} --os-region-name {} '
+                     '--os-user-domain-name Default --os-project-domain-name Default'.
                      format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url'],
                             auth_info['region']))
         flags = (auth_args + ' ' + flags).strip()
@@ -129,6 +130,7 @@ def nova(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli
 def openstack(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
               auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
 
+    flags += ' --os-identity-api-version 3'
     return exec_cli('openstack', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
                     err_only=err_only, timeout=timeout, rtn_list=rtn_list)

@@ -29,6 +29,8 @@ CONNECTION_REFUSED = '.*Connection refused.*'
 _SSH_OPTS = (' -o RSAAuthentication=no' + ' -o PubkeyAuthentication=no' + ' -o StrictHostKeyChecking=no' +
              ' -o UserKnownHostsFile=/dev/null')
 
+_SSH_OPTS_UBUNTU_VM = (' -o RSAAuthentication=no' + ' -o StrictHostKeyChecking=no' + ' -o UserKnownHostsFile=/dev/null')
+
 EXIT_CODE_CMD = 'echo $?'
 TIMEOUT_EXPECT = 10
 
@@ -52,14 +54,14 @@ class SSHClient:
             reconnect()         reconnects to session
     """
 
-    def __init__(self, host, user='wrsroot', password='li69nux', force_password=True, initial_prompt=CONTROLLER_PROMPT,
+    def __init__(self, host, user='wrsroot', password='Li69nux*', force_password=True, initial_prompt=CONTROLLER_PROMPT,
                  timeout=20, session=None):
         """
         Initiate an object for connecting to remote host
         Args:
             host: hostname or ip. such as "yow-cgcs-ironpass-1.wrs.com" or "128.224.151.212"
             user: linux username for login to host. such as "wrsroot"
-            password: password for given user. such as "li69nux"
+            password: password for given user. such as "Li69nux*"
 
         Returns:
 
@@ -130,6 +132,18 @@ class SSHClient:
                 if self._is_connected(fail_ok=False):
                     LOG.info("Login successful!")
                     # LOG.debug(self._session)
+                    # next 5 lines change ssh window size and flush its buffer
+                    self._session.setwinsize(150, 250)
+                    self.send()
+
+                    end_time = time.time() + 20
+                    while time.time() < end_time:
+                        index = self.expect(timeout=3, fail_ok=True)
+                        if index != 0:
+                            break
+                    else:
+                        LOG.warning("Still getting prompt from the buffer. Buffer might not be cleared yet.")
+
                     return
 
                 # retry if this line is reached. it would've returned if login succeeded.
@@ -224,10 +238,9 @@ class SSHClient:
         Returns:
 
         """
-        # LOG.error("heree preflush after {}".format(self._session.after))
         self.expect(fail_ok=True, timeout=timeout)
+
         LOG.debug("Buffer is flushed by reading out the rest of the output")
-        # LOG.error("heree postflush after {}".format(self._session.after))
 
     def expect(self, blob_list=None, timeout=10, fail_ok=False, rm_date=False):
         """
@@ -263,14 +276,20 @@ class SSHClient:
 
         try:
             index = self._session.expect(blob_list, timeout=timeout)
-        except (pexpect.EOF, pexpect.TIMEOUT) as e:
+        except pexpect.EOF:
             # LOG.warning("No match found for {}!\npexpect exception caught: {}".format(blob_list, e.__str__()))
             # LOG.debug("Before: {}; After:{}".format(self._parse_output(self._session.before),
             #                                         self._parse_output(self._session.after)))
             if fail_ok:
                 return -1
             else:
-                LOG.warning("No match found for {}!\nPexpect exception caught: {}".format(blob_list, e.__str__()))
+                LOG.warning("No match found for {}!\nEOF caught.".format(blob_list))
+                raise
+        except pexpect.TIMEOUT:
+            if fail_ok:
+                return -2
+            else:
+                LOG.warning("No match found for {}. \nexpect timeout.".format(blob_list))
                 raise
 
         # Match found, reformat the outputs
@@ -400,7 +419,6 @@ class SSHClient:
 
         return code, output
 
-
     def scp_files_to_local_host(self, source_file, dest_password, dest_user=None, dest_folder_name=None, timeout=10):
 
         # Process destination info
@@ -415,7 +433,7 @@ class SSHClient:
         to_user = (dest_user if dest_user is not None else local_host.get_user()) + '@'
 
         destination = to_user + to_host + dest_path
-        scp_cmd = ' '.join(['scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source_file,
+        scp_cmd = ' '.join(['scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source_file,
                             destination]).strip()
         LOG.info("Copying files from ssh client to {}: {}".format(to_host, scp_cmd))
         self.send(scp_cmd)
@@ -616,9 +634,11 @@ class SSHFromSSH(SSHClient):
                     self.send(self.password)
                     self.expect(prompt, timeout=timeout)
                 else:
-                    res_index = self.expect([Prompt.ADD_HOST, prompt, self.parent.get_prompt()], timeout=timeout, fail_ok=False)
-                    if res_index == 1:
+                    res_index = self.expect([Prompt.ADD_HOST, prompt, self.parent.get_prompt()], timeout=timeout,
+                                            fail_ok=False)
+                    if res_index == 2:
                         raise exceptions.SSHException("Unable to login to {}".format(self.host))
+
                     if res_index == 0:
                         self.send('yes')
                         self.expect(prompt, timeout=timeout)
@@ -725,16 +745,17 @@ class VMSSHClient(SSHFromSSH):
 
         """
         LOG.debug("vm_image_name: {}".format(vm_img_name))
+        if vm_img_name is None:
+            vm_img_name = ''
+
         vm_img_name = vm_img_name.strip().lower()
+
         if not natbox_client:
             natbox_client = NATBoxClient.get_natbox_client()
-        force_password = True
+
         if user:
             if not password:
                 password = user
-        elif 'centos' in vm_img_name or 'centos' in vm_name:
-            user = 'centos'
-            force_password = False
         else:
             for image_name in Guest.CREDS:
                 if image_name in vm_img_name or image_name in vm_name:
@@ -746,7 +767,7 @@ class VMSSHClient(SSHFromSSH):
                 user = 'root'
                 password = 'root'
                 known_guests = list(Guest.CREDS.keys())
-                known_guests.append('centos')
+
                 LOG.warning("User/password are not provided, and VM image type is not in the list: {}. "
                             "Use root/root to login.".format(known_guests))
 
@@ -757,17 +778,17 @@ class VMSSHClient(SSHFromSSH):
                                           initial_prompt=prompt, timeout=timeout)
 
         # This needs to be modified in centos case.
-        if not force_password:
-            ssh_options = " -i {}".format(ProjVar.get_var('KEYFILE_NAME'))
+        if not password:
+            ssh_options = " -i {}{}".format(ProjVar.get_var('KEYFILE_PATH'), _SSH_OPTS_UBUNTU_VM)
         else:
             ssh_options = _SSH_OPTS
-        self.ssh_cmd = '/usr/bin/ssh{} {}@{}'.format(ssh_options, self.user, self.host)
-        self.connect(use_password=force_password, retry=retry, retry_timeout=retry_timeout)
+        self.ssh_cmd = 'ssh {} {}@{}'.format(ssh_options, self.user, self.host)
+        self.connect(use_password=password, retry=retry, retry_timeout=retry_timeout)
         self.exec_cmd("TMOUT=0")
 
 
 class FloatingClient(SSHClient):
-    def __init__(self, floating_ip, user='wrsroot', password='li69nux', initial_prompt=CONTROLLER_PROMPT):
+    def __init__(self, floating_ip, user='wrsroot', password='Li69nux*', initial_prompt=CONTROLLER_PROMPT):
 
         # get a list of floating ips for all known labs
         __lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith(r'__')]

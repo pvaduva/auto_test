@@ -25,7 +25,7 @@ class LaunchInstances():
         self.ssh = paramiko.SSHClient()
         self.ssh.load_system_host_keys()
         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.ssh.connect("%s" % self.host_ip, username="wrsroot", password="li69nux")
+        self.ssh.connect("%s" % self.host_ip, username="wrsroot", password="Li69nux*")
 
 
     def get_column_value_from_multiple_columns(self, table, match_header_key,

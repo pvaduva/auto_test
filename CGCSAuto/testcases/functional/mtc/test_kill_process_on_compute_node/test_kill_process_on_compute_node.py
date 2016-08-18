@@ -8,6 +8,7 @@ import time
 import re
 import sys
 from pytest import fixture, mark, skip, raises, fail
+from testfixtures.resource_mgmt import ResourceCleanup
 from utils.tis_log import LOG
 from utils import cli, exceptions
 from utils.ssh import ControllerClient
@@ -192,6 +193,7 @@ def test_092_vm_instance_recovery_kill_process_on_compute_node():
     # Create ubuntu instances
     print("Create vm instances")
     vm_id = vm_helper.boot_vm(name=vm_image, source='volume', source_id=vol_id)[1]
+    ResourceCleanup.add('vm', vm_id)
 
     # Get the ip adress of the instance
     LOG.debug("Get private IP address of the vm instance")

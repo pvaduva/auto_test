@@ -17,26 +17,26 @@ BOOT_FROM_VOLUME = 'Attempt to boot from volume - no image supplied'
 
 
 IMAGE_DIR = '/home/wrsroot/images'
+DEFAULT_GUEST = 'cgcs-guest.img'
 
 DNS_NAMESERVERS = ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
 
 # home dir
 HOME = '/home/wrsroot/'
 # Heat template path
-HEAT_PATH = 'heat/templates/hot/simple/'
-HEAT_SCENARIO_PATH = 'heat/templates/hot/scenario/'
-
+HEAT_PATH = 'heat/hot/simple/'
+HEAT_SCENARIO_PATH = 'heat/hot/scenario/'
 
 class NetIP:
-    MGMT_NET_NAME = 'mgmt-net'
-    DATA_NET_NAME = 'tenant'
+    MGMT_NET_NAME = 'tenant\d-mgmt-net'
+    DATA_NET_NAME = 'tenant\d-net'
     INTERNAL_NET_NAME = 'internal'
     # such as 192.168.11.6
-    MGMT_IP = r'192.168\.\d{1,3}\.\d{1,3}'
+    MGMT_IP = r'192.168.\d{1,3}.\d{1,3}'
     # such as 172.16.1.11
-    DATA_IP = r'172.\d{1,3}\.\d{1,3}\.\d{1,3}'
+    DATA_IP = r'172.\d{1,3}.\d{1,3}.\d{1,3}'
     # such as 10.1.1.44
-    INTERNAL_IP = r'10.\d{1,3}\.\d{1,3}\.\d{1,3}'
+    INTERNAL_IP = r'10.\d{1,3}.\d{1,3}.\d{1,3}'
 
 
 class SystemType:
@@ -54,6 +54,7 @@ class VMStatus:
     # under http://docs.openstack.org/developer/nova/vmstates.html
     ACTIVE = 'ACTIVE'
     BUILD = 'BUILDING'
+    REBUILD = 'REBUILD'
     VERIFY_RESIZE = 'VERIFY_RESIZE'
     RESIZE = 'RESIZED'
     ERROR = 'ERROR'
@@ -94,6 +95,7 @@ class Prompt:
     CONTROLLER_PROMPT = '.*controller\-[01]\:~\$ '
     ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
+    STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'
     PASSWORD_PROMPT = '.*assword\:.*'
     ADD_HOST = '.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
@@ -128,6 +130,7 @@ class FlavorSpec:
     NUMA_NODES = 'hw:numa_nodes'
     NUMA_0 = 'hw:numa_node.0'
     NUMA_1 = 'hw:numa_node.1'
+    VSWITCH_NUMA_AFFINITY = 'hw:wrs:vswitch_numa_affinity'
     MEM_PAGE_SIZE = 'hw:mem_page_size'
     AUTO_RECOVERY = 'sw:wrs:auto_recovery'
     GUEST_HEARTBEAT = 'sw:wrs:guest:heartbeat'
@@ -176,7 +179,12 @@ class EventLogID:
     VM_DELETED = '700.114'
     VM_CREATED = '700.108'
     VM_FAILED = '700.001'
-
+    VM_REBOOTING = '700.005'
+    STORAGE_DEGRADE = '200.006'
+    STORAGE_ALARM_COND = '800.001'
+    STORAGE_LOR = '800.011'
+    STORAGE_POOLQUOTA = '800.003'
+    HOST_LOCK = '200.001'
 
 class NetworkingVmMapping:
     VSWITCH = {
@@ -232,3 +240,8 @@ class HTTPPorts:
     NOVA_EC2_VER = "v2"
     PATCHING_PORT = 15491
     PATCHING_VER = "v1"
+
+
+class CeilometerSamples:
+    VSWITCH_PORT_TRANSMIT_UTIL = "vswitch.port.transmit.util"
+    VSWITCH_ENGINE_UTIL = "vswitch.engine.util"

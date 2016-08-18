@@ -1,7 +1,8 @@
 from pytest import fixture
 
 from utils.tis_log import LOG
-from keywords import nova_helper
+from utils.ssh import ControllerClient
+from keywords import nova_helper, glance_helper, vm_helper
 
 
 @fixture(scope='session')
@@ -21,3 +22,37 @@ def server_groups():
         return srv_grps_tenant
 
     return create_server_groups
+
+
+@fixture(scope='session')
+def ubuntu_image():
+    return _create_image('ubuntu')
+
+
+@fixture(scope='session')
+def centos7_image():
+    return _create_image('centos7')
+
+
+@fixture(scope='session')
+def centos6_image():
+    return _create_image('centos6')
+
+
+def _create_image(img_os):
+    # vm_helper._scp_net_config_cloud_init(img_os)
+    # centos_image_location = \
+    #     ['http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2',
+    #      'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud.qcow2']
+    #
+    # ubuntu_image_location = \
+    #     ['https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img']
+
+    image_path = glance_helper._scp_guest_image(img_os=img_os)
+
+    img_id = glance_helper.get_image_id_from_name(img_os)
+    if not img_id:
+        img_id = glance_helper.create_image(name=img_os, source_image_file=image_path, disk_format='qcow2',
+                                            container_format='bare')[1]
+
+    return img_id

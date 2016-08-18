@@ -1,6 +1,6 @@
 class Tenant:
     __REGION = 'RegionOne'
-    __URL = 'http://192.168.204.2:5000/v2.0/'
+    __URL = 'http://192.168.204.2:5000/v3/'
 
     ADMIN = {
         'user': 'admin',
@@ -68,7 +68,7 @@ class Tenant:
 
 class Host:
     USER = 'wrsroot'
-    PASSWORD = "li69nux"
+    PASSWORD = "Li69nux*"
 
     @classmethod
     def set_user(cls, username):
@@ -81,17 +81,20 @@ class Host:
 
 class Guest:
     CREDS = {
+
         'cgcs-guest': {
             'user': 'root',
             'password': 'root'
         },
+
         'ubuntu': {
             'user': 'ubuntu',
-            'password': 'ubuntu'
+            'password': None
         },
-        'wrl5': {
-            'user': '',
-            'password': '',
+
+        'centos': {
+            'user': 'centos',
+            'password': None
         }
     }
 
@@ -102,3 +105,11 @@ class Guest:
     @classmethod
     def set_password(cls, image_name, password):
         cls.CREDS[image_name]['password'] = password
+
+
+class SvcCgcsAuto:
+    SERVER = '128.224.150.21'
+    USER = 'svc-cgcsauto'
+    PASSWORD = ')OKM0okm'
+    HOME = '/home/svc-cgcsauto'
+

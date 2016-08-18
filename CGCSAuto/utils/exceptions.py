@@ -139,3 +139,8 @@ class HeatError(TiSError):
 
 class CeilometerError(TiSError):
     message = "Ceilometer error"
+
+
+class SysinvError(TiSError):
+    message = 'Sysinv error'
+

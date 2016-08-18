@@ -20,10 +20,12 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 @fixture(scope='module')
 def router_info(request):
+    LOG.fixture_step("Disable SNAT and update router to DVR if not already done.")
+
     router_id = network_helper.get_tenant_router()
     network_helper.update_router_ext_gateway_snat(router_id, enable_snat=False)
     is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN))
-    LOG.info("Disable SNAT and update router to DVR if not already done.")
+
     if not is_dvr:
         network_helper.update_router_distributed(router_id, distributed=True)
 
@@ -80,7 +82,7 @@ def test_dvr_update_router(router_info):
     (3, 'affinity'),
     (3, 'anti-affinity'),
 ])
-def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups):
+def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, router_info):
     """
     Test vms East West connection by pinging vms' data network from vm
 
@@ -88,20 +90,32 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups):
         vms_num (int): number of vms to boot
         srv_grp_policy (str): affinity to boot vms on same host, anti-affinity to boot vms on different hosts
         server_groups: test fixture to return affinity and anti-affinity server groups
+        router_info (str): id of tenant router
+
+    Skip Conditions:
+        - Only one nova host on the system
 
     Setups:
         - Enable DVR    (module)
 
     Test Steps
+        - Update router to distributed if not already done
         - Boot given number of vms with specific server group policy to schedule vms on same or different host(s)
         - Ping vms' over data and management networks from one vm to test NS and EW traffic
 
     Teardown:
         - Delete vms
+        - Revert router to
 
     """
     if srv_grp_policy == 'anti-affinity' and len(host_helper.get_nova_hosts()) == 1:
         skip("Only one nova host on the system.")
+
+    LOG.tc_step("Update router to distributed if not already done")
+    router_id = router_info
+    is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN))
+    if not is_dvr:
+        network_helper.update_router_distributed(router_id, distributed=True)
 
     LOG.tc_step("Boot {} vms with server group policy {}".format(vms_num, srv_grp_policy))
     affinity_grp, anti_affinity_grp = server_groups(best_effort=True)

@@ -67,7 +67,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         if value is not None:
             criteria[key] = value
 
-    table_ = table_parser.table(cli.cinder('list --all-tenant', auth_info=auth_info, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.cinder('list --all-tenants', auth_info=auth_info, ssh_client=con_ssh))
 
     if name is not None:
         table_ = table_parser.filter_table(table_, strict=name_strict, **{'Display Name': name})
@@ -93,7 +93,7 @@ def get_volumes_attached_to_vms(volumes=None, vms=None, con_ssh=None, auth_info=
     Returns (list): a list of volumes ids or [] if no match found
 
     """
-    table_ = table_parser.table(cli.cinder('list --all-tenant', auth_info=auth_info, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.cinder('list --all-tenants', auth_info=auth_info, ssh_client=con_ssh))
 
     # Filter from given volumes if provided
     if volumes is not None:
@@ -109,9 +109,9 @@ def get_volumes_attached_to_vms(volumes=None, vms=None, con_ssh=None, auth_info=
     return table_parser.get_column(table_, 'ID')
 
 
-def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snapshot_id=None, vol_type=None, size=1,
+def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snapshot_id=None, vol_type=None, size=None,
                   avail_zone=None, metadata=None, bootable=True, fail_ok=False, auth_info=None, con_ssh=None,
-                  rtn_exist=False):
+                  rtn_exist=False, guest_image=None):
     """
     Create a volume with given criteria.
 
@@ -130,6 +130,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
         auth_info (dict):
         con_ssh (SSHClient):
         rtn_exist(bool): whether to return an existing available volume with matching name and bootable state.
+        guest_image (str): guest image name if image_id unspecified. valid values: cgcs-guest, ubuntu, centos7, centos6
 
     Returns (tuple):  (return_code, volume_id or err msg)
         (-1, existing_vol_id)   # returns existing volume_id instead of creating a new one. Applies when rtn_exist=True.
@@ -158,7 +159,11 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
         elif source_vol_id:
             source_arg = '--source-volid ' + source_vol_id
         else:
-            image_id = image_id if image_id is not None else glance_helper.get_image_id_from_name('cgcs-guest')
+            guest_image = guest_image if guest_image else 'cgcs-guest'
+            image_id = image_id if image_id is not None else glance_helper.get_image_id_from_name(guest_image)
+            if size is None:
+                size = 1 if 'cgcs-guest' in guest_image else 9
+
             source_arg = '--image-id ' + image_id
 
     optional_args = {'--display-name': name,
@@ -170,6 +175,8 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     for key, value in optional_args.items():
         if value is not None:
             subcmd = ' '.join([subcmd.strip(), key, value.lower().strip()])
+
+    size = 1 if size is None else size
 
     subcmd = ' '.join([subcmd, source_arg, str(size)])
     LOG.info("Creating volume: {}".format(name))
@@ -183,7 +190,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     table_ = table_parser.table(cmd_output)
     volume_id = table_parser.get_value_two_col_table(table_, 'id')
 
-    if not _wait_for_volume_status(vol_id=volume_id, status='available', fail_ok=fail_ok):
+    if not _wait_for_volume_status(vol_id=volume_id, status='available',auth_info=auth_info, fail_ok=fail_ok):
         LOG.warning("Volume is created, but not in available state.")
         return 2, volume_id
 
@@ -326,7 +333,7 @@ def _wait_for_volumes_deleted(volumes, timeout=VolumeTimeout.DELETE, fail_ok=Tru
     vols_deleted = []
     end_time = time.time() + timeout
     while time.time() < end_time:
-        table_ = table_parser.table(cli.cinder('list --all-tenant', ssh_client=con_ssh, auth_info=auth_info))
+        table_ = table_parser.table(cli.cinder('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info))
         existing_vols = table_parser.get_column(table_, 'ID')
 
         for vol in vols_to_check:

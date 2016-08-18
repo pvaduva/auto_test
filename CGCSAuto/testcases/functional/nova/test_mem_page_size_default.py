@@ -100,7 +100,7 @@ def test_vm_mem_pool(flavor_1g, mem_page_size, volume_):
         else:
             req_num = mem_page_size
         pattern = "Not enough memory.*req: {}".format(req_num)
-        assert bool(re.search(pattern, fault_msg))
+        assert re.search(pattern, fault_msg)
         return
 
     # If vm booted successfully:

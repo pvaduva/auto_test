@@ -46,7 +46,7 @@ def vm_(request, flavor_):
 
     # Teardown to remove the vm and flavor
     def restore_hosts():
-        LOG.tc_step("Cleaning up vms..")
+        LOG.fixture_step("Cleaning up vms..")
         vm_helper.delete_vms(vm_id, delete_volumes=True)
 
     request.addfinalizer(restore_hosts)
@@ -96,18 +96,22 @@ def test_vm_with_health_check_failure(vm_):
         vm_ssh.exec_cmd("touch /tmp/unhealthy")
 
     LOG.tc_step("Verify an active alarm for the reboot is present")
-    time.sleep(10)
-    alarms_tab = system_helper.get_alarms()
-    reasons = table_parser.get_values(alarms_tab, 'Reason Text', strict=False, **{'Entity ID': vm_id})
-    assert re.search('Instance .* is rebooting on host', '\n'.join(reasons)), \
-        "Instance rebooting active alarm is not listed"
+    reasons = system_helper.wait_for_events(EventLogTimeout.VM_REBOOT_EVENT, strict=False, fail_ok=True,
+                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
+                                               EventLogID.VM_REBOOTING]})
+    assert reasons, "Instance rebooting active alarm is not listed"
+    # time.sleep(20)
+    # alarms_tab = system_helper.get_alarms()
+    # reasons = table_parser.get_values(alarms_tab, 'Reason Text', strict=False, **{'Entity ID': vm_id})
+    # assert re.search('Instance .* is rebooting on host', '\n'.join(reasons)), \
+    #     "Instance rebooting active alarm is not listed"
 
     LOG.tc_step("Kill the vim process to force the VM to another compute")
     with host_helper.ssh_to_host(compute_name) as compute_ssh:
         cmd = "ps -ef | grep 'kvm -c' | grep -v grep | awk '{print $2}'"
         exitcode, output = compute_ssh.exec_cmd(cmd, expect_timeout=90)
         time.sleep(10)
-        cmd = "echo 'li69nux' | sudo -S kill -9 %s" % output
+        cmd = "echo 'Li69nux*' | sudo -S kill -9 %s" % output
         exitcode, output = compute_ssh.exec_cmd(cmd, expect_timeout=90)
 
     time.sleep(10)

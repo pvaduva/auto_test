@@ -1,13 +1,10 @@
 
 from pytest import fixture, mark
-from time import sleep
 
-from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 
-from consts.auth import Tenant
-from consts.cgcs import VMStatus, FlavorSpec, NetworkingVmMapping
-from keywords import vm_helper, nova_helper, host_helper, network_helper, cinder_helper, glance_helper
+from consts.cgcs import FlavorSpec
+from keywords import vm_helper, nova_helper, network_helper
 
 from testfixtures.resource_mgmt import ResourceCleanup
 
@@ -17,6 +14,8 @@ def base_setup():
 
     flavor_id = nova_helper.create_flavor(name='dedicated')[1]
     ResourceCleanup.add('flavor', flavor_id, scope='module')
+
+    nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
@@ -72,32 +71,34 @@ def test_vif_models(vif_model, base_setup):
     LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_under_test))
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
-    LOG.info("Ping vm's own data network ips")
+    LOG.info("Ping vm under test from base vm over data network")
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types='data')
 
-    LOG.tc_step("Live-migrate the VM and verify ping over management and data networks")
-    vm_helper.live_migrate_vm(vm_under_test)
-    vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
+    # Following steps are moved to test_nova_actions.py
 
-    LOG.tc_step("Cold-migrate the VM and verify ping over management and data networks")
-    vm_helper.cold_migrate_vm(vm_under_test)
-    vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
-
-    LOG.tc_step("Pause and un-pause the VM and verify ping over management and data networks")
-    vm_helper.pause_vm(vm_under_test)
-    vm_helper.unpause_vm(vm_under_test)
-    vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
-
-    LOG.tc_step("Suspend and resume the VM and verify ping over management and data networks")
-    vm_helper.suspend_vm(vm_under_test)
-    vm_helper.resume_vm(vm_under_test)
-    vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
-
-    LOG.tc_step("Stop and start the VM and verify ping over management and data networks")
-    vm_helper.stop_vms(vm_under_test)
-    vm_helper.start_vms(vm_under_test)
-    vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
-
-    LOG.tc_step("Reboot the VM and verify ping over management and data networks")
-    vm_helper.reboot_vm(vm_under_test)
-    vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
+    # LOG.tc_step("Live-migrate the VM and verify ping over management and data networks")
+    # vm_helper.live_migrate_vm(vm_under_test)
+    # vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
+    #
+    # LOG.tc_step("Cold-migrate the VM and verify ping over management and data networks")
+    # vm_helper.cold_migrate_vm(vm_under_test)
+    # vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
+    #
+    # LOG.tc_step("Pause and un-pause the VM and verify ping over management and data networks")
+    # vm_helper.pause_vm(vm_under_test)
+    # vm_helper.unpause_vm(vm_under_test)
+    # vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
+    #
+    # LOG.tc_step("Suspend and resume the VM and verify ping over management and data networks")
+    # vm_helper.suspend_vm(vm_under_test)
+    # vm_helper.resume_vm(vm_under_test)
+    # vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
+    #
+    # LOG.tc_step("Stop and start the VM and verify ping over management and data networks")
+    # vm_helper.stop_vms(vm_under_test)
+    # vm_helper.start_vms(vm_under_test)
+    # vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
+    #
+    # LOG.tc_step("Reboot the VM and verify ping over management and data networks")
+    # vm_helper.reboot_vm(vm_under_test)
+    # vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])

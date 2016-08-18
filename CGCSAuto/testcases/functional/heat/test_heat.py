@@ -235,7 +235,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 @mark.usefixtures('check_alarms')
 @mark.parametrize(
     ('template_name'), [
-        P1(('WR_Neutron_ProviderNetRange.yaml')),
+        mark.sanity(('WR_Neutron_ProviderNetRange.yaml')),
         P1(('WR_Neutron_ProviderNet.yaml')),
         P1(('OS_Cinder_Volume.yaml')),
         P1(('OS_Ceilometer_Alarm.yaml')),

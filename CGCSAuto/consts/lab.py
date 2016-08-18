@@ -5,7 +5,7 @@ class Labs:
         'floating ip': '128.224.150.189',
         'controller-0 ip': '128.224.150.199',
         'controller-1 ip': '128.224.150.129',
-        'auth_url': 'http://192.168.204.102:5000/v2.0/',
+        'auth_url': 'http://192.168.204.102:5000/v3/',
     }
 
     IP_1_4 = {
@@ -14,7 +14,7 @@ class Labs:
         'floating ip': '128.224.151.212',
         'controller-0 ip': '128.224.151.192',
         'controller-1 ip': '128.224.151.193',
-        'auth_url': 'http://192.168.204.2:5000/v2.0/',
+        'auth_url': 'http://192.168.204.2:5000/v3/',
     }
 
     IP_5_6 = {
@@ -23,7 +23,15 @@ class Labs:
         'floating ip': '128.224.151.216',
         'controller-0 ip': '128.224.151.196',
         'controller-1 ip': '128.224.151.197',
-        'auth_url': 'http://192.168.204.2:5000/v2.0/',
+        'auth_url': 'http://192.168.204.2:5000/v3/',
+    }
+
+    IP_7_12 = {
+        'short_name': 'ip_7_12',
+        'name': 'yow-cgcs-ironpass-7_12',
+        'floating ip': '128.224.151.243',
+        'controller-0 ip': '128.224.150.244',
+        'controller-1 ip': '128.224.150.205',
     }
 
     IP_14_17 = {
@@ -82,7 +90,7 @@ class Labs:
         'floating ip': '128.224.150.73',
         'controller-0 ip': '128.224.150.26',
         'controller-1 ip': '128.224.150.28',
-        'auth_url': 'http://192.168.204.2:5000/v2.0/',
+        'auth_url': 'http://192.168.204.2:5000/v3/',
     }
 
     PV1 = {
@@ -132,6 +140,7 @@ class Labs:
         'floating ip': '128.224.151.228',
         'controller-0 ip': '128.224.150.220',
         'controller-1 ip': '128.224.150.231',
+        'auth_url': 'http://192.168.144.2:5000/v2.0/',
     }
 
     WCP_13_14 = {
@@ -157,6 +166,14 @@ class Labs:
         'floating ip': '128.224.150.234',
         'controller-0 ip': '128.224.150.232',
         'controller-1 ip': '128.224.150.233'
+    }
+
+    WCP_71_75 = {
+        'short_name': 'wcp_71_75',
+        'name': 'yow-cgcs-wildcat-71_75',
+        'floating ip': '128.224.151.218',
+        'controller-0 ip': '128.224.151.215',
+        'controller-1 ip': '128.224.151.24',
     }
 
     VBOX = {
@@ -235,4 +252,3 @@ class NatBoxes:
         'user': '',
         'password': ''
     }
-

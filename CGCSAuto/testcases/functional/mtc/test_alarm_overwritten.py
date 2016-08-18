@@ -79,6 +79,8 @@ def test_alarm_overwritten(con_ssh=None):
 
     test_result = True
     LOG.info("Execute system alarm-history-list")
+    # output continues but waits for enter or q to continue with output or exit table
+    # causes expect to timeout
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
         cmd = 'alarm-history-list --uuid --nowrap --limit 2000'
         exitcode,output = cli.system(cmd, ssh_client=con_ssh,

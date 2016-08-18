@@ -62,10 +62,9 @@ def is_small_footprint(controller_ssh=None):
 
 
 def get_storage_nodes(con_ssh=None):
-    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
-    nodes = table_parser.get_values(table_, 'hostname', strict=True, personality='storage')
+    nodes = _get_nodes(con_ssh)
 
-    return nodes
+    return nodes['storages']
 
 
 def get_controllers(con_ssh=None):
@@ -161,7 +160,7 @@ def _get_active_standby(controller='active', con_ssh=None):
     return controllers
 
 
-def get_alarms(uuid=False, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
+def get_alarms(uuid=True, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
                auth_info=Tenant.ADMIN):
     """
     Get active alarms dictionary with given criteria
@@ -276,7 +275,7 @@ def __process_query_args(args, query_key, query_value, query_type):
     return args
 
 
-def wait_for_events(timeout=30, num=10, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,
+def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,
                     fail_ok=True, rtn_val='Event Log ID', con_ssh=None, auth_info=Tenant.ADMIN, regex=False,
                     strict=True, check_interval=3, **kwargs):
     """
@@ -324,6 +323,60 @@ def wait_for_events(timeout=30, num=10, uuid=False, show_only=None, query_key=No
         return []
     else:
         raise exceptions.TimeoutException(msg)
+
+
+def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Delete active alarms
+
+    Args:
+        alarms (list|str): UUID(s) of alarms to delete
+        fail_ok (bool): whether or not to raise exception if any alarm failed to delete
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (rtn_code(int), message(str))
+        0, "Alarms deleted successfully"
+        1, "Some alarm(s) still exist on system after attempt to delete: <alarms_uuids>"
+
+    """
+    if alarms is None:
+        alarms_tab = get_alarms(uuid=True)
+        alarms = table_parser.get_column(alarms_tab, 'UUID')
+
+    if isinstance(alarms, str):
+        alarms = [alarms]
+
+    LOG.info("Deleting following alarms: {}".format(alarms))
+
+    res = {}
+    failed_clis = []
+    for alarm in alarms:
+        code, out = cli.system('alarm-delete', alarm, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
+        res[alarm] = code, out
+
+        if code != 0:
+            failed_clis.append(alarm)
+
+    post_alarms_tab = get_alarms(uuid=True)
+    post_alarms = table_parser.get_column(post_alarms_tab, 'UUID')
+
+    undeleted_alarms = list(set(alarms) & set(post_alarms))
+    if undeleted_alarms:
+        err_msg = "Some alarm(s) still exist on system after attempt to delete: {}\nAlarm delete results: {}".\
+            format(undeleted_alarms, res)
+
+        if fail_ok:
+            return 1, err_msg
+        raise exceptions.SysinvError(err_msg)
+
+    elif failed_clis:
+        LOG.warning("Some alarm-delete cli(s) rejected, but alarm no longer exists.\nAlarm delete results: {}".
+                    format(res))
+
+    succ_msg = "Alarms deleted successfully"
+    LOG.info(succ_msg)
+    return 0, succ_msg
 
 
 def host_exists(host, field='hostname', con_ssh=None):
@@ -647,7 +700,7 @@ def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_i
     Returns (tuple):
 
     """
-    LOG.info("Setting 4k memory to: {}".format(smallpage_num))
+    LOG.info("Setting host {}'s proc_id {} to contain {} 4k pages".format(host, proc_id, smallpage_num))
     mem_vals = get_host_mem_values(
             host, ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'vm_hp_avail_2M', 'mem_avail(MiB)', ],
             proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)

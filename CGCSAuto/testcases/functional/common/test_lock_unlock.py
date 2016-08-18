@@ -79,7 +79,7 @@ class TestLockUnlock:
                     failure_msgs.append(msg)
 
         assert not failure_msgs, '\n'.join(failure_msgs)
-    
+
     @mark.skipif(not system_helper.is_small_footprint(), reason="Only applies to small footprint lab.")
     @mark.usefixtures('vms_', 'unlock_if_locked', 'check_vms')
     @mark.parametrize('host', [

@@ -2,6 +2,7 @@ from pytest import fixture, mark
 
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
+from consts.cli_errs import VCPUSchedulerErr
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
@@ -76,6 +77,6 @@ def test_vm_vcpu_model(flavor_and_volume, vcpu_model):
         LOG.tc_step("Check vm in error state due to vcpu model unsupported by hosts.")
         assert 1 == code, "boot vm cli exit code is not 1. Actual fail reason: {}".format(msg)
 
-        expt_fault = "No valid host was found.*vcpu_model.*required.*"
+        expt_fault = VCPUSchedulerErr.CPU_MODEL_UNAVAIL
         res_bool, vals = vm_helper.wait_for_vm_values(vm, 10, regex=True, strict=False, status='ERROR', fault=expt_fault)
         assert res_bool, "VM did not reach expected error state. Actual: {}".format(vals)

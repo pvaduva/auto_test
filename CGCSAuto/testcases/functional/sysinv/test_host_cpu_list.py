@@ -34,6 +34,8 @@ def test_host_cpu_list(host_name):
 
     """
 
+    if system_helper.is_small_footprint() and 'compute' in host_name:
+        skip("Small footprint lab, no computes.")
     LOG.tc_step("Verify the system-cpu-list is working for a specific node")
     table_ = table_parser.table(cli.system('host-cpu-list', host_name))
     LOG.tc_step("Check there are 7 columns in the table")

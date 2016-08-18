@@ -12,7 +12,7 @@ from consts.timeout import EventLogTimeout
 from keywords import nova_helper, vm_helper, glance_helper,cinder_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
-@mark.sanity
+
 def test_launch_vm_boot_and_login():
     """
     Verify the lab is able to boot up an VM from image and login through natbox
@@ -40,6 +40,7 @@ def test_launch_vm_boot_and_login():
     assert vm_state == VMStatus.ACTIVE
 
     LOG.tc_step('Login into the VM and excute "whami" cli. Expect "root" to be returned ')
+    sleep(10)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         cmd = "whoami"
         cmd_output= vm_ssh.wait_for_cmd_output(cmd, 'root', timeout=10, strict=False, expt_timeout=3, check_interval=2)

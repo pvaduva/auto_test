@@ -10,6 +10,7 @@ from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from testfixtures.resource_mgmt import *
+from testfixtures.recover_hosts import *
 
 natbox_ssh = None
 con_ssh = None
@@ -24,12 +25,18 @@ def setup_test_session():
     Setup primary tenant and Nax Box ssh before the first test gets executed.
     TIS ssh was already set up at collecting phase.
     """
-    global natbox_ssh
+    global build_id
+    build_id = setups.get_build_id(con_ssh)
 
     os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     setups.set_env_vars(con_ssh)
+
+    setups.copy_files_to_con1()
+
+    global natbox_ssh
     natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'))
+
     setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
 
@@ -93,7 +100,6 @@ class MakeReport:
             return cls(item)
 
 
-@pytest.mark.tryfirst
 def pytest_runtest_makereport(item, call, __multicall__):
     report = __multicall__.execute()
     my_rep = MakeReport.get_report(item)
@@ -151,8 +157,6 @@ def pytest_collectstart():
     """
     global con_ssh
     con_ssh = setups.setup_tis_ssh(ProjVar.get_var("LAB"))
-    global build_id
-    build_id = setups.get_build_id(con_ssh)
 
 
 def pytest_runtest_setup(item):
@@ -213,6 +217,7 @@ def pytest_configure(config):
     collect_all = config.getoption('collectall')
     report_all = config.getoption('reportall')
     report_tag = config.getoption('report_tag')
+    resultlog = config.getoption('resultlog')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
     lab = setups.get_lab_dict(lab_arg) if lab_arg else setup_consts.LAB
@@ -222,8 +227,13 @@ def pytest_configure(config):
     collect_all = True if collect_all else setup_consts.COLLECT_ALL
     report_all = True if report_all else setup_consts.REPORT_ALL
 
-    # compute directory for all logs based on the lab and timestamp on local machine
-    log_dir = os.path.expanduser("~") + "/AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
+    # compute directory for all logs based on resultlog arg, lab, and timestamp on local machine
+    resultlog = resultlog if resultlog else os.path.expanduser("~")
+    if '/AUTOMATION_LOGS' in resultlog:
+        resultlog = resultlog.split(sep='/AUTOMATION_LOGS')[0]
+    if not resultlog.endswith('/'):
+        resultlog += '/'
+    log_dir = resultlog + "AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
 
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
@@ -233,9 +243,7 @@ def pytest_configure(config):
     config_logger(log_dir)
 
     # set resultlog save location
-    resultlog = config.getoption('resultlog')
-    if not resultlog:
-        config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
+    config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
 
 
 def pytest_addoption(parser):
@@ -293,7 +301,13 @@ def pytest_unconfigure():
 
 
 def pytest_collection_modifyitems(items):
+    move_to_last = []
     for item in items:
+        # re-order tests:
+        trylast_marker = item.get_marker('trylast')
+        if trylast_marker:
+            move_to_last.append(item)
+
         # known issue marker
         feature_marker = item.get_marker('features')
         if feature_marker is not None:
@@ -309,12 +323,19 @@ def pytest_collection_modifyitems(items):
             LOG.debug(msg=msg)
             item.add_marker(eval("pytest.mark.known_issue"))
 
+    # add trylast tests to the end
+    for item in move_to_last:
+        items.remove(item)
+        items.append(item)
+
 
 def pytest_generate_tests(metafunc):
     # Modify the order of the fixtures to delete resources before revert host
     config_host_fixtures = {'class': 'config_host_class', 'module': 'config_host_module'}
+
     for key, value in config_host_fixtures.items():
         delete_res_func = 'delete_resources_{}'.format(key)
+
         if value in metafunc.fixturenames and delete_res_func in metafunc.fixturenames:
             index = list(metafunc.fixturenames).index('delete_resources_{}'.format(key))
             index = max([0, index-1])

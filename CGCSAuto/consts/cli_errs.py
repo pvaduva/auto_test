@@ -9,12 +9,17 @@ class VCPUSchedulerErr:
     MISSING_PARAMETER = "missing required parameter"
     TOO_MANY_PARAMETERS = "too many parameters"
     VCPU_MULTIPLE_ASSIGNMENT = "specified multiple times, specification is ambiguous"
+    CPU_MODEL_UNAVAIL = "No valid host was found.*Host VCPU model.*required.*"
 
 
 class MinCPUErr:
     VAL_LARGER_THAN_VCPUS = "min_vcpus must be less than or equal to the flavor vcpus value"
     VAL_LESS_THAN_1 = "min_vcpus must be greater than or equal to 1"
     CPU_POLICY_NOT_DEDICATED = "min_vcpus is only valid when hw:cpu_policy is 'dedicated'"
+
+
+class ScaleErr:
+    SCALE_LIMIT_HIT = "When scaling, cannot scale beyond limits"
 
 
 class CpuAssignment:
@@ -47,9 +52,40 @@ class CPUPolicyErr:
 
 
 class SharedCPUErr:
-    DEDICATED_CPU_REQUIRED = "hw:wrs:shared_vcpu is only valid when hw:cpu_policy is 'dedicated'"
+    DEDICATED_CPU_REQUIRED = "hw:wrs:shared_vcpu is only valid when hw:cpu_policy is dedicated"
+    INVALID_VCPU_ID = "hw:wrs:shared_vcpu must be greater than or equal to 0"
+    MORE_THAN_FLAVOR = "hw:wrs:shared_vcpu value ({}) must be less than flavor vcpus ({})"
 
+
+class ResizeVMErr:
+    RESIZE_ERR = "Error resizing server"
 
 class ColdMigrateErr:
     HT_HOST_REQUIRED = "(NUMATopologyFilter) Host not useable. Requested threads policy: {}; from flavor or " \
                        "image is not allowed on non-hyperthreaded host"
+
+
+class NetworkingErr:
+    INVALID_VXLAN_VNI_RANGE = "exceeds 16777215"
+    INVALID_MULTICAST_IP_ADDRESS = "is not a valid multicast IP address."
+    INVALID_VXLAN_PROVISION_PORTS = "is not in [4789, 8472]."
+    VXLAN_TTL_RANGE_MISSING = "VXLAN time-to-live attributes missing"
+    VXLAN_TTL_RANGE_TOO_LARGE = "is too large - must be no larger than '255'."
+    OVERLAP_SEGMENTATION_RANGE = "segmentation id range overlaps with"
+    INVALID_MTU_VALUE = "requires an interface MTU value of at least"
+    VXLAN_MISSING_IP_ON_INTERFACE = "requires an IP address"
+    WRONG_IF_ADDR_MODE = "interface address mode must be 'static'"
+    SET_IF_ADDR_MODE_WHEN_IP_EXIST = "addresses still exist on interfac"
+    NULL_IP_ADDR = "Address must not be null"
+    NULL_NETWORK_ADDR = "Network must not be null"
+    NULL_GATEWAY_ADDR = "Gateway address must not be null"
+    NULL_HOST_PARTION_ADDR = "Host bits must not be zero"
+    NOT_UNICAST_ADDR = "Address must be a unicast address"
+    NOT_BROADCAST_ADDR = "Address cannot be the network broadcast address"
+    DUPLICATE_IP_ADDR = "already exists"
+    INVALID_IP_OR_PREFIX = "Invalid IP address and prefix"
+    INVALID_IP_NETWORK = "Invalid IP network"
+    ROUTE_GATEWAY_UNREACHABLE = "not reachable"
+    IP_VERSION_NOT_MATCH = "Network and gateway IP versions must match"
+    GATEWAY_IP_IN_SUBNET = "Gateway address must not be within destination subnet"
+    NETWORK_IP_EQUAL_TO_GATEWAY = "Network and gateway IP addresses must be different"

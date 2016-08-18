@@ -35,7 +35,7 @@ def get_build_info(options):
     # establish SSH connection auth keys
     nodeSSH = sshU.SshConn(host=lab,
                            username='wrsroot',
-                           password='li69nux',
+                           password='Li69nux*',
                            port=22)
 
 

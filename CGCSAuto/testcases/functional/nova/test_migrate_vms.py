@@ -3,9 +3,8 @@ from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec
-from keywords import vm_helper, nova_helper, system_helper, host_helper
+from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
 from testfixtures.resource_mgmt import ResourceCleanup
-
 
 
 flavor_params = [
@@ -89,6 +88,7 @@ def vm_(request, flavor_):
 
     return vm
 
+
 @mark.skipif(len(host_helper.get_hypervisors()) < 2, reason="Less than 2 hypervisor hosts on the system")
 @mark.parametrize(
         "block_migrate", [
@@ -147,7 +147,7 @@ def test_live_migrate_vm(vm_, block_migrate):
             False,
             True,
         ])
-def test_cold_migrate_vm(vm_, revert):
+def test_cold_migrate_vm_1(vm_, revert):
     """
     Test live migrate vm with various configs for: vm boot source, has volume attached, has local disk, storage backing
 
@@ -208,21 +208,85 @@ def hosts_per_stor_backing():
     return hosts_per_backing
 
 
-@mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type'), [
-    mark.p1(('local_image', 0, 0, None, 1, 'volume')),
-    mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume')),
-    mark.p1(('local_image', 1, 0, 'shared', 2, 'image')),
-    mark.p1(('local_image', 0, 1, 'dedicated', 1, 'image')),
-    mark.p1(('local_lvm', 0, 0, None, 1, 'volume')),
-    mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'volume')),
-    mark.p1(('remote', 0, 0, None, 2, 'volume')),
-    mark.p1(('remote', 1, 0, None, 1, 'volume')),
-    mark.p1(('remote', 1, 1, None, 1, 'image')),
-    mark.p1(('remote', 0, 1, None, 2, 'image_with_vol')),
+@mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'block_mig'), [
+    mark.p1(('local_image', 0, 0, None, 1, 'volume', False)),
+    mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume', False)),
+    mark.p1(('local_image', 1, 0, 'shared', 2, 'image', True)),
+    mark.p1(('local_image', 0, 1, 'dedicated', 1, 'image', False)),
+    mark.p1(('local_lvm', 0, 0, None, 1, 'volume', False)),
+    mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'volume', False)),
+    mark.p1(('remote', 0, 0, None, 2, 'volume', False)),
+    mark.p1(('remote', 1, 0, None, 1, 'volume', False)),
+    mark.p1(('remote', 1, 1, None, 1, 'image', True)),
+    mark.p1(('remote', 0, 1, None, 2, 'image_with_vol', False)),
 ])
-def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, hosts_per_stor_backing):
+def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, block_mig,
+                                  hosts_per_stor_backing):
     if len(hosts_per_stor_backing[storage_backing]) < 2:
         skip("Less than two hosts have {} storage backing".format(storage_backing))
+
+    vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type)
+
+    prev_vm_host = nova_helper.get_vm_host(vm_id)
+
+    LOG.tc_step("Live migrate VM and ensure it succeeded")
+    # block_mig = True if boot_source == 'image' else False
+    code, output = vm_helper.live_migrate_vm(vm_id, block_migrate=block_mig)
+    assert 0 == code, "Live migrate is not successful. Details: {}".format(output)
+
+    post_vm_host = nova_helper.get_vm_host(vm_id)
+    assert prev_vm_host != post_vm_host
+
+
+@mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'resize'), [
+    mark.p1(('local_image', 0, 0, None, 1, 'volume', 'confirm')),
+    mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume', 'confirm')),
+    mark.p1(('local_image', 1, 0, 'shared', 2, 'image', 'confirm')),
+    mark.p1(('local_image', 0, 1, 'dedicated', 1, 'image', 'confirm')),
+    mark.p1(('local_image', 0, 0, None, 1, 'image_with_vol', 'confirm')),
+    mark.p1(('local_lvm', 0, 0, None, 1, 'volume', 'confirm')),
+    mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'image', 'confirm')),
+    mark.p1(('local_lvm', 0, 0, 'dedicated', 1, 'image_with_vol', 'confirm')),
+    mark.p1(('local_lvm', 0, 1, None, 2, 'volume', 'confirm')),
+    mark.p1(('local_lvm', 1, 1, 'dedicated', 2, 'volume', 'confirm')),
+    mark.p1(('remote', 0, 0, None, 2, 'volume', 'confirm')),
+    mark.p1(('remote', 1, 0, None, 1, 'volume', 'confirm')),
+    mark.p1(('remote', 1, 1, None, 1, 'image', 'confirm')),
+    mark.p1(('remote', 0, 0, None, 2, 'image_with_vol', 'confirm')),
+    mark.p1(('local_image', 0, 0, None, 2, 'volume', 'revert')),
+    mark.p1(('local_image', 0, 0, 'dedicated', 1, 'volume', 'revert')),
+    mark.p1(('local_image', 1, 0, 'shared', 2, 'image', 'revert')),
+    mark.p1(('local_image', 0, 1, 'dedicated', 1, 'image', 'revert')),
+    mark.p1(('local_image', 0, 0, 'dedicated', 2, 'image_with_vol', 'revert')),
+    mark.p1(('local_lvm', 0, 0, None, 2, 'volume', 'revert')),
+    mark.p1(('local_lvm', 0, 0, 'dedicated', 1, 'volume', 'revert')),
+    mark.p1(('local_lvm', 0, 1, None, 1, 'volume', 'revert')),
+    mark.p1(('local_lvm', 1, 0, 'dedicated', 2, 'image', 'revert')),
+    mark.p1(('local_lvm', 0, 0, 'dedicated', 1, 'image_with_vol', 'revert')),
+    mark.p1(('remote', 0, 0, None, 2, 'volume', 'revert')),
+    mark.p1(('remote', 1, 1, None, 1, 'volume', 'revert')),
+    mark.p1(('remote', 0, 0, None, 1, 'image', 'revert')),
+    mark.p1(('remote', 1, 0, None, 2, 'image_with_vol', 'revert')),
+])
+def test_cold_migrate_vm_2(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, resize, hosts_per_stor_backing):
+    if len(hosts_per_stor_backing[storage_backing]) < 2:
+        skip("Less than two hosts have {} storage backing".format(storage_backing))
+
+    vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type)
+    prev_vm_host = nova_helper.get_vm_host(vm_id)
+
+    LOG.tc_step("Cold migrate VM and ensure it succeeded")
+    # block_mig = True if boot_source == 'image' else False
+
+    revert = True if resize == 'revert' else False
+    code, output = vm_helper.cold_migrate_vm(vm_id, revert=revert)
+    assert 0 == code, "Cold migrate is not successful. Details: {}".format(output)
+
+    post_vm_host = nova_helper.get_vm_host(vm_id)
+    assert prev_vm_host != post_vm_host
+
+
+def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type):
 
     LOG.tc_step("Create a flavor with {} vcpus, {} ephemera disk, {} swap disk".format(vcpus, ephemeral, swap))
     flavor_id = nova_helper.create_flavor(name='live-mig', ephemeral=ephemeral, swap=swap, vcpus=vcpus,
@@ -239,67 +303,55 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
     boot_source = 'volume' if vm_type == 'volume' else 'image'
     LOG.tc_step("Boot a vm from {}".format(boot_source))
     vm_id = vm_helper.boot_vm('live-mig', flavor=flavor_id, source=boot_source)[1]
-    # ResourceCleanup.add('vm', vm_id)
+    ResourceCleanup.add('vm', vm_id)
 
     if vm_type == 'image_with_vol':
         LOG.tc_step("Attach volume to vm")
         vm_helper.attach_vol_to_vm(vm_id=vm_id)
 
-    LOG.tc_step("Check sudo vcpupin before live mgirating vm")
-    if cpu_pol == 'dedicated':
-        pre_vm_host = nova_helper.get_vm_host(vm_id)
-        # Check host side info such as nova-compute.log and virsh pcpupin
-        instance_name = nova_helper.get_vm_instance_name(vm_id)
-        with host_helper.ssh_to_host(pre_vm_host) as host_ssh:
+    return vm_id
 
-            LOG.tc_step("Check vcpus for vm is the same via vm-topology and virsh vcpupin")
-            vcpus_for_vm = host_helper.get_vcpus_for_instance_via_virsh(host_ssh, instance_name=instance_name)
 
-            for vcpu in vcpus_for_vm:
-                assert 1 == len(vcpus_for_vm[vcpu]), "More than 1 cpus listed in virsh vcpupin for dedicated vm"
+@mark.sanity
+@mark.parametrize(('guest_os', 'mig_type', 'cpu_pol'), [
+    ('ubuntu', 'live', 'dedicated'),
+    ('ubuntu', 'cold', 'dedicated'),
+    ('cgcs-guest', 'live', None),
+    mark.cpe_sanity(('cgcs-guest', 'cold', None)),
+])
+def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu_image):
+    LOG.tc_step("Create a flavor with 1 vcpu")
+    flavor_id = nova_helper.create_flavor(name='{}-mig'.format(mig_type), vcpus=1, root_disk=9)[1]
+    ResourceCleanup.add('flavor', flavor_id)
 
-    LOG.tc_step("Live migrate VM and ensure it succeeded")
-    block_mig = True if boot_source == 'image' else False
-    code, output = vm_helper.live_migrate_vm(vm_id, block_migrate=block_mig)
-    assert 0 == code, "Live migrate is not successful. Details: {}".format(output)
+    if cpu_pol is not None:
+        specs = {FlavorSpec.CPU_POLICY: cpu_pol}
+        LOG.tc_step("Add following extra specs: {}".format(specs))
+        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
 
-    LOG.tc_step("Check vm topology stay unchanged")
-    instance_topology = vm_helper.get_instance_topology(vm_id)
+    LOG.tc_step("Create a volume from {} image".format(guest_os))
+    if guest_os == 'ubuntu':
+        image_id = ubuntu_image
+    else:
+        image_id = glance_helper.get_image_id_from_name('cgcs-guest')
+    vol_id = cinder_helper.create_volume(name='ubuntu', image_id=image_id, size=9)[1]
+    ResourceCleanup.add('volume', vol_id)
 
-    expt_cpu_pol = 'ded' if cpu_pol == 'dedicated' else 'sha'
-    pcpus_total = []
-    for topology_on_numa_node in instance_topology:  # Cannot be on two numa nodes for dedicated vm unless specified
-        assert expt_cpu_pol == topology_on_numa_node['pol'], "CPU policy is not {} in vm-topology".format(expt_cpu_pol)
+    LOG.tc_step("Boot a vm from above flavor and volume")
+    vm_id = vm_helper.boot_vm('live-mig', flavor=flavor_id, source='volume', source_id=vol_id)[1]
+    ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
-        actual_siblings = topology_on_numa_node['siblings']
-        actual_topology = topology_on_numa_node['topology']
-        actual_pcpus = topology_on_numa_node['pcpus']
-        pcpus_total += actual_pcpus
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-        if expt_cpu_pol == 'ded':
-            assert topology_on_numa_node['thr'] == 'no', "cpu thread policy is in vm topology"
-            if vcpus == 1:
-                assert not actual_siblings, "siblings should not be included with only 1 vcpu"
-            else:
-                assert actual_siblings, "siblings should be included for dedicated vm"
-            assert '1c,{}t'.format(vcpus) in actual_topology, 'vm topology is not as expected.'
-            assert vcpus == len(actual_pcpus), "pcpus number for dedicated vm is not the same as setting in flavor"
-        else:
-            assert topology_on_numa_node['thr'] is None, "cpu thread policy is in vm topology"
-            assert actual_siblings is None, 'siblings should not be included for floating vm'
-            assert actual_topology is None, 'topology should not be included for floating vm'
-            assert actual_pcpus is None, "pcpu should not be included in vm-topology for floating vm"
+    LOG.tc_step("{} migrate vm and check vm is moved to different host".format(mig_type))
+    prev_vm_host = nova_helper.get_vm_host(vm_id)
+    if mig_type == 'live':
+        vm_helper.live_migrate_vm(vm_id)
+    else:
+        vm_helper.cold_migrate_vm(vm_id)
 
-    if cpu_pol == 'dedicated':
-        post_vm_host = nova_helper.get_vm_host(vm_id)
-        assert pre_vm_host != post_vm_host, "VM host did not change after live migration"
+    vm_host = nova_helper.get_vm_host(vm_id)
+    assert prev_vm_host != vm_host, "vm host did not change after {} migration".format(mig_type)
 
-        # Check host side info such as nova-compute.log and virsh pcpupin
-        instance_name = nova_helper.get_vm_instance_name(vm_id)
-        with host_helper.ssh_to_host(post_vm_host) as host_ssh:
-
-            LOG.tc_step("Check vcpus for vm is the same via vm-topology and virsh vcpupin")
-            vcpus_for_vm = host_helper.get_vcpus_for_instance_via_virsh(host_ssh, instance_name=instance_name)
-
-            for vcpu in vcpus_for_vm:
-                assert 1 == len(vcpus_for_vm[vcpu]), "More than 1 cpus listed in virsh vcpupin for dedicated vm"
+    LOG.tc_step("Ping vm from NatBox after {} migration".format(mig_type))
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)

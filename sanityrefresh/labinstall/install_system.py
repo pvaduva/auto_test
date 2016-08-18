@@ -374,14 +374,14 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
             bld_server_conn.sendline("cd " + load_path)
             bld_server_conn.find_prompt()
             bld_server_conn.rsync(CENTOS_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete"])
-            bld_server_conn.rsync("extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
+            bld_server_conn.rsync("export/extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
         else:
             bld_server_conn.rsync(load_path + "/" + RPM_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete"])
 
             bld_server_conn.sendline("cd " + load_path)
             bld_server_conn.find_prompt()
 
-            bld_server_conn.rsync("extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
+            bld_server_conn.rsync("export/extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
             bld_server_conn.rsync(RPM_INSTALL_REL_PATH + "/boot/isolinux/vmlinuz", USERNAME, tuxlab_server, feed_path)
             bld_server_conn.rsync(RPM_INSTALL_REL_PATH + "/boot/isolinux/initrd", USERNAME, tuxlab_server, feed_path + "/initrd.img")
 
@@ -800,6 +800,7 @@ def main():
     if tis_on_tis:
         logutils.print_name_value("TiS-on-TiS", tis_on_tis)
 
+    logutils.print_name_value("Logs location:", 'http://128.224.150.21/install_logs/')
     logutils.print_name_value("Lab config location", lab_cfg_location)
 
     if not tis_on_tis:
@@ -1118,12 +1119,16 @@ def main():
                                           CERTIFICATE_FILE_NAME),
                                           pre_opts=pre_opts)
 
+                cmd = "export USER=wrsroot"
+                rc, output = controller0.telnet_conn.exec_cmd(cmd)
+
                 cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
                 cmd += " config_controller --config-file " + cfgfile
                 #cmd += " config_controller --default"
-                #rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+                #os.environ["TERM"] = "xterm"
+                rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
                 # Switching to ssh due to CGTS-4051
-                rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+                #rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
                 if rc != 0 or find_error_msg(output, "Configuration failed"):
                     msg = "config_controller failed"
                     log.error(msg)

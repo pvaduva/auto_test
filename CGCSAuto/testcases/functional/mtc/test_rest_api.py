@@ -11,7 +11,7 @@ from utils.tis_log import LOG
 #default expected number of pipelines
 NUM_PIPELINES = 2
 IP_ADDR = html_helper.get_ip_addr()
-TOKEN = html_helper.get_user_token()[0]
+TOKEN = html_helper.get_user_token()
 
 HEADERS = {"Content-Type": "application/json",
            "Accept": "application/json",

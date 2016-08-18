@@ -433,7 +433,6 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
     row_indexes = []
     for header, values in kwargs.items():
         if not isinstance(values, list):
-            print("you shouldn't be here. type: {}".format(type(values)))
             values = [values]
 
         kwarg_row_indexes = []
@@ -522,6 +521,7 @@ def get_value_two_col_table(table_, field, strict=True, regex=False, merge_lines
                 break
     else:
         LOG.warning("Field {} is not found in table.".format(field))
+        LOG.debug("Field {} is not found in table: {}.".format(field, table_))
         val = ''
 
     # handle multi-line value

@@ -27,6 +27,7 @@ class VMTimeout:
     REBOOT = 180
     PAUSE = 180
     IF_ADD = 30
+    REBUILD = 300
     DHCP_IP_ASSIGN = 30
 
 
@@ -58,3 +59,4 @@ class ImageTimeout:
 class EventLogTimeout:
     HEARTBEAT_ESTABLISH = 300
     HEALTH_CHECK_FAIL = 60
+    VM_REBOOT_EVENT = 60
