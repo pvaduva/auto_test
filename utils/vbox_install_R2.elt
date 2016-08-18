@@ -928,9 +928,9 @@ $part=1
 
 ; === install tenant files and guest images
 $install_tenant_files=yes
-$directory=regular
+$directory=R2_files
 ? if $load == GA2 ?[
-	$directory=15.12_files
+	$directory=R2_files
 ]
 ?if $install_sw !=no? [	
 	# get IP address of host (use netstat -an | grep :22)
@@ -1199,8 +1199,6 @@ $directory=regular
 <NTP server 3
 >>^M
 <License File
->>^M
-<wrsroot password age
 >>^M
 ?if $https == no? [ 
 	<Use secure
