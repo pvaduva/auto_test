@@ -210,7 +210,7 @@ $boot_dir=$boot_image_dir
 
 # default user and password
 $user=wrsroot
-$pass=li69nux
+$pass=Li69nux*
 
 $admin_password=admin
 
@@ -880,7 +880,7 @@ $part=1
 
 !sleep 2
 
-@1500
+@2000
 *FORK serial
 >>^M
 ; === protect against blue screen of death
@@ -1102,7 +1102,10 @@ $directory=R3_files
 	<Volume storage in GiB
 	>>^M
 ]
-
+<Cinder LVM type
+>>^M
+<Enable SDN Network configuration
+>>^M
 <Configure a separate PXEBoot network
 >$pxe_network
 
@@ -1159,14 +1162,12 @@ $directory=R3_files
 	>$infrastructure_interface_link_aggregation
 	<Infrastructure interface
 	>$infrastructure_interface
-#	?if $rel2 == yes ? [
 	<Configure an infrastructure VLAN
 	>$configure_infrastructure_VLAN
 	?if $configure_infrastructure_VLAN == Y ? [
 		<Infrastructure VLAN Identifier
 		>$infrastructure_VLAN_ID
 	]
-#	]
 	<Infrastructure interface MTU
 	>$infrastructure_interface_MTU
 	<Infrastructure interface link capacity Mbps
@@ -1183,14 +1184,12 @@ $directory=R3_files
         >$OAM_interface_link_aggregation
         <External OAM interface
         >$OAM_interface
- #       ?if $rel2 == yes ? [
         <Configure an external OAM VLAN
        	>$configure_OAM_VLAN
 	?if $configure_OAM_VLAN == Y ? [
 		<External OAM VLAN Identifier
 		>$OAM_VLAN_ID
 	]	
-#	]
 ]
 
 <External OAM interface MTU
