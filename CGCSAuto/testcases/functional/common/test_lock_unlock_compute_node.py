@@ -34,9 +34,18 @@ def test_lock_unlock_compute_node():
     LOG.tc_step("Lock {} and ensure it is locked successfully".format(lucky_compute_node))
     host_helper.lock_host(lucky_compute_node)
 
+    locked_compute_admin_state = host_helper.get_hostshow_value(lucky_compute_node,'administrative')
+    assert locked_compute_admin_state == 'locked', 'Test Failed. Compute Node {} should be in locked state but ' \
+                                        'is not.'.format(lucky_compute_node)
+
     # wait for services to stabilize before unlocking
     time.sleep(20)
 
     # unlock compute node and verify compute node is successfully unlocked
     LOG.tc_step("Unlock {} and ensure it is unlocked successfully with hypervisor state up".format(lucky_compute_node))
     host_helper.unlock_host(lucky_compute_node, check_hypervisor_up=True)
+
+    unlocked_compute_admin_state = host_helper.get_hostshow_value(lucky_compute_node,'administrative')
+    assert unlocked_compute_admin_state == 'unlocked', 'Test Failed. Compute Node {} should be in unlocked state ' \
+                                                       'but is not.'.format(lucky_compute_node)
+
