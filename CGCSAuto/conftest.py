@@ -9,8 +9,10 @@ import setups
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
-from testfixtures.resource_mgmt import *
-from testfixtures.recover_hosts import *
+
+# Do NOT remove following imports. Needed for test fixture discovery purpose
+from testfixtures.resource_mgmt import delete_resources_func, delete_resources_class, delete_resources_module
+from testfixtures.recover_hosts import hosts_recover_func, hosts_recover_class, hosts_recover_module
 
 natbox_ssh = None
 con_ssh = None
