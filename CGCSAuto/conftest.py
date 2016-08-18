@@ -218,6 +218,7 @@ def pytest_configure(config):
     report_all = config.getoption('reportall')
     report_tag = config.getoption('report_tag')
     resultlog = config.getoption('resultlog')
+    openstack_cli = config.getoption('openstackcli')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
     lab = setups.get_lab_dict(lab_arg) if lab_arg else setup_consts.LAB
@@ -226,6 +227,7 @@ def pytest_configure(config):
     is_boot = True if bootvms_arg else setup_consts.BOOT_VMS
     collect_all = True if collect_all else setup_consts.COLLECT_ALL
     report_all = True if report_all else setup_consts.REPORT_ALL
+    openstack_cli = True if openstack_cli else False
 
     # compute directory for all logs based on resultlog arg, lab, and timestamp on local machine
     resultlog = resultlog if resultlog else os.path.expanduser("~")
@@ -237,7 +239,7 @@ def pytest_configure(config):
 
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
-                     report_all=report_all, report_tag=report_tag)
+                     report_all=report_all, report_tag=report_tag, openstack_cli = openstack_cli)
 
     os.makedirs(log_dir, exist_ok=True)
     config_logger(log_dir)
@@ -255,16 +257,20 @@ def pytest_addoption(parser):
     collect_all_help = "Run collect all on TiS server at the end of test session if any test fails."
     report_help = "Upload results and logs to the test results database."
     tag_help = "Tag to be used for uploading logs to the test results database."
+    openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
+
     parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
     parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
     parser.addoption('--natbox', action='store', metavar='natboxname', default=None, help=natbox_help)
+    parser.addoption('--report_tag', action='store', dest='report_tag', metavar='tagname', default=None, help=tag_help)
+
     parser.addoption('--bootvms', '--boot_vms', '--boot-vms', dest='bootvms', action='store_true', help=bootvm_help)
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
                      help=collect_all_help)
     parser.addoption('--reportall', '--report_all', '--report-all', dest='reportall', action='store_true',
                      help=report_help)
-    parser.addoption('--report_tag', action='store', dest='report_tag', metavar='tagname', default=None, 
-                     help=tag_help)
+    parser.addoption('--openstackcli', '--openstack_cli', '--openstack-cli', action='store_true', dest='openstackcli',
+                     help=openstackcli_help)
 
 
 def config_logger(log_dir):

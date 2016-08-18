@@ -4,7 +4,9 @@ from utils import exceptions
 from utils import ssh
 from utils.ssh import ControllerClient
 from consts.timeout import CLI_TIMEOUT
-from consts.auth import Tenant, Tenant
+from consts.auth import Tenant
+from consts.proj_vars import ProjVar
+from consts.openstack_cli import NEUTRON_MAP
 
 
 def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
@@ -154,6 +156,15 @@ def heat(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_
 
 def neutron(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
             auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
+
+    openstack_cmd = None
+    if ProjVar.get_var('OPENSTACK_CLI'):
+        openstack_cmd = NEUTRON_MAP.get(cmd, None)
+
+    if openstack_cmd is not None:
+        return openstack(cmd=openstack_cmd, positional_args=positional_args, flags=flags,
+                         ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
+                         err_only=err_only, timeout=timeout, rtn_list=rtn_list)
 
     return exec_cli('neutron', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
