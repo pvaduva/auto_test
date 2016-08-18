@@ -1000,7 +1000,7 @@ def get_host_interfaces_info(host, header='name', net_type=None, if_type=None, u
 
     args = ' --nowrap'
     args += ' --a' if show_all else ''
-    args += host
+    args += ' ' + host
 
     table_ = table_parser.table(cli.system('host-if-list', args, ssh_client=con_ssh, auth_info=auth_info))
 
