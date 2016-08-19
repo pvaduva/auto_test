@@ -14,20 +14,35 @@ from keywords import system_helper, vm_helper, nova_helper, cinder_helper, stora
 ########################
 
 
-@fixture()
+@fixture(scope='function')
 def check_alarms(request):
     """
-    Check system alarms before and after test run.
+    Check system alarms before and after test case.
 
     Args:
         request: caller of this fixture. i.e., test func.
     """
-    LOG.fixture_step("(function) Gathering system alarms info before test begins.")
+    __verify_alarms(request=request, scope='function')
+
+
+@fixture(scope='session', autouse=True)
+def check_alarms_session(request):
+    """
+    Check system alarms before and after test session.
+
+    Args:
+        request: caller of this fixture. i.e., test func.
+    """
+    __verify_alarms(request=request, scope='session')
+
+
+def __verify_alarms(request, scope):
+    LOG.fixture_step("({}) Gathering system alarms info before test {} begins.".format(scope, scope))
     before_tab = system_helper.get_alarms_table()
     before_rows = table_parser.get_all_rows(before_tab)
 
     def verify_alarms():
-        LOG.fixture_step("(function) Verifying system alarms after test ended...")
+        LOG.fixture_step("({}) Verifying system alarms after test {} ended...".format(scope, scope))
         after_tab = system_helper.get_alarms_table()
         after_rows = table_parser.get_all_rows(after_tab)
         new_alarms = []
@@ -55,7 +70,7 @@ def check_alarms(request):
                             new_alarms.append(item)
 
         assert not new_alarms, "New alarm(s) found: {}".format(new_alarms)
-        LOG.info("System alarms verified.")
+        LOG.fixture_step("({}) System alarms verified.".format(scope))
 
     request.addfinalizer(verify_alarms)
     return
