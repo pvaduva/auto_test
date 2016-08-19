@@ -1,6 +1,8 @@
 from pytest import fixture, mark, skip
 
 from consts.auth import Tenant
+from consts.cgcs import EventLogID
+from consts.timeout import EventLogTimeout
 from utils import table_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -21,19 +23,40 @@ def check_alarms(request):
         request: caller of this fixture. i.e., test func.
     """
     LOG.fixture_step("(function) Gathering system alarms info before test begins.")
-    before_tab = system_helper.get_alarms()
+    before_tab = system_helper.get_alarms_table()
     before_rows = table_parser.get_all_rows(before_tab)
 
     def verify_alarms():
         LOG.fixture_step("(function) Verifying system alarms after test ended...")
-        after_tab = system_helper.get_alarms()
+        after_tab = system_helper.get_alarms_table()
         after_rows = table_parser.get_all_rows(after_tab)
         new_alarms = []
+
         for item in after_rows:
             if item not in before_rows:
                 new_alarms.append(item)
+
+        if new_alarms:
+            alarm_id = EventLogID.NETWORK_AGENT_NOT_RESPOND
+            kwargs = {'Alarm ID': alarm_id}
+
+            if table_parser.get_values(after_tab, 'Alarm ID', **kwargs) and \
+                    not table_parser.get_values(before_tab, 'Alarm ID', **kwargs):
+
+                LOG.fixture_step("'Networking Agent not responding' alarm detected, waiting for it to be gone.")
+                if system_helper.wait_for_alarm_gone(alarm_id, timeout=EventLogTimeout.NET_AGENT_NOT_RESPOND_CLEAR,
+                                                     fail_ok=True):
+
+                    after_tab = system_helper.get_alarms_table()
+                    after_rows = table_parser.get_all_rows(after_tab)
+                    new_alarms = []
+                    for item in after_rows:
+                        if item not in before_rows:
+                            new_alarms.append(item)
+
         assert not new_alarms, "New alarm(s) found: {}".format(new_alarms)
         LOG.info("System alarms verified.")
+
     request.addfinalizer(verify_alarms)
     return
 

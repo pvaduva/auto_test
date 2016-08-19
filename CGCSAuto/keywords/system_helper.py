@@ -24,7 +24,7 @@ class System:
 
     def get_system_info(self):
         system = {}
-        alarms = get_alarms(self.CON_SSH)
+        alarms = get_alarms_table(self.CON_SSH)
         system['alarms'] = alarms
         # TODO: add networks, providernets, interfaces, flavors, images, volumes, vms info?
 
@@ -160,8 +160,8 @@ def _get_active_standby(controller='active', con_ssh=None):
     return controllers
 
 
-def get_alarms(uuid=True, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
-               auth_info=Tenant.ADMIN):
+def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
+                     auth_info=Tenant.ADMIN):
     """
     Get active alarms dictionary with given criteria
     Args:
@@ -186,6 +186,31 @@ def get_alarms(uuid=True, show_suppress=False, query_key=None, query_value=None,
     table_ = table_parser.table(cli.system('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info),
                                 combine_multiline_entry=True)
     return table_
+
+
+def get_alarms(rtn_val='UUID', alarm_id=None, reason_text=None, entity_id=None, severity=None, time_stamp=None,
+               strict=False, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
+               auth_info=Tenant.ADMIN):
+
+    table_ = get_alarms_table(show_suppress=show_suppress, query_key=query_key, query_value=query_value,
+                              query_type=query_type, con_ssh=con_ssh, auth_info=auth_info)
+
+    if alarm_id:
+        table_ = table_parser.filter_table(table_, **{'Alarm ID': alarm_id})
+
+    kwargs_dict = {
+        'Reason Text': reason_text,
+        'Entity ID': entity_id,
+        'Severity': severity,
+        'Time Stamp': time_stamp
+    }
+
+    kwargs = {}
+    for key, value in kwargs_dict.items():
+        if value is not None:
+            kwargs[key] = value
+
+    return table_parser.get_values(table_, rtn_val, strict=strict, **kwargs)
 
 
 def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
@@ -341,7 +366,7 @@ def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
 
     """
     if alarms is None:
-        alarms_tab = get_alarms(uuid=True)
+        alarms_tab = get_alarms_table(uuid=True)
         alarms = table_parser.get_column(alarms_tab, 'UUID')
 
     if isinstance(alarms, str):
@@ -358,7 +383,7 @@ def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
         if code != 0:
             failed_clis.append(alarm)
 
-    post_alarms_tab = get_alarms(uuid=True)
+    post_alarms_tab = get_alarms_table(uuid=True)
     post_alarms = table_parser.get_column(post_alarms_tab, 'UUID')
 
     undeleted_alarms = list(set(alarms) & set(post_alarms))
@@ -377,6 +402,43 @@ def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
     succ_msg = "Alarms deleted successfully"
     LOG.info(succ_msg)
     return 0, succ_msg
+
+
+def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False, timeout=120, check_interval=3,
+                        fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+
+    LOG.info("Waiting for alarm {} to disappear from system alarm-list".format(alarm_id))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        alarms_tab = table_parser.table(cli.system('alarm-list', ssh_client=con_ssh, auth_info=auth_info))
+
+        alarm_tab = table_parser.filter_table(alarms_tab, **{'Alarm ID': alarm_id})
+        if table_parser.get_all_rows(alarm_tab):
+            kwargs = {}
+            if entity_id:
+                kwargs['Entity ID'] = entity_id
+            if reason_text:
+                kwargs['Reason Text'] = reason_text
+
+            if kwargs:
+                alarms = table_parser.get_values(alarm_tab, strict=strict, **kwargs)
+                if not alarms:
+                    LOG.info("Alarm {} with {} is not displayed in system alarm-list".format(alarm_id, kwargs))
+                    return True
+
+        else:
+            LOG.info("Alarm {} is not displayed in system alarm-list".format(alarm_id))
+            return True
+
+        time.sleep(check_interval)
+
+    else:
+        err_msg = "Timed out waiting for alarm {} to disappear".format(alarm_id)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return False
+        else:
+            raise exceptions.TimeoutException(err_msg)
 
 
 def host_exists(host, field='hostname', con_ssh=None):

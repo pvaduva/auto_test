@@ -208,7 +208,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
             assert 0 == index, "Auto recovery to reboot the vm is not kicked off within timeout."
 
             LOG.tc_step("Verify instance rebooting active alarm is on")
-            alarms_tab = system_helper.get_alarms()
+            alarms_tab = system_helper.get_alarms_table()
             reasons = table_parser.get_values(alarms_tab, 'Reason Text', strict=False, **{'Entity ID': vm_id})
             assert re.search('Instance .* is rebooting on host', '\n'.join(reasons)), \
                 "Instance rebooting active alarm is not listed"
@@ -333,7 +333,7 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat):
 
     LOG.tc_step("Kill the kvm processes on vm host: {}".format(target_host))
     with host_helper.ssh_to_host(target_host) as host_ssh:
-        exit_code, output = host_ssh.exec_sudo_cmd('killall -s KILL qemu-kvm')
+        exit_code, output = host_ssh.exec_sudo_cmd('killall -s KILL kvm')   # qemu-kvm for centos
         if not exit_code == 0:
             raise exceptions.SSHExecCommandFailed("Failed to kill host kvm processes. Details: {}".format(output))
 

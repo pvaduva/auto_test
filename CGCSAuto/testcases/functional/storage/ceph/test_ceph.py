@@ -431,9 +431,9 @@ def test_lock_stor_check_osds_down(host):
 
     LOG.tc_step('Check that host lock alarm is raised when {} is locked'.format(host))
     query_value = 'host={}'.format(host)
-    alarms_table = system_helper.get_alarms(query_key='entity_instance_id',
-                                            query_value=query_value,
-                                            query_type='string')
+    alarms_table = system_helper.get_alarms_table(query_key='entity_instance_id',
+                                                  query_value=query_value,
+                                                  query_type='string')
     LOG.info(alarms_table)
     msg = "Alarm {} was not found in alarm-list".format(EventLogID.HOST_LOCK)
     assert EventLogID.HOST_LOCK in str(alarms_table), msg
@@ -459,18 +459,18 @@ def test_lock_stor_check_osds_down(host):
     time.sleep(15)
 
     # 800.011   Loss of replication in replication group group-0: OSDs are down
-    alarms_table = system_helper.get_alarms(query_key='alarm_id',
-                                            query_value=EventLogID.STORAGE_LOR,
-                                            query_type='string')
+    alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
+                                                  query_value=EventLogID.STORAGE_LOR,
+                                                  query_type='string')
     LOG.info(alarms_table)
     msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_LOR)
     assert EventLogID.STORAGE_LOR in str(alarms_table), msg
 
     # 800.001   Storage Alarm Condition: Pgs are degraded/stuck/blocked. Please
     # check 'ceph -s' for more details
-    alarms_table = system_helper.get_alarms(query_key='alarm_id',
-                                            query_value=EventLogID.STORAGE_ALARM_COND,
-                                            query_type='string')
+    alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
+                                                  query_value=EventLogID.STORAGE_ALARM_COND,
+                                                  query_type='string')
     LOG.info(alarms_table)
     msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_ALARM_COND)
     assert EventLogID.STORAGE_ALARM_COND in str(alarms_table), msg
@@ -485,15 +485,15 @@ def test_lock_stor_check_osds_down(host):
     # Check that alarms clear
     LOG.tc_step('Check that host lock alarm is cleared when {} is unlocked'.format(host))
     query_value = 'host={}'.format(host)
-    alarms_table = system_helper.get_alarms(query_key='entity_instance_id',
-                                            query_value=query_value,
-                                            query_type='string')
+    alarms_table = system_helper.get_alarms_table(query_key='entity_instance_id',
+                                                  query_value=query_value,
+                                                  query_type='string')
     LOG.info(alarms_table)
     msg = "Alarm {} found in alarm-list".format(EventLogID.HOST_LOCK)
     assert EventLogID.HOST_LOCK not in str(alarms_table), msg
 
     LOG.tc_step('Check that the replication group alarm is cleared')
-    alarms_table = system_helper.get_alarms(con_ssh)
+    alarms_table = system_helper.get_alarms_table(con_ssh)
     LOG.info(alarms_table)
     ids = table_parser.get_values(alarms_table, 'Alarm ID')
     for alarm_id in ids:
@@ -501,7 +501,7 @@ def test_lock_stor_check_osds_down(host):
             'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_LOR)
 
     LOG.tc_step('Check that the Storage Alarm Condition is cleared')
-    alarms_table = system_helper.get_alarms(con_ssh)
+    alarms_table = system_helper.get_alarms_table(con_ssh)
     LOG.info(alarms_table)
     ids = table_parser.get_values(alarms_table, 'Alarm ID')
     for alarm_id in ids:
@@ -561,18 +561,18 @@ def test_lock_cont_check_mon_down():
     time.sleep(5)
 
     LOG.tc_step('Check that storage degrade alarm is raised when {} is locked'.format(host))
-    alarms_table = system_helper.get_alarms(query_key='alarm_id',
-                                            query_value=EventLogID.STORAGE_ALARM_COND,
-                                            query_type='string')
+    alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
+                                                  query_value=EventLogID.STORAGE_ALARM_COND,
+                                                  query_type='string')
     LOG.info(alarms_table)
     msg = 'Alarm {} not found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
     assert len(alarms_table) == 2, msg
 
     LOG.tc_step('Check that host lock alarm is raised when {} is locked'.format(host))
     query_value = 'host={}'.format(host)
-    alarms_table = system_helper.get_alarms(query_key='entity_instance_id',
-                                            query_value=query_value,
-                                            query_type='string')
+    alarms_table = system_helper.get_alarms_table(query_key='entity_instance_id',
+                                                  query_value=query_value,
+                                                  query_type='string')
     LOG.info(alarms_table)
     msg = "Alarm {} not found in alarm-list".format(EventLogID.HOST_LOCK)
     assert EventLogID.HOST_LOCK in str(alarms_table), msg
@@ -596,15 +596,15 @@ def test_lock_cont_check_mon_down():
     # Check that alarms clear
     LOG.tc_step('Check that the host locked alarm is cleared')
     query_value = 'host={}'.format(host)
-    alarms_table = system_helper.get_alarms(query_key='entity_instance_id',
-                                            query_value=query_value,
-                                            query_type='string')
+    alarms_table = system_helper.get_alarms_table(query_key='entity_instance_id',
+                                                  query_value=query_value,
+                                                  query_type='string')
     LOG.info(alarms_table)
     msg = "Alarm {} not found in alarm-list".format(EventLogID.HOST_LOCK)
     assert EventLogID.HOST_LOCK not in str(alarms_table), msg
 
     LOG.tc_step('Check that the Storage Alarm Condition is cleared')
-    alarms_table = system_helper.get_alarms(con_ssh)
+    alarms_table = system_helper.get_alarms_table(con_ssh)
     LOG.info(alarms_table)
     ids = table_parser.get_values(alarms_table, 'Alarm ID')
     for alarm_id in ids:
@@ -673,9 +673,9 @@ def test_storgroup_semantic_checks():
         assert not ceph_healthy, msg
 
         LOG.tc_step('Check that alarms are raised when {} is locked'.format(host))
-        alarms_table = system_helper.get_alarms(query_key='alarm_id',
-                                                query_value=EventLogID.HOST_LOCK,
-                                                query_type='string')
+        alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
+                                                      query_value=EventLogID.HOST_LOCK,
+                                                      query_type='string')
         LOG.info(alarms_table)
         msg = "Alarm {} not found in alarm-list".format(EventLogID.HOST_LOCK)
         assert len(alarms_table) == 2, msg
@@ -694,9 +694,9 @@ def test_storgroup_semantic_checks():
 
         # Check for loss of replication group alarm
         # 800.011   Loss of replication in replication group group-0: OSDs are down
-        alarms_table = system_helper.get_alarms(query_key='alarm_id',
-                                                query_value=EventLogID.STORAGE_LOR,
-                                                query_type='string')
+        alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
+                                                      query_value=EventLogID.STORAGE_LOR,
+                                                      query_type='string')
         LOG.info(alarms_table)
         msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_LOR)
         assert len(alarms_table) == 2, msg
@@ -704,9 +704,9 @@ def test_storgroup_semantic_checks():
         # Check for Storage Alarm Condition
         # 800.001   Storage Alarm Condition: Pgs are degraded/stuck/blocked. Please
         # check 'ceph -s' for more details
-        alarms_table = system_helper.get_alarms(query_key='alarm_id',
-                                                query_value=EventLogID.STORAGE_LOR,
-                                                query_type='string')
+        alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
+                                                      query_value=EventLogID.STORAGE_LOR,
+                                                      query_type='string')
         LOG.info(alarms_table)
         msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_LOR)
         assert len(alarms_table) == 2, msg
@@ -734,7 +734,7 @@ def test_storgroup_semantic_checks():
 
         # Check that alarms clear
         LOG.tc_step('Check that the host locked alarm is cleared')
-        alarms_table = system_helper.get_alarms(con_ssh)
+        alarms_table = system_helper.get_alarms_table(con_ssh)
         LOG.info(alarms_table)
         ids = table_parser.get_values(alarms_table, 'Alarm ID')
         for alarm_id in ids:
@@ -743,7 +743,7 @@ def test_storgroup_semantic_checks():
                 'Alarm ID {} was found in alarm-list'.format(EventLogID.HOST_LOCK)
 
         LOG.tc_step('Check that the replication group alarm is cleared')
-        alarms_table = system_helper.get_alarms(con_ssh)
+        alarms_table = system_helper.get_alarms_table(con_ssh)
         LOG.info(alarms_table)
         ids = table_parser.get_values(alarms_table, 'Alarm ID')
         for alarm_id in ids:
@@ -751,7 +751,7 @@ def test_storgroup_semantic_checks():
                 'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_LOR)
 
         LOG.tc_step('Check that the Storage Alarm Condition is cleared')
-        alarms_table = system_helper.get_alarms(con_ssh)
+        alarms_table = system_helper.get_alarms_table(con_ssh)
         LOG.info(alarms_table)
         ids = table_parser.get_values(alarms_table, 'Alarm ID')
         for alarm_id in ids:
@@ -1014,9 +1014,9 @@ def test_exceed_size_of_img_pool():
     # 800.001   Storage Alarm Condition: Pgs are degraded/stuck/blocked.
     # Please check 'ceph -s' for more details
     LOG.tc_step('Query alarms for ceph alarms')
-    alarms_table = system_helper.get_alarms(query_key='alarm_id',
-                                            query_value=EventLogID.STORAGE_ALARM_COND,
-                                            query_type='string')
+    alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
+                                                  query_value=EventLogID.STORAGE_ALARM_COND,
+                                                  query_type='string')
     LOG.info(alarms_table)
     msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_ALARM_COND)
     assert EventLogID.STORAGE_ALARM_COND in str(alarms_table), msg
@@ -1181,9 +1181,9 @@ def test_modify_ceph_pool_size():
     total_used = glance_pool_gib + cinder_pool_gib + ephemeral_pool_gib
     if total_used != ceph_total_space_gib:
         # Check for 800.003 Ceph cluster has free space unused by storage pool quotas
-        alarms_table = system_helper.get_alarms(query_key='alarm_id',
-                                                query_value=EventLogID.STORAGE_POOLQUOTA,
-                                                query_type='string')
+        alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
+                                                      query_value=EventLogID.STORAGE_POOLQUOTA,
+                                                      query_type='string')
         LOG.info(alarms_table)
         msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_POOLQUOTA)
         assert EventLogID.STORAGE_POOLQUOTA in str(alarms_table)
@@ -1201,9 +1201,9 @@ def test_modify_ceph_pool_size():
         time.sleep(10)
 
         # Check for 800.003 Ceph cluster has free space unused by storage pool quotas
-        alarms_table = system_helper.get_alarms(query_key='alarm_id',
-                                                query_value=EventLogID.STORAGE_POOLQUOTA,
-                                                query_type='string')
+        alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
+                                                      query_value=EventLogID.STORAGE_POOLQUOTA,
+                                                      query_type='string')
         LOG.info(alarms_table)
         msg = "Alarm {} found in alarm-list".format(EventLogID.STORAGE_POOLQUOTA)
         assert EventLogID.STORAGE_POOLQUOTA not in str(alarms_table), msg
