@@ -10,7 +10,8 @@ from consts.reasons import SkipReason
 from keywords import host_helper, system_helper
 
 
-@mark.sanity
+# Remove from sanity as it is already covered by system alarm-list/show sanity test cases
+# @mark.sanity
 def test_lock_unlock_compute_node():
     """
     Verify lock unlock compute host on non-CPE system

@@ -12,7 +12,7 @@ from keywords import ceilometer_helper
 
 
 @mark.sanity
-def test_ceilometer_5_min_record():
+def test_ceilometer_vswitch_port_samples():
     meter = 'vswitch.port.transmit.util'
 
     LOG.tc_step("Get resource IDs for last two vswitch.port.transmit.util entries in sample-list")

@@ -17,7 +17,7 @@ from testfixtures.recover_hosts import HostsToRecover
 
 
 @mark.sanity
-def test_1443_system_alarm_list():
+def test_system_alarm_list_on_compute_reboot():
     """
     Verify system alarm-list command in the system
 
@@ -57,7 +57,7 @@ def test_1443_system_alarm_list():
 
 
 @mark.sanity
-def test_1446_system_alarm_show():
+def test_system_alarm_show_on_lock_unlock_compute():
     """
     Verify system alarm-show command
 

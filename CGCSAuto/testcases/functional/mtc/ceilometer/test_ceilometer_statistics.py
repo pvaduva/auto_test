@@ -16,7 +16,7 @@ from keywords import common, host_helper, ceilometer_helper, network_helper, gla
 
 @mark.cpe_sanity
 @mark.sanity
-def test_tc402_validate_statistics_for_one_meter():
+def test_statistics_for_image_size_meter():
     """
     Validate statistics for one meter
 
@@ -36,7 +36,11 @@ def test_tc402_validate_statistics_for_one_meter():
 
 
 @mark.sanity
-def test_401_validate_ceilometer_meters_exist():
+# Hardcode the parameter eventhough unused so sanity test name can show the meters tested
+@mark.parametrize('meters', [
+    'router_subnet_image_vswitch'
+])
+def test_ceilometer_meters_exist(meters):
     """
     Validate ceilometer meters exist
     Verification Steps:
