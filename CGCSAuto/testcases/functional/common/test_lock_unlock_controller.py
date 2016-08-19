@@ -10,6 +10,7 @@ from keywords import host_helper,system_helper
 
 
 @mark.sanity
+@mark.cpe_sanity
 def test_lock_unlock_active_controller():
     """
     Verify lock unlock active controller. Expected it to fail
@@ -27,18 +28,19 @@ def test_lock_unlock_active_controller():
         - Unlock standby controller and ensure it is successfully unlocked with web-services up
 
     """
-    LOG.tc_step('Retrieve the standby controller from the lab')
+    LOG.tc_step('Retrieve the active controller from the lab')
     active_controller = system_helper.get_active_controller_name()
 
     assert active_controller, "No active controller available"
 
     # lock standby controller node and verify it is successfully locked
-    LOG.tc_step("Lock standby controller and ensure it fail to lock")
-    exit_code, cmd_output = host_helper.lock_host(standby_controller, fail_ok=True)
+    LOG.tc_step("Lock active controller and ensure it fail to lock")
+    exit_code, cmd_output = host_helper.lock_host(active_controller, fail_ok=True)
 
     assert exit_code == 1, 'Locking of active controller passed. However it was expected to fail'
 
 @mark.sanity
+@mark.cpe_sanity
 def test_lock_unlock_standby_controller():
     """
     Verify lock unlock standby controller

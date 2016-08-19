@@ -98,7 +98,7 @@ class TestLockUnlock:
 
         assert not failure_msgs, '\n'.join(failure_msgs)
     
-    @mark.cpe_sanity
+    #@mark.cpe_sanity
     @mark.skipif(not system_helper.is_small_footprint(), reason="Only applies to small footprint lab.")
     @mark.usefixtures( 'unlock_if_locked', 'check_hosts_availability')
     @mark.parametrize('host', [
