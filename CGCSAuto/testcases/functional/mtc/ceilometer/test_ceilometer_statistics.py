@@ -16,7 +16,10 @@ from keywords import common, host_helper, ceilometer_helper, network_helper, gla
 
 @mark.cpe_sanity
 @mark.sanity
-def test_statistics_for_image_size_meter():
+@mark.parametrize('meter', [
+    'image.size'
+])
+def test_statistics_for_one_meter(meter):
     """
     Validate statistics for one meter
 
@@ -25,14 +28,15 @@ def test_statistics_for_image_size_meter():
     headers = ['Count', 'Min', 'Max', 'Avg']
 
     LOG.tc_step('Get ceilometer statistics table for image.size meter')
-    # Verify that all the instances were successfully launched
-    stats_tab = ceilometer_helper.get_statistics_table(meter='image.size')
+
+    stats_tab = ceilometer_helper.get_statistics_table(meter=meter)
+    assert stats_tab['values'], "No entries found for meter {}".format(meter)
 
     LOG.tc_step('Check that count, min, max, avg values are larger than zero')
     for header in headers:
         header_val = eval(table_parser.get_column(stats_tab, header)[0])
 
-        assert 0 < header_val, "Value for {} in image.size stats table is not larger than zero".format(header)
+        assert 0 < header_val, "Value for {} in {} stats table is not larger than zero".format(header, meter)
 
 
 @mark.sanity
