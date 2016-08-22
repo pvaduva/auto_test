@@ -18,11 +18,10 @@ def less_than_two_hypervisors():
 @fixture(scope='module')
 def modify_huge_page(request):
     # setup up huge page on compute-1
-
+    hostname = request.param[0]
     if system_helper.is_small_footprint():
-        hostname = system_helper.get_standby_controller_name() + " "
-    else:
-        hostname = request.param[0]
+        hostname = system_helper.get_standby_controller_name()
+
     processor = request.param[1]
     page_config = request.param[2]
     host_processor = hostname + processor
@@ -51,7 +50,7 @@ def modify_huge_page(request):
     return host
 
 
-@mark.parametrize('modify_huge_page', [["compute-1 ", "1 ", "-2M 0 -1G 4"]], indirect=True)
+@mark.parametrize('modify_huge_page', [["compute-1", " 1 ", "-2M 0 -1G 4"]], indirect=True)
 def test_valid_huge_page_input(modify_huge_page):
     """
     US51396_tc02_setting_num_hugepages_cli (50 Modify number of hugepages using CLI in sysinv testplan)
@@ -105,8 +104,8 @@ def test_valid_huge_page_input(modify_huge_page):
     # end tc
 
 
-@mark.parametrize('modify_huge_page', [["compute-1 ", "0 ", "-2M 999999 -1G 99999"],
-                                       ["compute-1 ", "0 ", "-2M asdf -1G asdf"]], indirect=True)
+@mark.parametrize('modify_huge_page', [["compute-1", " 0 ", "-2M 999999 -1G 99999"],
+                                       ["compute-1", " 0 ", "-2M asdf -1G asdf"]], indirect=True)
 def test_invalid_huge_page_input(modify_huge_page):
     """
     (55 Invalid inputs for number of hugepages will be rejected GUI in sysinv testplan)
@@ -153,7 +152,3 @@ def test_invalid_huge_page_input(modify_huge_page):
     assert err == 1, "Expected Huge Page CLI to Fail. However, it passed"
 
     # end tc
-
-
-
-

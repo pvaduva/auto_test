@@ -5,7 +5,7 @@
 
 
 from pytest import fixture, mark, skip
-import ast
+import ast, time
 import random
 
 from utils import cli
@@ -43,10 +43,15 @@ def is_enough_4k_page_memory():
         proc1_num_4k_page = int(system_helper.get_host_mem_values(host, ['vm_total_4K'], proc_id=1)[0])
         print(proc0_num_4k_page,proc1_num_4k_page)
         if proc0_num_4k_page < 600000 and proc1_num_4k_page < 600000 :
+            if system_helper.get_active_controller_name() == host:
+                host_helper.swact_host()
+                time.sleep(30)
+                host_helper.lock_host(host)
+                time.sleep(30)
             host_helper.lock_host(host)
             # chose to set 4k page of proc1 to 600000
             system_helper.set_host_4k_pages(host, proc_id=1, smallpage_num=600000)
-            host_helper.unlock_host(host, check_hypervisor_up=True)
+            host_helper.unlock_host(host, check_hypervisor_up=True, check_webservice_up=True)
 
 @fixture(scope='module')
 def hosts_per_stor_backing():
@@ -88,9 +93,9 @@ def test_4k_page_vm(boot_source):
     """
 
     flavor_id = nova_helper.create_flavor()[1]
+    ResourceCleanup.add('flavor', flavor_id, scope='module')
     pagesize_spec = {'hw:mem_page_size': 'small'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **pagesize_spec)
-    ResourceCleanup.add('flavor', flavor_id, scope='module')
 
     # verify there is enough 4k pages on compute nodes to create 4k page flavor
     is_enough_4k_page_memory()
@@ -129,6 +134,7 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
         skip("Less than two hosts have {} storage backing".format(storage_backing))
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type)
+    ResourceCleanup.add('vm', vm_id, scope='function')
 
     # make sure the VM is up and pingable from natbox
     LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
@@ -169,6 +175,7 @@ def test_cold_migrate_4k_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm
         skip("Less than two hosts have {} storage backing".format(storage_backing))
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type)
+    ResourceCleanup.add('vm', vm_id)
 
     # make sure the VM is up and pingable from natbox
     LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
