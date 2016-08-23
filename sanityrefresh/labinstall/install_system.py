@@ -1141,6 +1141,7 @@ def main():
             installer_exit._exit(1, msg)
 
 
+    time.sleep(10)
     cmd = "source /etc/nova/openrc"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
