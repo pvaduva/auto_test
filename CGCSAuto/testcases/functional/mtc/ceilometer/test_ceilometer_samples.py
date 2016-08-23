@@ -12,6 +12,7 @@ from keywords import ceilometer_helper
 
 
 @mark.sanity
+@mark.cpe_sanity
 def test_ceilometer_vswitch_port_samples_5_min_record():
     meter = 'vswitch.port.transmit.util'
 
