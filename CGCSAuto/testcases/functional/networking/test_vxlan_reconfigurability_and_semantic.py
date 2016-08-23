@@ -17,7 +17,7 @@ def providernet_(request):
 
     providernets = network_helper.get_providernets(strict=True, type='vxlan')
     if not providernets:
-        skip(" ******* No vxlan provider-net configured.")
+        skip("No vxlan provider-net configured")
 
     provider = common.get_unique_name(pro_net_name, resource_type='other')
     args = provider + ' --type=vxlan'

@@ -441,6 +441,39 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
             raise exceptions.TimeoutException(err_msg)
 
 
+def wait_for_alarms_gone(alarm_uuids, timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
+                         auth_info=Tenant.ADMIN):
+
+    if isinstance(alarm_uuids, str):
+        alarm_uuids = [alarm_uuids]
+
+    LOG.info("Waiting for alarms to disappear from system alarm-list: {}".format(alarm_uuids))
+    alarms_to_check = list(alarm_uuids)
+
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        alarms_tab = get_alarms_table()
+
+        alarms = table_parser.get_column(alarms_tab, 'UUID')
+
+        for alarm in alarm_uuids:
+            if alarm not in alarms:
+                alarms_to_check.remove(alarm)
+        if not alarms_to_check:
+            LOG.info("Following alarms are cleared: {}".format(alarm_uuids))
+            return True, []
+
+        time.sleep(check_interval)
+
+    else:
+        err_msg = "Timed out waiting for following alarms to disappear: {}".format(alarms_to_check)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return False, alarms_to_check
+        else:
+            raise exceptions.TimeoutException(err_msg)
+
+
 def host_exists(host, field='hostname', con_ssh=None):
     if not field.lower() in ['hostname', 'id']:
         raise ValueError("field has to be either \'hostname\' or \'id\'")

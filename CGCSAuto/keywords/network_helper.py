@@ -415,7 +415,7 @@ def get_floating_ip_info(fip, fip_val='ip', field='fixed_ip_address', auth_info=
 
     table_ = table_parser.table(cli.neutron('floatingip-show', fip, ssh_client=con_ssh, auth_info=auth_info))
     val = table_parser.get_value_two_col_table(table_, field)
-    val = None if val == 'None' else val
+    val = None if val in ['None', '', 'none'] else val
     return val
 
 
@@ -1315,7 +1315,50 @@ def clear_router_gateway(router_id=None, fail_ok=False, auth_info=Tenant.ADMIN, 
     return 0, msg
 
 
-def _update_router(admin_state_up=None, distributed=None, no_routes=None, routes=None, external_gateway_info=None,
+def __set_router_openstack(name=None, admin_state_up=None, distributed=None, no_routes=None, routes=None,
+                           router_id=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    if router_id is None:
+        router_id = get_tenant_router(con_ssh=con_ssh)
+
+    if not isinstance(router_id, str):
+        raise ValueError("Expecting string value for router_id. Get {}".format(type(router_id)))
+
+    args = ''
+    if name is not None:
+        args += ' --name {}'.format(name)
+
+    if routes is not None:
+        if no_routes:
+            raise ValueError("'Only one of the: routes', 'no_routes' can be specified.")
+        if isinstance(routes, str):
+            routes = [routes]
+
+        for route in routes:
+            args += ' --route ' + route
+
+    elif no_routes:
+        args += ' --clear-routes'
+
+    if admin_state_up is True:
+        args += ' --enable'
+    elif admin_state_up is False:
+        args += ' --disable'
+
+    if distributed is True:
+        args += ' --distributed'
+    elif distributed is False:
+        args += ' --centralized'
+
+    if not args:
+        raise ValueError("At least one of the args need to be specified.")
+
+    LOG.info("Updating router {}: {}".format(router_id, args))
+
+    args = '{} {}'.format(args.strip(), router_id)
+    return cli.neutron('router-update', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+
+
+def _update_router(name=None, admin_state_up=None, distributed=None, no_routes=None, routes=None, external_gateway_info=None,
                    router_id=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """
 
@@ -1333,6 +1376,10 @@ def _update_router(admin_state_up=None, distributed=None, no_routes=None, routes
     Returns:
 
     """
+    if external_gateway_info is None and common._execute_with_openstack_cli():
+        return __set_router_openstack(name=name, admin_state_up=admin_state_up, distributed=distributed,
+                                      no_routes=no_routes, routes=routes, router_id=router_id, fail_ok=fail_ok,
+                                      con_ssh=con_ssh, auth_info=auth_info)
 
     if router_id is None:
         router_id = get_tenant_router(con_ssh=con_ssh)
@@ -1351,6 +1398,7 @@ def _update_router(admin_state_up=None, distributed=None, no_routes=None, routes
             args += ' --route ' + route
 
     args_dict = {
+        '--name': name,
         '--admin-state-up': admin_state_up,
         '--distributed': distributed,
         '--no-routes': no_routes,
@@ -1367,7 +1415,8 @@ def _update_router(admin_state_up=None, distributed=None, no_routes=None, routes
     LOG.info("Updating router {}: {}".format(router_id, args))
 
     args = '{} {}'.format(router_id, args.strip())
-    return cli.neutron('router-update', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+    return cli.neutron('router-update', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True,
+                       force_neutron=True)
 
 
 def get_router_ext_gateway_info(router_id=None, auth_info=None, con_ssh=None):
@@ -1632,7 +1681,7 @@ def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_s
     if not ips:
         raise ValueError("No ips provided.")
 
-    table_ = table_parser.table(cli.neutron('subnet-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.neutron('subnet-list', ssh_client=con_ssh, auth_info=auth_info, force_neutron=True))
     table_ = table_parser.filter_table(table_, strict=True, **{'wrs-net:vlan_id': str(vlan_id)})
 
     cidrs = table_parser.get_column(table_, 'cidr')

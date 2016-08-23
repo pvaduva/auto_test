@@ -10,6 +10,7 @@ from consts.cli_errs import NetworkingErr
 
 pro_net_name = 'provider_vxlan'
 
+
 @fixture(scope='module')
 def get_interface_(request):
 

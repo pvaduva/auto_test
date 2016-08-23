@@ -155,10 +155,10 @@ def heat(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_
 
 
 def neutron(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
-            auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
+            auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False, force_neutron=False):
 
     openstack_cmd = None
-    if ProjVar.get_var('OPENSTACK_CLI'):
+    if not force_neutron and ProjVar.get_var('OPENSTACK_CLI'):
         openstack_cmd = NEUTRON_MAP.get(cmd, None)
 
     if openstack_cmd is not None:

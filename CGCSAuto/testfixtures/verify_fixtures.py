@@ -39,37 +39,28 @@ def check_alarms_session(request):
 def __verify_alarms(request, scope):
     LOG.fixture_step("({}) Gathering system alarms info before test {} begins.".format(scope, scope))
     before_tab = system_helper.get_alarms_table()
-    before_rows = table_parser.get_all_rows(before_tab)
+    before_uuids = table_parser.get_column(before_tab, 'UUID')
 
     def verify_alarms():
         LOG.fixture_step("({}) Verifying system alarms after test {} ended...".format(scope, scope))
         after_tab = system_helper.get_alarms_table()
-        after_rows = table_parser.get_all_rows(after_tab)
+        after_uuids = table_parser.get_column(after_tab, 'UUID')
         new_alarms = []
 
-        for item in after_rows:
-            if item not in before_rows:
+        for item in after_uuids:
+            if item not in before_uuids:
                 new_alarms.append(item)
 
         if new_alarms:
-            alarm_id = EventLogID.NETWORK_AGENT_NOT_RESPOND
-            kwargs = {'Alarm ID': alarm_id}
+            LOG.fixture_step("New alarms detected. Waiting for new alarms to clear.")
+            res, new_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True, timeout=300)
 
-            if table_parser.get_values(after_tab, 'Alarm ID', **kwargs) and \
-                    not table_parser.get_values(before_tab, 'Alarm ID', **kwargs):
+        if new_alarms:
+            table_final = table_parser.filter_table(after_tab, UUID=new_alarms)
+            new_rows = table_parser.get_all_rows(table_final)
 
-                LOG.fixture_step("'Networking Agent not responding' alarm detected, waiting for it to be gone.")
-                if system_helper.wait_for_alarm_gone(alarm_id, timeout=EventLogTimeout.NET_AGENT_NOT_RESPOND_CLEAR,
-                                                     fail_ok=True):
+            assert not new_alarms, "New alarm(s) found and did not clear within 5 minutes: {}".format(new_rows)
 
-                    after_tab = system_helper.get_alarms_table()
-                    after_rows = table_parser.get_all_rows(after_tab)
-                    new_alarms = []
-                    for item in after_rows:
-                        if item not in before_rows:
-                            new_alarms.append(item)
-
-        assert not new_alarms, "New alarm(s) found: {}".format(new_alarms)
         LOG.fixture_step("({}) System alarms verified.".format(scope))
 
     request.addfinalizer(verify_alarms)

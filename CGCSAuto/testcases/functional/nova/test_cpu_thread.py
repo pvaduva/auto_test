@@ -6,7 +6,7 @@ from utils.tis_log import LOG
 
 from consts.reasons import SkipReason
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus
-from consts.cli_errs import CPUThreadErr, SharedCPUErr, ColdMigrateErr, CPUPolicyErr, ScaleErr
+from consts.cli_errs import CPUThreadErr, SharedCPUErr, ColdMigErr, CPUPolicyErr, ScaleErr
 
 from keywords import nova_helper, system_helper, vm_helper, host_helper, glance_helper, cinder_helper, common, check_helper
 from testfixtures.resource_mgmt import ResourceCleanup
@@ -761,7 +761,7 @@ class TestHTEnabled:
         code, output = vm_helper.live_migrate_vm(vm_id, fail_ok=True)
         assert 2 == code, "Expect live migration request to be rejected. Actual: {}".format(output)
         # TODO: update error string
-        assert ColdMigrateErr.HT_HOST_REQUIRED.format(cpu_thr_pol) in output
+        assert ColdMigErr.HT_HOST_REQUIRED.format(cpu_thr_pol) in output
 
 
 class TestHTDisabled:
@@ -895,7 +895,7 @@ class TestMigrateResize:
         if len(ht_hosts) == 1:
             LOG.tc_step("Check cold migration is rejected due to no other ht host available")
             assert 2 == code, "Cold migrate request is not rejected while no other ht host available."
-            assert ColdMigrateErr.HT_HOST_REQUIRED.format(cpu_thread_policy) in output
+            assert ColdMigErr.HT_HOST_REQUIRED.format(cpu_thread_policy) in output
 
             assert vm_host == nova_helper.get_vm_host(vm_id), "VM host changed even though cold migration rejected"
 
