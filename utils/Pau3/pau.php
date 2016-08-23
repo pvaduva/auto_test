@@ -129,7 +129,7 @@ function pau_submit($theme,$ofile,$tester_name,$test_name,$passfail,$lab,$build,
 	echo "<pre>debug_tag: $tag </br>";
 	echo "<pre>debug_theme: $theme </br>";
 	if ($theme == "tis") {
-		$pipe = popen ("$cdir/$pau_ini_writer -o $outfile -x \"$tag\" -n \"$tester_name\"  -t \"$test_name\"  -r \"$passfail\" -l \"$lab\"  -b \"$build\" -a \"$logfile\" -j \"$jira\"  -u \"$userstory\" -d $domain -R \"$release_name\"", "r");
+		$pipe = popen ("$cdir/$pau_ini_writer -o $outfile -x \"${tag},titanium_server_regression_r3,cgcs_manual\" -n \"$tester_name\"  -t \"$test_name\"  -r \"$passfail\" -l \"$lab\"  -b \"$build\" -a \"$logfile\" -j \"$jira\"  -u \"$userstory\" -d $domain -R \"$release_name\"", "r");
 	}
 	if ($theme == "iot") {
 		$pipe = popen ("$cdir/$pau_ini_writer  -o $outfile -n \"$tester_name\"  -t \"$test_name\"  -r \"$passfail\"  -b \"$bar_code\" -a \"$logfile\" -j \"$jira\"  -u \"$userstory\" -d $domain   -N \"$board_name\"  -B \"$bsp\"  -C \"$config_label\"  -R \"$release_name\"    -E \"$env_name\"  -T \"$tag\"   -P \"$project\"", "r");
