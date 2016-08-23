@@ -17,7 +17,7 @@ from testfixtures.recover_hosts import HostsToRecover
 
 
 @mark.sanity
-def test_1443_system_alarm_list():
+def test_system_alarm_list_on_compute_reboot():
     """
     Verify system alarm-list command in the system
 
@@ -36,7 +36,7 @@ def test_1443_system_alarm_list():
     system_helper.delete_alarms()
 
     LOG.tc_step("Check alarm-list table consists of correct headers")
-    alarms_tab = system_helper.get_alarms(uuid=True)
+    alarms_tab = system_helper.get_alarms_table(uuid=True)
     # Verify that the alarm table contains the correct headers
     expt_headers = ['UUID', 'Alarm ID', 'Reason Text', 'Entity ID', 'Severity', 'Time Stamp']
 
@@ -49,7 +49,7 @@ def test_1443_system_alarm_list():
     time.sleep(20)
 
     LOG.tc_step("Verify no active alarm generated after reboot completes")
-    post_alarms_tab = system_helper.get_alarms(uuid=True)
+    post_alarms_tab = system_helper.get_alarms_table(uuid=True)
     post_alarms_tab = table_parser.filter_table(post_alarms_tab, strict=False, **{'Entity ID': compute_host})
     post_alarms = table_parser.get_column(post_alarms_tab, 'UUID')
 
@@ -57,7 +57,7 @@ def test_1443_system_alarm_list():
 
 
 @mark.sanity
-def test_1446_system_alarm_show():
+def test_system_alarm_show_on_lock_unlock_compute():
     """
     Verify system alarm-show command
 
@@ -88,7 +88,7 @@ def test_1446_system_alarm_show():
     time.sleep(20)
 
     LOG.tc_step("Check system alarm-list after locking")
-    post_lock_alarms_tab = system_helper.get_alarms(uuid=True)
+    post_lock_alarms_tab = system_helper.get_alarms_table(uuid=True)
     post_lock_alarms_tab = table_parser.filter_table(post_lock_alarms_tab, strict=False,
                                                      **{'Reason Text': compute_host})
 
@@ -119,7 +119,7 @@ def test_1446_system_alarm_show():
     time.sleep(30)
 
     LOG.tc_step("Verify that alarms generated due to lock compute is destroyed from alarm list table")
-    post_unlock_alarms_tab = system_helper.get_alarms(uuid=True)
+    post_unlock_alarms_tab = system_helper.get_alarms_table(uuid=True)
     post_unlock_alarms = table_parser.get_values(post_unlock_alarms_tab, 'UUID', **{'Reason Text': compute_host})
 
     assert not post_unlock_alarms, "Some alarm(s) still exist after unlock: {}. Alarms before unlock: {}".format(

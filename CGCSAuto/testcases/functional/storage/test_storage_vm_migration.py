@@ -19,7 +19,7 @@ def pre_alarm_():
     Returns: list of alarms
 
     """
-    pre_alarms = system_helper.get_alarms()
+    pre_alarms = system_helper.get_alarms_table()
     pre_list = table_parser.get_all_rows(pre_alarms)
     # Time stamps are removed before comparing alarms with post test alarms.
     # The time stamp  is the last item in each alarm row.
@@ -455,7 +455,7 @@ def is_vm_filesystem_rw(vm_id, rootfs='vda'):
 
 
 def is_new_alarm_raised(pre_list):
-    alarms = system_helper.get_alarms()
+    alarms = system_helper.get_alarms_table()
     new_list = table_parser.get_all_rows(alarms)
 
     for alarm in new_list:

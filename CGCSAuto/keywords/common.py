@@ -255,3 +255,10 @@ def get_timedelta_for_isotimes(time1, time2):
     time2_datetime = datetime.strptime(time2, "%Y-%m-%dT%H:%M:%S")
 
     return time2_datetime - time1_datetime
+
+
+def _execute_with_openstack_cli():
+    """
+    DO NOT USE THIS IN TEST FUNCTIONS!
+    """
+    return ProjVar.get_var('OPENSTACK_CLI')

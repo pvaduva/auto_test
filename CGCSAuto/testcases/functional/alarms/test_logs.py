@@ -50,8 +50,8 @@ def test_event_list_vms(event_option, severity):
     LOG.tc_step('Verify test result')
     check_flag = query_check(len(query_tab['values']), int(limit) - 1)
     assert check_flag != 1, " Test Failed "
-    active_alarm_uuid = system_helper.get_alarms(uuid=True, query_key='alarm_id', query_value=alarm_id,
-                                                 query_type='string')
+    active_alarm_uuid = system_helper.get_alarms_table(uuid=True, query_key='alarm_id', query_value=alarm_id,
+                                                       query_type='string')
     if event_option == 'alarms':
         uuid_val = active_alarm_uuid['values'][0][0]
         retcode, output = delete_alarm_log(uuid=uuid_val)
@@ -84,7 +84,7 @@ def delete_alarm_log(con_ssh=None, uuid=None):
     if uuid is None:
         return 1
     cli.system(cmd="alarm-delete", positional_args=uuid, ssh_client=con_ssh)
-    query_active_alarm = system_helper.get_alarms(query_key='UUID', query_value=uuid, query_type='string')
+    query_active_alarm = system_helper.get_alarms_table(query_key='UUID', query_value=uuid, query_type='string')
     if not bool(query_active_alarm):
         return 1, "Alarm " + uuid + " was not deleted"
     return 0, "Alarm ID " + uuid + " was deleted"

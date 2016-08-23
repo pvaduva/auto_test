@@ -13,8 +13,7 @@ from keywords import host_helper
 CONTROLLER_PROMPT = '.*controller\-[01].*\$ '
 
 
-
-def cmd_execute(action, param='', check_params=''):
+def cmd_execute(action, param='', check_params=None):
     """
     Function to execute a command on a host machine
     """
@@ -29,6 +28,7 @@ def cmd_execute(action, param='', check_params=''):
         param_found = True
 
     return param_found
+
 
 def list_services():
     """
@@ -55,6 +55,7 @@ def list_services():
 
     return result
 
+
 def list_subfunctions(host):
     """
     Method to list a host subfunctions
@@ -69,6 +70,7 @@ def list_subfunctions(host):
     result = cmd_execute(cmd, param='', check_params=check_params)
         
     return result
+
 
 @mark.cpe_sanity
 def test_tc4694_verify_services_and_functions():

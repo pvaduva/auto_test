@@ -76,7 +76,7 @@ class HostOperationalState:
     DISABLED = 'disabled'
 
 
-class HostAavailabilityState:
+class HostAvailabilityState:
     DEGRADED = 'degraded'
     OFFLINE = 'offline'
     ONLINE = 'online'
@@ -185,6 +185,8 @@ class EventLogID:
     STORAGE_LOR = '800.011'
     STORAGE_POOLQUOTA = '800.003'
     HOST_LOCK = '200.001'
+    NETWORK_AGENT_NOT_RESPOND = '300.003'
+
 
 class NetworkingVmMapping:
     VSWITCH = {

@@ -99,7 +99,7 @@ def test_vm_with_heartbeat_failure(vm_):
 
     LOG.tc_step("Verify an active alarm for the reboot is present")
     time.sleep(10)
-    alarms_tab = system_helper.get_alarms()
+    alarms_tab = system_helper.get_alarms_table()
     reasons = table_parser.get_values(alarms_tab, 'Reason Text', strict=False, **{'Entity ID': vm_id})
     assert re.search('Instance .* is rebooting on host', '\n'.join(reasons)), \
         "Instance rebooting active alarm is not listed"

@@ -8,7 +8,7 @@ from utils.ssh import ControllerClient, SSHFromSSH
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
-from consts.cgcs import HostAavailabilityState, HostAdminState
+from consts.cgcs import HostAvailabilityState, HostAdminState
 from consts.timeout import HostTimeout, CMDTimeout
 
 from keywords import system_helper, common
@@ -122,7 +122,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     hostnames = sorted(hostnames)
     hosts_in_rebooting = _wait_for_hosts_states(
             hostnames, timeout=HostTimeout.FAIL_AFTER_REBOOT, check_interval=10, duration=8, con_ssh=con_ssh,
-            availability=[HostAavailabilityState.OFFLINE, HostAavailabilityState.FAILED])
+            availability=[HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED])
 
     if not hosts_in_rebooting:
         hosts_info = get_host_show_values_for_hosts(hostnames, 'task', 'availability', con_ssh=con_ssh)
@@ -153,7 +153,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
             hosts_tab = table_parser.table(cli.system('host-list --nowrap', ssh_client=con_ssh))
             hosts_to_check_tab = table_parser.filter_table(hosts_tab, hostname=unlocked_hosts)
             hosts_avail = table_parser.get_values(hosts_to_check_tab, 'hostname',
-                                                  availability=HostAavailabilityState.AVAILABLE)
+                                                  availability=HostAvailabilityState.AVAILABLE)
 
             if hosts_avail and (check_hypervisor_up or check_webservice_up):
 
@@ -413,10 +413,10 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
 
     """
     LOG.info("Unlocking {}...".format(host))
-    if get_hostshow_value(host, 'availability') in [HostAavailabilityState.OFFLINE, HostAavailabilityState.FAILED]:
+    if get_hostshow_value(host, 'availability') in [HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED]:
         LOG.info("Host is offline or failed, waiting for it to go online, available or degraded first...")
-        _wait_for_host_states(host, availability=[HostAavailabilityState.AVAILABLE, HostAavailabilityState.ONLINE,
-                                                  HostAavailabilityState.DEGRADED],
+        _wait_for_host_states(host, availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.ONLINE,
+                                                  HostAvailabilityState.DEGRADED],
                               fail_ok=False)
 
     if get_hostshow_value(host, 'administrative', con_ssh=con_ssh) == HostAdminState.UNLOCKED:
@@ -434,13 +434,13 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
         return 2, "Host is not in unlocked state"
 
     if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-                                 availability=[HostAavailabilityState.AVAILABLE, HostAavailabilityState.DEGRADED]):
+                                 availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]):
         return 3, "Host state did not change to available or degraded within timeout"
 
     if not _wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh, task=''):
         return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
 
-    if get_hostshow_value(host, 'availability') == HostAavailabilityState.DEGRADED:
+    if get_hostshow_value(host, 'availability') == HostAvailabilityState.DEGRADED:
         LOG.warning("Host is in degraded state after unlocked.")
         return 4, "Host is in degraded state after unlocked."
 
@@ -530,7 +530,7 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
         LOG.warning("Some host(s) not in unlocked states after 60 seconds.")
 
     if not _wait_for_hosts_states(hosts_to_check, timeout=timeout, check_interval=10, con_ssh=con_ssh,
-                                  availability=[HostAavailabilityState.AVAILABLE, HostAavailabilityState.DEGRADED]):
+                                  availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]):
         LOG.warning("Some host(s) state did not change to available or degraded within timeout")
 
     hosts_tab = table_parser.table(cli.system('host-list --nowrap', ssh_client=con_ssh))
@@ -538,8 +538,8 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
     hosts_unlocked = table_parser.get_values(hosts_to_check_tab, target_header='hostname', administrative='unlocked')
     hosts_not_unlocked = list(set(hosts_to_check) - set(hosts_unlocked))
     hosts_unlocked_tab = table_parser.filter_table(hosts_to_check_tab, hostname=hosts_unlocked)
-    hosts_avail = table_parser.get_values(hosts_unlocked_tab, 'hostname', availability=HostAavailabilityState.AVAILABLE)
-    hosts_degrd = table_parser.get_values(hosts_unlocked_tab, 'hostname', availability=HostAavailabilityState.DEGRADED)
+    hosts_avail = table_parser.get_values(hosts_unlocked_tab, 'hostname', availability=HostAvailabilityState.AVAILABLE)
+    hosts_degrd = table_parser.get_values(hosts_unlocked_tab, 'hostname', availability=HostAvailabilityState.DEGRADED)
     hosts_other = list(set(hosts_unlocked) - set(hosts_avail) - set(hosts_degrd))
 
     for host in hosts_not_unlocked:

@@ -44,7 +44,7 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
 
     # unlock the node
     LOG.tc_step('unlock the standby')
-    
+
     # check webservice are up when host are unlocked
     host_helper.unlock_host(hostname, check_webservice_up=True)
 

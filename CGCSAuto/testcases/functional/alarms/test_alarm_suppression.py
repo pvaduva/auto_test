@@ -34,8 +34,8 @@ def test_alarm_suppression():
     system_helper.unsuppress_all(fail_ok=True)
     LOG.tc_step("Generate ALARM")
     assert alarm_generate_succ, "Alarm Generated"
-    query_active_alarm = system_helper.get_alarms(query_key='alarm_id', query_value=alarm_id,
-                                                  query_type='string')
+    query_active_alarm = system_helper.get_alarms_table(query_key='alarm_id', query_value=alarm_id,
+                                                        query_type='string')
     assert len(query_active_alarm) > 1, "Alarm " + alarm_id + " not found in active list  "
     LOG.tc_step(alarm_id+' Alarm Suppressed .')
     suppress_=system_helper.get_suppressed_alarms(uuid=True)
@@ -45,20 +45,20 @@ def test_alarm_suppression():
                                             **{"Suppressed Alarm ID's": alarm_id})
     retcode, output = system_helper.suppress_alarm(alarm_id=alarm_id)
     assert retcode == 0, output
-    query_active_alarm = system_helper.get_alarms(query_key='alarm_id', query_value=alarm_id,
-                                                  query_type='string')
+    query_active_alarm = system_helper.get_alarms_table(query_key='alarm_id', query_value=alarm_id,
+                                                        query_type='string')
     assert bool(query_active_alarm), "Alarm ID " + alarm_id + " found in Active list"
     LOG.tc_step('Generate Alarm again .and Verify not in the Active list')
     alarm_generate_succ = generate_alarm_log(alarm_str=alarm_log_generate_str, maxi=int(limit))
     assert alarm_generate_succ, "Active Alarm Generated again "
-    query_active_alarm = system_helper.get_alarms(query_key='alarm_id', query_value=alarm_id,
-                                                  query_type='string')
+    query_active_alarm = system_helper.get_alarms_table(query_key='alarm_id', query_value=alarm_id,
+                                                        query_type='string')
     assert bool(query_active_alarm), "Alarm ID " + alarm_id + "found in Active list"
     LOG.tc_step('Alarm Unsuppressed .')
     retcode, output = system_helper.unsuppress_alarm(alarm_id=alarm_id)
     assert retcode == 0, output
-    active_alarm_uuid = system_helper.get_alarms(uuid=True, query_key='alarm_id', query_value=alarm_id,
-                                                 query_type='string')
+    active_alarm_uuid = system_helper.get_alarms_table(uuid=True, query_key='alarm_id', query_value=alarm_id,
+                                                       query_type='string')
     uuid_val = active_alarm_uuid['values'][0][0]
     retcode, output = delete_alarm_log(uuid=uuid_val)
     assert retcode == 0, output
@@ -83,7 +83,7 @@ def delete_alarm_log(con_ssh=None, uuid=None):
     if uuid is None:
         return 1
     cli.system(cmd="alarm-delete", positional_args=uuid, ssh_client=con_ssh)
-    query_active_alarm = system_helper.get_alarms(query_key='UUID', query_value=uuid, query_type='string')
+    query_active_alarm = system_helper.get_alarms_table(query_key='UUID', query_value=uuid, query_type='string')
     if not bool(query_active_alarm):
         return 1, "Alarm " + uuid + " was not deleted"
     return 0, "Alarm ID " + uuid + " was deleted"

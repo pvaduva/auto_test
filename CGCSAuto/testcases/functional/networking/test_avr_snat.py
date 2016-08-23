@@ -298,8 +298,8 @@ def test_snat_reset_router_ext_gateway(snat_setups):
 
     LOG.tc_step("Disassociate floatingip from vm and verify it's successful.")
     network_helper.disassociate_floating_ip(floating_ip=fip)
-    assert not network_helper.get_floating_ip_info(fip=fip, field='fixed_ip_address'), \
-        "Floating ip {} still attached to fixed ip".format(fip)
+    # assert not network_helper.get_floating_ip_info(fip=fip, field='fixed_ip_address'), \
+    #     "Floating ip {} still attached to fixed ip".format(fip)
 
     LOG.tc_step("Clear router gateway and verify vm cannot be ping'd from NatBox")
     fixed_ip = network_helper.get_router_ext_gateway_info()['external_fixed_ips'][0]['ip_address']

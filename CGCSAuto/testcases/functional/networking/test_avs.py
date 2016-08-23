@@ -13,6 +13,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
 @fixture(scope='module')
 def base_vm_():
 
+    LOG.fixture_step("Create a base vm with dedicated CPU policy and virtio nics")
     flavor_id = nova_helper.create_flavor(name='dedicated')[1]
     ResourceCleanup.add('flavor', flavor_id, scope='module')
 
@@ -91,10 +92,10 @@ def test_avp_vms_with_vm_actions(spec_name, spec_val, vm_type, vif_model, base_v
     LOG.tc_step("Ping VM {} from NatBox".format(vm_under_test))
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
 
-    LOG.info("Ping vm's own data network ips")
+    LOG.tc_step("Ping vm's own data network ips")
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types='data')
 
-    LOG.info("Ping vm_under_test from base_vm to verify management and data networks connection")
+    LOG.tc_step("Ping vm_under_test from base_vm to verify management and data networks connection")
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
 
     LOG.tc_step("Live-migrate the VM and verify ping over management and data networks")

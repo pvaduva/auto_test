@@ -4,49 +4,29 @@
 # of this software may be licensed only pursuant to the terms
 # of an applicable Wind River license agreement.
 
-from pytest import fixture, mark, skip, raises, fail
-
-import copy
-import datetime
-import time
-import sys
-from utils.ssh import ControllerClient
 from utils.tis_log import LOG
-from utils import cli, exceptions
+from utils import cli
 
-CONTROLLER_PROMPT = '.*controller\-[01].*\$ '
 allowable_alarms=['100.104', '100.114', '400.001']
 
-
-def cmd_execute(action, param=''):
-    """
-    Function to execute a command on a host machine
-    """
-
-    alarms_found = False
-
-    controller_ssh = ControllerClient.get_active_controller()
-    controller_ssh.set_prompt(CONTROLLER_PROMPT)
-    exitcode, output = controller_ssh.exec_cmd('%s %s' % (action, param), expect_timeout=20)
-
-    print("Output: %s" % output)
-    if (('warning' in output) or 
-        ('minor' in output) or 
-        ('major' in output) or 
-        ('critical' in output)):
-        if not(any(val in output for val in allowable_alarms)):
-            alarms_found = True
-
-    return alarms_found
 
 def test_tc4693_verify_no_alarms():
     """Method to list alarms
     """
 
     # list the alarms
-    cmd = ("source /etc/nova/openrc; system alarm-list")
-    print ("Command sent: %s" % cmd)
-    result = cmd_execute(cmd)
-    assert not result
 
+    alarms_found = False
 
+    output = cli.system('alarm-list')
+
+    LOG.tc_step("Check no unexpected alarms in output for system alarm-list: \n%s" % output)
+
+    if (('warning' in output) or
+            ('minor' in output) or
+            ('major' in output) or
+            ('critical' in output)):
+        if not (any(val in output for val in allowable_alarms)):
+            alarms_found = True
+
+    assert not alarms_found

@@ -1,6 +1,8 @@
 from pytest import fixture, mark, skip
 
 from consts.auth import Tenant
+from consts.cgcs import EventLogID
+from consts.timeout import EventLogTimeout
 from utils import table_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -12,28 +14,55 @@ from keywords import system_helper, vm_helper, nova_helper, cinder_helper, stora
 ########################
 
 
-@fixture()
+@fixture(scope='function')
 def check_alarms(request):
     """
-    Check system alarms before and after test run.
+    Check system alarms before and after test case.
 
     Args:
         request: caller of this fixture. i.e., test func.
     """
-    LOG.fixture_step("(function) Gathering system alarms info before test begins.")
-    before_tab = system_helper.get_alarms()
-    before_rows = table_parser.get_all_rows(before_tab)
+    __verify_alarms(request=request, scope='function')
+
+
+@fixture(scope='session', autouse=True)
+def check_alarms_session(request):
+    """
+    Check system alarms before and after test session.
+
+    Args:
+        request: caller of this fixture. i.e., test func.
+    """
+    __verify_alarms(request=request, scope='session')
+
+
+def __verify_alarms(request, scope):
+    LOG.fixture_step("({}) Gathering system alarms info before test {} begins.".format(scope, scope))
+    before_tab = system_helper.get_alarms_table()
+    before_uuids = table_parser.get_column(before_tab, 'UUID')
 
     def verify_alarms():
-        LOG.fixture_step("(function) Verifying system alarms after test ended...")
-        after_tab = system_helper.get_alarms()
-        after_rows = table_parser.get_all_rows(after_tab)
+        LOG.fixture_step("({}) Verifying system alarms after test {} ended...".format(scope, scope))
+        after_tab = system_helper.get_alarms_table()
+        after_uuids = table_parser.get_column(after_tab, 'UUID')
         new_alarms = []
-        for item in after_rows:
-            if item not in before_rows:
+
+        for item in after_uuids:
+            if item not in before_uuids:
                 new_alarms.append(item)
-        assert not new_alarms, "New alarm(s) found: {}".format(new_alarms)
-        LOG.info("System alarms verified.")
+
+        if new_alarms:
+            LOG.fixture_step("New alarms detected. Waiting for new alarms to clear.")
+            res, new_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True, timeout=300)
+
+        if new_alarms:
+            table_final = table_parser.filter_table(after_tab, UUID=new_alarms)
+            new_rows = table_parser.get_all_rows(table_final)
+
+            assert not new_alarms, "New alarm(s) found and did not clear within 5 minutes: {}".format(new_rows)
+
+        LOG.fixture_step("({}) System alarms verified.".format(scope))
+
     request.addfinalizer(verify_alarms)
     return
 

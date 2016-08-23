@@ -88,7 +88,7 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=None):
+            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True):
     """
 
     Args:
@@ -183,8 +183,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                 if is_new:
                     new_vol = volume_id
             else:
-                new_vol = volume_id = cinder_helper.create_volume(name=vol_name, auth_info=auth_info,
-                                                                  con_ssh=con_ssh, guest_image=guest_os)[1]
+                new_vol = volume_id = cinder_helper.create_volume(name=vol_name, auth_info=auth_info, con_ssh=con_ssh,
+                                                                  guest_image=guest_os, rtn_exist=False)[1]
 
     elif source.lower() == 'image':
         img_name = guest_os if guest_os else 'cgcs-guest'
@@ -865,7 +865,7 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
         else:
             LOG.warning(msg)
     elif packet_loss_rate > 0:
-        LOG.warning("Some packets dropped when ping from {} to {}. Packet loss rate: {}\%".
+        LOG.warning("Some packets dropped when ping from {} to {}. Packet loss rate: {}%".
                     format(ssh_client.host, server, packet_loss_rate))
     else:
         LOG.info("All packets received by {}".format(server))

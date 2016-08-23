@@ -60,9 +60,14 @@ class SharedCPUErr:
 class ResizeVMErr:
     RESIZE_ERR = "Error resizing server"
 
-class ColdMigrateErr:
+
+class ColdMigErr:
     HT_HOST_REQUIRED = "(NUMATopologyFilter) Host not useable. Requested threads policy: {}; from flavor or " \
                        "image is not allowed on non-hyperthreaded host"
+
+
+class LiveMigErr:
+    BLOCK_MIG_UNSUPPORTED = "is not on local storage: Block migration cannot be used with shared storage"
 
 
 class NetworkingErr:

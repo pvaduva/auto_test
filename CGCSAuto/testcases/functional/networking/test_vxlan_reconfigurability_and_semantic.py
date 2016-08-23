@@ -15,9 +15,9 @@ pro_net_name = 'provider_vxlan'
 @fixture(scope='module', autouse=True)
 def providernet_(request):
 
-    providernets = network_helper.get_provider_nets(strict=True, type='vxlan')
+    providernets = network_helper.get_providernets(strict=True, type='vxlan')
     if not providernets:
-        skip(" ******* No vxlan provider-net configured.")
+        skip("No vxlan provider-net configured")
 
     provider = common.get_unique_name(pro_net_name, resource_type='other')
     args = provider + ' --type=vxlan'
@@ -63,7 +63,7 @@ def test_vxlan_vni_maximum_range_negative(r_min, r_max, providernet_):
     provider, range_name = providernet_
 
     LOG.tc_step("Create the segmentation range")
-    code, err_info = create_vxlan_providernet_range(provider, range_name, range_min=r_min, range_max=r_max)
+    code, err_info = create_vxlan_providernet_range(provider, range_name=range_name, range_min=r_min, range_max=r_max)
 
     LOG.tc_step("Verify the segmentation range creation should be failed")
 
@@ -72,7 +72,7 @@ def test_vxlan_vni_maximum_range_negative(r_min, r_max, providernet_):
         assert NetworkingErr.INVALID_VXLAN_VNI_RANGE in err_info
     else:
         LOG.tc_step("The segmentation range should be removed if success")
-        network_helper.delete_vxlan_providernet_range(range_name)
+        network_helper.delete_providernet_range(range_name)
         assert 1 == code, "Should not pass when range out bourn"
 
 
@@ -107,14 +107,15 @@ def test_vxlan_valid_multicast_addr_negative(addr, providernet_):
     provider, range_name = providernet_
 
     LOG.tc_step("Create the segmentation range with given multcast group addr {}".format(addr))
-    code, err_info = create_vxlan_providernet_range(provider, range_name, group=addr, range_min=r_min, range_max=r_max)
+    code, err_info = create_vxlan_providernet_range(provider, range_name=range_name, group=addr, range_min=r_min,
+                                                    range_max=r_max)
 
     LOG.tc_step("Verify the segmentation range creation should be failed")
     if code > 0:
         LOG.info("Expect fail when the multicast group addresses are not in (224.0.0.0 to 239.255.255.255).")
         assert NetworkingErr.INVALID_MULTICAST_IP_ADDRESS in err_info
     else:
-        network_helper.delete_vxlan_providernet_range(range_name)
+        network_helper.delete_providernet_range(range_name)
         assert 1 == code, "Should not pass when multicast addresses are out of range"
 
 
@@ -153,7 +154,7 @@ def test_vxlan_valid_port_negative(the_port, providernet_):
     provider, range_name = providernet_
 
     LOG.tc_step("Create the segmentation range with the port {}".format(the_port))
-    code, err_info = create_vxlan_providernet_range(provider, range_name, port=the_port,
+    code, err_info = create_vxlan_providernet_range(provider, range_name=range_name, port=the_port,
                                                     range_min=r_min, range_max=r_max)
 
     LOG.tc_step("Verify the segmentation range creation should be failed")
@@ -161,7 +162,7 @@ def test_vxlan_valid_port_negative(the_port, providernet_):
         LOG.info("Expect fail when port is not 4789 or 8472")
         assert NetworkingErr.INVALID_VXLAN_PROVISION_PORTS in err_info
     else:
-        network_helper.delete_vxlan_providernet_range(range_name)
+        network_helper.delete_providernet_range(range_name)
         assert 1 == code, "Should not pass when port is not valid"
 
 
@@ -197,7 +198,8 @@ def test_vxlan_valid_ttl_negative(the_ttl, providernet_):
     provider, range_name = providernet_
 
     LOG.tc_step("Create the segmentation range with ttl {}".format(the_ttl))
-    code, err_info = create_vxlan_providernet_range(provider, range_name, ttl=the_ttl, range_min=r_min, range_max=r_max)
+    code, err_info = create_vxlan_providernet_range(provider, range_name=range_name, ttl=the_ttl, range_min=r_min,
+                                                    range_max=r_max)
 
     LOG.tc_step("Verify the segmentation range creation should be failed")
     # the two error message one for ttl=0  and another one if for ttl>255
@@ -205,7 +207,7 @@ def test_vxlan_valid_ttl_negative(the_ttl, providernet_):
         LOG.info("Expect fail when TTL is not in range (1, 255)")
         assert NetworkingErr.VXLAN_TTL_RANGE_MISSING in err_info or NetworkingErr.VXLAN_TTL_RANGE_TOO_LARGE in err_info
     else:
-        network_helper.delete_vxlan_providernet_range(range_name)
+        network_helper.delete_providernet_range(range_name)
         assert 1 == code, "Should not pass when TTL is our of range 1 to 255"
 
 
@@ -222,13 +224,14 @@ def prepare_segmentation_range(request):
         table_ = table_parser.table(output)
         provider_id = table_parser.get_value_two_col_table(table_, 'id')
     else:
-        provider_id = network_helper.get_provider_nets(strict=True, type='vxlan', name=provider)[0]
+        provider_id = network_helper.get_providernets(strict=True, type='vxlan', name=provider)[0]
 
     range_name = provider+"_range"
-    create_vxlan_providernet_range(provider_id, range_name, range_min=min_rang, range_max=max_rang)
+    range_name = create_vxlan_providernet_range(provider_id, range_name=range_name, range_min=min_rang,
+                                                range_max=max_rang)[1]
 
     def fin():
-        network_helper.delete_vxlan_providernet_range(range_name)
+        network_helper.delete_providernet_range(range_name)
         cli.neutron('providernet-delete', provider, auth_info=Tenant.ADMIN)
     request.addfinalizer(fin)
 
@@ -277,14 +280,15 @@ def test_vxlan_same_providernet_overlapping_segmentation_negative(r_min, r_max, 
 
     LOG.tc_step("Create the segmentation range with the range {}-{}".format(r_min, r_max))
     # second time create it should be fail because using same segmentation range
-    code, err_info = create_vxlan_providernet_range(provider_id, range_name, range_min=r_min, range_max=r_max)
+    code, err_info = create_vxlan_providernet_range(provider_id, range_name=range_name, range_min=r_min,
+                                                    range_max=r_max)
 
     LOG.tc_step("Verify the segmentation range creation should be failed")
     if code > 0:
         LOG.info("Expect fail when two ranges on the same provider network have overlapping segmentation ranges")
         assert NetworkingErr.OVERLAP_SEGMENTATION_RANGE in err_info
     else:
-        assert 1 == code, "Should not pass when the two ranges on the same provider-nt have overlapping seg ranges"
+        assert False, "Should not pass when the two ranges on the same provider-nt have overlapping seg ranges"
 
 
 @fixture(scope='module')
@@ -305,7 +309,7 @@ def multiple_provider_net_range(request):
             table_ = table_parser.table(output)
             provider_ids.append(table_parser.get_value_two_col_table(table_, 'id'))
         else:
-            provider_ids.append(network_helper.get_provider_nets(strict=True, type='vxlan', name=provider)[0])
+            provider_ids.append(network_helper.get_providernets(strict=True, type='vxlan', name=provider)[0])
 
     # Create interface to associate with the two provider-nets
 
@@ -346,16 +350,16 @@ def multiple_provider_net_range(request):
     # the name of the range is: providernet_names[0]_range
     range_name = providernet_names[0] + '_range'
 
+    code, range_name = create_vxlan_providernet_range(provider_ids[0], range_name=range_name, range_min=r_min, range_max=r_max)
     def fin_teardown():
         # Clean up: remove the ranges and providers just created
-        network_helper.delete_vxlan_providernet_range(range_name)
+        network_helper.delete_providernet_range(range_name)
 
         for provider in providernet_names:
             cli.neutron('providernet-delete', provider, auth_info=Tenant.ADMIN)
 
     request.addfinalizer(fin_teardown)
 
-    code, err_info = create_vxlan_providernet_range(provider_ids[0], range_name, range_min=r_min, range_max=r_max)
     if code > 0:
         msg = "create first provider network segmentation range {}-{} failed with: {}".format(r_min, r_max, err_info)
         assert False, msg
@@ -408,7 +412,7 @@ def test_vxlan_same_ranges_on_different_provider_negative(multiple_provider_net_
 
     LOG.tc_step("Create the second range, first been created in fixture")
     range_name = providers[1] + '_shared'
-    code, output = create_vxlan_providernet_range(providers[1], range_name, range_min=r_min, range_max=r_max)
+    code, output = create_vxlan_providernet_range(providers[1], range_name=range_name, range_min=r_min, range_max=r_max)
 
     LOG.tc_step("Verify the segmentation range creation should be failed")
     if code > 0:
@@ -416,7 +420,7 @@ def test_vxlan_same_ranges_on_different_provider_negative(multiple_provider_net_
         assert NetworkingErr.OVERLAP_SEGMENTATION_RANGE in output
     else:
         range_name = providers[1] + '_shared'
-        network_helper.delete_vxlan_providernet_range(range_name)
+        network_helper.delete_providernet_range(range_name)
         assert 1 == code, "Should not pass when two range overlap and associate to same data if"
 
 
@@ -475,6 +479,6 @@ def test_vxlan_mtu_value_negative(multiple_provider_net_range, the_mtu):
 
 def create_vxlan_providernet_range(provider_id, range_name, range_min, range_max, group='239.0.0.0', port=4789, ttl=1):
 
-    return network_helper.create_providernet_range(provider_id, range_name, range_min, range_max, group=group,
-                                                   port=port, ttl=ttl, auth_info=Tenant.ADMIN, con_ssh=None,
-                                                   fail_ok=True)
+    return network_helper.create_providernet_range(provider_id, range_name=range_name, range_min=range_min,
+                                                   range_max=range_max, group=group, port=port, ttl=ttl,
+                                                   auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=True)
