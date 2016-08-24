@@ -871,9 +871,11 @@ class Telnet:
                     wr_exit()._exit(1, msg)
                 if index == 0:
                     log.info("Found login prompt. Login as {}".format(username))
-                    self.write_line(username)
+                    #self.write_line(username)
+                    self.write(str.encode(username + '\r\n'))
                     self.get_read_until(PASSWORD_PROMPT, TELNET_EXPECT_TIMEOUT)
-                    self.write_line(password)
+                    #self.write_line(password)
+                    self.write(str.encode(password + '\r\n'))
                     break
                 elif index == 1:
                     log.info('User "{}" is already logged in.'.format(username))
@@ -973,7 +975,10 @@ class Telnet:
                     if host_os == 'wrlinux':
                         selection_menu_option = '1'
                     else:
-                        selection_menu_option = '2'
+                        if small_footprint:
+                            selection_menu_option = '4'
+                        else:
+                            selection_menu_option = '2'
 
                     if hasattr(node, "host_kickstart_menu_selection"):
                         selection_menu_option =  getattr(node, "host_kickstart_menu_selection")
@@ -1210,7 +1215,7 @@ def deploy_ssh_key(self):
         self.write_line('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
         self.write_line("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
 
-def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, negotiate=False, vt100query=False, log_path=None, debug=False):
+def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, port_login=False, negotiate=False, vt100query=False, log_path=None, debug=False):
     """Establishes telnet connection to host."""
 
     if log_path:
@@ -1220,6 +1225,8 @@ def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, negotiate=False, vt
     try:
         log.info("Open Telnet connection to: {} {}".format(ip_addr, port))
         conn = Telnet(ip_addr, port, timeout, negotiate, vt100query, logfile)
+        if port_login:
+            conn.login(TELNET_CONSOLE_USERNAME, TELNET_CONSOLE_PASSWORD)
 
         if debug:
             conn.set_debuglevel(1)

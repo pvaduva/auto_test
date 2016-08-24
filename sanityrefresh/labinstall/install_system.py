@@ -599,6 +599,7 @@ def bring_up(node, boot_device_dict, small_footprint, host_os, output_dir, close
         node.telnet_conn = telnetlib.connect(node.telnet_ip,
                                              int(node.telnet_port),
                                              negotiate=node.telnet_negotiate,
+                                             port_login=True if node.telnet_login_prompt else False,
                                              vt100query=node.telnet_vt100query,
                                              log_path=output_dir + "/"\
                                                + node.name + ".telnet.log")
@@ -941,6 +942,7 @@ def main():
             cont0_telnet_conn = telnetlib.connect(controller0.telnet_ip,
                                                   int(controller0.telnet_port),
                                                   negotiate=controller0.telnet_negotiate,
+                                                  port_login=True if controller0.telnet_login_prompt else False,
                                                   vt100query=controller0.telnet_vt100query,\
                                                   log_path=output_dir + "/" + CONTROLLER0 +\
                                                   ".telnet.log", debug=False)

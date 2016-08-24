@@ -92,7 +92,7 @@ def vms_(volumes_):
 
         instance_name = vm_names[index]
         vm_id = vm_helper.boot_vm(name=instance_name, source='volume',
-                                  source_id=vol_params['id'])[1]
+                                  source_id=vol_params['id'], user_data=get_user_data_file())[1]
         vm = {
                 'id': vm_id,
                 'display_name': instance_name,
@@ -244,6 +244,8 @@ def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
 
     LOG.tc_step("Verify VMs are evacuated.....")
 
+    computes = host_helper.get_nova_hosts()
+    computes.remove(host_0)
     after_evac_host_0 = nova_helper.get_vm_host((vms_[0])['id'])
     after_evac_host_1 = nova_helper.get_vm_host((vms_[1])['id'])
 
@@ -384,7 +386,7 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
     LOG.tc_step("Booting instance vm_0...")
 
     rc, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm_0', source='volume',
-                                                source_id=vol_id_0)
+                                                source_id=vol_id_0, user_data=get_user_data_file())
     ResourceCleanup.add('vm', vm_id, scope='function')
     assert rc == 0, "VM vm_0 did not succeed: reaon {}".format(msg)
 
@@ -457,11 +459,13 @@ def is_vm_filesystem_rw(vm_id, rootfs='vda'):
 def is_new_alarm_raised(pre_list):
     alarms = system_helper.get_alarms_table()
     new_list = table_parser.get_all_rows(alarms)
-
+    LOG.info("Pre-alarm: {}".format(pre_list))
+    LOG.info("New-alarm: {}".format(new_list))
     for alarm in new_list:
         alarm.pop()     # to remove the time stamp
         if alarm not in pre_list:
             return True, new_list
+
     return False, None
 
 

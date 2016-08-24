@@ -2,123 +2,10 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="dccb2dd4-8b73-4ed6-bc70-026583350024" name="Default" comment="">
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/utils/__init__.py" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/collect_logs.py" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/collect_logs.py" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/constants.py" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/constants.py" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/install_cumulus.py" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/install_cumulus.py" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/install_system.py" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/install_system.py" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-hp380-1_4.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-hp380-1_4.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-ironpass-14_17.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-ironpass-14_17.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-ironpass-1_4.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-ironpass-1_4.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-ironpass-20_27.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-ironpass-20_27.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-ironpass-28_30.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-ironpass-28_30.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-ironpass-31_32.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-ironpass-31_32.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-ironpass-33_36.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-ironpass-33_36.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-ironpass-37_40.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-ironpass-37_40.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-ironpass-5_6.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-ironpass-5_6.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-ironpass-7_12.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-ironpass-7_12.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-pv-0.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-pv-0.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-r720-1_2.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-r720-1_2.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-r720-3_7.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-r720-3_7.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-wildcat-13_14.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-wildcat-13_14.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-wildcat-15_22.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-wildcat-15_22.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-wildcat-3_6.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-wildcat-3_6.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/lab_settings/cgcs-wildcat-7_12.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-wildcat-7_12.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/18536.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/18536.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/18537.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/18537.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/18541.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/18541.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/18542.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/18542.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/18551.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/18551.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/20509.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/20509.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/20516.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/20516.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/20519.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/20519.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/20520.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/20520.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/20521.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/20521.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/20522.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/20522.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/20525.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/20525.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/20526.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/20526.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/20550.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/20550.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/20551.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/20551.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/20559.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/20559.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21710.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21710.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21720.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21720.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21721.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21721.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21723.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21723.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21750.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21750.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21758.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21758.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21762.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21762.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21763.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21763.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21764.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21764.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21765.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21765.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21768.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21768.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21769.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21769.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21770.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21770.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21771.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21771.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21778.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21778.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21784.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21784.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21786.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21786.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21787.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21787.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21788.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21788.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21789.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21789.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21790.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21790.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21791.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21791.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21805.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21805.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/21806.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21806.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22347.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22347.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22348.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22348.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22349.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22349.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22351.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22351.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22352.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22352.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22417.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22417.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22418.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22418.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22487.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22487.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22715.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22715.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22716.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22716.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22717.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22717.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22718.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22718.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22719.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22719.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22720.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22720.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22721.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22721.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/22722.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/22722.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23135.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23135.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23136.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23136.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23137.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23137.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23138.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23138.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23139.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23139.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23140.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23140.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23141.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23141.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23142.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23142.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23143.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23143.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23146.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23146.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23147.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23147.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23198.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23198.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23199.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23199.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23200.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23200.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23201.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23201.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23202.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23202.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23203.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23203.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23204.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23204.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23205.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23205.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23206.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23206.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23207.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23207.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23213.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23213.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23214.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23214.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23215.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23215.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23216.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23216.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23217.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23217.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23218.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23218.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23219.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23219.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23220.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23220.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23221.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23221.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23222.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23222.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/node_info/23224.ini" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23224.ini" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/utils/__init__.py" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/__init__.py" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/utils/classes.py" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/utils/classes.py" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/utils/common.py" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/utils/common.py" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/utils/log.py" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/utils/log.py" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/utils/ssh.py" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/utils/ssh.py" />
-      <change type="MOVED" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/utils/wr_telnetlib.py" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/utils/wr_telnetlib.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/sanityrefresh/labinstall/setup.py" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/setup.py" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-wildcat-78_79.ini" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23278.ini" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23279.ini" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/CGCSAuto/testcases/functional/storage/test_storage_vm_migration.py" afterPath="$PROJECT_DIR$/CGCSAuto/testcases/functional/storage/test_storage_vm_migration.py" />
     </list>
     <ignored path="cgcs.iws" />
     <ignored path=".idea/workspace.xml" />
@@ -139,21 +26,81 @@
   </component>
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-      <file leaf-file-name="setup.py" pinned="false" current-in-tab="true">
-        <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/setup.py">
+      <file leaf-file-name="23261.ini" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23261.ini">
           <provider selected="true" editor-type-id="text-editor">
-            <state vertical-scroll-proportion="0.58536583">
-              <caret line="16" column="34" selection-start-line="16" selection-start-column="34" selection-end-line="16" selection-end-column="34" />
+            <state vertical-scroll-proportion="-0.0">
+              <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
               <folding />
             </state>
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="collect_logs.py" pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/collect_logs.py">
+      <file leaf-file-name="23262.ini" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23262.ini">
           <provider selected="true" editor-type-id="text-editor">
-            <state vertical-scroll-proportion="0.0">
+            <state vertical-scroll-proportion="-0.0">
               <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="23271.ini" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23271.ini">
+          <provider selected="true" editor-type-id="text-editor">
+            <state vertical-scroll-proportion="-0.0">
+              <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="23278.ini" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23278.ini">
+          <provider selected="true" editor-type-id="text-editor">
+            <state vertical-scroll-proportion="-1.5517242">
+              <caret line="3" column="27" selection-start-line="3" selection-start-column="27" selection-end-line="3" selection-end-column="27" />
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="23279.ini" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23279.ini">
+          <provider selected="true" editor-type-id="text-editor">
+            <state vertical-scroll-proportion="-3.6206896">
+              <caret line="7" column="0" selection-start-line="7" selection-start-column="0" selection-end-line="7" selection-end-column="0" />
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="cgcs-wildcat-78_79.ini" pinned="false" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-wildcat-78_79.ini">
+          <provider selected="true" editor-type-id="text-editor">
+            <state vertical-scroll-proportion="0.075">
+              <caret line="2" column="17" selection-start-line="2" selection-start-column="17" selection-end-line="2" selection-end-column="17" />
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="cgcs-wildcat-71_75.ini" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-wildcat-71_75.ini">
+          <provider selected="true" editor-type-id="text-editor">
+            <state vertical-scroll-proportion="-0.0">
+              <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="23268.ini" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23268.ini">
+          <provider selected="true" editor-type-id="text-editor">
+            <state vertical-scroll-proportion="-1.5517242">
+              <caret line="3" column="19" selection-start-line="3" selection-start-column="0" selection-end-line="5" selection-end-column="18" />
               <folding />
             </state>
           </provider>
@@ -174,8 +121,6 @@
   <component name="IdeDocumentHistory">
     <option name="CHANGED_PATHS">
       <list>
-        <option value="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/20550.ini" />
-        <option value="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21720.ini" />
         <option value="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21721.ini" />
         <option value="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-ironpass-33_36.ini" />
         <option value="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/21786.ini" />
@@ -224,12 +169,15 @@
         <option value="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/utils/ssh.py" />
         <option value="$PROJECT_DIR$/sanityrefresh/labinstall/labinstall/install_system.py" />
         <option value="$PROJECT_DIR$/sanityrefresh/labinstall/setup.py" />
+        <option value="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23278.ini" />
+        <option value="$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23279.ini" />
+        <option value="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-wildcat-78_79.ini" />
       </list>
     </option>
   </component>
   <component name="ProjectFrameBounds">
     <option name="x" value="231" />
-    <option name="y" value="165" />
+    <option name="y" value="105" />
     <option name="width" value="1543" />
     <option name="height" value="803" />
   </component>
@@ -258,8 +206,6 @@
       <foldersAlwaysOnTop value="true" />
     </navigator>
     <panes>
-      <pane id="Scope" />
-      <pane id="Scratches" />
       <pane id="ProjectPane">
         <subPane>
           <PATH>
@@ -338,24 +284,6 @@
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
             <PATH_ELEMENT>
-              <option name="myItemId" value="labinstall_" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-          </PATH>
-          <PATH>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="cgcs" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="cgcs" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="sanityrefresh" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
               <option name="myItemId" value="labinstall" />
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
@@ -382,12 +310,36 @@
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
           </PATH>
+          <PATH>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="cgcs" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="cgcs" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="sanityrefresh" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="labinstall" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="lab_settings" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+          </PATH>
         </subPane>
       </pane>
+      <pane id="Scope" />
+      <pane id="Scratches" />
     </panes>
   </component>
   <component name="PropertiesComponent">
-    <property name="last_opened_file_path" value="$PROJECT_DIR$/../wrlinux-x/addons/wr-cgcs/layers/cgcs" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
     <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PythonContentEntriesConfigurable" />
     <property name="settings.editor.splitter.proportion" value="0.2" />
   </component>
@@ -401,12 +353,12 @@
     </option>
   </component>
   <component name="RecentsManager">
-    <key name="CopyFile.RECENT_KEYS">
-      <recent name="$PROJECT_DIR$/sanityrefresh/labinstall/node_info" />
-      <recent name="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings" />
-    </key>
     <key name="MoveFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/sanityrefresh/labinstall" />
+    </key>
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings" />
+      <recent name="$PROJECT_DIR$/sanityrefresh/labinstall/node_info" />
     </key>
   </component>
   <component name="RunManager">
@@ -547,26 +499,26 @@
     <servers />
   </component>
   <component name="ToolWindowManager">
-    <frame x="231" y="165" width="1543" height="803" extended-state="0" />
-    <editor active="false" />
+    <frame x="231" y="105" width="1543" height="803" extended-state="0" />
+    <editor active="true" />
     <layout>
-      <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.32411674" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
+      <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.3240059" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="TODO" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="6" side_tool="false" content_ui="tabs" />
       <window_info id="Structure" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.24953675" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
-      <window_info id="Project" active="true" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.2618421" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
+      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.2618421" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
       <window_info id="Python Console" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="10" side_tool="false" content_ui="tabs" />
       <window_info id="Favorites" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="2" side_tool="true" content_ui="tabs" />
       <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="8" side_tool="true" content_ui="tabs" />
       <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.3281471" sideWeight="0.5" order="9" side_tool="false" content_ui="tabs" />
       <window_info id="Cvs" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="4" side_tool="false" content_ui="tabs" />
       <window_info id="Message" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
-      <window_info id="Find" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.2923463" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Ant Build" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
+      <window_info id="Find" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.2923463" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Debug" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.4" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Commander" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.4" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
-      <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
-      <window_info id="Inspection" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.4" sideWeight="0.5" order="5" side_tool="false" content_ui="tabs" />
       <window_info id="Hierarchy" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="2" side_tool="false" content_ui="combo" />
+      <window_info id="Inspection" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.4" sideWeight="0.5" order="5" side_tool="false" content_ui="tabs" />
+      <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
     </layout>
     <layout-to-restore>
       <window_info id="Cvs" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="4" side_tool="false" content_ui="tabs" />
@@ -583,9 +535,9 @@
       <window_info id="Commander" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.4" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
       <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.28238183" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
       <window_info id="Python Console" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="10" side_tool="false" content_ui="tabs" />
-      <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
-      <window_info id="Inspection" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.4" sideWeight="0.5" order="5" side_tool="false" content_ui="tabs" />
       <window_info id="Hierarchy" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="2" side_tool="false" content_ui="combo" />
+      <window_info id="Inspection" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.4" sideWeight="0.5" order="5" side_tool="false" content_ui="tabs" />
+      <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
     </layout-to-restore>
   </component>
   <component name="Vcs.Log.UiProperties">
@@ -618,6 +570,22 @@
     <watches-manager />
   </component>
   <component name="editorHistoryManager">
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/setup.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/collect_logs.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/setup.py">
       <provider selected="true" editor-type-id="text-editor">
         <state vertical-scroll-proportion="0.0">
@@ -715,9 +683,6 @@
       <provider selected="true" editor-type-id="text-editor">
         <state vertical-scroll-proportion="0.0">
           <caret line="930" column="72" selection-start-line="930" selection-start-column="72" selection-end-line="930" selection-end-column="72" />
-          <folding>
-            <element signature="e#1878#1888#0" expanded="false" />
-          </folding>
         </state>
       </provider>
     </entry>
@@ -739,9 +704,7 @@
       <provider selected="true" editor-type-id="text-editor">
         <state vertical-scroll-proportion="0.0">
           <caret line="959" column="78" selection-start-line="959" selection-start-column="78" selection-end-line="959" selection-end-column="78" />
-          <folding>
-            <element signature="e#618#628#0" expanded="false" />
-          </folding>
+          <folding />
         </state>
       </provider>
     </entry>
@@ -749,9 +712,6 @@
       <provider selected="true" editor-type-id="text-editor">
         <state vertical-scroll-proportion="2.763456">
           <caret line="272" column="22" selection-start-line="272" selection-start-column="17" selection-end-line="272" selection-end-column="22" />
-          <folding>
-            <element signature="e#424#447#0" expanded="false" />
-          </folding>
         </state>
       </provider>
     </entry>
@@ -765,8 +725,104 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/setup.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state vertical-scroll-proportion="0.58536583">
+        <state vertical-scroll-proportion="0.0">
           <caret line="16" column="34" selection-start-line="16" selection-start-column="34" selection-end-line="16" selection-end-column="34" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23275.ini">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23260.ini">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23261.ini">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23262.ini">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23271.ini">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23268.ini">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="-1.5517242">
+          <caret line="3" column="19" selection-start-line="3" selection-start-column="0" selection-end-line="5" selection-end-column="18" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23278.ini">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="-1.5517242">
+          <caret line="3" column="27" selection-start-line="3" selection-start-column="27" selection-end-line="3" selection-end-column="27" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/node_info/23279.ini">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="-3.6206896">
+          <caret line="7" column="0" selection-start-line="7" selection-start-column="0" selection-end-line="7" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-wildcat-13_14.ini">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-r720-1_2.ini">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-wildcat-71_75.ini">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/sanityrefresh/labinstall/lab_settings/cgcs-wildcat-78_79.ini">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.075">
+          <caret line="2" column="17" selection-start-line="2" selection-start-column="17" selection-end-line="2" selection-end-column="17" />
           <folding />
         </state>
       </provider>
