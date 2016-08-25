@@ -30,6 +30,7 @@ class Host(object):
         self.telnet_negotiate = False
         self.telnet_vt100query = False
         self.telnet_conn = None
+        self.telnet_login_prompt = None
         self.ssh_conn = None
         self.administrative = None
         self.operational = None
