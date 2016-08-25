@@ -119,6 +119,10 @@ def test_4k_page_vm(boot_source):
                                         "However, output is {} ".format(attribute[2])
 
 
+<<<<<<< HEAD
+=======
+@mark.skipif(True, reason="JIRA CGTS-4972")
+>>>>>>> Rewrote keywords to modify host storage backing
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'block_mig'), [
     mark.p2(('local_image', 0, 0, None, 1, 'volume', True)),
     mark.p1(('local_image', 0, 0, None, 1, 'image',True)),
@@ -162,6 +166,10 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
     assert prev_vm_host != post_vm_host
 
 
+<<<<<<< HEAD
+=======
+@mark.skipif(True, reason="JIRA CGTS-4972")
+>>>>>>> Rewrote keywords to modify host storage backing
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type'), [
     mark.p2(('local_image', 0, 0, None, 1, 'volume')),
     mark.p2(('local_lvm', 0, 0, None, 1, 'volume')),

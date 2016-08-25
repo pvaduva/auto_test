@@ -63,12 +63,12 @@ def config_local_volume_group(request):
         return local_volume_group
 
     # config lvg parameter for instance backing either image/lvm
-    host_helper.set_host_local_backing_type('compute-0', inst_type=local_volume_type, vol_group='nova-local')
+    host_helper.modify_host_lvg('compute-0', inst_backing=local_volume_type, lvm='nova-local')
 
     def reset_local_volume_group():
         # reset local volume group back to what it was before
         if local_volume_type != pre_local_volume_type:
-            host_helper.set_host_local_backing_type('compute-0', inst_type=pre_local_volume_type, vol_group='nova-local')
+            host_helper.modify_host_lvg('compute-0', inst_backing=pre_local_volume_type, lvm='nova-local')
     request.addfinalizer(reset_local_volume_group)
 
     return local_volume_group

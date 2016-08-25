@@ -49,8 +49,8 @@ def _get_info_non_cli(cmd, con_ssh=None):
     return output
 
 
-def is_small_footprint(controller_ssh=None):
-    table_ = table_parser.table(cli.system('host-show', '1', ssh_client=controller_ssh))
+def is_small_footprint(controller_ssh=None, controller='controller-0'):
+    table_ = table_parser.table(cli.system('host-show', controller, ssh_client=controller_ssh))
     subfunc = table_parser.get_value_two_col_table(table_, 'subfunctions')
 
     combined = 'controller' in subfunc and 'compute' in subfunc

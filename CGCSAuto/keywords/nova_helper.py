@@ -1385,3 +1385,7 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, auth_info=Tena
 
 def get_vm_instance_name(vm_id, con_ssh=None):
     return get_vm_nova_show_value(vm_id, ":instance_name", strict=False, con_ssh=con_ssh)
+
+
+def get_nova_services_table(auth_info=Tenant.ADMIN, con_ssh=None):
+    return table_parser.table(cli.nova('service-list', ssh_client=con_ssh, auth_info=auth_info))

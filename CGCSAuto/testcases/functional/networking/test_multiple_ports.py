@@ -173,8 +173,8 @@ class TestMutiPortsBasic:
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
 
 
-def test_multiports_on_same_network_multiple_fips():
-    LOG.tc_step("Boot vm on ")
+# def test_multiports_on_same_network_multiple_fips():
+#     LOG.tc_step("Boot vm on ")
 
 
 class TestMutiPortsPCI:

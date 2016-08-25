@@ -1,12 +1,14 @@
 ###
 # test_467_lock_unlock_compute_node sanity_juno_unified_R3.xls
 ###
-
+import time
 from pytest import mark
 
-from time import sleep
 from utils.tis_log import LOG
-from keywords import host_helper,system_helper
+from testfixtures.recover_hosts import HostsToRecover
+from testfixtures.resource_mgmt import ResourceCleanup
+
+from keywords import host_helper,system_helper, nova_helper, vm_helper
 
 
 @mark.sanity
@@ -39,6 +41,7 @@ def test_lock_unlock_active_controller():
 
     assert exit_code == 1, 'Locking of active controller passed. However it was expected to fail'
 
+
 @mark.sanity
 @mark.cpe_sanity
 def test_lock_unlock_standby_controller():
@@ -67,12 +70,12 @@ def test_lock_unlock_standby_controller():
     LOG.tc_step("Lock standby controller and ensure it is successfully locked")
     host_helper.lock_host(standby_controller)
 
-    locked_controller_admin_state = host_helper.get_hostshow_value(standby_controller,'administrative')
+    locked_controller_admin_state = host_helper.get_hostshow_value(standby_controller, 'administrative')
     assert locked_controller_admin_state == 'locked', 'Test Failed. Standby Controller {} should be in locked ' \
-                                                        'state but is not.'.format(standby_controller)
+                                                      'state but is not.'.format(standby_controller)
 
     # wait for services to stabilize before unlocking
-    sleep(20)
+    time.sleep(20)
 
     # unlock standby controller node and verify controller node is successfully unlocked
     LOG.tc_step("Unlock standby controller and ensure it is successfully unlocked with web-services up")
@@ -83,4 +86,53 @@ def test_lock_unlock_standby_controller():
                                                           'state but is not.'.format(standby_controller)
 
 
+# Remove from sanity as it is already covered by system alarm-list/show sanity test cases
+# Updated the test to lock with vms on host
 
+# @mark.sanity
+def test_lock_unlock_vm_host():
+    """
+    Verify lock unlock vm host
+
+    Test Steps:
+        - Boot a vm
+        - Lock vm host and ensure it is locked successfully
+        - Check vm is migrated to different host and in ACTIVE state
+        - Unlock the selected hypervisor and ensure it is unlocked successfully with hypervisor state up
+
+    """
+
+    LOG.tc_step("Boot a vm that can be live-migrated")
+    vm_id1 = vm_helper.boot_vm(name='lock_unlock_test')[1]
+    ResourceCleanup.add('vm', vm_id1)
+
+    LOG.tc_step("Boot a vm that cannot be live-migrated")
+    flavor = nova_helper.create_flavor('swap1', swap=1)[1]
+    ResourceCleanup.add('flavor', flavor)
+    vm_id2 = vm_helper.boot_vm(name='volume_swap', flavor=flavor)[1]
+    ResourceCleanup.add('vm', vm_id2)
+
+    vm_host = nova_helper.get_vm_host(vm_id2)
+    HostsToRecover.add(vm_host)
+
+    if nova_helper.get_vm_host(vm_id1) != vm_host:
+        vm_helper.live_migrate_vm(vm_id1, destination_host=vm_host)
+
+    # lock compute node and verify compute node is successfully unlocked
+    LOG.tc_step("Lock vm host {} and ensure it is locked successfully".format(vm_host))
+    host_helper.lock_host(vm_host, check_first=False)
+
+    LOG.tc_step("Check vms are migrated to different host and in ACTIVE state")
+    for vm in [vm_id1, vm_id2]:
+        post_vm_host = nova_helper.get_vm_host(vm)
+        assert post_vm_host != vm_host, "VM {} host did not change even though vm host is locked".format(vm)
+
+        post_vm_status = nova_helper.get_vm_status(vm).upper()
+        assert 'ACTIVE' == post_vm_status, "VM {} status is {} instead of ACTIVE".format(vm, post_vm_status)
+
+    # wait for services to stabilize before unlocking
+    time.sleep(10)
+
+    # unlock compute node and verify compute node is successfully unlocked
+    LOG.tc_step("Unlock {} and ensure it is unlocked successfully with hypervisor state up".format(vm_host))
+    host_helper.unlock_host(vm_host, check_hypervisor_up=True)
