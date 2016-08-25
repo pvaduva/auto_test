@@ -37,7 +37,7 @@ def is_enough_4k_page_memory():
     """
     # check if any 4k pages greater than 600000 means more than 2G(~536871 4k pages) total.
     check = True
-    for host in host_helper.get_hypervisors():
+    for host in host_helper.get_hypervisors(state='up', status='enabled'):
 
         proc0_num_4k_page = int(system_helper.get_host_mem_values(host, ['vm_total_4K'], proc_id=0)[0])
         proc1_num_4k_page = int(system_helper.get_host_mem_values(host, ['vm_total_4K'], proc_id=1)[0])
@@ -52,6 +52,7 @@ def is_enough_4k_page_memory():
             # chose to set 4k page of proc1 to 600000
             system_helper.set_host_4k_pages(host, proc_id=1, smallpage_num=600000)
             host_helper.unlock_host(host, check_hypervisor_up=True, check_webservice_up=True)
+
 
 @fixture(scope='module')
 def hosts_per_stor_backing():
@@ -118,7 +119,6 @@ def test_4k_page_vm(boot_source):
                                         "However, output is {} ".format(attribute[2])
 
 
-@mark.skipif(True, reason="Evacuation JIRA CGTS-4972")
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'block_mig'), [
     mark.p2(('local_image', 0, 0, None, 1, 'volume', True)),
     mark.p1(('local_image', 0, 0, None, 1, 'image',True)),
@@ -161,7 +161,7 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
     post_vm_host = nova_helper.get_vm_host(vm_id)
     assert prev_vm_host != post_vm_host
 
-@mark.skipif(True, reason="Evacuation JIRA CGTS-4972")
+
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type'), [
     mark.p2(('local_image', 0, 0, None, 1, 'volume')),
     mark.p2(('local_lvm', 0, 0, None, 1, 'volume')),

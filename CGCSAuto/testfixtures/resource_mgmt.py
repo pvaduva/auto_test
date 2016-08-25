@@ -84,6 +84,8 @@ class ResourceCleanup:
         'vms_with_vols': [],
         'vms_no_vols': [],
         'volumes': [],
+        'volume_types': [],
+        'qos_specs': [],
         'flavors': [],
         'images': [],
         'server_groups': [],
@@ -108,6 +110,8 @@ class ResourceCleanup:
         vms_with_vols = resources['vms_with_vols']
         vms_no_vols = resources['vms_no_vols']
         volumes = resources['volumes']
+        volume_types = resources['volume_types']
+        qos_specs = resources['qos_specs']
         flavors = resources['flavors']
         images = resources['images']
         server_groups = resources['server_groups']
@@ -131,6 +135,18 @@ class ResourceCleanup:
         if volumes:
             LOG.fixture_step("({}) Attempt to delete following volumes: {}".format(scope, volumes))
             code, msg = cinder_helper.delete_volumes(volumes, fail_ok=True, auth_info=Tenant.ADMIN)
+            if code > 0:
+                err_msgs.append(msg)
+
+        if volume_types:
+            LOG.fixture_step("({}) Attempt to delete following volume_types: {}".format(scope, volume_types))
+            code, msg = cinder_helper.delete_volume_type(volume_types, fail_ok=True, auth_info=Tenant.ADMIN)
+            if code > 0:
+                err_msgs.append(msg)
+
+        if qos_specs:
+            LOG.fixture_step("({}) Attempt to delete following qos_specs: {}".format(scope, qos_specs))
+            code, msg = cinder_helper.delete_qos_specs(qos_specs, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
 
@@ -209,7 +225,7 @@ class ResourceCleanup:
         scope = scope.lower()
         resource_type = resource_type.lower()
         valid_scopes = ['function', 'class', 'module']
-        valid_types = ['vm', 'volume', 'flavor', 'image', 'server_group', 'router', 'subnet', 'floating_ip', 'heat_stack']
+        valid_types = ['vm', 'volume', 'volume_type', 'qos_spec', 'flavor', 'image', 'server_group', 'router', 'subnet', 'floating_ip', 'heat_stack']
         if scope not in valid_scopes:
             raise ValueError("'scope' param value has to be one of the: {}".format(valid_scopes))
         if resource_type not in valid_types:

@@ -516,13 +516,14 @@ def create_qos_specs(qos_specs_name=None, con_ssh=None, **kwargs):
     return 0, qos_specs_id
 
 
-def delete_qos_specs(qos_specs_id, force=False, con_ssh=None):
+def delete_qos_specs(qos_specs_id, force=False, fail_ok=True, auth_info=Tenant.ADMIN, con_ssh=None):
 
     args_ = ''
     args_ += ' --force {} '.format(force)
-    args_ += qos_specs_id
+    # temp solution
+    args_ += qos_specs_id[0]
 
-    exit_code, cmd_output = cli.cinder('qos-delete', args_, fail_ok=False, ssh_client=con_ssh, auth_info=Tenant.ADMIN,
+    exit_code, cmd_output = cli.cinder('qos-delete', args_, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
                                        rtn_list=True)
 
     return exit_code, cmd_output
@@ -541,10 +542,11 @@ def create_volume_type(vol_type_name=None, con_ssh=None):
     return 0, vol_type_id
 
 
-def delete_volume_type(vol_type_id, con_ssh=None):
+def delete_volume_type(vol_type_id, fail_ok=True, auth_info=Tenant.ADMIN,  con_ssh=None):
     # must be an ADMIN to use volume type delete
 
-    cli.cinder('type-delete', vol_type_id, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
+    exit_code, cmd_output = cli.cinder('type-delete', vol_type_id, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
+    return exit_code, cmd_output
 
 
 def get_type_list(con_ssh=None):

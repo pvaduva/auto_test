@@ -21,42 +21,42 @@ from testfixtures.resource_mgmt import ResourceCleanup
 from setup_consts import P1, P2, P3
 
 instance_backing_params = [
-        ('read_bytes_sec',  10485769,   'image'),
-        ('read_bytes_sec',  200000000,  'image'),
-        ('read_bytes_sec',  419430400,  'image'),
-        ('write_bytes_sec', 10485769,   'image'),
-        ('write_bytes_sec', 400000000,  'image'),
-        ('write_bytes_sec', 419430400,  'image'),
-        ('total_bytes_sec', 10485769,   'image'),
-        ('total_bytes_sec', 419430400,  'image'),
-        ('read_iops_sec',   200,        'image'),
-        ('read_iops_sec',   5000,       'image'),
-        ('write_iops_sec',  200,        'image'),
-        ('write_iops_sec',  5000,       'image'),
-        ('total_iops_sec',  200,        'image'),
-        ('total_iops_sec',  5000,       'image'),
-        ('read_bytes_sec',  10485769,   'lvm'),
-        ('read_bytes_sec',  200000000,  'lvm'),
-        ('read_bytes_sec',  419430400,  'lvm'),
-        ('write_bytes_sec', 10485769,   'lvm'),
-        ('write_bytes_sec', 400000000,  'lvm'),
-        ('write_bytes_sec', 419430400,  'lvm'),
-        ('total_bytes_sec', 10485769,   'lvm'),
-        ('total_bytes_sec', 419430400,  'lvm'),
-        ('read_iops_sec',   200,        'lvm'),
-        ('read_iops_sec',   5000,       'lvm'),
-        ('write_iops_sec',  200,        'lvm'),
-        ('write_iops_sec',  5000,       'lvm'),
-        ('total_iops_sec',  200,        'lvm'),
-        ('total_iops_sec',  5000,       'lvm'),
+    mark.p1(('read_bytes_sec',  10485769,   'image')),
+    mark.p1(('read_bytes_sec',  200000000,  'image')),
+    mark.p2(('read_bytes_sec',  419430400,  'image')),
+    mark.p2(('write_bytes_sec', 10485769,   'image')),
+    mark.p2(('write_bytes_sec', 400000000,  'image')),
+    mark.p2(('write_bytes_sec', 419430400,  'image')),
+    mark.p2(('total_bytes_sec', 10485769,   'image')),
+    mark.p2(('total_bytes_sec', 419430400,  'image')),
+    mark.p2(('read_iops_sec',   200,        'image')),
+    mark.p2(('read_iops_sec',   5000,       'image')),
+    mark.p2(('write_iops_sec',  200,        'image')),
+    mark.p2(('write_iops_sec',  5000,       'image')),
+    mark.p2(('total_iops_sec',  200,        'image')),
+    mark.p1(('total_iops_sec',  5000,       'image')),
+    mark.p2(('read_bytes_sec',  10485769,   'lvm')),
+    mark.p2(('read_bytes_sec',  200000000,  'lvm')),
+    mark.p2(('read_bytes_sec',  419430400,  'lvm')),
+    mark.p2(('write_bytes_sec', 10485769,   'lvm')),
+    mark.p2(('write_bytes_sec', 400000000,  'lvm')),
+    mark.p2(('write_bytes_sec', 419430400,  'lvm')),
+    mark.p2(('total_bytes_sec', 10485769,   'lvm')),
+    mark.p2(('total_bytes_sec', 419430400,  'lvm')),
+    mark.p2(('read_iops_sec',   200,        'lvm')),
+    mark.p2(('read_iops_sec',   5000,       'lvm')),
+    mark.p2(('write_iops_sec',  200,        'lvm')),
+    mark.p2(('write_iops_sec',  5000,       'lvm')),
+    mark.p2(('total_iops_sec',  200,        'lvm')),
+    mark.p2(('total_iops_sec',  5000,       'lvm')),
 
     ]
 
 
-@fixture(scope='session', params=instance_backing_params )
+@fixture(scope='module', params=instance_backing_params )
 def config_local_volume_group(request):
 
-    qos_var= request.param[0]
+    qos_var = request.param[0]
     qos_var_value = request.param[1]
     local_volume_type = request.param[2]
     local_volume_group = {
@@ -65,20 +65,20 @@ def config_local_volume_group(request):
         'instance_backing': request.param[2]
     }
 
-    # check the local volume group of compute-0
-    inst_back = host_helper.get_local_storage_backing('compute-0', con_ssh=None)
+    # check the local volume group of compute-0 before and changes
+    pre_local_volume_type = host_helper.get_local_storage_backing('compute-0', con_ssh=None)
 
-    # if already same lvm skip
-    if inst_back == request.param[2]:
+    # if already same local_volume_type on compute-0 skip config local_volume_type
+    if pre_local_volume_type == local_volume_type:
         return local_volume_group
 
     # config lvg parameter for instance backing either image/lvm
-    host_helper.set_host_local_backing_type('compute-0', inst_type=request.param[2], vol_group='nova-local')
+    host_helper.set_host_local_backing_type('compute-0', inst_type=local_volume_type, vol_group='nova-local')
 
     def reset_local_volume_group():
-        # reset local volume group back to image
-        if request.param[2] != 'image':
-            host_helper.set_host_local_backing_type('compute-0', inst_type='image', vol_group='nova-local')
+        # reset local volume group back to what it was before
+        if local_volume_type != pre_local_volume_type:
+            host_helper.set_host_local_backing_type('compute-0', inst_type=pre_local_volume_type, vol_group='nova-local')
     request.addfinalizer(reset_local_volume_group)
 
     return local_volume_group
@@ -99,10 +99,7 @@ def create_qos_specs(request, config_local_volume_group):
                  }
 
     # associate qos specs to volume_type
-
-    def delete_qos_specs():
-        cinder_helper.delete_qos_specs(qos_specs_id)
-    request.addfinalizer(delete_qos_specs)
+    ResourceCleanup.add('qos_spec', qos_specs_id, scope='module')
 
     return qos_specs
 
@@ -111,13 +108,9 @@ def create_qos_specs(request, config_local_volume_group):
 def create_volume_type(request):
 
     volume_type_id = cinder_helper.create_volume_type("test_volume_type")[1]
-
     volume_type = {'id': volume_type_id
                    }
-
-    def delete_volume_type():
-        cinder_helper.delete_volume_type(volume_type_id)
-    request.addfinalizer(delete_volume_type)
+    ResourceCleanup.add('volume_type', volume_type_id, scope='module')
 
     return volume_type
 
@@ -140,58 +133,6 @@ def create_qos_association(request, create_volume_type, create_qos_specs):
     request.addfinalizer(delete_qos_association)
 
     return qos_association
-
-
-@fixture(scope='module')
-def create_volume_with_type(request, create_qos_association):
-
-    volume_type_id = create_qos_association['volume_type_id']
-    qos_spec = create_qos_association['qos_spec']
-
-    img_id = glance_helper.get_image_id_from_name('cgcs-guest')
-
-    volume_id = cinder_helper.create_volume("test_volume", vol_type=volume_type_id,image_id=img_id )[1]
-
-    table_ = table_parser.table(cli.cinder('type-list', auth_info=Tenant.ADMIN))
-    volume_type_name = table_parser.get_values(table_, 'Name', ID=volume_type_id)
-
-    volume = {'id': volume_id,
-              'volume_type_id': volume_type_id,
-              'volume_type_name': volume_type_name,
-              'qos_spec': qos_spec
-              }
-
-    def delete_volume():
-        cinder_helper.delete_volumes(volume_id)
-    request.addfinalizer(delete_volume)
-
-    return volume
-
-
-@fixture(scope='module')
-def create_vm_with_volume(request, create_volume_with_type):
-
-    volume_id = create_volume_with_type['id']
-    volume_type_id = create_volume_with_type['volume_type_id']
-    volume_type_name = create_volume_with_type['volume_type_name']
-    qos_spec = create_volume_with_type['qos_spec']
-
-    boot_source = 'volume'
-    vm_id = vm_helper.boot_vm( source=boot_source, source_id=volume_id)[1]
-
-    vm = {'id': vm_id,
-          'volume_type_id': volume_type_id,
-          'volume_type_name': volume_type_name,
-          'qos_spec': qos_spec
-          }
-
-    def delete_vm():
-        # must delete VM before flavors
-        vm_helper.delete_vms(vm_id, delete_volumes=True)
-
-    request.addfinalizer(delete_vm)
-
-    return vm
 
 
 def test_verify_qos_specs(create_qos_specs):
@@ -217,7 +158,7 @@ def test_associate_qos_spec_to_volume_type(create_qos_association):
         format(volume_type_id, match_volume_type_id)
 
 
-def test_verify_disk_extra_on_virsh(create_vm_with_volume):
+def test_verify_disk_extra_on_virsh(create_qos_association):
     """
     from us77170_StorageTestPlan.pdf
 
@@ -237,15 +178,26 @@ def test_verify_disk_extra_on_virsh(create_vm_with_volume):
         - delete specific bytes per second extra specs vm/volume-type/qos-specs
 
     """
-    vm_id = create_vm_with_volume['id']
-    disk_extra_spec = create_vm_with_volume['qos_spec']
-    virsh_tag = disk_extra_spec[0]
-    expected_disk_spec_val = disk_extra_spec[1]
+
+    volume_type_id = create_qos_association['volume_type_id']
+    qos_spec = create_qos_association['qos_spec']
+    img_id = glance_helper.get_image_id_from_name('cgcs-guest')
+
+    # create volume with defined volume type
+    volume_id = cinder_helper.create_volume("test_volume", vol_type=volume_type_id, image_id=img_id)[1]
+    ResourceCleanup.add('volume', volume_id)
+
+    # create vm from volume
+    boot_source = 'volume'
+    vm_id = vm_helper.boot_vm(source=boot_source, source_id=volume_id)[1]
+    ResourceCleanup.add('vm', vm_id)
+
+    virsh_tag = qos_spec[0]
+    expected_disk_spec_val = qos_spec[1]
 
     LOG.tc_step("Look up vm-topology cli for which host vm is located")
 
     vm_host_table = system_helper.get_vm_topology_tables('servers')[0]
-
     vm_host = table_parser.get_values(vm_host_table,'host', ID=vm_id)[0]
 
     instance_name = table_parser.get_values(vm_host_table, 'instance_name', ID=vm_id)[0]
@@ -255,10 +207,9 @@ def test_verify_disk_extra_on_virsh(create_vm_with_volume):
     with host_helper.ssh_to_host(vm_host) as comp_ssh:
 
         LOG.tc_step("Extract the correct bytes value from virsh dumpxml")
-
         sed_cmd = "sed -n 's:.*<"+virsh_tag+">\(.*\)</"+virsh_tag+">.*:\\1:p' "
-
         dump_xml_cmd = "virsh dumpxml "+ instance_name + " | " + sed_cmd
+
         code, dump_xml_output = comp_ssh.exec_sudo_cmd(cmd=dump_xml_cmd)
 
     LOG.tc_step("Compare the expected {} bytes with the bytes from the xmldump".format(expected_disk_spec_val))
