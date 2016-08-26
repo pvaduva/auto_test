@@ -167,6 +167,7 @@ class NameCount:
         'server_group': 0,
         'subnet': 0,
         'heat_stack': 0,
+        'qos': 0,
         'other': 0,
     }
 

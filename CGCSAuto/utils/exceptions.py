@@ -144,3 +144,6 @@ class CeilometerError(TiSError):
 class SysinvError(TiSError):
     message = 'Sysinv error'
 
+
+class CinderError(TiSError):
+    message = 'Cinder error'

@@ -1460,6 +1460,7 @@ def modify_host_lvg(host, lvm='nova-local', inst_backing=None, inst_lv_size=None
     Returns (tuple):
         (0, "Host is configured")       host configured
         (1, <stderr>)
+        (2, )
 
     """
 

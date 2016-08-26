@@ -1,11 +1,13 @@
 import random
 import time
 
-from consts.auth import Tenant
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
+
+from consts.auth import Tenant
 from consts.timeout import VolumeTimeout
-from keywords import glance_helper, keystone_helper
+
+from keywords import common, glance_helper, keystone_helper
 
 
 def get_any_volume(status='available', bootable=True, auth_info=None, con_ssh=None, new_name=None):
@@ -496,37 +498,220 @@ def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     cli.cinder('quota-update', args_, ssh_client=con_ssh, auth_info=auth_info)
 
 
-def create_qos_specs(qos_specs_name=None, con_ssh=None, **kwargs):
+def create_qos_specs(qos_name=None, fail_ok=False, consumer=None, auth_info=Tenant.ADMIN, con_ssh=None, **specs):
+    """
+    Create QoS with given name and specs
 
-    if qos_specs_name is None:
-        qos_specs_name = 'default_qos_spec_name'
+    Args:
+        qos_name (str):
+        fail_ok (bool):
+        consumer (str): Valid consumer of QoS specs are: ['front-end', 'back-end', 'both']
+        auth_info (dict):
+        con_ssh (SSHClient):
+        **specs: QoS specs
+            format: **{<spec_name1>: <spec_value1>, <spec_name2>: <spec_value2>}
 
-    if not kwargs:
-        raise ValueError("Please specify at least one key=value pair via kwargs.")
+    Returns (tuple):
+        (0, QoS <id> created successfully with specs: <specs dict>)
+        (1, <std_err>)
 
-    args_ = qos_specs_name
+    """
+    if consumer is None and not specs:
+        raise ValueError("'consumer' or 'specs' have to be specified.")
 
-    for key in kwargs:
-        args_ += ' {}={}'.format(key, kwargs[key])
+    valid_consumers = ['front-end', 'back-end', 'both']
+    if consumer is not None and consumer.lower() not in valid_consumers:
+        raise ValueError("Invalid consumer value {}. Choose from: {}".format(consumer, valid_consumers))
 
-    table_ = table_parser.table(cli.cinder('qos-create', args_, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    qos_specs_id = table_parser.get_value_two_col_table(table_, 'id')
-    # qos_specs_name = table_parser.get_value_two_col_table(table_, 'name')
+    if qos_name is None:
+        qos_name = 'qos-auto'
+    qos_name = common.get_unique_name(qos_name, get_qos_list(rtn_val='name'), resource_type='qos')
+    args_ = qos_name
 
-    return 0, qos_specs_id
+    if consumer:
+        specs['consumer'] = consumer
+
+    LOG.info("Creating QoS {} with specs: {}".format(qos_name, specs))
+
+    for key in specs:
+        args_ += ' {}={}'.format(key, specs[key])
+
+    code, output = cli.cinder('qos-create', args_, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                              fail_ok=fail_ok)
+
+    if code > 0:
+        return 1, output
+
+    LOG.info("Check created QoS specs are correct")
+    qos_tab = table_parser.table(output)
+    post_qos_specs = eval(table_parser.get_value_two_col_table(qos_tab, 'specs'))
+    post_consumer = table_parser.get_value_two_col_table(qos_tab, 'consumer')
+
+    for spec_name in specs:
+        expected_val = str(specs[spec_name])
+        if spec_name == 'consumer':
+            actual_val = post_consumer
+        else:
+            actual_val = post_qos_specs[spec_name]
+
+        if expected_val != actual_val:
+            err_msg = "{} is not as expected. Expect: {}, actual: {}".format(spec_name, expected_val, actual_val)
+            raise exceptions.CinderError(err_msg)
+
+    qos_id = table_parser.get_value_two_col_table(qos_tab, 'id')
+
+    LOG.info("QoS {} created successfully with specs: {}".format(qos_id, specs))
+    return 0, qos_id
 
 
-def delete_qos_specs(qos_specs_id, force=False, fail_ok=True, auth_info=Tenant.ADMIN, con_ssh=None):
+def delete_qos(qos_id, force=None, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Delete given QoS via cinder qos-delete
 
-    args_ = ''
-    args_ += ' --force {} '.format(force)
-    # temp solution
-    args_ += qos_specs_id[0]
+    Args:
+        qos_id (str):
+        force (bool):
+        check_first (bool):
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
 
-    exit_code, cmd_output = cli.cinder('qos-delete', args_, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
-                                       rtn_list=True)
+    Returns (tuple):
+        (0, QoS spec <qos_id> is successfully deleted)
+        (1, <std_err>)
+        (2, QoS <qos_id> still exists in cinder qos-list after deletion)
 
-    return exit_code, cmd_output
+    """
+
+    LOG.info("Delete QoS spec {}".format(qos_id))
+
+    if check_first:
+        qos_list = get_qos_list()
+        if qos_id not in qos_list:
+            msg = "QoS spec {} does not exist in cinder qos-list. Do nothing."
+            LOG.info(msg)
+            return -1, msg
+
+    args_ = qos_id
+
+    if force is not None:
+        args_ = '--force {} '.format(force) + args_
+
+    code, output = cli.cinder('qos-delete', args_, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
+                              rtn_list=True)
+
+    if code == 1:
+        return code, output
+
+    post_qos_list = get_qos_list()
+    if qos_id in post_qos_list:
+        err_msg = "QoS {} still exists in cinder qos-list after deletion".format(qos_id)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        else:
+            raise exceptions.CinderError(err_msg)
+
+    succ_msg = "QoS spec {} is successfully deleted".format(qos_id)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def delete_qos_list(qos_ids, force=False, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Delete given list of QoS'
+
+    Args:
+        qos_ids (list|str):
+        force (bool):
+        check_first (bool):
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns:
+
+    """
+    if isinstance(qos_ids, str):
+        qos_ids = [qos_ids]
+
+    qos_ids_to_del = list(qos_ids)
+    if check_first:
+        if check_first:
+            existing_qos_list = get_qos_list()
+            qos_to_del_list = list(set(existing_qos_list) & set(qos_ids))
+            if not qos_to_del_list:
+                msg = "None of the QoS specs {} exist in cinder qos-list. Do nothing.".format(qos_ids)
+                LOG.info(msg)
+                return -1, msg
+
+    qos_delete_rejected_list = []
+    for qos in qos_ids_to_del:
+        args = '' if force is None else '--force {} '.format(force) + qos
+        code, output = cli.cinder('qos-delete', args, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
+                                  rtn_list=True)
+        if code > 0:
+            qos_delete_rejected_list.append(qos)
+
+    qos_list_to_check = list(set(qos_ids) - set(qos_delete_rejected_list))
+
+    qos_undeleted_list = []
+    if qos_list_to_check:
+        qos_undeleted_list = wait_for_qos_deleted(qos_ids=qos_list_to_check, fail_ok=fail_ok, con_ssh=con_ssh)[1]
+
+    if qos_delete_rejected_list or qos_undeleted_list:
+        err_msg = "Some QoS's failed to delete. cli rejected: {}. Still exist after deletion: {}".format(
+                qos_delete_rejected_list, qos_undeleted_list)
+
+        if fail_ok:
+            LOG.info(err_msg)
+            return 1, err_msg
+        else:
+            raise exceptions.CinderError(err_msg)
+
+    succ_msg = "QoS's successfully deleted: {}".format(qos_ids)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def wait_for_qos_deleted(qos_ids, timeout=10, check_interval=1, fail_ok=False, con_ssh=None):
+    """
+    Wait for given list of QoS to be gone from cinder qos-list
+    Args:
+        qos_ids (list):
+        timeout (int):
+        check_interval (int):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+
+    Returns (tuple):
+        (True, [])          All given QoS ids are gone from cinder qos-list
+        (False, [undeleted_qos_list])       Some given QoS' still exist in cinder qos-list
+
+    """
+
+    LOG.info("Waiting for QoS' to be deleted from system: {}".format(qos_ids))
+
+    qos_undeleted = list(qos_ids)
+    end_time = time.time() + timeout
+
+    while time.time() < end_time:
+        existing_qos_list = get_qos_list(con_ssh=con_ssh)
+        qos_undeleted = list(set(existing_qos_list) & set(qos_undeleted))
+
+        if not qos_undeleted:
+            msg = "QoS' all gone from cinder qos-list: {}".format(qos_ids)
+            LOG.info(msg)
+            return True, []
+
+        time.sleep(check_interval)
+
+    err_msg = "Timed out waiting for QoS' to be gone from cinder qos-list: {}".format(qos_undeleted)
+    if fail_ok:
+        LOG.warning(err_msg)
+        return False, qos_undeleted
+    else:
+        raise exceptions.CinderError(err_msg)
 
 
 def create_volume_type(vol_type_name=None, con_ssh=None):
@@ -558,12 +743,42 @@ def get_type_list(con_ssh=None):
     return vol_type_id
 
 
-def get_qos_list(con_ssh=None):
-    # must be an admin to perform cinder qos-list
-    table_ = table_parser.table(cli.cinder('qos-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    qos_specs_id = table_parser.get_values(table_, 'ID')
+def get_qos_list(rtn_val='id', ids=None, name=None, consumer=None, strict=True, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get qos list based on given filters
 
-    return qos_specs_id
+    Args:
+        rtn_val (str): 'id' or 'name'
+        ids (list): list of qos ids to filter out from
+        name (str): name of the qos' to filter for
+        consumer (str): consumer of the qos' to filter for
+        strict (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (list): list of qos IDs found. If not found, [] is returned
+
+    """
+
+    kwargs_raw = {
+        'ID': ids,
+        'Name': name,
+        'Consumer': consumer,
+    }
+
+    kwargs = {}
+    for key, val in kwargs_raw.items():
+        if val is not None:
+            kwargs[key] = val
+
+    table_ = table_parser.table(cli.cinder('qos-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    if kwargs:
+        table_ = table_parser.filter_table(table_, strict=strict, **kwargs)
+
+    qos_specs_ids = table_parser.get_values(table_, rtn_val)
+
+    return qos_specs_ids
 
 
 
