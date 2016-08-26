@@ -142,7 +142,7 @@ class ResourceCleanup:
 
         if volume_types:
             LOG.fixture_step("({}) Attempt to delete following volume_types: {}".format(scope, volume_types))
-            code, msg = cinder_helper.delete_volume_type(volume_types, fail_ok=True, auth_info=Tenant.ADMIN)
+            code, msg = cinder_helper.delete_volume_types(volume_types, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
 

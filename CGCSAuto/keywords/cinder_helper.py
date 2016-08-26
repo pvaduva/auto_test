@@ -588,7 +588,7 @@ def delete_qos(qos_id, force=None, check_first=True, fail_ok=False, auth_info=Te
     if check_first:
         qos_list = get_qos_list()
         if qos_id not in qos_list:
-            msg = "QoS spec {} does not exist in cinder qos-list. Do nothing."
+            msg = "QoS spec {} does not exist in cinder qos-list. Do nothing.".format(qos_id)
             LOG.info(msg)
             return -1, msg
 
@@ -637,13 +637,12 @@ def delete_qos_list(qos_ids, force=False, check_first=True, fail_ok=False, auth_
 
     qos_ids_to_del = list(qos_ids)
     if check_first:
-        if check_first:
-            existing_qos_list = get_qos_list()
-            qos_to_del_list = list(set(existing_qos_list) & set(qos_ids))
-            if not qos_to_del_list:
-                msg = "None of the QoS specs {} exist in cinder qos-list. Do nothing.".format(qos_ids)
-                LOG.info(msg)
-                return -1, msg
+        existing_qos_list = get_qos_list()
+        qos_to_del_list = list(set(existing_qos_list) & set(qos_ids))
+        if not qos_to_del_list:
+            msg = "None of the QoS specs {} exist in cinder qos-list. Do nothing.".format(qos_ids)
+            LOG.info(msg)
+            return -1, msg
 
     qos_delete_rejected_list = []
     for qos in qos_ids_to_del:
@@ -714,33 +713,184 @@ def wait_for_qos_deleted(qos_ids, timeout=10, check_interval=1, fail_ok=False, c
         raise exceptions.CinderError(err_msg)
 
 
-def create_volume_type(vol_type_name=None, con_ssh=None):
-    # must be an ADMIN to use volume type create
-    # option to make vol_type_name an optional variable and create arbitrary volume type?
+def create_volume_type(name=None, public=None, rtn_val='ID', fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Create a volume type with given name
 
-    if vol_type_name is None:
-        vol_type_name = 'default_vol_type_name'
+    Args:
+        name (str): name for the volume type
+        public (bool):
+        rtn_val (str): 'ID' or 'Name'
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
 
-    table_ = table_parser.table(cli.cinder('type-create', vol_type_name, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    vol_type_id = table_parser.get_values(table_, 'ID')[0]
+    Returns (tuple):
+        (0, <vol_type_id>)      - volume type created successfully
+        (1, <std_err>)          - cli rejected
+        (2, <vol_type_id>)      - volume type public flag is not as expected
 
-    return 0, vol_type_id
+    """
+
+    LOG.info("Creating volume type.")
+
+    if name is None:
+        name = 'vol_type_auto'
+
+    args = common.get_unique_name(name, get_volume_types())
+
+    if public is not None:
+        args = '--is-public {} {}'.format(public, args)
+
+    code, output = cli.cinder('type-create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                              rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    LOG.info("Check is_public property for create volume type")
+    table_ = table_parser.table(output)
+    vol_type = table_parser.get_column(table_, rtn_val)[0]
+
+    actual_pub = table_parser.get_column(table_, 'Is_Public')[0]
+    expt_pub = 'False' if public is False else 'True'
+    if actual_pub != expt_pub:
+        err_msg = "volume type is_public should be {} instead of {}".format(expt_pub, actual_pub)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, vol_type
+        else:
+            raise exceptions.CinderError(err_msg)
+
+    LOG.info("Volume type is created successfully")
+    return 0, vol_type
 
 
-def delete_volume_type(vol_type_id, fail_ok=True, auth_info=Tenant.ADMIN,  con_ssh=None):
-    # must be an ADMIN to use volume type delete
+def delete_volume_type(vol_type_id, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN,  con_ssh=None):
+    """
+    Delete given volume type
 
-    exit_code, cmd_output = cli.cinder('type-delete', vol_type_id, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
-    return exit_code, cmd_output
+    Args:
+        vol_type_id:
+        check_first:
+        fail_ok:
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+        (-1, Volume type <id> does not exist in cinder type-list. Do nothing.)
+        (0, Volume type is successfully deleted)
+        (1, <std_err>)
+        (2, Volume type <id> still exists in cinder type-list after deletion)
+
+    """
+
+    LOG.info("Delete volume type {} started".format(vol_type_id))
+
+    if check_first:
+        vol_types = get_volume_types()
+        if vol_type_id not in vol_types:
+            msg = "Volume type {} does not exist in cinder type-list. Do nothing.".format(vol_type_id)
+            LOG.info(msg)
+            return -1, msg
+
+    code, output = cli.cinder('type-delete', vol_type_id, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
+                              rtn_list=True)
+
+    if code == 1:
+        return code, output
+
+    post_vol_types = get_volume_types()
+    if vol_type_id in post_vol_types:
+        err_msg = "Volume type {} still exists in cinder type-list after deletion".format(vol_type_id)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        else:
+            raise exceptions.CinderError(err_msg)
+
+    succ_msg = "Volume type is successfully deleted"
+    LOG.info(succ_msg)
+    return 0, succ_msg
 
 
-def get_type_list(con_ssh=None):
-    # return a table of volume type list
-    table_ = table_parser.table(cli.cinder('type-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+def delete_volume_types(vol_types, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Delete given volume type
 
-    vol_type_id = table_parser.get_values(table_, 'ID')
+    Args:
+        vol_types (list): list of volume type id's to delete
+        check_first (bool):
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
 
-    return vol_type_id
+    Returns (tuple):
+        (-1, None of the volume types <ids> exist in cinder qos-list. Do nothing.)
+        (0, Volume types successfully deleted: <ids>)
+        (1, <std_err>)
+        (2, Volume types delete rejected: <ids>; volume types still in cinder type-list after deletion: <ids>)
+
+    """
+
+    LOG.info("Delete volume types started")
+
+    vol_types_to_del = list(vol_types)
+    if check_first:
+        existing_vol_types = get_volume_types()
+        vol_types_to_del = list(set(existing_vol_types) & set(vol_types))
+        if not vol_types_to_del:
+            msg = "None of the volume types {} exist in cinder qos-list. Do nothing.".format(vol_types)
+            LOG.info(msg)
+            return -1, msg
+
+    types_rejected = []
+    for vol_type in vol_types_to_del:
+        code, output = cli.cinder('type-delete', vol_type, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info,
+                                  rtn_list=True)
+        if code == 1:
+            types_rejected.append(vol_type)
+
+    LOG.info("Check volume types are gone from cinder type-list")
+    types_to_check = list(set(vol_types_to_del) - set(types_rejected))
+    types_undeleted = []
+    if types_to_check:
+        post_del_types = get_volume_types()
+        types_undeleted = list(set(post_del_types) & set(types_to_check))
+
+    if types_rejected or types_undeleted:
+        err_msg = "Volume types delete rejected: {}; volume types still in cinder type-list after deletion: {}".\
+            format(types_rejected, types_undeleted)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        else:
+            raise exceptions.CinderError(err_msg)
+
+    succ_msg = "Volume types successfully deleted: {}".format(vol_types)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def get_volume_types(ids=None, public=None, name=None, strict=True, rtn_val='ID', con_ssh=None, auth_info=Tenant.ADMIN):
+
+    table_ = table_parser.table(cli.cinder('type-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    filters = {}
+    if ids is not None:
+        filters['ID'] = ids
+    if public is not None:
+        filters['Is_Public'] = public
+
+    if filters:
+        table_ = table_parser.filter_table(table_, **filters)
+
+    if name is not None:
+        table_ = table_parser.filter_table(table_, strict=strict, **{'Name': name})
+
+    vol_types = table_parser.get_column(table_, rtn_val)
+
+    return vol_types
 
 
 def get_qos_list(rtn_val='id', ids=None, name=None, consumer=None, strict=True, con_ssh=None, auth_info=Tenant.ADMIN):
