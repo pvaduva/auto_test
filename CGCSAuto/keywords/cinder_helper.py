@@ -1,11 +1,13 @@
 import random
 import time
 
-from consts.auth import Tenant
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
+
+from consts.auth import Tenant
 from consts.timeout import VolumeTimeout
-from keywords import glance_helper, keystone_helper
+
+from keywords import common, glance_helper, keystone_helper
 
 
 def get_any_volume(status='available', bootable=True, auth_info=None, con_ssh=None, new_name=None):
@@ -496,72 +498,437 @@ def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     cli.cinder('quota-update', args_, ssh_client=con_ssh, auth_info=auth_info)
 
 
-def create_qos_specs(qos_specs_name=None, con_ssh=None, **kwargs):
+def create_qos_specs(qos_name=None, fail_ok=False, consumer=None, auth_info=Tenant.ADMIN, con_ssh=None, **specs):
+    """
+    Create QoS with given name and specs
 
-    if qos_specs_name is None:
-        qos_specs_name = 'default_qos_spec_name'
+    Args:
+        qos_name (str):
+        fail_ok (bool):
+        consumer (str): Valid consumer of QoS specs are: ['front-end', 'back-end', 'both']
+        auth_info (dict):
+        con_ssh (SSHClient):
+        **specs: QoS specs
+            format: **{<spec_name1>: <spec_value1>, <spec_name2>: <spec_value2>}
 
-    if not kwargs:
-        raise ValueError("Please specify at least one key=value pair via kwargs.")
+    Returns (tuple):
+        (0, QoS <id> created successfully with specs: <specs dict>)
+        (1, <std_err>)
 
-    args_ = qos_specs_name
+    """
+    if consumer is None and not specs:
+        raise ValueError("'consumer' or 'specs' have to be specified.")
 
-    for key in kwargs:
-        args_ += ' {}={}'.format(key, kwargs[key])
+    valid_consumers = ['front-end', 'back-end', 'both']
+    if consumer is not None and consumer.lower() not in valid_consumers:
+        raise ValueError("Invalid consumer value {}. Choose from: {}".format(consumer, valid_consumers))
 
-    table_ = table_parser.table(cli.cinder('qos-create', args_, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    qos_specs_id = table_parser.get_value_two_col_table(table_, 'id')
-    # qos_specs_name = table_parser.get_value_two_col_table(table_, 'name')
+    if qos_name is None:
+        qos_name = 'qos-auto'
+    qos_name = common.get_unique_name(qos_name, get_qos_list(rtn_val='name'), resource_type='qos')
+    args_ = qos_name
 
-    return 0, qos_specs_id
+    if consumer:
+        specs['consumer'] = consumer
 
+    LOG.info("Creating QoS {} with specs: {}".format(qos_name, specs))
 
-def delete_qos_specs(qos_specs_id, force=False, con_ssh=None):
+    for key in specs:
+        args_ += ' {}={}'.format(key, specs[key])
 
-    args_ = ''
-    args_ += ' --force {} '.format(force)
-    args_ += qos_specs_id
+    code, output = cli.cinder('qos-create', args_, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                              fail_ok=fail_ok)
 
-    exit_code, cmd_output = cli.cinder('qos-delete', args_, fail_ok=False, ssh_client=con_ssh, auth_info=Tenant.ADMIN,
-                                       rtn_list=True)
+    if code > 0:
+        return 1, output
 
-    return exit_code, cmd_output
+    LOG.info("Check created QoS specs are correct")
+    qos_tab = table_parser.table(output)
+    post_qos_specs = eval(table_parser.get_value_two_col_table(qos_tab, 'specs'))
+    post_consumer = table_parser.get_value_two_col_table(qos_tab, 'consumer')
 
+    for spec_name in specs:
+        expected_val = str(specs[spec_name])
+        if spec_name == 'consumer':
+            actual_val = post_consumer
+        else:
+            actual_val = post_qos_specs[spec_name]
 
-def create_volume_type(vol_type_name=None, con_ssh=None):
-    # must be an ADMIN to use volume type create
-    # option to make vol_type_name an optional variable and create arbitrary volume type?
+        if expected_val != actual_val:
+            err_msg = "{} is not as expected. Expect: {}, actual: {}".format(spec_name, expected_val, actual_val)
+            raise exceptions.CinderError(err_msg)
 
-    if vol_type_name is None:
-        vol_type_name = 'default_vol_type_name'
+    qos_id = table_parser.get_value_two_col_table(qos_tab, 'id')
 
-    table_ = table_parser.table(cli.cinder('type-create', vol_type_name, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    vol_type_id = table_parser.get_values(table_, 'ID')[0]
-
-    return 0, vol_type_id
-
-
-def delete_volume_type(vol_type_id, con_ssh=None):
-    # must be an ADMIN to use volume type delete
-
-    cli.cinder('type-delete', vol_type_id, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
-
-
-def get_type_list(con_ssh=None):
-    # return a table of volume type list
-    table_ = table_parser.table(cli.cinder('type-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-
-    vol_type_id = table_parser.get_values(table_, 'ID')
-
-    return vol_type_id
+    LOG.info("QoS {} created successfully with specs: {}".format(qos_id, specs))
+    return 0, qos_id
 
 
-def get_qos_list(con_ssh=None):
-    # must be an admin to perform cinder qos-list
-    table_ = table_parser.table(cli.cinder('qos-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    qos_specs_id = table_parser.get_values(table_, 'ID')
+def delete_qos(qos_id, force=None, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Delete given QoS via cinder qos-delete
 
-    return qos_specs_id
+    Args:
+        qos_id (str):
+        force (bool):
+        check_first (bool):
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple):
+        (0, QoS spec <qos_id> is successfully deleted)
+        (1, <std_err>)
+        (2, QoS <qos_id> still exists in cinder qos-list after deletion)
+
+    """
+
+    LOG.info("Delete QoS spec {}".format(qos_id))
+
+    if check_first:
+        qos_list = get_qos_list()
+        if qos_id not in qos_list:
+            msg = "QoS spec {} does not exist in cinder qos-list. Do nothing.".format(qos_id)
+            LOG.info(msg)
+            return -1, msg
+
+    args_ = qos_id
+
+    if force is not None:
+        args_ = '--force {} '.format(force) + args_
+
+    code, output = cli.cinder('qos-delete', args_, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
+                              rtn_list=True)
+
+    if code == 1:
+        return code, output
+
+    post_qos_list = get_qos_list()
+    if qos_id in post_qos_list:
+        err_msg = "QoS {} still exists in cinder qos-list after deletion".format(qos_id)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        else:
+            raise exceptions.CinderError(err_msg)
+
+    succ_msg = "QoS spec {} is successfully deleted".format(qos_id)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def delete_qos_list(qos_ids, force=False, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Delete given list of QoS'
+
+    Args:
+        qos_ids (list|str):
+        force (bool):
+        check_first (bool):
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns:
+
+    """
+    if isinstance(qos_ids, str):
+        qos_ids = [qos_ids]
+
+    qos_ids_to_del = list(qos_ids)
+    if check_first:
+        existing_qos_list = get_qos_list()
+        qos_to_del_list = list(set(existing_qos_list) & set(qos_ids))
+        if not qos_to_del_list:
+            msg = "None of the QoS specs {} exist in cinder qos-list. Do nothing.".format(qos_ids)
+            LOG.info(msg)
+            return -1, msg
+
+    qos_delete_rejected_list = []
+    for qos in qos_ids_to_del:
+        args = '' if force is None else '--force {} '.format(force) + qos
+        code, output = cli.cinder('qos-delete', args, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
+                                  rtn_list=True)
+        if code > 0:
+            qos_delete_rejected_list.append(qos)
+
+    qos_list_to_check = list(set(qos_ids) - set(qos_delete_rejected_list))
+
+    qos_undeleted_list = []
+    if qos_list_to_check:
+        qos_undeleted_list = wait_for_qos_deleted(qos_ids=qos_list_to_check, fail_ok=fail_ok, con_ssh=con_ssh)[1]
+
+    if qos_delete_rejected_list or qos_undeleted_list:
+        err_msg = "Some QoS's failed to delete. cli rejected: {}. Still exist after deletion: {}".format(
+                qos_delete_rejected_list, qos_undeleted_list)
+
+        if fail_ok:
+            LOG.info(err_msg)
+            return 1, err_msg
+        else:
+            raise exceptions.CinderError(err_msg)
+
+    succ_msg = "QoS's successfully deleted: {}".format(qos_ids)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def wait_for_qos_deleted(qos_ids, timeout=10, check_interval=1, fail_ok=False, con_ssh=None):
+    """
+    Wait for given list of QoS to be gone from cinder qos-list
+    Args:
+        qos_ids (list):
+        timeout (int):
+        check_interval (int):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+
+    Returns (tuple):
+        (True, [])          All given QoS ids are gone from cinder qos-list
+        (False, [undeleted_qos_list])       Some given QoS' still exist in cinder qos-list
+
+    """
+
+    LOG.info("Waiting for QoS' to be deleted from system: {}".format(qos_ids))
+
+    qos_undeleted = list(qos_ids)
+    end_time = time.time() + timeout
+
+    while time.time() < end_time:
+        existing_qos_list = get_qos_list(con_ssh=con_ssh)
+        qos_undeleted = list(set(existing_qos_list) & set(qos_undeleted))
+
+        if not qos_undeleted:
+            msg = "QoS' all gone from cinder qos-list: {}".format(qos_ids)
+            LOG.info(msg)
+            return True, []
+
+        time.sleep(check_interval)
+
+    err_msg = "Timed out waiting for QoS' to be gone from cinder qos-list: {}".format(qos_undeleted)
+    if fail_ok:
+        LOG.warning(err_msg)
+        return False, qos_undeleted
+    else:
+        raise exceptions.CinderError(err_msg)
+
+
+def create_volume_type(name=None, public=None, rtn_val='ID', fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Create a volume type with given name
+
+    Args:
+        name (str): name for the volume type
+        public (bool):
+        rtn_val (str): 'ID' or 'Name'
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple):
+        (0, <vol_type_id>)      - volume type created successfully
+        (1, <std_err>)          - cli rejected
+        (2, <vol_type_id>)      - volume type public flag is not as expected
+
+    """
+
+    LOG.info("Creating volume type.")
+
+    if name is None:
+        name = 'vol_type_auto'
+
+    args = common.get_unique_name(name, get_volume_types())
+
+    if public is not None:
+        args = '--is-public {} {}'.format(public, args)
+
+    code, output = cli.cinder('type-create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                              rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    LOG.info("Check is_public property for create volume type")
+    table_ = table_parser.table(output)
+    vol_type = table_parser.get_column(table_, rtn_val)[0]
+
+    actual_pub = table_parser.get_column(table_, 'Is_Public')[0]
+    expt_pub = 'False' if public is False else 'True'
+    if actual_pub != expt_pub:
+        err_msg = "volume type is_public should be {} instead of {}".format(expt_pub, actual_pub)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, vol_type
+        else:
+            raise exceptions.CinderError(err_msg)
+
+    LOG.info("Volume type is created successfully")
+    return 0, vol_type
+
+
+def delete_volume_type(vol_type_id, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN,  con_ssh=None):
+    """
+    Delete given volume type
+
+    Args:
+        vol_type_id:
+        check_first:
+        fail_ok:
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+        (-1, Volume type <id> does not exist in cinder type-list. Do nothing.)
+        (0, Volume type is successfully deleted)
+        (1, <std_err>)
+        (2, Volume type <id> still exists in cinder type-list after deletion)
+
+    """
+
+    LOG.info("Delete volume type {} started".format(vol_type_id))
+
+    if check_first:
+        vol_types = get_volume_types()
+        if vol_type_id not in vol_types:
+            msg = "Volume type {} does not exist in cinder type-list. Do nothing.".format(vol_type_id)
+            LOG.info(msg)
+            return -1, msg
+
+    code, output = cli.cinder('type-delete', vol_type_id, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
+                              rtn_list=True)
+
+    if code == 1:
+        return code, output
+
+    post_vol_types = get_volume_types()
+    if vol_type_id in post_vol_types:
+        err_msg = "Volume type {} still exists in cinder type-list after deletion".format(vol_type_id)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        else:
+            raise exceptions.CinderError(err_msg)
+
+    succ_msg = "Volume type is successfully deleted"
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def delete_volume_types(vol_types, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Delete given volume type
+
+    Args:
+        vol_types (list): list of volume type id's to delete
+        check_first (bool):
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple):
+        (-1, None of the volume types <ids> exist in cinder qos-list. Do nothing.)
+        (0, Volume types successfully deleted: <ids>)
+        (1, <std_err>)
+        (2, Volume types delete rejected: <ids>; volume types still in cinder type-list after deletion: <ids>)
+
+    """
+
+    LOG.info("Delete volume types started")
+
+    vol_types_to_del = list(vol_types)
+    if check_first:
+        existing_vol_types = get_volume_types()
+        vol_types_to_del = list(set(existing_vol_types) & set(vol_types))
+        if not vol_types_to_del:
+            msg = "None of the volume types {} exist in cinder qos-list. Do nothing.".format(vol_types)
+            LOG.info(msg)
+            return -1, msg
+
+    types_rejected = []
+    for vol_type in vol_types_to_del:
+        code, output = cli.cinder('type-delete', vol_type, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info,
+                                  rtn_list=True)
+        if code == 1:
+            types_rejected.append(vol_type)
+
+    LOG.info("Check volume types are gone from cinder type-list")
+    types_to_check = list(set(vol_types_to_del) - set(types_rejected))
+    types_undeleted = []
+    if types_to_check:
+        post_del_types = get_volume_types()
+        types_undeleted = list(set(post_del_types) & set(types_to_check))
+
+    if types_rejected or types_undeleted:
+        err_msg = "Volume types delete rejected: {}; volume types still in cinder type-list after deletion: {}".\
+            format(types_rejected, types_undeleted)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        else:
+            raise exceptions.CinderError(err_msg)
+
+    succ_msg = "Volume types successfully deleted: {}".format(vol_types)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def get_volume_types(ids=None, public=None, name=None, strict=True, rtn_val='ID', con_ssh=None, auth_info=Tenant.ADMIN):
+
+    table_ = table_parser.table(cli.cinder('type-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    filters = {}
+    if ids is not None:
+        filters['ID'] = ids
+    if public is not None:
+        filters['Is_Public'] = public
+
+    if filters:
+        table_ = table_parser.filter_table(table_, **filters)
+
+    if name is not None:
+        table_ = table_parser.filter_table(table_, strict=strict, **{'Name': name})
+
+    vol_types = table_parser.get_column(table_, rtn_val)
+
+    return vol_types
+
+
+def get_qos_list(rtn_val='id', ids=None, name=None, consumer=None, strict=True, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get qos list based on given filters
+
+    Args:
+        rtn_val (str): 'id' or 'name'
+        ids (list): list of qos ids to filter out from
+        name (str): name of the qos' to filter for
+        consumer (str): consumer of the qos' to filter for
+        strict (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (list): list of qos IDs found. If not found, [] is returned
+
+    """
+
+    kwargs_raw = {
+        'ID': ids,
+        'Name': name,
+        'Consumer': consumer,
+    }
+
+    kwargs = {}
+    for key, val in kwargs_raw.items():
+        if val is not None:
+            kwargs[key] = val
+
+    table_ = table_parser.table(cli.cinder('qos-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    if kwargs:
+        table_ = table_parser.filter_table(table_, strict=strict, **kwargs)
+
+    qos_specs_ids = table_parser.get_values(table_, rtn_val)
+
+    return qos_specs_ids
 
 
 

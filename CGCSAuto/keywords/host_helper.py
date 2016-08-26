@@ -164,7 +164,8 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
                     computes += controllers
 
                 if check_hypervisor_up and computes:
-                    res, hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)
+                    res, hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh,
+                                                                        timeout=90)
                     if not res:
                         err_msg = "Hosts not up in nova hypervisor-list: {}".format(hosts_hypervisordown)
                         if fail_ok:
@@ -173,7 +174,8 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
                             raise exceptions.HostPostCheckFailed(err_msg)
 
                 if check_webservice_up and controllers:
-                    res, hosts_webdown = wait_for_webservice_up(controllers, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)
+                    res, hosts_webdown = wait_for_webservice_up(controllers, fail_ok=fail_ok, con_ssh=con_ssh,
+                                                                timeout=90)
                     if not res:
                         err_msg = "Hosts web-services not active in system servicegroup-list: {}".format(hosts_webdown)
                         if fail_ok:
@@ -1232,7 +1234,6 @@ def compare_host_to_cpuprofile(host, profile_uuid, fail_ok=False, con_ssh=None, 
                 LOG.warning(msg + str(i))
                 return 2, msg + str(i)
 
-
     msg = "The host and cpu profile have the same information"
     return 0, msg
 
@@ -1439,23 +1440,203 @@ def check_host_local_backing_type(host, storage_type='image', con_ssh=None):
     return True
 
 
-def set_host_local_backing_type(host, inst_type='image',vol_group='noval-local',unlock_host=True, con_ssh=None):
-    lock_host(host)
-    lvg_args = "-b "+inst_type+" "+host+" "+vol_group
-    # config lvg parameter for instance backing either image/lvm
-    # sleep before for a few second before moidfiy? this is too much..
-    cli.system('host-lvg-modify', lvg_args, auth_info=Tenant.ADMIN, fail_ok=False)
+def modify_host_lvg(host, lvm='nova-local', inst_backing=None, inst_lv_size=None, concurrent_ops=None, lock=True,
+                    unlock=True, fail_ok=False, check_first=True, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Modify host lvg
 
-    # unlock the node
-    if unlock_host:
-        # https://jira.wrs.com:8443/browse/CGTS-4523 need to check for hypervisor or sleep20 sec
-        unlock_host(host,check_hypervisor_up=True)
-        verify_backing = check_host_local_backing_type(host, storage_type=inst_type, con_ssh=None),
-        if verify_backing:
-            return 0, "host local backing was configured and verification passed"
-        return 1, "host_local backing was configured but verification failed "
+    Args:
+        host (str): host to modify lvg for
+        lvm (str): local volume group name. nova-local by default
+        inst_backing (str): image, lvm, or remote
+        inst_lv_size (int): instance lv size in MiB
+        concurrent_ops (int): number of current disk operations
+        lock (bool): whether or not to lock host before modify
+        unlock (bool): whether or not to unlock host and verify config after modify
+        fail_ok (bool): whether or not raise exception if host-lvg-modify cli got rejected
+        auth_info (dict):
+        con_ssh (SSHClient):
 
-    return 2, "host local backing was configured and host still in locked state"
+    Returns (tuple):
+        (0, "Host is configured")       host configured
+        (1, <stderr>)
+        (2, )
+
+    """
+
+    if inst_backing is not None:
+        if 'image' in inst_backing:
+            inst_backing = 'image'
+        elif 'lvm' in inst_backing:
+            inst_backing = 'lvm'
+            # if inst_lv_size is None:
+            #     raise ValueError("Instance local volume size has to be provided when instance backing is 'lvm'")
+        elif 'remote' in inst_backing:
+            inst_backing = 'remote'
+        else:
+            raise ValueError("Invalid instance backing provided. Choose from: image, lvm, remote.")
+
+    def check_host_config(lvg_tab=None):
+        err_msg = ''
+        if lvg_tab is None:
+            lvg_tab = table_parser.table(cli.system('host-lvg-show', '{} {}'.format(host, lvm), ssh_client=con_ssh))
+
+        if inst_backing is not None:
+            post_inst_backing = eval(table_parser.get_value_two_col_table(lvg_tab, 'parameters'))['instance_backing']
+            if inst_backing != post_inst_backing:
+                err_msg += "Instance backing is {} instead of {}\n".format(post_inst_backing, inst_backing)
+
+        if inst_lv_size is not None:
+            post_inst_lv_size = int(table_parser.get_value_two_col_table(lvg_tab, 'lvm_vg_size'))
+            if int(inst_lv_size) != post_inst_lv_size:
+                err_msg += "Instance local volume size is {} instead of {}\n".format(post_inst_lv_size, inst_lv_size)
+
+        if concurrent_ops is not None:
+            post_concurrent_ops = eval(table_parser.get_value_two_col_table(lvg_tab, 'parameters'))[
+                'concurrent_disk_operations']
+
+            if int(concurrent_ops) != post_concurrent_ops:
+                err_msg += "Concurrent disk operations is {} instead of {}".format(post_concurrent_ops,
+                                                                                   concurrent_ops)
+        return err_msg
+
+    args_dict = {
+        '--instance_backing': inst_backing,
+        '--instances_lv_size_mib': inst_lv_size,
+        '--concurrent_disk_operations': concurrent_ops
+    }
+    args = ''
+
+    for key, val in args_dict.items():
+        if val is not None:
+            args += ' {} {}'.format(key, val)
+
+    if not args:
+        raise ValueError("At least one of the values should be supplied: inst_backing, inst_lv_size, concurrent_ops'")
+
+    args += ' {} {}'.format(host, lvm)
+
+    if check_first:
+        pre_check_err = check_host_config()
+        if not pre_check_err:
+            msg = "Host already configured with requested lvg values. Do nothing."
+            LOG.info(msg)
+            return -1, msg
+
+    if lock:
+        lock_host(host, con_ssh=con_ssh)
+
+    LOG.info("Modifying host-lvg for {} with params: {}".format(host, args))
+    code, output = cli.system('host-lvg-modify', args, fail_ok=fail_ok, rtn_list=True, auth_info=auth_info,
+                              ssh_client=con_ssh)
+
+    def check_host_config(lvg_tab=None):
+        err_msg = ''
+        if lvg_tab is None:
+            lvg_tab = table_parser.table(cli.system('host-lvg-show', '{} {}'.format(host, lvm), ssh_client=con_ssh))
+
+        if inst_backing is not None:
+            post_inst_backing = eval(table_parser.get_value_two_col_table(lvg_tab, 'parameters'))['instance_backing']
+            if inst_backing != post_inst_backing:
+                err_msg += "Instance backing is {} instead of {}\n".format(post_inst_backing, inst_backing)
+
+        if inst_lv_size is not None:
+            post_inst_lv_size = int(table_parser.get_value_two_col_table(lvg_tab, 'lvm_vg_size'))
+            if int(inst_lv_size) != post_inst_lv_size:
+                err_msg += "Instance local volume size is {} instead of {}\n".format(post_inst_lv_size, inst_lv_size)
+
+        if concurrent_ops is not None:
+            post_concurrent_ops = eval(table_parser.get_value_two_col_table(lvg_tab, 'parameters'))[
+                'concurrent_disk_operations']
+
+            if int(concurrent_ops) != post_concurrent_ops:
+                err_msg += "Concurrent disk operations is {} instead of {}".format(post_concurrent_ops,
+                                                                                   concurrent_ops)
+        return err_msg
+
+    err = ''
+    if code == 0:
+        err = check_host_config(table_parser.table(output))
+        if err:
+            err = "host-lvg-modify output check failed. " + err
+            rtn_code = 2
+
+    if unlock:
+        unlock_host(host, con_ssh=con_ssh)
+
+        if not err:
+            LOG.info("Checking host lvg configurations are applied correctly after host unlock")
+            err = check_host_config()
+            if err:
+                err = "Host lvg config check failed after host unlock. " + err
+                rtn_code = 3
+
+    if code == 1:
+        return 1, output
+
+    if err:
+        if fail_ok:
+            LOG.warning(err)
+            return rtn_code, err
+        else:
+            raise exceptions.HostPostCheckFailed(err)
+
+    return 0, "Host is configured successfully"
+
+
+def set_host_storage_backing(host, inst_backing, lvm='nova-local', lock=True, unlock=True, wait_for_host_aggregate=True,
+                             fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+
+    Args:
+        host (str): host to modify lvg for
+        lvm (str): local volume group name. nova-local by default
+        inst_backing (str): image, lvm, or remote
+        wait_for_host_aggregate (bool): Whether or not wait for host to appear in host-aggregate for specified backing
+        lock (bool): whether or not to lock host before modify
+        unlock (bool): whether or not to unlock host and verify config after modify
+        fail_ok (bool): whether or not raise exception if host-lvg-modify cli got rejected
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns:
+
+    """
+    if wait_for_host_aggregate and not unlock:
+        raise ValueError("'wait_for_host_aggregate=True' requires 'unlock=True'")
+
+    code, output = modify_host_lvg(host, lvm=lvm, inst_backing=inst_backing, lock=lock, unlock=unlock, fail_ok=fail_ok,
+                                   auth_info=auth_info, con_ssh=con_ssh)
+    if code > 0:
+        return code, output
+
+    if wait_for_host_aggregate:
+        res = wait_for_host_in_aggregate(host=host, storage_backing=inst_backing, fail_ok=fail_ok)
+        if not res:
+            err = "Host {} did not appear in {} host-aggregate within timeout".format(host, inst_backing)
+            return 4, err
+
+    return 0, "{} storage backing is successfully set to {}".format(host, inst_backing)
+
+
+def wait_for_host_in_aggregate(host, storage_backing, timeout=120, check_interval=3, fail_ok=False, con_ssh=None):
+
+    endtime = time.time() + timeout
+    while time.time() < endtime:
+        hosts_with_backing = get_hosts_by_storage_aggregate(storage_backing=storage_backing, con_ssh=con_ssh)
+        if host in hosts_with_backing:
+            LOG.info("{} appeared in host-aggregate for {} backing".format(host, storage_backing))
+            return True
+
+        time.sleep(check_interval)
+
+    err_msg = "Timed out waiting for {} to appear in {} host-aggregate".format(host, storage_backing)
+    if fail_ok:
+        LOG.warning(err_msg)
+        return False
+    else:
+        raise exceptions.HostError(err_msg)
+
 
 def is_host_local_image_backing(host, con_ssh=None):
     return check_host_local_backing_type(host, storage_type='image', con_ssh=con_ssh)
@@ -1702,8 +1883,7 @@ def get_vcpus_for_instance_via_virsh(host_ssh, instance_name, rtn_list=False):
     Args:
         host_ssh (SSHFromSSH):
         instance_name (str):
-        vm_id (str):
-        con_ssh (SSHClient):
+        rtn_list (bool):
 
     Returns (list|dict): list of vcpus ids used by specified instance such as [8, 9], or {0: [8], 1: [9]}
 

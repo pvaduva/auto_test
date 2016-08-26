@@ -78,7 +78,7 @@ def test_ping_between_two_vms(guest_os, ubuntu_image):
 
 @mark.usefixtures('centos7_image', 'centos6_image', 'ubuntu_image')
 @mark.parametrize('guest_os', [
-    'centos7',  # image has issue cloudinit always fails
+    'centos7',
     'centos6',
     'ubuntu'
 ])

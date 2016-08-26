@@ -4,3 +4,5 @@ class SkipReason:
     MORE_THAN_ONE_HT_HOSTS = "More than one hyperthreaded hosts available"
     LESS_THAN_TWO_HYPERVISORS = "Less than two hypervisors available"
     CPE_DETECTED = "Skip for small footprint lab"
+    NO_HOST_WITH_BACKING = "No host with {} instance storage backing exists on system"
+    LESS_THAN_TWO_HOSTS_WITH_BACKING = "Less than two hosts with {} instance storage backing exist on system"

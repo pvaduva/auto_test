@@ -5,8 +5,7 @@
 
 
 from pytest import fixture, mark, skip
-import ast
-import random
+import time
 
 from utils import cli
 from utils.ssh import ControllerClient
@@ -18,17 +17,7 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-def get_host_aggregate(host):
-    #retrieve the host is either local_lvm or local_image
-    args = host + ' nova-local'
-    table_ = table_parser.table(cli.system('host-lvg-show', args, auth_info=Tenant.ADMIN, fail_ok=False))
-
-    instance_backing = table_parser.get_value_two_col_table(table_,'parameters')
-    inst_back = ast.literal_eval(instance_backing)['instance_backing']
-
-    return inst_back
-
-def is_enough_4k_page_memory():
+def ensure_sufficient_4k_pages():
     """
     Check if there is enough 4k pages on any compute node on any processors is a bit hassle
 
@@ -36,17 +25,23 @@ def is_enough_4k_page_memory():
 
     """
     # check if any 4k pages greater than 600000 means more than 2G(~536871 4k pages) total.
-    check = True
-    for host in host_helper.get_hypervisors():
+
+    for host in host_helper.get_hypervisors(state='up', status='enabled'):
 
         proc0_num_4k_page = int(system_helper.get_host_mem_values(host, ['vm_total_4K'], proc_id=0)[0])
         proc1_num_4k_page = int(system_helper.get_host_mem_values(host, ['vm_total_4K'], proc_id=1)[0])
         print(proc0_num_4k_page,proc1_num_4k_page)
         if proc0_num_4k_page < 600000 and proc1_num_4k_page < 600000 :
+            if system_helper.get_active_controller_name() == host:
+                host_helper.swact_host()
+                time.sleep(30)
+                host_helper.lock_host(host)
+                time.sleep(30)
             host_helper.lock_host(host)
             # chose to set 4k page of proc1 to 600000
             system_helper.set_host_4k_pages(host, proc_id=1, smallpage_num=600000)
-            host_helper.unlock_host(host, check_hypervisor_up=True)
+            host_helper.unlock_host(host, check_hypervisor_up=True, check_webservice_up=True)
+
 
 @fixture(scope='module')
 def hosts_per_stor_backing():
@@ -57,6 +52,7 @@ def hosts_per_stor_backing():
         skip("No two hosts have the same storage backing")
 
     return hosts_per_backing
+
 
 @mark.parametrize(
     "boot_source", [
@@ -88,12 +84,12 @@ def test_4k_page_vm(boot_source):
     """
 
     flavor_id = nova_helper.create_flavor()[1]
+    ResourceCleanup.add('flavor', flavor_id, scope='module')
     pagesize_spec = {'hw:mem_page_size': 'small'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **pagesize_spec)
-    ResourceCleanup.add('flavor', flavor_id, scope='module')
 
-    # verify there is enough 4k pages on compute nodes to create 4k page flavor
-    is_enough_4k_page_memory()
+    # Ensure there is enough 4k pages on compute nodes to create 4k page flavor
+    ensure_sufficient_4k_pages()
 
     vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
@@ -113,15 +109,14 @@ def test_4k_page_vm(boot_source):
                                         "However, output is {} ".format(attribute[2])
 
 
-@mark.skipif(True, reason="Evacuation JIRA CGTS-4972")
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'block_mig'), [
     mark.p2(('local_image', 0, 0, None, 1, 'volume', True)),
-    mark.p1(('local_image', 0, 0, None, 1, 'image',True)),
+    mark.p1(('local_image', 0, 0, None, 1, 'image', True)),
     mark.p1(('local_image', 0, 0, None, 3, 'image', True)),
     mark.p2(('local_lvm', 0, 0, None, 1, 'volume', True)),
-    mark.p2(('local_lvm', 0, 0, None, 1, 'image',True)),
+    mark.p2(('local_lvm', 0, 0, None, 1, 'image', True)),
     mark.p2(('remote', 1, 1, None, 1, 'volume', True)),
-    mark.p2(('remote', 0, 0, None, 2, 'image',True)),
+    mark.p2(('remote', 0, 0, None, 2, 'image', True)),
 ])
 def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, block_mig,
                                   hosts_per_stor_backing):
@@ -129,6 +124,7 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
         skip("Less than two hosts have {} storage backing".format(storage_backing))
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type)
+    ResourceCleanup.add('vm', vm_id, scope='function')
 
     # make sure the VM is up and pingable from natbox
     LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
@@ -155,7 +151,7 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
     post_vm_host = nova_helper.get_vm_host(vm_id)
     assert prev_vm_host != post_vm_host
 
-@mark.skipif(True, reason="Evacuation JIRA CGTS-4972")
+
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type'), [
     mark.p2(('local_image', 0, 0, None, 1, 'volume')),
     mark.p2(('local_lvm', 0, 0, None, 1, 'volume')),
@@ -169,6 +165,7 @@ def test_cold_migrate_4k_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm
         skip("Less than two hosts have {} storage backing".format(storage_backing))
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type)
+    ResourceCleanup.add('vm', vm_id)
 
     # make sure the VM is up and pingable from natbox
     LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
@@ -205,7 +202,8 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
     ResourceCleanup.add('flavor', flavor_id)
 
     specs = {FlavorSpec.STORAGE_BACKING: storage_backing,
-             'hw:mem_page_size': 'small'}
+             FlavorSpec.MEM_PAGE_SIZE: 'small'}
+
     if cpu_pol is not None:
         specs[FlavorSpec.CPU_POLICY] = cpu_pol
 
@@ -213,7 +211,7 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
 
     # verify there is enough 4k pages on compute nodes to create 4k page flavor
-    is_enough_4k_page_memory()
+    ensure_sufficient_4k_pages()
 
     boot_source = 'volume' if vm_type == 'volume' else 'image'
     LOG.tc_step("Boot a vm from {}".format(boot_source))

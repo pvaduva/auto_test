@@ -17,6 +17,15 @@ from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 
 
+@fixture(scope='module', autouse=True)
+def unlock_nodes(request):
+
+    def teardown():
+        hosts = host_helper.get_hosts(administrative='locked', availability='online')
+        host_helper.unlock_hosts(hosts, check_hypervisor_up=True, check_webservice_up=True)
+    request.addfinalizer(teardown)
+
+
 def modify_mtu_on_interface(hostname, mtu, network_type):
 
     LOG.tc_step('This Test will take 10min+ to execute as it lock, modify and unlock a node. ')
@@ -32,6 +41,8 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
     # lock the node
     LOG.tc_step('lock the standby')
     host_helper.lock_host(hostname)
+    if system_helper.is_small_footprint():
+        sleep(30)
 
     # config the page number after lock the compute node
     LOG.tc_step('modify the mtu on locked controller')
@@ -46,6 +57,8 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
     LOG.tc_step('unlock the standby')
 
     # check webservice are up when host are unlocked
+    if system_helper.is_small_footprint():
+        sleep(30)
     host_helper.unlock_host(hostname, check_webservice_up=True)
 
 
@@ -86,6 +99,7 @@ def test_oam_intf_mtu_modified(mtu):
     # swact active and standby controller
 
     host_helper.swact_host(fail_ok=False)
+    sleep(30)
     # modify mtu on new standby controller
     second_host = system_helper.get_standby_controller_name()
     # modify mtu on new standby controller
@@ -137,6 +151,7 @@ def test_data_intf_mtu_modified(mtu):
             if len(compute_list) < 2:
                 host_helper.unlock_host(system_helper.get_standby_controller_name(), check_hypervisor_up=True)
             host_helper.swact_host()
+            sleep(30)
 
         modify_mtu_on_interface(host, mtu, 'data')
 

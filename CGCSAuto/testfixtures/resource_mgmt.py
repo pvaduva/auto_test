@@ -84,6 +84,8 @@ class ResourceCleanup:
         'vms_with_vols': [],
         'vms_no_vols': [],
         'volumes': [],
+        'volume_types': [],
+        'qos_ids': [],
         'flavors': [],
         'images': [],
         'server_groups': [],
@@ -105,9 +107,12 @@ class ResourceCleanup:
 
     @staticmethod
     def _delete(resources, scope):
+        
         vms_with_vols = resources['vms_with_vols']
         vms_no_vols = resources['vms_no_vols']
         volumes = resources['volumes']
+        volume_types = resources['volume_types']
+        qos_ids = resources['qos_ids']
         flavors = resources['flavors']
         images = resources['images']
         server_groups = resources['server_groups']
@@ -115,6 +120,7 @@ class ResourceCleanup:
         subnets = resources['subnets']
         floating_ips = resources['floating_ips']
         heat_stacks = resources['heat_stacks']
+        
         err_msgs = []
         if vms_with_vols:
             LOG.fixture_step("({}) Attempt to delete following vms and attached volumes: {}".format(scope, vms_with_vols))
@@ -131,6 +137,18 @@ class ResourceCleanup:
         if volumes:
             LOG.fixture_step("({}) Attempt to delete following volumes: {}".format(scope, volumes))
             code, msg = cinder_helper.delete_volumes(volumes, fail_ok=True, auth_info=Tenant.ADMIN)
+            if code > 0:
+                err_msgs.append(msg)
+
+        if volume_types:
+            LOG.fixture_step("({}) Attempt to delete following volume_types: {}".format(scope, volume_types))
+            code, msg = cinder_helper.delete_volume_types(volume_types, fail_ok=True, auth_info=Tenant.ADMIN)
+            if code > 0:
+                err_msgs.append(msg)
+
+        if qos_ids:
+            LOG.fixture_step("({}) Attempt to delete following qos_ids: {}".format(scope, qos_ids))
+            code, msg = cinder_helper.delete_qos_list(qos_ids, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
 
@@ -209,17 +227,21 @@ class ResourceCleanup:
         scope = scope.lower()
         resource_type = resource_type.lower()
         valid_scopes = ['function', 'class', 'module']
-        valid_types = ['vm', 'volume', 'flavor', 'image', 'server_group', 'router', 'subnet', 'floating_ip', 'heat_stack']
+        valid_types = ['vm', 'volume', 'volume_type', 'qos', 'flavor', 'image', 'server_group', 'router',
+                       'subnet', 'floating_ip', 'heat_stack']
+        
         if scope not in valid_scopes:
             raise ValueError("'scope' param value has to be one of the: {}".format(valid_scopes))
         if resource_type not in valid_types:
-            raise ValueError("'resouce_type' param value has to be one of the: {}".format(valid_types))
+            raise ValueError("'resource_type' param value has to be one of the: {}".format(valid_types))
 
         if resource_type == 'vm':
             if del_vm_vols:
                 key = 'vms_with_vols'
             else:
                 key = 'vms_no_vols'
+        elif resource_type == 'qos':
+            key = 'qos_ids'
         else:
             key = resource_type + 's'
 

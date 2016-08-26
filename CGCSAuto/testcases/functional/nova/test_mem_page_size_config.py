@@ -51,6 +51,7 @@ def flavor_mem_page_size(request, flavor_2g):
 
     return mem_page_size
 
+
 @fixture(scope='module')
 def image_mempage():
     image_id = glance_helper.create_image(name='mempage')[1]

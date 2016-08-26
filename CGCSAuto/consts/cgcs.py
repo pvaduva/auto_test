@@ -247,3 +247,12 @@ class HTTPPorts:
 class CeilometerSamples:
     VSWITCH_PORT_TRANSMIT_UTIL = "vswitch.port.transmit.util"
     VSWITCH_ENGINE_UTIL = "vswitch.engine.util"
+
+
+class QoSSpecs:
+    READ_BYTES = 'read_bytes_sec'
+    WRITE_BYTES = 'write_bytes_sec'
+    TOTAL_BYTES = 'total_bytes_sec'
+    READ_IOPS = 'read_iops_sec'
+    WRITE_IOPS = 'write_iops_sec'
+    TOTAL_IOPS = 'total_iops_sec'
