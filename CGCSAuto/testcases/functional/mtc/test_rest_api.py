@@ -4,6 +4,7 @@ import time
 from consts import timeout
 from consts.cgcs import HTTPPorts
 from pytest import fixture, mark, skip
+from testfixtures.recover_hosts import HostsToRecover
 from keywords import html_helper, host_helper, system_helper
 from utils.tis_log import LOG
 
@@ -11,11 +12,14 @@ from utils.tis_log import LOG
 #default expected number of pipelines
 NUM_PIPELINES = 2
 IP_ADDR = html_helper.get_ip_addr()
-TOKEN = html_helper.get_user_token()
 
-HEADERS = {"Content-Type": "application/json",
-           "Accept": "application/json",
-           "X-Auth-Token": TOKEN}
+
+def get_headers():
+    headers = {"Content-Type": "application/json",
+               "Accept": "application/json",
+               "X-Auth-Token": html_helper.get_user_token()}
+
+    return headers
 
 
 @fixture(scope='function')
@@ -32,24 +36,23 @@ def prepare_modify_cpu(request):
         skip("There were no unlocked compute nodes.")
     host = computes[0]
     uuid = host_helper.get_hostshow_value(host=host, field='uuid')
+    headers = get_headers()
 
     url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER, 'iprofile')
     data = {'hostname': 'test_compute_profile',
             'profiletype': 'cpu',
             'ihost_uuid': uuid}
-    resp = html_helper.post_request(url, headers=HEADERS, data=data)
+    resp = html_helper.post_request(url, headers=headers, data=data)
     iprofile_uuid = resp['uuid']
     LOG.info("The new profile uuid is: {}".format(iprofile_uuid))
 
 
     def unlock():
         host_helper.apply_cpu_profile(host, iprofile_uuid)
-        if 'locked' == host_helper.get_hostshow_value(host, field='administrative'):
-            host_helper.unlock_host(host)
 
         url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER,
                                      'iprofile/{}'.format(iprofile_uuid))
-        html_helper.delete_request(url, headers=HEADERS)
+        html_helper.delete_request(url, headers=headers)
 
     request.addfinalizer(unlock)
 
@@ -113,8 +116,9 @@ def test_get_extensions():
         - Check that the data received is in a valid form
 
     """
+    headers = get_headers()
     url = html_helper.create_url(IP_ADDR, HTTPPorts.NEUTRON_PORT, HTTPPorts.NEUTRON_VER, 'extensions')
-    data = html_helper.get_request(url, headers=HEADERS)
+    data = html_helper.get_request(url, headers=headers)
 
     res = validate_extensions(data)
     assert res == 0, "FAIL: The extensions returned are not valid."
@@ -130,8 +134,9 @@ def test_get_host_pipelines():
         - Check that we get at least 2 pipelines
 
     """
+    headers = get_headers()
     url = html_helper.create_url(IP_ADDR, HTTPPorts.CEIL_PORT, HTTPPorts.CEIL_VER, 'wrs-pipelines')
-    pipelines = html_helper.get_request(url, headers=HEADERS)
+    pipelines = html_helper.get_request(url, headers=headers)
     LOG.tc_step("Checking how many pipelines were returned. Expecting at least {}.".format(NUM_PIPELINES))
     assert len(pipelines) >= NUM_PIPELINES, "FAIL: Expected {} pipelines. Only {} pipelines were found."\
                                             .format(NUM_PIPELINES, len(pipelines))
@@ -147,8 +152,9 @@ def test_get_individual_pipelines():
 
     """
 
+    headers = get_headers()
     url = html_helper.create_url(IP_ADDR, HTTPPorts.CEIL_PORT, HTTPPorts.CEIL_VER, 'wrs-pipelines')
-    pipelines = html_helper.get_request(url, headers=HEADERS)
+    pipelines = html_helper.get_request(url, headers=headers)
     for item in pipelines:
         LOG.tc_step("Validating {}".format(item))
         res = validate_pipelines(item)
@@ -171,13 +177,14 @@ def test_put_pipelines():
         - Check that the pipelines are the same as they were originally
 
     """
+    headers = get_headers()
     url = html_helper.create_url(IP_ADDR, HTTPPorts.CEIL_PORT, HTTPPorts.CEIL_VER, 'wrs-pipelines')
-    pipelines = html_helper.get_request(url, headers=HEADERS)
+    pipelines = html_helper.get_request(url, headers=headers)
     for item in pipelines:
         pipeline_id = "wrs-pipelines/" + item["name"]
         pipeline_url = html_helper.create_url(IP_ADDR, HTTPPorts.CEIL_PORT, HTTPPorts.CEIL_VER, pipeline_id)
         LOG.tc_step("Getting original pipeline data")
-        payload = html_helper.get_request(pipeline_url, headers=HEADERS)
+        payload = html_helper.get_request(pipeline_url, headers=headers)
         copy_payload = copy.deepcopy(payload)
 
         payload['backup_count'] = 7
@@ -186,12 +193,12 @@ def test_put_pipelines():
         payload['max_bytes'] = 9000000
 
         LOG.tc_step("Sending modified pipeline to server")
-        html_helper.put_request(pipeline_url, payload, headers=HEADERS)
-        data = html_helper.get_request(pipeline_url, headers=HEADERS)
+        html_helper.put_request(pipeline_url, payload, headers=headers)
+        data = html_helper.get_request(pipeline_url, headers=headers)
 
         LOG.tc_step("Reverting back to original pipeline data")
-        html_helper.put_request(pipeline_url, copy_payload, headers=HEADERS)
-        reset_pipeline = html_helper.get_request(pipeline_url, headers=HEADERS)
+        html_helper.put_request(pipeline_url, copy_payload, headers=headers)
+        reset_pipeline = html_helper.get_request(pipeline_url, headers=headers)
         assert payload == data, "FAIL: The pipeline {}'s values were not changed correctly.".format(item["name"])
         assert copy_payload == reset_pipeline, "FAIL: The pipeline {} was not set back to its original state."\
                                                .format(item["name"])
@@ -213,9 +220,10 @@ def test_modify_cpu(prepare_modify_cpu):
 
     """
     name, uuid, iprofile_uuid = prepare_modify_cpu
+    headers = get_headers()
 
     url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER, "ihosts")
-    hosts = html_helper.get_request(url=url, headers=HEADERS)['ihosts']
+    hosts = html_helper.get_request(url=url, headers=headers)['ihosts']
     found = False
     for host in hosts:
         if host['uuid'] == uuid:
@@ -227,10 +235,11 @@ def test_modify_cpu(prepare_modify_cpu):
     LOG.tc_step("Locking {}".format(name))
     url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER, "ihosts/{}".format(uuid))
     lock_data = [{"path": "/action", "value": "lock", "op": "replace"}]
-    html_helper.patch_request(url=url, headers=HEADERS, data=lock_data)
+    HostsToRecover.add(name, scope='function')
+    html_helper.patch_request(url=url, headers=headers, data=lock_data)
     time.sleep(timeout.HostTimeout.COMPUTE_LOCK)
 
-    host = html_helper.get_request(url=url, headers=HEADERS)
+    host = html_helper.get_request(url=url, headers=headers)
     assert 'locked' == host['administrative'], "FAIL: Couldn't lock {}".format(name)
 
     res, out = host_helper.modify_host_cpu(name, 'shared', p0=1, p1=1, timeout=180)
@@ -239,7 +248,7 @@ def test_modify_cpu(prepare_modify_cpu):
     LOG.tc_step("Applying cpu profile")
     data = [{"path": "/iprofile_uuid", "value": "{}".format(iprofile_uuid), "op": "replace"},
             {"path": "/action", "value": "apply-profile", "op": "replace"}]
-    resp = html_helper.patch_request(url=url, headers=HEADERS, data=data)
+    resp = html_helper.patch_request(url=url, headers=headers, data=data)
 
     res, out = host_helper.compare_host_to_cpuprofile(name, iprofile_uuid)
     assert 0 == res, "FAIL: The host doesn't have the same cpu functions as the cpu profile"

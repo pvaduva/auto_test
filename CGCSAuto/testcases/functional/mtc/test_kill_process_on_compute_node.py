@@ -10,7 +10,7 @@ import sys
 from pytest import fixture, mark, skip, raises, fail
 from testfixtures.resource_mgmt import ResourceCleanup
 from utils.tis_log import LOG
-from utils import cli, exceptions
+from utils import cli, exceptions, table_parser
 from utils.ssh import ControllerClient
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
 
@@ -148,16 +148,17 @@ def kill_instance_process(instance_num=None, instance_name=None):
     kill_cmd = "kill -9 $(ps ax | grep %s | awk '{print $1}')" % search_value
 
     # Get the compute
-    compute_ssh = host_helper.ssh_to_host("compute-1")
-    exitcode, output = compute_ssh.exec_cmd(kill_cmd, expect_timeout=900)
-    print("Output: %s" % output)
+    # compute_ssh = host_helper.ssh_to_host("compute-1")
+    # exitcode, output = compute_ssh.exec_cmd(kill_cmd, expect_timeout=900)
+    vm_host = nova_helper.get_vm_host(instance_name)
+    with host_helper.ssh_to_host(vm_host) as host_ssh:
+        exitcode, output = host_ssh.exec_cmd(kill_cmd, expect_timeout=900)
+        LOG.info("Output: %s" % output)
 
-    cmd = 'source /etc/nova/openrc; /usr/bin/nova show %s' % instance_name
-    res, out = cmd_execute(cmd)
-    vm_table = table(out)
-
+    # cmd = 'source /etc/nova/openrc; /usr/bin/nova show %s' % instance_name
+    # res, out = cmd_execute(cmd)
     table_param = 'OS-EXT-STS:task_state'
-    task_state = get_column_value(vm_table, table_param)
+    task_state = nova_helper.get_vm_nova_show_value(instance_name, field=table_param)
 
     print("task_state: %s" % task_state)
     #cls.assertEqual(task_state, 'reboot_started_hard')
@@ -184,11 +185,13 @@ def test_092_vm_instance_recovery_kill_process_on_compute_node():
     network_type = 'tenant2-mgmt-net'
     vol_size = 8
 
+    con_ssh = ControllerClient.get_active_controller()
     # Get the image uuid from glance
     image_id = glance_helper.get_image_id_from_name(name=vm_image, strict=False)
 
     # Create volume containing the image
     vol_id = cinder_helper.create_volume(name='vol_' + vm_image, image_id=image_id, size=vol_size)[1]
+    ResourceCleanup.add(resource_type='volume', resource_id=vol_id, scope='function')
 
     # Create ubuntu instances
     print("Create vm instances")
@@ -197,26 +200,20 @@ def test_092_vm_instance_recovery_kill_process_on_compute_node():
 
     # Get the ip adress of the instance
     LOG.debug("Get private IP address of the vm instance")
-    cmd = 'source /etc/nova/openrc; /usr/bin/nova show %s' % vm_id
-    res, out = cmd_execute(cmd)
-    stats_table = table(out)
-    host_ip = get_column_value(stats_table,'%s network' % (network_type))
-    private_ip = host_ip.split(',')[0]
-    print("Host IP address for instance: %s" % private_ip[0])
-    time.sleep(10)
+    res, out = cli.nova('show', vm_id, rtn_list=True)
+    stats_table = table_parser.table(out)
+    time.sleep(30)
 
     print("Check that VM responds on pings")
     ping_results, res_dict = vm_helper.ping_vms_from_natbox(vm_id)
     print("Ping result: %s" % res_dict)
 
     LOG.debug("Get search value")
-    cmd = 'source /etc/nova/openrc; /usr/bin/nova show %s' % vm_id
-    res, out = cmd_execute(cmd)
-    vm_table = table(out)
+    vm_table = stats_table
 
     table_param = 'OS-EXT-SRV-ATTR:instance_name'
-    instance_number = get_column_value(vm_table, table_param)
-    print("Instance id: %s" % instance_number)
+    instance_number = table_parser.get_value_two_col_table(vm_table, table_param)
+    LOG.info("Instance id: %s" % instance_number)
 
     LOG.debug("Kill qemu* process corresponding to the instance")
     LOG.debug("Check that instance restarts automatically")

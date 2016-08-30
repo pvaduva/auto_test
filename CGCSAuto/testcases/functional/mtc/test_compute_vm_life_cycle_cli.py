@@ -33,7 +33,8 @@ def check_computes_availability(request):
         # status = 'available'
         # hosts_table = table_parser.table(cli.system('host-list', ssh_client=None))
         hosts = host_helper.get_hypervisors(state='down')
-        host_helper.unlock_hosts(hosts)
+        if hosts:
+            host_helper.unlock_hosts(hosts)
         # for line in hosts_table['values']:
         #     if line[2] == 'compute' and line[3] != 'unlocked':
         #         comp_name = line[1]

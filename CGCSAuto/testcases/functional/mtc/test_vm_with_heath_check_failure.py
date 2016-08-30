@@ -22,7 +22,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
 @fixture(scope='module')
 def flavor_(request):
     flavor_id = nova_helper.create_flavor(name='heartbeat')[1]
-    ResourceCleanup.add('flavor', flavor_id)
+    ResourceCleanup.add('flavor', flavor_id, scope='module')
 
     extra_specs = {FlavorSpec.GUEST_HEARTBEAT: 'True'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
@@ -42,7 +42,7 @@ def vm_(request, flavor_):
 
     vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id)[1]
     time.sleep(30)
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
+    ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
 
     # Teardown to remove the vm and flavor
     def restore_hosts():

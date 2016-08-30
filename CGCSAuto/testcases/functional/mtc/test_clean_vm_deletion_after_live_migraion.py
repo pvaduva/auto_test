@@ -30,11 +30,13 @@ def heartbeat_flavor_vm(request):
     heartbeat = request.param
 
     flavor_id = nova_helper.create_flavor()[1]
+    ResourceCleanup.add('flavor', flavor_id, scope='module')
     heartbeat_spec = {FlavorSpec.GUEST_HEARTBEAT: heartbeat}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
 
     boot_source = 'image'
     vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
+    ResourceCleanup.add('vm', vm_id, scope='module')
     events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
@@ -44,10 +46,9 @@ def heartbeat_flavor_vm(request):
     else:
         assert not events, "Heartbeat event generated unexpectedly: {}".format(events)
 
-    ResourceCleanup.add('flavor', flavor_id,scope='module')
-
     # use volume to boot a vm by default
     vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
+    ResourceCleanup.add('vm', vm_id, scope='module')
     events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
@@ -55,8 +56,6 @@ def heartbeat_flavor_vm(request):
     vm = {'id': vm_id,
           'heartbeat': heartbeat
           }
-
-    ResourceCleanup.add('vm', vm_id, scope='module')
 
     return vm
 
@@ -95,11 +94,9 @@ def test_clean_vm_deletion_after_live_migration(heartbeat_flavor_vm):
     vm_host = nova_helper.get_vm_host(vm_id)
     vm_helper.delete_vms(vm_id)
 
-
     # On the compute node hosting the VM, inspect /var/log/guestServer.log
     # On the active controller, inspect /var/log/guestAgent.log
     with host_helper.ssh_to_host(vm_host) as vm_compute_node:
-
         compare_line = "Info : "+vm_id+" delete"
         compute_cmd = "cat /var/log/guestServer.log | grep '"+compare_line+"'"
         code, compute_output = vm_compute_node.exec_cmd(cmd=compute_cmd)
