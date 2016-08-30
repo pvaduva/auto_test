@@ -14,16 +14,8 @@ from utils import table_parser
 from consts.auth import Tenant
 from consts.timeout import CLI_TIMEOUT
 from utils.tis_log import LOG
+from testfixtures.recover_hosts import HostsToRecover
 from keywords import nova_helper, vm_helper, host_helper, system_helper
-
-
-@fixture(scope='module', autouse=True)
-def unlock_nodes(request):
-
-    def teardown():
-        hosts = host_helper.get_hosts(administrative='locked', availability='online')
-        host_helper.unlock_hosts(hosts, check_hypervisor_up=True, check_webservice_up=True)
-    request.addfinalizer(teardown)
 
 
 def modify_mtu_on_interface(hostname, mtu, network_type):
@@ -40,9 +32,9 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
 
     # lock the node
     LOG.tc_step('lock the standby')
+    HostsToRecover.add(hostname, scope='function')
     host_helper.lock_host(hostname)
-    if system_helper.is_small_footprint():
-        sleep(30)
+    sleep(30)
 
     # config the page number after lock the compute node
     LOG.tc_step('modify the mtu on locked controller')
@@ -57,8 +49,7 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
     LOG.tc_step('unlock the standby')
 
     # check webservice are up when host are unlocked
-    if system_helper.is_small_footprint():
-        sleep(30)
+    sleep(30)
     host_helper.unlock_host(hostname, check_webservice_up=True)
 
 

@@ -31,12 +31,13 @@ def ensure_sufficient_4k_pages():
         proc0_num_4k_page = int(system_helper.get_host_mem_values(host, ['vm_total_4K'], proc_id=0)[0])
         proc1_num_4k_page = int(system_helper.get_host_mem_values(host, ['vm_total_4K'], proc_id=1)[0])
         print(proc0_num_4k_page,proc1_num_4k_page)
-        if proc0_num_4k_page < 600000 and proc1_num_4k_page < 600000 :
+        if proc0_num_4k_page < 600000 and proc1_num_4k_page < 600000:
             if system_helper.get_active_controller_name() == host:
                 host_helper.swact_host()
                 time.sleep(30)
                 host_helper.lock_host(host)
-                time.sleep(30)
+
+            time.sleep(30)
             host_helper.lock_host(host)
             # chose to set 4k page of proc1 to 600000
             system_helper.set_host_4k_pages(host, proc_id=1, smallpage_num=600000)
