@@ -15,6 +15,7 @@ from consts.cgcs import FlavorSpec
 from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.recover_hosts import HostsToRecover
 
 
 def ensure_sufficient_4k_pages():
@@ -38,7 +39,9 @@ def ensure_sufficient_4k_pages():
                 host_helper.lock_host(host)
 
             time.sleep(30)
+            HostsToRecover.add(host)
             host_helper.lock_host(host)
+            time.sleep(30)
             # chose to set 4k page of proc1 to 600000
             system_helper.set_host_4k_pages(host, proc_id=1, smallpage_num=600000)
             host_helper.unlock_host(host, check_hypervisor_up=True, check_webservice_up=True)
@@ -145,7 +148,7 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
     # start live migration
     prev_vm_host = nova_helper.get_vm_host(vm_id)
     LOG.tc_step("Live migrate VM and ensure it succeeded")
-    # block_mig = True if boot_source == 'image' else False
+    block_mig = True if vm_type == 'image' else False
     code, output = vm_helper.live_migrate_vm(vm_id, block_migrate=block_mig)
     assert 0 == code, "Live migrate is not successful. Details: {}".format(output)
 
