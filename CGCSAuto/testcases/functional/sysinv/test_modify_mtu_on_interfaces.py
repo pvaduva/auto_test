@@ -5,7 +5,7 @@
 
 
 from pytest import fixture, mark, skip
-import ast
+import ast, random
 from time import sleep
 
 from utils import cli,exceptions
@@ -15,7 +15,7 @@ from consts.auth import Tenant
 from consts.timeout import CLI_TIMEOUT
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import nova_helper, vm_helper, host_helper, system_helper
+from keywords import nova_helper, vm_helper, host_helper, system_helper, network_helper
 
 
 def modify_mtu_on_interface(hostname, mtu, network_type):
@@ -37,7 +37,13 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
     sleep(30)
 
     # config the page number after lock the compute node
-    LOG.tc_step('modify the mtu on locked controller')
+    LOG.tc_step('modify the mtu on locked host {}'.format(hostname))
+
+    if network_type == 'data':
+        pnet_mtus = network_helper.get_providernets(name='data', rtn_val='mtu', strict=False)
+        for pnet_mtu in pnet_mtus:
+            if pnet_mtu > mtu:
+                mtu = pnet_mtu + random.randint(1, 50)
 
     # change all MTUs on ports of the same network type
     for port_uuid in port_uuid_list:
