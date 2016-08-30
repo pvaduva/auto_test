@@ -315,9 +315,11 @@ def test_ceph_reboot_storage_node():
 
     for host in storage_nodes:
         LOG.tc_step('Reboot {}'.format(host))
+        HostsToRecover.add(host, scope='function')
         results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
         LOG.tc_step("Results: {}".format(results))          # yang TODO log added to keyword, still needed?
 
+        time.sleep(1)
         LOG.tc_step('Check health of CEPH cluster')
         ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
         assert not ceph_healthy, msg
@@ -421,8 +423,8 @@ def test_lock_stor_check_osds_down(host):
         host = 'storage-' + str(node_id)
 
     LOG.tc_step('Lock storage node {}'.format(host))
-    host_helper.lock_host(host, check_first=False)
     HostsToRecover.add(host)
+    host_helper.lock_host(host, check_first=False)
     # assert rtn_code == 0, out       # yang TODO assert unnecessary here, can set check_first to false if needed.
 
     LOG.tc_step('Determine the storage group for host {}'.format(host))
@@ -554,6 +556,7 @@ def test_lock_cont_check_mon_down():
 
     host = system_helper.get_standby_controller_name()
     LOG.tc_step('Lock standby controller node {}'.format(host))
+    HostsToRecover.add(host, scope='function')
     rtn_code, out = host_helper.lock_host(host)
     assert rtn_code == 0, out
 
@@ -665,6 +668,7 @@ def test_storgroup_semantic_checks():
         storage_group = peers['name']
 
         LOG.tc_step('Lock {} in the {} group:'.format(host, storage_group))
+        HostsToRecover.add(host, scope='function')
         rtn_code, out = host_helper.lock_host(host)
         assert rtn_code == 0, out
 
@@ -717,6 +721,7 @@ def test_storgroup_semantic_checks():
 
         for node in hosts:
             LOG.tc_step('Attempt to lock the {}'.format(node))
+            HostsToRecover.add(node)
             rtn_code, out = host_helper.lock_host(node, fail_ok=True)
             assert 1 == rtn_code, out       # yang TODO perhaps should assert 1 here for cli rejection.
 
@@ -1172,10 +1177,10 @@ def test_modify_ceph_pool_size():
 
     LOG.tc_step('Query the size of the CEPH storage pools')
     table_ = table_parser.table(cli.system('storagepool-show'))
-    glance_pool_gib = int(table_parser.get_values(table_, 'glance_pool_gib'))
-    cinder_pool_gib = int(table_parser.get_values(table_, 'cinder_pool_gib'))
-    ephemeral_pool_gib = int(table_parser.get_values(table_, 'ephemeral_pool_gib'))
-    ceph_total_space_gib = table_parser.get_values(table_, 'ceph_total_space_gib')
+    glance_pool_gib = int(table_parser.get_value_two_col_table(table_, 'glance_pool_gib'))
+    cinder_pool_gib = int(table_parser.get_value_two_col_table(table_, 'cinder_pool_gib'))
+    ephemeral_pool_gib = int(table_parser.get_value_two_col_table(table_, 'ephemeral_pool_gib'))
+    ceph_total_space_gib = int(table_parser.get_value_two_col_table(table_, 'ceph_total_space_gib'))
 
     LOG.tc_step('Increase the size of the ceph image pool')
     total_used = glance_pool_gib + cinder_pool_gib + ephemeral_pool_gib
@@ -1227,7 +1232,7 @@ def test_modify_ceph_pool_size():
 
     LOG.info('Check the ceph images pool is set to the right value')
     table_ = table_parser.table(cli.system('storagepool-show'))
-    glance_pool_gib = table_parser.get_values(table_, 'glance_pool_gib')
+    glance_pool_gib = table_parser.get_value_two_col_table(table_, 'glance_pool_gib')
 
     msg = 'Glance pool size was supposed to be {} but is {} instead'.format(new_value,
                                                                             glance_pool_gib)
@@ -1261,8 +1266,8 @@ def test_modify_ceph_pool_size_neg():
 
     LOG.tc_step('Query the size of the CEPH storage pools')
     table_ = table_parser.table(cli.system('storagepool-show'))
-    glance_pool_gib = int(table_parser.get_values(table_, 'glance_pool_gib'))
-    ephemeral_pool_gib = int(table_parser.get_values(table_, 'ephemeral_pool_gib'))
+    glance_pool_gib = int(table_parser.get_value_two_col_table(table_, 'glance_pool_gib'))
+    ephemeral_pool_gib = int(table_parser.get_value_two_col_table(table_, 'ephemeral_pool_gib'))
 
     LOG.tc_step('Determine what qcow2 images we have available')
     image_names = storage_helper.find_images(con_ssh)

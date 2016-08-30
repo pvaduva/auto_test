@@ -13,6 +13,7 @@ from consts.auth import Tenant
 from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 from setup_consts import P1, P2, P3
+from testfixtures.recover_hosts import HostsToRecover
 
 
 #creating a storage profile on storage-0 node
@@ -54,6 +55,7 @@ def test_storage_profile_on_compute(create_storage_profile):
     profile_name = create_storage_profile['profile_name']
     positional_arg = host_name + ' ' + profile_name
 
+    HostsToRecover.add(host_name)
     host_helper.lock_host(host_name)
     exitcode, output = cli.system('host-apply-storprofile', positional_arg, fail_ok=True,
                                   auth_info=Tenant.ADMIN, rtn_list=True)
@@ -76,10 +78,11 @@ def test_storage_profile_on_controller(create_storage_profile):
     profile_name = create_storage_profile['profile_name']
     positional_arg = host_name + ' ' + profile_name
 
+    HostsToRecover.add(host_name)
     host_helper.lock_host(host_name)
     exitcode, output = cli.system('host-apply-storprofile', positional_arg, fail_ok=True,
                                   auth_info=Tenant.ADMIN, rtn_list=True)
     host_helper.unlock_host(host_name)
 
-    assert exitcode == 1 and "Can not apply this profile to host" in output
+    assert exitcode == 1
 
