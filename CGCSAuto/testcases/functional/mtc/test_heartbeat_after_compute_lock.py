@@ -100,7 +100,12 @@ def test_heartbeat_after_compute_lock(heartbeat_flavor_vm):
     vm_host_table = system_helper.get_vm_topology_tables('servers')[0]
     vm_host = table_parser.get_values(vm_host_table,'host', ID=vm_id)[0]
 
+    if vm_host == system_helper.get_active_controller_name():
+        host_helper.swact_host()
+        sleep(30)
+
     host_helper.lock_host(vm_host)
+    sleep(30)
     host_helper.unlock_host(vm_host, check_hypervisor_up=True)
     compute_list = system_helper.get_computes()
 

@@ -78,18 +78,6 @@ def test_vm_with_heartbeat_failure(vm_):
     LOG.tc_step('Determine which compute the vm is on')
     compute_name = nova_helper.get_vm_host(vm_id)
 
-    #with host_helper.ssh_to_host('controller-0') as cont_ssh:
-    #    vm_table = table_parser.table(cli.nova('show', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN))
-    #    table_param = 'OS-EXT-SRV-ATTR:host'
-    #    compute_name = table_parser.get_value_two_col_table(vm_table, table_param)
-
-    #LOG.tc_step("Verify vm heartbeat is on via event logs")
-    #cat_log = 'cat /var/log/guestServer.log'
-    #host = nova_helper.get_vm_host(vm_id)
-    #with host_helper.ssh_to_host(host) as compute_ssh:
-    #    exitcode, output = compute_ssh.exec_cmd(cat_log, expect_timeout=10)
-    #    assert ('is heartbeating' in output)
-
     LOG.tc_step("Kill the heartbeat daemon")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         cmd = "ps -ef | grep 'heartbeat' | grep -v grep | awk '{print $2}'"
@@ -115,11 +103,6 @@ def test_vm_with_heartbeat_failure(vm_):
 
     LOG.tc_step('Determine which compute the vm is on after the reboot')
     new_compute_name = nova_helper.get_vm_host(vm_id)
-
-    #with host_helper.ssh_to_host('controller-0') as cont_ssh:
-    #    vm_table = table_parser.table(cli.nova('show', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN))
-    #    table_param = 'OS-EXT-SRV-ATTR:host'
-    #    new_compute_name = table_parser.get_value_two_col_table(vm_table, table_param)
 
     assert (new_compute_name == compute_name)
 

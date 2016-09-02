@@ -28,9 +28,6 @@ def test_system_alarm_list_on_compute_reboot():
     rows.
     """
 
-    # if system_helper.is_small_footprint():
-    #     skip(SkipReason.CPE_DETECTED)
-
     # Clear the alarms currently present
     LOG.tc_step("Clear the alarms table")
     system_helper.delete_alarms()
@@ -71,9 +68,6 @@ def test_system_alarm_show_on_lock_unlock_compute():
 
     """
 
-    # if system_helper.is_small_footprint():
-    #     skip(SkipReason.CPE_DETECTED)
-
     # Clear the alarms currently present
     LOG.tc_step("Clear the alarms table")
     system_helper.delete_alarms()
@@ -81,10 +75,12 @@ def test_system_alarm_show_on_lock_unlock_compute():
     # Raise a new alarm by locking a compute node
     # Get the compute
     compute_host = host_helper.get_nova_hosts()[0]
+    if compute_host == system_helper.get_active_controller_name():
+        compute_host = system_helper.get_standby_controller_name()
 
     LOG.tc_step("Lock a nova hypervisor host {}".format(compute_host))
-    host_helper.lock_host(compute_host)
     HostsToRecover.add(compute_host)
+    host_helper.lock_host(compute_host)
     time.sleep(20)
 
     LOG.tc_step("Check system alarm-list after locking")

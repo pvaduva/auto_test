@@ -78,18 +78,6 @@ def test_vm_with_health_check_failure(vm_):
     LOG.tc_step('Determine which compute the vm is on')
     compute_name = nova_helper.get_vm_host(vm_id)
 
-    #with host_helper.ssh_to_host('controller-0') as cont_ssh:
-    #    vm_table = table_parser.table(cli.nova('show', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN))
-    #    table_param = 'OS-EXT-SRV-ATTR:host'
-    #    compute_name = table_parser.get_value_two_col_table(vm_table, table_param)
-
-    #LOG.tc_step("Verify vm heartbeat is on via event logs")
-    #cat_log = 'cat /var/log/guestServer.log'
-    #host = nova_helper.get_vm_host(vm_id)
-    #with host_helper.ssh_to_host(host) as compute_ssh:
-    #    exitcode, output = compute_ssh.exec_cmd(cat_log, expect_timeout=10)
-    #    assert ('is heartbeating' in output)
-
     LOG.tc_step("Write fail to Health Check file and verify that heartbeat daemon reboots the VM")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         LOG.tc_step("Run touch /tmp/unhealthy to put vm into unhealthy state.")
@@ -100,11 +88,6 @@ def test_vm_with_health_check_failure(vm_):
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                                EventLogID.VM_REBOOTING]})
     assert reasons, "Instance rebooting active alarm is not listed"
-    # time.sleep(20)
-    # alarms_tab = system_helper.get_alarms()
-    # reasons = table_parser.get_values(alarms_tab, 'Reason Text', strict=False, **{'Entity ID': vm_id})
-    # assert re.search('Instance .* is rebooting on host', '\n'.join(reasons)), \
-    #     "Instance rebooting active alarm is not listed"
 
     LOG.tc_step("Kill the vim process to force the VM to another compute")
     with host_helper.ssh_to_host(compute_name) as compute_ssh:
@@ -117,11 +100,6 @@ def test_vm_with_health_check_failure(vm_):
     time.sleep(10)
     LOG.tc_step('Determine which compute the vm is on after the reboot')
     new_compute_name = nova_helper.get_vm_host(vm_id)
-
-    #with host_helper.ssh_to_host('controller-0') as cont_ssh:
-    #    vm_table = table_parser.table(cli.nova('show', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN))
-    #    table_param = 'OS-EXT-SRV-ATTR:host'
-    #    new_compute_name = table_parser.get_value_two_col_table(vm_table, table_param)
 
     assert (new_compute_name == compute_name)
 

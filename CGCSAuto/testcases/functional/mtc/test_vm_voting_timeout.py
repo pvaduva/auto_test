@@ -34,12 +34,10 @@ def heartbeat_flavor_vm(request):
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
 
     vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
-
+    ResourceCleanup.add('vm', vm_id, scope='module')
     events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
-
-    ResourceCleanup.add('vm', vm_id, scope='module')
 
     vm = {'id': vm_id,
           'heartbeat': heartbeat

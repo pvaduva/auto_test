@@ -32,10 +32,6 @@ def test_alarm_timestamp_order(con_ssh=None):
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
         exitcode, output = cli.exec_cli('echo q | system', 'event-list --limit 50 --uuid',
                                         rtn_list=True,auth_info=Tenant.ADMIN)
-        # exitcode,output = cli.system(cmd, ssh_client=con_ssh,
-        #                              auth_info=Tenant.ADMIN,
-        #                              rtn_list=True, fail_ok=False,
-        #                              timeout=90)
     alarms_list = table_parser.table(output)
 
     LOG.info('Verify the order of the timestamp of each entry')

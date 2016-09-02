@@ -34,10 +34,6 @@ def test_alarm_overwritten(con_ssh=None):
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
         exitcode, output = cli.exec_cli('echo q | system', 'event-list --limit 50 --uuid',
                                         rtn_list=True, auth_info=Tenant.ADMIN)
-        # exitcode,output = cli.system(cmd, ssh_client=con_ssh,
-        #                              auth_info=Tenant.ADMIN,
-        #                              rtn_list=True, fail_ok=False,
-        #                              timeout=200)
     alarm_table = table_parser.table(output)
     size = len(alarm_table['values'])
 
