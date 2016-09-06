@@ -37,7 +37,7 @@ def test_flavor_vcpu_scheduler_valid(vcpu_num, vcpu_schedulers):
 
     for vcpu_scheduler in vcpu_schedulers:
         vcpu_scheduler = '''"{}"'''.format(vcpu_scheduler)
-        extra_spec = {FlavorSpec.VCPU_SCHEDULER: vcpu_scheduler}
+        extra_spec = {FlavorSpec.VCPU_SCHEDULER: vcpu_scheduler, FlavorSpec.CPU_POLICY: "dedicated"}
 
         LOG.tc_step("Set flavor extra spec to: {} and verify extra spec is set successfully.".format(extra_spec))
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_spec)
@@ -88,7 +88,7 @@ def test_flavor_vcpu_scheduler_invalid(vcpu_num, vcpu_schedulers, expected_err):
 
     for vcpu_scheduler in vcpu_schedulers:
         vcpu_scheduler = '''"{}"'''.format(vcpu_scheduler)
-        extra_spec = {FlavorSpec.VCPU_SCHEDULER: vcpu_scheduler}
+        extra_spec = {FlavorSpec.VCPU_SCHEDULER: vcpu_scheduler, FlavorSpec.CPU_POLICY: "dedicated"}
 
         LOG.tc_step("Attempt to set vcpu_scheduler to invalid value - {} in extra specs, and verify it is rejected".
                     format(vcpu_scheduler))
@@ -129,7 +129,7 @@ def test_boot_vm_vcpu_scheduler(vcpu_num, vcpu_scheduler):
 
     LOG.tc_step("Set flavor vcpu_scheduler spec to: {}".format(vcpu_scheduler))
     vcpu_scheduler_flavor = '''"{}"'''.format(vcpu_scheduler)
-    extra_spec = {FlavorSpec.VCPU_SCHEDULER: vcpu_scheduler_flavor}
+    extra_spec = {FlavorSpec.VCPU_SCHEDULER: vcpu_scheduler_flavor, FlavorSpec.CPU_POLICY: "dedicated"}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_spec)
 
     LOG.tc_step("Boot a vm with above flavor.")
