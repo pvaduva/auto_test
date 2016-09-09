@@ -270,6 +270,7 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
                 expt_affined_cpus = vm_pcpus
 
             assert len(affined_cpus) <= len(expt_affined_cpus) + 2
+            # affined cpus was a single core. expected a core and its sibling
             assert set(expt_affined_cpus) <= set(affined_cpus)
 
         else:
