@@ -27,7 +27,6 @@ HOME = '/home/wrsroot/'
 HEAT_PATH = 'heat/hot/simple/'
 HEAT_SCENARIO_PATH = 'heat/hot/scenarios/'
 
-
 class NetIP:
     MGMT_NET_NAME = 'tenant\d-mgmt-net'
     DATA_NET_NAME = 'tenant\d-net'
