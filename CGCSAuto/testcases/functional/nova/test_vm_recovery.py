@@ -34,7 +34,7 @@ def test_image_metadata_in_volume(auto_recovery, disk_format, container_format):
         - Delete created images
 
     """
-    property_key = ImageMetadata.AUTO_RECOVERRY
+    property_key = ImageMetadata.AUTO_RECOVERY
 
     LOG.tc_step("Create an image with property auto_recovery={}, disk_format={}, container_format={}".
                 format(auto_recovery, disk_format, container_format))
@@ -110,7 +110,7 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
     if extra_specs:
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **{FlavorSpec.AUTO_RECOVERY: flavor_auto_recovery})
 
-    property_key = ImageMetadata.AUTO_RECOVERRY
+    property_key = ImageMetadata.AUTO_RECOVERY
     LOG.tc_step("Create an image with property auto_recovery={}, disk_format={}, container_format={}".
                 format(image_auto_recovery, disk_format, container_format))
     if image_auto_recovery is None:
