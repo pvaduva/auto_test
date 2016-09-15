@@ -118,7 +118,6 @@ class FlavorSpec:
     VCPU_MODEL = 'hw:cpu_model'
     SHARED_VCPU = 'hw:wrs:shared_vcpu'
     CPU_THREAD_POLICY = 'hw:cpu_thread_policy'
-    # CPU_THREAD_POLICY = 'hw:cpu_threads_policy' upstream changes to name
     VCPU_SCHEDULER = 'hw:wrs:vcpu:scheduler'
     MIN_VCPUS = "hw:wrs:min_vcpus"
     STORAGE_BACKING = 'aggregate_instance_extra_specs:storage'

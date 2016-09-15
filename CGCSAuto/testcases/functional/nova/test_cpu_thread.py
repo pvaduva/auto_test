@@ -13,9 +13,9 @@ from testfixtures.resource_mgmt import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
-@fixture(scope='module', autouse=True)
-def find_ht_hosts():
-    LOG.fixture_step("Look for hyper-threading enabled hosts")
+@fixture(scope='module')
+def ht_and_nonht_hosts():
+    LOG.fixture_step("Look for hyper-threading enabled and disabled hosts")
     nova_hosts = host_helper.get_nova_hosts()
     ht_hosts = []
     non_ht_hosts = []
@@ -25,8 +25,8 @@ def find_ht_hosts():
         else:
             non_ht_hosts.append(host)
 
-    LOG.info('Hyper-threading enabled hosts: {}'.format(ht_hosts))
-    LOG.info('Hyper-threading disabled hosts: {}'.format(non_ht_hosts))
+    LOG.fixture_step('Hyper-threading enabled hosts: {}\nHyper-threading disabled hosts: {}'.
+                     format(ht_hosts, non_ht_hosts))
     return ht_hosts, non_ht_hosts
 
 
@@ -50,7 +50,6 @@ def find_ht_hosts():
     mark.p3(('shared', None, '0', None, 'SharedCPUErr.DEDICATED_CPU_REQUIRED')),
     mark.p2(('dedicated', 'isolate', '0', None, 'CPUThreadErr.UNSET_SHARED_VCPU')),
     mark.p2(('dedicated', 'require', '1', None, 'CPUThreadErr.UNSET_SHARED_VCPU')),
-    # mark.p2(('dedicated', 'prefer', '1', None, 'CPUThreadErr.UNSET_SHARED_VCPU')),    allowed
     mark.p2(('dedicated', 'require', None, '2', 'CPUThreadErr.UNSET_MIN_VCPUS')),     # Allowed with isolate
 
 ])
@@ -75,18 +74,11 @@ def test_cpu_thread_flavor_set_negative(cpu_policy, cpu_thread_policy, shared_vc
 
     LOG.tc_step("Verify cli rejected invalid extra specs setting with proper error message.")
     expt_err_eval = eval(expt_err)
-
-    if isinstance(expt_err_eval, list):
-        for err_part in expt_err_eval:
-            assert err_part in output
-    else:
-        assert expt_err_eval in output
     if expt_err in ['CPUThreadErr.INVALID_POLICY', 'CPUThreadErr.UNSET_SHARED_VCPU', 'CPUThreadErr.UNSET_MIN_VCPUS']:
-        assert cpu_thread_policy in output
-    #     expt_err_eval = expt_err_eval.format(cpu_thread_policy)
-    #
-    # assert 1 == code, 'Set flavor extra spec is not rejected with invalid extra spec settings: {}.'.format(specs_to_set)
-    # assert expt_err_eval in output
+        expt_err_eval = expt_err_eval.format(cpu_thread_policy)
+
+    assert 1 == code, 'Set flavor extra spec is not rejected with invalid extra spec settings: {}.'.format(specs_to_set)
+    assert expt_err_eval in output
 
 
 @mark.parametrize(('specs_preset', 'specs_to_set', 'expt_err'), [
@@ -109,45 +101,40 @@ def test_cpu_thread_flavor_add_negative(specs_preset, specs_to_set, expt_err):
     if expt_err == 'CPUThreadErr.UNSET_SHARED_VCPU':
         all_specs = specs_preset.copy()
         all_specs.update(specs_to_set)
-        # expt_err_eval = expt_err_eval.format(all_specs[FlavorSpec.CPU_THREAD_POLICY])
-        assert all_specs[FlavorSpec.CPU_THREAD_POLICY] in output
+        expt_err_eval = expt_err_eval.format(all_specs[FlavorSpec.CPU_THREAD_POLICY])
 
     assert 1 == code, 'Set flavor extra spec is not rejected. Existing specs: {}. Specs to set: {}'.format(
             specs_preset, specs_to_set)
-    # assert expt_err_eval in output
-    if isinstance(expt_err_eval, list):
-        for err_part in expt_err_eval:
-            assert err_part in output
-    else:
-        assert expt_err_eval in output
+    assert expt_err_eval in output
 
-@mark.parametrize(('cpu_thread_policy', 'vcpu', 'HT_enabled'),[
-    ('isolate', 2, True),
-    ('prefer', 2, True),
-    ('isolate', 3, True),
-    ('prefer', 3, True),
-    # ('isolate', 2, False),    not available yet
-    ('prefer', 2, False),
-    # ('isolate', 3, False),
-    ('prefer', 3, False),
-])
-def test_launch_vm_isolate_or_prefer(cpu_thread_policy, vcpu, HT_enabled, find_ht_hosts):
-    hosts, other_hosts = find_ht_hosts
-    if HT_enabled and not hosts:
-        skip("No HT enabled hosts")
-    elif not HT_enabled and not other_hosts:
-        skip("No HT disabled hosts")
-    flavor_id = nova_helper.create_flavor(cpu_thread_policy, vcpus=vcpu)[1]
-    ResourceCleanup.add('flavor', flavor_id)
-
-    specs = {FlavorSpec.CPU_THREAD_POLICY: cpu_thread_policy, FlavorSpec.CPU_POLICY: 'dedicated',
-             FlavorSpec.MIN_VCPUS: 2}
-    LOG.tc_step("Set following extra specs: {}".format(specs))
-    nova_helper.set_flavor_extra_specs(flavor_id, **specs)
-
-    LOG.tc_step("Boot a vm using the above flavor")
-    vm_id = vm_helper.boot_vm(cpu_thread_policy, flavor=flavor_id)[1]
-    ResourceCleanup.add('vm', vm_id)
+#
+# @mark.parametrize(('cpu_thread_policy', 'vcpu', 'HT_enabled'),[
+#     ('isolate', 2, True),
+#     ('prefer', 2, True),
+#     ('isolate', 3, True),
+#     ('prefer', 3, True),
+#     # ('isolate', 2, False),    not available yet
+#     ('prefer', 2, False),
+#     # ('isolate', 3, False),
+#     ('prefer', 3, False),
+# ])
+# def test_launch_vm_isolate_or_prefer(cpu_thread_policy, vcpu, HT_enabled, ht_and_nonht_hosts):
+#     hosts, other_hosts = ht_and_nonht_hosts
+#     if HT_enabled and not hosts:
+#         skip("No HT enabled hosts")
+#     elif not HT_enabled and not other_hosts:
+#         skip("No HT disabled hosts")
+#     flavor_id = nova_helper.create_flavor(cpu_thread_policy, vcpus=vcpu)[1]
+#     ResourceCleanup.add('flavor', flavor_id)
+#
+#     specs = {FlavorSpec.CPU_THREAD_POLICY: cpu_thread_policy, FlavorSpec.CPU_POLICY: 'dedicated',
+#              FlavorSpec.MIN_VCPUS: 2}
+#     LOG.tc_step("Set following extra specs: {}".format(specs))
+#     nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+#
+#     LOG.tc_step("Boot a vm using the above flavor")
+#     vm_id = vm_helper.boot_vm(cpu_thread_policy, flavor=flavor_id)[1]
+#     ResourceCleanup.add('vm', vm_id)
 
 
 @mark.p1
@@ -176,14 +163,14 @@ def test_cpu_thread_flavor_delete_negative(cpu_thread_policy):
 class TestHTEnabled:
 
     @fixture(scope='class', autouse=True)
-    def ht_hosts(self, find_ht_hosts):
-        ht_hosts, non_ht_hosts = find_ht_hosts
+    def ht_hosts(self, ht_and_nonht_hosts):
+        ht_hosts, non_ht_hosts = ht_and_nonht_hosts
 
         if not ht_hosts:
             skip("No up hypervisor found with Hyper-threading enabled.")
 
         LOG.info('Hyper-threading enabled hosts: {}'.format(ht_hosts))
-        return ht_hosts
+        return ht_hosts, non_ht_hosts
 
     @mark.p1
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus'), [
@@ -193,13 +180,14 @@ class TestHTEnabled:
         mark.p1((5, 'isolate', None)),
         mark.p1((4, 'isolate', None)),
         mark.p1((4, 'require', None)),
+        mark.p1((3, 'require', None)),
         mark.p2((3, 'prefer', None)),
         mark.p2((2, 'prefer', None)),
-        mark.p1((3, 'require', None)),
-        mark.p2((3, None, None)),       # should default to prefer policy behaviour
+        mark.p2((3, None, None)),       # should default to prefer policy behaviour, covered by cpu_policy tests
         mark.p2((2, None, None)),
     ])
     def test_boot_vm_cpu_thread_positive(self, vcpus, cpu_thread_policy, min_vcpus, ht_hosts):
+        ht_hosts, non_ht_hosts = ht_hosts
         LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
         flavor_id = nova_helper.create_flavor(name='cpu_thread_{}'.format(cpu_thread_policy), vcpus=vcpus)[1]
         ResourceCleanup.add('flavor', flavor_id)
@@ -215,7 +203,8 @@ class TestHTEnabled:
         nova_helper.set_flavor_extra_specs(flavor_id, **specs)
 
         LOG.tc_step("Get used cpus for all hosts before booting vm")
-        pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=ht_hosts, rtn_val='used_now')
+        hosts_to_check = ht_hosts if cpu_thread_policy == 'require' else ht_hosts + non_ht_hosts
+        pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=hosts_to_check, rtn_val='used_now')
 
         LOG.tc_step("Boot a vm with above flavor and ensure it's booted on a HT enabled host.")
         vm_id = vm_helper.boot_vm(name='cpu_thread_{}'.format(cpu_thread_policy), flavor=flavor_id)[1]
@@ -223,8 +212,8 @@ class TestHTEnabled:
 
         vm_host = nova_helper.get_vm_host(vm_id)
 
-        # if cpu_thread_policy == 'require':    TODO replace conditional when isolate vm can be booted on non HT host
-        if cpu_thread_policy != 'prefer':
+        if cpu_thread_policy == 'require':
+        # if cpu_thread_policy != 'prefer':
             assert vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
 
         prev_cpus = pre_hosts_cpus[vm_host]
@@ -235,10 +224,12 @@ class TestHTEnabled:
     # TODO add prefer policy test cases, remove error for require odd # vcpu test case?
     @mark.parametrize(('flv_vcpus', 'flv_cpu_pol', 'flv_cpu_thr_pol', 'img_cpu_thr_pol', 'img_cpu_pol', 'create_vol', 'expt_err'), [
         mark.p1((3, None, None, 'isolate', 'dedicated', False, None)),
-        mark.p1((4, None, None, 'require', 'dedicated', True, None)),
+        mark.p1((4, None, None, 'require', 'dedicated', False, None)),
+        mark.p1((3, None, None, 'require', 'dedicated', True, None)),
         mark.p1((3, None, None, 'prefer', 'dedicated', True, None)),
         mark.p1((2, 'dedicated', None, 'isolate', None, False, None)),
         mark.p1((2, 'dedicated', None, 'require', None, True, None)),
+        mark.p2((3, 'dedicated', None, 'require', None, False, None)),
         mark.p1((3, 'dedicated', 'isolate', 'isolate', 'dedicated', True, None)),
         mark.p1((2, 'dedicated', 'require', 'require', 'dedicated', True, None)),
         mark.p1((2, 'dedicated', 'prefer', 'prefer', 'dedicated', True, None)),
@@ -256,6 +247,7 @@ class TestHTEnabled:
     ])
     def test_boot_vm_cpu_thread_image(self, flv_vcpus, flv_cpu_pol, flv_cpu_thr_pol, img_cpu_thr_pol, img_cpu_pol,
                                       create_vol, expt_err, ht_hosts):
+        ht_hosts, non_ht_hosts = ht_hosts
         LOG.tc_step("Create flavor with {} vcpus".format(flv_vcpus))
         flavor_id = nova_helper.create_flavor(name='cpu_thread_image', vcpus=flv_vcpus)[1]
         ResourceCleanup.add('flavor', flavor_id)
@@ -271,7 +263,10 @@ class TestHTEnabled:
         LOG.tc_step("Get used cpus for all hosts before booting vm")
         pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=ht_hosts, rtn_val='used_now')
 
-        image_meta = {ImageMetadata.CPU_POLICY: img_cpu_pol, ImageMetadata.CPU_THREAD_POLICY: img_cpu_thr_pol}
+        image_meta = {ImageMetadata.CPU_THREAD_POLICY: img_cpu_thr_pol}
+        if img_cpu_pol:
+            image_meta[ImageMetadata.CPU_POLICY] = img_cpu_pol
+        
         LOG.tc_step("Create image with following metadata: {}".format(image_meta))
         image_id = glance_helper.create_image(name='cpu_thread_{}'.format(img_cpu_thr_pol), **image_meta)[1]
         ResourceCleanup.add('image', image_id)
@@ -286,7 +281,8 @@ class TestHTEnabled:
             source = 'image'
 
         LOG.tc_step("Attempt to boot a vm with above flavor and {}".format(source))
-        code, vm_id, msg, ignore = vm_helper.boot_vm(name='cpu_thread_image', flavor=flavor_id, source=source, source_id=source_id, fail_ok=True)
+        code, vm_id, msg, ignore = vm_helper.boot_vm(name='cpu_thread_image', flavor=flavor_id, source=source,
+                                                     source_id=source_id, fail_ok=True)
         if vm_id:
             ResourceCleanup.add('vm', vm_id)
 
@@ -308,13 +304,11 @@ class TestHTEnabled:
             return    # end the test for negative cases
 
         # Check for positive tests
-        # TODO Will be updated so vms with isolate policy can boot on non HT hosts
         LOG.tc_step("Check vm is successfully booted on a HT enabled host.")
         assert 0 == code, "Expect vm boot successfully. Actual: {}".format(msg)
 
         vm_host = nova_helper.get_vm_host(vm_id)
-        # if flv_cpu_thr_pol == 'require':
-        if flv_cpu_thr_pol != 'prefer':
+        if flv_cpu_thr_pol == 'require':
             assert vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
 
         # Calculate expected policy:
@@ -327,54 +321,44 @@ class TestHTEnabled:
         check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, prev_total_cpus=prev_cpus, vm_host=vm_host,
                                           cpu_pol=expt_cpu_pol, cpu_thr_pol=expt_thr_pol)
 
-    # TODO require policy can now allow odd number of vcpus. Probably get rid of this test entirely
-    @mark.p1
-    @mark.parametrize(('vcpus', 'cpu_thread_policy', 'expt_err'), [
-        (1, 'require', 'CPUThreadErr.VCPU_NUM_UNDIVISIBLE'),
-        (3, 'require', 'CPUThreadErr.VCPU_NUM_UNDIVISIBLE')
-    ])
-    def to_del_test_boot_vm_cpu_thread_negative(self, vcpus, cpu_thread_policy, expt_err):
-        LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
-        flavor_id = nova_helper.create_flavor(name='cpu_thread_negative', vcpus=vcpus)[1]
-        ResourceCleanup.add('flavor', flavor_id)
-
-        specs = {FlavorSpec.CPU_THREAD_POLICY: cpu_thread_policy, FlavorSpec.CPU_POLICY: 'dedicated'}
-        LOG.tc_step("Set following extra specs: {}".format(specs))
-        nova_helper.set_flavor_extra_specs(flavor_id, **specs)
-
-        LOG.tc_step("Boot a vm with above flavor and check it failed booted.")
-        code, vm_id, msg, vol_id = vm_helper.boot_vm(name='cpu_thread_{}'.format(cpu_thread_policy),
-                                                     flavor=flavor_id, fail_ok=True)
-        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-        ResourceCleanup.add('volume', vol_id)
-
-        assert 1 == code, "Boot vm cli is not rejected. Details: {}".format(msg)
-
-        LOG.tc_step("Check expected fault message displayed in nova show")
-        fault_msg = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
-        assert eval(expt_err).format(vcpus) in fault_msg
+    # # TODO require policy can now allow odd number of vcpus. Probably get rid of this test entirely
+    # @mark.p1
+    # @mark.parametrize(('vcpus', 'cpu_thread_policy', 'expt_err'), [
+    #     (1, 'require', 'CPUThreadErr.VCPU_NUM_UNDIVISIBLE'),
+    #     (3, 'require', 'CPUThreadErr.VCPU_NUM_UNDIVISIBLE')
+    # ])
+    # def to_del_test_boot_vm_cpu_thread_negative(self, vcpus, cpu_thread_policy, expt_err):
+    #     LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
+    #     flavor_id = nova_helper.create_flavor(name='cpu_thread_negative', vcpus=vcpus)[1]
+    #     ResourceCleanup.add('flavor', flavor_id)
+    #
+    #     specs = {FlavorSpec.CPU_THREAD_POLICY: cpu_thread_policy, FlavorSpec.CPU_POLICY: 'dedicated'}
+    #     LOG.tc_step("Set following extra specs: {}".format(specs))
+    #     nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+    #
+    #     LOG.tc_step("Boot a vm with above flavor and check it failed booted.")
+    #     code, vm_id, msg, vol_id = vm_helper.boot_vm(name='cpu_thread_{}'.format(cpu_thread_policy),
+    #                                                  flavor=flavor_id, fail_ok=True)
+    #     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+    #     ResourceCleanup.add('volume', vol_id)
+    #
+    #     assert 1 == code, "Boot vm cli is not rejected. Details: {}".format(msg)
+    #
+    #     LOG.tc_step("Check expected fault message displayed in nova show")
+    #     fault_msg = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
+    #     assert eval(expt_err).format(vcpus) in fault_msg
 
     # TODO isolate policy will be able to boot vms on non HT hosts
     # will instead lock compute hosts
     @fixture(scope='function')
     def prepare_multi_vm_env(self, ht_hosts, request):
-        if not ht_hosts:
-            skip("No HT enabled hosts")
-        ht_host = ht_hosts[0]
-        if len(ht_hosts) != 1:
+        ht_hosts, non_ht_hosts = ht_hosts
+        if len(ht_hosts) > 1:
             # Only run test on lab with 1 ht host for sibling cores checking purpose.
             # IP14-17, IP1-4 can be used for this testcase
-            if system_helper.is_small_footprint():
-                ht_host = system_helper.get_active_controller_name()
-            elif len(ht_hosts > 4):
-                skip("More than 4 ht hosts available. Skip to reduce execution time.")
-            # skip("More than one host has hyper-threading enabled.")
+            skip("More than one host has hyper-threading enabled.")
 
-        for host in host_helper.get_hypervisors():
-            if host == ht_host:
-                continue
-            HostsToRecover.add(host, scope='function')
-            host_helper.lock_host(host)
+        ht_host = ht_hosts[0]
 
         LOG.fixture_step("Create flavor with 4 vcpus")
         flavor_id = nova_helper.create_flavor(name='cpu_thread', vcpus=4)[1]
@@ -419,12 +403,12 @@ class TestHTEnabled:
 
         # left_over_isolate_cores = int((max_cores - max_vm_num * 8)/2)
         left_over_isolate_cores = left_over_unpinned_cpus / 2
-        return ht_host, max_vm_num, flavor_id, left_over_isolate_cores
+        return ht_host, max_vm_num, flavor_id, left_over_isolate_cores, non_ht_hosts
 
-    # TODO isolate policy will be able to boot vms on non HT hosts, probably remove this test
+    # TODO isolate policy will be able to boot vms on non HT hosts
     @mark.p2
     def test_boot_multiple_vms_cpu_thread_isolate(self, prepare_multi_vm_env):
-        ht_host, max_vm_num, flavor_id, left_over_isolate_cores = prepare_multi_vm_env
+        ht_host, max_vm_num, flavor_id, left_over_isolate_cores, non_ht_hosts = prepare_multi_vm_env
         log_cores_siblings = host_helper.get_logcore_siblings(host=ht_host)
 
         LOG.tc_step("Boot {} vms with isolate cpu thread policy and 4vcpus in flavor".format(max_vm_num))
@@ -452,7 +436,7 @@ class TestHTEnabled:
 
                 assert topology_on_numa_node['siblings'] is None, "Siblings should not be displayed for 'isolate' vm"
 
-                assert '4c,1t' in topology_on_numa_node['topology'], 'vm topology is not as expected'
+                # TODO assert '4c,1t' in topology_on_numa_node['topology'], 'vm topology is not as expected'
 
                 pcpus = topology_on_numa_node['pcpus']
                 vm_pcpus += pcpus
@@ -485,12 +469,17 @@ class TestHTEnabled:
         ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
         ResourceCleanup.add('volume', vol_id)
 
-        assert 1 == code, "Boot vm cli is not rejected. Details: {}".format(msg)
+        if non_ht_hosts:
+            vm_host_ht_full = nova_helper.get_vm_host(vm_id)
+            assert 0 == code, "VM is not successfully booted even though non HT host available"
+            assert vm_host_ht_full in non_ht_hosts, "VM is not booted on non-HT host"
+        else:
+            assert 1 == code, "Boot vm cli is not rejected. Details: {}".format(msg)
 
-        LOG.tc_step("Check expected fault message displayed in nova show")
-        fault_msg = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
-        assert "No valid host was found" in fault_msg
-        assert CPUThreadErr.INSUFFICIENT_CORES_FOR_ISOLATE.format(ht_host, 4, left_over_isolate_cores) in fault_msg
+            LOG.tc_step("Check expected fault message displayed in nova show")
+            fault_msg = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
+            assert "No valid host was found" in fault_msg
+            assert CPUThreadErr.INSUFFICIENT_CORES_FOR_ISOLATE.format(ht_host, 4, left_over_isolate_cores) in fault_msg
 
     # TODO add cases with prefer policy and require with odd # of vcpus
     @mark.parametrize(('vcpus', 'cpu_thread_pol', 'min_vcpus', 'numa_0'), [
@@ -501,9 +490,10 @@ class TestHTEnabled:
         mark.p2((5, 'isolate', 2, None)),
         mark.p1((6, 'require', 2, None)),
         mark.p1((5, 'prefer', 2, None)),
-        mark.p1((3, 'require', 2, None)),
+        mark.p1((5, 'require', 2, None)),
     ])
     def test_cpu_scale_cpu_thread_pol(self, vcpus, cpu_thread_pol, min_vcpus, numa_0, ht_hosts):
+        ht_hosts, non_ht_hosts = ht_hosts
         LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
         flavor_id = nova_helper.create_flavor(name='cpu_thread_scale', vcpus=vcpus)[1]
         ResourceCleanup.add('flavor', flavor_id)
@@ -609,11 +599,10 @@ class TestHTEnabled:
         (5, 'dedicated', 'prefer', 2, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None),
         # mark.skipif(True, reason="Evacuation JIRA CGTS-4917")
         (2, 'dedicated', 'isolate', None, None, 'strict', 'volume', ['cold_migrate', 'live_migrate'], 'evacuate'),
-    ])
-    # ], ids=id_gen)
+    ], ids=id_gen)
     def test_cpu_thread_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol,  min_vcpus, numa_0,
                                                  vs_numa_affinity, boot_source, nova_actions, host_action, ht_hosts):
-
+        ht_hosts, non_ht_hosts = ht_hosts
         if len(ht_hosts) < 2:
             skip(SkipReason.LESS_THAN_TWO_HT_HOSTS)
 
@@ -639,7 +628,8 @@ class TestHTEnabled:
             nova_helper.set_flavor_extra_specs(flavor_id, **specs)
 
         LOG.tc_step("Get used cpus for all hosts before booting vm")
-        pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=ht_hosts, rtn_val='used_now')
+        hosts_to_check = ht_hosts if cpu_thr_pol == 'require' else ht_hosts + non_ht_hosts
+        pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=hosts_to_check, rtn_val='used_now')
 
         LOG.tc_step("Boot a vm with above flavor and ensure it's booted on a HT enabled host.")
         vm_name = 'cpu_thr_{}_{}'.format(cpu_thr_pol, vcpus)
@@ -653,9 +643,7 @@ class TestHTEnabled:
             check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
 
         vm_host = nova_helper.get_vm_host(vm_id)
-        # TODO only check when policy is require
-        # if cpu_thr_pol == 'require':
-        if cpu_thr_pol != 'prefer':
+        if cpu_thr_pol == 'require':
             assert vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
 
         prev_cpus = pre_hosts_cpus[vm_host]
@@ -673,9 +661,7 @@ class TestHTEnabled:
 
         post_vm_host = nova_helper.get_vm_host(vm_id)
 
-        # TODO only check when policy is require
-        # if cpu_thr_pol == 'require':
-        if cpu_thr_pol != 'prefer':
+        if cpu_thr_pol == 'require':
             LOG.tc_step("Check vm is on HT host")
             assert post_vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
 
@@ -734,10 +720,10 @@ class TestHTEnabled:
         (1, 'dedicated', 'isolate', 'image', 'image', 'live_migrate', True),
         (3, 'dedicated', 'prefer', 'image', 'image', 'live_migrate', True),
         (3, 'dedicated', 'require', None, 'volume', 'live_migrate', True),
-    ])
-    # ], ids=id_gen)
+    ], ids=id_gen)
     def test_cpu_thread_image_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol, vs_numa_affinity,
                                                        boot_source, nova_actions, cpu_thr_in_flv, ht_hosts):
+        ht_hosts, non_ht_hosts = ht_hosts
         if len(ht_hosts) < 2:
             skip(SkipReason.LESS_THAN_TWO_HT_HOSTS)
 
@@ -772,7 +758,8 @@ class TestHTEnabled:
             source_id = image_id
 
         LOG.tc_step("Get used cpus for all hosts before booting vm")
-        pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=ht_hosts, rtn_val='used_now')
+        hosts_to_check = ht_hosts if cpu_thr_pol == 'require' else ht_hosts + non_ht_hosts
+        pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=hosts_to_check, rtn_val='used_now')
 
         LOG.tc_step("Boot a vm from {} with above flavor".format(boot_source))
         vm_id = vm_helper.boot_vm(name=name_str, flavor=flavor_id, source=boot_source, source_id=source_id)[1]
@@ -780,9 +767,7 @@ class TestHTEnabled:
 
         vm_host = nova_helper.get_vm_host(vm_id)
 
-        # TODO only check when using require policy
-        # if cpu_thr_pol == 'require':
-        if cpu_thr_pol != 'prefer':
+        if cpu_thr_pol == 'require':
             LOG.tc_step("Check vm is booted on a HT host")
             assert vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
 
@@ -800,9 +785,8 @@ class TestHTEnabled:
             vm_helper.perform_action_on_vm(vm_id, action=action)
 
         post_vm_host = nova_helper.get_vm_host(vm_id)
-        # TODO only check when using require policy
-        # if cpu_thr_pol == 'require':
-        if cpu_thr_pol != 'prefer':
+
+        if cpu_thr_pol == 'require':
             LOG.tc_step("Check vm is still on HT host")
             assert post_vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
 
@@ -818,18 +802,18 @@ class TestHTEnabled:
 class TestHTMix:
     # run on specific labs, e.g. ip 1-4 or ip 14-17 or ip 33-36 for mix of HT and non HT computes
     @fixture(scope='class', autouse=True)
-    def ht_hosts(self, find_ht_hosts):
-        ht_hosts, non_ht_hosts = find_ht_hosts
+    def ht_hosts(self, ht_and_nonht_hosts):
+        ht_hosts, non_ht_hosts = ht_and_nonht_hosts
 
-        if not ht_hosts:
-            skip("No up hypervisor found with Hyper-threading enabled.")
+        if len(ht_hosts) != 1:
+            skip("Number of Hyper-threading enabled host is not 1.")
 
         if not non_ht_hosts:
             skip("No up hypervisor found with Hyper-threading disabled.")
 
         LOG.info('Hyper-threading enabled hosts: {}'.format(ht_hosts))
         LOG.info('Hyper-threading disabled hosts: {}'.format(non_ht_hosts))
-        return ht_hosts
+        return ht_hosts, non_ht_hosts
 
     # TODO isolate policy will allow migrate to non HT hosts soon, remove isolate cases then
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol', 'cpu_thr_source', 'vs_numa_affinity', 'boot_source'), [
@@ -842,12 +826,7 @@ class TestHTMix:
     def test_cpu_thr_live_mig_negative(self, vcpus, cpu_pol, cpu_thr_pol, cpu_thr_source, vs_numa_affinity, boot_source, ht_hosts):
 
         LOG.tc_step("Ensure system has only one HT host")
-
-        if len(ht_hosts) > 1:
-            skip(SkipReason.MORE_THAN_ONE_HT_HOSTS)
-
-        if len(host_helper.get_nova_hosts()) < 2:
-            skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+        ht_hosts, non_ht_hosts = ht_hosts
 
         specs = {}
         if cpu_thr_source == 'flavor':
@@ -889,7 +868,8 @@ class TestHTMix:
             nova_helper.set_flavor_extra_specs(flavor_id, **specs)
 
         LOG.tc_step("Get used cpus for all hosts before booting vm")
-        pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=ht_hosts, rtn_val='used_now')
+        hosts_to_check = ht_hosts if cpu_thr_pol == 'require' else ht_hosts + non_ht_hosts
+        pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=hosts_to_check, rtn_val='used_now')
 
         LOG.tc_step("Boot a vm from {} with above flavor and ensure it's booted on HT host.".format(boot_source))
         vm_name = 'cpu_thr_{}_{}_{}'.format(cpu_thr_pol, cpu_thr_source, vcpus)
@@ -911,18 +891,12 @@ class TestHTMix:
         LOG.tc_step("Attempt to live migrate vm and ensure it's rejected due to no other HT host")
         code, output = vm_helper.live_migrate_vm(vm_id, fail_ok=True)
         assert 2 == code, "Expect live migration request to be rejected. Actual: {}".format(output)
-        # TODO: update error string
-        # assert ColdMigErr.HT_HOST_REQUIRED.format(cpu_thr_pol) in output
-
-        for err_part in ColdMigErr.HT_HOST_REQUIRED:
-            assert err_part in output
-        assert cpu_thr_pol in output
+        assert ColdMigErr.HT_HOST_REQUIRED.format(cpu_thr_pol) in output
 
 
 # TODO create test cases with vms with isolate policy being able to boot on non HT hosts
 class TestHTDisabled:
 
-    # 2016-09-12_22-01-23
     @mark.p1
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus', 'expt_err'), [
         (2, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
@@ -934,7 +908,9 @@ class TestHTDisabled:
         (2, 'prefer', None, None),
         (3, 'prefer', 2, None),
     ])
-    def test_boot_vm_cpu_thread_ht_disabled(self, vcpus, cpu_thread_policy, min_vcpus, expt_err, ht_hosts):
+    def test_boot_vm_cpu_thread_ht_disabled(self, vcpus, cpu_thread_policy, min_vcpus, expt_err, ht_and_nonht_hosts):
+
+        ht_hosts, non_ht_hosts = ht_and_nonht_hosts
         if ht_hosts[0]:
             skip("There are HT enabled hosts")
         LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
@@ -965,16 +941,16 @@ class TestHTDisabled:
                     assert err_part in fault_msg
                 assert cpu_thread_policy in fault_msg
             else:
-                 assert eval(expt_err).format(cpu_thread_policy) in fault_msg
+                assert eval(expt_err).format(cpu_thread_policy) in fault_msg
         else:
             assert 0 == code, "Boot vm with isolate policy was unsuccessful. Details: {}".format(msg)
 
 
 class TestMigrateResize:
     @fixture(scope='class', autouse=True, params=['two_plus_ht', 'one_ht'])
-    def ht_and_nonht_hosts(self, request, find_ht_hosts):
+    def ht_and_nonht_hosts(self, request, ht_and_nonht_hosts):
 
-        ht_hosts, non_ht_hosts = find_ht_hosts
+        ht_hosts, non_ht_hosts = ht_and_nonht_hosts
         if len(host_helper.get_nova_hosts()) < 2:
             skip("Less than two up hypervisors in system.")
         if not ht_hosts:

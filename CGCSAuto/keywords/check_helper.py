@@ -62,7 +62,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
         numa_num (int): number of numa nodes vm vcpus are on. Default is 1 if unset in flavor.
         vm_host (str):
         cpu_pol (str): dedicated or shared
-        cpu_thr_pol (str): isolate or require
+        cpu_thr_pol (str): isolate, require, or prefer
         expt_increase (int): expected total vcpu increase on vm host compared to prev_total_cpus
         con_ssh (SSHClient)
 
@@ -76,9 +76,11 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
     if numa_num is None:
         numa_num = 1
 
+    is_ht_host = system_helper.is_hyperthreading_enabled(vm_host)
+
     if expt_increase is None:
         if cpu_pol == 'dedicated':
-            expt_increase = vcpus * 2 if cpu_thr_pol == 'isolate' else vcpus
+            expt_increase = vcpus * 2 if (cpu_thr_pol == 'isolate' and is_ht_host) else vcpus
         else:
             expt_increase = vcpus / 16
 
@@ -99,7 +101,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
                 'show')
     pcpus_total, siblings_total = _check_vm_topology_via_vm_topology(
             vm_id, vcpus=vcpus, cpu_pol=cpu_pol, cpu_thr_pol=cpu_thr_pol, vm_host=vm_host,
-            numa_num=numa_num, con_ssh=con_ssh, host_log_core_siblings=log_cores_siblings)
+            numa_num=numa_num, con_ssh=con_ssh, host_log_core_siblings=log_cores_siblings, is_ht=is_ht_host)
 
     LOG.tc_step("Check vm vcpus, siblings on vm via /sys/devices/system/cpu/<cpu>/topology/core_siblings_list")
     _check_vm_topology_on_vm(vm_id, vcpus=vcpus, siblings_total=siblings_total)
@@ -113,7 +115,8 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
     return pcpus_total, siblings_total
 
 
-def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_num, vm_host, host_log_core_siblings=None, con_ssh=None):
+def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_num, vm_host,
+                                       host_log_core_siblings=None, is_ht=None, con_ssh=None):
     """
 
     Args:
@@ -136,6 +139,9 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
         # float-2numa-4 | 4,4,4 |    512 | node:0,   256MB, pgsize:2M, vcpus:0,1, pol:sha
         #                                  node:1,   256MB, pgsize:2M, vcpus:2,3, pol:sha
     """
+    if is_ht is None:
+        is_ht = system_helper.is_hyperthreading_enabled(vm_host)
+
     if not host_log_core_siblings:
         host_log_core_siblings = host_helper.get_logcore_siblings(host=vm_host, con_ssh=con_ssh)
 
@@ -178,30 +184,54 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
 
         else:
             assert actual_pcpus, "pcpus is not included in vm-topology for dedicated vm"
+            # comment out topology and sibling checks until Jim Gauld decides on a consistent vm topology
             # TODO assert actual_topology, "vm topology is not included in vm-topology for dedicated vm"
 
             if cpu_thr_pol:
+                # FIXME: assumption invalid. isolate will not require ht_host
                 # Assumption: hyper-threading must be enabled if vm launched successfully. And thread number is 2.
                 assert actual_thread_policy in cpu_thr_pol, 'cpu thread policy in vm topology is {} while flavor ' \
                                                             'spec is {}'.format(actual_thread_policy, cpu_thr_pol)
 
                 if cpu_thr_pol == 'isolate':
                     # isolate-5: node:0, 512MB, pgsize:2M, 1s,5c,1t, vcpus:0-4, pcpus:9,24,27,3,26, pol:ded, thr:iso
-                    assert not actual_siblings, "siblings should not be included with only 1 vcpu"
+                    assert not actual_siblings, "siblings should not be included for isolate thread policy"
                     # TODO assert '{}c,1t'.format(vcpus_per_numa) in actual_topology
+                    expt_core_len_in_pair = 1
+
                 elif cpu_thr_pol == 'require':
                     # require-4: node:0, 512MB, pgsize:2M, 1s,2c,2t, vcpus:0-3, pcpus:25,5,8,28, siblings:{0,1},{2,3}, pol:ded, thr:req
-                    assert actual_siblings, "siblings should be included for dedicated vm"
+                    if len(actual_pcpus) % 2 == 0:
+                        assert actual_siblings, "siblings should be included for dedicated vm"
                     # TODO assert '{}c,2t'.format(int(vcpus_per_numa / 2)) in actual_topology  # 2 is the host thread number
+                    expt_core_len_in_pair = 2
+                    # siblings_total += actual_siblings
 
-                    siblings_total += actual_siblings
+                elif cpu_thr_pol == 'prefer' or cpu_thr_pol is None:
+                    if is_ht:
+                        expt_core_len_in_pair = 2
+                        if len(actual_pcpus) % 2 == 0:
+                            assert actual_siblings, "siblings should be included for prefer vm with HT host"
+                    else:
+                        expt_core_len_in_pair = 1
+                        assert not actual_siblings, "siblings should not be included for prefer vm with non-HT host"
+
                 else:
                     raise NotImplemented("New cpu threads policy added? Update automation code.")
 
-                expt_core_len_in_pair = 1 if cpu_thr_pol == 'isolate' else 2
-                for pair in host_log_core_siblings:
-                    assert len(set(pair) & set(actual_pcpus)) in [0, expt_core_len_in_pair], "Host sibling pair: {}, " \
-                        "VM pcpus:{}. Expected cores per pair: {}".format(pair, actual_pcpus, expt_core_len_in_pair)
+                if cpu_thr_pol == 'require' and len(actual_pcpus) % 2 == 1:
+                    count = 0
+                    for pair in host_log_core_siblings:
+                        num_cpu_in_pair = len(set(pair) & set(actual_pcpus))
+                        if num_cpu_in_pair == 1:
+                            count += 1
+                    assert 1 == count, "More than 1 pcpu does not have sibling pair assigned. 'require' VM pcpus: " \
+                                       "{}. Host sibling pairs: {}".format(actual_pcpus, host_log_core_siblings)
+                else:
+                    for pair in host_log_core_siblings:
+                        assert len(set(pair) & set(actual_pcpus)) in [0, expt_core_len_in_pair], \
+                            "Host sibling pair: {}, VM pcpus:{}. Expected cores per pair: {}".format(
+                                    pair, actual_pcpus, expt_core_len_in_pair)
 
                 pcpus_total += actual_pcpus
 
@@ -214,13 +244,14 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
 
                 if 1 == vcpus_per_numa:
                     assert not actual_siblings, "siblings should not be included with only 1 vcpu"
-                else:
-                    assert actual_siblings, 'sibling should be included with dedicated policy and {} vcpus per ' \
-                                            'numa node'.format(vcpus_per_numa)
-
-                    siblings_total += actual_siblings
+                # TODO else:
+                #     assert actual_siblings, 'sibling should be included with dedicated policy and {} vcpus per ' \
+                #                             'numa node'.format(vcpus_per_numa)
 
                 pcpus_total += actual_pcpus
+
+            if actual_siblings:
+                siblings_total += actual_siblings
 
     return pcpus_total, siblings_total
 
@@ -255,19 +286,21 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
 
         if 'ded' in cpu_pol:
 
-            if cpu_thr_pol == 'isolate':
-                LOG.tc_step("Check affined cpus for isolate vm is its pcpus plus the siblings of those pcpus")
-                expt_affined_cpus = []
-
-                for pcpu in vm_pcpus:
-                    for host_sibling_pair in host_log_core_siblings:
-                        if pcpu in host_sibling_pair:
-                            expt_affined_cpus += host_sibling_pair
-                expt_affined_cpus = sorted(list(set(expt_affined_cpus)))
-
-            else:
-                LOG.tc_step("Check affined cpus for dedicated vm is the same as its pcpus shown in vm-topology")
-                expt_affined_cpus = vm_pcpus
+            # if cpu_thr_pol == 'isolate':
+            #     LOG.tc_step("Check affined cpus for isolate vm is its pcpus plus the siblings of those pcpus")
+            #     expt_affined_cpus = []
+            #
+            #     for pcpu in vm_pcpus:
+            #         for host_sibling_pair in host_log_core_siblings:
+            #             if pcpu in host_sibling_pair:
+            #                 expt_affined_cpus += host_sibling_pair
+            #     expt_affined_cpus = sorted(list(set(expt_affined_cpus)))
+            #
+            # else:
+            #     LOG.tc_step("Check affined cpus for dedicated vm is the same as its pcpus shown in vm-topology")
+            #     expt_affined_cpus = vm_pcpus
+            LOG.tc_step("Check affined cpus for dedicated vm is the same as its pcpus shown in vm-topology")
+            expt_affined_cpus = vm_pcpus
 
             assert len(affined_cpus) <= len(expt_affined_cpus) + 2
             # affined cpus was a single core. expected a core and its sibling

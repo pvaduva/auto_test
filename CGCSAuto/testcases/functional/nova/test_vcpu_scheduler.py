@@ -78,6 +78,7 @@ def test_flavor_vcpu_scheduler_invalid(vcpu_num, vcpu_schedulers, expected_err):
         - Create a flavor with given number of vcpus
         - Attempt to set vcpu_scheduler extra specs to given invalid values
         - Check cli is rejected with valid reason
+
     Teardown:
         - Delete flavor
     """
