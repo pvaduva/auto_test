@@ -5,7 +5,7 @@ from utils import exceptions
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
 
-from consts.auth import Tenant
+from consts.auth import Tenant, CliAuth
 from consts.cgcs import Prompt
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar
@@ -21,9 +21,8 @@ def setup_tis_ssh(lab):
         con_ssh = SSHClient(lab['floating ip'], 'wrsroot', 'Li69nux*', CONTROLLER_PROMPT)
         con_ssh.connect()
         ControllerClient.set_active_controller(con_ssh)
-    if 'auth_url' in lab:
-        Tenant._set_url(lab['auth_url'])
-
+    # if 'auth_url' in lab:
+    #     Tenant._set_url(lab['auth_url'])
     return con_ssh
 
 
@@ -261,3 +260,28 @@ def copy_files_to_con1():
 
         else:
             raise exceptions.TimeoutException("Timed out rsync files to controller-1")
+
+
+def get_auth_via_openrc(con_ssh):
+    valid_keys = ['OS_AUTH_URL',
+                  'OS_ENDPOINT_TYPE',
+                  'CINDER_ENDPOINT_TYPE',
+                  'OS_USER_DOMAIN_NAME',
+                  'OS_PROJECT_DOMAIN_NAME',
+                  'OS_IDENTITY_API_VERSION',
+                  'OS_REGION_NAME',
+                  'OS_INTERFACE']
+
+    code, output = con_ssh.exec_cmd('cat /etc/nova/openrc')
+    if code != 0:
+        return None
+
+    lines = output.splitlines()
+    auth_dict = {}
+    for line in lines:
+        if 'export' in line:
+            if line.split('export ')[1].split(sep='=')[0] in valid_keys:
+                key, value = line.split(sep='export ')[1].split(sep='=')
+                auth_dict[key.strip().upper()] = value.strip()
+
+    return auth_dict

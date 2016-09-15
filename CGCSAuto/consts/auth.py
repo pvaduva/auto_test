@@ -112,3 +112,32 @@ class SvcCgcsAuto:
     USER = 'svc-cgcsauto'
     PASSWORD = ')OKM0okm'
     HOME = '/home/svc-cgcsauto'
+
+
+class CliAuth:
+
+    __var_dict = {
+            'OS_AUTH_URL': 'http://192.168.204.2:5000/v3',
+            'OS_ENDPOINT_TYPE': 'internalURL',
+            'CINDER_ENDPOINT_TYPE': 'internalURL',
+            'OS_USER_DOMAIN_NAME': 'Default',
+            'OS_PROJECT_DOMAIN_NAME': 'Default',
+            'OS_IDENTITY_API_VERSION': '3',
+            'OS_REGION_NAME': 'RegionOne',
+            'OS_INTERFACE': 'internal',
+        }
+
+    @classmethod
+    def set_vars(cls, **kwargs):
+
+        for key in kwargs:
+            cls.__var_dict[key.upper()] = kwargs[key]
+
+    @classmethod
+    def get_var(cls, var_name):
+        var_name = var_name.upper()
+        valid_vars = cls.__var_dict.keys()
+        if var_name not in valid_vars:
+            raise ValueError("Invalid var_name. Valid vars: {}".format(valid_vars))
+
+        return cls.__var_dict[var_name]
