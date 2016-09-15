@@ -219,7 +219,7 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
                 else:
                     raise NotImplemented("New cpu threads policy added? Update automation code.")
 
-                if cpu_thr_pol == 'require' and len(actual_pcpus) % 2 == 1:
+                if cpu_thr_pol in ['require', 'prefer'] and is_ht and len(actual_pcpus) % 2 == 1:
                     count = 0
                     for pair in host_log_core_siblings:
                         num_cpu_in_pair = len(set(pair) & set(actual_pcpus))

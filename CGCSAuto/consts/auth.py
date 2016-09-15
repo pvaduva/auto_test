@@ -112,4 +112,3 @@ class SvcCgcsAuto:
     USER = 'svc-cgcsauto'
     PASSWORD = ')OKM0okm'
     HOME = '/home/svc-cgcsauto'
-
