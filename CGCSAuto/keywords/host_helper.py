@@ -1867,6 +1867,8 @@ def get_vcpus_info_in_log(host_ssh, numa_nodes=None, rtn_list=False, con_ssh=Non
                 value = common._parse_cpus_list(value)
             elif key in ['cpu_usage', 'shared']:
                 value = float(value)
+            elif key == 'map':
+                pass
             else:
                 value = int(value)
 

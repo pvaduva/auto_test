@@ -237,7 +237,7 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
 
             else:
                 # node:1,   512MB, pgsize:2M, 1s,1c,3t, vcpus:0-2, pcpus:35,15,10, siblings:{0-2}, pol:ded, thr:no
-                assert topology_on_numa_node['thr'] == 'no', "cpu thread policy is in vm topology"
+                assert topology_on_numa_node['thr'] == 'pre', "cpu thread policy is in vm topology"
                 # TODO assert '1c,{}t'.format(vcpus_per_numa) in actual_topology, 'vm topology is not as expected'
                 assert vcpus_per_numa == len(actual_pcpus), "vm pcpus number per numa node is {} instead of {}".format(
                         len(actual_pcpus), vcpus_per_numa)
@@ -308,7 +308,7 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
 
         else:
             LOG.tc_step("Check affined cpus for floating vm is the same as unpinned cpus on vm host")
-            # TODO count all numa nodes for floating vm. Any way to get numa nodes dynamically without  cli?
+            # TODO count all numa nodes for floating vm. Any way to get numa nodes dynamically from vm host?
             cpus_info = host_helper.get_vcpus_info_in_log(host_ssh=host_ssh, rtn_list=True, numa_nodes=[0, 1])
             unpinned_cpus = []
 

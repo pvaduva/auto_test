@@ -34,8 +34,8 @@ class CPUThreadErr:
     DEDICATED_CPU_REQUIRED = 'Cannot set cpu thread pinning policy in a non dedicated cpu pinning policy'
     VCPU_NUM_UNDIVISIBLE = "(NUMATopologyFilter) Cannot use 'require' cpu threads policy as requested #VCPUs: {}, " \
                            "is not divisible by number of threads: 2"
-    INSUFFICIENT_CORES_FOR_ISOLATE = "{}: (NUMATopologyFilter) Cannot pin instance as requested VCPUs: {}, is " \
-                                     "greater than available CPUs: {}, with 'isolate' threads policy"
+    INSUFFICIENT_CORES_FOR_ISOLATE = "{}: (NUMATopologyFilter) Cannot use isolate cpu thread policy as requested " \
+                                     "VCPUS: {} is greater than available CPUs with all siblings free"
     HT_HOST_UNAVAIL = "(NUMATopologyFilter) Host not useable. Requested threads policy: '{}'; from flavor or image " \
                       "is not allowed on non-hyperthreaded host"
     UNSET_SHARED_VCPU = "Cannot set hw:cpu_thread_policy to {} if hw:wrs:shared_vcpu is set. Either unset " \
