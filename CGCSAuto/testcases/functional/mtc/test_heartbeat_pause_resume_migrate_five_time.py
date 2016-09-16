@@ -30,25 +30,26 @@ def heartbeat_flavor_vm(request):
     heartbeat = request.param
 
     flavor_id = nova_helper.create_flavor()[1]
+    ResourceCleanup.add(resource_type='flavor', resource_id=flavor_id, scope='module')
     heartbeat_spec = {FlavorSpec.GUEST_HEARTBEAT: heartbeat}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
 
     boot_source = 'image'
     vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
+    ResourceCleanup.add(resource_type='vm', resource_id=vm_id, scope='module')
     events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
-    ResourceCleanup.add('vm', vm_id, scope='module')
     if heartbeat == 'True':
         assert events, "VM heartbeat is not enabled."
         assert EventLogID.HEARTBEAT_ENABLED == events[0], "VM heartbeat failed to establish."
     else:
         assert not events, "Heartbeat event generated unexpectedly: {}".format(events)
 
-    ResourceCleanup.add('flavor', flavor_id,scope='module')
 
     # use volume to boot a vm by default
     vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
+    ResourceCleanup.add(resource_type='vm', resource_id=vm_id, scope='module')
     events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
@@ -56,8 +57,6 @@ def heartbeat_flavor_vm(request):
     vm = {'id': vm_id,
           'heartbeat': heartbeat
           }
-
-    ResourceCleanup.add('vm', vm_id, scope='module')
 
     return vm
 
@@ -99,12 +98,12 @@ def test_vm_pause_resume_five_time(heartbeat_flavor_vm):
 
         LOG.tc_step("check heartbeat after restart vim nfv-vim.pid ")
         cmd = "ps -ef | grep [h]eartbeat | awk '{print $10}' "
-        heartbeat_proc_shown = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False, expt_timeout=3,
+        heartbeat_proc_shown = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False, expt_timeout=5,
                                                           check_interval=2)
 
         if heartbeat_proc_shown:
             heartbeat_proc_disappear = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False,
-                                                                  expt_timeout=3, disappear=True, check_interval=2)
+                                                                  expt_timeout=5, disappear=True, check_interval=2)
             if heartbeat_type == 'False':
                 assert heartbeat_proc_disappear, "Heartbeat set to False, However, heartbeat process is running " \
                                                  "after compute lock."
@@ -114,7 +113,7 @@ def test_vm_pause_resume_five_time(heartbeat_flavor_vm):
 
         else:
             heartbeat_proc_appear = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False,
-                                                               expt_timeout=3, check_interval=2)
+                                                               expt_timeout=5, check_interval=2)
             if heartbeat_type == 'True':
                 assert heartbeat_proc_appear, "Heartbeat set to True. However, heartbeat process is not running " \
                                               "after compute lock."
@@ -166,12 +165,12 @@ def test_vm_live_migration_five_time(heartbeat_flavor_vm):
 
         LOG.tc_step("check heartbeat after restart vim nfv-vim.pid ")
         cmd = "ps -ef | grep [h]eartbeat | awk '{print $10}' "
-        heartbeat_proc_shown = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False, expt_timeout=3,
+        heartbeat_proc_shown = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False, expt_timeout=5,
                                                           check_interval=2)
 
         if heartbeat_proc_shown:
             heartbeat_proc_disappear = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False,
-                                                                  expt_timeout=3, disappear=True, check_interval=2)
+                                                                  expt_timeout=5, disappear=True, check_interval=2)
             if heartbeat_type == 'False':
                 assert heartbeat_proc_disappear, "Heartbeat set to False, However, heartbeat process is running " \
                                                  "after compute lock."
@@ -181,7 +180,7 @@ def test_vm_live_migration_five_time(heartbeat_flavor_vm):
 
         else:
             heartbeat_proc_appear = vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=10, strict=False,
-                                                               expt_timeout=3, check_interval=2)
+                                                               expt_timeout=5, check_interval=2)
             if heartbeat_type == 'True':
                 assert heartbeat_proc_appear, "Heartbeat set to True. However, heartbeat process is not running " \
                                               "after compute lock."

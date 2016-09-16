@@ -127,7 +127,7 @@ class TestMutiPortsBasic:
                     format(vm_actions))
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
 
-    @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
+    # @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
     def test_multiports_on_same_network_evacuate_vm(self, vms_to_test):
         """
         Test evacuate vm with multiple ports on same network
@@ -159,6 +159,10 @@ class TestMutiPortsBasic:
         LOG.tc_step("Reboot vm host {}".format(host))
         host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
         HostsToRecover.add(host, scope='function')
+
+        LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
+        vm_helper._wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
+                                       timeout=120)
 
         LOG.tc_step("Verify vm is evacuated to other host")
         vm_helper._wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
@@ -302,7 +306,7 @@ class TestMutiPortsPCI:
             vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'internal'],
                                        vlan_zero_only=True)
 
-    @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
+    # @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
     @mark.parametrize('vifs', [
         # (['pci-sriov', 'pci-passthrough']),
         (['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov']),

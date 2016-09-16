@@ -94,7 +94,8 @@ def test_retention_sample():
     # sample-list uses meter to specify the name to search for.
     # probably will have to change at least one of them when they become consistent.
     samples = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
-    assert 1 == len(samples), "FAIL: The sample is not in the list"
+    assert 1 == len(samples), "FAIL: The sample is not in the list. Number of samples: {}. Expected: 1"\
+                              .format(len(samples))
 
     if 65 - SysInvTimeout.RETENTION_PERIOD_SAVED > 0:
         LOG.info("Waiting for retention period to end.")

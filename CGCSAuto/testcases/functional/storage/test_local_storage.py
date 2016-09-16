@@ -14,6 +14,7 @@ from consts.cgcs import LocalStorage
 from utils.tis_log import LOG
 from utils import cli
 from keywords import common
+from testfixtures.recover_hosts import HostsToRecover
 
 from keywords import system_helper, host_helper, local_storage_helper
 
@@ -60,10 +61,11 @@ class TestLocalStorage(object):
 
                 while old_new_types:
                     host, old_type, _ = old_new_types.pop()
+                    HostsToRecover.add(host, scope='function')
                     host_helper.lock_host(host)
                     cmd = 'host-lvg-modify -b {} {} nova-local'.format(old_type, host)
                     cli.system(cmd, fail_ok=False)
-                    host_helper.unlock_host(host)
+                    # host_helper.unlock_host(host)
             finally:
                 pass
 
@@ -92,7 +94,7 @@ class TestLocalStorage(object):
                               ssh_client=None, fail_ok=False, force_change=False):
         if host_helper.check_host_local_backing_type(compute_dest, ls_type, con_ssh=ssh_client) and not force_change:
             msg = 'host already has local-storage backing:{} as expected'.format(ls_type)
-            LOG.inf(msg)
+            LOG.info(msg)
             return -1, msg
 
         LOG.debug('compute: {} is not in local-storage-type:{} or will force to apply'.format(compute_dest, ls_type))
@@ -105,6 +107,7 @@ class TestLocalStorage(object):
         old_type = host_helper.get_local_storage_backing(compute_dest)
 
         LOG.tc_step('Lock the host:{} for applying storage-profile'.format(compute_dest))
+        HostsToRecover.add(compute_dest, scope='function')
         rtn_code, msg = host_helper.lock_host(compute_dest, con_ssh=ssh_client, fail_ok=False, check_first=True)
         if 0 == rtn_code:
             self._add_to_cleanup_list(to_cleanup=compute_dest, cleanup_type='locked')
@@ -135,6 +138,7 @@ class TestLocalStorage(object):
     def set_local_storage_backing(self, compute=None, to_type='image'):
         LOG.debug('lock compute:{} in order to change to new local-storage-type:{}'\
                  .format(compute, to_type))
+        HostsToRecover.add(compute, scope='function')
         rtn_code, msg = host_helper.lock_host(compute, check_first=True)
         if 0 == rtn_code:
             self._add_to_cleanup_list(to_cleanup=compute, cleanup_type='locked')
@@ -162,6 +166,8 @@ class TestLocalStorage(object):
             computes_unlocked = host_helper.get_nova_hosts()
             compute_to_change = random.choice([c for c in computes_unlocked
                                                if c != system_helper.get_active_controller_name()])
+        if ls_type == 'image' and host_helper.get_local_storage_backing(compute_to_change) == 'lvm':
+            skip("Avoid reboot loop. CGTS-4855.")
         self.set_local_storage_backing(compute=compute_to_change, to_type=ls_type)
 
         return compute_to_change
@@ -452,6 +458,8 @@ class TestLocalStorage(object):
         compute_dest = random.choice(other_computes)
 
         LOG.tc_step('Attemp to apply storage-profile from {} to {}'.format(compute_with_max, compute_dest))
+
+        HostsToRecover.add(compute_dest, scope='function')
         rtn_code, output = host_helper.lock_host(compute_dest, check_first=True)
         if rtn_code == 0:
             self._add_to_cleanup_list(to_cleanup=compute_dest, cleanup_type='locked')

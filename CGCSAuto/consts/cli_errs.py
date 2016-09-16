@@ -30,18 +30,18 @@ class CpuAssignment:
 
 
 class CPUThreadErr:
-    INVALID_POLICY = "Invalid hw:cpu_threads_policy '{}', must be one of: require, isolate."
+    INVALID_POLICY = "Invalid hw:cpu_thread_policy '{}', must be one of: require, isolate, prefer."
     DEDICATED_CPU_REQUIRED = 'Cannot set cpu thread pinning policy in a non dedicated cpu pinning policy'
     VCPU_NUM_UNDIVISIBLE = "(NUMATopologyFilter) Cannot use 'require' cpu threads policy as requested #VCPUs: {}, " \
                            "is not divisible by number of threads: 2"
-    INSUFFICIENT_CORES_FOR_ISOLATE = "{}: (NUMATopologyFilter) Cannot pin instance as requested VCPUs: {}, is " \
-                                     "greater than available CPUs: {}, with 'isolate' threads policy"
+    INSUFFICIENT_CORES_FOR_ISOLATE = "{}: (NUMATopologyFilter) Cannot use isolate cpu thread policy as requested " \
+                                     "VCPUS: {} is greater than available CPUs with all siblings free"
     HT_HOST_UNAVAIL = "(NUMATopologyFilter) Host not useable. Requested threads policy: '{}'; from flavor or image " \
                       "is not allowed on non-hyperthreaded host"
-    UNSET_SHARED_VCPU = "Cannot set hw:cpu_threads_policy to {} if hw:wrs:shared_vcpu is set. Either unset " \
-                        "hw:cpu_threads_policy or unset hw:wrs:shared_vcpu"
-    UNSET_MIN_VCPUS = "Cannot set hw:cpu_threads_policy to {} if hw:wrs:min_vcpus is set. Either unset " \
-                      "hw:cpu_threads_policy, set it to another policy, or unset hw:wrs:min_vcpus"
+    UNSET_SHARED_VCPU = "Cannot set hw:cpu_thread_policy to {} if hw:wrs:shared_vcpu is set. Either unset " \
+                        "hw:cpu_thread_policy, set it to prefer, or unset hw:wrs:shared_vcpu"
+    UNSET_MIN_VCPUS = "Cannot set hw:cpu_thread_policy to {} if hw:wrs:min_vcpus is set. Either unset " \
+                      "hw:cpu_thread_policy, set it to another policy, or unset hw:wrs:min_vcpus"
     CONFLICT_FLV_IMG = "Image property 'hw_cpu_thread_policy' is not permitted to override CPU thread pinning policy " \
                        "set against the flavor"
 
@@ -62,8 +62,8 @@ class ResizeVMErr:
 
 
 class ColdMigErr:
-    HT_HOST_REQUIRED = "(NUMATopologyFilter) Host not useable. Requested threads policy: {}; from flavor or " \
-                       "image is not allowed on non-hyperthreaded host"
+    HT_HOST_REQUIRED = "(NUMATopologyFilter) Host not useable. Requested threads policy: {} from flavor or image is " \
+                       "not allowed on non-hyperthreaded host"
 
 
 class LiveMigErr:

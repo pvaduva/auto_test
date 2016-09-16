@@ -36,20 +36,6 @@ def fail_controller(request):
 
     HostsToRecover.add(standby, scope='function')
 
-    # def wait_for_controller():
-    #     check_interval = 10
-    #     LOG.fixture_step("Waiting for {} to reboot".format(standby))
-    #     end_time = time.time() + timeout.HostTimeout.REBOOT
-    #     while True:
-    #         state = host_helper.get_hostshow_values(standby, None, 'availability', 'operational')
-    #         if 'available' == state['availability'] and 'enabled' == state['operational']:
-    #             LOG.info("{} has finished rebooting".format(standby))
-    #             break
-    #         if time.time() > end_time:
-    #             assert 0 == 1, "FAIL: The controller hasn't rebooted"
-    #         time.sleep(check_interval)
-    #
-    # request.addfinalizer(wait_for_controller)
     return True
 
 

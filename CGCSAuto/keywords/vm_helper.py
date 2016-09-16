@@ -547,7 +547,7 @@ def _is_live_migration_allowed(vm_id, con_ssh=None, block_migrate=None):
         if storage_backing == 'remote':
             return True
         else:
-            LOG.warning("Live migration without block is not allowed for vm {}".format(vm_id))
+            LOG.warning("Live migration is not allowed for localdisk vm with non-remote storage. vm: {}".format(vm_id))
             return False
 
     # auto choose block-mig without local disk
@@ -1687,7 +1687,7 @@ def rebuild_vm(vm_id, image_id=None, new_name=None, preserve_ephemeral=None, fai
         args += ' --meta {}={}'.format(key, value)
 
     LOG.info("Rebuilding vm {}".format(vm_id))
-    code, output = cli.nova('rebuild', args, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    code, output = cli.nova('rebuild', args, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
     if code == 1:
         return code, output
 

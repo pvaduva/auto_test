@@ -145,7 +145,7 @@ class TestSriovPciptResourceUsage:
         LOG.info("Tne resource usage {} is equal to expected value {}".format(resource_value, increment_value))
         assert resource_value == increment_value, "The resource usage is not equal to expected value"
 
-    @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
+    # @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
     def test_pcipt_sriov_evacuate_vm(self, vms_to_test):
         """
         Test evacuate vm with multiple ports on same network
@@ -179,8 +179,12 @@ class TestSriovPciptResourceUsage:
         host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
         HostsToRecover.add(host, scope='function')
 
+        LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
+        vm_helper._wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
+                                       timeout=120)
+
         LOG.tc_step("Verify vm is evacuated to other host")
-        vm_helper._wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=120, fail_ok=False)
+        vm_helper._wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
         post_evac_host = nova_helper.get_vm_host(vm_under_test)
         assert post_evac_host != host, "VM is on the same host after original host rebooted."
 

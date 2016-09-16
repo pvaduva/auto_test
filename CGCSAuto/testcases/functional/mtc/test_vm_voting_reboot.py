@@ -22,7 +22,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
 @fixture(scope='module')
 def flavor_(request):
     flavor_id = nova_helper.create_flavor(name='heartbeat')[1]
-    ResourceCleanup.add('flavor', flavor_id)
+    ResourceCleanup.add('flavor', flavor_id, scope='module')
 
     extra_specs = {FlavorSpec.GUEST_HEARTBEAT: 'True'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
@@ -42,7 +42,7 @@ def vm_(request, flavor_):
 
     vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id)[1]
     time.sleep(30)
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
+    ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
 
     # Teardown to remove the vm and flavor
     def restore_hosts():
@@ -86,7 +86,7 @@ def test_vm_voting_reboot(vm_):
 
     LOG.tc_step("Verify vm heartbeat is on by checking the heartbeat process")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat")
+        exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat | grep -v grep")
         assert (output is not None)
 
     LOG.tc_step("Set the voting criteria in the vm: touch /tmp/vote_no_to_reboot")

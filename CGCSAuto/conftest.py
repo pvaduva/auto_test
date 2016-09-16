@@ -6,6 +6,7 @@ import pytest
 
 import setup_consts
 import setups
+from consts.auth import CliAuth, Tenant
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
@@ -156,6 +157,9 @@ def pytest_collectstart():
     """
     global con_ssh
     con_ssh = setups.setup_tis_ssh(ProjVar.get_var("LAB"))
+    CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
+    Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
+    Tenant._set_region(CliAuth.get_var('OS_REGION_NAME'))
 
 
 def pytest_runtest_setup(item):
@@ -238,7 +242,7 @@ def pytest_configure(config):
 
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
-                     report_all=report_all, report_tag=report_tag, openstack_cli = openstack_cli)
+                     report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli)
 
     os.makedirs(log_dir, exist_ok=True)
     config_logger(log_dir)

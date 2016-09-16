@@ -72,7 +72,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
     table_ = table_parser.table(cli.cinder('list --all-tenants', auth_info=auth_info, ssh_client=con_ssh))
 
     if name is not None:
-        table_ = table_parser.filter_table(table_, strict=name_strict, **{'Display Name': name})
+        table_ = table_parser.filter_table(table_, strict=name_strict, **{'Name': name})
 
     if criteria:
         table_ = table_parser.filter_table(table_, **criteria)
@@ -83,16 +83,17 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
     return table_parser.get_column(table_, 'ID')
 
 
-def get_volumes_attached_to_vms(volumes=None, vms=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_volumes_attached_to_vms(volumes=None, vms=None, header='ID', con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Filter out the volumes that are attached to a vm.
     Args:
         volumes (list or str): list of volumes ids to filter out from. When None, filter from all volumes
         vms (list or str): get volumes attached to given vm(s). When None, filter volumes attached to any vm
+        header (str): header of the column in the table to return
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (list): a list of volumes ids or [] if no match found
+    Returns (list): a list of values from the column specified or [] if no match found
 
     """
     table_ = table_parser.table(cli.cinder('list --all-tenants', auth_info=auth_info, ssh_client=con_ssh))
@@ -108,7 +109,7 @@ def get_volumes_attached_to_vms(volumes=None, vms=None, con_ssh=None, auth_info=
     else:
         table_ = table_parser.filter_table(table_, strict=False, regex=True, **{'Attached to': '.*\S.*'})
 
-    return table_parser.get_column(table_, 'ID')
+    return table_parser.get_column(table_, header)
 
 
 def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snapshot_id=None, vol_type=None, size=None,
@@ -153,6 +154,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
                      'volume.'.format(name, bootable))
             return -1, vol_ids[0]
 
+    name = common.get_unique_name(name, resource_type='volume', existing_names=get_volumes())
     subcmd = ''
     source_arg = ''
     if bootable:

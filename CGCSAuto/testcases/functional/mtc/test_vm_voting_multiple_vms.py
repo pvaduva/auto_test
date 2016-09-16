@@ -22,7 +22,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
 @fixture(scope='module')
 def flavor_(request):
     flavor_id = nova_helper.create_flavor(name='heartbeat')[1]
-    ResourceCleanup.add('flavor', flavor_id)
+    ResourceCleanup.add('flavor', flavor_id, scope='module')
 
     extra_specs = {FlavorSpec.GUEST_HEARTBEAT: 'True'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
@@ -49,12 +49,12 @@ def vms_(request, flavor_):
         vm_id = vm_helper.boot_vm(name=inst_names[idx], flavor=flavor_id)[1]
         time.sleep(30)
         vm_ids.append(vm_id)
-        ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
+        ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
 
     vm_id = vm_helper.boot_vm(name=inst_names[3])[1]
     time.sleep(30)
     vm_ids.append(vm_id)
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
+    ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
 
     # Teardown to remove the vm and flavor
     def remove_vms():
@@ -145,8 +145,11 @@ def test_vm_voting_multiple_vms(vms_):
         exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat | grep -v grep")
         assert (output is not None)
 
-        LOG.tc_step("Set the no stop voting criteria in vm: %s" % vm_id)
+    LOG.tc_step("Set the no stop voting criteria in vm: %s" % vm_id)
+    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         vm_ssh.exec_cmd(voting_list[2])
+        code, out = vm_ssh.exec_cmd('ls /tmp')
+        assert out is not None
 
     LOG.tc_step("Verify that attempts to stop the VM is not allowed")
     time.sleep(20)

@@ -7,11 +7,11 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 
 @mark.parametrize(('property_key', 'values', 'disk_format', 'container_format'), [
-    mark.p2((ImageMetadata.AUTO_RECOVERRY, [random.choice(['true', 'false']), random.choice(['True', 'False']),
-                                            random.choice(['TRUE', 'FALSE']), random.choice(['TruE', 'faLSe'])],
+    mark.p2((ImageMetadata.AUTO_RECOVERY, [random.choice(['true', 'false']), random.choice(['True', 'False']),
+                                           random.choice(['TRUE', 'FALSE']), random.choice(['TruE', 'faLSe'])],
              'qcow2', 'bare')),
-    mark.p2((ImageMetadata.AUTO_RECOVERRY, [random.choice(['true', 'false']), random.choice(['True', 'False']),
-                                            random.choice(['TRUE', 'FALSE']), random.choice(['TruE', 'faLSe'])],
+    mark.p2((ImageMetadata.AUTO_RECOVERY, [random.choice(['true', 'false']), random.choice(['True', 'False']),
+                                           random.choice(['TRUE', 'FALSE']), random.choice(['TruE', 'faLSe'])],
              'raw', 'bare')),
 ])
 def test_create_image_with_metadata(property_key, values, disk_format, container_format):

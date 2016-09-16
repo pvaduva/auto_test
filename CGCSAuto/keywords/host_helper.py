@@ -87,6 +87,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         reboot_con = True
         hostnames.remove(controller)
 
+    res, out = cli.system('host-list', rtn_list=True)
+    LOG.info('\n{}'.format(out))
+
     user, password = LinuxUser.get_current_user_password()
     # reboot hosts other than active controller
     for host in hostnames:
@@ -1864,6 +1867,8 @@ def get_vcpus_info_in_log(host_ssh, numa_nodes=None, rtn_list=False, con_ssh=Non
                 value = common._parse_cpus_list(value)
             elif key in ['cpu_usage', 'shared']:
                 value = float(value)
+            elif key == 'map':
+                pass
             else:
                 value = int(value)
 
