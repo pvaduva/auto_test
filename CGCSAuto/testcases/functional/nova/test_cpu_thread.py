@@ -234,7 +234,8 @@ class TestHTEnabled:
             nova_helper.set_flavor_extra_specs(flavor_id, **specs)
 
         LOG.tc_step("Get used cpus for all hosts before booting vm")
-        pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=ht_hosts, rtn_val='used_now')
+        hosts_to_check = ht_hosts if img_cpu_thr_pol == 'require' else ht_hosts + non_ht_hosts
+        pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=hosts_to_check, rtn_val='used_now')
 
         image_meta = {ImageMetadata.CPU_THREAD_POLICY: img_cpu_thr_pol}
         if img_cpu_pol:
@@ -465,6 +466,8 @@ class TestHTEnabled:
         LOG.tc_step("Get used cpus for all hosts before scaling vm")
         host_allocated_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')[vm_host]
 
+        expt_vcpu_num_change = 2 if cpu_thread_pol == 'isolate' else 1
+
         # Scale down test
         if expt_current_cpu > expt_min_cpu:
             LOG.tc_step("Scale down vm vcpus until it hits the lower limit and ensure scale is successful.")
@@ -478,10 +481,11 @@ class TestHTEnabled:
                 LOG.tc_step('Check total allocated vcpus for host and pcpus for vm is reduced by 1')
                 pcpus_total = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=host_allocated_cpus,
                                                                 vm_host=vm_host, cpu_pol='dedicated',
-                                                                cpu_thr_pol=cpu_thread_pol, expt_increase=-1)[0]
+                                                                cpu_thr_pol=cpu_thread_pol,
+                                                                expt_increase=-expt_vcpu_num_change)[0]
                 assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
                 assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
-                host_allocated_cpus -= 1
+                host_allocated_cpus -= expt_vcpu_num_change
 
         LOG.tc_step("VM is now at it's minimal vcpus, attempt to scale down and ensure it's rejected")
         code, output = vm_helper.scale_vm(vm_id, direction='down', resource='cpu', fail_ok=True)
@@ -504,11 +508,12 @@ class TestHTEnabled:
                 LOG.tc_step('Check total allocated vcpus for host and pcpus for vm is increased by 1')
                 pcpus_total = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=host_allocated_cpus,
                                                                 vm_host=vm_host, cpu_pol='dedicated',
-                                                                cpu_thr_pol=cpu_thread_pol, expt_increase=1)[0]
+                                                                cpu_thr_pol=cpu_thread_pol,
+                                                                expt_increase=expt_vcpu_num_change)[0]
                 assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
                 assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
 
-                host_allocated_cpus += 1
+                host_allocated_cpus += expt_vcpu_num_change
 
         LOG.tc_step("VM is now at it's maximum vcpus, attemp to scale up and ensure it's rejected")
         code, output = vm_helper.scale_vm(vm_id, direction='up', resource='cpu', fail_ok=True)
@@ -646,6 +651,9 @@ class TestHTEnabled:
         (4, 'dedicated', 'require', 'strict', 'image', 'live_migrate', False),
         (3, 'dedicated', 'require', 'strict', 'volume', 'live_migrate', False),
         (3, 'dedicated', 'prefer', 'strict', 'image', 'live_migrate', False),
+        (1, 'dedicated', 'isolate', 'strict', 'volume', 'live_migrate', True),
+        (3, 'dedicated', 'prefer', None, 'volume', 'live_migrate', True),
+        (3, 'dedicated', 'require', None, 'volume', 'live_migrate', True),
         (3, 'dedicated', 'isolate', None, 'volume', 'cold_migrate', False),
         (2, 'dedicated', 'require', None, 'volume', 'cold_mig_revert', False),
         (2, 'dedicated', 'require', None, 'volume', 'cold_mig_revert', False),
@@ -654,10 +662,6 @@ class TestHTEnabled:
         (6, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False),
         (5, 'dedicated', 'prefer', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False),
         (3, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False),
-        (4, 'dedicated', 'require', None, 'volume', 'live_migrate', True),
-        (1, 'dedicated', 'isolate', 'image', 'image', 'live_migrate', True),
-        (3, 'dedicated', 'prefer', 'image', 'image', 'live_migrate', True),
-        (3, 'dedicated', 'require', None, 'volume', 'live_migrate', True),
     ], ids=id_gen)
     def test_cpu_thread_image_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol, vs_numa_affinity,
                                                        boot_source, nova_actions, cpu_thr_in_flv, ht_hosts_):
@@ -824,7 +828,12 @@ class TestHTEnabled:
         LOG.tc_step("Attempt to live migrate vm and ensure it's rejected due to no other HT host")
         code, output = vm_helper.live_migrate_vm(vm_id, fail_ok=True)
         assert 2 == code, "Expect live migration request to be rejected. Actual: {}".format(output)
-        assert ColdMigErr.HT_HOST_REQUIRED.format(cpu_thr_pol) in output
+
+        expt_pol_str = "u'{}'".format(cpu_thr_pol)
+        if cpu_thr_source == 'flavor':
+            assert ColdMigErr.HT_HOST_REQUIRED.format(expt_pol_str, None) in output
+        else:
+            assert ColdMigErr.HT_HOST_REQUIRED.format(None, expt_pol_str) in output
 
 
 class TestHTDisabled:
@@ -954,7 +963,7 @@ class TestMigrateResize:
         LOG.tc_step("Attempt to cold migrate VM")
         code, output = vm_helper.cold_migrate_vm(vm_id, fail_ok=True)
 
-        if cpu_thread_policy != 'require' or len(ht_hosts) > 1:
+        if cpu_thread_policy not in ['require', 'isolate'] or len(ht_hosts) > 1:
             LOG.tc_step("Check cold migration succeeded and vm migrated to other host")
             assert 0 == code, "Cold migration failed unexpectedly. Details: {}".format(output)
 
@@ -962,7 +971,8 @@ class TestMigrateResize:
             LOG.tc_step("Check cold migration is rejected due to no other ht host available for require vm")
             assert 2 == code, "Cold migrate result unexpected. Details: {}".format(output)
 
-            expt_err = ColdMigErr.HT_HOST_REQUIRED.format(cpu_thread_policy)
+            expt_flv_str = "u'{}'".format(cpu_thread_policy)
+            expt_err = ColdMigErr.HT_HOST_REQUIRED.format(expt_flv_str, None)
             assert expt_err in output
 
             post_vm_host = nova_helper.get_vm_host(vm_id)

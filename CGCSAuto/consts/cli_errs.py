@@ -62,12 +62,13 @@ class ResizeVMErr:
 
 
 class ColdMigErr:
-    HT_HOST_REQUIRED = "(NUMATopologyFilter) Host not useable. Requested threads policy: {} from flavor or image is " \
-                       "not allowed on non-hyperthreaded host"
+    HT_HOST_REQUIRED = "(NUMATopologyFilter) Host not useable. Requested threads policy: '[{}, {}]'; from flavor or " \
+                       "image is not allowed on non-hyperthreaded host"
 
 
 class LiveMigErr:
     BLOCK_MIG_UNSUPPORTED = "is not on local storage: Block migration cannot be used with shared storage"
+    GENERAL_NO_HOST = "No valid host was found. There are not enough hosts available."
 
 
 class NetworkingErr:

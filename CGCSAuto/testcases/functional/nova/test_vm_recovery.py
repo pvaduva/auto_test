@@ -108,7 +108,7 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
         extra_specs[FlavorSpec.AUTO_RECOVERY] = flavor_auto_recovery
 
     if extra_specs:
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **{FlavorSpec.AUTO_RECOVERY: flavor_auto_recovery})
+        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
     property_key = ImageMetadata.AUTO_RECOVERY
     LOG.tc_step("Create an image with property auto_recovery={}, disk_format={}, container_format={}".

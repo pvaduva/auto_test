@@ -143,7 +143,6 @@ class ImageMetadata:
     AUTO_RECOVERY = 'sw_wrs_auto_recovery'
     VIF_MODEL = 'hw_vif_model'
     CPU_THREAD_POLICY = 'hw_cpu_thread_policy'
-    # CPU_THREAD_POLICY = 'hw_cpu_threads_policy' upstream name change
     CPU_POLICY = 'hw_cpu_policy'
 
 
