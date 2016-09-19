@@ -230,7 +230,8 @@ function randomize_fname($name) {
   			echo "<option value=\"Ottawa_ironpass7-12\">Ottawa_ironpass7-12</option>";
   			echo "<option value=\"Ottawa_ironpass14-17\">Ottawa_ironpass7-12</option>";
   			echo "<option value=\"Ottawa_ironpass18-19\">Ottawa_ironpass7-12</option>";
-  			echo "<option value=\"Ottawa_ironpass-20-27\">Ottawa_ironpass-20-27</option>";
+                        echo "<option value=\"Ottawa_ironpass-20-27\">Ottawa_ironpass-20-27</option>";
+			echo "<option value=\"Ottawa_ironpass-33-36\">Ottawa_ironpass-20-27</option>";
   			echo "<option value=\"wcp7-12\">wcp7-12</option>";
  			echo "<option value=\"Ottawa_R720-1-2\">Ottawa_R720-1-2</option>";
  			echo "<option value=\"Ottawa_R720-3-7\">Ottawa_R720-3-7</option>";
