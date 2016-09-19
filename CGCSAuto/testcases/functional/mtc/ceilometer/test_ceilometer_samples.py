@@ -15,16 +15,14 @@ from keywords import ceilometer_helper
 @mark.cpe_sanity
 def test_ceilometer_vswitch_port_samples_5_min_record():
     """
-
     Test Steps:
-        - Get resource IDs for last two vswitch.port.transmit.util entries in sample-list
+        - Get resource IDs for last two vswitch.port.transmit.util entries in ceilometer sample-list
+        - Verify 10 vswitch.port.transmit.util entries exist in sample-list per resource id (wait for up to 5 minute)
 
     """
     meter = 'vswitch.port.transmit.util'
 
     LOG.tc_step("Get resource IDs for last two vswitch.port.transmit.util entries in sample-list")
-    # last_two_vswitch_samples_resource_ids = ceilometer_helper.get_samples(limit=2, meter=meter)
-    # vswitch_samples_len = len(last_two_vswitch_samples_resource_ids)
     last_two_samples = __wait_for_records(limit=2, meter=meter, query=None, entry_num=2, timeout=60)
 
     assert 2 == len(last_two_samples), "Number of entries for {} meter is {} instead of 2".format(meter, last_two_samples)
