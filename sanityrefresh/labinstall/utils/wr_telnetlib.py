@@ -1068,7 +1068,7 @@ class Telnet:
                         time.sleep(1)
                         self.write(str.encode(DOWN))
                         self.write(str.encode(DOWN))
-                        self.write(str.encode(DOWN))
+                        #self.write(str.encode(DOWN))
                         time.sleep(1)
                         log.info("Pressing ENTER key")
                         self.write(str.encode("\r\r"))
