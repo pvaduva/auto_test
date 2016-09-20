@@ -191,7 +191,8 @@ $source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_2.0_Unified
 $source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Unified_Daily_Build/latest_bootimage.iso
 # Centos Version
 $source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Centos_Build/latest_bootimage.iso
-
+# Centos Version
+$source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Centos_Build/latest_bootimage.iso
 ?if $load == GA2 ?[
 	$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_bootimage.iso
 ]
@@ -221,7 +222,7 @@ $IP=10.10.10.3
 $pull_new_image=no
 $wipe_disk=yes
 #config controller release2 additional questions
-#$rel2=yes ###### Changed the code by default to rel2 behaviour
+#$rel2=yes @@@@@@ Changed the code by default to rel2 behaviour
 $rel3=yes
 
 $install_tenant_files=yes
@@ -983,7 +984,7 @@ $directory=R3_files
 	?if $patch == yes ? [
 		@1500
 		; === Copying Patch file for 15.12
-		>wget -r -nH -nd -np -R index.html* --no-parent http://10.10.10.254:8088/files/install/15.12_patches/
+		>wget -r -nH -nd -np -R index.html* --no-parent http://10.10.10.254:8088/files/install/R2_patches/
 		>mkdir patches
 		>mv *.patch patches/
 		>sudo sw-patch query
