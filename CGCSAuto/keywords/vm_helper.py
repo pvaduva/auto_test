@@ -615,7 +615,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     if not before_status == VMStatus.ACTIVE:
         LOG.warning("Non-active VM status before cold migrate: {}".format(before_status))
 
-    LOG.info("Colding migrating VM {} from {}...".format(vm_id, before_host))
+    LOG.info("Cold migrating VM {} from {}...".format(vm_id, before_host))
     exitcode, output = cli.nova('migrate --poll', vm_id, ssh_client=con_ssh, auth_info=auth_info,
                                 timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=True, rtn_list=True)
 

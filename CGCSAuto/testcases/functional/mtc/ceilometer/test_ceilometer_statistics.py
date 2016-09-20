@@ -77,7 +77,9 @@ def test_ceilometer_meters_exist(meters):
     # Check meter for image
     LOG.tc_step('Check meters for image')
     images = glance_helper.get_images()
-    image_meters_tab = ceilometer_helper.get_meters_table(meter='image.upload')
+    # maybe change to image instead of image.upload?
+    # image_meters_tab = ceilometer_helper.get_meters_table(meter='image.upload')
+    image_meters_tab = ceilometer_helper.get_meters_table(meter='image')
     images_in_meter_list = table_parser.get_column(image_meters_tab, 'Resource ID')
 
     assert set(images) <= set(images_in_meter_list)

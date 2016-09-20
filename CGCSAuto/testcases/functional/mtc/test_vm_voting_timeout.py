@@ -102,5 +102,7 @@ def test_vm_voting_timeout(heartbeat_flavor_vm, action, revert, vm_voting):
         cmd_str = "vm_helper.{}(vm_id)".format(revert)
         eval(cmd_str)
 
+    sleep(20)
+
     # delete vm automatically
 
