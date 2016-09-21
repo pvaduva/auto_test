@@ -72,7 +72,7 @@ def test_show_mem_data():
             assert 'True' == hp or 'False' == hp, "FAIL: Neither True nor False"
 
             table_2 = system_helper.get_host_memory_values(host=host, proc_num=proc)
-            total = table_parser.get_value_two_col_table(table_2, 'Memory: Total     (MiB)')
+            total = table_parser.get_value_two_col_table(table_2, 'Memory:.*Total.*(MiB)', regex=True)
             assert mem_tot == total, "FAIL: The two tables don't agree on total memory"
             pages = table_parser.get_value_two_col_table(table_2, 'Huge Pages Configured')
             assert hp == pages, "FAIL: The two tables don't agree on huge pages configuration"

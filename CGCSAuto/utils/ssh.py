@@ -55,7 +55,7 @@ class SSHClient:
     """
 
     def __init__(self, host, user='wrsroot', password='Li69nux*', force_password=True, initial_prompt=CONTROLLER_PROMPT,
-                 timeout=20, session=None):
+                 timeout=60, session=None):
         """
         Initiate an object for connecting to remote host
         Args:
@@ -242,7 +242,7 @@ class SSHClient:
 
         LOG.debug("Buffer is flushed by reading out the rest of the output")
 
-    def expect(self, blob_list=None, timeout=10, fail_ok=False, rm_date=False):
+    def expect(self, blob_list=None, timeout=60, fail_ok=False, rm_date=False):
         """
         Look for match in the output. Stop if 1) match is found, 2) match is not found and prompt is reached, 3) match
         is not found and timeout is reached. For scenario 2 and 3, either throw timeout exception or return False based

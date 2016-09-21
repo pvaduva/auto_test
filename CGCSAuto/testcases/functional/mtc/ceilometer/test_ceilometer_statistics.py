@@ -40,7 +40,7 @@ def test_statistics_for_one_meter(meter):
 
 
 @mark.sanity
-# Hardcode the parameter eventhough unused so sanity test name can show the meters tested
+# Hardcode the parameter even though unused so sanity test name can show the meters tested
 @mark.parametrize('meters', [
     'router_subnet_image_vswitch'
 ])
@@ -59,7 +59,7 @@ def test_ceilometer_meters_exist(meters):
         skip("Over a day since install. Meters no longer exist.")
 
     # Check meter for routers
-    LOG.tc_step("Check number of router.create meters is at least the number of existing routers")
+    LOG.tc_step("Check number of 'router.create' meters is at least the number of existing routers")
     routers = network_helper.get_routers(auth_info=Tenant.ADMIN)
     router_create_meter_table = ceilometer_helper.get_meters_table(meter='router.create')
     created_routers_in_meters = table_parser.get_column(router_create_meter_table, 'Resource ID')
@@ -67,7 +67,7 @@ def test_ceilometer_meters_exist(meters):
     assert set(routers) <= set(created_routers_in_meters), "router.create meters do not exist for all existing routers"
 
     # Check meter for subnets
-    LOG.tc_step("Check number of subnet.create meters is at least the number of existing subnets")
+    LOG.tc_step("Check number of 'subnet.create' meters is at least the number of existing subnets")
     subnets = network_helper.get_subnets(auth_info=Tenant.ADMIN)
     subnet_create_meter_table = ceilometer_helper.get_meters_table(meter='subnet.create')
     created_subnets_in_meters = table_parser.get_column(subnet_create_meter_table, 'Resource ID')
@@ -77,7 +77,9 @@ def test_ceilometer_meters_exist(meters):
     # Check meter for image
     LOG.tc_step('Check meters for image')
     images = glance_helper.get_images()
-    image_meters_tab = ceilometer_helper.get_meters_table(meter='image.upload')
+    # maybe change to image instead of image.upload?
+    # image_meters_tab = ceilometer_helper.get_meters_table(meter='image.upload')
+    image_meters_tab = ceilometer_helper.get_meters_table(meter='image')
     images_in_meter_list = table_parser.get_column(image_meters_tab, 'Resource ID')
 
     assert set(images) <= set(images_in_meter_list)

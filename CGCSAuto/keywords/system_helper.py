@@ -452,7 +452,7 @@ def wait_for_alarms_gone(alarm_uuids, timeout=120, check_interval=3, fail_ok=Fal
 
     end_time = time.time() + timeout
     while time.time() < end_time:
-        alarms_tab = get_alarms_table()
+        alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
 
         alarms = table_parser.get_column(alarms_tab, 'UUID')
 

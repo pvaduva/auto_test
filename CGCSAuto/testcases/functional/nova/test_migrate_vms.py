@@ -66,30 +66,31 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
 
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'vm_type', 'block_mig', 'expt_err'), [
     mark.p1(('local_image', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
-    mark.p1(('local_image', 1, 0, 'volume', False, 'TBD')),
-    mark.p1(('local_image', 0, 1, 'volume', False, 'TBD')),
-    mark.p1(('local_image', 0, 0, 'image_with_vol', False, 'TBD')),
-    mark.p1(('local_image', 0, 0, 'image_with_vol', True, 'TBD')),
+    mark.p1(('local_image', 1, 0, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_image', 0, 1, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_image', 0, 0, 'image_with_vol', False, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_image', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),
     # mark.p1(('local_image', 0, 0, 'shared', 2, 'image', False, ??)),      obsolete in Mitaka
     # mark.p1(('local_image', 1, 1, 'dedicated', 1, 'image', False, ??)),   obsolete in Mitaka
     mark.p1(('local_lvm', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
-    mark.p1(('local_lvm', 1, 0, 'volume', True, 'TBD')),
-    mark.p1(('local_lvm', 0, 1, 'volume', True, 'TBD')),
-    mark.p1(('local_lvm', 0, 1, 'volume', False, 'TBD')),
-    mark.p1(('local_lvm', 1, 0, 'volume', False, 'TBD')),
-    mark.p1(('local_lvm', 0, 0, 'image', True, 'TBD')),
-    mark.p1(('local_lvm', 1, 0, 'image', True, 'TBD')),
-    mark.p1(('local_lvm', 0, 0, 'image', False, 'TBD')),
-    mark.p1(('local_lvm', 0, 1, 'image', False, 'TBD')),
-    mark.p1(('local_lvm', 0, 0, 'image_with_vol', False, 'TBD')),
-    mark.p1(('local_lvm', 0, 0, 'image_with_vol', True, 'TBD')),
+    mark.p1(('local_lvm', 1, 0, 'volume', True, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_lvm', 0, 1, 'volume', True, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_lvm', 0, 1, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_lvm', 1, 0, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_lvm', 0, 0, 'image', True, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_lvm', 1, 0, 'image', True, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_lvm', 0, 0, 'image', False, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_lvm', 0, 1, 'image', False, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_lvm', 0, 0, 'image_with_vol', False, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_lvm', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),
     mark.p1(('remote', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
     mark.p1(('remote', 1, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
     mark.p1(('remote', 0, 1, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
     mark.p1(('remote', 0, 1, 'image', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
     mark.p1(('remote', 0, 0, 'image_with_vol', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
 ])
-def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, block_mig, expt_err, hosts_per_stor_backing):
+def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, block_mig, expt_err,
+                                  hosts_per_stor_backing):
     """
     Skip Condition:
         - Less than two hosts have specified storage backing
@@ -116,7 +117,8 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
     # block_mig = True if boot_source == 'image' else False
     code, output = vm_helper.live_migrate_vm(vm_id, block_migrate=block_mig)
     assert 1 == code, "Expect live migration to have expected fail. Actual: {}".format(output)
-    assert expt_err in output, "Expected error message {} is not in actual error message: {}".format(expt_err, output)
+    assert eval(expt_err) in output, "Expected error message {} is not in actual error message: {}".\
+        format(eval(expt_err), output)
 
     post_vm_host = nova_helper.get_vm_host(vm_id)
     assert prev_vm_host == post_vm_host, "VM host changed even though live migration request rejected."

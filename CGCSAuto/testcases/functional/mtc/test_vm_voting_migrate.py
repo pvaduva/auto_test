@@ -18,6 +18,7 @@ from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
 from consts.auth import Tenant
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.recover_hosts import HostsToRecover
 
 @fixture(scope='module')
 def flavor_(request):
@@ -115,6 +116,15 @@ def test_vm_voting_migrate(vm_):
                                                      destination_host=dest_host)
     assert return_code in [0, 1], message
     time.sleep(60)
+
+    hypervisor_hosts = host_helper.get_hypervisors(state='up', status='enabled')
+    if len(hypervisor_hosts) > 2:
+        LOG.tc_step("Locking hypervisors so there are only 2 up")
+        vm_host = nova_helper.get_vm_host(vm_id)
+        hypervisor_hosts.remove(vm_host)
+        for host in hypervisor_hosts[1:]:
+            HostsToRecover.add(host, scope='function')
+            host_helper.lock_host(host)
 
     LOG.tc_step("Verify the VM can be cold migrated")
     return_code, message = vm_helper.cold_migrate_vm(vm_id, fail_ok=True, revert=True)
