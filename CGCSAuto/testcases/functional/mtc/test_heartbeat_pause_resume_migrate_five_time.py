@@ -91,8 +91,11 @@ def test_vm_pause_resume_five_time(heartbeat_flavor_vm):
 
     # find the compute node where the vm is located
     for i in range(0,5):
+        LOG.info("Pause and unpause vm. #{}".format(i))
         vm_helper.pause_vm(vm_id)
+        sleep(5)
         vm_helper.unpause_vm(vm_id)
+        sleep(5)
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 
@@ -159,7 +162,9 @@ def test_vm_live_migration_five_time(heartbeat_flavor_vm):
     LOG.tc_step("Live migrate the VMs five time")
     # find the compute node where the vm is located
     for i in range(0, 5):
+        LOG.info("Live migrate vm. #{}".format(i))
         vm_helper.live_migrate_vm(vm_id, block_migrate=True)
+        sleep(5)
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 
