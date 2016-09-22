@@ -104,7 +104,7 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path):
             con_0_ssh.send('yes')
             con_0_ssh.expect(Prompt.PASSWORD_PROMPT)
         con_0_ssh.send(natbox['password'])
-        con_0_ssh.expect()
+        con_0_ssh.expect(timeout=30)
         if not con_0_ssh.get_exit_code() == 0:
             raise exceptions.CommonError("Failed to copy keyfile to NatBox")
     LOG.info("key file is successfully copied from controller-0 to NATBox")
