@@ -388,7 +388,7 @@ class SSHClient:
 
     def get_exit_code(self):
         self.send(EXIT_CODE_CMD)
-        self.expect(timeout=3)
+        self.expect(timeout=30)
         return int(self.cmd_output.splitlines()[1])
 
     def get_hostname(self):
