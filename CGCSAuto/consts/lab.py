@@ -176,6 +176,14 @@ class Labs:
         'controller-1 ip': '128.224.151.24',
     }
 
+    WCP_80_84 = {
+        'short_name': 'wcp_80_84',
+        'name': 'yow-cgcs-wildcat-80_84',
+        'floating ip': '128.224.150.18',
+        'controller-0 ip': '128.224.150.14',
+        'controller-1 ip': '128.224.150.156',
+    }
+
     VBOX = {
         'short_name': 'vbox',
         'name': 'vbox',
