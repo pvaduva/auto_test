@@ -265,12 +265,12 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 
 @mark.sanity
 @mark.parametrize(('guest_os', 'mig_type', 'cpu_pol'), [
-    ('ubuntu', 'live', 'dedicated'),
-    ('ubuntu', 'cold', 'dedicated'),
+    ('ubuntu_14', 'live', 'dedicated'),
+    ('ubuntu_14', 'cold', 'dedicated'),
     ('cgcs-guest', 'live', None),
     mark.cpe_sanity(('cgcs-guest', 'cold', None)),
 ])
-def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu_image):
+def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu14_image):
     LOG.tc_step("Create a flavor with 1 vcpu")
     flavor_id = nova_helper.create_flavor(name='{}-mig'.format(mig_type), vcpus=1, root_disk=9)[1]
     ResourceCleanup.add('flavor', flavor_id)
@@ -281,11 +281,11 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu_image):
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
 
     LOG.tc_step("Create a volume from {} image".format(guest_os))
-    if guest_os == 'ubuntu':
-        image_id = ubuntu_image
+    if guest_os == 'ubuntu_14':
+        image_id = ubuntu14_image
     else:
         image_id = glance_helper.get_image_id_from_name('cgcs-guest')
-    vol_id = cinder_helper.create_volume(name='ubuntu', image_id=image_id, size=9)[1]
+    vol_id = cinder_helper.create_volume(name='ubuntu_14', image_id=image_id, size=9)[1]
     ResourceCleanup.add('volume', vol_id)
 
     LOG.tc_step("Boot a vm from above flavor and volume")

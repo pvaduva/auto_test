@@ -2116,7 +2116,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     file_dir = TiSPath.USERDATA
 
     if 'ubuntu' in guest_os:
-        guest_os = 'ubuntu'
+        guest_os = 'ubuntu_14'
         # vm_if_path = VMPath.VM_IF_PATH_UBUNTU
         eth_path = VMPath.ETH_PATH_UBUNTU
     elif 'centos' in guest_os:
@@ -2125,7 +2125,8 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
         eth_path = VMPath.ETH_PATH_CENTOS
 
     else:
-        raise ValueError("Unknown guest os")
+        LOG.warning("Unknown guest os for userdata creation")
+        return None
 
     eth0_path = eth_path.format('eth0')
     file_name = '{}_{}nic_cloud_init_if_conf.sh'.format(guest_os, nics_num)
@@ -2141,7 +2142,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     con_ssh.exec_cmd(cmd, fail_ok=False)
 
     tmp_file = ProjVar.get_var('TEMP_DIR') + file_name
-    if 'centos7' in guest_os:
+    if 'centos_7' in guest_os:
         shell = '/usr/bin/bash'
     else:
         shell = '/bin/bash'

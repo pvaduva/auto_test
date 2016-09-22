@@ -7,8 +7,8 @@
 
 import time
 
-from datetime import datetime
 from utils.tis_log import LOG
+from consts.cgcs import MELLANOX_DEVICE
 from keywords import host_helper, system_helper, vm_helper, nova_helper, common
 
 
@@ -23,7 +23,7 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
     device_types = system_helper.get_host_ports_info(host, 'device type', if_name=data_ports, strict=True)
     extra_mt_ports = 0
     for device_type in device_types:
-        if 'MT27500' in device_type:
+        if MELLANOX_DEVICE in device_type:
             extra_mt_ports += 1
 
     if extra_mt_ports > 0:

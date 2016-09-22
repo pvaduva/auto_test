@@ -39,27 +39,23 @@ def check_alarms_session(request):
 def __verify_alarms(request, scope):
     LOG.fixture_step("({}) Gathering system alarms info before test {} begins.".format(scope, scope))
     before_tab = system_helper.get_alarms_table()
-    before_uuids = table_parser.get_column(before_tab, 'UUID')
+    before_alarms = system_helper._get_alarms(before_tab)
 
     def verify_alarms():
         LOG.fixture_step("({}) Verifying system alarms after test {} ended...".format(scope, scope))
         after_tab = system_helper.get_alarms_table()
-        after_uuids = table_parser.get_column(after_tab, 'UUID')
+        after_alarms = system_helper._get_alarms(after_tab)
         new_alarms = []
 
-        for item in after_uuids:
-            if item not in before_uuids:
+        for item in after_alarms:
+            if item not in before_alarms:
                 new_alarms.append(item)
 
         if new_alarms:
             LOG.fixture_step("New alarms detected. Waiting for new alarms to clear.")
-            res, new_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True, timeout=300)
-
-        if new_alarms:
-            table_final = table_parser.filter_table(after_tab, UUID=new_alarms)
-            new_rows = table_parser.get_all_rows(table_final)
-
-            assert not new_alarms, "New alarm(s) found and did not clear within 5 minutes: {}".format(new_rows)
+            res, remaining_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True, timeout=300)
+            assert res, "New alarm(s) found and did not clear within 5 minutes. " \
+                        "Alarm IDs and Entity IDs: {}".format(remaining_alarms)
 
         LOG.fixture_step("({}) System alarms verified.".format(scope))
 

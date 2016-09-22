@@ -69,6 +69,7 @@ def setup_natbox_ssh(keyfile_path, natbox):
 
 def __copy_keyfile_to_natbox(natbox, keyfile_path):
     # con_ssh = ControllerClient.get_active_controller()
+    LOG.info("scp key file from controller-0 to NATBox")
     with host_helper.ssh_to_host('controller-0') as con_0_ssh:
         # con_0_ssh = ssh_to_controller0(ssh_client=con_ssh)
         if not con_0_ssh.file_exists('/home/wrsroot/.ssh/id_rsa'):
@@ -106,6 +107,7 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path):
         con_0_ssh.expect()
         if not con_0_ssh.get_exit_code() == 0:
             raise exceptions.CommonError("Failed to copy keyfile to NatBox")
+    LOG.info("key file is successfully copied from controller-0 to NATBox")
 
 
 def boot_vms(is_boot):

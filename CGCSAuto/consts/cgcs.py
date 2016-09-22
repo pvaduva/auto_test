@@ -26,6 +26,8 @@ HOME = '/home/wrsroot/'
 # Heat template path
 HEAT_PATH = 'heat/hot/simple/'
 HEAT_SCENARIO_PATH = 'heat/hot/scenarios/'
+MELLANOX_DEVICE = 'MT27500'
+
 
 class NetIP:
     MGMT_NET_NAME = 'tenant\d-mgmt-net'
@@ -205,11 +207,11 @@ class NetworkingVmMapping:
 
 class VifMapping:
     VIF_MAP = {'vswitch': 'DPDKAPPS',
-                   'avp': 'AVPAPPS',
-                   'virtio': 'VIRTIOAPPS',
-                   'sriov': 'SRIOVAPPS',
-                   'pcipt': 'PCIPTAPPS'
-                   }
+               'avp': 'AVPAPPS',
+               'virtio': 'VIRTIOAPPS',
+               'sriov': 'SRIOVAPPS',
+               'pcipt': 'PCIPTAPPS'
+               }
 
 
 class LocalStorage:
@@ -229,7 +231,7 @@ class HTTPPorts:
     SYS_PORT = 6385
     SYS_VER = "v1"
     CINDER_PORT = 8776
-    CINDER_VER = "v2" #v1 is also supported
+    CINDER_VER = "v2"   # v1 is also supported
     GLANCE_PORT = 9292
     GLANCE_VER = "v2"
     HEAT_PORT = 8004
@@ -237,7 +239,7 @@ class HTTPPorts:
     HEAT_CFN_PORT = 8000
     HEAT_CFN_VER = "v1"
     NOVA_PORT = 8774
-    NOVA_VER = "v2" #v3 also supported
+    NOVA_VER = "v2"     # v3 also supported
     NOVA_EC2_PORT = 8773
     NOVA_EC2_VER = "v2"
     PATCHING_PORT = 15491
@@ -256,3 +258,15 @@ class QoSSpecs:
     READ_IOPS = 'read_iops_sec'
     WRITE_IOPS = 'write_iops_sec'
     TOTAL_IOPS = 'total_iops_sec'
+
+
+class GuestImages:
+    UBUNTU_14 = 'ubuntu-14.04-server-cloudimg-amd64-disk1.img'
+    UBUNTU_12 = 'ubuntu-12.04-server-cloudimg-amd64-disk1.img'
+    CENTOS_6 = 'CentOS-6.8-x86_64-GenericCloud-1608.qcow2'
+    CENTOS_7 = 'CentOS-7-x86_64-GenericCloud.qcow2'
+    # RHEL_6 = 'rhel-6.5-x86_64.qcow2'
+    # RHEL_7 = 'rhel-7.2-x86_64.qcow2'
+    # openSUSE_11 = 'openSUSE-11.3-x86_64.qcow2'
+    # openSUSE_12 = 'openSUSE-12.3-x86_64.qcow2'
+    openSUSE_13 = 'openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2'

@@ -133,7 +133,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
         auth_info (dict):
         con_ssh (SSHClient):
         rtn_exist(bool): whether to return an existing available volume with matching name and bootable state.
-        guest_image (str): guest image name if image_id unspecified. valid values: cgcs-guest, ubuntu, centos7, centos6
+        guest_image (str): guest image name if image_id unspecified. valid values: cgcs-guest, ubuntu, centos_7, centos_6
 
     Returns (tuple):  (return_code, volume_id or err msg)
         (-1, existing_vol_id)   # returns existing volume_id instead of creating a new one. Applies when rtn_exist=True.

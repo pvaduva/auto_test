@@ -268,10 +268,11 @@ def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     """
     size = 1
     if guest_os and 'cgcs-guest' not in guest_os:
-        if 'ubuntu' in guest_os:
-            size = 9
-        elif 'centos' in guest_os:
-            size = 9
+        # if 'ubuntu' in guest_os:
+        #     size = 9
+        # elif 'centos' in guest_os:
+        #     size = 9
+        size = 9
 
     default_flavor_name = 'flavor-default-size{}'.format(size)
     flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)

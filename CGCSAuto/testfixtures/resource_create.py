@@ -25,18 +25,48 @@ def server_groups():
 
 
 @fixture(scope='session')
-def ubuntu_image():
-    return _create_image('ubuntu')
+def ubuntu14_image():
+    return _create_image('ubuntu_14')
+
+
+@fixture(scope='session')
+def ubuntu12_image():
+    return _create_image('ubuntu_12')
 
 
 @fixture(scope='session')
 def centos7_image():
-    return _create_image('centos7')
+    return _create_image('centos_7')
 
 
 @fixture(scope='session')
 def centos6_image():
-    return _create_image('centos6')
+    return _create_image('centos_6')
+
+
+@fixture(scope='session')
+def opensuse11_image():
+    return _create_image('openSUSE_11')
+
+
+@fixture(scope='session')
+def opensuse12_image():
+    return _create_image('openSUSE_12')
+
+
+@fixture(scope='session')
+def opensuse13_image():
+    return _create_image('openSUSE_13')
+
+
+@fixture(scope='session')
+def rhel6_image():
+    return _create_image('rhel_6')
+
+
+@fixture(scope='session')
+def rhel7_image():
+    return _create_image('rhel_7')
 
 
 def _create_image(img_os):

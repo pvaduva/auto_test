@@ -659,7 +659,7 @@ class TestHTEnabled:
         (2, 'dedicated', 'require', None, 'volume', 'cold_mig_revert', False),
         (5, 'dedicated', 'prefer', None, 'volume', 'cold_mig_revert', False),
         (4, 'dedicated', 'isolate', None, 'image', ['suspend', 'resume', 'rebuild'], False),
-        (6, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False),
+        (6, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], True),
         (5, 'dedicated', 'prefer', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False),
         (3, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False),
     ], ids=id_gen)

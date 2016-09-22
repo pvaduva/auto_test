@@ -95,7 +95,23 @@ class Guest:
         'centos': {
             'user': 'centos',
             'password': None
+        },
+
+        'openSUSE': {
+            'user': 'root',
+            'password': None
+        },
+
+        'rhel': {
+            'user': 'cloud-user',
+            'password': None
+        },
+
+        'cirros': {
+            'user': 'cirros',
+            'password': 'cubswin:)'
         }
+
     }
 
     @classmethod

@@ -37,7 +37,7 @@ def setup_test_session():
     global natbox_ssh
     natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'))
 
-    setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
+    # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
 
 @pytest.fixture(scope='function', autouse=True)

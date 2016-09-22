@@ -6,7 +6,7 @@ from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.timeout import ImageTimeout
-from consts.cgcs import IMAGE_DIR, Prompt
+from consts.cgcs import IMAGE_DIR, Prompt, GuestImages
 from keywords.common import Count
 
 
@@ -97,7 +97,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     source_str = file_path
 
-    known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros']
+    known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros', 'openSUSE', 'rhel']
     name = name if name else 'auto'
     for img_str in known_imgs:
         if img_str in name:
@@ -110,7 +110,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
         name_prefix = name_prefix.split(sep='.')[0]
         name = name_prefix + '_' + name
 
-    name = '_'.join([name, str(Count.get_image_count())])
+    name = '-'.join([name, str(Count.get_image_count())])
 
     optional_args = {
         '--id': image_id,
@@ -332,18 +332,22 @@ def get_image_properties(image, property_keys, auth_info=Tenant.ADMIN, con_ssh=N
     return results
 
 
-def _scp_guest_image(img_os='ubuntu', dest_dir=IMAGE_DIR, con_ssh=None):
+def _scp_guest_image(img_os='ubuntu_14', dest_dir=IMAGE_DIR, con_ssh=None):
     """
 
     Args:
-        img_os (str): guest image os type. valid values: ubuntu, centos7, centos6
+        img_os (str): guest image os type. valid values: ubuntu, centos_7, centos_6
         dest_dir (str): where to save the downloaded image. Default is '~/images'
         con_ssh (SSHClient):
 
     Returns (str): full file name of downloaded image. e.g., '~/images/ubuntu.img'
 
     """
-    valid_img_os_types = ['ubuntu', 'centos6', 'centos7']
+    valid_img_os_types = ['ubuntu_14', 'ubuntu_12',
+                          'centos_6', 'centos_7',
+                          'openSUSE_11', 'openSUSE_12', 'openSUSE_13',
+                          'rhel_6', 'rhel_7']
+
     if img_os not in valid_img_os_types:
         raise ValueError("Invalid image OS type provided. Valid values: {}".format(valid_img_os_types))
 
@@ -351,19 +355,38 @@ def _scp_guest_image(img_os='ubuntu', dest_dir=IMAGE_DIR, con_ssh=None):
         con_ssh = ControllerClient.get_active_controller()
 
     # image_loc_dict = {
-    #     'ubuntu': ['ubuntu.img',
+    #     'ubuntu_14': ['ubuntu.img',
     #                'https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img'],
-    #     'centos6': ['centos6.qcow2', 'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud.qcow2'],
-    #     'centos7': ['centos7.qcow2', 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2']
+    #     'centos_6': ['centos_6.qcow2', 'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud.qcow2'],
+    #     'centos_7': ['centos_7.qcow2', 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2']
     # }
 
     image_loc_dict = {
-        'ubuntu': 'ubuntu.img',
-        'centos6': 'centos6.img',
-        'centos7': 'centos7.img',
+        'ubuntu_14': GuestImages.UBUNTU_14,
+        'ubuntu_12': GuestImages.UBUNTU_12,
+        'centos_6': GuestImages.CENTOS_6,
+        'centos_7': GuestImages.CENTOS_7,
+        # 'openSUSE_11': GuestImages.openSUSE_11,
+        # 'openSUSE_12': GuestImages.openSUSE_12,
+        'openSUSE_13': GuestImages.openSUSE_13,
+        # 'rhel_6': GuestImages.RHEL_6,
+        # 'rhel_7': GuestImages.RHEL_7,
     }
 
-    dest_name = image_loc_dict[img_os]
+    dest_img_dict = {
+        'ubuntu_14': 'ubuntu_14.img',
+        'ubuntu_12': 'ubuntu_12.img',
+        'centos_6': 'centos_6.img',
+        'centos_7': 'centos_7.img',
+        # 'openSUSE_11': 'openSUSE_11.img',
+        # 'openSUSE_12': 'openSUSE_12.img',
+        'openSUSE_13': 'openSUSE_13.img',
+        # 'rhel_6': 'rhel_6.img',
+        # 'rhel_7': 'rhel_7.img',
+    }
+
+    dest_name = dest_img_dict[img_os]
+    source_name = image_loc_dict[img_os]
 
     if dest_dir.endswith('/'):
         dest_dir = dest_dir[:-1]
@@ -382,10 +405,10 @@ def _scp_guest_image(img_os='ubuntu', dest_dir=IMAGE_DIR, con_ssh=None):
     # cmd = 'wget {} --no-check-certificate -P {} -O {}'.format(img_url, img_dest, new_name)
     # con_ssh.exec_cmd(cmd, expect_timeout=7200, fail_ok=False)
 
-    source_path = '{}/images/{}'.format(SvcCgcsAuto.HOME, dest_name)
+    source_path = '{}/images/{}'.format(SvcCgcsAuto.HOME, source_name)
     LOG.info('scp image from test server to active controller')
     scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}@{}:{} {}'.format(
-            SvcCgcsAuto.USER, SvcCgcsAuto.SERVER, source_path, dest_dir)
+            SvcCgcsAuto.USER, SvcCgcsAuto.SERVER, source_path, dest_path)
 
     con_ssh.send(scp_cmd)
     index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=3600)
