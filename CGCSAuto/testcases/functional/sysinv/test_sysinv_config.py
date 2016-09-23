@@ -98,7 +98,7 @@ class TestRetentionPeriod:
         LOG.info('Backup Retention Period')
         table_ = table_parser.table(cli.system('pm-show'))
         self.retention_period = table_parser.get_value_two_col_table(table_, 'retention_secs')
-        LOG.info('Current Retention Prioid is {}'.format(self.retention_period))
+        LOG.info('Current Retention Period is {}'.format(self.retention_period))
 
         def restore_rention_period():
             LOG.info('Restore Retention Period to its orignal value {}'.format(self.retention_period))

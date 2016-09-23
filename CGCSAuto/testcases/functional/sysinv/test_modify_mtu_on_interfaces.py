@@ -28,7 +28,6 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
     # get the port_uuid for network_type interface only
     table_ = table_parser.table(cli.system('host-if-list --nowrap', hostname))
     port_uuid_list = table_parser.get_values(table_, 'uuid', **{'network type': network_type})
-    imtu = " --imtu "+mtu
 
     # lock the node
     LOG.tc_step('lock the standby')
@@ -42,9 +41,12 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
     if network_type == 'data':
         pnet_mtus = network_helper.get_providernets(name='data', rtn_val='mtu', strict=False)
         for pnet_mtu in pnet_mtus:
-            if pnet_mtu > mtu:
-                mtu = pnet_mtu + random.randint(1, 50)
+            if int(pnet_mtu) > int(mtu):
+                mtu = pnet_mtu
+        mtu = str(mtu)
 
+    imtu = " --imtu " + mtu
+    LOG.tc_step("Modifying {} interfaces to have {} mtu".format(network_type, mtu))
     # change all MTUs on ports of the same network type
     for port_uuid in port_uuid_list:
         args = hostname + " " + port_uuid + imtu
