@@ -36,7 +36,6 @@ def ensure_sufficient_4k_pages():
             if system_helper.get_active_controller_name() == host:
                 host_helper.swact_host()
                 time.sleep(30)
-                host_helper.lock_host(host)
 
             time.sleep(30)
             HostsToRecover.add(host)
