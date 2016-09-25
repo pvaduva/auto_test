@@ -1,7 +1,10 @@
 import time
 from pytest import mark
+
 from utils.tis_log import LOG
+
 from keywords import vm_helper, network_helper
+from testfixtures.resource_mgmt import ResourceCleanup
 
 
 def test_boot_vms(ubuntu14_image, opensuse11_image, opensuse12_image, rhel6_image, rhel7_image):
@@ -29,10 +32,14 @@ def test_vm_topo_check():
 
 
 @mark.parametrize('guest_os', [
-    # 'openSUSE_11', 'openSUSE_12',
-    # 'rhel_6', 'rhel_7'
-    'openSUSE_13',
+    'opensuse_11',
+    'opensuse_12',
+    # 'rhel_6',
+    'rhel_7'
+    # 'opensuse_13',
 ])
-def test_boot_and_ping_vm(guest_os, opensuse13_image, opensuse11_image, opensuse12_image, rhel6_image, rhel7_image):
-    vm_id = vm_helper.boot_vm(guest_os=guest_os)[1]
+def test_boot_and_ping_vm(guest_os, opensuse11_image, opensuse12_image, opensuse13_image, rhel6_image, rhel7_image):
+
+    vm_id = vm_helper.boot_vm(guest_os=guest_os, source='image')[1]
+    ResourceCleanup.add('vm', vm_id)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

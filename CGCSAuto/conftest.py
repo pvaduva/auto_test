@@ -211,6 +211,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers",
                             "features(feature_name1, feature_name2, ...): mark impacted feature(s) for a test case.")
     config.addinivalue_line("markers",
+                            "priorities(sanity, cpe_sanity, p2, ...): mark priorities for a test case.")
+    config.addinivalue_line("markers",
                             "known_issue(CGTS-xxxx): mark known issue with JIRA ID or description if no JIRA needed.")
 
     lab_arg = config.getoption('lab')
@@ -317,13 +319,19 @@ def pytest_collection_modifyitems(items):
         if trylast_marker:
             move_to_last.append(item)
 
-        # known issue marker
+        priority_marker = item.get_marker('priorities')
+        if priority_marker is not None:
+            priorities = priority_marker.args
+            for priority in priorities:
+                item.add_marker(eval("pytest.mark.{}".format(priority)))
+
         feature_marker = item.get_marker('features')
         if feature_marker is not None:
             features = feature_marker.args
             for feature in features:
                 item.add_marker(eval("pytest.mark.{}".format(feature)))
 
+        # known issue marker
         known_issue_mark = item.get_marker('known_issue')
         if known_issue_mark is not None:
             issue = known_issue_mark.args[0]
