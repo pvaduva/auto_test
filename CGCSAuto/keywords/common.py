@@ -197,15 +197,20 @@ def get_unique_name(name_str, existing_names=None, resource_type='other'):
     if resource_type not in valid_types:
         raise ValueError("Invalid resource_type provided. Valid types: {}".format(valid_types))
 
-    unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
-
     if existing_names:
+        if resource_type == 'image':
+            unique_name = name_str
+        else:
+            unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
+
         for i in range(50):
             if unique_name not in existing_names:
                 break
             unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
         else:
             raise LookupError("Cannot find unique name.")
+    else:
+        unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
 
     return unique_name
 

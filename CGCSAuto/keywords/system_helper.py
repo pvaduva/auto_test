@@ -463,24 +463,25 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
     Returns (tuple): (res(bool), remaining_alarms(tuple))
 
     """
-    pre_alarms = alarms
+    pre_alarms = list(alarms)   # Don't update the original list
     LOG.info("Waiting for alarms to disappear from system alarm-list: {}".format(pre_alarms))
     alarms_to_check = list(pre_alarms)
 
     end_time = time.time() + timeout
     while time.time() < end_time:
         current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
-        post_alarms = _get_alarms(current_alarms_tab)
+        current_alarms = _get_alarms(current_alarms_tab)
 
         for alarm in pre_alarms:
-            if alarm not in post_alarms:
-                LOG.info("Removing alarm {} from current alarms list: {}".format(alarm, post_alarms))
+            if alarm not in current_alarms:
+                LOG.info("Removing alarm {} from current alarms list: {}".format(alarm, alarms_to_check))
                 alarms_to_check.remove(alarm)
 
         if not alarms_to_check:
             LOG.info("Following alarms cleared: {}".format(pre_alarms))
             return True, []
 
+        pre_alarms = alarms_to_check
         time.sleep(check_interval)
 
     else:

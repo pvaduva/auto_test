@@ -97,7 +97,7 @@ class Guest:
             'password': None
         },
 
-        'openSUSE': {
+        'opensuse': {
             'user': 'root',
             'password': None
         },

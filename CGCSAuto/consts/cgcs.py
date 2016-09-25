@@ -15,10 +15,6 @@ NAME_UUID = r'(.*) \((' + UUID + r')\)'
 # Message to indicate boot from volume from nova show
 BOOT_FROM_VOLUME = 'Attempt to boot from volume - no image supplied'
 
-
-IMAGE_DIR = '/home/wrsroot/images'
-DEFAULT_GUEST = 'cgcs-guest.img'
-
 DNS_NAMESERVERS = ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
 
 # home dir
@@ -27,6 +23,23 @@ HOME = '/home/wrsroot/'
 HEAT_PATH = 'heat/hot/simple/'
 HEAT_SCENARIO_PATH = 'heat/hot/scenarios/'
 MELLANOX_DEVICE = 'MT27500'
+
+
+class GuestImages:
+    IMAGE_DIR = '/home/wrsroot/images'
+    DEFAULT_GUEST = 'cgcs-guest.img'
+    # Image files name and size from yow-cgcs-test.wrs.com:/home/svc-cgcsauto/images
+    IMAGE_FILES = {
+        'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 8),
+        'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8),
+        'centos_6': ('CentOS-6.8-x86_64-GenericCloud-1608.qcow2', 8),
+        'centos_7': ('CentOS-7-x86_64-GenericCloud.qcow2', 8),
+        'rhel_6': ('rhel-6.5-x86_64.qcow2', 11),                # OVP img
+        'rhel_7': ('rhel-7.2-x86_64.qcow2', 11),               # OVP img
+        'opensuse_11': ('openSUSE-11.3-x86_64.qcow2', 11),     # OVP img
+        'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21),      # OVP img
+        'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16),
+    }
 
 
 class NetIP:
@@ -259,14 +272,3 @@ class QoSSpecs:
     WRITE_IOPS = 'write_iops_sec'
     TOTAL_IOPS = 'total_iops_sec'
 
-
-class GuestImages:
-    UBUNTU_14 = 'ubuntu-14.04-server-cloudimg-amd64-disk1.img'
-    UBUNTU_12 = 'ubuntu-12.04-server-cloudimg-amd64-disk1.img'
-    CENTOS_6 = 'CentOS-6.8-x86_64-GenericCloud-1608.qcow2'
-    CENTOS_7 = 'CentOS-7-x86_64-GenericCloud.qcow2'
-    # RHEL_6 = 'rhel-6.5-x86_64.qcow2'
-    # RHEL_7 = 'rhel-7.2-x86_64.qcow2'
-    # openSUSE_11 = 'openSUSE-11.3-x86_64.qcow2'
-    # openSUSE_12 = 'openSUSE-12.3-x86_64.qcow2'
-    openSUSE_13 = 'openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2'

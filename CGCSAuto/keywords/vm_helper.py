@@ -193,7 +193,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     elif source.lower() == 'image':
         img_name = guest_os if guest_os else 'cgcs-guest'
-        image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=False)
+        image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=True)
 
     elif source.lower() == 'snapshot':
         if not snapshot_id:
@@ -1673,7 +1673,7 @@ def rebuild_vm(vm_id, image_id=None, new_name=None, preserve_ephemeral=None, fai
                auth_info=Tenant.ADMIN, **metadata):
 
     if image_id is None:
-        image_id = glance_helper.get_image_id_from_name('cgcs-guest')
+        image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
 
     args = '{} {}'.format(vm_id, image_id)
 

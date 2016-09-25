@@ -6,15 +6,16 @@ from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.timeout import ImageTimeout
-from consts.cgcs import IMAGE_DIR, Prompt, GuestImages
-from keywords.common import Count
+from consts.cgcs import Prompt, GuestImages
+from keywords import common
 
 
-def get_images(images=None, auth_info=Tenant.ADMIN, con_ssh=None, strict=True, exclude=False, **kwargs):
+def get_images(images=None, rtn_val='id', auth_info=Tenant.ADMIN, con_ssh=None, strict=True, exclude=False, **kwargs):
     """
     Get a list of image id(s) that matches the criteria
     Args:
         images (str|list): ids of images to filter from
+        rtn_val(str): id or name
         auth_info (dict):
         con_ssh (SSHClient):
         strict (bool): match full string or substring for the value(s) given in kwargs.
@@ -31,9 +32,9 @@ def get_images(images=None, auth_info=Tenant.ADMIN, con_ssh=None, strict=True, e
         table_ = table_parser.filter_table(table_, ID=images)
 
     if not kwargs:
-        return table_parser.get_column(table_, 'ID')
+        return table_parser.get_column(table_, rtn_val)
 
-    return table_parser.get_values(table_, 'ID', strict=strict, exclude=exclude, **kwargs)
+    return table_parser.get_values(table_, rtn_val, strict=strict, exclude=exclude, **kwargs)
 
 
 def get_image_id_from_name(name=None, strict=False, con_ssh=None, auth_info=None):
@@ -93,11 +94,11 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     # Use source image url if url is provided. Else use local img file.
 
-    file_path = source_image_file if source_image_file else IMAGE_DIR + '/cgcs-guest.img'
+    file_path = source_image_file if source_image_file else GuestImages.IMAGE_DIR + '/cgcs-guest.img'
 
     source_str = file_path
 
-    known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros', 'openSUSE', 'rhel']
+    known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros', 'opensuse', 'rhel']
     name = name if name else 'auto'
     for img_str in known_imgs:
         if img_str in name:
@@ -110,7 +111,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
         name_prefix = name_prefix.split(sep='.')[0]
         name = name_prefix + '_' + name
 
-    name = '-'.join([name, str(Count.get_image_count())])
+    name = common.get_unique_name(name_str=name, existing_names=get_images(), resource_type='image')
 
     optional_args = {
         '--id': image_id,
@@ -332,7 +333,7 @@ def get_image_properties(image, property_keys, auth_info=Tenant.ADMIN, con_ssh=N
     return results
 
 
-def _scp_guest_image(img_os='ubuntu_14', dest_dir=IMAGE_DIR, con_ssh=None):
+def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, con_ssh=None):
     """
 
     Args:
@@ -343,10 +344,7 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=IMAGE_DIR, con_ssh=None):
     Returns (str): full file name of downloaded image. e.g., '~/images/ubuntu.img'
 
     """
-    valid_img_os_types = ['ubuntu_14', 'ubuntu_12',
-                          'centos_6', 'centos_7',
-                          'openSUSE_11', 'openSUSE_12', 'openSUSE_13',
-                          'rhel_6', 'rhel_7']
+    valid_img_os_types = list(GuestImages.IMAGE_FILES.keys())
 
     if img_os not in valid_img_os_types:
         raise ValueError("Invalid image OS type provided. Valid values: {}".format(valid_img_os_types))
@@ -354,39 +352,8 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=IMAGE_DIR, con_ssh=None):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    # image_loc_dict = {
-    #     'ubuntu_14': ['ubuntu.img',
-    #                'https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img'],
-    #     'centos_6': ['centos_6.qcow2', 'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud.qcow2'],
-    #     'centos_7': ['centos_7.qcow2', 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2']
-    # }
-
-    image_loc_dict = {
-        'ubuntu_14': GuestImages.UBUNTU_14,
-        'ubuntu_12': GuestImages.UBUNTU_12,
-        'centos_6': GuestImages.CENTOS_6,
-        'centos_7': GuestImages.CENTOS_7,
-        # 'openSUSE_11': GuestImages.openSUSE_11,
-        # 'openSUSE_12': GuestImages.openSUSE_12,
-        'openSUSE_13': GuestImages.openSUSE_13,
-        # 'rhel_6': GuestImages.RHEL_6,
-        # 'rhel_7': GuestImages.RHEL_7,
-    }
-
-    dest_img_dict = {
-        'ubuntu_14': 'ubuntu_14.img',
-        'ubuntu_12': 'ubuntu_12.img',
-        'centos_6': 'centos_6.img',
-        'centos_7': 'centos_7.img',
-        # 'openSUSE_11': 'openSUSE_11.img',
-        # 'openSUSE_12': 'openSUSE_12.img',
-        'openSUSE_13': 'openSUSE_13.img',
-        # 'rhel_6': 'rhel_6.img',
-        # 'rhel_7': 'rhel_7.img',
-    }
-
-    dest_name = dest_img_dict[img_os]
-    source_name = image_loc_dict[img_os]
+    dest_name = img_os.lower() + '.img'
+    source_name = GuestImages.IMAGE_FILES[img_os][0]
 
     if dest_dir.endswith('/'):
         dest_dir = dest_dir[:-1]
@@ -400,10 +367,6 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=IMAGE_DIR, con_ssh=None):
     LOG.debug('Create directory for image storage if not already exists')
     cmd = 'mkdir -p {}'.format(dest_dir)
     con_ssh.exec_cmd(cmd, fail_ok=False)
-
-    # LOG.info('wget image from {} to {}/{}'.format(img_url, img_dest, new_name))
-    # cmd = 'wget {} --no-check-certificate -P {} -O {}'.format(img_url, img_dest, new_name)
-    # con_ssh.exec_cmd(cmd, expect_timeout=7200, fail_ok=False)
 
     source_path = '{}/images/{}'.format(SvcCgcsAuto.HOME, source_name)
     LOG.info('scp image from test server to active controller')
@@ -420,8 +383,6 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=IMAGE_DIR, con_ssh=None):
         index = con_ssh.expect()
     if index != 0:
         raise exceptions.SSHException("Failed to scp files")
-
-    # common._scp_base(cmd, remote_password=SvcCgcsAuto.PASSWORD, timeout=3600)
 
     if not con_ssh.file_exists(file_path=dest_path):
         raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
