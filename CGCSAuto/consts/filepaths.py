@@ -12,3 +12,9 @@ class VMPath:
     ETH_PATH_CENTOS = '/etc/sysconfig/network-scripts/ifcfg-{}'
 
 
+class UserData:
+    ADDUSER_WRSROOT = 'cloud_config_adduser_wrsroot.txt'
+
+
+class TestServerPath:
+    USER_DATA = '/home/svc-cgcsauto/userdata/'

@@ -4,7 +4,7 @@ import re
 from utils import cli, exceptions
 from utils import table_parser
 from utils.tis_log import LOG
-from consts.auth import Tenant
+from consts.auth import Tenant, Guest
 from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec, GuestImages
 from keywords import keystone_helper, host_helper, common
 from keywords.common import Count
@@ -51,10 +51,8 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=None,
         name = 'flavor'
     flavor_name = common.get_unique_name(name_str=name, existing_names=existing_names, resource_type='flavor')
 
-    if root_disk is None and guest_os:
-        root_disk = GuestImages.IMAGE_FILES[guest_os][1]
-    else:
-        root_disk = 1
+    if root_disk is None:
+        root_disk = GuestImages.IMAGE_FILES[guest_os][1] if guest_os else 1
 
     mandatory_args = ' '.join([flavor_name, flavor_id, str(ram), str(root_disk), str(vcpus)])
 
@@ -580,7 +578,7 @@ def unset_server_group_metadata(srv_grp_id, fail_ok=False, auth_info=None, con_s
 
     args = srv_grp_id + ' '
     metadata = [item.lower() for item in metadata]
-    args += ' '.join([item + "=" for item in metadata])
+    args += ' '.join([str(item) + "=" for item in metadata])
 
     code, output = cli.nova('server-group-set-metadata', args, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
                             fail_ok=fail_ok)

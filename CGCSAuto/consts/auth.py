@@ -88,23 +88,23 @@ class Guest:
         },
 
         'ubuntu': {
-            'user': 'ubuntu',
+            'user': 'wrsroot',
             'password': None
         },
 
         'centos': {
-            'user': 'centos',
+            'user': 'wrsroot',
             'password': None
         },
 
-        'opensuse': {
-            'user': 'root',
+        'opensuse_13': {
+            'user': 'wrsroot',
             'password': None
         },
 
         'rhel': {
-            'user': 'cloud-user',
-            'password': None
+            'user': 'root',
+            'password': 'root'
         },
 
         'cirros': {

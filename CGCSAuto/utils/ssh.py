@@ -755,7 +755,7 @@ class VMSSHClient(SSHFromSSH):
 
         if user:
             if not password:
-                password = user
+                password = None
         else:
             for image_name in Guest.CREDS:
                 if image_name.lower() in vm_img_name.lower() or image_name.lower() in vm_name.lower():

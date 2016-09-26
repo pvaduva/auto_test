@@ -7,12 +7,12 @@ from contextlib import contextmanager
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
 from utils.tis_log import LOG
-from consts.auth import Tenant, SvcCgcsAuto
+from consts.auth import Tenant, SvcCgcsAuto, Guest
 from consts.timeout import VMTimeout, CMDTimeout
 from consts.proj_vars import ProjVar
 from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, \
     VifMapping, VMNetworkStr
-from consts.filepaths import TiSPath, VMPath
+from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 
@@ -101,7 +101,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         key_name (str):
         swap (int):
         ephemeral (int):
-        user_data (str):
+        user_data (str|list):
         vm_host (str): which host to place the vm
         block_device:
         auth_info (dict):
@@ -209,10 +209,15 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     avail_zone = 'nova:{}'.format(vm_host) if vm_host else None
 
-    # create userdata cloud init file to run right after vm initialization to get ip on interfaces other than eth0.
-    if guest_os and not user_data and 'cgcs-guest' not in guest_os:
+    if user_data is None and guest_os and 'cgcs-guest' not in guest_os:
+        # create userdata cloud init file to run right after vm initialization to get ip on interfaces other than eth0.
         user_data = _create_cloud_init_if_conf(guest_os, nics_num=len(nics))
 
+        # # Add wrsroot/li69nux user to non cgcs-guest vm
+        # user_data_adduser = _get_cloud_config_add_user(con_ssh=con_ssh)
+        # user_data.append(user_data_adduser)
+
+    # create cmd
     optional_args_dict = {'--flavor': flavor,
                           '--image': image,
                           '--boot-volume': volume_id,
@@ -221,8 +226,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--max-count': str(max_count) if max_count is not None else None,
                           '--key-name': key_name,
                           '--swap': swap,
-                          '--ephemeral': ephemeral,
                           '--user-data': user_data,
+                          '--ephemeral': ephemeral,
                           '--block-device': block_device,
                           '--hint': hint,
                           '--availability-zone': avail_zone,
@@ -2123,12 +2128,10 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
         guest_os = guest_os
         # vm_if_path = VMPath.VM_IF_PATH_CENTOS
         eth_path = VMPath.ETH_PATH_CENTOS
-
     else:
         LOG.warning("Unknown guest os for userdata creation")
-        return None
+        eth_path = None
 
-    eth0_path = eth_path.format('eth0')
     file_name = '{}_{}nic_cloud_init_if_conf.sh'.format(guest_os, nics_num)
 
     file_path = file_dir + file_name
@@ -2137,25 +2140,74 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
         LOG.info('userdata {} already exists. Return existing path'.format(file_path))
         return file_path
 
-    LOG.debug('Create userdata directory if not already exists')
+    LOG.info('Create userdata directory if not already exists')
     cmd = 'mkdir -p {}'.format(file_dir)
     con_ssh.exec_cmd(cmd, fail_ok=False)
 
     tmp_file = ProjVar.get_var('TEMP_DIR') + file_name
-    if 'centos_7' in guest_os:
-        shell = '/usr/bin/bash'
-    else:
-        shell = '/bin/bash'
+
+    # No longer need to specify bash using cloud-config
+    # if 'centos_7' in guest_os:
+    #     shell = '/usr/bin/bash'
+    # else:
+    #     shell = '/bin/bash'
 
     with open(tmp_file, mode='a') as f:
-        f.write('#!{}\n\n'.format(shell))
-        for i in range(nics_num-1):
-            ethi_name = 'eth{}'.format(i+1)
-            ethi_path = eth_path.format(ethi_name)
-            f.write('cp {} {}\n'.format(eth0_path, ethi_path))
-            f.write("sed -i 's/eth0/{}/g' {}\n".format(ethi_name, ethi_path))
-            f.write('ifup {}\n'.format(ethi_name))
+
+        f.write("#cloud-config\n"
+                "user: wrsroot\n"
+                "password: li69nux\n"
+                "chpasswd: { expire: False}\n"
+                "ssh_pwauth: True\n\n")
+
+        if eth_path is not None:
+            eth0_path = eth_path.format('eth0')
+            f.write("runcmd:\n")
+            # f.write(" - echo '#!{}'\n".format(shell))
+            for i in range(nics_num-1):
+                ethi_name = 'eth{}'.format(i+1)
+                ethi_path = eth_path.format(ethi_name)
+                f.write(' - cp {} {}\n'.format(eth0_path, ethi_path))
+                f.write(" - sed -i 's/eth0/{}/g' {}\n".format(ethi_name, ethi_path))
+                f.write(' - ifup {}\n'.format(ethi_name))
 
     common.scp_to_active_controller(source_path=tmp_file, dest_path=file_path, is_dir=False)
+
+    LOG.info("Userdata file created: {}".format(file_path))
+    return file_path
+
+
+def _get_cloud_config_add_user(con_ssh=None):
+    """
+    copy the cloud-config userdata to TiS server.
+    This userdata adds wrsroot/li69nux user to guest
+
+    Args:
+        con_ssh (SSHClient):
+
+    Returns (str): TiS filepath of the userdata
+
+    """
+    file_dir = TiSPath.USERDATA
+    file_name = UserData.ADDUSER_WRSROOT
+    file_path = file_dir + file_name
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+    if con_ssh.file_exists(file_path=file_path):
+        LOG.info('userdata {} already exists. Return existing path'.format(file_path))
+        return file_path
+
+    LOG.debug('Create userdata directory if not already exists')
+    cmd = 'mkdir -p {}'.format(file_dir)
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
+    source_file = TestServerPath.USER_DATA + file_name
+
+    dest_path = common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=file_dir,
+                                                                 dest_name=file_name, is_dir=False, con_ssh=con_ssh)
+
+    if dest_path is None:
+        raise exceptions.CommonError("userdata file {} does not exist after download".format(file_path))
 
     return file_path

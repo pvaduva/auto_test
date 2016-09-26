@@ -3,8 +3,8 @@ from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec
-from consts.cli_errs import LiveMigErr
-from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
+from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
+from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
@@ -12,9 +12,6 @@ from testfixtures.resource_mgmt import ResourceCleanup
 def hosts_per_stor_backing():
     hosts_per_backing = host_helper.get_hosts_per_storage_backing()
     LOG.fixture_step("Hosts per storage backing: {}".format(hosts_per_backing))
-
-    # if max([len(hosts) for hosts in list(hosts_per_backing.values())]) < 2:
-    #     skip("No two hosts have the same storage backing")
 
     return hosts_per_backing
 
