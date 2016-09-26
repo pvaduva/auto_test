@@ -44,6 +44,16 @@ def heartbeat_flavor_vm(request):
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
 
+    events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
+                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
+                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
+
+    if heartbeat == 'True':
+        assert events, "VM heartbeat is not enabled."
+        assert EventLogID.HEARTBEAT_ENABLED == events[0], "VM heartbeat failed to establish."
+    else:
+        assert not events, "Heartbeat event generated unexpectedly: {}".format(events)
+
     vm = {'id': vm_id,
           'heartbeat': heartbeat
           }

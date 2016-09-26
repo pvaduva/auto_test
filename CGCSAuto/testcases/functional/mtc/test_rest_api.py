@@ -39,7 +39,7 @@ def prepare_modify_cpu(request):
     headers = get_headers()
 
     url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER, 'iprofile')
-    data = {'hostname': 'test_compute_profile',
+    data = {'profilename': 'test_compute_profile',
             'profiletype': 'cpu',
             'ihost_uuid': uuid}
     resp = html_helper.post_request(url, headers=headers, data=data)

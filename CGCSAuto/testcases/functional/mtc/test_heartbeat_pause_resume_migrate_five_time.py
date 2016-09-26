@@ -93,9 +93,9 @@ def test_vm_pause_resume_five_time(heartbeat_flavor_vm):
     for i in range(0,5):
         LOG.info("Pause and unpause vm. #{}".format(i))
         vm_helper.pause_vm(vm_id)
-        sleep(5)
+        sleep(10)
         vm_helper.unpause_vm(vm_id)
-        sleep(5)
+        sleep(10)
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 

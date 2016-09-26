@@ -13,6 +13,7 @@ from utils import table_parser
 from consts.auth import Tenant
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper
 from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.recover_hosts import HostsToRecover
 
 ubuntu_vm_login = 'ubuntu'
 ubuntu_passwd = 'ubuntu'
@@ -130,6 +131,7 @@ def _lock_unlock_computes_except_one(host_name, action='lock'):
     elif action == 'lock':
         for comp_name in compute_list:
             if comp_name != host_name:
+                HostsToRecover.add(comp_name)
                 host_helper.lock_host(comp_name)
 
 def launch_instance_on_compute(network_name=None,
@@ -153,10 +155,10 @@ def launch_instance_on_compute(network_name=None,
     """
 
 
-    if not Tenant.ADMIN:
-        net_label_name = '-'.join([tenant.name, 'mgmt-net'])
-    else:
-        net_label_name = network_name + '-net0'
+    # if not Tenant.ADMIN:
+    #     net_label_name = '-'.join([tenant.name, 'mgmt-net'])
+    # else:
+    #     net_label_name = network_name + '-net0'
 
     LOG.tc_step('Locking unused computes')
     _lock_unlock_computes_except_one(host_name)

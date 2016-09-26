@@ -44,6 +44,13 @@ def vm_(request, flavor_):
     time.sleep(30)
     ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
 
+    events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
+                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
+                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
+
+    assert events, "VM heartbeat is not enabled."
+    assert EventLogID.HEARTBEAT_ENABLED == events[0], "VM heartbeat failed to establish."
+
     # Teardown to remove the vm and flavor
     def restore_hosts():
         LOG.fixture_step("Cleaning up vms..")
