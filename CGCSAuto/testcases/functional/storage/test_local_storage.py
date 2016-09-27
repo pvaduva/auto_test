@@ -61,11 +61,11 @@ class TestLocalStorage(object):
 
                 while old_new_types:
                     host, old_type, _ = old_new_types.pop()
-                    HostsToRecover.add(host, scope='function')
+                    HostsToRecover.add(host, scope='class')
                     host_helper.lock_host(host)
                     cmd = 'host-lvg-modify -b {} {} nova-local'.format(old_type, host)
                     cli.system(cmd, fail_ok=False)
-                    # host_helper.unlock_host(host)
+                    host_helper.unlock_host(host)
             finally:
                 pass
 
@@ -153,8 +153,6 @@ class TestLocalStorage(object):
 
         LOG.debug('unlock {} now'.format(compute))
         host_helper.unlock_host(compute)
-        if 0 == rtn_code:
-            self._remove_from_cleanup_list(list_type='locked', to_remove=compute)
 
     def setup_local_storage_type_on_lab(self, ls_type='image'):
         LOG.debug('Chose one compute to change its local-storage-backing to expected type: {}'.format(ls_type))
@@ -384,8 +382,6 @@ class TestLocalStorage(object):
 
         LOG.tc_step('Check if the changes take effect after unlocking')
         rtn_code = host_helper.unlock_host(compute_dest)
-        if 0 == rtn_code:
-            self._remove_from_cleanup_list(to_remove=compute_dest, list_type='locked')
 
         LOG.tc_step('Verify the local-storage type changed to {} on host:{}'
                     .format(local_storage_type, compute_dest))
