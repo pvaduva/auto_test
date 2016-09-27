@@ -163,8 +163,6 @@ class TestLocalStorage(object):
             computes_unlocked = host_helper.get_nova_hosts()
             compute_to_change = random.choice([c for c in computes_unlocked
                                                if c != system_helper.get_active_controller_name()])
-        if ls_type == 'image' and host_helper.get_local_storage_backing(compute_to_change) == 'lvm':
-            skip("Avoid reboot loop. CGTS-4855.")
         self.set_local_storage_backing(compute=compute_to_change, to_type=ls_type)
 
         return compute_to_change

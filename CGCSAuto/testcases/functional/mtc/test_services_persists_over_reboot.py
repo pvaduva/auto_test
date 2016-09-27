@@ -43,7 +43,8 @@ def test_system_persist_over_host_reboot(host_type):
         if system_helper.is_small_footprint():
             host = system_helper.get_standby_controller_name()
     elif host_type == 'storage':
-        hosts = system_helper.get_storage_nodes()
+        # Make a better function for this
+        hosts = host_helper.get_hosts(personality='storage')
         if hosts:
             host = hosts[0]
         else:

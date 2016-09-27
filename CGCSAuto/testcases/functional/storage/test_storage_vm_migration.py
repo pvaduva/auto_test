@@ -7,6 +7,7 @@ from keywords import host_helper, vm_helper, nova_helper, cinder_helper, glance_
 from consts.cgcs import VMStatus
 from consts.auth import Tenant
 from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.verify_fixtures import check_alarms
 from utils.ssh import ControllerClient
 
 
@@ -144,33 +145,34 @@ def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
     """
     pre_alarms = pre_alarm_
     for vm in vms_:
+        vm_id = vm['id']
 
-        LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm['id']))
-        vm_state = nova_helper.get_vm_status(vm['id'])
+        LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm_id))
+        vm_state = nova_helper.get_vm_status(vm_id)
 
         assert vm_state == VMStatus.ACTIVE, 'VM {} state is {}; Not in ACTIVATE state as expected'\
-            .format(vm['id'], vm_state)
+            .format(vm_id, vm_state)
 
         LOG.tc_step("Verify  VM can be pinged from NAT box...")
-        rc, boot_time = check_vm_boot_time(vm['id'])
+        rc, boot_time = check_vm_boot_time(vm_id)
         assert rc,  "VM is not pingable after {} seconds ".format(boot_time)
 
         LOG.tc_step("Verify Login to VM and check filesystem is rw mode....")
-        assert is_vm_filesystem_rw(vm['id']), 'rootfs filesystem is not RW as expected for VM {}'\
+        assert is_vm_filesystem_rw(vm_id), 'rootfs filesystem is not RW as expected for VM {}'\
             .format(vm['display_name'])
 
-        LOG.tc_step("Attempting  live migration; vm id = {}; vm_name = {} ....".format(vm['id'], vm['display_name']))
+        LOG.tc_step("Attempting  live migration; vm id = {}; vm_name = {} ....".format(vm_id, vm['display_name']))
 
-        code, msg = vm_helper.live_migrate_vm(vm_id=vm['id'],  fail_ok=True)
+        code, msg = vm_helper.live_migrate_vm(vm_id=vm_id,  fail_ok=True)
         LOG.tc_step("Verify live migration succeeded...")
         assert code == 0, "Expected return code 0. Actual return code: {}; details: {}".format(code,  msg)
 
         LOG.tc_step("Verifying  filesystem is rw mode after live migration....")
-        assert is_vm_filesystem_rw(vm['id']), 'After live migration rootfs filesystem is not RW as expected for VM {}'.format(vm['display_name'])
+        assert is_vm_filesystem_rw(vm_id), 'After live migration rootfs filesystem is not RW as expected for VM {}'.format(vm['display_name'])
 
-        LOG.tc_step("Checking for any new system alarm....")
-        rc, new_alarm = is_new_alarm_raised(pre_alarms)
-        assert not rc, " alarm(s) found: {}".format(new_alarm)
+        # LOG.tc_step("Checking for any new system alarm....")
+        # rc, new_alarm = is_new_alarm_raised(pre_alarms)
+        # assert not rc, " alarm(s) found: {}".format(new_alarm)
 
 
 def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
@@ -223,9 +225,6 @@ def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
         assert is_vm_filesystem_rw(vm['id']), 'rootfs filesystem is not RW as expected for VM {}'\
             .format(vm['display_name'])
 
-        LOG.tc_step("Checking for any system alarm ....")
-        rc, new_alarm = is_new_alarm_raised(pre_alarms)
-        assert not rc, " alarm(s) found: {}".format(new_alarm)
 
     LOG.tc_step("Checking if live migration is required to put the vms to a single compute....")
     host_0 = nova_helper.get_vm_host((vms_[0])['id'])
@@ -264,16 +263,9 @@ def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
     assert is_vm_filesystem_rw((vms_[0])['id']), 'After evacuation the rootfs filesystem is not RW as expected ' \
                                                  'for VM {}'.format((vms_[0])['display_name'])
 
-    LOG.tc_step("Checking for any system alarm ....")
-    rc, new_alarm = is_new_alarm_raised(pre_alarms)
-    assert not rc, " alarm(s) found: {}".format(new_alarm)
-
     LOG.tc_step("Login to VM and to check filesystem is rw mode....")
     assert is_vm_filesystem_rw((vms_[1])['id']), 'After evacuation the rootfs filesystem is not RW as expected ' \
                                                  'for VM {}'.format((vms_[1])['display_name'])
-    LOG.tc_step("Checking for any system alarm ....")
-    rc, new_alarm = is_new_alarm_raised(pre_alarms)
-    assert not rc, " alarm(s) found: {}".format(new_alarm)
 
 
 def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_):
@@ -312,34 +304,34 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_)
     pre_alarms = pre_alarm_
 
     for vm in vms:
-
-        LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm['id']))
-        vm_state = nova_helper.get_vm_status(vm['id'])
+        vm_id = vm['id']
+        LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm_id))
+        vm_state = nova_helper.get_vm_status(vm_id)
 
         assert vm_state == VMStatus.ACTIVE, 'VM {} state is {}; Not in ACTIVATE state as expected'\
-            .format(vm['id'], vm_state)
+            .format(vm_id, vm_state)
 
         LOG.tc_step("Verify  VM can be pinged from NAT box...")
-        rc, boot_time = check_vm_boot_time(vm['id'])
+        rc, boot_time = check_vm_boot_time(vm_id)
         assert rc,  "VM is not pingable after {} seconds ".format(boot_time)
 
         LOG.tc_step("Verify Login to VM and check filesystem is rw mode....")
-        assert is_vm_filesystem_rw(vm['id']), 'rootfs filesystem is not RW as expected for VM {}'\
+        assert is_vm_filesystem_rw(vm_id), 'rootfs filesystem is not RW as expected for VM {}'\
             .format(vm['display_name'])
 
-        LOG.tc_step("Attempting  cold migration; vm id = {}; vm_name = {} ....".format(vm['id'], vm['display_name']))
+        LOG.tc_step("Attempting  cold migration; vm id = {}; vm_name = {} ....".format(vm_id, vm['display_name']))
 
-        code, msg = vm_helper.cold_migrate_vm(vm_id=vm['id'],  fail_ok=True)
+        code, msg = vm_helper.cold_migrate_vm(vm_id=vm_id,  fail_ok=True)
         LOG.tc_step("Verify cold migration succeeded...")
         assert code == 0, "Expected return code 0. Actual return code: {}; details: {}".format(code,  msg)
 
         LOG.tc_step("Verifying  filesystem is rw mode after cold migration....")
-        assert is_vm_filesystem_rw(vm['id']), 'After cold migration rootfs filesystem is not RW as expected for ' \
+        assert is_vm_filesystem_rw(vm_id), 'After cold migration rootfs filesystem is not RW as expected for ' \
                                               'VM {}'.format(vm['display_name'])
 
-        LOG.tc_step("Checking for any system alarm ....")
-        rc, new_alarm = is_new_alarm_raised(pre_alarms)
-        assert not rc, " alarm(s) found: {}".format(new_alarm)
+        # LOG.tc_step("Checking for any system alarm ....")
+        # rc, new_alarm = is_new_alarm_raised(pre_alarms)
+        # assert not rc, " alarm(s) found: {}".format(new_alarm)
 
 
 def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
@@ -386,8 +378,9 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
 
     rc, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm_0', source='volume',
                                                 source_id=vol_id_0, user_data=get_user_data_file())
-    ResourceCleanup.add('vm', vm_id, scope='function')
+    # ResourceCleanup.add('vm', vm_id, scope='function')
     assert rc == 0, "VM vm_0 did not succeed: reaon {}".format(msg)
+    time.sleep(5)
 
     LOG.tc_step("Verify  VM can be pinged from NAT box...")
     rc, boot_time = check_vm_boot_time(vm_id)
@@ -464,17 +457,17 @@ def is_vm_filesystem_rw(vm_id, rootfs='vda'):
         return True
 
 
-def is_new_alarm_raised(pre_list):
-    alarms = system_helper.get_alarms_table()
-    new_list = table_parser.get_all_rows(alarms)
-    LOG.info("Pre-alarm: {}".format(pre_list))
-    LOG.info("New-alarm: {}".format(new_list))
-    for alarm in new_list:
-        alarm.pop()     # to remove the time stamp
-        if alarm not in pre_list:
-            return True, new_list
-
-    return False, None
+# def is_new_alarm_raised(pre_list):
+#     alarms = system_helper.get_alarms_table()
+#     new_list = table_parser.get_all_rows(alarms)
+#     LOG.info("Pre-alarm: {}".format(pre_list))
+#     LOG.info("New-alarm: {}".format(new_list))
+#     for alarm in new_list:
+#         alarm.pop()     # to remove the time stamp
+#         if alarm not in pre_list:
+#             return True, new_list
+#
+#     return False, None
 
 
 def get_user_data_file():
