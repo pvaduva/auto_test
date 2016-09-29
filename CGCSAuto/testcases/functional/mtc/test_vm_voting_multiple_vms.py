@@ -19,6 +19,7 @@ from consts.auth import Tenant
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
+
 @fixture(scope='module')
 def flavor_(request):
     flavor_id = nova_helper.create_flavor(name='heartbeat')[1]
@@ -39,19 +40,26 @@ def vms_(request, flavor_):
 
     vm_name1 = 'test-hb-vote-migrate'
     vm_name2 = 'test-hb-vote-reboot'
-    vm_name3 = 'test-hb-vote-stop-start'
+    vm_name3 = 'test-hb-vote-stop'
     vm_name4 = 'test-no-hb-vote-migrate'
-    inst_names = [vm_name1, vm_name2, vm_name3, vm_name4]
+    inst_names = [vm_name1, vm_name2, vm_name3]
+    # inst_names = [vm_name1, vm_name2, vm_name3, vm_name4]
 
     flavor_id = flavor_
     vm_ids = []
-    for idx in range(len(inst_names) - 1):
-        vm_id = vm_helper.boot_vm(name=inst_names[idx], flavor=flavor_id)[1]
+    for name in inst_names:
+        vm_id = vm_helper.boot_vm(name=name, flavor=flavor_id)[1]
         time.sleep(30)
         vm_ids.append(vm_id)
         ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
 
-    vm_id = vm_helper.boot_vm(name=inst_names[3])[1]
+        event = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
+                                              **{'Entity Instance ID': vm_id, 'Event Log ID': [
+                                                 EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
+        assert event, "VM heartbeat is not enabled."
+        assert EventLogID.HEARTBEAT_ENABLED == event[0], "VM heartbeat failed to establish."
+
+    vm_id = vm_helper.boot_vm(name=vm_name4)[1]
     time.sleep(30)
     vm_ids.append(vm_id)
     ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
@@ -163,7 +171,7 @@ def test_vm_voting_multiple_vms(vms_):
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         LOG.tc_step("Verify that no heartbeat is running in the vm: %s" % vm_id)
         exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat | grep -v grep")
-        assert (output is None)
+        assert (output is None or output == '')
 
         LOG.tc_step("Set the no migration voting criteria in vm: %s" % vm_id)
         vm_ssh.exec_cmd(voting_list[0])
