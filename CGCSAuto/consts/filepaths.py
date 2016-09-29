@@ -18,3 +18,11 @@ class UserData:
 
 class TestServerPath:
     USER_DATA = '/home/svc-cgcsauto/userdata/'
+
+
+class PrivKeyPath:
+    OPT_PLATFORM = "/opt/platform/id_rsa"
+    WRS_HOME = '/home/wrsroot/.ssh/id_rsa'
+
+
+WRSROOT_HOME = '/home/wrsroot/'

@@ -30,8 +30,10 @@ class CpuAssignment:
 
 
 class CPUThreadErr:
-    INVALID_POLICY = "Invalid hw:cpu_thread_policy '{}', must be one of: require, isolate, prefer."
-    DEDICATED_CPU_REQUIRED = 'Cannot set cpu thread pinning policy in a non dedicated cpu pinning policy'
+    INVALID_POLICY = "invalid hw:cpu_thread_policy '{}', must be one of prefer, isolate, require"
+    # DEDICATED_CPU_REQUIRED = 'Cannot set cpu thread pinning policy in a non dedicated cpu pinning policy'
+    DEDICATED_CPU_REQUIRED = 'ERROR (Conflict): hw:cpu_thread_policy is only valid when hw:cpu_policy is dedicated.  ' \
+                             'Either unset hw:cpu_thread_policy or set hw:cpu_policy to dedicated.'
     VCPU_NUM_UNDIVISIBLE = "(NUMATopologyFilter) Cannot use 'require' cpu threads policy as requested #VCPUs: {}, " \
                            "is not divisible by number of threads: 2"
     INSUFFICIENT_CORES_FOR_ISOLATE = "{}: (NUMATopologyFilter) Cannot use isolate cpu thread policy as requested " \
@@ -67,7 +69,7 @@ class ColdMigErr:
 
 
 class LiveMigErr:
-    BLOCK_MIG_UNSUPPORTED = "is not on local storage: Block migration cannot be used with shared storage"
+    BLOCK_MIG_UNSUPPORTED = "is not on local storage: Block migration can not be used with shared storage"
     GENERAL_NO_HOST = "No valid host was found. There are not enough hosts available."
 
 

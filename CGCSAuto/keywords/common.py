@@ -291,6 +291,9 @@ def _parse_cpus_list(cpus):
 
     """
     if isinstance(cpus, str):
+        if cpus.strip() == '':
+            return []
+
         cpus = cpus.split(sep=',')
 
     cpus_list = list(cpus)

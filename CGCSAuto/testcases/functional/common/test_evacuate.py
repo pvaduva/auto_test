@@ -108,14 +108,17 @@ class TestVariousGuests:
         return request.param
 
     @mark.trylast
+    @mark.features('guest_os')
     @mark.usefixtures('ubuntu14_image',
                       'centos6_image', 'centos7_image',
-                      'opensuse11_image', 'opensuse12_image', # 'opensuse13_image',
+                      'opensuse11_image', 'opensuse12_image',
+                      # 'opensuse13_image',
                       'rhel6_image', 'rhel7_image')
     @mark.parametrize('guest_os', [
         'ubuntu_14',
         'centos_6', 'centos_7',
-        'opensuse_11', 'opensuse_12', # 'opensuse_13',
+        'opensuse_11', 'opensuse_12',
+        # 'opensuse_13',
         'rhel_6', 'rhel_7',
     ])
     def test_evacuate_vm(self, guest_os, boot_source):

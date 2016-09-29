@@ -1999,8 +1999,12 @@ def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
         _sudo_reboot(vm_ssh)
 
 
-def get_proc_num_from_vm(vm_ssh):
-    return int(vm_ssh.exec_cmd('cat /proc/cpuinfo | grep processor | wc -l', fail_ok=False)[1])
+def get_proc_nums_from_vm(vm_ssh):
+    total_cores = common._parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/present', fail_ok=False)[1])
+    online_cores = common._parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/online', fail_ok=False)[1])
+    offline_cores = common._parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/offline', fail_ok=False)[1])
+
+    return total_cores, online_cores, offline_cores
 
 
 def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=None, con_ssh=None):
@@ -2106,7 +2110,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
         guest_os:
         nics_num:
 
-    Returns (str): file path of the cloud init userdata file for given guest os and number of nics
+    Returns (str|None): file path of the cloud init userdata file for given guest os and number of nics
         Sample file content for Centos vm:
             #!/bin/bash
             sudo cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth1
@@ -2124,13 +2128,19 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
         guest_os = 'ubuntu_14'
         # vm_if_path = VMPath.VM_IF_PATH_UBUNTU
         eth_path = VMPath.ETH_PATH_UBUNTU
+        new_user = 'ubuntu'
+
     elif 'centos' in guest_os:
         guest_os = guest_os
         # vm_if_path = VMPath.VM_IF_PATH_CENTOS
         eth_path = VMPath.ETH_PATH_CENTOS
+        new_user = 'centos'
+
     else:
         LOG.warning("Unknown guest os for userdata creation")
-        eth_path = None
+        # eth_path = None
+        # new_user = None
+        return
 
     file_name = '{}_{}nic_cloud_init_if_conf.sh'.format(guest_os, nics_num)
 
@@ -2153,12 +2163,13 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     #     shell = '/bin/bash'
 
     with open(tmp_file, mode='a') as f:
+        f.write("#cloud-config\n")
 
-        f.write("#cloud-config\n"
-                "user: wrsroot\n"
-                "password: li69nux\n"
-                "chpasswd: { expire: False}\n"
-                "ssh_pwauth: True\n\n")
+        if new_user is not None:
+            f.write("user: {}\n"
+                    "password: {}\n"
+                    "chpasswd: {{ expire: False}}\n"
+                    "ssh_pwauth: True\n\n".format(new_user, new_user))
 
         if eth_path is not None:
             eth0_path = eth_path.format('eth0')

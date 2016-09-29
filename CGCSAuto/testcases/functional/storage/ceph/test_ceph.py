@@ -12,7 +12,7 @@ from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper, \
     storage_helper, glance_helper, cinder_helper
-from consts.cgcs import EventLogID, IMAGE_DIR
+from consts.cgcs import EventLogID, GuestImages
 from testfixtures.recover_hosts import HostsToRecover
 
 PROC_RESTART_TIME = 30          # number of seconds between process restarts
@@ -936,7 +936,7 @@ def test_import_raw_with_cache_raw():
         LOG.info('No raw images were found on the controller')
         LOG.tc_step('Rsyncing images from controller-0')
         rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no " {} ' \
-                       'controller-1:{}'.format(IMAGE_DIR, IMAGE_DIR)
+                       'controller-1:{}'.format(GuestImages.IMAGE_DIR, GuestImages.IMAGE_DIR)
         con_ssh.exec_cmd(rsync_images)
         image_names = storage_helper.find_images(con_ssh, image_type='raw')
         msg = 'No images found on controller'
@@ -944,7 +944,7 @@ def test_import_raw_with_cache_raw():
 
     LOG.tc_step('Import raw images into glance with --cache-raw')
     for image in image_names:
-        source_image_loc = IMAGE_DIR + image
+        source_image_loc = GuestImages.IMAGE_DIR + image
         ret = glance_helper.create_image(source_image_file=source_image_loc,
                                          disk_format='raw',
                                          container_format='bare',
@@ -998,10 +998,10 @@ def test_exceed_size_of_img_pool():
         LOG.info('No qcow2 images were found on the system')
         LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
         image_names = storage_helper.download_images(dload_type='ubuntu',
-            img_dest=IMAGE_DIR, con_ssh=con_ssh)
+            img_dest=GuestImages.IMAGE_DIR, con_ssh=con_ssh)
 
     LOG.tc_step('Import qcow2 images into glance until pool is full')
-    source_img = IMAGE_DIR + "/" + image_names[0]
+    source_img = GuestImages.IMAGE_DIR + "/" + image_names[0]
     while True:
         ret = glance_helper.create_image(source_image_file=source_img,
                                          disk_format='qcow2',
@@ -1080,15 +1080,15 @@ def test_import_large_images_with_cache_raw():
     if base_img not in image_names:
         LOG.tc_step('Rsyncing images from controller-0')
         rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no " {} ' \
-                       'controller-1:{}'.format(IMAGE_DIR, IMAGE_DIR)
+                       'controller-1:{}'.format(GuestImages.IMAGE_DIR, GuestImages.IMAGE_DIR)
         con_ssh.exec_cmd(rsync_images)
         image_names = storage_helper.find_images(con_ssh)
-        msg = '{} was not found in {}'.format(base_img, IMAGE_DIR)
+        msg = '{} was not found in {}'.format(base_img, GuestImages.IMAGE_DIR)
         assert base_img in image_names, msg
 
     # Resize the image to 40GB
     LOG.tc_step('Resize the cgcs-guest image to 40GB')
-    cmd = 'cp {}/{} {}/{}'.format(IMAGE_DIR, base_img, IMAGE_DIR, new_img)
+    cmd = 'cp {}/{} {}/{}'.format(GuestImages.IMAGE_DIR, base_img, GuestImages.IMAGE_DIR, new_img)
     rtn_code, out = con_ssh.exec_cmd(cmd)
     assert not rtn_code, out
     cmd = 'qemu-img resize {} -f raw 40G'.format(new_img)
@@ -1102,17 +1102,17 @@ def test_import_large_images_with_cache_raw():
 
     # Convert the image to qcow2
     LOG.tc_step('Convert the raw image to qcow2')
-    args = '{}/{} {}/{}'.format(IMAGE_DIR, new_img, IMAGE_DIR, qcow2_img)
+    args = '{}/{} {}/{}'.format(GuestImages.IMAGE_DIR, new_img, GuestImages.IMAGE_DIR, qcow2_img)
     cmd = 'qemu-img convert -f raw -O qcow2' + ' ' + args
     con_ssh.exec_cmd(cmd, expect_timeout=600, fail_ok=False)
 
     # Check the image type is updated
     image_names = storage_helper.find_images(con_ssh, image_type='qcow2')
-    msg = 'qcow2 image was not found in {}'.format(IMAGE_DIR)
+    msg = 'qcow2 image was not found in {}'.format(GuestImages.IMAGE_DIR)
     assert qcow2_img in image_names, msg
 
     LOG.tc_step('Import image into glance')
-    source_img = IMAGE_DIR + qcow2_img
+    source_img = GuestImages.IMAGE_DIR + qcow2_img
     out = glance_helper.create_image(source_image_file=source_img,
                                      disk_format='qcow2', \
                                      container_format='bare', \
@@ -1275,10 +1275,10 @@ def test_modify_ceph_pool_size_neg():
     if not image_names:
         LOG.info('No qcow2 images were found on the system')
         LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
-        image_names = storage_helper.download_images(dload_type='ubuntu', img_dest=IMAGE_DIR, con_ssh=con_ssh)    # TODO for Yang: perhaps a session level fixture should be added
+        image_names = storage_helper.download_images(dload_type='ubuntu', img_dest=GuestImages.IMAGE_DIR, con_ssh=con_ssh)    # TODO for Yang: perhaps a session level fixture should be added
 
     LOG.tc_step('Import qcow2 images into glance until pool is full')
-    source_img = IMAGE_DIR + "/" + image_names[0]
+    source_img = GuestImages.IMAGE_DIR + "/" + image_names[0]
     while True:
         ret = glance_helper.create_image(source_image_file=source_img,
                                          disk_format='qcow2',

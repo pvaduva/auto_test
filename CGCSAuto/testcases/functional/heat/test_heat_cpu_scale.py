@@ -7,7 +7,8 @@ from utils import cli
 from utils.tis_log import LOG
 
 from setup_consts import P1, P2, P3
-from consts.cgcs import HEAT_PATH, HEAT_SCENARIO_PATH, HOME, FlavorSpec
+from consts.cgcs import HEAT_PATH, HEAT_SCENARIO_PATH, FlavorSpec
+from consts.filepaths import WRSROOT_HOME
 
 from keywords import nova_helper, vm_helper, heat_helper, ceilometer_helper, network_helper
 from testfixtures.resource_mgmt import ResourceCleanup
@@ -31,7 +32,7 @@ def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
     t_name, yaml = template_name.split('.')
     stack_name = t_name
 
-    template_path = os.path.join(HOME, HEAT_SCENARIO_PATH, template_name)
+    template_path = os.path.join(WRSROOT_HOME, HEAT_SCENARIO_PATH, template_name)
     cmd_list = ['-f %s ' % template_path]
 
     # create a flavor with Hearbeat enabled]

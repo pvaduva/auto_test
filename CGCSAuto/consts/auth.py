@@ -88,20 +88,22 @@ class Guest:
         },
 
         'ubuntu': {
-            'user': 'wrsroot',
+            'user': 'ubuntu',
             'password': None
         },
 
         'centos': {
-            'user': 'wrsroot',
+            'user': 'centos',
             'password': None
         },
 
+        # This image has some issue where it usually fails to boot
         'opensuse_13': {
-            'user': 'wrsroot',
+            'user': 'root',
             'password': None
         },
 
+        # OPV image which is has root/root enabled
         'rhel': {
             'user': 'root',
             'password': 'root'

@@ -9,7 +9,7 @@ from keywords import nova_helper, vm_helper, heat_helper,ceilometer_helper,netwo
 from setup_consts import P1, P2, P3
 import time
 from consts.heat import Heat
-from consts.cgcs import HOME
+from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HEAT_PATH
 import os
 from consts.auth import Tenant
@@ -165,7 +165,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     if heat_user is 'admin':
         auth_info=Tenant.ADMIN
 
-    template_path = os.path.join(HOME, HEAT_PATH, template_name)
+    template_path = os.path.join(WRSROOT_HOME, HEAT_PATH, template_name)
     cmd_list = ['-f %s ' % template_path]
 
     if params is not None:

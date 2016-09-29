@@ -75,11 +75,17 @@ def test_ping_between_two_vms(guest_os, ubuntu14_image):
     vm_helper.ping_vms_from_vm(to_vms=vms[1], from_vm=vms[0], net_types=['mgmt', 'data', 'internal'])
 
 
-@mark.usefixtures('centos7_image', 'centos6_image', 'ubuntu14_image')
+@mark.features('guest_os')
+@mark.usefixtures('centos7_image', 'centos6_image', 'ubuntu14_image',
+                  'opensuse13_image', 'opensuse11_image',
+                  'rhel7_image')
 @mark.parametrize('guest_os', [
     'centos_7',
     'centos_6',
-    'ubuntu_14'
+    'ubuntu_14',
+    # 'opensuse_13',
+    'opensuse_11',
+    'rhel_7',
 ])
 def test_ping_vm_basic(guest_os):
     vm_id = vm_helper.boot_vm(name=guest_os, guest_os=guest_os)[1]

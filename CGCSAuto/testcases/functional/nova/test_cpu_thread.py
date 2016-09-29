@@ -1,4 +1,4 @@
-import random
+import random, time
 
 from pytest import mark, fixture, skip
 
@@ -425,11 +425,10 @@ class TestHTEnabled:
         assert CPUThreadErr.INSUFFICIENT_CORES_FOR_ISOLATE.format(ht_host, 4) in fault_msg
 
     @mark.parametrize(('vcpus', 'cpu_thread_pol', 'min_vcpus', 'numa_0'), [
-        mark.p1((6, 'require', None, 1)),
-        mark.p1((5, 'require', None, None)),
-        mark.p1((6, 'isolate', 2, 0)),
+        mark.p1((6, 'require', None, 1)),   # Not allowed to set min_vcpus with require
+        mark.p1((6, 'isolate', 3, 0)),
         mark.p1((6, 'prefer', 1, 0)),
-        mark.p1((6, None, 2, 1)),     # should default to prefer behaviour
+        mark.p1((6, None, 4, 1)),     # should default to prefer behaviour
         mark.p2((5, 'isolate', 2, None)),
         mark.p1((5, 'prefer', 1, None)),
     ])
@@ -452,7 +451,7 @@ class TestHTEnabled:
 
         LOG.tc_step("Boot a vm with above flavor and check it booted successfully on a hyperthreaded host.")
         vm_id = vm_helper.boot_vm(name='vcpu{}_min{}_{}'.format(vcpus, min_vcpus, cpu_thread_pol), flavor=flavor_id)[1]
-        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+        ResourceCleanup.add('vm', vm_id)
 
         vm_host = nova_helper.get_vm_host(vm_id)
         if cpu_thread_pol == 'require':
@@ -483,6 +482,7 @@ class TestHTEnabled:
                                                                 vm_host=vm_host, cpu_pol='dedicated',
                                                                 cpu_thr_pol=cpu_thread_pol,
                                                                 expt_increase=-expt_vcpu_num_change)[0]
+
                 assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
                 assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
                 host_allocated_cpus -= expt_vcpu_num_change
@@ -538,7 +538,7 @@ class TestHTEnabled:
         (6, 'dedicated', 'require', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None),
         (5, 'dedicated', 'prefer', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None),
         # mark.skipif(True, reason="Evacuation JIRA CGTS-4917")
-        (2, 'dedicated', 'isolate', None, None, 'strict', 'volume', ['cold_migrate', 'live_migrate'], 'evacuate'),
+        (3, 'dedicated', 'isolate', None, None, 'strict', 'volume', ['cold_migrate', 'live_migrate'], 'evacuate'),
     ], ids=id_gen)
     def test_cpu_thread_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol, min_vcpus, numa_0,
                                                  vs_numa_affinity, boot_source, nova_actions, host_action, ht_hosts_):
@@ -602,6 +602,7 @@ class TestHTEnabled:
 
         for action in nova_actions:
             vm_helper.perform_action_on_vm(vm_id, action=action)
+            time.sleep(10)
 
         post_vm_host = nova_helper.get_vm_host(vm_id)
         pre_action_cpus = pre_hosts_cpus[post_vm_host]
@@ -730,7 +731,10 @@ class TestHTEnabled:
             nova_actions = [nova_actions]
 
         for action in nova_actions:
-            vm_helper.perform_action_on_vm(vm_id, action=action)
+            kwargs = {}
+            if action == 'rebuild':
+                kwargs['image_id'] = image_id
+            vm_helper.perform_action_on_vm(vm_id, action=action, **kwargs)
 
         post_vm_host = nova_helper.get_vm_host(vm_id)
         pre_action_cpus = pre_hosts_cpus[post_vm_host]
