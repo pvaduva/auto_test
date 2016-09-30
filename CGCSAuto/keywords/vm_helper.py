@@ -501,6 +501,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     LOG.info("Waiting for VM status change to original state {}".format(before_status))
     end_time = time.time() + VMTimeout.LIVE_MIGRATE_COMPLETE
     while time.time() < end_time:
+        time.sleep(2)
         status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
                                                     auth_info=Tenant.ADMIN)
         if status == before_status:
@@ -512,7 +513,6 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
             raise exceptions.VMPostCheckFailed(
                 "VM {} is in {} state after live migration. Original state before live migration is: {}".
                 format(vm_id, VMStatus.ERROR, before_status))
-        time.sleep(2)
     else:
         if fail_ok:
             return 4, "Post action check failed: VM is not in original state."

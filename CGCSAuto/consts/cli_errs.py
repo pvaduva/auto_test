@@ -79,6 +79,7 @@ class NetworkingErr:
     INVALID_VXLAN_PROVISION_PORTS = "is not in [4789, 8472]."
     VXLAN_TTL_RANGE_MISSING = "VXLAN time-to-live attributes missing"
     VXLAN_TTL_RANGE_TOO_LARGE = "is too large - must be no larger than '255'."
+    VXLAN_TTL_RANGE_TOO_SMALL = "is too small - must be at least '1'."
     OVERLAP_SEGMENTATION_RANGE = "segmentation id range overlaps with"
     INVALID_MTU_VALUE = "requires an interface MTU value of at least"
     VXLAN_MISSING_IP_ON_INTERFACE = "requires an IP address"
