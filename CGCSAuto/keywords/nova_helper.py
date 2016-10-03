@@ -1020,7 +1020,7 @@ def get_vm_boot_info(vm_id, auth_info=None, con_ssh=None):
         if len(volumes) == 0:
             raise exceptions.VMError("Booted from volume, but no volume id found.")
         elif len(volumes) > 1:
-            raise exceptions.VMError("VM booted from volume. Multiple volumes found! Did you attach extra volume?")
+            LOG.warning("VM booted from volume. Multiple volumes found, taking the first volume as boot source")
         return {'type': 'volume', 'id': volumes[0]}
     else:
         match = re.search(UUID, image)

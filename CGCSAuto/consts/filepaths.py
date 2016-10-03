@@ -7,8 +7,9 @@ class TiSPath:
 
 class VMPath:
     VM_IF_PATH_UBUNTU = '/etc/network/interfaces.d/'
-    VM_IF_PATH_CENTOS = '/etc/sysconfig/network-scripts/'
     ETH_PATH_UBUNTU = '/etc/network/interfaces.d/{}.cfg'
+    # Below two paths are common for CentOS, OpenSUSE, and RHEL
+    VM_IF_PATH_CENTOS = '/etc/sysconfig/network-scripts/'
     ETH_PATH_CENTOS = '/etc/sysconfig/network-scripts/ifcfg-{}'
 
 

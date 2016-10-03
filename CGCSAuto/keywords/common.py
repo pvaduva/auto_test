@@ -197,6 +197,11 @@ class Count:
         return cls.__flavor_count
 
     @classmethod
+    def get_volume_count(cls):
+        cls.__volume_count += 1
+        return cls.__volume_count
+
+    @classmethod
     def get_image_count(cls):
         cls.__image_count += 1
         return cls.__image_count
@@ -269,7 +274,8 @@ def get_unique_name(name_str, existing_names=None, resource_type='other'):
 
         for i in range(50):
             if unique_name not in existing_names:
-                break
+                return unique_name
+
             unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
         else:
             raise LookupError("Cannot find unique name.")

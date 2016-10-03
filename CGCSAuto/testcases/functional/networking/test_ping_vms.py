@@ -77,13 +77,13 @@ def test_ping_between_two_vms(guest_os, ubuntu14_image):
 
 @mark.features('guest_os')
 @mark.usefixtures('centos7_image', 'centos6_image', 'ubuntu14_image',
-                  'opensuse13_image', 'opensuse11_image',
+                  'opensuse12_image', 'opensuse11_image',
                   'rhel7_image')
 @mark.parametrize('guest_os', [
     'centos_7',
     'centos_6',
     'ubuntu_14',
-    # 'opensuse_13',
+    'opensuse_12',
     'opensuse_11',
     'rhel_7',
 ])

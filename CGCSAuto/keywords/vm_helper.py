@@ -2123,24 +2123,20 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     """
 
     file_dir = TiSPath.USERDATA
+    guest_os = guest_os.lower()
+
+    # default eth_path for non-ubuntu image
+    eth_path = VMPath.ETH_PATH_CENTOS
+    new_user = None
 
     if 'ubuntu' in guest_os:
         guest_os = 'ubuntu_14'
         # vm_if_path = VMPath.VM_IF_PATH_UBUNTU
         eth_path = VMPath.ETH_PATH_UBUNTU
         new_user = 'ubuntu'
-
     elif 'centos' in guest_os:
-        guest_os = guest_os
         # vm_if_path = VMPath.VM_IF_PATH_CENTOS
-        eth_path = VMPath.ETH_PATH_CENTOS
         new_user = 'centos'
-
-    else:
-        LOG.warning("Unknown guest os for userdata creation")
-        # eth_path = None
-        # new_user = None
-        return
 
     file_name = '{}_{}nic_cloud_init_if_conf.sh'.format(guest_os, nics_num)
 
