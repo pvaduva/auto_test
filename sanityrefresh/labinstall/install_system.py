@@ -1560,6 +1560,8 @@ def main():
 
         wait_state(nodes, ADMINISTRATIVE, UNLOCKED)
         wait_state(nodes, OPERATIONAL, ENABLED)
+        # Sleep to allow drdb sync to initiate
+        time.sleep(60)
         wait_until_drbd_sync_complete(controller0, timeout=1800, check_interval=180)
 
     for node in nodes:
