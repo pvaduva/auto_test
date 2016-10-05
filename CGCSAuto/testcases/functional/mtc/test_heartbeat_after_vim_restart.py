@@ -44,10 +44,6 @@ def heartbeat_flavor_vm(request):
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
 
-    events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
-                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
-                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
-
     if heartbeat == 'True':
         assert events, "VM heartbeat is not enabled."
         assert EventLogID.HEARTBEAT_ENABLED == events[0], "VM heartbeat failed to establish."
@@ -87,6 +83,11 @@ def test_heartbeat_after_vim_restart(heartbeat_flavor_vm):
     """
     vm_id = heartbeat_flavor_vm['id']
     heartbeat_type = heartbeat_flavor_vm['heartbeat']
+
+    LOG.tc_step("Verify vm heartbeat is on by checking the heartbeat process")
+    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat | grep -v grep")
+        assert (output is not None)
 
     LOG.tc_step("Kill the nfv-vim.pid process on active controller")
 
