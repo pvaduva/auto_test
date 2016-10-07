@@ -37,11 +37,11 @@ def ht_and_nonht_hosts():
 
 
 @mark.parametrize(('cpu_policy', 'cpu_thread_policy', 'shared_vcpu', 'min_vcpus', 'expt_err'), [
-    mark.p1((None, 'isolate', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
-    mark.p1((None, 'require', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
-    mark.p1((None, 'prefer', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
-    mark.p1(('shared', 'isolate', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
-    mark.p1(('shared', 'require', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
+    mark.p1((None, 'isolate', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED_FLAVOR')),
+    mark.p1((None, 'require', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED_FLAVOR')),
+    mark.p1((None, 'prefer', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED_FLAVOR')),
+    mark.p1(('shared', 'isolate', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED_FLAVOR')),
+    mark.p1(('shared', 'require', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED_FLAVOR')),
     # should not be an error for this
     # mark.p1(('shared', 'prefer', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
     # should default to prefer policy
@@ -132,7 +132,7 @@ def test_cpu_thread_flavor_delete_negative(cpu_thread_policy):
     code, output = nova_helper.unset_flavor_extra_specs(flavor_id, FlavorSpec.CPU_POLICY, check_first=False,
                                                         fail_ok=True)
     assert 1 == code, 'Unset cpu policy is not rejected when cpu thread policy is set.'
-    assert CPUThreadErr.DEDICATED_CPU_REQUIRED in output
+    assert CPUThreadErr.DEDICATED_CPU_REQUIRED_FLAVOR in output
 
 
 class TestHTEnabled:
@@ -213,9 +213,9 @@ class TestHTEnabled:
         mark.p3((3, 'dedicated', 'require', 'isolate', 'dedicated', False, 'CPUThreadErr.CONFLICT_FLV_IMG')),
         mark.p3((2, 'dedicated', 'require', 'prefer', 'dedicated', False, 'CPUThreadErr.CONFLICT_FLV_IMG')),
         mark.p3((3, 'dedicated', 'isolate', 'prefer', 'dedicated', True, 'CPUThreadErr.CONFLICT_FLV_IMG')),
-        mark.p2((2, None, None, 'isolate', None, True, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
-        mark.p2((2, None, None, 'require', None, False, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
-        mark.p2((2, None, None, 'prefer', None, False, 'CPUThreadErr.DEDICATED_CPU_REQUIRED')),
+        mark.p2((2, None, None, 'isolate', None, True, 'CPUThreadErr.DEDICATED_CPU_REQUIRED_BOOT_VM')),
+        mark.p2((2, None, None, 'require', None, False, 'CPUThreadErr.DEDICATED_CPU_REQUIRED_BOOT_VM')),
+        mark.p2((2, None, None, 'prefer', None, False, 'CPUThreadErr.DEDICATED_CPU_REQUIRED_BOOT_VM')),
         # mark.p2((3, 'dedicated', None, 'require', None, True, 'CPUThreadErr.VCPU_NUM_UNDIVISIBLE')),
     ])
     def test_boot_vm_cpu_thread_image(self, flv_vcpus, flv_cpu_pol, flv_cpu_thr_pol, img_cpu_thr_pol, img_cpu_pol,
@@ -475,16 +475,16 @@ class TestHTEnabled:
                 LOG.tc_step("Scale down once and check vm vcpus change in nova show")
                 vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
                 expt_current_cpu -= 1
-                check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+                # check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
                 LOG.tc_step('Check total allocated vcpus for host and pcpus for vm is reduced by 1')
-                pcpus_total = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=host_allocated_cpus,
-                                                                vm_host=vm_host, cpu_pol='dedicated',
-                                                                cpu_thr_pol=cpu_thread_pol,
-                                                                expt_increase=-expt_vcpu_num_change)[0]
+                check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=host_allocated_cpus,
+                                                  vm_host=vm_host, cpu_pol='dedicated', cpu_thr_pol=cpu_thread_pol,
+                                                  expt_increase=-expt_vcpu_num_change,
+                                                  min_vcpus=expt_min_cpu, current_vcpus=expt_current_cpu)
 
-                assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
-                assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
+                # assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
+                # assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
                 host_allocated_cpus -= expt_vcpu_num_change
 
         LOG.tc_step("VM is now at it's minimal vcpus, attempt to scale down and ensure it's rejected")
@@ -503,16 +503,16 @@ class TestHTEnabled:
 
                 vm_helper.scale_vm(vm_id, direction='up', resource='cpu')
                 expt_current_cpu += 1
-                check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+                # check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
                 LOG.tc_step('Check total allocated vcpus for host and pcpus for vm is increased by 1')
-                pcpus_total = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=host_allocated_cpus,
-                                                                vm_host=vm_host, cpu_pol='dedicated',
-                                                                cpu_thr_pol=cpu_thread_pol,
-                                                                expt_increase=expt_vcpu_num_change)[0]
-                assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
-                assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
+                check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=host_allocated_cpus,
+                                                  vm_host=vm_host, cpu_pol='dedicated', cpu_thr_pol=cpu_thread_pol,
+                                                  expt_increase=expt_vcpu_num_change,
+                                                  min_vcpus=expt_min_cpu, current_vcpus=expt_current_cpu)
 
+                # assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
+                # assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
                 host_allocated_cpus += expt_vcpu_num_change
 
         LOG.tc_step("VM is now at it's maximum vcpus, attemp to scale up and ensure it's rejected")
@@ -846,17 +846,17 @@ class TestHTDisabled:
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus', 'expt_err'), [
         (2, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
         (3, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
-        (2, 'isolate', 2, None),
-        (3, 'isolate', None, None),
-        # (2, 'isolate', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
-        # (2, 'isolate', '2', 'CPUThreadErr.HT_HOST_UNAVAIL'),
+        # (2, 'isolate', 2, None),
+        # (3, 'isolate', None, None),
+        (3, 'isolate', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
+        (2, 'isolate', '2', 'CPUThreadErr.HT_HOST_UNAVAIL'),
         (2, 'prefer', None, None),
         (3, 'prefer', 2, None),
     ])
     def test_boot_vm_cpu_thread_ht_disabled(self, vcpus, cpu_thread_policy, min_vcpus, expt_err, ht_and_nonht_hosts):
 
         ht_hosts, non_ht_hosts = ht_and_nonht_hosts
-        if ht_hosts[0]:
+        if ht_hosts:
             skip("There are HT enabled hosts")
         LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
         flavor_id = nova_helper.create_flavor(name='cpu_thread', vcpus=vcpus)[1]
@@ -880,13 +880,9 @@ class TestHTDisabled:
 
             LOG.tc_step("Check expected fault message displayed in nova show")
             fault_msg = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
-            expt_err_eval = eval(expt_err)
-            if isinstance(expt_err_eval, list):
-                for err_part in expt_err_eval:
-                    assert err_part in fault_msg
-                assert cpu_thread_policy in fault_msg
-            else:
-                assert eval(expt_err).format(cpu_thread_policy) in fault_msg
+            flavor_pol = "u'{}'".format(cpu_thread_policy) if cpu_thread_policy is not None else None
+            requsted_thread_pols = '[{}, None]'.format(flavor_pol)
+            assert eval(expt_err).format(requsted_thread_pols) in fault_msg
         else:
             assert 0 == code, "Boot vm with isolate policy was unsuccessful. Details: {}".format(msg)
 

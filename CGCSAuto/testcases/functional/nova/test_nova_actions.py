@@ -4,7 +4,7 @@ from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, VMStatus
 from consts.reasons import SkipReason
 
-from keywords import vm_helper, nova_helper, glance_helper, cinder_helper
+from keywords import vm_helper, nova_helper, glance_helper, cinder_helper, check_helper, host_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
@@ -56,6 +56,8 @@ def test_nova_actions(guest_os, cpu_pol, actions):
             LOG.tc_step("Perform following action on vm {}: {}".format(vm_id, action))
             vm_helper.perform_action_on_vm(vm_id, action=action)
 
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
 
 class TestVariousGuests:
 
@@ -83,7 +85,7 @@ class TestVariousGuests:
                 skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
 
         LOG.tc_step("Create a flavor with 1 vcpu")
-        flavor_id = nova_helper.create_flavor(name=cpu_pol, vcpus=1, guest_os=guest_os)[1]
+        flavor_id = nova_helper.create_flavor(name=cpu_pol, vcpus=2, guest_os=guest_os)[1]
         ResourceCleanup.add('flavor', flavor_id)
 
         if cpu_pol is not None:
@@ -100,6 +102,8 @@ class TestVariousGuests:
             assert 0 == code, "Issue occurred when creating volume"
             source_id = vol_id
 
+        prev_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
+
         LOG.tc_step("Boot a {} vm with above flavor from {}".format(guest_os, boot_source))
         vm_id = vm_helper.boot_vm('nova_actions-{}-{}'.format(guest_os, boot_source), flavor=flavor_id,
                                   source=boot_source, source_id=source_id, guest_os=guest_os)[1]
@@ -107,6 +111,9 @@ class TestVariousGuests:
 
         LOG.tc_step("Wait for VM pingable from NATBOX")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        vm_host_origin = nova_helper.get_vm_host(vm_id)
+        check_helper.check_topology_of_vm(vm_id, vcpus=2, prev_total_cpus=prev_cpus[vm_host_origin],
+                                          vm_host=vm_host_origin, cpu_pol=cpu_pol)
 
         for action in actions:
             if action == 'auto_recover':
@@ -118,3 +125,10 @@ class TestVariousGuests:
             else:
                 LOG.tc_step("Perform following action on vm {}: {}".format(vm_id, action))
                 vm_helper.perform_action_on_vm(vm_id, action=action)
+
+            if action in ['unpause', 'resume', 'start', 'auto_recover']:
+                vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
+                vm_host = nova_helper.get_vm_host(vm_id)
+                check_helper.check_topology_of_vm(vm_id, vcpus=2, prev_total_cpus=prev_cpus[vm_host],
+                                                  vm_host=vm_host, cpu_pol=cpu_pol)

@@ -4,7 +4,7 @@ from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
-from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper
+from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
@@ -69,13 +69,13 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
     mark.p1(('local_image', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),
     # mark.p1(('local_image', 0, 0, 'shared', 2, 'image', False, ??)),      obsolete in Mitaka
     # mark.p1(('local_image', 1, 1, 'dedicated', 1, 'image', False, ??)),   obsolete in Mitaka
-    mark.p1(('local_lvm', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
-    mark.p1(('local_lvm', 1, 0, 'volume', True, 'LiveMigErr.GENERAL_NO_HOST')),
-    mark.p1(('local_lvm', 0, 1, 'volume', True, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_lvm', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
+    mark.p1(('local_lvm', 1, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
+    mark.p1(('local_lvm', 0, 1, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
     mark.p1(('local_lvm', 0, 1, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),
     mark.p1(('local_lvm', 1, 0, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),
-    mark.p1(('local_lvm', 0, 0, 'image', True, 'LiveMigErr.GENERAL_NO_HOST')),
-    mark.p1(('local_lvm', 1, 0, 'image', True, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_lvm', 0, 0, 'image', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
+    mark.p1(('local_lvm', 1, 0, 'image', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
     mark.p1(('local_lvm', 0, 0, 'image', False, 'LiveMigErr.GENERAL_NO_HOST')),
     mark.p1(('local_lvm', 0, 1, 'image', False, 'LiveMigErr.GENERAL_NO_HOST')),
     mark.p1(('local_lvm', 0, 0, 'image_with_vol', False, 'LiveMigErr.GENERAL_NO_HOST')),
@@ -304,27 +304,28 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu14_image):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
 
 
-@mark.usefixtures('ubuntu_14',
+@mark.usefixtures('ubuntu14_image',
                   'centos6_image', 'centos7_image',
-                  'opensuse11_image', 'opensuse12_image', # 'opensuse13_image',
+                  'opensuse11_image', 'opensuse12_image',
+                  # 'opensuse13_image',
                   'rhel6_image', 'rhel7_image')
-@mark.parametrize(('guest_os', 'cpu_pol', 'boot_source'), [
-    ('ubuntu_14', 'share', 'volume'),
-    ('ubuntu_14', 'dedicated', 'image'),
-    ('centos_6', 'dedicated', 'volume'),
-    ('centos_7', 'dedicated', 'volume'),
-    ('centos_7', None, 'image'),
-    ('opensuse_11', 'dedicated', 'volume'),
-    ('opensuse_12', 'dedicated', 'volume'),
+@mark.parametrize(('guest_os', 'vcpus', 'cpu_pol', 'boot_source'), [
+    ('ubuntu_14', 1, 'shared', 'volume'),
+    ('ubuntu_14', 2, 'dedicated', 'image'),
+    ('centos_6', 3, 'dedicated', 'volume'),
+    ('centos_7', 1, 'dedicated', 'volume'),
+    ('centos_7', 5, None, 'image'),
+    ('opensuse_11', 3, 'dedicated', 'volume'),
+    ('opensuse_12', 4, 'dedicated', 'volume'),
     # ('opensuse_13', 'shared', 'volume'),
     # ('opensuse_13', 'dedicated', 'image'),
-    ('rhel_6', 'dedicated', 'image'),
-    ('rhel_6', None, 'volume'),
-    ('rhel_7', 'dedicated', 'volume'),
+    ('rhel_6', 3, 'dedicated', 'image'),
+    ('rhel_6', 4, None, 'volume'),
+    ('rhel_7', 1, 'dedicated', 'volume'),
 ])
-def test_migrate_vm_various_guest(guest_os, cpu_pol, boot_source):
+def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
     LOG.tc_step("Create a flavor with 1 vcpu")
-    flavor_id = nova_helper.create_flavor(name='migrate', vcpus=1, guest_os=guest_os)[1]
+    flavor_id = nova_helper.create_flavor(name='migrate', vcpus=vcpus, guest_os=guest_os)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
     if cpu_pol is not None:
@@ -341,12 +342,17 @@ def test_migrate_vm_various_guest(guest_os, cpu_pol, boot_source):
         assert 0 == code, "Issue occurred when creating volume"
         source_id = vol_id
 
+    prev_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
+
     LOG.tc_step("Boot a {} VM with above flavor from {}".format(guest_os, boot_source))
     vm_id = vm_helper.boot_vm(name='{}-{}-migrate'.format(guest_os, cpu_pol), flavor=flavor_id,
                               source=boot_source, source_id=source_id, guest_os=guest_os)[1]
     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    vm_host_origin = nova_helper.get_vm_host(vm_id)
+    check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_origin],
+                                      vm_host=vm_host_origin, cpu_pol=cpu_pol)
 
     LOG.tc_step("Live migrate {} VM".format(guest_os))
     vm_helper.live_migrate_vm(vm_id)
@@ -354,8 +360,16 @@ def test_migrate_vm_various_guest(guest_os, cpu_pol, boot_source):
     LOG.tc_step("Ping vm from NatBox after live migration")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
 
+    vm_host_live_mig = nova_helper.get_vm_host(vm_id)
+    check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_live_mig],
+                                      vm_host=vm_host_live_mig, cpu_pol=cpu_pol)
+
     LOG.tc_step("Cold migrate vm and check vm is moved to different host")
     vm_helper.cold_migrate_vm(vm_id)
 
     LOG.tc_step("Ping vm from NatBox after cold migration")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
+
+    vm_host_cold_mig = nova_helper.get_vm_host(vm_id)
+    check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_cold_mig],
+                                      vm_host=vm_host_cold_mig, cpu_pol=cpu_pol)

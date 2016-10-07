@@ -174,4 +174,5 @@ def test_resize_vm_shared_cpu_negative(vcpus, cpu_policy, shared_vcpu, basic_vm)
 
     LOG.tc_step("Attempt to resize vm with invalid flavor, and verify resize request is rejected.")
     code, msg = vm_helper.resize_vm(basic_vm, flavor, fail_ok=True)
-    assert code == 1 and ResizeVMErr.RESIZE_ERR in msg
+    assert code == 1, "Resize vm request is not rejected"
+    assert ResizeVMErr.SHARED_NOT_ENABLED.format('0') in msg

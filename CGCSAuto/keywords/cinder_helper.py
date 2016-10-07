@@ -147,6 +147,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     Notes:
         snapshot_id > source_vol_id > image_id if more than one source ids are provided.
     """
+
     bootable = str(bootable).lower()
 
     if rtn_exist and name is not None:
@@ -155,6 +156,9 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
             LOG.info('Volume(s) with name {} and bootable state {} exists and in available state, return an existing '
                      'volume.'.format(name, bootable))
             return -1, vol_ids[0]
+
+    if name is None:
+        name = 'vol-{}'.format(common.get_tenant_name())
 
     name = common.get_unique_name(name, resource_type='volume', existing_names=get_volumes())
     subcmd = ''
@@ -999,7 +1003,7 @@ def is_volumes_pool_sufficient(min_size=30):
     #   volume-05fa416d-d37b-4d57-a6ff-ab4fe49deece cinder-volumes Vwi-a-tz--  1.00g cinder-volumes-pool    64.16
     #   volume-1b04fa7f-b839-4cf9-a177-e676ec6cf9b7 cinder-volumes Vwi-a-tz--  1.00g cinder-volumes-pool    64.16
     if lvs_pool:
-        pool_size = float(lvs_pool.splitlines()[0].split(sep=' ')[3].strip()[:-1])
+        pool_size = float(lvs_pool.splitlines()[0].strip().split()[3].strip()[:-1])
         return pool_size >= min_size
 
     # assume enough volumes in ceph:

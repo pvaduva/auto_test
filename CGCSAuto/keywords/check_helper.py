@@ -48,7 +48,7 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
 
 
 def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=None, cpu_pol=None, cpu_thr_pol=None,
-                         expt_increase=None, con_ssh=None):
+                         expt_increase=None, min_vcpus=None, current_vcpus=None, con_ssh=None):
     """
     Check vm has the correct topology based on the number of vcpus, cpu policy, cpu threads policy, number of numa nodes
 
@@ -68,6 +68,15 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
 
     """
     cpu_pol = cpu_pol if cpu_pol else 'shared'
+    min_vcpus = vcpus if min_vcpus is None else min_vcpus
+    current_vcpus = vcpus if current_vcpus is None else current_vcpus
+    max_vcpus = vcpus
+
+    actual_vcpus = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))
+    expt_vcpus_all = [min_vcpus, current_vcpus, max_vcpus]
+    assert expt_vcpus_all == actual_vcpus, "Actual min/current/max vcpus in nova show: {}; Expected: {}".\
+        format(actual_vcpus, expt_vcpus_all)
+
     log_cores_siblings = host_helper.get_logcore_siblings(host=vm_host, con_ssh=con_ssh)
 
     if vm_host is None:
@@ -101,10 +110,11 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
                 'show')
     pcpus_total, siblings_total = _check_vm_topology_via_vm_topology(
             vm_id, vcpus=vcpus, cpu_pol=cpu_pol, cpu_thr_pol=cpu_thr_pol, vm_host=vm_host,
-            numa_num=numa_num, con_ssh=con_ssh, host_log_core_siblings=log_cores_siblings, is_ht=is_ht_host)
+            numa_num=numa_num, con_ssh=con_ssh, host_log_core_siblings=log_cores_siblings, is_ht=is_ht_host,
+            current_vcpus=current_vcpus)
 
     LOG.tc_step("Check vm vcpus, siblings on vm via /sys/devices/system/cpu/<cpu>/topology/core_siblings_list")
-    _check_vm_topology_on_vm(vm_id, vcpus=vcpus, siblings_total=siblings_total, pcpus=pcpus_total)
+    _check_vm_topology_on_vm(vm_id, vcpus=vcpus, siblings_total=siblings_total, current_vcpus=current_vcpus)
 
     LOG.tc_step('Check vm vcpus, pcpus on vm host via nova-compute.log and virsh vcpupin')
     # Note: floating vm pcpus will not be checked via virsh vcpupin
@@ -116,7 +126,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
 
 
 def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_num, vm_host,
-                                       host_log_core_siblings=None, is_ht=None, con_ssh=None):
+                                       host_log_core_siblings=None, is_ht=None, current_vcpus=None, con_ssh=None):
     """
 
     Args:
@@ -139,6 +149,9 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
         # float-2numa-4 | 4,4,4 |    512 | node:0,   256MB, pgsize:2M, vcpus:0,1, pol:sha
         #                                  node:1,   256MB, pgsize:2M, vcpus:2,3, pol:sha
     """
+    current_vcpus = vcpus if current_vcpus is None else current_vcpus
+    max_vcpus = vcpus
+
     if is_ht is None:
         is_ht = system_helper.is_hyperthreading_enabled(vm_host)
 
@@ -188,19 +201,6 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
             # TODO assert actual_topology, "vm topology is not included in vm-topology for dedicated vm"
 
             if not cpu_thr_pol:
-                # # node:1,   512MB, pgsize:2M, 1s,1c,3t, vcpus:0-2, pcpus:35,15,10, siblings:{0-2}, pol:ded, thr:no
-                # assert topology_on_numa_node['thr'] == 'pre', "cpu thread policy is in vm topology"
-                # # TODO assert '1c,{}t'.format(vcpus_per_numa) in actual_topology, 'vm topology is not as expected'
-                # assert vcpus_per_numa == len(actual_pcpus), "vm pcpus number per numa node is {} instead of {}".format(
-                #         len(actual_pcpus), vcpus_per_numa)
-                #
-                # if 1 == vcpus_per_numa:
-                #     assert not actual_siblings, "siblings should not be included with only 1 vcpu"
-                # # TODO else:
-                # #     assert actual_siblings, 'sibling should be included with dedicated policy and {} vcpus per ' \
-                # #                             'numa node'.format(vcpus_per_numa)
-                #
-                # # pcpus_total += actual_pcpus
                 cpu_thr_pol = 'prefer'
 
             # if cpu_thr_pol:
@@ -212,14 +212,21 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
             if cpu_thr_pol == 'isolate':
                 # isolate-5: node:0, 512MB, pgsize:2M, 1s,5c,1t, vcpus:0-4, pcpus:9,24,27,3,26, pol:ded, thr:iso
                 assert not actual_siblings, "siblings should not be included for isolate thread policy"
-                # TODO assert '{}c,1t'.format(vcpus_per_numa) in actual_topology
+                assert '{}c,1t'.format(vcpus_per_numa) in actual_topology
                 expt_core_len_in_pair = 1
 
             elif cpu_thr_pol == 'require':
                 # require-4: node:0, 512MB, pgsize:2M, 1s,2c,2t, vcpus:0-3, pcpus:25,5,8,28, siblings:{0,1},{2,3}, pol:ded, thr:req
-                if len(actual_pcpus) % 2 == 0:
+                if len(actual_vcpus) % 2 == 0:
                     assert actual_siblings, "siblings should be included for dedicated vm"
-                # TODO assert '{}c,2t'.format(int(vcpus_per_numa / 2)) in actual_topology  # 2 is the host thread number
+                    # 2 is the host thread number
+                    assert '{}c,2t'.format(int(vcpus_per_numa / 2)) in actual_topology, \
+                        "Expected topology: {}c,2t; Actual: {}".format(int(vcpus_per_numa / 2), actual_topology)
+                else:
+                    assert not actual_siblings, "siblings should not be included for require vm with odd number vcpus"
+                    assert '{}c,1t'.format(vcpus_per_numa) in actual_topology, \
+                        "Expected topology: {}c,1t; Actual: {}".format(vcpus_per_numa, actual_topology)
+
                 expt_core_len_in_pair = 2
                 # siblings_total += actual_siblings
 
@@ -227,38 +234,51 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
                 assert vcpus_per_numa == len(actual_pcpus), "vm pcpus number per numa node is {} instead of {}".format(
                         len(actual_pcpus), vcpus_per_numa)
                 if is_ht:
+                    # Those checks are not guaranteed if vm is migrated from non-HT host to HT host
                     expt_core_len_in_pair = 2
-                    # if len(actual_pcpus) % 2 == 0:
-                    #     TODO assert actual_siblings, "siblings should be included for prefer vm with HT host"
+                    if len(actual_vcpus) % 2 == 0:
+                        assert '{}c,2t'.format(int(vcpus_per_numa / 2)) in actual_topology, \
+                            "Expected topology: {}c,2t; Actual: {}".format(int(vcpus_per_numa / 2), actual_topology)
+                        assert actual_siblings, "siblings should be included for prefer vm with even number vcpus " \
+                                                "on HT host"
+                    else:
+                        assert not actual_siblings, "siblings should not be included for prefer vm with odd number vcpu"
+                        assert '{}c,1t'.format(vcpus_per_numa) in actual_topology, \
+                            "Expected topology: {}c,1t; Actual: {}".format(vcpus_per_numa, actual_topology)
                 else:
                     expt_core_len_in_pair = 1
+                    # Live migrate between ht host and non-ht host would not change vm siblings, so don't check siblings
                     # TODO assert not actual_siblings, "siblings should not be included for prefer vm with non-HT host"
 
             else:
                 raise NotImplemented("New cpu threads policy added? Update automation code.")
 
-            if cpu_thr_pol in ['require', 'prefer'] and is_ht and len(actual_pcpus) % 2 == 1:
-                if len(set(actual_pcpus)) == len(actual_pcpus) or len(set(actual_pcpus)) > 2:
-                    count = 0
-                    for pair in host_log_core_siblings:
-                        num_cpu_in_pair = len(set(pair) & set(actual_pcpus))
-                        if num_cpu_in_pair == 1:
-                            count += 1
+            # Don't check siblings for prefer as it changes after vcpu scaling
+            if cpu_thr_pol == 'require' and len(actual_pcpus) % 2 == 1:
 
-                    assert count <= 1, "More than 1 pcpu for {} vm does not have sibling vcpu assigned. VM pcpus: {}" \
-                                       ". Host sibling pairs: {}".format(cpu_thr_pol, actual_pcpus,
-                                                                         host_log_core_siblings)
-            else:
-                if len(set(actual_pcpus)) == len(actual_pcpus):
-                    for pair in host_log_core_siblings:
-                        assert len(set(pair) & set(actual_pcpus)) in [0, expt_core_len_in_pair], \
-                            "Host sibling pair: {}, VM pcpus:{}. Expected cores per pair: {}".format(
-                                    pair, actual_pcpus, expt_core_len_in_pair)
+                count = 0
+                for pair in host_log_core_siblings:
+                    num_cpu_in_pair = len(set(pair) & set(actual_pcpus))
+                    if num_cpu_in_pair == 1:
+                        count += 1
+
+                assert count <= 1, "More than 1 pcpu for {} vm does not have sibling vcpu assigned. " \
+                                   "VM pcpus: {}. Host sibling pairs: {}".format(cpu_thr_pol, actual_pcpus,
+                                                                                 host_log_core_siblings)
+            elif cpu_thr_pol in ['require', 'isolate']:
+                for pair in host_log_core_siblings:
+                    assert len(set(pair) & set(actual_pcpus)) in [0, expt_core_len_in_pair], \
+                        "Host sibling pair: {}, VM pcpus:{}. Expected cores per pair: {}".format(
+                        pair, actual_pcpus, expt_core_len_in_pair)
 
             pcpus_total += actual_pcpus
 
             if actual_siblings:
                 siblings_total += actual_siblings
+
+    if pcpus_total:
+        assert max_vcpus == len(pcpus_total), "Max vcpus: {}, pcpus list: {}".format(max_vcpus, pcpus_total)
+        assert current_vcpus == len(set(pcpus_total)), "Current vcpus: {}, pcpus: {}".format(max_vcpus, pcpus_total)
 
     return pcpus_total, siblings_total
 
@@ -296,19 +316,6 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
 
         if 'ded' in cpu_pol:
 
-            # if cpu_thr_pol == 'isolate':
-            #     LOG.tc_step("Check affined cpus for isolate vm is its pcpus plus the siblings of those pcpus")
-            #     expt_affined_cpus = []
-            #
-            #     for pcpu in vm_pcpus:
-            #         for host_sibling_pair in host_log_core_siblings:
-            #             if pcpu in host_sibling_pair:
-            #                 expt_affined_cpus += host_sibling_pair
-            #     expt_affined_cpus = sorted(list(set(expt_affined_cpus)))
-            #
-            # else:
-            #     LOG.tc_step("Check affined cpus for dedicated vm is the same as its pcpus shown in vm-topology")
-            #     expt_affined_cpus = vm_pcpus
             LOG.tc_step("Check affined cpus for dedicated vm is the same as its pcpus shown in vm-topology")
             expt_affined_cpus = vm_pcpus
 
@@ -332,26 +339,24 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
                                                   'on vm host {}\n{}'.format(vm_host, err_msg)
 
 
-def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, pcpus):
+def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus):
     # Check from vm in /proc/cpuinfo and /sys/devices/.../cpu#/topology/core_siblings_list
     actual_sib_list = []
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        LOG.tc_step("Check vm has {} present cores from inside vm via /sys/devices/system/cpu/present".format(vcpus))
+        LOG.tc_step("Check vm present|online|offline cores from inside vm via /sys/devices/system/cpu/")
         present_cores, online_cores, offline_cores = vm_helper.get_proc_nums_from_vm(vm_ssh)
         expt_sib_list = [[vcpu] for vcpu in range(len(online_cores))] if not siblings_total else siblings_total
 
         assert vcpus == len(present_cores), "Number of vcpus for vm: {}, present cores from " \
                                             "/sys/devices/system/cpu/present: {}".format(vcpus, len(present_cores))
+        assert current_vcpus == len(online_cores), \
+            "Current vcpus for vm: {}, online cores from /sys/devices/system/cpu/present: {}".\
+            format(current_vcpus, online_cores)
 
-        if pcpus:
-            expt_online_cores = len(set(pcpus))
-            assert expt_online_cores == len(online_cores), "Number of onlines cores expected: {}. Actual: {}".\
-                format(expt_online_cores, len(online_cores))
-
-            expt_total_cores = len(online_cores) + len(offline_cores)
-            assert len(present_cores) == expt_total_cores, "Number of present cores: {}. online+offline cores: {}".\
-                format(expt_online_cores, expt_total_cores)
+        expt_total_cores = len(online_cores) + len(offline_cores)
+        assert expt_total_cores in [len(present_cores), 512], \
+            "Number of present cores: {}. online+offline cores: {}".format(vcpus, expt_total_cores)
 
         LOG.tc_step("Check vm /sys/devices/system/cpu/[cpu#]/topology/core_siblings_list")
         for cpu in ['cpu{}'.format(i) for i in range(len(online_cores))]:
@@ -362,8 +367,9 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, pcpus):
             if sib_for_cpu not in actual_sib_list:
                 actual_sib_list.append(sib_for_cpu)
 
-    assert sorted(expt_sib_list) == sorted(actual_sib_list), "Expt sib list: {}, actual sib list: {}".\
-        format(sorted(expt_sib_list), sorted(actual_sib_list))
+        if len(online_cores) == len(present_cores):
+            assert sorted(expt_sib_list) == sorted(actual_sib_list), "Expt sib list: {}, actual sib list: {}".\
+                format(sorted(expt_sib_list), sorted(actual_sib_list))
 
 
 def check_vm_vcpus_via_nova_show(vm_id, min_cpu, current_cpu, max_cpu, con_ssh=None):

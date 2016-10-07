@@ -267,7 +267,7 @@ def get_unique_name(name_str, existing_names=None, resource_type='other'):
         raise ValueError("Invalid resource_type provided. Valid types: {}".format(valid_types))
 
     if existing_names:
-        if resource_type == 'image':
+        if resource_type in ['image', 'volume']:
             unique_name = name_str
         else:
             unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
