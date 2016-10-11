@@ -38,13 +38,6 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
     # config the page number after lock the compute node
     LOG.tc_step('modify the mtu on locked host {}'.format(hostname))
 
-    if network_type == 'data':
-        pnet_mtus = network_helper.get_providernets(name='data', rtn_val='mtu', strict=False)
-        for pnet_mtu in pnet_mtus:
-            if int(pnet_mtu) > int(mtu):
-                mtu = pnet_mtu
-        mtu = str(mtu)
-
     imtu = " --imtu " + mtu
     LOG.tc_step("Modifying {} interfaces to have {} mtu".format(network_type, mtu))
     # change all MTUs on ports of the same network type
@@ -90,6 +83,12 @@ def test_oam_intf_mtu_modified(mtu):
         - Nothing
 
     """
+    pnet_mtus = network_helper.get_providernets(name='ext', rtn_val='mtu', strict=False)
+    for pnet_mtu in pnet_mtus:
+        if int(pnet_mtu) > int(mtu):
+            mtu = pnet_mtu
+    LOG.info("Changing mtu to {} because of providernet minimum mtu".format(mtu))
+    mtu = str(mtu)
 
     # retrieve standby controller
     first_host = system_helper.get_standby_controller_name()
@@ -141,6 +140,13 @@ def test_data_intf_mtu_modified(mtu):
         - Nothing
 
     """
+    pnet_mtus = network_helper.get_providernets(name='data', rtn_val='mtu', strict=False)
+    for pnet_mtu in pnet_mtus:
+        if int(pnet_mtu) > int(mtu):
+            mtu = pnet_mtu
+    LOG.info("Changing mtu to {} because of providernet minimum mtu".format(mtu))
+    mtu = str(mtu)
+
     # test all compute node that are up and enabled
     compute_list = host_helper.get_hypervisors(state='up', status='enabled')
 
