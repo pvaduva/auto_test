@@ -719,7 +719,7 @@ def wait_until_drbd_sync_complete(controller0, timeout=600, check_interval=180):
             print(message)
             break
 
-        return sync_complete
+    return sync_complete
 
 def main():
 
