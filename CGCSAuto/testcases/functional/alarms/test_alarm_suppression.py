@@ -57,7 +57,7 @@ def test_alarm_suppression():
     LOG.tc_step('Alarm Unsuppressed .')
     retcode, output = system_helper.unsuppress_alarm(alarm_id=alarm_id)
     assert retcode == 0, output
-    active_alarm_uuid = system_helper.get_alarms_table(uuid=True, query_key='alarm_id', query_value=alarm_id,
+    active_alarm_uuid = system_helper.get_alarms_table(query_key='alarm_id', query_value=alarm_id,
                                                        query_type='string')
     uuid_val = active_alarm_uuid['values'][0][0]
     retcode, output = delete_alarm_log(uuid=uuid_val)
@@ -83,7 +83,7 @@ def delete_alarm_log(con_ssh=None, uuid=None):
     if uuid is None:
         return 1
     cli.system(cmd="alarm-delete", positional_args=uuid, ssh_client=con_ssh)
-    query_active_alarm = system_helper.get_alarms_table(query_key='UUID', query_value=uuid, query_type='string')
+    query_active_alarm = system_helper.get_alarms_table(uuid=True, query_key='UUID', query_value=uuid, query_type='string')
     if not bool(query_active_alarm):
         return 1, "Alarm " + uuid + " was not deleted"
     return 0, "Alarm ID " + uuid + " was deleted"

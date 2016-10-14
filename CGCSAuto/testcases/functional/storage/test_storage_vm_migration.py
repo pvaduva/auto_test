@@ -1,13 +1,22 @@
-from pytest import fixture, mark
 import time
-import io
+from pytest import fixture, skip
+
 from utils.tis_log import LOG
 from utils import table_parser
-from keywords import host_helper, vm_helper, nova_helper, cinder_helper, glance_helper, network_helper, system_helper
+from keywords import host_helper, vm_helper, nova_helper, cinder_helper, glance_helper, system_helper
 from consts.cgcs import VMStatus
 from consts.auth import Tenant
 from testfixtures.resource_mgmt import ResourceCleanup
 from utils.ssh import ControllerClient
+
+
+@fixture(scope='module', autouse=True)
+def check_system():
+    if not cinder_helper.is_volumes_pool_sufficient(min_size=80):
+        skip("Cinder volume pool size is smaller than 80G")
+
+    if len(host_helper.get_nova_hosts()) < 2:
+        skip("at least two computes are required")
 
 
 @fixture(scope='function', autouse=True)
@@ -103,8 +112,6 @@ def vms_(volumes_):
     return vms
 
 
-@mark.skipif(len(system_helper.get_storage_nodes()) < 1, reason="No storage hosts on the system")
-@mark.skipif(len(host_helper.get_nova_hosts()) < 2, reason="at least two computes are required")
 def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
     """
     Test instantiate a vm with a large volume ( 20 GB and 40 GB) and live migrate:
@@ -166,8 +173,6 @@ def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
         assert not rc, " alarm(s) found: {}".format(new_alarm)
 
 
-@mark.skipif(len(system_helper.get_storage_nodes()) < 1, reason="No storage hosts on the system")
-@mark.skipif(len(host_helper.get_nova_hosts()) < 2, reason="at least two computes are required")
 def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
     """
    Test instantiate a vm with a large volume ( 20 GB and 40 GB) and evacuate:
@@ -252,10 +257,8 @@ def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
     assert after_evac_host_0 and after_evac_host_0 != host_0, "VM {} evacuation failed; " \
         "current host: {}; expected host: {}".format((vms_[0])['id'], after_evac_host_0, host_1)
 
-
     assert after_evac_host_1 and after_evac_host_1 != host_0, "VM {} evacuation failed; " \
         "current host: {}; expected host: {}".format((vms_[0])['id'], after_evac_host_1, host_1)
-
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode....")
     assert is_vm_filesystem_rw((vms_[0])['id']), 'After evacuation the rootfs filesystem is not RW as expected ' \
@@ -273,8 +276,6 @@ def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
     assert not rc, " alarm(s) found: {}".format(new_alarm)
 
 
-@mark.skipif(len(system_helper.get_storage_nodes()) < 1, reason="No storage hosts on the system")
-@mark.skipif(len(host_helper.get_nova_hosts()) < 2, reason="at least two computes are required")
 def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_):
     """
     Test instantiate a vm with a large volume ( 20 GB and 40 GB) and cold migrate:
@@ -341,8 +342,6 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_)
         assert not rc, " alarm(s) found: {}".format(new_alarm)
 
 
-@mark.skipif(len(system_helper.get_storage_nodes()) < 1, reason="No storage hosts on the system")
-@mark.skipif(len(host_helper.get_nova_hosts()) < 2, reason="at least two computes are required")
 def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
     """
     Test  a vm with a multiple volumes live, cold  migration and evacuation:
@@ -444,6 +443,15 @@ def check_vm_boot_time(vm_id):
 
 
 def is_vm_filesystem_rw(vm_id, rootfs='vda'):
+    """
+
+    Args:
+        vm_id:
+        rootfs (str|list):
+
+    Returns:
+
+    """
     with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name='cgcs-guest') as vm_ssh:
         if isinstance(rootfs, str):
             rootfs = [rootfs]
@@ -479,7 +487,6 @@ def get_user_data_file():
 
     """
 
-    import os.path
     auth_info = Tenant.get_primary()
     tenant = auth_info['tenant']
     user_data_file = "/home/wrsroot/userdata/{}_test_userdata.txt".format(tenant)
@@ -492,6 +499,6 @@ def get_user_data_file():
               "EOF".format(user_data_file)
         print(cmd)
         code, output = controller_ssh.exec_cmd(cmd)
-        LOG.info("Code: {} outpu: {}".format(code, output))
+        LOG.info("Code: {} output: {}".format(code, output))
 
     return user_data_file

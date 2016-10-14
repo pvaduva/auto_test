@@ -188,9 +188,9 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
     return table_
 
 
-def get_alarms(rtn_val='UUID', alarm_id=None, reason_text=None, entity_id=None, severity=None, time_stamp=None,
-               strict=False, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
-               auth_info=Tenant.ADMIN):
+def get_alarms(rtn_vals=('Alarm ID', 'Reason Text', 'Entity ID'), alarm_id=None, reason_text=None, entity_id=None,
+               severity=None, time_stamp=None, strict=False, show_suppress=False, query_key=None, query_value=None,
+               query_type=None, con_ssh=None, auth_info=Tenant.ADMIN, combine_entries=True):
 
     table_ = get_alarms_table(show_suppress=show_suppress, query_key=query_key, query_value=query_value,
                               query_type=query_type, con_ssh=con_ssh, auth_info=auth_info)
@@ -210,7 +210,17 @@ def get_alarms(rtn_val='UUID', alarm_id=None, reason_text=None, entity_id=None, 
         if value is not None:
             kwargs[key] = value
 
-    return table_parser.get_values(table_, rtn_val, strict=strict, **kwargs)
+    table_ = table_parser.filter_table(table_, strict=strict, **kwargs)
+
+    rtn_vals_list = []
+    for val in rtn_vals:
+        vals = table_parser.get_column(table_, val)
+        rtn_vals_list.append(vals)
+
+    if combine_entries:
+        rtn_vals_list = [' '.join(vals) for vals in rtn_vals_list]
+
+    return rtn_vals_list
 
 
 def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
