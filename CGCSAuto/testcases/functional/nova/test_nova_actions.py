@@ -56,7 +56,7 @@ def test_nova_actions(guest_os, cpu_pol, actions):
             LOG.tc_step("Perform following action on vm {}: {}".format(vm_id, action))
             vm_helper.perform_action_on_vm(vm_id, action=action)
 
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 class TestVariousGuests:
@@ -84,7 +84,7 @@ class TestVariousGuests:
             if not cinder_helper.is_volumes_pool_sufficient(min_size=30):
                 skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
 
-        LOG.tc_step("Create a flavor with 1 vcpu")
+        LOG.tc_step("Create a flavor with 2 vcpus")
         flavor_id = nova_helper.create_flavor(name=cpu_pol, vcpus=2, guest_os=guest_os)[1]
         ResourceCleanup.add('flavor', flavor_id)
 

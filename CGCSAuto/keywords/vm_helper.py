@@ -774,20 +774,23 @@ def wait_for_vm_values(vm_id, timeout=VMTimeout.STATUS_CHANGE, check_interval=3,
     while time.time() < end_time:
         table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
         for field in fields_to_check:
-            expt_val = kwargs[field]
+            expt_vals = kwargs[field]
             actual_val = table_parser.get_value_two_col_table(table_, field)
             results[field] = actual_val
-            if regex:
-                match_found = re.match(expt_val, actual_val) if strict else re.search(expt_val, actual_val)
-            else:
-                match_found = expt_val == actual_val if strict else expt_val in actual_val
+            if not isinstance(expt_vals, list):
+                expt_vals = [expt_vals]
+            for expt_val in expt_vals:
+                if regex:
+                    match_found = re.match(expt_val, actual_val) if strict else re.search(expt_val, actual_val)
+                else:
+                    match_found = expt_val == actual_val if strict else expt_val in actual_val
 
-            if match_found:
-                fields_to_check.remove(field)
+                if match_found:
+                    fields_to_check.remove(field)
 
-            if not fields_to_check:
-                LOG.info("VM has reached states: {}".format(results))
-                return True, results
+                if not fields_to_check:
+                    LOG.info("VM has reached states: {}".format(results))
+                    return True, results
 
         time.sleep(check_interval)
 

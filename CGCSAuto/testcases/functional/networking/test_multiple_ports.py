@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, VMStatus
 from consts.reasons import SkipReason
 from consts.auth import Tenant
-from keywords import vm_helper, nova_helper, network_helper, host_helper
+from keywords import vm_helper, nova_helper, network_helper, host_helper, common
 from testfixtures.resource_mgmt import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -190,6 +190,13 @@ class TestMutiPortsPCI:
         pcipt_info = network_helper.get_pci_interface_info(interface='pthru')
         if not sriov_info or not pcipt_info:
             skip(SkipReason.PCI_IF_UNAVAIL)
+
+        LOG.fixture_step("(class) Get a PCI network too boot vm from pci providernet info from lab_setup.conf")
+        pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')
+        pci_pthru_nets = network_helper.get_pci_nets(vif='pthru', rtn_val='name')
+        avail_nets = list(set(pci_pthru_nets) & set(pci_sriov_nets))
+        if 'internal0-net1' not in avail_nets:
+            skip("'internal-net1' does not have pci-sriov and/or pci-passthrough interfaces")
 
         LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
         flavor_id = nova_helper.create_flavor(name='dedicated')[1]

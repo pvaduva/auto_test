@@ -47,6 +47,8 @@ def reconnect_before_test():
     """
     con_ssh.flush()
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
+    natbox_ssh.flush()
+    natbox_ssh.connect(retry=False)
 
 
 @pytest.fixture(scope='function', autouse=False)

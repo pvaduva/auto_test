@@ -88,7 +88,7 @@ def vif_model_check(request):
     return vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type
 
 
-def test_resource_usage(vif_model_check):
+def test_pci_resource_usage(vif_model_check):
     """
     Create a vm under test with specified vifs for tenant network
     Args:
@@ -124,8 +124,13 @@ def test_resource_usage(vif_model_check):
     vms_under_test = []
     for i in range(vm_limit):
         LOG.tc_step("Boot a vm with {} vif model on {} net".format(vif_model, net_type))
-        vm_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, nics=nics_to_test)[1]
-        ResourceCleanup.add('vm', vm_id)
+        res, vm_id, err, vol_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, nics=nics_to_test, fail_ok=True)
+        if vm_id:
+            ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+        if vol_id:
+            ResourceCleanup.add('volume', vol_id)
+        assert 0 == res, "VM is not booted successfully. Error: {}".format(err)
+
         vms_under_test.append(vm_id)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
@@ -144,10 +149,13 @@ def test_resource_usage(vif_model_check):
     for vm_to_del in vms_under_test:
         LOG.tc_step("Check resource usage for {} interface reduced by 1 after deleting a vm".format(vif_model))
         vm_helper.delete_vms(vm_to_del, check_first=False, stop_first=False)
-        resource_value = nova_helper.get_provider_net_info(pnet_id, field=resource_param)
+        resource_val = common.wait_for_val_from_func(expt_val=pre_resource_value - 1, timeout=30, check_interval=3,
+                                                     func=nova_helper.get_provider_net_info,
+                                                     providernet_id=pnet_id, field=resource_param)[1]
+        # resource_value = nova_helper.get_provider_net_info(pnet_id, field=resource_param)
 
-        assert pre_resource_value - 1 == resource_value, "Resource usage for {} is not reduced by 1".format(vif_model)
-        pre_resource_value = resource_value
+        assert pre_resource_value - 1 == resource_val, "Resource usage for {} is not reduced by 1".format(vif_model)
+        pre_resource_value = resource_val
 
 
 def test_pci_vm_nova_actions(vif_model_check):
@@ -178,8 +186,13 @@ def test_pci_vm_nova_actions(vif_model_check):
     vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type = vif_model_check
 
     LOG.tc_step("Boot a vm with {} vif model on internal net".format(vif_model))
-    vm_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, nics=nics_to_test)[1]
-    ResourceCleanup.add('vm', vm_id)
+    res, vm_id, err, vol_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, nics=nics_to_test)
+    if vm_id:
+        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+    if vol_id:
+        ResourceCleanup.add('volume', vol_id)
+    assert 0 == res, "VM is not booted successfully. Error: {}".format(err)
+
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
     if 'pci-passthrough' == vif_model:
@@ -259,8 +272,13 @@ def test_evacuate_pci_vm(vif_model_check):
     vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type = vif_model_check
 
     LOG.tc_step("Boot a vm with {} vif model on {} net".format(vif_model, net_type))
-    vm_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, nics=nics_to_test)[1]
-    ResourceCleanup.add('vm', vm_id)
+    res, vm_id, err, vol_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, nics=nics_to_test)
+    if vm_id:
+        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+    if vol_id:
+        ResourceCleanup.add('volume', vol_id)
+    assert 0 == res, "VM is not booted successfully. Error: {}".format(err)
+
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
     if 'pci-passthrough' == vif_model:

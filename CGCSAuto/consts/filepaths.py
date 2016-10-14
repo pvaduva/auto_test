@@ -1,3 +1,6 @@
+WRSROOT_HOME = '/home/wrsroot/'
+
+
 class TiSPath:
     TIS_UBUNTU_PATH = '/home/wrsroot/userdata/ubuntu_if_config.sh'
     TIS_CENTOS_PATH = '/home/wrsroot/userdata/centos_if_config.sh'
@@ -25,5 +28,3 @@ class PrivKeyPath:
     OPT_PLATFORM = "/opt/platform/id_rsa"
     WRS_HOME = '/home/wrsroot/.ssh/id_rsa'
 
-
-WRSROOT_HOME = '/home/wrsroot/'

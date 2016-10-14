@@ -315,7 +315,7 @@ def multiple_provider_net_range(request):
 
     # Create interface to associate with the two provider-nets
 
-    nova_hosts = host_helper.get_hypervisors()
+    nova_hosts = host_helper.get_hypervisors(state='up', status='enabled')
 
     if not nova_hosts:
         skip("Can not continue without computer host node")

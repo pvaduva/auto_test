@@ -45,7 +45,7 @@ def test_set_shared_vcpu_spec_reject(cpu_policy, vcpus, shared_vcpu):
     Args:
         cpu_policy (str): shared or dedicated
         vcpus (int): number of vcpus to set when creating flavor
-        vcpu_id (int): vcpu id to attempt to set to
+        shared_vcpu (int): vcpu id to attempt to set to
 
     Test Steps:
         - Create flavor with given number of vcpus

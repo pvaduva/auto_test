@@ -1,5 +1,6 @@
 from pytest import mark, fixture, skip
 
+from utils import cli, table_parser
 from utils.tis_log import LOG
 from consts.cli_errs import CpuAssignment   # Do not remove this. Used in eval()
 from consts.cgcs import FlavorSpec
@@ -171,6 +172,7 @@ class TestVSwitchCPUReconfig:
 
         """
         host, ht_enabled, is_cpe = host_to_config
+
         HostsToRecover.add(host, scope='class')
 
         if ht_required is not None and ht_required is not ht_enabled:
@@ -179,9 +181,22 @@ class TestVSwitchCPUReconfig:
         if cpe_required is not None and (cpe_required is not is_cpe):
             skip("Requires {} system.".format("non-CPE" if is_cpe else "CPE"))
 
-        if platform[0] == 'cores-2':
-            p0, p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1))
-            platform = int(p0) - 2, int(p1) - 2
+        total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1))
+
+        # convert test params if host to config has more than 10 cores per proc & threaad
+        if 'NO_VM_CORE' in expt_err:
+            platform = int(total_p0) - 2, int(total_p1) - 2
+        elif 'TOTAL_TOO_MANY_CORES' in expt_err:
+            diff = 0
+            if total_p0 > 10 and platform[0] + vswitch[0] > 10:
+                diff = total_p0 - 10
+            elif total_p1 > 10 and platform[1] + vswitch[1] > 10:
+                diff = total_p1 - 10
+            platform = platform[0] + diff, platform[1] + diff
+        elif 'VSWITCH_TOO_MANY_CORES' in expt_err:
+            if total_p0 > 10 and vswitch[0] + vswitch[1] > 10:
+                diff = total_p0 - 10
+                vswitch = vswitch[0] + diff, vswitch[1] + diff
 
         platform_args = {}
         for i in range(len(platform)):
@@ -205,7 +220,7 @@ class TestVSwitchCPUReconfig:
         assert 1 == code, "Modify host cpu request is not rejected."
 
         if "TOTAL_TOO_MANY_CORES" in expt_err:
-            proc_id = 0 if platform[0] + vswitch[0] > 10 else 1
+            proc_id = 0 if platform[0] + vswitch[0] > total_p0 else 1
             expt_err = eval(expt_err).format(proc_id)
         elif "VSWITCH_INSUFFICIENT_CORES" in expt_err:
             min_core_num = 2 if is_cpe else 1
@@ -239,18 +254,20 @@ class TestVMSchedulingLockHosts:
         Args:
             host (str): vm hostname
 
-        Returns (tuple): max vms cores number across all cores, vms cores number on vSwitch cores
+        Returns (tuple): number of cores for VMs function on non-vSwitch numa node, and vSwitch numa node
 
         """
         vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, function='VMs')
 
-        vms_cores_nums = []
-        for value in vms_cores_dict.values():
-            vms_cores_nums.append(len(value))
-
-        max_num = max(vms_cores_nums)
+        # vms_cores_nums = []
+        # for value in vms_cores_dict.values():
+        #     vms_cores_nums.append(len(value))
+        #
+        # max_num = max(vms_cores_nums)
         vswitch_proc = list(vswitch_cores_dict.keys())[0]
-        return max_num, len(vms_cores_dict[vswitch_proc])
+        nonvswitch_proc = 1 if int(vswitch_proc) == 0 else 0
+
+        return len(vms_cores_dict[nonvswitch_proc]), len(vms_cores_dict[vswitch_proc])
 
     @mark.parametrize('resize_revert', [
         mark.p1(False),
@@ -284,6 +301,11 @@ class TestVMSchedulingLockHosts:
         """
         host, ht_enabled, is_cpe = host_to_config
 
+        LOG.tc_step("Delete all vms on target host if any")
+        vms_to_del = nova_helper.get_vms_on_hypervisor(hostname=host)
+        if vms_to_del:
+            vm_helper.delete_vms(vms_to_del, stop_first=False)
+
         LOG.tc_step("Check vswitch numa node on {} doesn't have the most vm cores.".format(host))
         vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch')
         max_vm_cores_num, vswitch_vm_cores_num = self.__get_vms_cores_nums(host, vswitch_cores_dict)
@@ -302,6 +324,10 @@ class TestVMSchedulingLockHosts:
 
         if ht_enabled:
             vswitch_vm_cores_num *= 2
+            max_vm_cores_num *= 2
+
+        if nova_helper.get_quotas(quotas='cores')[0] < max_vm_cores_num + 10:
+            nova_helper.update_quotas(cores=max_vm_cores_num + 10)
 
         LOG.tc_step("Create a basic flavor with 2 vcpus and boot a vm with this flavor.")
         pre_flavor = nova_helper.create_flavor(name='2_vcpus', vcpus=2)[1]
@@ -319,6 +345,7 @@ class TestVMSchedulingLockHosts:
 
         LOG.tc_step("Resize {}vm to a flavor with vcpu number more than the available cores on current numa node".
                     format('and revert ' if resize_revert else ''))
+
         huge_flavor = nova_helper.create_flavor(name='many_vcpus', vcpus=vswitch_vm_cores_num + 1)[1]
         ResourceCleanup.add('flavor', huge_flavor)
         nova_helper.set_flavor_extra_specs(huge_flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
@@ -378,8 +405,6 @@ class TestVMSchedulingLockHosts:
         host_helper.lock_host(host),
         host_helper.modify_host_cpu(host, 'vswitch', **vswitch_args)
         host_helper.unlock_host(host, check_hypervisor_up=True)
-        host_helper.wait_for_hypervisors_up(host)
-        host_helper.wait_for_hosts_in_nova_compute(host)
 
         LOG.tc_step("Create a flavor with vcpus set to (vSwitch node VMs cores / 3) +1")
         proc_id = 1 if vswitch[0] == 0 else 0

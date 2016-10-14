@@ -4,6 +4,7 @@
 
 import os
 import pexpect
+import time
 from datetime import datetime, timedelta
 
 from consts.cgcs import Prompt
@@ -341,3 +342,19 @@ def _execute_with_openstack_cli():
     DO NOT USE THIS IN TEST FUNCTIONS!
     """
     return ProjVar.get_var('OPENSTACK_CLI')
+
+
+def wait_for_val_from_func(expt_val, timeout, check_interval, func, *args, **kwargs):
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        current_val = func(*args, **kwargs)
+        if not isinstance(expt_val, list) or isinstance(expt_val, tuple):
+            expt_val = [expt_val]
+
+        for val in expt_val:
+            if val == current_val:
+                return True, val
+
+        time.sleep(check_interval)
+
+    return False, current_val

@@ -980,7 +980,7 @@ def get_key_pair(name=None, con_ssh=None, auth_info=None):
     """
     table_ = table_parser.table(cli.nova('keypair-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is not None:
-        return table_parser.get_values(table_,'Name', Name=name)
+        return table_parser.get_values(table_, 'Name', Name=name)
     else:
         return table_parser.get_column(table_, 'Name')
 

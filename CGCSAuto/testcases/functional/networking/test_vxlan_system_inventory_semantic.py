@@ -23,7 +23,7 @@ def get_interface_(request):
     if not table_parser.get_values(table_, 'id', **{'name': provider_}):
         cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, rtn_list=True)
 
-    nova_hosts = host_helper.get_hypervisors()
+    nova_hosts = host_helper.get_hypervisors(state='up', status='enabled')
 
     if not nova_hosts:
         skip("Can not continue without computer host node")

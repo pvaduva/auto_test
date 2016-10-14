@@ -53,7 +53,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
     Check vm has the correct topology based on the number of vcpus, cpu policy, cpu threads policy, number of numa nodes
 
     Check is done via vm-topology, nova host-describe, virsh vcpupin (on vm host), nova-compute.log (on vm host),
-    /sys/devices/system/cpu/<cpu#>/topology/core_siblings_list/core_siblings_list (on vm)
+    /sys/devices/system/cpu/<cpu#>/topology/thread_siblings_list (on vm)
 
     Args:
         vm_id (str):
@@ -113,7 +113,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
             numa_num=numa_num, con_ssh=con_ssh, host_log_core_siblings=log_cores_siblings, is_ht=is_ht_host,
             current_vcpus=current_vcpus)
 
-    LOG.tc_step("Check vm vcpus, siblings on vm via /sys/devices/system/cpu/<cpu>/topology/core_siblings_list")
+    LOG.tc_step("Check vm vcpus, siblings on vm via /sys/devices/system/cpu/<cpu>/topology/thread_siblings_list")
     _check_vm_topology_on_vm(vm_id, vcpus=vcpus, siblings_total=siblings_total, current_vcpus=current_vcpus)
 
     LOG.tc_step('Check vm vcpus, pcpus on vm host via nova-compute.log and virsh vcpupin')
@@ -340,7 +340,7 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
 
 
 def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus):
-    # Check from vm in /proc/cpuinfo and /sys/devices/.../cpu#/topology/core_siblings_list
+    # Check from vm in /proc/cpuinfo and /sys/devices/.../cpu#/topology/thread_siblings_list
     actual_sib_list = []
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
@@ -351,16 +351,16 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus):
         assert vcpus == len(present_cores), "Number of vcpus for vm: {}, present cores from " \
                                             "/sys/devices/system/cpu/present: {}".format(vcpus, len(present_cores))
         assert current_vcpus == len(online_cores), \
-            "Current vcpus for vm: {}, online cores from /sys/devices/system/cpu/present: {}".\
+            "Current vcpus for vm: {}, online cores from /sys/devices/system/cpu/online: {}".\
             format(current_vcpus, online_cores)
 
         expt_total_cores = len(online_cores) + len(offline_cores)
         assert expt_total_cores in [len(present_cores), 512], \
             "Number of present cores: {}. online+offline cores: {}".format(vcpus, expt_total_cores)
 
-        LOG.tc_step("Check vm /sys/devices/system/cpu/[cpu#]/topology/core_siblings_list")
+        LOG.tc_step("Check vm /sys/devices/system/cpu/[cpu#]/topology/thread_siblings_list")
         for cpu in ['cpu{}'.format(i) for i in range(len(online_cores))]:
-            actual_sib_list_for_cpu = vm_ssh.exec_cmd('cat /sys/devices/system/cpu/{}/topology/core_siblings_list'.
+            actual_sib_list_for_cpu = vm_ssh.exec_cmd('cat /sys/devices/system/cpu/{}/topology/thread_siblings_list'.
                                                       format(cpu), fail_ok=False)[1]
 
             sib_for_cpu = common._parse_cpus_list(actual_sib_list_for_cpu)

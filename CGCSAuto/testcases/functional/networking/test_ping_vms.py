@@ -93,4 +93,4 @@ def test_ping_vm_basic(guest_os):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
     time.sleep(30)
-    vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['mgmt', 'data'])
+    vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['mgmt'])

@@ -1635,13 +1635,17 @@ def get_providernet_for_interface(interface='pthru', rtn_val='id', filepath=None
     if 'No such file or directory' in sriov_if_override:
         raise ValueError("File '{}' cannot be found".format(filepath))
 
-    provider_net_name = re.findall('\{DATAMTU\}\|(.*)[\|,\"]', sriov_if_override)
+    provider_net_name = re.findall('\{DATAMTU\}\|(.*)\|', sriov_if_override)
+    if not provider_net_name:
+        provider_net_name = re.findall('\{DATAMTU\}\|(.*)\"', sriov_if_override)
+
     if not provider_net_name:
         return ''
 
     provider_net_name = provider_net_name[0]
 
-    return get_providernets(name='.*{}'.format(provider_net_name), rtn_val=rtn_val, con_ssh=con_ssh, strict=True,
+    LOG.info("Providernet name: {}".format(provider_net_name))
+    return get_providernets(name='.*{}$'.format(provider_net_name), rtn_val=rtn_val, con_ssh=con_ssh, strict=True,
                             regex=True, auth_info=auth_info)[0]
 
 

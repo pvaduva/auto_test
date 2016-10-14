@@ -142,7 +142,7 @@ class TestVariousGuests:
         vm_helper.wait_for_vm_values(vm_id, fail_ok=True, timeout=120, status=[VMStatus.ERROR, VMStatus.REBUILD])
 
         LOG.tc_step("Check vms are in Active state and moved to other host after host reboot")
-        vm_helper.wait_for_vm_values(vm_id, timeout=300, status=[VMStatus.ACTIVE])
+        vm_helper.wait_for_vm_values(vm_id, timeout=300, fail_ok=False, status=[VMStatus.ACTIVE])
 
         post_vm_host = nova_helper.get_vm_host(vm_id)
         assert vm_host != post_vm_host, "VM host did not change upon host reboot even though VM is in Active state."

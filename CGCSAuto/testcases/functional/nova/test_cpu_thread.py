@@ -192,7 +192,7 @@ class TestHTEnabled:
         prev_cpus = pre_hosts_cpus[vm_host]
 
         check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol='dedicated',
-                                          cpu_thr_pol=cpu_thread_policy, vm_host=vm_host)
+                                          cpu_thr_pol=cpu_thread_policy, min_vcpus=min_vcpus, vm_host=vm_host)
 
     @mark.parametrize(('flv_vcpus', 'flv_cpu_pol', 'flv_cpu_thr_pol', 'img_cpu_thr_pol', 'img_cpu_pol', 'create_vol', 'expt_err'), [
         mark.p1((3, None, None, 'isolate', 'dedicated', False, None)),
@@ -593,7 +593,7 @@ class TestHTEnabled:
         prev_cpus = pre_hosts_cpus[vm_host]
 
         check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
-                                          cpu_thr_pol=cpu_thr_pol, vm_host=vm_host)
+                                          cpu_thr_pol=cpu_thr_pol, min_vcpus=min_vcpus, vm_host=vm_host)
 
         # Perform Nova action(s) and check vm topology
         LOG.tc_step("Perform following nova action(s) on vm {}: {}".format(vm_id, nova_actions))
@@ -612,7 +612,7 @@ class TestHTEnabled:
 
         LOG.tc_step("Check VM topology is still correct after {}".format(nova_actions))
         check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=pre_action_cpus, cpu_pol=cpu_pol,
-                                          cpu_thr_pol=cpu_thr_pol, vm_host=post_vm_host)
+                                          cpu_thr_pol=cpu_thr_pol, min_vcpus=min_vcpus, vm_host=post_vm_host)
 
         if vs_numa_affinity == 'strict':
             LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
@@ -638,7 +638,7 @@ class TestHTEnabled:
 
             LOG.tc_step("Check VM topology is still correct after host reboot")
             check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
-                                              cpu_thr_pol=cpu_thr_pol, vm_host=vm_host_post_evac)
+                                              cpu_thr_pol=cpu_thr_pol, min_vcpus=min_vcpus, vm_host=vm_host_post_evac)
 
             if vs_numa_affinity == 'strict':
                 LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
