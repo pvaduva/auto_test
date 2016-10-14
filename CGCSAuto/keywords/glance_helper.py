@@ -341,7 +341,7 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, con_ssh
         dest_dir (str): where to save the downloaded image. Default is '~/images'
         con_ssh (SSHClient):
 
-    Returns (str): full file name of downloaded image. e.g., '~/images/ubuntu.img'
+    Returns (str): full file name of downloaded image. e.g., '~/images/ubuntu_14.qcow2'
 
     """
     valid_img_os_types = list(GuestImages.IMAGE_FILES.keys())
@@ -352,7 +352,7 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, con_ssh
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    dest_name = img_os.lower() + '.img'
+    dest_name = GuestImages.IMAGE_FILES[img_os][2]
     source_name = GuestImages.IMAGE_FILES[img_os][0]
 
     if dest_dir.endswith('/'):

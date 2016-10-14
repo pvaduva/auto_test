@@ -14,9 +14,11 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper, \
     storage_helper, glance_helper, cinder_helper
 from consts.cgcs import EventLogID, GuestImages
 from testfixtures.recover_hosts import HostsToRecover
+from testfixtures.resource_mgmt import ResourceCleanup
 
 PROC_RESTART_TIME = 30          # number of seconds between process restarts
 RESTARTS_BEFORE_ASSERT = 3      # number of process restarts until error assertion
+
 
 # Runtime: 208 seconds - pass on wildcat-7-12 and PV0
 # CGTS-4513 Loss of replication group alarm not always seen
@@ -967,8 +969,9 @@ def test_import_raw_with_cache_raw():
 
 
 # INPROGRESS
-@mark.usefixtures('ceph_precheck')
-def test_exceed_size_of_img_pool():
+# TODO: remove '_' before test name after this test is completed.
+@mark.usefixtures('ceph_precheck', 'ubuntu14_image')
+def _test_exceed_size_of_img_pool():
     """
     Verify that system behaviour when we exceed the size of the rbd image pool.
 
@@ -988,32 +991,35 @@ def test_exceed_size_of_img_pool():
     """
 
     con_ssh = ControllerClient.get_active_controller()
-    glance_ids = []
 
-    # Return a list of images of a given type
-    LOG.tc_step('Determine what qcow2 images we have available')
-    image_names = storage_helper.find_images(con_ssh)
-
-    if not image_names:
-        LOG.info('No qcow2 images were found on the system')
-        LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
-        image_names = storage_helper.download_images(dload_type='ubuntu',
-            img_dest=GuestImages.IMAGE_DIR, con_ssh=con_ssh)
+    # # Return a list of images of a given type
+    # LOG.tc_step('Determine what qcow2 images we have available')
+    # image_names = storage_helper.find_images(con_ssh)
+    #
+    # if not image_names:
+    #     LOG.info('No qcow2 images were found on the system')
+    #     LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
+    #     image_names = storage_helper.download_images(dload_type='ubuntu', img_dest=GuestImages.IMAGE_DIR, con_ssh=con_ssh)
 
     LOG.tc_step('Import qcow2 images into glance until pool is full')
-    source_img = GuestImages.IMAGE_DIR + "/" + image_names[0]
-    while True:
-        ret = glance_helper.create_image(source_image_file=source_img,
-                                         disk_format='qcow2',
-                                         container_format='bare',
-                                         cache_raw=True, wait=True,
-                                         fail_ok=True)
-        glance_ids.append(ret[1])
+    source_img_path = "{}/{}".format(GuestImages.IMAGE_DIR, GuestImages.IMAGE_FILES['ubuntu_14'][2])
 
-        if ret[0] == 1:
+    timeout = 7200
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        code, image_id = glance_helper.create_image(source_image_file=source_img_path,
+                                                    disk_format='qcow2',
+                                                    container_format='bare',
+                                                    cache_raw=True, wait=True,
+                                                    fail_ok=True)
+        ResourceCleanup.add('image', image_id)
+
+        if code != 0:
             break
+    else:
+        raise exceptions.TimeoutException("Timed out (2 hours) filling out image pool.")
 
-    #Wait for alarm to appear
+    # Wait for alarm to appear
     time.sleep(10)
 
     # 800.001   Storage Alarm Condition: Pgs are degraded/stuck/blocked.
@@ -1030,14 +1036,10 @@ def test_exceed_size_of_img_pool():
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
     assert ceph_healthy, msg
 
-    LOG.info("glance ids {}".format(glance_ids))
 
-    #LOG.tc_step('Delete Image(s) {}'.format(glance_ids))
-    #glance_helper.delete_images(glance_ids)
-
-
+# TODO: remove '_' before test name after this test is completed.
 @mark.usefixtures('ceph_precheck')
-def test_import_large_images_with_cache_raw():
+def _test_import_large_images_with_cache_raw():
     """
     Verify that system behaviour when we attempt to import large images, i.e.
     20-40GB, with cache-raw enabled.
@@ -1114,8 +1116,8 @@ def test_import_large_images_with_cache_raw():
     LOG.tc_step('Import image into glance')
     source_img = GuestImages.IMAGE_DIR + qcow2_img
     out = glance_helper.create_image(source_image_file=source_img,
-                                     disk_format='qcow2', \
-                                     container_format='bare', \
+                                     disk_format='qcow2',
+                                     container_format='bare',
                                      cache_raw=True, wait=True)
     msg = 'Failed to import {} into glance'.format(qcow2_img)
     assert out[0] == 0, msg
@@ -1154,8 +1156,9 @@ def test_import_large_images_with_cache_raw():
     glance_helper.delete_images(out[1])
 
 
+# TODO: remove '_' before test name after this test is completed.
 @mark.usefixtures('ceph_precheck')
-def test_modify_ceph_pool_size():
+def _test_modify_ceph_pool_size():
     """
     Verify that the user can modify the size of the ceph images pool.
 
@@ -1239,8 +1242,9 @@ def test_modify_ceph_pool_size():
     assert int(glance_pool_gib) == new_value, msg
 
 
+# TODO: remove '_' before test name after this test is completed.
 @mark.usefixtures('ceph_precheck')
-def test_modify_ceph_pool_size_neg():
+def _test_modify_ceph_pool_size_neg():
     """
     Verify that the user can modify the size of the ceph images pool.
 
@@ -1311,11 +1315,9 @@ def test_modify_ceph_pool_size_neg():
 
     LOG.tc_step('Import one more image')
     ret = glance_helper.create_image(source_image_file=source_img,
-                                     disk_format='qcow2', \
-                                     container_format='bare', \
+                                     disk_format='qcow2',
+                                     container_format='bare',
                                      cache_raw=True, wait=True,
                                      fail_ok=True)
     msg = 'Was not able to import another image after increasing the quota'
     assert ret[0] == 0, msg
-
-

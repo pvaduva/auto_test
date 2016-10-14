@@ -8,7 +8,6 @@ from pytest import mark
 from pytest import skip
 from pytest import fixture
 
-from consts.proj_vars import ProjVar
 from consts.cgcs import LocalStorage
 
 from utils.tis_log import LOG

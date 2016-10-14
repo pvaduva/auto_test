@@ -28,15 +28,15 @@ class GuestImages:
     DEFAULT_GUEST = 'cgcs-guest.img'
     # Image files name and size from yow-cgcs-test.wrs.com:/home/svc-cgcsauto/images
     IMAGE_FILES = {
-        'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 8),
-        'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8),
-        'centos_6': ('CentOS-6.8-x86_64-GenericCloud-1608.qcow2', 8),
-        'centos_7': ('CentOS-7-x86_64-GenericCloud.qcow2', 8),
-        'rhel_6': ('rhel-6.5-x86_64.qcow2', 11),                # OVP img
-        'rhel_7': ('rhel-7.2-x86_64.qcow2', 11),               # OVP img
-        'opensuse_11': ('openSUSE-11.3-x86_64.qcow2', 11),     # OVP img
-        'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21),      # OVP img
-        'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16),
+        'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_14.qcow2'),
+        'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2'),
+        'centos_6': ('CentOS-6.8-x86_64-GenericCloud-1608.qcow2', 8, 'centos_6.qcow2'),
+        'centos_7': ('CentOS-7-x86_64-GenericCloud.qcow2', 8, 'centos_7.qcow2'),
+        'rhel_6': ('rhel-6.5-x86_64.qcow2', 11, 'rhel_6.qcow2'),                # OVP img
+        'rhel_7': ('rhel-7.2-x86_64.qcow2', 11, 'rhel_7.qcow2'),               # OVP img
+        'opensuse_11': ('openSUSE-11.3-x86_64.qcow2', 11, 'opensuse_11.qcow2'),     # OVP img
+        'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21, 'opensuse_12.qcow2'),      # OVP img
+        'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16, 'opensuse_13.qcow2'),
     }
 
 
