@@ -1937,3 +1937,32 @@ def get_hosts_per_storage_backing(con_ssh=None):
              'remote': get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh)}
 
     return hosts
+
+
+def get_coredumps_and_crashreports():
+    LOG.info("Getting existing system crash reports and coredumps list")
+
+    hosts_tab = table_parser.table(cli.system('host-list'))
+    all_hosts = table_parser.get_column(hosts_tab, 'hostname')
+
+    hosts_tab = table_parser.filter_table(hosts_tab, exclude=True,
+                                          availability=[HostAvailabilityState.FAILED, HostAvailabilityState.OFFLINE])
+
+    hosts_to_check = table_parser.get_column(hosts_tab, 'hostname')
+
+    if not all_hosts == hosts_to_check:
+        LOG.warning("Some host(s) in offline or failed state - {}, checking other hosts only".
+                    format(all_hosts - hosts_to_check))
+
+    core_dumps_and_reports = {}
+    for host in hosts_to_check:
+        with ssh_to_host(hostname=host) as host_ssh:
+            core_dump_output = host_ssh.exec_cmd('ls -l /var/lib/systemd/coredump/', fail_ok=False)[1]
+            core_dumps = core_dump_output.splitlines()[1:]
+            crash_report_output = host_ssh.exec_cmd('ls -l /var/crash/', fail_ok=False)[1]
+            crash_reports = crash_report_output.splitlines()[1:]
+
+            core_dumps_and_reports[host] = core_dumps, crash_reports
+
+    LOG.info("core dumps and crash reports per host: {}".format(core_dumps_and_reports))
+    return core_dumps_and_reports

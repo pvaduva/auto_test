@@ -1,12 +1,12 @@
 from pytest import fixture, mark, skip
 
 from consts.auth import Tenant
-from consts.cgcs import EventLogID
+from consts.cgcs import EventLogID, HostAvailabilityState
 from consts.timeout import EventLogTimeout
-from utils import table_parser
+from utils import table_parser, cli
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
-from keywords import system_helper, vm_helper, nova_helper, cinder_helper, storage_helper
+from keywords import system_helper, vm_helper, nova_helper, cinder_helper, storage_helper, host_helper
 
 
 ########################
@@ -25,7 +25,7 @@ def check_alarms(request):
     __verify_alarms(request=request, scope='function')
 
 
-@fixture(scope='session', autouse=True)
+# @fixture(scope='session', autouse=True)
 def check_alarms_session(request):
     """
     Check system alarms before and after test session.
@@ -61,6 +61,35 @@ def __verify_alarms(request, scope):
 
     request.addfinalizer(verify_alarms)
     return
+
+
+@fixture(scope='session', autouse=True)
+def pre_alarms_session():
+    return __get_alarms('session')
+
+
+@fixture(scope='function')
+def pre_alarms_function():
+    return __get_alarms('function')
+
+
+def __get_alarms(scope):
+    LOG.fixture_step("({}) Gathering system alarms info before test {} begins.".format(scope, scope))
+    alarms = system_helper.get_alarms()
+    return alarms
+
+
+@fixture(scope='session', autouse=True)
+def pre_coredumps_and_crash_reports_session():
+    return __get_system_crash_and_coredumps('session')
+
+
+def __get_system_crash_and_coredumps(scope):
+    LOG.fixture_step("({}) Getting existing system crash reports and coredumps before test {} begins.".
+                     format(scope, scope))
+
+    core_dumps_and_reports = host_helper.get_coredumps_and_crashreports()
+    return core_dumps_and_reports
 
 
 @fixture()

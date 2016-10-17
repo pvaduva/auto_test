@@ -315,10 +315,16 @@ def pytest_unconfigure():
 
 def pytest_collection_modifyitems(items):
     move_to_last = []
+    absolute_last = []
+
     for item in items:
         # re-order tests:
         trylast_marker = item.get_marker('trylast')
-        if trylast_marker:
+        abslast_marker = item.get_marker('abslast')
+
+        if abslast_marker:
+            absolute_last.append(item)
+        elif trylast_marker:
             move_to_last.append(item)
 
         priority_marker = item.get_marker('priorities')
@@ -346,6 +352,10 @@ def pytest_collection_modifyitems(items):
     for item in move_to_last:
         items.remove(item)
         items.append(item)
+
+    for i in absolute_last:
+        items.remove(i)
+        items.append(i)
 
 
 def pytest_generate_tests(metafunc):

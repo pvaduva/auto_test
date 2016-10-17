@@ -188,7 +188,7 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
     return table_
 
 
-def get_alarms(rtn_vals=('Alarm ID', 'Reason Text', 'Entity ID'), alarm_id=None, reason_text=None, entity_id=None,
+def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=None, entity_id=None,
                severity=None, time_stamp=None, strict=False, show_suppress=False, query_key=None, query_value=None,
                query_type=None, con_ssh=None, auth_info=Tenant.ADMIN, combine_entries=True):
 
@@ -210,7 +210,8 @@ def get_alarms(rtn_vals=('Alarm ID', 'Reason Text', 'Entity ID'), alarm_id=None,
         if value is not None:
             kwargs[key] = value
 
-    table_ = table_parser.filter_table(table_, strict=strict, **kwargs)
+    if kwargs:
+        table_ = table_parser.filter_table(table_, strict=strict, **kwargs)
 
     rtn_vals_list = []
     for val in rtn_vals:
