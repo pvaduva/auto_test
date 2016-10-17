@@ -1945,14 +1945,14 @@ def get_coredumps_and_crashreports():
     hosts_tab = table_parser.table(cli.system('host-list'))
     all_hosts = table_parser.get_column(hosts_tab, 'hostname')
 
-    hosts_tab = table_parser.filter_table(hosts_tab, exclude=True,
-                                          availability=[HostAvailabilityState.FAILED, HostAvailabilityState.OFFLINE])
+    hosts_tab = table_parser.filter_table(hosts_tab, exclude=True, availability=HostAvailabilityState.FAILED)
+    hosts_tab = table_parser.filter_table(hosts_tab, exclude=True, availability=HostAvailabilityState.OFFLINE)
 
     hosts_to_check = table_parser.get_column(hosts_tab, 'hostname')
 
     if not all_hosts == hosts_to_check:
         LOG.warning("Some host(s) in offline or failed state - {}, checking other hosts only".
-                    format(all_hosts - hosts_to_check))
+                    format(set(all_hosts) - set(hosts_to_check)))
 
     core_dumps_and_reports = {}
     for host in hosts_to_check:
