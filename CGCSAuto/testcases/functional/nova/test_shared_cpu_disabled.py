@@ -136,6 +136,7 @@ def test_launch_vm_shared_cpu_setting_negative(vcpus, cpu_policy, numa_nodes, nu
 def basic_vm():
     vm_id = vm_helper.boot_vm()[1]
     ResourceCleanup.add('vm', vm_id, scope='module')
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     return vm_id
 
 
@@ -176,3 +177,6 @@ def test_resize_vm_shared_cpu_negative(vcpus, cpu_policy, shared_vcpu, basic_vm)
     code, msg = vm_helper.resize_vm(basic_vm, flavor, fail_ok=True)
     assert code == 1, "Resize vm request is not rejected"
     assert ResizeVMErr.SHARED_NOT_ENABLED.format('0') in msg
+
+    LOG.tc_step("Ensure VM is still pingable after resize reject")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=basic_vm)

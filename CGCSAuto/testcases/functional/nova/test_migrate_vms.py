@@ -52,6 +52,8 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
 
     prev_vm_host = nova_helper.get_vm_host(vm_id)
 
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
     LOG.tc_step("Live migrate VM and ensure it succeeded")
     # block_mig = True if boot_source == 'image' else False
     code, output = vm_helper.live_migrate_vm(vm_id, block_migrate=block_mig)
@@ -59,6 +61,9 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
 
     post_vm_host = nova_helper.get_vm_host(vm_id)
     assert prev_vm_host != post_vm_host
+
+    LOG.tc_step("Ensure vm is pingable from NatBox after live migration")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'vm_type', 'block_mig', 'expt_err'), [
@@ -107,10 +112,11 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
         skip("Less than two hosts have {} storage backing".format(storage_backing))
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, None, 1, vm_type)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     prev_vm_host = nova_helper.get_vm_host(vm_id)
 
-    LOG.tc_step("Live migrate VM and ensure it succeeded")
+    LOG.tc_step("Live migrate VM and ensure it's rejected with proper error message")
     # block_mig = True if boot_source == 'image' else False
     code, output = vm_helper.live_migrate_vm(vm_id, block_migrate=block_mig)
     assert 1 == code, "Expect live migration to have expected fail. Actual: {}".format(output)
@@ -119,6 +125,9 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
 
     post_vm_host = nova_helper.get_vm_host(vm_id)
     assert prev_vm_host == post_vm_host, "VM host changed even though live migration request rejected."
+
+    LOG.tc_step("Ensure vm is pingable from NatBox after live migration rejected")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'resize'), [
@@ -173,6 +182,7 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type)
     prev_vm_host = nova_helper.get_vm_host(vm_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     LOG.tc_step("Cold migrate VM and {} resize".format(resize))
 
@@ -187,6 +197,9 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
         assert prev_vm_host == post_vm_host, "vm host changed after cold migrate revert"
     else:
         assert prev_vm_host != post_vm_host, "vm host did not change after cold migrate"
+
+    LOG.tc_step("Ensure vm is pingable from NatBox after cold migration {}".format(resize))
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'boot_source'), [
@@ -224,14 +237,21 @@ def test_migrate_vm_negative_no_other_host(storage_backing, ephemeral, swap, boo
         skip("Number of {} hosts is not 1".format(storage_backing))
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, None, 2, boot_source)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     LOG.tc_step("Attempt to live migrate VM and verify request rejected due to no matching storage backing")
     code, output = vm_helper.live_migrate_vm(vm_id=vm_id, fail_ok=True)
     assert 1 == code, "Expect live mig to fail due to no matching storage backing. Actual: {}".format(output)
 
+    LOG.tc_step("Ensure vm is pingable from NatBox after live migration rejected")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
     LOG.tc_step("Attempt to cold migrate VM and verify request rejected due to no matching storage backing")
     code, output = vm_helper.cold_migrate_vm(vm_id, fail_ok=True)
     assert 1 == code, "Expect cold mig to fail due to no matching storage backing. Actual: {}".format(output)
+
+    LOG.tc_step("Ensure vm is pingable from NatBox after cold migration rejected")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type):

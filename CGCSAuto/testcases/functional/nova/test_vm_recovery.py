@@ -128,6 +128,7 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
                 image_auto_recovery, flavor_auto_recovery))
     vm_id = vm_helper.boot_vm(name='auto_recov', flavor=flavor_id, source='image', source_id=image_id)[1]
     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     LOG.tc_step("Verify vm auto recovery is {} by setting vm to error state.".format(expt_result))
     vm_helper.set_vm_state(vm_id=vm_id, error_state=True, fail_ok=False)
@@ -136,6 +137,9 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
 
     assert expt_result == res_bool, "Expected auto_recovery: {}. Actual vm status: {}".format(
             expt_result, actual_val)
+
+    LOG.tc_step("Ensure vm is pingable after auto recovery")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 @mark.features(Features.AUTO_RECOV, Features.HEARTBEAT)
@@ -212,6 +216,12 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
             reasons = table_parser.get_values(alarms_tab, 'Reason Text', strict=False, **{'Entity ID': vm_id})
             assert re.search('Instance .* is rebooting on host', '\n'.join(reasons)), \
                 "Instance rebooting active alarm is not listed"
+
+    LOG.tc_step("Wait for VM reach active state")
+    vm_helper.wait_for_vm_values(vm_id, timeout=180, status=VMStatus.ACTIVE)
+
+    LOG.tc_step("Ensure vm is still pingable after auto recovery")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 @mark.features(Features.HEARTBEAT)
@@ -328,6 +338,7 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat):
     LOG.tc_step("Boot a vm with above flavor")
     vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
     ResourceCleanup.add('vm', vm_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     target_host = nova_helper.get_vm_host(vm_id)
 
@@ -345,4 +356,8 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat):
     system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, strict=False, fail_ok=False,
                                   **{'Entity Instance ID': vm_id, 'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
 
+    LOG.tc_step("Wait for VM reach active state")
     vm_helper.wait_for_vm_values(vm_id, timeout=30, status=VMStatus.ACTIVE)
+
+    LOG.tc_step("Ensure VM is still pingable after auto recovery")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

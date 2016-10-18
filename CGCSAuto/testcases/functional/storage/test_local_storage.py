@@ -737,7 +737,7 @@ class TestLocalStorage(object):
         LOG.tc_step('Get the name of the profile and check if it is existing')
         local_file = self.get_local_storprfoile_file(local_storage_type=local_storage_type)
         if not local_file:
-            msg = 'Cannot find the porfile:{}'.format(local_file)
+            msg = 'Cannot find the profile:{}'.format(local_file)
             LOG.tc_step(msg)
             skip(msg)
             return -1

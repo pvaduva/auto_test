@@ -1,3 +1,4 @@
+import re
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
@@ -25,18 +26,19 @@ def vif_model_check(request):
     primary_tenant_name = common.get_tenant_name(primary_tenant)
     other_tenant = Tenant.TENANT_2 if primary_tenant_name == 'tenant1' else Tenant.TENANT_1
 
+    tenant_net = "{}-net"
     for net in pci_nets:
         if 'internal' in net:
             pci_net = net
             net_type = 'internal'
             break
-        elif primary_tenant_name in net:
+        elif tenant_net.format(primary_tenant_name) in net:
             pci_net = net
             net_type = 'data'
             break
     else:
         for net in pci_nets:
-            if other_tenant['tenant'] in net:
+            if tenant_net.format(other_tenant['tenant']) in net:
                 Tenant.set_primary(other_tenant)
                 pci_net = net
                 net_type = 'data'
