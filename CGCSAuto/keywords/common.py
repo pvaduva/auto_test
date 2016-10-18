@@ -1,11 +1,76 @@
+####################################################################################
+# DO NOT import anything from helper modules to this module, such as nova_helper   #
+####################################################################################
+
 import os
 import pexpect
+import time
 from datetime import datetime, timedelta
 
-from consts.auth import Tenant
+from consts.cgcs import Prompt
+from consts.auth import Tenant, SvcCgcsAuto
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
+
+
+def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=120,
+                                              is_dir=False, con_ssh=None):
+    """
+    SCP file or files under a directory from test server to TiS server
+
+    Args:
+        source_path (str): test server file path or directory path
+        dest_dir (str): destination directory. should end with '/'
+        dest_name (str): destination file name if not dir
+        timeout (int):
+        is_dir (bool):
+        con_ssh:
+
+    Returns (str|None): destination file/dir path if scp successful else None
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    dir_option = '-r ' if is_dir else ''
+    source_server = SvcCgcsAuto.SERVER
+    source_user = SvcCgcsAuto.USER
+    source_password = SvcCgcsAuto.PASSWORD
+
+    if not is_dir and dest_name is None:
+        dest_name = source_path.split(sep='/')[-1]
+
+    dest_path = dest_dir if not dest_name else dest_dir + dest_name
+
+    scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{}@{}:{} {}'.format(
+            dir_option, source_user, source_server, source_path, dest_path)
+
+    if con_ssh.file_exists(file_path=dest_path):
+        LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
+        return dest_path
+
+    LOG.debug('Create destination directory on tis server if not already exists')
+    cmd = 'mkdir -p {}'.format(dest_dir)
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
+    LOG.info("scp file(s) from test server to tis server")
+    con_ssh.send(scp_cmd)
+    index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout)
+    if index == 2:
+        con_ssh.send('yes')
+        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=timeout)
+    if index == 1:
+        con_ssh.send(source_password)
+        index = con_ssh.expect()
+    if index != 0:
+        LOG.error("Failed to scp files")
+
+    if not con_ssh.file_exists(file_path=dest_path):
+        LOG.error("File path {} does not exist after scp".format(dest_path))
+        return None
+    else:
+        return dest_path
 
 
 def scp_to_active_controller(source_path, dest_path='',
@@ -133,6 +198,11 @@ class Count:
         return cls.__flavor_count
 
     @classmethod
+    def get_volume_count(cls):
+        cls.__volume_count += 1
+        return cls.__volume_count
+
+    @classmethod
     def get_image_count(cls):
         cls.__image_count += 1
         return cls.__image_count
@@ -197,15 +267,21 @@ def get_unique_name(name_str, existing_names=None, resource_type='other'):
     if resource_type not in valid_types:
         raise ValueError("Invalid resource_type provided. Valid types: {}".format(valid_types))
 
-    unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
-
     if existing_names:
+        if resource_type in ['image', 'volume']:
+            unique_name = name_str
+        else:
+            unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
+
         for i in range(50):
             if unique_name not in existing_names:
-                break
+                return unique_name
+
             unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
         else:
             raise LookupError("Cannot find unique name.")
+    else:
+        unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
 
     return unique_name
 
@@ -222,6 +298,9 @@ def _parse_cpus_list(cpus):
 
     """
     if isinstance(cpus, str):
+        if cpus.strip() == '':
+            return []
+
         cpus = cpus.split(sep=',')
 
     cpus_list = list(cpus)
@@ -263,3 +342,19 @@ def _execute_with_openstack_cli():
     DO NOT USE THIS IN TEST FUNCTIONS!
     """
     return ProjVar.get_var('OPENSTACK_CLI')
+
+
+def wait_for_val_from_func(expt_val, timeout, check_interval, func, *args, **kwargs):
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        current_val = func(*args, **kwargs)
+        if not isinstance(expt_val, list) or isinstance(expt_val, tuple):
+            expt_val = [expt_val]
+
+        for val in expt_val:
+            if val == current_val:
+                return True, val
+
+        time.sleep(check_interval)
+
+    return False, current_val

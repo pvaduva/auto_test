@@ -37,8 +37,7 @@ def create_storage_profile(request):
     profile_name = 'storage_test_profile'
     host_name = 'storage-0'
     positional_arg = profile_name + ' ' + host_name
-    exitcode, output = cli.system('storprofile-add', positional_arg, fail_ok=True,
-                              auth_info=Tenant.ADMIN, rtn_list=True)
+    cli.system('storprofile-add', positional_arg)
 
     storage_profile = {
         'profile_name': profile_name,
@@ -46,6 +45,7 @@ def create_storage_profile(request):
     }
 
     return storage_profile
+
 
 def test_storage_profile_on_compute(create_storage_profile):
     # apply that profile to compute-0

@@ -6,6 +6,8 @@ class Labs:
         'controller-0 ip': '128.224.150.199',
         'controller-1 ip': '128.224.150.129',
         # 'auth_url': 'http://192.168.204.102:5000/v3/',
+        'controller_nodes': [21768, 21769],
+        'compute_nodes': [21770, 21771],
     }
 
     IP_1_4 = {
@@ -15,6 +17,8 @@ class Labs:
         'controller-0 ip': '128.224.151.192',
         'controller-1 ip': '128.224.151.193',
         # 'auth_url': 'http://192.168.204.2:5000/v3/',
+        'controller_nodes': [20519, 20520],
+        'compute_nodes': [20521, 20522],
     }
 
     IP_5_6 = {
@@ -24,6 +28,7 @@ class Labs:
         'controller-0 ip': '128.224.151.196',
         'controller-1 ip': '128.224.151.197',
         # 'auth_url': 'http://192.168.204.2:5000/v3/',
+        'controller_nodes': [20525, 20526]
     }
 
     IP_7_12 = {
@@ -32,6 +37,9 @@ class Labs:
         'floating ip': '128.224.151.243',
         'controller-0 ip': '128.224.150.244',
         'controller-1 ip': '128.224.150.205',
+        'controller_nodes': [21786, 21788],
+        'compute_nodes': [21789, 21791],
+        'storage_nodes': [21790, 21787]
     }
 
     IP_14_17 = {
@@ -39,7 +47,9 @@ class Labs:
         'name': 'cgcs-ironpass-14_17',
         'floating ip': '128.224.150.54',
         'controller-0 ip': '128.224.150.219',
-        'controller-1 ip': '128.224.150.212'
+        'controller-1 ip': '128.224.150.212',
+        'controller_nodes': [22349, 22348],
+        'compute_nodes': [22347, 21784],
     }
 
     IP_18_19 = {
@@ -48,7 +58,8 @@ class Labs:
         'floating ip': '128.224.150.158',
         'controller-0 ip': '128.224.150.168',
         'controller-1 ip': '128.224.150.169',
-        'system_type': 'CPE',
+        'controller_nodes': [22354, 22357],
+        'compute_nodes': [22431, 22432, 22433, 22434],
     }
 
     IP_20_27 = {
@@ -57,6 +68,9 @@ class Labs:
         'floating ip': '128.224.151.49',
         'controller-0 ip': '128.224.151.47',
         'controller-1 ip': '128.224.151.48',
+        'controller_nodes': [18541, 18542],
+        'compute_nodes': [22417,22418,21762,18537],
+        'storage_nodes': [18536, 18551],
     }
 
     IP_28_30 = {
@@ -65,6 +79,8 @@ class Labs:
         'floating ip': '128.224.150.188',
         'controller-0 ip': '128.224.150.223',
         'controller-1 ip': '128.224.150.179',
+        'controller_nodes': [20559],
+        'compute_nodes': [20516, 21710],
     }
 
     IP_31_32 = {
@@ -74,6 +90,7 @@ class Labs:
         'controller-0 ip': '128.224.150.92',
         'controller-1 ip': '128.224.150.22',
         'system_type': 'CPE',
+        'controller_nodes': [21750, 21758],
     }
 
     IP_33_36 = {
@@ -82,6 +99,18 @@ class Labs:
         'floating ip': '128.224.150.215',
         'controller-0 ip': '128.224.150.32',
         'controller-1 ip': '128.224.151.148',
+        'controller_nodes': [20509, 20550],
+        'compute_nodes': [21720, 21721]
+    }
+
+    IP_37_40 = {
+        'short_name': 'ip_37_40',
+        'name': 'cgcs-ironpass-37_40',
+        'floating ip': '128.224.150.89',
+        'controller-0 ip': '128.224.150.175',
+        'controller-1 ip': '128.224.150.93',
+        'controller_nodes': [20551, 21778],
+        'compute_nodes': [21723, 22487]
     }
 
     PV0 = {
@@ -91,6 +120,9 @@ class Labs:
         'controller-0 ip': '128.224.150.26',
         'controller-1 ip': '128.224.150.28',
         # 'auth_url': 'http://192.168.204.2:5000/v3/',
+        'controller_nodes': [22715, 22716],
+        'compute_nodes': [22719, 22720, 22721, 22722],
+        'storage_nodes': [22717, 22718],
     }
 
     PV1 = {
@@ -98,7 +130,10 @@ class Labs:
         'name': 'yow-cgcs-pv-1',
         'floating ip': '128.224.151.182',
         'controller-0 ip': '128.224.151.198',
-        'controller-1 ip': '128.224.151.199'
+        'controller-1 ip': '128.224.151.199',
+        'controller_nodes': [23136, 23138],
+        'compute_nodes': [23135, 23137, 23140, 23143, 23139, 23141, 23142, 23096],
+        'storage_nodes': [23146, 23147],
     }
 
     PV2 = {
@@ -116,6 +151,7 @@ class Labs:
         'controller-0 ip': '128.224.150.130',
         'controller-1 ip': '128.224.150.106',
         'system_type': 'CPE',
+        'controller_nodes': [22351, 22352],
     }
 
     R720_3_7 = {
@@ -124,6 +160,8 @@ class Labs:
         'floating ip': '128.224.150.142',
         'controller-0 ip': '128.224.151.35',
         'controller-1 ip': '128.224.151.36',
+        'controller_nodes': [21805, 21806],
+        'compute_nodes': [21763, 21764, 21765],
     }
 
     WCP_3_6 = {
@@ -132,6 +170,8 @@ class Labs:
         'floating ip': '128.224.151.227',
         'controller-0 ip': '128.224.150.69',
         'controller-1 ip': '128.224.150.70',
+        'controller_nodes': [23198, 23199],
+        'compute_nodes': [23200, 23201],
     }
 
     WCP_7_12 = {
@@ -141,6 +181,9 @@ class Labs:
         'controller-0 ip': '128.224.150.220',
         'controller-1 ip': '128.224.150.231',
         # 'auth_url': 'http://192.168.144.2:5000/v2.0/',
+        'controller_nodes': [23202, 23203],
+        'compute_nodes': [23206, 23207],
+        'storage_nodes': [23204, 23205],
     }
 
     WCP_13_14 = {
@@ -158,6 +201,9 @@ class Labs:
         'controller-0 ip': '128.224.150.140',
         'controller-1 ip': '128.224.150.180',
         # 'auth_url': 'http://192.168.204.102:5000/v2.0/',
+        'controller_nodes': [23215, 23216],
+        'compute_nodes': [23219, 23220, 23221, 23222],
+        'storage_nodes': [23217, 23218]
     }
 
     WCP_35_60 = {
@@ -174,6 +220,57 @@ class Labs:
         'floating ip': '128.224.151.218',
         'controller-0 ip': '128.224.151.215',
         'controller-1 ip': '128.224.151.24',
+        'controller_nodes': [23271, 23272],
+        'compute_nodes': [23273, 23274, 23275],
+    }
+
+    WCP_76_77 = {
+        'short_name': 'wcp_76_77',
+        'name': 'yow-cgcs-wildcat-76_77',
+        'floating ip': '128.224.150.5',
+        'controller-0 ip': '128.224.150.3',
+        'controller-1 ip': '128.224.150.4',
+        'controller_nodes': [23276, 23277],
+    }
+
+    WCP_80_84 = {
+        'short_name': 'wcp_80_84',
+        'name': 'yow-cgcs-wildcat-80_84',
+        'floating ip': '128.224.150.18',
+        'controller-0 ip': '128.224.150.14',
+        'controller-1 ip': '128.224.150.156',
+        'controller_nodes': [23318, 23319],
+        'compute_nodes': [23320, 23321, 23322],
+    }
+
+    WCP_85_89 = {
+        'short_name': 'wcp_80_84',
+        'name': 'yow-cgcs-wildcat-80_84',
+        'floating ip': '128.224.150.224',
+        'controller-0 ip': '128.224.150.244',
+        'controller-1 ip': '128.224.150.202',
+        'controller_nodes': [23323, 23324],
+        'compute_nodes': [23325, 23326, 23327],
+    }
+
+    WCP_90_91 = {
+        'short_name': 'wcp_80_84',
+        'name': 'yow-cgcs-wildcat-80_84',
+        'floating ip': '128.224.151.162',
+        'controller-0 ip': '128.224.151.151',
+        'controller-1 ip': '128.224.151.153',
+        'controller_nodes': [23328, 23329],
+    }
+
+    WCP_92_98 = {
+        'short_name': 'wcp_80_84',
+        'name': 'yow-cgcs-wildcat-80_84',
+        'floating ip': '128.224.151.15',
+        'controller-0 ip': '128.224.151.111',
+        'controller-1 ip': '128.224.151.205',
+        'controller_nodes': [23299, 23300],
+        'compute_nodes': [23303, 23304, 23305],
+        'storage_nodes': [23301, 23302],
     }
 
     VBOX = {

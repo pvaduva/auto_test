@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, VMStatus
 from consts.reasons import SkipReason
 from consts.auth import Tenant
-from keywords import vm_helper, nova_helper, network_helper, host_helper
+from keywords import vm_helper, nova_helper, network_helper, host_helper, common
 from testfixtures.resource_mgmt import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -191,6 +191,13 @@ class TestMutiPortsPCI:
         if not sriov_info or not pcipt_info:
             skip(SkipReason.PCI_IF_UNAVAIL)
 
+        LOG.fixture_step("(class) Get a PCI network too boot vm from pci providernet info from lab_setup.conf")
+        pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')
+        pci_pthru_nets = network_helper.get_pci_nets(vif='pthru', rtn_val='name')
+        avail_nets = list(set(pci_pthru_nets) & set(pci_sriov_nets))
+        if 'internal0-net1' not in avail_nets:
+            skip("'internal-net1' does not have pci-sriov and/or pci-passthrough interfaces")
+
         LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
         flavor_id = nova_helper.create_flavor(name='dedicated')[1]
         ResourceCleanup.add('flavor', flavor_id, scope='class')
@@ -219,7 +226,8 @@ class TestMutiPortsPCI:
         vm_helper.ping_vms_from_vm(to_vms=base_vm_pci, from_vm=base_vm_pci, net_types=['data', 'internal'],
                                    vlan_zero_only=True)
 
-        LOG.fixture_step("(class) Get seg_id for internal0-net1 to prepare for vlan tagging on pci-passthough device later.")
+        LOG.fixture_step("(class) Get seg_id for internal0-net1 to prepare for vlan tagging on pci-passthough "
+                         "device later.")
         seg_id = network_helper.get_net_info(net_id=internal_net_id, field='segmentation_id', strict=False,
                                              auto_info=Tenant.ADMIN)
         assert seg_id, 'Segmentation id of internal0-net1 is not found'
@@ -274,7 +282,7 @@ class TestMutiPortsPCI:
         ResourceCleanup.add('vm', vm_under_test, scope='function')
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
-        LOG.tc_step("Add vlan to pci-passthrough interface.")
+        LOG.tc_step("Add vlan to pci-passthrough interface for VM.")
         vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)
 
         LOG.tc_step("Ping vm's own data and internal (vlan 0 only) network ips")
@@ -289,7 +297,7 @@ class TestMutiPortsPCI:
                 LOG.tc_step("Set vm to error state and wait for auto recovery complete, "
                             "then verify ping from base vm over management and internal networks")
                 vm_helper.set_vm_state(vm_id=vm_under_test, error_state=True, fail_ok=False)
-                vm_helper.wait_for_vm_values(vm_id=vm_under_test, status=VMStatus.ACTIVE, fail_ok=True, timeout=600)
+                vm_helper.wait_for_vm_values(vm_id=vm_under_test, status=VMStatus.ACTIVE, fail_ok=False, timeout=600)
 
             else:
                 LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))

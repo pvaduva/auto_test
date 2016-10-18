@@ -188,9 +188,9 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
     return table_
 
 
-def get_alarms(rtn_val='UUID', alarm_id=None, reason_text=None, entity_id=None, severity=None, time_stamp=None,
-               strict=False, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
-               auth_info=Tenant.ADMIN):
+def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=None, entity_id=None,
+               severity=None, time_stamp=None, strict=False, show_suppress=False, query_key=None, query_value=None,
+               query_type=None, con_ssh=None, auth_info=Tenant.ADMIN, combine_entries=True):
 
     table_ = get_alarms_table(show_suppress=show_suppress, query_key=query_key, query_value=query_value,
                               query_type=query_type, con_ssh=con_ssh, auth_info=auth_info)
@@ -210,7 +210,18 @@ def get_alarms(rtn_val='UUID', alarm_id=None, reason_text=None, entity_id=None, 
         if value is not None:
             kwargs[key] = value
 
-    return table_parser.get_values(table_, rtn_val, strict=strict, **kwargs)
+    if kwargs:
+        table_ = table_parser.filter_table(table_, strict=strict, **kwargs)
+
+    rtn_vals_list = []
+    for val in rtn_vals:
+        vals = table_parser.get_column(table_, val)
+        rtn_vals_list.append(vals)
+
+    if combine_entries:
+        rtn_vals_list = [' '.join(vals) for vals in rtn_vals_list]
+
+    return rtn_vals_list
 
 
 def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
@@ -441,32 +452,51 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
             raise exceptions.TimeoutException(err_msg)
 
 
-def wait_for_alarms_gone(alarm_uuids, timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
+def _get_alarms(alarms_tab):
+    alarm_ids = table_parser.get_column(alarms_tab, 'Alarm_ID')
+    entity_ids = table_parser.get_column(alarms_tab, 'Entity ID')
+    alarms = list(zip(alarm_ids, entity_ids))
+    return alarms
+
+
+def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
                          auth_info=Tenant.ADMIN):
+    """
+    Wait for given alarms to be gone from system alarm-list
+    Args:
+        alarms (list): list of tuple. [(<alarm_id1>, <entity_id1>), ...]
+        timeout (int):
+        check_interval (int):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
 
-    if isinstance(alarm_uuids, str):
-        alarm_uuids = [alarm_uuids]
+    Returns (tuple): (res(bool), remaining_alarms(tuple))
 
-    LOG.info("Waiting for alarms to disappear from system alarm-list: {}".format(alarm_uuids))
-    alarms_to_check = list(alarm_uuids)
+    """
+    pre_alarms = list(alarms)   # Don't update the original list
+    LOG.info("Waiting for alarms to disappear from system alarm-list: {}".format(pre_alarms))
+    alarms_to_check = list(pre_alarms)
 
     end_time = time.time() + timeout
     while time.time() < end_time:
-        alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
+        current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
+        current_alarms = _get_alarms(current_alarms_tab)
 
-        alarms = table_parser.get_column(alarms_tab, 'UUID')
-
-        for alarm in alarm_uuids:
-            if alarm not in alarms:
+        for alarm in pre_alarms:
+            if alarm not in current_alarms:
+                LOG.info("Removing alarm {} from current alarms list: {}".format(alarm, alarms_to_check))
                 alarms_to_check.remove(alarm)
+
         if not alarms_to_check:
-            LOG.info("Following alarms are cleared: {}".format(alarm_uuids))
+            LOG.info("Following alarms cleared: {}".format(pre_alarms))
             return True, []
 
+        pre_alarms = alarms_to_check
         time.sleep(check_interval)
 
     else:
-        err_msg = "Timed out waiting for following alarms to disappear: {}".format(alarms_to_check)
+        err_msg = "Following alarms did not clear within {} seconds: {}".format(alarms_to_check, timeout)
         if fail_ok:
             LOG.warning(err_msg)
             return False, alarms_to_check

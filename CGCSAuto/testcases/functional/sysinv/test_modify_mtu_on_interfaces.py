@@ -5,7 +5,7 @@
 
 
 from pytest import fixture, mark, skip
-import ast
+import ast, random
 from time import sleep
 
 from utils import cli,exceptions
@@ -15,7 +15,7 @@ from consts.auth import Tenant
 from consts.timeout import CLI_TIMEOUT
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import nova_helper, vm_helper, host_helper, system_helper
+from keywords import nova_helper, vm_helper, host_helper, system_helper, network_helper
 
 
 def modify_mtu_on_interface(hostname, mtu, network_type):
@@ -28,7 +28,6 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
     # get the port_uuid for network_type interface only
     table_ = table_parser.table(cli.system('host-if-list --nowrap', hostname))
     port_uuid_list = table_parser.get_values(table_, 'uuid', **{'network type': network_type})
-    imtu = " --imtu "+mtu
 
     # lock the node
     LOG.tc_step('lock the standby')
@@ -37,8 +36,10 @@ def modify_mtu_on_interface(hostname, mtu, network_type):
     sleep(30)
 
     # config the page number after lock the compute node
-    LOG.tc_step('modify the mtu on locked controller')
+    LOG.tc_step('modify the mtu on locked host {}'.format(hostname))
 
+    imtu = " --imtu " + mtu
+    LOG.tc_step("Modifying {} interfaces to have {} mtu".format(network_type, mtu))
     # change all MTUs on ports of the same network type
     for port_uuid in port_uuid_list:
         args = hostname + " " + port_uuid + imtu
@@ -82,6 +83,12 @@ def test_oam_intf_mtu_modified(mtu):
         - Nothing
 
     """
+    pnet_mtus = network_helper.get_providernets(name='ext', rtn_val='mtu', strict=False)
+    for pnet_mtu in pnet_mtus:
+        if int(pnet_mtu) > int(mtu):
+            mtu = pnet_mtu
+    LOG.info("Changing mtu to {} because of providernet minimum mtu".format(mtu))
+    mtu = str(mtu)
 
     # retrieve standby controller
     first_host = system_helper.get_standby_controller_name()
@@ -133,6 +140,13 @@ def test_data_intf_mtu_modified(mtu):
         - Nothing
 
     """
+    pnet_mtus = network_helper.get_providernets(name='data', rtn_val='mtu', strict=False)
+    for pnet_mtu in pnet_mtus:
+        if int(pnet_mtu) > int(mtu):
+            mtu = pnet_mtu
+    LOG.info("Changing mtu to {} because of providernet minimum mtu".format(mtu))
+    mtu = str(mtu)
+
     # test all compute node that are up and enabled
     compute_list = host_helper.get_hypervisors(state='up', status='enabled')
 

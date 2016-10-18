@@ -30,8 +30,12 @@ class CpuAssignment:
 
 
 class CPUThreadErr:
-    INVALID_POLICY = "Invalid hw:cpu_thread_policy '{}', must be one of: require, isolate, prefer."
-    DEDICATED_CPU_REQUIRED = 'Cannot set cpu thread pinning policy in a non dedicated cpu pinning policy'
+    INVALID_POLICY = "invalid hw:cpu_thread_policy '{}', must be one of prefer, isolate, require"
+    # DEDICATED_CPU_REQUIRED = 'Cannot set cpu thread pinning policy in a non dedicated cpu pinning policy'
+    DEDICATED_CPU_REQUIRED_FLAVOR = 'ERROR (Conflict): hw:cpu_thread_policy is only valid when hw:cpu_policy is ' \
+                                    'dedicated.  Either unset hw:cpu_thread_policy or set hw:cpu_policy to dedicated.'
+    DEDICATED_CPU_REQUIRED_BOOT_VM = 'ERROR (BadRequest): Cannot set cpu thread pinning policy in a non dedicated ' \
+                                     'cpu pinning policy'
     VCPU_NUM_UNDIVISIBLE = "(NUMATopologyFilter) Cannot use 'require' cpu threads policy as requested #VCPUs: {}, " \
                            "is not divisible by number of threads: 2"
     INSUFFICIENT_CORES_FOR_ISOLATE = "{}: (NUMATopologyFilter) Cannot use isolate cpu thread policy as requested " \
@@ -59,6 +63,7 @@ class SharedCPUErr:
 
 class ResizeVMErr:
     RESIZE_ERR = "Error resizing server"
+    SHARED_NOT_ENABLED = 'Shared not enabled for cell {}'
 
 
 class ColdMigErr:
@@ -67,8 +72,9 @@ class ColdMigErr:
 
 
 class LiveMigErr:
-    BLOCK_MIG_UNSUPPORTED = "is not on local storage: Block migration cannot be used with shared storage"
+    BLOCK_MIG_UNSUPPORTED = "is not on local storage: Block migration can not be used with shared storage"
     GENERAL_NO_HOST = "No valid host was found. There are not enough hosts available."
+    BLOCK_MIG_UNSUPPORTED_LVM = 'Block live migration is not supported for instances with LVM backed storage'
 
 
 class NetworkingErr:
@@ -77,6 +83,7 @@ class NetworkingErr:
     INVALID_VXLAN_PROVISION_PORTS = "is not in [4789, 8472]."
     VXLAN_TTL_RANGE_MISSING = "VXLAN time-to-live attributes missing"
     VXLAN_TTL_RANGE_TOO_LARGE = "is too large - must be no larger than '255'."
+    VXLAN_TTL_RANGE_TOO_SMALL = "is too small - must be at least '1'."
     OVERLAP_SEGMENTATION_RANGE = "segmentation id range overlaps with"
     INVALID_MTU_VALUE = "requires an interface MTU value of at least"
     VXLAN_MISSING_IP_ON_INTERFACE = "requires an IP address"

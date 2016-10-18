@@ -1635,22 +1635,31 @@ def get_providernet_for_interface(interface='pthru', rtn_val='id', filepath=None
     if 'No such file or directory' in sriov_if_override:
         raise ValueError("File '{}' cannot be found".format(filepath))
 
-    provider_net_name = re.findall('\{DATAMTU\}\|(.*)[\|,\"]', sriov_if_override)
+    provider_net_name = re.findall('\{DATAMTU\}\|(.*)\|', sriov_if_override)
+    if not provider_net_name:
+        provider_net_name = re.findall('\{DATAMTU\}\|(.*)\"', sriov_if_override)
+
     if not provider_net_name:
         return ''
 
     provider_net_name = provider_net_name[0]
 
-    return get_providernets(name='.*{}'.format(provider_net_name), rtn_val=rtn_val, con_ssh=con_ssh, strict=True,
+    LOG.info("Providernet name: {}".format(provider_net_name))
+    return get_providernets(name='.*{}$'.format(provider_net_name), rtn_val=rtn_val, con_ssh=con_ssh, strict=True,
                             regex=True, auth_info=auth_info)[0]
 
 
-def get_networks_on_providernet(providernet_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_networks_on_providernet(providernet_id, rtn_val='id', con_ssh=None, auth_info=Tenant.ADMIN, strict=True,
+                                regex=False, **kwargs):
     """
+
     Args:
-        con_ssh (SSHClient):
         providernet_id:
+        con_ssh (SSHClient):
         auth_info:
+        strict (bool)
+        regex (bool)
+        **kwargs: extra key/value pair to filter out the results
 
     Returns:
         statue (0 or 1) and the list of network ID
@@ -1658,7 +1667,14 @@ def get_networks_on_providernet(providernet_id, con_ssh=None, auth_info=Tenant.A
     table_ = table_parser.table(cli.neutron(cmd='net-list-on-providernet', positional_args=providernet_id,
                                             auth_info=auth_info, ssh_client=con_ssh))
 
-    return table_parser.get_values(table_, 'id')
+    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, **kwargs)
+
+
+def get_pci_nets(vif='sriov', rtn_val='name', con_ssh=None, auth_info=Tenant.ADMIN):
+
+    pnet_id = get_providernet_for_interface(interface=vif, con_ssh=con_ssh, auth_info=auth_info)
+
+    return get_networks_on_providernet(pnet_id, rtn_val, con_ssh=con_ssh, auth_info=auth_info)
 
 
 def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_ssh=None):

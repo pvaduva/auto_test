@@ -83,6 +83,11 @@ def test_heartbeat_after_compute_reboot(heartbeat_flavor_vm):
     vm_id = heartbeat_flavor_vm['id']
     heartbeat_type = heartbeat_flavor_vm['heartbeat']
 
+    LOG.tc_step("Verify vm heartbeat is on by checking the heartbeat process")
+    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat | grep -v grep")
+        assert (output is not None)
+
     LOG.tc_step("Reboot the compute node where the VM is located")
     # find the compute node where the vm is located
     vm_host = nova_helper.get_vm_host(vm_id)

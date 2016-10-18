@@ -1,12 +1,12 @@
 from pytest import fixture, mark, skip
 
 from consts.auth import Tenant
-from consts.cgcs import EventLogID
+from consts.cgcs import EventLogID, HostAvailabilityState
 from consts.timeout import EventLogTimeout
-from utils import table_parser
+from utils import table_parser, cli
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
-from keywords import system_helper, vm_helper, nova_helper, cinder_helper, storage_helper
+from keywords import system_helper, vm_helper, nova_helper, cinder_helper, storage_helper, host_helper
 
 
 ########################
@@ -25,7 +25,7 @@ def check_alarms(request):
     __verify_alarms(request=request, scope='function')
 
 
-@fixture(scope='session', autouse=True)
+# @fixture(scope='session', autouse=True)
 def check_alarms_session(request):
     """
     Check system alarms before and after test session.
@@ -39,32 +39,57 @@ def check_alarms_session(request):
 def __verify_alarms(request, scope):
     LOG.fixture_step("({}) Gathering system alarms info before test {} begins.".format(scope, scope))
     before_tab = system_helper.get_alarms_table()
-    before_uuids = table_parser.get_column(before_tab, 'UUID')
+    before_alarms = system_helper._get_alarms(before_tab)
 
     def verify_alarms():
         LOG.fixture_step("({}) Verifying system alarms after test {} ended...".format(scope, scope))
         after_tab = system_helper.get_alarms_table()
-        after_uuids = table_parser.get_column(after_tab, 'UUID')
+        after_alarms = system_helper._get_alarms(after_tab)
         new_alarms = []
 
-        for item in after_uuids:
-            if item not in before_uuids:
+        for item in after_alarms:
+            if item not in before_alarms:
                 new_alarms.append(item)
 
         if new_alarms:
             LOG.fixture_step("New alarms detected. Waiting for new alarms to clear.")
-            res, new_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True, timeout=300)
-
-        if new_alarms:
-            table_final = table_parser.filter_table(after_tab, UUID=new_alarms)
-            new_rows = table_parser.get_all_rows(table_final)
-
-            assert not new_alarms, "New alarm(s) found and did not clear within 5 minutes: {}".format(new_rows)
+            res, remaining_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True, timeout=300)
+            assert res, "New alarm(s) found and did not clear within 5 minutes. " \
+                        "Alarm IDs and Entity IDs: {}".format(remaining_alarms)
 
         LOG.fixture_step("({}) System alarms verified.".format(scope))
 
     request.addfinalizer(verify_alarms)
     return
+
+
+@fixture(scope='session', autouse=True)
+def pre_alarms_session():
+    return __get_alarms('session')
+
+
+@fixture(scope='function')
+def pre_alarms_function():
+    return __get_alarms('function')
+
+
+def __get_alarms(scope):
+    LOG.fixture_step("({}) Gathering system alarms info before test {} begins.".format(scope, scope))
+    alarms = system_helper.get_alarms()
+    return alarms
+
+
+@fixture(scope='session', autouse=True)
+def pre_coredumps_and_crash_reports_session():
+    return __get_system_crash_and_coredumps('session')
+
+
+def __get_system_crash_and_coredumps(scope):
+    LOG.fixture_step("({}) Getting existing system crash reports and coredumps before test {} begins.".
+                     format(scope, scope))
+
+    core_dumps_and_reports = host_helper.get_coredumps_and_crashreports()
+    return core_dumps_and_reports
 
 
 @fixture()

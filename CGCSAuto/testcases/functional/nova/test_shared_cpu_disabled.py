@@ -45,7 +45,7 @@ def test_set_shared_vcpu_spec_reject(cpu_policy, vcpus, shared_vcpu):
     Args:
         cpu_policy (str): shared or dedicated
         vcpus (int): number of vcpus to set when creating flavor
-        vcpu_id (int): vcpu id to attempt to set to
+        shared_vcpu (int): vcpu id to attempt to set to
 
     Test Steps:
         - Create flavor with given number of vcpus
@@ -136,6 +136,7 @@ def test_launch_vm_shared_cpu_setting_negative(vcpus, cpu_policy, numa_nodes, nu
 def basic_vm():
     vm_id = vm_helper.boot_vm()[1]
     ResourceCleanup.add('vm', vm_id, scope='module')
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     return vm_id
 
 
@@ -174,4 +175,8 @@ def test_resize_vm_shared_cpu_negative(vcpus, cpu_policy, shared_vcpu, basic_vm)
 
     LOG.tc_step("Attempt to resize vm with invalid flavor, and verify resize request is rejected.")
     code, msg = vm_helper.resize_vm(basic_vm, flavor, fail_ok=True)
-    assert code == 1 and ResizeVMErr.RESIZE_ERR in msg
+    assert code == 1, "Resize vm request is not rejected"
+    assert ResizeVMErr.SHARED_NOT_ENABLED.format('0') in msg
+
+    LOG.tc_step("Ensure VM is still pingable after resize reject")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=basic_vm)

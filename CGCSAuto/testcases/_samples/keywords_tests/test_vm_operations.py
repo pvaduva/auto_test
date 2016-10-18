@@ -75,7 +75,7 @@ def test_ping_vms_from_vm_1(vm_count):
 
 @mark.parametrize('vm_image', [
     # 'cgcs-guest',
-    # 'ubuntu',
+    # 'ubuntu_14',
     'wrl5',
     'centos',
 ])

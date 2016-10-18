@@ -73,6 +73,10 @@ def test_vm_vcpu_model(flavor_and_volume, vcpu_model):
         else:
             assert ' -cpu {} '.format(vcpu_model).lower() in output.lower(), 'cpu_model {} not found for vm {}'.\
                 format(vcpu_model, vm)
+
+        LOG.tc_step("Check vm is pingable from NatBox with vcpu_model {}".format(vcpu_model))
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
     else:
         LOG.tc_step("Check vm in error state due to vcpu model unsupported by hosts.")
         assert 1 == code, "boot vm cli exit code is not 1. Actual fail reason: {}".format(msg)

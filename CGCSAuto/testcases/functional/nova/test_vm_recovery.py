@@ -85,8 +85,7 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
     Test Steps:
         - Create a flavor with auto recovery and cpu policy set to given values in extra spec
         - Create an image with auto recovery set to given value in metadata
-        - Create a volume from above image
-        - Boot a vm with the flavor and from the volume
+        - Boot a vm with the flavor and from the image
         - Set vm state to error via nova reset-state
         - Verify vm auto recovery behavior is as expected
 
@@ -120,14 +119,16 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
                                               **{property_key: image_auto_recovery})[1]
     ResourceCleanup.add('image', resource_id=image_id)
 
-    LOG.tc_step("Create a volume from the image")
-    vol_id = cinder_helper.create_volume(name='auto_recov', image_id=image_id, rtn_exist=False)[1]
-    ResourceCleanup.add('volume', vol_id)
+    # auto recovery in image metadata will not work if vm booted from volume
+    # LOG.tc_step("Create a volume from the image")
+    # vol_id = cinder_helper.create_volume(name='auto_recov', image_id=image_id, rtn_exist=False)[1]
+    # ResourceCleanup.add('volume', vol_id)
 
-    LOG.tc_step("Boot a vm from volume with auto recovery - {} and using the flavor with auto recovery - {}".format(
-            image_auto_recovery, flavor_auto_recovery))
-    vm_id = vm_helper.boot_vm(name='auto_recov', flavor=flavor_id, source='volume', source_id=vol_id)[1]
+    LOG.tc_step("Boot a vm from image with auto recovery - {} and using the flavor with auto recovery - {}".format(
+                image_auto_recovery, flavor_auto_recovery))
+    vm_id = vm_helper.boot_vm(name='auto_recov', flavor=flavor_id, source='image', source_id=image_id)[1]
     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     LOG.tc_step("Verify vm auto recovery is {} by setting vm to error state.".format(expt_result))
     vm_helper.set_vm_state(vm_id=vm_id, error_state=True, fail_ok=False)
@@ -136,6 +137,9 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
 
     assert expt_result == res_bool, "Expected auto_recovery: {}. Actual vm status: {}".format(
             expt_result, actual_val)
+
+    LOG.tc_step("Ensure vm is pingable after auto recovery")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 @mark.features(Features.AUTO_RECOV, Features.HEARTBEAT)
@@ -168,7 +172,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
 
     """
 
-    LOG.tc_step("Create a flavor with guest_heartbeart set to true, and auto_recovery set to {} in extra spec".
+    LOG.tc_step("Create a flavor with guest_heartbeart set to True, and auto_recovery set to {} in extra spec".
                 format(auto_recovery))
     flavor_id = nova_helper.create_flavor(name='auto_recover_' + str(auto_recovery))[1]
     ResourceCleanup.add('flavor', flavor_id)
@@ -212,6 +216,12 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
             reasons = table_parser.get_values(alarms_tab, 'Reason Text', strict=False, **{'Entity ID': vm_id})
             assert re.search('Instance .* is rebooting on host', '\n'.join(reasons)), \
                 "Instance rebooting active alarm is not listed"
+
+    LOG.tc_step("Wait for VM reach active state")
+    vm_helper.wait_for_vm_values(vm_id, timeout=180, status=VMStatus.ACTIVE)
+
+    LOG.tc_step("Ensure vm is still pingable after auto recovery")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 @mark.features(Features.HEARTBEAT)
@@ -282,7 +292,7 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
 
     LOG.tc_step("Verify vm heartbeat failure event is {}logged".format(step_str))
 
-    events_2 = system_helper.wait_for_events(timeout=EventLogTimeout.HEALTH_CHECK_FAIL, fail_ok=True,
+    events_2 = system_helper.wait_for_events(timeout=EventLogTimeout.HEALTH_CHECK_FAIL, strict=False, fail_ok=True,
                                              **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                                 EventLogID.SOFT_REBOOT_BY_VM, EventLogID.HEARTBEAT_CHECK_FAILED]})
 
@@ -328,6 +338,7 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat):
     LOG.tc_step("Boot a vm with above flavor")
     vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
     ResourceCleanup.add('vm', vm_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     target_host = nova_helper.get_vm_host(vm_id)
 
@@ -345,4 +356,8 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat):
     system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, strict=False, fail_ok=False,
                                   **{'Entity Instance ID': vm_id, 'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
 
+    LOG.tc_step("Wait for VM reach active state")
     vm_helper.wait_for_vm_values(vm_id, timeout=30, status=VMStatus.ACTIVE)
+
+    LOG.tc_step("Ensure VM is still pingable after auto recovery")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

@@ -4,14 +4,14 @@ import re
 from utils import cli, exceptions
 from utils import table_parser
 from utils.tis_log import LOG
-from consts.auth import Tenant
-from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec
+from consts.auth import Tenant, Guest
+from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec, GuestImages
 from keywords import keystone_helper, host_helper, common
 from keywords.common import Count
 
 
-def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ephemeral=None, swap=None,
-                  is_public=None, rxtx_factor=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None,
+def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=None, ephemeral=None, swap=None,
+                  is_public=None, rxtx_factor=None, guest_os=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None,
                   check_storage_backing=True):
     """
     Create a flavor with given critria.
@@ -50,23 +50,9 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
     if name is None:
         name = 'flavor'
     flavor_name = common.get_unique_name(name_str=name, existing_names=existing_names, resource_type='flavor')
-    # if name is not None:
-    #     flavor_name = name
-    #     if name in existing_names:
-    #         for i in range(50):
-    #             tmp_name = '-'.join([name, str(i)])
-    #             if tmp_name not in existing_names:
-    #                 flavor_name = tmp_name
-    #                 break
-    # else:
-    #     name = 'flavor'
-    #     for i in range(10):
-    #         tmp_name = '-'.join([name, str(Count.get_flavor_count())])
-    #         if tmp_name not in existing_names:
-    #             flavor_name = tmp_name
-    #             break
-    #     else:
-    #         exceptions.FlavorError("Unable to get a proper name for flavor creation.")
+
+    if root_disk is None:
+        root_disk = GuestImages.IMAGE_FILES[guest_os][1] if guest_os else 1
 
     mandatory_args = ' '.join([flavor_name, flavor_id, str(ram), str(root_disk), str(vcpus)])
 
@@ -268,10 +254,11 @@ def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     """
     size = 1
     if guest_os and 'cgcs-guest' not in guest_os:
-        if 'ubuntu' in guest_os:
-            size = 9
-        elif 'centos' in guest_os:
-            size = 9
+        # if 'ubuntu' in guest_os:
+        #     size = 9
+        # elif 'centos' in guest_os:
+        #     size = 9
+        size = GuestImages.IMAGE_FILES[guest_os][1]
 
     default_flavor_name = 'flavor-default-size{}'.format(size)
     flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)
@@ -591,7 +578,7 @@ def unset_server_group_metadata(srv_grp_id, fail_ok=False, auth_info=None, con_s
 
     args = srv_grp_id + ' '
     metadata = [item.lower() for item in metadata]
-    args += ' '.join([item + "=" for item in metadata])
+    args += ' '.join([str(item) + "=" for item in metadata])
 
     code, output = cli.nova('server-group-set-metadata', args, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
                             fail_ok=fail_ok)
@@ -993,7 +980,7 @@ def get_key_pair(name=None, con_ssh=None, auth_info=None):
     """
     table_ = table_parser.table(cli.nova('keypair-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is not None:
-        return table_parser.get_values(table_,'Name',Name=name)
+        return table_parser.get_values(table_, 'Name', Name=name)
     else:
         return table_parser.get_column(table_, 'Name')
 
@@ -1033,7 +1020,7 @@ def get_vm_boot_info(vm_id, auth_info=None, con_ssh=None):
         if len(volumes) == 0:
             raise exceptions.VMError("Booted from volume, but no volume id found.")
         elif len(volumes) > 1:
-            raise exceptions.VMError("VM booted from volume. Multiple volumes found! Did you attach extra volume?")
+            LOG.warning("VM booted from volume. Multiple volumes found, taking the first volume as boot source")
         return {'type': 'volume', 'id': volumes[0]}
     else:
         match = re.search(UUID, image)

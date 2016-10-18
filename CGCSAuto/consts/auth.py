@@ -95,7 +95,25 @@ class Guest:
         'centos': {
             'user': 'centos',
             'password': None
+        },
+
+        # This image has some issue where it usually fails to boot
+        'opensuse_13': {
+            'user': 'root',
+            'password': None
+        },
+
+        # OPV image which is has root/root enabled
+        'rhel': {
+            'user': 'root',
+            'password': 'root'
+        },
+
+        'cirros': {
+            'user': 'cirros',
+            'password': 'cubswin:)'
         }
+
     }
 
     @classmethod

@@ -7,12 +7,12 @@ from contextlib import contextmanager
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
 from utils.tis_log import LOG
-from consts.auth import Tenant, SvcCgcsAuto
+from consts.auth import Tenant, SvcCgcsAuto, Guest
 from consts.timeout import VMTimeout, CMDTimeout
 from consts.proj_vars import ProjVar
 from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, \
     VifMapping, VMNetworkStr
-from consts.filepaths import TiSPath, VMPath
+from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 
@@ -101,7 +101,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         key_name (str):
         swap (int):
         ephemeral (int):
-        user_data (str):
+        user_data (str|list):
         vm_host (str): which host to place the vm
         block_device:
         auth_info (dict):
@@ -193,7 +193,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     elif source.lower() == 'image':
         img_name = guest_os if guest_os else 'cgcs-guest'
-        image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=False)
+        image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=True)
 
     elif source.lower() == 'snapshot':
         if not snapshot_id:
@@ -209,10 +209,15 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     avail_zone = 'nova:{}'.format(vm_host) if vm_host else None
 
-    # create userdata cloud init file to run right after vm initialization to get ip on interfaces other than eth0.
-    if guest_os and not user_data and 'cgcs-guest' not in guest_os:
+    if user_data is None and guest_os and 'cgcs-guest' not in guest_os:
+        # create userdata cloud init file to run right after vm initialization to get ip on interfaces other than eth0.
         user_data = _create_cloud_init_if_conf(guest_os, nics_num=len(nics))
 
+        # # Add wrsroot/li69nux user to non cgcs-guest vm
+        # user_data_adduser = _get_cloud_config_add_user(con_ssh=con_ssh)
+        # user_data.append(user_data_adduser)
+
+    # create cmd
     optional_args_dict = {'--flavor': flavor,
                           '--image': image,
                           '--boot-volume': volume_id,
@@ -221,8 +226,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--max-count': str(max_count) if max_count is not None else None,
                           '--key-name': key_name,
                           '--swap': swap,
-                          '--ephemeral': ephemeral,
                           '--user-data': user_data,
+                          '--ephemeral': ephemeral,
                           '--block-device': block_device,
                           '--hint': hint,
                           '--availability-zone': avail_zone,
@@ -496,6 +501,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     LOG.info("Waiting for VM status change to original state {}".format(before_status))
     end_time = time.time() + VMTimeout.LIVE_MIGRATE_COMPLETE
     while time.time() < end_time:
+        time.sleep(2)
         status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
                                                     auth_info=Tenant.ADMIN)
         if status == before_status:
@@ -507,7 +513,6 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
             raise exceptions.VMPostCheckFailed(
                 "VM {} is in {} state after live migration. Original state before live migration is: {}".
                 format(vm_id, VMStatus.ERROR, before_status))
-        time.sleep(2)
     else:
         if fail_ok:
             return 4, "Post action check failed: VM is not in original state."
@@ -769,20 +774,23 @@ def wait_for_vm_values(vm_id, timeout=VMTimeout.STATUS_CHANGE, check_interval=3,
     while time.time() < end_time:
         table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
         for field in fields_to_check:
-            expt_val = kwargs[field]
+            expt_vals = kwargs[field]
             actual_val = table_parser.get_value_two_col_table(table_, field)
             results[field] = actual_val
-            if regex:
-                match_found = re.match(expt_val, actual_val) if strict else re.search(expt_val, actual_val)
-            else:
-                match_found = expt_val == actual_val if strict else expt_val in actual_val
+            if not isinstance(expt_vals, list):
+                expt_vals = [expt_vals]
+            for expt_val in expt_vals:
+                if regex:
+                    match_found = re.match(expt_val, actual_val) if strict else re.search(expt_val, actual_val)
+                else:
+                    match_found = expt_val == actual_val if strict else expt_val in actual_val
 
-            if match_found:
-                fields_to_check.remove(field)
+                if match_found:
+                    fields_to_check.remove(field)
 
-            if not fields_to_check:
-                LOG.info("VM has reached states: {}".format(results))
-                return True, results
+                if not fields_to_check:
+                    LOG.info("VM has reached states: {}".format(results))
+                    return True, results
 
         time.sleep(check_interval)
 
@@ -1673,7 +1681,7 @@ def rebuild_vm(vm_id, image_id=None, new_name=None, preserve_ephemeral=None, fai
                auth_info=Tenant.ADMIN, **metadata):
 
     if image_id is None:
-        image_id = glance_helper.get_image_id_from_name('cgcs-guest')
+        image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
 
     args = '{} {}'.format(vm_id, image_id)
 
@@ -1994,8 +2002,12 @@ def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
         _sudo_reboot(vm_ssh)
 
 
-def get_proc_num_from_vm(vm_ssh):
-    return int(vm_ssh.exec_cmd('cat /proc/cpuinfo | grep processor | wc -l', fail_ok=False)[1])
+def get_proc_nums_from_vm(vm_ssh):
+    total_cores = common._parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/present', fail_ok=False)[1])
+    online_cores = common._parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/online', fail_ok=False)[1])
+    offline_cores = common._parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/offline', fail_ok=False)[1])
+
+    return total_cores, online_cores, offline_cores
 
 
 def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=None, con_ssh=None):
@@ -2101,7 +2113,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
         guest_os:
         nics_num:
 
-    Returns (str): file path of the cloud init userdata file for given guest os and number of nics
+    Returns (str|None): file path of the cloud init userdata file for given guest os and number of nics
         Sample file content for Centos vm:
             #!/bin/bash
             sudo cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth1
@@ -2114,20 +2126,21 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     """
 
     file_dir = TiSPath.USERDATA
+    guest_os = guest_os.lower()
+
+    # default eth_path for non-ubuntu image
+    eth_path = VMPath.ETH_PATH_CENTOS
+    new_user = None
 
     if 'ubuntu' in guest_os:
-        guest_os = 'ubuntu'
+        guest_os = 'ubuntu_14'
         # vm_if_path = VMPath.VM_IF_PATH_UBUNTU
         eth_path = VMPath.ETH_PATH_UBUNTU
+        new_user = 'ubuntu'
     elif 'centos' in guest_os:
-        guest_os = guest_os
         # vm_if_path = VMPath.VM_IF_PATH_CENTOS
-        eth_path = VMPath.ETH_PATH_CENTOS
+        new_user = 'centos'
 
-    else:
-        raise ValueError("Unknown guest os")
-
-    eth0_path = eth_path.format('eth0')
     file_name = '{}_{}nic_cloud_init_if_conf.sh'.format(guest_os, nics_num)
 
     file_path = file_dir + file_name
@@ -2136,25 +2149,75 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
         LOG.info('userdata {} already exists. Return existing path'.format(file_path))
         return file_path
 
-    LOG.debug('Create userdata directory if not already exists')
+    LOG.info('Create userdata directory if not already exists')
     cmd = 'mkdir -p {}'.format(file_dir)
     con_ssh.exec_cmd(cmd, fail_ok=False)
 
     tmp_file = ProjVar.get_var('TEMP_DIR') + file_name
-    if 'centos7' in guest_os:
-        shell = '/usr/bin/bash'
-    else:
-        shell = '/bin/bash'
+
+    # No longer need to specify bash using cloud-config
+    # if 'centos_7' in guest_os:
+    #     shell = '/usr/bin/bash'
+    # else:
+    #     shell = '/bin/bash'
 
     with open(tmp_file, mode='a') as f:
-        f.write('#!{}\n\n'.format(shell))
-        for i in range(nics_num-1):
-            ethi_name = 'eth{}'.format(i+1)
-            ethi_path = eth_path.format(ethi_name)
-            f.write('cp {} {}\n'.format(eth0_path, ethi_path))
-            f.write("sed -i 's/eth0/{}/g' {}\n".format(ethi_name, ethi_path))
-            f.write('ifup {}\n'.format(ethi_name))
+        f.write("#cloud-config\n")
+
+        if new_user is not None:
+            f.write("user: {}\n"
+                    "password: {}\n"
+                    "chpasswd: {{ expire: False}}\n"
+                    "ssh_pwauth: True\n\n".format(new_user, new_user))
+
+        if eth_path is not None:
+            eth0_path = eth_path.format('eth0')
+            f.write("runcmd:\n")
+            # f.write(" - echo '#!{}'\n".format(shell))
+            for i in range(nics_num-1):
+                ethi_name = 'eth{}'.format(i+1)
+                ethi_path = eth_path.format(ethi_name)
+                f.write(' - cp {} {}\n'.format(eth0_path, ethi_path))
+                f.write(" - sed -i 's/eth0/{}/g' {}\n".format(ethi_name, ethi_path))
+                f.write(' - ifup {}\n'.format(ethi_name))
 
     common.scp_to_active_controller(source_path=tmp_file, dest_path=file_path, is_dir=False)
+
+    LOG.info("Userdata file created: {}".format(file_path))
+    return file_path
+
+
+def _get_cloud_config_add_user(con_ssh=None):
+    """
+    copy the cloud-config userdata to TiS server.
+    This userdata adds wrsroot/li69nux user to guest
+
+    Args:
+        con_ssh (SSHClient):
+
+    Returns (str): TiS filepath of the userdata
+
+    """
+    file_dir = TiSPath.USERDATA
+    file_name = UserData.ADDUSER_WRSROOT
+    file_path = file_dir + file_name
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+    if con_ssh.file_exists(file_path=file_path):
+        LOG.info('userdata {} already exists. Return existing path'.format(file_path))
+        return file_path
+
+    LOG.debug('Create userdata directory if not already exists')
+    cmd = 'mkdir -p {}'.format(file_dir)
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
+    source_file = TestServerPath.USER_DATA + file_name
+
+    dest_path = common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=file_dir,
+                                                                 dest_name=file_name, is_dir=False, con_ssh=con_ssh)
+
+    if dest_path is None:
+        raise exceptions.CommonError("userdata file {} does not exist after download".format(file_path))
 
     return file_path

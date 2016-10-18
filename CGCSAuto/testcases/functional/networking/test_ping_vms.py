@@ -12,9 +12,9 @@ from testfixtures.resource_mgmt import ResourceCleanup
 @mark.cpe_sanity
 @mark.parametrize('guest_os', [
     mark.sanity('cgcs-guest'),
-    mark.sanity('ubuntu'),
+    mark.sanity('ubuntu_14'),
 ])
-def test_ping_between_two_vms(guest_os, ubuntu_image):
+def test_ping_between_two_vms(guest_os, ubuntu14_image):
     """
     Ping between two cgcs-guest/ubuntu vms with virtio and avp vif models
 
@@ -31,8 +31,8 @@ def test_ping_between_two_vms(guest_os, ubuntu_image):
 
     """
     # determine the disk size and image id based on the guest os under test
-    if guest_os == 'ubuntu':
-        image_id = ubuntu_image
+    if guest_os == 'ubuntu_14':
+        image_id = ubuntu14_image
         size = 9
     else:
         image_id = glance_helper.get_image_id_from_name('cgcs-guest')
@@ -68,7 +68,6 @@ def test_ping_between_two_vms(guest_os, ubuntu_image):
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
         # vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['data', 'internal'])
-
         vms.append(vm_id)
 
     LOG.info("Ping between two vms over management, data, and internal networks")
@@ -76,11 +75,17 @@ def test_ping_between_two_vms(guest_os, ubuntu_image):
     vm_helper.ping_vms_from_vm(to_vms=vms[1], from_vm=vms[0], net_types=['mgmt', 'data', 'internal'])
 
 
-@mark.usefixtures('centos7_image', 'centos6_image', 'ubuntu_image')
+@mark.features('guest_os')
+@mark.usefixtures('centos7_image', 'centos6_image', 'ubuntu14_image',
+                  'opensuse12_image', 'opensuse11_image',
+                  'rhel7_image')
 @mark.parametrize('guest_os', [
-    'centos7',
-    'centos6',
-    'ubuntu'
+    'centos_7',
+    'centos_6',
+    'ubuntu_14',
+    'opensuse_12',
+    'opensuse_11',
+    'rhel_7',
 ])
 def test_ping_vm_basic(guest_os):
     vm_id = vm_helper.boot_vm(name=guest_os, guest_os=guest_os)[1]
@@ -88,4 +93,4 @@ def test_ping_vm_basic(guest_os):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
     time.sleep(30)
-    vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['mgmt', 'data'])
+    vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['mgmt'])

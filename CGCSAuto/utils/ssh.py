@@ -388,7 +388,7 @@ class SSHClient:
 
     def get_exit_code(self):
         self.send(EXIT_CODE_CMD)
-        self.expect(timeout=3)
+        self.expect(timeout=30)
         return int(self.cmd_output.splitlines()[1])
 
     def get_hostname(self):
@@ -755,10 +755,10 @@ class VMSSHClient(SSHFromSSH):
 
         if user:
             if not password:
-                password = user
+                password = None
         else:
             for image_name in Guest.CREDS:
-                if image_name in vm_img_name or image_name in vm_name:
+                if image_name.lower() in vm_img_name.lower() or image_name.lower() in vm_name.lower():
                     vm_creds = Guest.CREDS[image_name]
                     user = vm_creds['user']
                     password = vm_creds['password']

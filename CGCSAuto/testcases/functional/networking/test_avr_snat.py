@@ -229,7 +229,7 @@ def test_snat_computes_lock_reboot(snat_setups):
         - Disable SNAT on router    (module)
 
     """
-    hypervisors = host_helper.get_hypervisors()
+    hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
     if len(hypervisors) > 3:
         skip("More than 3 hypervisors on system. Skip to reduce run time.")
     if system_helper.is_small_footprint():

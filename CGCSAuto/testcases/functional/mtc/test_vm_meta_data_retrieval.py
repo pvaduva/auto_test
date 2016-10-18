@@ -35,7 +35,7 @@ def test_vm_meta_data_retrieval():
 
     """
     LOG.debug('Booting ubuntu VM')
-    sourceid = glance_helper.get_image_id_from_name('cgcs-guest')
+    sourceid = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
     vm_id = vm_helper.boot_vm(source='image', source_id=sourceid)[1]
     ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
     time.sleep(5)

@@ -205,7 +205,9 @@ def test_vxlan_valid_ttl_negative(the_ttl, providernet_):
     # the two error message one for ttl=0  and another one if for ttl>255
     if code > 0:
         LOG.info("Expect fail when TTL is not in range (1, 255)")
-        assert NetworkingErr.VXLAN_TTL_RANGE_MISSING in err_info or NetworkingErr.VXLAN_TTL_RANGE_TOO_LARGE in err_info
+        assert NetworkingErr.VXLAN_TTL_RANGE_MISSING in err_info or \
+               NetworkingErr.VXLAN_TTL_RANGE_TOO_LARGE in err_info or \
+               NetworkingErr.VXLAN_TTL_RANGE_TOO_SMALL in err_info
     else:
         network_helper.delete_providernet_range(range_name)
         assert 1 == code, "Should not pass when TTL is our of range 1 to 255"
@@ -313,7 +315,7 @@ def multiple_provider_net_range(request):
 
     # Create interface to associate with the two provider-nets
 
-    nova_hosts = host_helper.get_hypervisors()
+    nova_hosts = host_helper.get_hypervisors(state='up', status='enabled')
 
     if not nova_hosts:
         skip("Can not continue without computer host node")

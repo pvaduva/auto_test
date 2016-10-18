@@ -2,10 +2,12 @@ import random
 import time
 
 from utils import table_parser, cli, exceptions
+from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
 from consts.timeout import VolumeTimeout
+from consts.cgcs import GuestImages
 
 from keywords import common, glance_helper, keystone_helper
 
@@ -133,7 +135,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
         auth_info (dict):
         con_ssh (SSHClient):
         rtn_exist(bool): whether to return an existing available volume with matching name and bootable state.
-        guest_image (str): guest image name if image_id unspecified. valid values: cgcs-guest, ubuntu, centos7, centos6
+        guest_image (str): guest image name if image_id unspecified. valid values: cgcs-guest, ubuntu, centos_7, centos_6
 
     Returns (tuple):  (return_code, volume_id or err msg)
         (-1, existing_vol_id)   # returns existing volume_id instead of creating a new one. Applies when rtn_exist=True.
@@ -145,6 +147,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     Notes:
         snapshot_id > source_vol_id > image_id if more than one source ids are provided.
     """
+
     bootable = str(bootable).lower()
 
     if rtn_exist and name is not None:
@@ -153,6 +156,9 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
             LOG.info('Volume(s) with name {} and bootable state {} exists and in available state, return an existing '
                      'volume.'.format(name, bootable))
             return -1, vol_ids[0]
+
+    if name is None:
+        name = 'vol-{}'.format(common.get_tenant_name())
 
     name = common.get_unique_name(name, resource_type='volume', existing_names=get_volumes())
     subcmd = ''
@@ -164,9 +170,13 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
             source_arg = '--source-volid ' + source_vol_id
         else:
             guest_image = guest_image if guest_image else 'cgcs-guest'
-            image_id = image_id if image_id is not None else glance_helper.get_image_id_from_name(guest_image)
+            image_id = image_id if image_id is not None else glance_helper.get_image_id_from_name(guest_image,
+                                                                                                  strict=True)
             if size is None:
-                size = 1 if 'cgcs-guest' in guest_image else 9
+                if 'cgcs-guest' in guest_image:
+                    size = 1
+                else:
+                    size = GuestImages.IMAGE_FILES[guest_image][1]
 
             source_arg = '--image-id ' + image_id
 
@@ -933,7 +943,6 @@ def get_qos_list(rtn_val='id', ids=None, name=None, consumer=None, strict=True, 
     return qos_specs_ids
 
 
-
 def associate_qos_to_volume_type(qos_spec_id, vol_type_id, fail_ok=False, con_ssh=None):
     """
     Associates qos specs with specified volume type.
@@ -976,3 +985,26 @@ def get_qos_association(qos_spec_id, con_ssh=None):
                                            auth_info=Tenant.ADMIN))
 
     return table_
+
+
+def is_volumes_pool_sufficient(min_size=30):
+    """
+
+    Args:
+        min_size (int): Minimum requirement for cinder volume pool size in Gbs. Default 30G.
+
+    Returns (bool):
+
+    """
+    con_ssh = ControllerClient.get_active_controller()
+    lvs_pool = con_ssh.exec_sudo_cmd(cmd="lvs | grep --color='never' cinder-volumes-pool")[1]
+    # Sample output:
+    # cinder-volumes-pool                         cinder-volumes twi-aotz-- 19.95g                          64.31  33.38
+    #   volume-05fa416d-d37b-4d57-a6ff-ab4fe49deece cinder-volumes Vwi-a-tz--  1.00g cinder-volumes-pool    64.16
+    #   volume-1b04fa7f-b839-4cf9-a177-e676ec6cf9b7 cinder-volumes Vwi-a-tz--  1.00g cinder-volumes-pool    64.16
+    if lvs_pool:
+        pool_size = float(lvs_pool.splitlines()[0].strip().split()[3].strip()[:-1])
+        return pool_size >= min_size
+
+    # assume enough volumes in ceph:
+    return True

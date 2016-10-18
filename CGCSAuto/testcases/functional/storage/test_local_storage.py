@@ -8,7 +8,6 @@ from pytest import mark
 from pytest import skip
 from pytest import fixture
 
-from consts.proj_vars import ProjVar
 from consts.cgcs import LocalStorage
 
 from utils.tis_log import LOG
@@ -61,11 +60,11 @@ class TestLocalStorage(object):
 
                 while old_new_types:
                     host, old_type, _ = old_new_types.pop()
-                    HostsToRecover.add(host, scope='function')
+                    HostsToRecover.add(host, scope='class')
                     host_helper.lock_host(host)
                     cmd = 'host-lvg-modify -b {} {} nova-local'.format(old_type, host)
                     cli.system(cmd, fail_ok=False)
-                    # host_helper.unlock_host(host)
+                    host_helper.unlock_host(host)
             finally:
                 pass
 
@@ -153,8 +152,6 @@ class TestLocalStorage(object):
 
         LOG.debug('unlock {} now'.format(compute))
         host_helper.unlock_host(compute)
-        if 0 == rtn_code:
-            self._remove_from_cleanup_list(list_type='locked', to_remove=compute)
 
     def setup_local_storage_type_on_lab(self, ls_type='image'):
         LOG.debug('Chose one compute to change its local-storage-backing to expected type: {}'.format(ls_type))
@@ -166,8 +163,6 @@ class TestLocalStorage(object):
             computes_unlocked = host_helper.get_nova_hosts()
             compute_to_change = random.choice([c for c in computes_unlocked
                                                if c != system_helper.get_active_controller_name()])
-        if ls_type == 'image' and host_helper.get_local_storage_backing(compute_to_change) == 'lvm':
-            skip("Avoid reboot loop. CGTS-4855.")
         self.set_local_storage_backing(compute=compute_to_change, to_type=ls_type)
 
         return compute_to_change
@@ -384,8 +379,6 @@ class TestLocalStorage(object):
 
         LOG.tc_step('Check if the changes take effect after unlocking')
         rtn_code = host_helper.unlock_host(compute_dest)
-        if 0 == rtn_code:
-            self._remove_from_cleanup_list(to_remove=compute_dest, list_type='locked')
 
         LOG.tc_step('Verify the local-storage type changed to {} on host:{}'
                     .format(local_storage_type, compute_dest))
@@ -744,7 +737,7 @@ class TestLocalStorage(object):
         LOG.tc_step('Get the name of the profile and check if it is existing')
         local_file = self.get_local_storprfoile_file(local_storage_type=local_storage_type)
         if not local_file:
-            msg = 'Cannot find the porfile:{}'.format(local_file)
+            msg = 'Cannot find the profile:{}'.format(local_file)
             LOG.tc_step(msg)
             skip(msg)
             return -1

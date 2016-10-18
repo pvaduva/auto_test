@@ -39,7 +39,7 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
         image_id = glance_helper.create_image(name='cpu_pol_{}'.format(img_pol), **image_meta)[1]
         ResourceCleanup.add('image', image_id)
     else:
-        image_id = glance_helper.get_image_id_from_name('cgcs-guest')
+        image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
 
     if boot_source == 'volume':
         LOG.tc_step("Create a volume from image")

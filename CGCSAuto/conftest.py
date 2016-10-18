@@ -37,7 +37,7 @@ def setup_test_session():
     global natbox_ssh
     natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'))
 
-    setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
+    # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
 
 @pytest.fixture(scope='function', autouse=True)
@@ -47,6 +47,8 @@ def reconnect_before_test():
     """
     con_ssh.flush()
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
+    natbox_ssh.flush()
+    natbox_ssh.connect(retry=False)
 
 
 @pytest.fixture(scope='function', autouse=False)
@@ -211,6 +213,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers",
                             "features(feature_name1, feature_name2, ...): mark impacted feature(s) for a test case.")
     config.addinivalue_line("markers",
+                            "priorities(sanity, cpe_sanity, p2, ...): mark priorities for a test case.")
+    config.addinivalue_line("markers",
                             "known_issue(CGTS-xxxx): mark known issue with JIRA ID or description if no JIRA needed.")
 
     lab_arg = config.getoption('lab')
@@ -311,19 +315,31 @@ def pytest_unconfigure():
 
 def pytest_collection_modifyitems(items):
     move_to_last = []
+    absolute_last = []
+
     for item in items:
         # re-order tests:
         trylast_marker = item.get_marker('trylast')
-        if trylast_marker:
+        abslast_marker = item.get_marker('abslast')
+
+        if abslast_marker:
+            absolute_last.append(item)
+        elif trylast_marker:
             move_to_last.append(item)
 
-        # known issue marker
+        priority_marker = item.get_marker('priorities')
+        if priority_marker is not None:
+            priorities = priority_marker.args
+            for priority in priorities:
+                item.add_marker(eval("pytest.mark.{}".format(priority)))
+
         feature_marker = item.get_marker('features')
         if feature_marker is not None:
             features = feature_marker.args
             for feature in features:
                 item.add_marker(eval("pytest.mark.{}".format(feature)))
 
+        # known issue marker
         known_issue_mark = item.get_marker('known_issue')
         if known_issue_mark is not None:
             issue = known_issue_mark.args[0]
@@ -336,6 +352,10 @@ def pytest_collection_modifyitems(items):
     for item in move_to_last:
         items.remove(item)
         items.append(item)
+
+    for i in absolute_last:
+        items.remove(i)
+        items.append(i)
 
 
 def pytest_generate_tests(metafunc):
