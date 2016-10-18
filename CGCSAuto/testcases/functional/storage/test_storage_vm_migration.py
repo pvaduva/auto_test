@@ -1,4 +1,4 @@
-import time
+import time, random
 from pytest import fixture, skip
 
 from utils.tis_log import LOG
@@ -495,3 +495,50 @@ def get_user_data_file():
         LOG.info("Code: {} output: {}".format(code, output))
 
     return user_data_file
+
+
+# temp stress test to reproduce a CGTS-4911
+def test_cold_migrate_vms_with_large_volume_stress():
+    end_time = time.time() + 12 * 3600
+    image_id = glance_helper.get_image_id_from_name('cgcs-guest')
+    i = 0
+    while time.time() < end_time:
+        i += 1
+        LOG.tc_step("Iteration number: {}".format(i))
+
+        vm_host = random.choice(['compute-0', 'compute-1'])
+        LOG.info("Boot two vms from 20g and 40g volume respectively")
+        vol_1 = cinder_helper.create_volume(name='vol-20', image_id=image_id, size=20)[1]
+        vol_2 = cinder_helper.create_volume(name='vol-40', image_id=image_id, size=40)[1]
+
+        vm_1 = vm_helper.boot_vm(name='20g_vol', source='volume', source_id=vol_1, vm_host=vm_host)[1]
+        vm_2 = vm_helper.boot_vm(name='40g_vol', source='volume', source_id=vol_2, vm_host=vm_host)[1]
+
+        LOG.info("Wait for both vms pingable before cold migration")
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_1)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_2)
+
+        for j in range(5):
+            LOG.info("\n----------------- Cold migration iteration: {}.{}".format(i, j+1))
+
+            for vm in [vm_1, vm_2]:
+                vol_size = '20g' if vm == vm_1 else '40g'
+
+                LOG.info("Cold migrate {} vm".format(vol_size))
+                for m in range(10):
+                    code, msg = vm_helper.cold_migrate_vm(vm_id=vm_1, fail_ok=True)
+                    if code == 0:
+                        break
+                    elif code == 2 and 'Platform CPU usage' in msg:
+                        time.sleep(5)
+                    else:
+                        assert False, "Cold mig {} vm failed with msg: {}".format(vol_size, msg)
+                else:
+                    assert False, "Cold migration {} vm failed 10 times due to CPU usage too high".format(vol_size)
+
+                LOG.info("Ping {} vm after cold migration".format(vol_size))
+                vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_1)
+                assert is_vm_filesystem_rw(vm_id=vm_1), 'rootfs filesystem is not RW for {} vm'.format(vol_size)
+
+        LOG.info("Delete both vms")
+        vm_helper.delete_vms([vm_1, vm_2], stop_first=False)
