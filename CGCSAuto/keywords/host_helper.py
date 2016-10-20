@@ -1966,3 +1966,59 @@ def get_coredumps_and_crashreports():
 
     LOG.info("core dumps and crash reports per host: {}".format(core_dumps_and_reports))
     return core_dumps_and_reports
+
+
+def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fail_ok=False, con_ssh=None):
+
+    if not hosts:
+        raise exceptions.HostError("No hostname provided.")
+
+    mtu_val = int(mtu_val)
+
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    res = {}
+    rtn_code = 0
+    for host in hosts:
+        if_names = system_helper.get_host_interfaces_info(host, header='name', net_type=network_type, con_ssh=con_ssh)
+
+        if lock_unlock:
+            lock_host(host)
+
+        LOG.info("Modify MTU for {} {} interfaces to: {}".format(host, network_type, mtu_val))
+
+        res_for_ifs = {}
+        for if_name in if_names:
+            args = "-m {} {} {}".format(mtu_val, host, if_name)
+            # system host-if-modify controller-1 <port_uuid>--imtu <mtu_value>
+            code, output = cli.system('host-if-modify', args, fail_ok=fail_ok, rtn_list=True, ssh_client=con_ssh)
+            res_for_ifs[if_name] = code, output
+
+            if code != 0:
+                rtn_code = 1
+
+        res[host] = res_for_ifs
+
+    if lock_unlock:
+        unlock_hosts(hosts, check_hypervisor_up=True, check_webservice_up=True)
+
+    check_failures = []
+    for host in hosts:
+
+        for if_name, mod_res in res[host]:
+            # Check mtu modified correctly
+            if mod_res[0] == 0:
+                actual_mtu = int(system_helper.get_host_if_show_values(host, interface=if_name, fields=['imtu'],
+                                                                       con_ssh=con_ssh)[0])
+                if not actual_mtu == mtu_val:
+                    check_failures.append((host, if_name, actual_mtu))
+
+    if check_failures:
+        msg = "Actual MTU value after modify is not as expected. Expected MTU value: {}. Actual [Host, Interface, " \
+              "MTU value]: {}".format(mtu_val, check_failures)
+        if fail_ok:
+            return 2, msg
+        raise exceptions.HostPostCheckFailed(msg)
+
+    return rtn_code, res

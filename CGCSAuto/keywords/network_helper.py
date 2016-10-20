@@ -562,7 +562,7 @@ def get_neutron_port(name=None, con_ssh=None, auth_info=None):
 def get_providernets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN,
                      **kwargs):
     """
-    Get the neutron provider net list based on name if given for ADMIN user.
+    Get the neutron provider net list based on name if given
 
     Args:
         rtn_val (str): id or name

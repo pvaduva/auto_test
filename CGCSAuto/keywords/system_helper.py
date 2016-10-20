@@ -1185,3 +1185,34 @@ def get_host_ports_for_net_type(host, net_type='data', rtn_list=True, con_ssh=No
         return total_ports_list
 
     return total_ports
+
+
+def get_host_if_show_values(host, interface, fields, con_ssh=None, auth_info=Tenant.ADMIN):
+    args = "{} {}".format(host, interface)
+    table_ = table_parser.table(cli.system('host-if-show', args, ssh_client=con_ssh, auth_info=auth_info))
+
+    if isinstance(fields, str):
+        fields = [fields]
+
+    res = []
+    for field in fields:
+        res.append(table_parser.get_value_two_col_table(table_, field))
+
+    return res
+
+
+def get_hosts_interfaces_info(hosts, fields, con_ssh=None, auth_info=Tenant.ADMIN, strict=True, **interface_filters):
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    res = {}
+    for host in hosts:
+        interfaces = get_host_interfaces_info(host, header='name', strict=strict, **interface_filters)
+        host_res = {}
+        for interface in interfaces:
+            values = get_host_if_show_values(host, interface, fields=fields, con_ssh=con_ssh, auth_info=auth_info)
+            host_res[interface] = values
+
+        res[host] = host_res
+
+    return res

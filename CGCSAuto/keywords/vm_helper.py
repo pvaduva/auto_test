@@ -644,8 +644,8 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
     LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
 
-    vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], fail_ok=fail_ok,
-                                    con_ssh=con_ssh)
+    vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], timeout=300,
+                                    fail_ok=fail_ok, con_ssh=con_ssh)
 
     if vm_status is None:
         return 4, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)

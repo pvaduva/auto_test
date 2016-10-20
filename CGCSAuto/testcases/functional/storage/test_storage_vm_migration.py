@@ -502,11 +502,15 @@ def test_cold_migrate_vms_with_large_volume_stress():
     end_time = time.time() + 12 * 3600
     image_id = glance_helper.get_image_id_from_name('cgcs-guest')
     i = 0
+    zone = 'nova'
+    from consts.proj_vars import ProjVar
+    if '35_60' in ProjVar.get_var('LAB_NAME'):
+        zone = 'chris'
     while time.time() < end_time:
         i += 1
         LOG.tc_step("Iteration number: {}".format(i))
-
-        vm_host = random.choice(['compute-0', 'compute-1'])
+        hosts = host_helper.get_nova_hosts()
+        vm_host = random.choice(hosts)
         LOG.info("Boot two vms from 20g and 40g volume respectively")
         vol_1 = cinder_helper.create_volume(name='vol-20', image_id=image_id, size=20)[1]
         vol_2 = cinder_helper.create_volume(name='vol-40', image_id=image_id, size=40)[1]
@@ -526,7 +530,7 @@ def test_cold_migrate_vms_with_large_volume_stress():
 
                 LOG.info("Cold migrate {} vm".format(vol_size))
                 for m in range(10):
-                    code, msg = vm_helper.cold_migrate_vm(vm_id=vm_1, fail_ok=True)
+                    code, msg = vm_helper.cold_migrate_vm(vm_id=vm, fail_ok=True)
                     if code == 0:
                         break
                     elif code == 2 and 'Platform CPU usage' in msg:
@@ -537,8 +541,8 @@ def test_cold_migrate_vms_with_large_volume_stress():
                     assert False, "Cold migration {} vm failed 10 times due to CPU usage too high".format(vol_size)
 
                 LOG.info("Ping {} vm after cold migration".format(vol_size))
-                vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_1)
-                assert is_vm_filesystem_rw(vm_id=vm_1), 'rootfs filesystem is not RW for {} vm'.format(vol_size)
+                vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+                assert is_vm_filesystem_rw(vm_id=vm), 'rootfs filesystem is not RW for {} vm'.format(vol_size)
 
         LOG.info("Delete both vms")
         vm_helper.delete_vms([vm_1, vm_2], stop_first=False)
