@@ -27,7 +27,7 @@ def config_host_module(request):
         Test or another fixture can execute it to pass the hostname, modify_func, and revert_func
 
     Examples:
-        see 'add_shared_cpu' fixture in nova/test_shared_cpu_enabled.py for usage.
+        see 'add_shared_cpu' fixture in nova/test_shared_cpu.py for usage.
 
     """
     return __config_host_base(scope='module', request=request)
@@ -56,7 +56,7 @@ def config_host_class(request):
         Test or another fixture can execute it to pass the hostname, modify_func, and revert_func
 
     Examples:
-        see 'add_shared_cpu' fixture in nova/test_shared_cpu_enabled.py for usage.
+        see 'add_shared_cpu' fixture in nova/test_shared_cpu.py for usage.
 
     """
     return __config_host_base(scope='class', request=request)
@@ -75,6 +75,7 @@ def __config_host_base(scope, request):
                 LOG.fixture_step("({}) Lock host: {}".format(scope, host))
                 host_helper.lock_host(host=host)
                 try:
+                    LOG.fixture_step("({}) Execute revert function: {}".format(scope, revert_func))
                     revert_func(host)
                 except:
                     raise
@@ -85,10 +86,10 @@ def __config_host_base(scope, request):
 
             request.addfinalizer(revert_host)
 
-        LOG.fixture_step("{}: Execute modify function: {}".format(scope, modify_func))
+        LOG.fixture_step("({}) Execute modify function: {}".format(scope, modify_func))
         modify_func(host, *args, **kwargs)
 
-        LOG.fixture_step("{}: Unlock host: {}".format(scope, host))
+        LOG.fixture_step("({}) Unlock host: {}".format(scope, host))
         host_helper.unlock_host(host=host)
 
     return config_host_func

@@ -1,20 +1,20 @@
 import random
 import re
 import time
-from pexpect import TIMEOUT as ExpectTimeout
 from contextlib import contextmanager
 
+from pexpect import TIMEOUT as ExpectTimeout
+
+from consts.auth import Tenant, SvcCgcsAuto
+from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
+    VMNetworkStr
+from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
+from consts.proj_vars import ProjVar
+from consts.timeout import VMTimeout, CMDTimeout
+from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
 from utils.tis_log import LOG
-from consts.auth import Tenant, SvcCgcsAuto, Guest
-from consts.timeout import VMTimeout, CMDTimeout
-from consts.proj_vars import ProjVar
-from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, \
-    VifMapping, VMNetworkStr
-from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
-
-from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 
 
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
@@ -849,43 +849,6 @@ def _confirm_or_revert_resize(vm, revert=False, con_ssh=None):
             cli.nova('resize-confirm', vm, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
 
 
-__PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
-
-
-def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
-    """
-
-    Args:
-        server (str): server ip to ping
-        ssh_client (SSHClient): ping from this ssh client
-        num_pings (int):
-        timeout (int): max time to wait for ping response in seconds
-        fail_ok (bool): whether to raise exception if packet loss rate is 100%
-
-    Returns (int): packet loss percentile, such as 100, 0, 25
-
-    """
-    cmd = 'ping -c {} {}'.format(num_pings, server)
-
-    output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
-    packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
-    packet_loss_rate = int(packet_loss_rate)
-
-    if packet_loss_rate == 100:
-        msg = "Ping from {} to {} failed.".format(ssh_client.host, server)
-        if not fail_ok:
-            raise exceptions.VMNetworkError(msg)
-        else:
-            LOG.warning(msg)
-    elif packet_loss_rate > 0:
-        LOG.warning("Some packets dropped when ping from {} to {}. Packet loss rate: {}%".
-                    format(ssh_client.host, server, packet_loss_rate))
-    else:
-        LOG.info("All packets received by {}".format(server))
-
-    return packet_loss_rate
-
-
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
               net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True):
     """
@@ -944,8 +907,8 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     res_dict = {}
     for i in range(retry + 1):
         for ip in vms_ips:
-            packet_loss_rate = _ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings, timeout=timeout,
-                                            fail_ok=True)
+            packet_loss_rate = network_helper._ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings,
+                                                           timeout=timeout, fail_ok=True)
             res_dict[ip] = packet_loss_rate
 
         res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
@@ -1067,7 +1030,7 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                prompt=prompt, con_ssh=con_ssh, vm_ip=vm_ip, use_fip=use_fip) as from_vm_ssh:
-        return _ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings, timeout=timeout, fail_ok=fail_ok)
+        return network_helper._ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings, timeout=timeout, fail_ok=fail_ok)
 
 
 @contextmanager

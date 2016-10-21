@@ -325,6 +325,10 @@ def get_column(table_, header):
 def __get_row_indexes_string(table_, header, value, strict=False, exclude=False):
     if isinstance(value, list):
         value = ''.join(value)
+
+    if not isinstance(value, str):
+        value = str(value)
+
     value = value.strip().lower()
 
     header = header.strip().lower()

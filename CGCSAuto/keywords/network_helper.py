@@ -4,7 +4,7 @@ import re
 import time
 
 from consts.auth import Tenant
-from consts.cgcs import NetIP, DNS_NAMESERVERS
+from consts.cgcs import NetIP, DNS_NAMESERVERS, PING_LOSS_RATE
 from consts.timeout import VMTimeout
 from keywords import common, keystone_helper, host_helper
 from utils import table_parser, cli, exceptions
@@ -1928,3 +1928,39 @@ def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     nics = [eval(nic_) for nic_ in nics]
 
     return nics
+
+
+__PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
+
+def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
+    """
+
+    Args:
+        server (str): server ip to ping
+        ssh_client (SSHClient): ping from this ssh client
+        num_pings (int):
+        timeout (int): max time to wait for ping response in seconds
+        fail_ok (bool): whether to raise exception if packet loss rate is 100%
+
+    Returns (int): packet loss percentile, such as 100, 0, 25
+
+    """
+    cmd = 'ping -c {} {}'.format(num_pings, server)
+
+    output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
+    packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
+    packet_loss_rate = int(packet_loss_rate)
+
+    if packet_loss_rate == 100:
+        msg = "Ping from {} to {} failed.".format(ssh_client.host, server)
+        if not fail_ok:
+            raise exceptions.VMNetworkError(msg)
+        else:
+            LOG.warning(msg)
+    elif packet_loss_rate > 0:
+        LOG.warning("Some packets dropped when ping from {} ssh session to {}. Packet loss rate: {}%".
+                    format(ssh_client.host, server, packet_loss_rate))
+    else:
+        LOG.info("All packets received by {}".format(server))
+
+    return packet_loss_rate

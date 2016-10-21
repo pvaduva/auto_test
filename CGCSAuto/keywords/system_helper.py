@@ -218,6 +218,7 @@ def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=No
         vals = table_parser.get_column(table_, val)
         rtn_vals_list.append(vals)
 
+    rtn_vals_list = zip(*rtn_vals_list)
     if combine_entries:
         rtn_vals_list = [' '.join(vals) for vals in rtn_vals_list]
 

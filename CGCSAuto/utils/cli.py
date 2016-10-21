@@ -49,7 +49,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
 
     if auth_info:
         auth_args = ('--os-username {} --os-password {} --os-project-name {} --os-auth-url {} --os-region-name {} '
-                     '--os-user-domain-name Default --os-project-domain-name Default'.
+                     '--os-user-domain-name Default --os-project-domain-name Default --os-endpoint-type internalURL'.
                      format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url'],
                             auth_info['region']))
         flags = (auth_args + ' ' + flags).strip()

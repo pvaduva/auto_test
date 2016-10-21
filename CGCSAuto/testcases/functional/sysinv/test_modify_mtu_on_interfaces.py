@@ -160,6 +160,9 @@ def test_modify_mtu_data_interface(mtu_range):
         if len(hypervisors) > 4:
             hypervisors = random.sample(hypervisors, 4)
 
+    # To remove
+    # hypervisors = [host_helper.get_nova_host_with_min_or_max_vms(rtn_max=False)]
+
     LOG.tc_step("Delete vms to reduce lock time")
     vm_helper.delete_vms()
 

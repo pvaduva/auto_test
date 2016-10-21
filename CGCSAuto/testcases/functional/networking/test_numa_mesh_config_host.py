@@ -29,10 +29,10 @@ def host_to_config(request):
     vswitch_proc_core_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch', core_type='log_core')
     pform_proc_core_dict = host_helper.get_host_cpu_cores_for_function(host, function='platform', core_type='log_core')
 
-    vswitch_original_num_p0 = len(vswitch_proc_core_dict[0]) if 0 in vswitch_proc_core_dict.keys() else 0
-    vswitch_original_num_p1 = len(vswitch_proc_core_dict[1]) if 1 in vswitch_proc_core_dict.keys() else 0
+    vswitch_original_num_p0 = len(vswitch_proc_core_dict[0])
+    vswitch_original_num_p1 = len(vswitch_proc_core_dict[1])
     platform_ogigin_num_p0 = len(pform_proc_core_dict[0])
-    platform_original_num_p1 = len(pform_proc_core_dict[1]) if 1 in pform_proc_core_dict.keys() else 0
+    platform_original_num_p1 = len(pform_proc_core_dict[1])
 
     def revert():
         post_vswitch_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch', core_type='log_core')
@@ -257,17 +257,20 @@ class TestVMSchedulingLockHosts:
         Returns (tuple): number of cores for VMs function on non-vSwitch numa node, and vSwitch numa node
 
         """
+        #  vswitch and non-vswitch nodes should be one each when this is called
+
         vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, function='VMs')
 
-        # vms_cores_nums = []
-        # for value in vms_cores_dict.values():
-        #     vms_cores_nums.append(len(value))
-        #
-        # max_num = max(vms_cores_nums)
-        vswitch_proc = list(vswitch_cores_dict.keys())[0]
-        nonvswitch_proc = 1 if int(vswitch_proc) == 0 else 0
+        vswitch_procs = [proc for proc in vswitch_cores_dict if vswitch_cores_dict[proc]]
+        nonvswitch_procs = [proc for proc in vms_cores_dict if proc not in vswitch_cores_dict]
 
-        return len(vms_cores_dict[nonvswitch_proc]), len(vms_cores_dict[vswitch_proc])
+        vswitch_node_vm_cores = nonvswitch_node_vm_cores = 0
+        if vswitch_procs:
+            vswitch_node_vm_cores = len(vms_cores_dict[nonvswitch_procs[0]])
+        if nonvswitch_procs:
+            nonvswitch_node_vm_cores = len(vms_cores_dict[vswitch_procs[0]])
+
+        return nonvswitch_node_vm_cores, vswitch_node_vm_cores
 
     @mark.parametrize('resize_revert', [
         mark.p1(False),
@@ -308,9 +311,10 @@ class TestVMSchedulingLockHosts:
 
         LOG.tc_step("Check vswitch numa node on {} doesn't have the most vm cores.".format(host))
         vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch')
-        max_vm_cores_num, vswitch_vm_cores_num = self.__get_vms_cores_nums(host, vswitch_cores_dict)
+        vswitch_procs = [proc for proc in vswitch_cores_dict if vswitch_cores_dict[proc]]
 
-        if len(vswitch_cores_dict) > 1 or vswitch_vm_cores_num == max_vm_cores_num:
+        # Assume 2 procs exist
+        if not vswitch_procs == [0]:
             LOG.tc_step("Modify host vSwitch cores to: 'p0': 2, 'p1': 0")
             host_helper.lock_host(host)
             host_helper.modify_host_cpu(host, 'vSwitch', **{'p0': 2, 'p1': 0})
@@ -318,8 +322,8 @@ class TestVMSchedulingLockHosts:
             host_helper.wait_for_hypervisors_up(host)
             host_helper.wait_for_hosts_in_nova_compute(host)
             vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch')
-            max_vm_cores_num, vswitch_vm_cores_num = self.__get_vms_cores_nums(host, vswitch_cores_dict)
 
+        max_vm_cores_num, vswitch_vm_cores_num = self.__get_vms_cores_nums(host, vswitch_cores_dict)
         assert max_vm_cores_num > vswitch_vm_cores_num, "vSwitch numa node has the most vm cores."
 
         if ht_enabled:

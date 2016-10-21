@@ -999,29 +999,35 @@ def get_nova_hosts_with_storage_backing(storage_backing, con_ssh=None):
     return candidate_hosts
 
 
-def get_nova_host_with_min_or_max_vms(rtn_max=True, con_ssh=None):
+def get_nova_host_with_min_or_max_vms(rtn_max=True, hosts=None, con_ssh=None):
     """
     Get name of a compute host with least of most vms.
 
     Args:
         rtn_max (bool): when True, return hostname with the most number of vms on it; otherwise return hostname with
             least number of vms on it.
+        hosts (list): choose from given hosts. If set to None, choose from all up hypervisors
         con_ssh (SSHClient):
 
     Returns (str): hostname
 
     """
-    hosts = get_nova_hosts(con_ssh=con_ssh)
+    hosts_to_check = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
+    if hosts:
+        if isinstance(hosts, str):
+            hosts = [hosts]
+        hosts_to_check = list(set(hosts_to_check) & set(hosts))
+
     table_ = system_helper.get_vm_topology_tables('computes')[0]
 
-    vms_nums = [int(table_parser.get_values(table_, 'servers', Host=host)[0]) for host in hosts]
+    vms_nums = [int(table_parser.get_values(table_, 'servers', Host=host)[0]) for host in hosts_to_check]
 
     if rtn_max:
         index = vms_nums.index(max(vms_nums))
     else:
         index = vms_nums.index(min(vms_nums))
 
-    return hosts[index]
+    return hosts_to_check[index]
 
 
 def get_hypervisors(state=None, status=None, con_ssh=None):
@@ -1284,7 +1290,7 @@ def apply_cpu_profile(host, profile_uuid, timeout=CMDTimeout.CPU_PROFILE_APPLY, 
     return 0, success_msg
 
 
-def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log_core', con_ssh=None,
+def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log_core', thread=0, con_ssh=None,
                                     auth_info=Tenant.ADMIN):
     """
     Get processor/logical cpu cores/per processor on thread 0 for given function for host via system host-cpu-list
@@ -1293,6 +1299,7 @@ def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log
         hostname (str): hostname to pass to system host-cpu-list
         function (str): such as 'Platform', 'vSwitch', or 'VMs'
         core_type (str): 'phy_core' or 'log_core'
+        thread (int): thread number. 0 or 1
         con_ssh (SSHClient):
         auth_info (dict):
 
@@ -1301,12 +1308,13 @@ def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log
 
     """
     table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh, auth_info=auth_info))
-    table_ = table_parser.filter_table(table_, assigned_function=function, thread='0')
-    procs = list(set(table_parser.get_column(table_, 'processor')))
+    procs = list(set(table_parser.get_values(table_, 'processor', thread=thread)))
     res_dict = {}
     for proc in procs:
-        res_dict[int(proc)] = sorted(int(item) for item in table_parser.get_values(table_, core_type, processor=proc))
+        res_dict[int(proc)] = sorted([int(item) for item in table_parser.get_values(table_, core_type, processor=proc,
+                                                                                    assigned_function=function)])
 
+    LOG.info("{} {} {}s per processor on thread {}: {}".format(hostname, function, core_type, thread, res_dict))
     return res_dict
 
 
@@ -2005,8 +2013,10 @@ def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fai
 
     check_failures = []
     for host in hosts:
+        host_res = res[host]
+        for if_name in host_res:
+            mod_res = host_res[if_name]
 
-        for if_name, mod_res in res[host]:
             # Check mtu modified correctly
             if mod_res[0] == 0:
                 actual_mtu = int(system_helper.get_host_if_show_values(host, interface=if_name, fields=['imtu'],
