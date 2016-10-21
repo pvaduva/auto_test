@@ -17,7 +17,7 @@ CENTOS_LAB_BASE_PATH = "/localdisk/designer/jenkins/CGCS_3.0_Centos_Pull_CGCS_DE
 CENTOS_LAB_REL_PATH = "rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/"
 CENTOS_LAB_SCRIPTS = CENTOS_LAB_BASE_PATH + "scripts/"
 CENTOS_CFG_FILES = CENTOS_LAB_BASE_PATH + "yow/"
-HEAT_TEMPLATES_PATH = "/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates/"
+HEAT_TEMPLATES_PATH = "rt/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates/"
 
 #TODO: Not all labs define their config_controller file as "system_config"
 #      E.g. some refer to it as cgcs_config or TiS_config.ini
