@@ -1048,6 +1048,7 @@ def main():
         bld_server_conn.rsync(LICENSE_FILEPATH, WRSROOT_USERNAME,
                               controller0.host_ip,
                               os.path.join(WRSROOT_HOME_DIR, "license.lic"),
+                              extra_opts="-L",
                               pre_opts=pre_opts)
         bld_server_conn.rsync(os.path.join(lab_cfg_path, "*"),
                               WRSROOT_USERNAME, controller0.host_ip,
