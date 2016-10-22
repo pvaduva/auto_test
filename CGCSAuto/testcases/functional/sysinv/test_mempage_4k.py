@@ -46,16 +46,16 @@ def ensure_sufficient_4k_pages(request):
                 revert_active_con = True
                 continue
 
-            LOG.tc_step("Revert host mem page setting for {}".format(host_))
+            LOG.fixture_step("Revert host mem page setting for {}".format(host_))
             host_helper.lock_host(host_)
             system_helper.set_host_4k_pages(host_, proc_id=1, smallpage_num=page_num)
 
             if is_cpe:
-                LOG.tc_step("Unlock host one by one for CPE lab")
+                LOG.fixture_step("Unlock host one by one for CPE lab")
                 host_helper.unlock_host(host_)
 
         if revert_active_con:
-            LOG.tc_step("Swact active controller and revert host mem page settings")
+            LOG.fixture_step("Swact active controller and revert host mem page settings")
             host_helper.swact_host(pre_active_con)
             host_helper.lock_host(pre_active_con)
             system_helper.set_host_4k_pages(pre_active_con, proc_id=1, smallpage_num=revert_dict[pre_active_con])
@@ -64,6 +64,7 @@ def ensure_sufficient_4k_pages(request):
     request.addfinalizer(revert_hosts)
 
     for host in hypervisors:
+        LOG.fixture_step("Modify 4k page numbers to 600000 for {}".format(host))
 
         proc0_num_4k_page = int(system_helper.get_host_mem_values(host, ['vm_total_4K'], proc_id=0)[0])
         proc1_num_4k_page = int(system_helper.get_host_mem_values(host, ['vm_total_4K'], proc_id=1)[0])
