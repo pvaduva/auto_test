@@ -908,7 +908,7 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     for i in range(retry + 1):
         for ip in vms_ips:
             packet_loss_rate = network_helper._ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings,
-                                                           timeout=timeout, fail_ok=True)
+                                                           timeout=timeout, fail_ok=True)[0]
             res_dict[ip] = packet_loss_rate
 
         res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
@@ -1030,7 +1030,8 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                prompt=prompt, con_ssh=con_ssh, vm_ip=vm_ip, use_fip=use_fip) as from_vm_ssh:
-        return network_helper._ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings, timeout=timeout, fail_ok=fail_ok)
+        return network_helper._ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings,
+                                           timeout=timeout, fail_ok=fail_ok)[0]
 
 
 @contextmanager

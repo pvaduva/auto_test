@@ -1963,4 +1963,5 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
     else:
         LOG.info("All packets received by {}".format(server))
 
-    return packet_loss_rate
+    untransmitted_packets = int(num_pings) - int(re.findall("(\d+) packets transmitted,", output)[0])
+    return packet_loss_rate, untransmitted_packets

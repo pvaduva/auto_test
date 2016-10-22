@@ -1,3 +1,4 @@
+import re
 from pytest import fixture, mark
 
 from utils.tis_log import LOG
@@ -71,8 +72,8 @@ def test_vm_vcpu_model(flavor_and_volume, vcpu_model):
             assert ' -cpu  haswell ' in output.lower() or ' -cpu haswell-notsx ' in output.lower(), \
                 'cpu_model Haswell or Haswell-noTSX not found for vm {}'.format(vm)
         else:
-            assert ' -cpu {} '.format(vcpu_model).lower() in output.lower(), 'cpu_model {} not found for vm {}'.\
-                format(vcpu_model, vm)
+            assert re.search(' -cpu {}[\s|,]'.format(vcpu_model).lower(), output.lower()), \
+                'cpu_model {} not found for vm {}'.format(vcpu_model, vm)
 
         LOG.tc_step("Check vm is pingable from NatBox with vcpu_model {}".format(vcpu_model))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)

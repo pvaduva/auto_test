@@ -312,8 +312,11 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu14_image):
 
     LOG.tc_step("{} migrate vm and check vm is moved to different host".format(mig_type))
     prev_vm_host = nova_helper.get_vm_host(vm_id)
+
     if mig_type == 'live':
-        vm_helper.live_migrate_vm(vm_id)
+        code, output = vm_helper.live_migrate_vm(vm_id)
+        if code == 1:
+            assert False, "No host to live migrate to. System may not be in good state."
     else:
         vm_helper.cold_migrate_vm(vm_id)
 

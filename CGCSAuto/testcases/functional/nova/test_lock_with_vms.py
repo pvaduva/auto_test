@@ -75,6 +75,10 @@ class TestLockWithVMs:
             - Unlock host(s) if locked during test.
 
         """
+
+        if len(host_helper.get_hypervisors(state='up', status='enabled')) < 2:
+            skip("Less than 2 up hypervisors on the system")
+
         self.hosts_locked = []
 
         storages_to_test = []
@@ -126,7 +130,6 @@ class TestLockWithVMs:
 
         return target_hosts, storages_to_test
 
-    @mark.skipif(len(host_helper.get_hypervisors()) < 2, reason="Less than 2 hypervisor hosts on the system")
     # @mark.usefixtures('delete_all_vms')
     def test_lock_with_vms(self, target_hosts):
         """

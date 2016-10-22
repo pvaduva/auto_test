@@ -443,26 +443,18 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
         for value in values:
             kwarg_row_indexes += _get_row_indexes(table_, header, value, strict=strict, regex=regex)
 
-        if kwarg_row_indexes:
-            row_indexes.append(kwarg_row_indexes)
+        row_indexes.append(list(set(kwarg_row_indexes)))
 
     len_ = len(row_indexes)
     target_row_indexes = []
-    if len_ == 0:
-        LOG.warning("Nothing found with criteria: {}".format(kwargs))
-        target_row_indexes = []
-    elif len == 1:
-        target_row_indexes = row_indexes[0]
-    else:
-        # Check every item in the first row_index list and see if it's also in the rest of the row_index lists
-        for item in row_indexes[0]:
-            add = True
-            for i in range(1, len_):
-                if item not in row_indexes[i]:
-                    add = False
-                    break
-            if add:
-                target_row_indexes.append(item)
+
+    # Check every item in the first row_index list and see if it's also in the rest of the row_index lists
+    for item in row_indexes[0]:
+        for i in range(1, len_):
+            if item not in row_indexes[i]:
+                break
+        else:
+            target_row_indexes.append(item)
 
     target_column = get_column(table_, target_header)
     target_values = []

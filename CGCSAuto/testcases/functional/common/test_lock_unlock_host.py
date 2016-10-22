@@ -13,7 +13,7 @@ from keywords import host_helper,system_helper, nova_helper, vm_helper
 
 @mark.sanity
 @mark.cpe_sanity
-def test_lock_unlock_active_controller():
+def test_lock_active_controller_reject():
     """
     Verify lock unlock active controller. Expected it to fail
 

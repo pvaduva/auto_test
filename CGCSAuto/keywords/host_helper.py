@@ -1310,6 +1310,8 @@ def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log
     table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh, auth_info=auth_info))
     procs = list(set(table_parser.get_values(table_, 'processor', thread=thread)))
     res_dict = {}
+    print(table_parser.get_values(table_, core_type, assigned_function=function))
+
     for proc in procs:
         res_dict[int(proc)] = sorted([int(item) for item in table_parser.get_values(table_, core_type, processor=proc,
                                                                                     assigned_function=function)])

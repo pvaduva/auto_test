@@ -138,3 +138,8 @@ def test_unlock_hosts():
     res = host_helper.unlock_hosts([standby, 'compute-1'])
     LOG.tc_step("Show results")
     LOG.info("Unlock hosts result: {}".format(res))
+
+
+def test_host_cpus():
+    print (host_helper.get_host_cpu_cores_for_function('controller-0', function='shared'))
+    print (host_helper.get_host_cpu_cores_for_function('controller-0', function='test'))
