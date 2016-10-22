@@ -88,7 +88,8 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True):
+            vm_host=None, avail_zone='nova', fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False,
+            guest_os='', poll=True):
     """
 
     Args:
@@ -207,7 +208,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if hint:
         hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
 
-    avail_zone = 'nova:{}'.format(vm_host) if vm_host else None
+    host_zone = '{}:{}'.format(avail_zone, vm_host) if vm_host else None
 
     if user_data is None and guest_os and 'cgcs-guest' not in guest_os:
         # create userdata cloud init file to run right after vm initialization to get ip on interfaces other than eth0.
@@ -230,7 +231,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--ephemeral': ephemeral,
                           '--block-device': block_device,
                           '--hint': hint,
-                          '--availability-zone': avail_zone,
+                          '--availability-zone': host_zone,
                           }
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
@@ -700,7 +701,7 @@ def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_
 
     LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
     vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], fail_ok=fail_ok,
-                                    con_ssh=con_ssh)
+                                    timeout=300, con_ssh=con_ssh)
 
     if vm_status is None:
         return 2, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)

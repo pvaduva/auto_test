@@ -501,28 +501,30 @@ def get_user_data_file():
 def test_cold_migrate_vms_with_large_volume_stress():
     end_time = time.time() + 12 * 3600
     image_id = glance_helper.get_image_id_from_name('cgcs-guest')
+
     i = 0
     zone = 'nova'
     from consts.proj_vars import ProjVar
     if '35_60' in ProjVar.get_var('LAB_NAME'):
         zone = 'chris'
+
     while time.time() < end_time:
         i += 1
         LOG.tc_step("Iteration number: {}".format(i))
-        hosts = host_helper.get_nova_hosts()
+        hosts = host_helper.get_nova_hosts(zone=zone)
         vm_host = random.choice(hosts)
         LOG.info("Boot two vms from 20g and 40g volume respectively")
         vol_1 = cinder_helper.create_volume(name='vol-20', image_id=image_id, size=20)[1]
         vol_2 = cinder_helper.create_volume(name='vol-40', image_id=image_id, size=40)[1]
 
-        vm_1 = vm_helper.boot_vm(name='20g_vol', source='volume', source_id=vol_1, vm_host=vm_host)[1]
-        vm_2 = vm_helper.boot_vm(name='40g_vol', source='volume', source_id=vol_2, vm_host=vm_host)[1]
+        vm_1 = vm_helper.boot_vm(name='20g_vol', source='volume', source_id=vol_1, vm_host=vm_host, avail_zone=zone)[1]
+        vm_2 = vm_helper.boot_vm(name='40g_vol', source='volume', source_id=vol_2, vm_host=vm_host, avail_zone=zone)[1]
 
         LOG.info("Wait for both vms pingable before cold migration")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_1)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_2)
 
-        for j in range(5):
+        for j in range(2):
             LOG.info("\n----------------- Cold migration iteration: {}.{}".format(i, j+1))
 
             for vm in [vm_1, vm_2]:

@@ -819,7 +819,7 @@ def get_hosts(hosts=None, con_ssh=None, **states):
     return table_parser.get_values(table_, 'hostname', **states)
 
 
-def get_nova_hosts(con_ssh=None, auth_info=Tenant.ADMIN):
+def get_nova_hosts(zone='nova', con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get nova hosts listed in nova host-list.
 
@@ -833,7 +833,7 @@ def get_nova_hosts(con_ssh=None, auth_info=Tenant.ADMIN):
     """
 
     table_ = table_parser.table(cli.nova('host-list', ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_values(table_, 'host_name', service='compute', zone='nova')
+    return table_parser.get_values(table_, 'host_name', service='compute', zone=zone)
 
 
 def wait_for_hypervisors_up(hosts, timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL, check_interval=3, fail_ok=False,
