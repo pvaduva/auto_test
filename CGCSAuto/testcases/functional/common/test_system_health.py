@@ -13,7 +13,7 @@ class TestCoreDumpsAndCrashes:
 
     @mark.abslast
     @mark.sanity
-    @mark.cpe_snaity
+    @mark.cpe_sanity
     @mark.parametrize('report_type', [
         'core_dumps',
         'crash_reports',
@@ -33,7 +33,7 @@ class TestCoreDumpsAndCrashes:
 
     # @mark.abslast
     # @mark.sanity
-    # @mark.cpe_snaity
+    # @mark.cpe_sanity
     # @mark.parametrize('report_type', [
     #     'core_dumps',
     #     'crash_reports',

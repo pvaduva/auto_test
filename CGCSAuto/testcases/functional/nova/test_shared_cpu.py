@@ -86,7 +86,7 @@ class TestSharedCpuDisabled:
             if is_cpe and system_helper.get_active_controller_name() == host_to_config:
                 host_helper.swact_host(host_to_config)
 
-            shared_cores = host_helper.get_host_cpu_cores_for_function(host_to_config, 'shared')
+            shared_cores = host_helper.get_host_cpu_cores_for_function(host_to_config, 'shared', thread=0)
 
             def _modify(host):
                 host_helper.modify_host_cpu(host, 'shared', p0=0, p1=0)

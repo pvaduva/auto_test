@@ -1313,8 +1313,8 @@ def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log
     print(table_parser.get_values(table_, core_type, assigned_function=function))
 
     for proc in procs:
-        res_dict[int(proc)] = sorted([int(item) for item in table_parser.get_values(table_, core_type, processor=proc,
-                                                                                    assigned_function=function)])
+        cores = table_parser.get_values(table_, core_type, processor=proc, assigned_function=function, thread=thread)
+        res_dict[int(proc)] = sorted([int(item) for item in cores])
 
     LOG.info("{} {} {}s per processor on thread {}: {}".format(hostname, function, core_type, thread, res_dict))
     return res_dict
