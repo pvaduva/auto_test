@@ -7,6 +7,7 @@ from keywords import system_helper, network_helper
 
 
 @mark.sanity
+@mark.cpe_sanity
 def test_ping_hosts():
     con_ssh = ControllerClient.get_active_controller()
 
