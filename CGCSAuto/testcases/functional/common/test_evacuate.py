@@ -41,8 +41,7 @@ class TestCgcsGuest:
 
         LOG.fixture_step("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
         vm2_name = "vol_local"
-        # fixme
-        vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, source='volume', vm_host='compute-0')[1]
+        vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, source='volume')[1]
         ResourceCleanup.add('vm', vm2, scope='module')
         vm_helper.wait_for_vm_pingable_from_natbox(vm2)
 
