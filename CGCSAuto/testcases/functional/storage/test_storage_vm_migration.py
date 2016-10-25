@@ -1,5 +1,5 @@
 import time, random
-from pytest import fixture, skip
+from pytest import fixture, skip, mark
 
 from utils.tis_log import LOG
 from utils import table_parser
@@ -498,9 +498,14 @@ def get_user_data_file():
 
 
 # temp stress test to reproduce a CGTS-4911
-def test_cold_migrate_vms_with_large_volume_stress():
+@mark.parametrize('image_id', [
+    'cgcs-guest',
+    'guest-2',
+    'guest-3'
+])
+def test_cold_migrate_vms_with_large_volume_stress(image_id):
     end_time = time.time() + 12 * 3600
-    image_id = glance_helper.get_image_id_from_name('cgcs-guest')
+    # image_id = glance_helper.get_image_id_from_name('cgcs-guest')
 
     i = 0
     zone = 'nova'
