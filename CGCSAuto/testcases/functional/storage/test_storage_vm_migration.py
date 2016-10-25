@@ -498,14 +498,19 @@ def get_user_data_file():
 
 
 # temp stress test to reproduce a CGTS-4911
-@mark.parametrize('image_id', [
-    'guest1',
-    'guest2',
-    'guest3',
-    'centos',
-    'cgcsguestconsole'
+@mark.parametrize(('image_id', 'backing'), [
+    ('guest1', 'image'),
+    ('guest2', 'image'),
+    ('guest3', 'image'),
+    ('centos', 'image'),
+    ('cgcsguestconsole', 'image'),
+    ('guest1', 'remote'),
+    ('guest2', 'remote'),
+    ('guest3', 'remote'),
+    ('centos', 'remote'),
+    ('cgcsguestconsole', 'remote'),
 ])
-def test_cold_migrate_vms_with_large_volume_stress(image_id):
+def test_cold_migrate_vms_with_large_volume_stress(image_id, backing):
     end_time = time.time() + 12 * 3600
     # image_id = glance_helper.get_image_id_from_name('cgcs-guest')
 
@@ -514,7 +519,10 @@ def test_cold_migrate_vms_with_large_volume_stress(image_id):
     from consts.proj_vars import ProjVar
     if '35_60' in ProjVar.get_var('LAB_NAME'):
         zone = 'chris'
+    if backing == 'image':
+        backing = 'local_image'
 
+    flav_id = nova_helper.create_flavor(name=backing, storage_backing=backing, check_storage_backing=False)[1]
     while time.time() < end_time:
         i += 1
         LOG.tc_step("Iteration number: {}".format(i))
@@ -524,8 +532,16 @@ def test_cold_migrate_vms_with_large_volume_stress(image_id):
         vol_1 = cinder_helper.create_volume(name='vol-20', image_id=image_id, size=20)[1]
         vol_2 = cinder_helper.create_volume(name='vol-40', image_id=image_id, size=40)[1]
 
-        vm_1 = vm_helper.boot_vm(name='20g_vol', source='volume', source_id=vol_1, vm_host=vm_host, avail_zone=zone)[1]
-        vm_2 = vm_helper.boot_vm(name='40g_vol', source='volume', source_id=vol_2, vm_host=vm_host, avail_zone=zone)[1]
+        vm_1 = vm_helper.boot_vm(name='20g_vol', source='volume', source_id=vol_1, flavor=flav_id)[1]
+        vm_2 = vm_helper.boot_vm(name='40g_vol', source='volume', source_id=vol_2, flavor=flav_id)[1]
+
+        host_1 = nova_helper.get_vm_host(vm_1)
+        host_2 = nova_helper.get_vm_host(vm_2)
+        if host_1 != host_2:
+            vm_helper.live_migrate_vm(vm_2, host_1)
+            host_1 = nova_helper.get_vm_host(vm_1)
+            host_2 = nova_helper.get_vm_host(vm_2)
+            LOG.info("vm_1 is on {}.    vm_2 is on {}".format(host_1, host_2))
 
         LOG.info("Wait for both vms pingable before cold migration")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_1)
