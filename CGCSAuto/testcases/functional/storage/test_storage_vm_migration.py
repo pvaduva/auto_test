@@ -603,15 +603,28 @@ def test_cold_migrate_vms_with_large_volume_stress(image_id, backing, vol_size):
         vm_helper.delete_vms([vm_1, vm_2], stop_first=False)
 
 
-@mark.parametrize(('action', 'backing'), [
-    ('livemigrate', 'image'),
-    ('reboot', 'image'),
-    ('stop', 'image'),
-    ('livemigrate', 'remote'),
-    ('reboot', 'remote'),
-    ('stop', 'remote'),
+@mark.usefixtures('centos7_image')
+@mark.parametrize(('action', 'backing', 'image', 'size'), [
+    ('livemigrate', 'image', 'guest1', 'big'),
+    ('reboot', 'image', 'guest1', 'big'),
+    ('stop', 'image', 'guest1', 'big'),
+    ('livemigrate', 'remote', 'guest1', 'big'),
+    ('reboot', 'remote', 'guest1', 'big'),
+    ('stop', 'remote', 'guest1', 'big'),
+    ('livemigrate', 'image', 'centos_7', 'big'),
+    ('reboot', 'image', 'centos_7', 'big'),
+    ('stop', 'image', 'centos_7', 'big'),
+    ('livemigrate', 'remote', 'centos_7', 'big'),
+    ('reboot', 'remote', 'centos_7', 'big'),
+    ('stop', 'remote', 'centos_7', 'big'),
+    ('livemigrate', 'image', 'guest1', 'small'),
+    ('reboot', 'image', 'guest1', 'small'),
+    ('stop', 'image', 'guest1', 'small'),
+    ('livemigrate', 'remote', 'guest1', 'small'),
+    ('reboot', 'remote', 'guest1', 'small'),
+    ('stop', 'remote', 'guest1', 'small'),
 ])
-def test_4911_other_tests(action, backing):
+def test_4911_other_tests(action, backing, image, size):
     end_time = time.time() + 12 * 3600
     if backing == 'image':
         backing = 'local_image'
@@ -626,9 +639,14 @@ def test_4911_other_tests(action, backing):
         LOG.tc_step("Iteration number: {}".format(i))
 
         if action == 'reboot':
-            LOG.info("Booting cgcs-guest vm with 40G volume")
-            vol = cinder_helper.create_volume(name='reboot-40G', image_id='cgcs-guest', size=40)[1]
-            vm_id = vm_helper.boot_vm('reboot_vm_40G', flavor=flav_id, source='volume', source_id=vol)[1]
+            if size == 'small':
+                LOG.info("Booting vm with 1G volume")
+                vol = cinder_helper.create_volume(name='reboot-1G', image_id=image, size=1)[1]
+                vm_id = vm_helper.boot_vm('reboot_vm_1G', flavor=flav_id, source='volume', source_id=vol)[1]
+            else:
+                LOG.info("Booting vm with 40G volume")
+                vol = cinder_helper.create_volume(name='reboot-40G', image_id=image, size=40)[1]
+                vm_id = vm_helper.boot_vm('reboot_vm_40G', flavor=flav_id, source='volume', source_id=vol)[1]
 
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
             LOG.info("Vm is up and pingable")
@@ -643,7 +661,7 @@ def test_4911_other_tests(action, backing):
 
                 vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
                 LOG.info("Vm is up and pingable after reboot")
-                assert is_vm_filesystem_rw(vm_id=vm_id, vm_image_name='cgcs-guest'), \
+                assert is_vm_filesystem_rw(vm_id=vm_id, vm_image_name=image), \
                        'rootfs filesystem is not RW after reboot'
             LOG.info("Delete the vm")
             vm_helper.delete_vms(vm_id, stop_first=False)
@@ -651,14 +669,25 @@ def test_4911_other_tests(action, backing):
         elif action == 'reboot':
             vm_hosts = host_helper.get_hosts_by_storage_aggregate(backing)
             vm_host = random.choice(vm_hosts)
-            LOG.info("Boot two vms from 20g and 40g volume respectively")
-            vol_1 = cinder_helper.create_volume(name='live_vm_20G', image_id='cgcs-guest', size=20)[1]
-            vol_2 = cinder_helper.create_volume(name='live_vm_40G', image_id='cgcs-guest', size=40)[1]
 
-            vm_1 = vm_helper.boot_vm(name='live_migrate_20g', source='volume', source_id=vol_1,
-                                     flavor=flav_id, vm_host=vm_host)[1]
-            vm_2 = vm_helper.boot_vm(name='live_migrate_40g', source='volume', source_id=vol_2,
-                                     flavor=flav_id, vm_host=vm_host)[1]
+            if size == 'small':
+                LOG.info("Boot two vms from 1G volumes")
+                vol_1 = cinder_helper.create_volume(name='live_vm_1G', image_id=image, size=1)[1]
+                vol_2 = cinder_helper.create_volume(name='live_vm_1G', image_id=image, size=1)[1]
+
+                vm_1 = vm_helper.boot_vm(name='live_migrate_1g', source='volume', source_id=vol_1,
+                                         flavor=flav_id, vm_host=vm_host)[1]
+                vm_2 = vm_helper.boot_vm(name='live_migrate_1g', source='volume', source_id=vol_2,
+                                         flavor=flav_id, vm_host=vm_host)[1]
+            else:
+                LOG.info("Boot two vms from 20g and 40g volume respectively")
+                vol_1 = cinder_helper.create_volume(name='live_vm_20G', image_id=image, size=20)[1]
+                vol_2 = cinder_helper.create_volume(name='live_vm_40G', image_id=image, size=40)[1]
+
+                vm_1 = vm_helper.boot_vm(name='live_migrate_20g', source='volume', source_id=vol_1,
+                                         flavor=flav_id, vm_host=vm_host)[1]
+                vm_2 = vm_helper.boot_vm(name='live_migrate_40g', source='volume', source_id=vol_2,
+                                         flavor=flav_id, vm_host=vm_host)[1]
 
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_1)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_2)
@@ -681,9 +710,10 @@ def test_4911_other_tests(action, backing):
                 vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_1)
                 vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_2)
                 LOG.info("Vms are up and pingable after live migration")
-                assert is_vm_filesystem_rw(vm_id=vm_1, vm_image_name='cgcs-guest'), \
+
+                assert is_vm_filesystem_rw(vm_id=vm_1, vm_image_name=image), \
                        'rootfs filesystem is not RW after reboot'
-                assert is_vm_filesystem_rw(vm_id=vm_2, vm_image_name='cgcs-guest'), \
+                assert is_vm_filesystem_rw(vm_id=vm_2, vm_image_name=image), \
                        'rootfs filesystem is not RW after reboot'
                 assert nova_helper.get_vm_host(vm_1) == nova_helper.get_vm_host(vm_2)
 
@@ -691,9 +721,14 @@ def test_4911_other_tests(action, backing):
             vm_helper.delete_vms([vm_1, vm_2], stop_first=False)
 
         elif action == 'stop':
-            LOG.info("Booting cgcs-guest vm with 40G volume")
-            vol = cinder_helper.create_volume(name='stop-40G', image_id='cgcs-guest', size=40)[1]
-            vm_id = vm_helper.boot_vm('stop_vm_40G', flavor=flav_id, source='volume', source_id=vol)[1]
+            if size == 'small':
+                LOG.info("Booting vm with 1G volume")
+                vol = cinder_helper.create_volume(name='stop-1G', image_id=image, size=1)[1]
+                vm_id = vm_helper.boot_vm('stop_1G', flavor=flav_id, source='volume', source_id=vol)[1]
+            else:
+                LOG.info("Booting vm with 40G volume")
+                vol = cinder_helper.create_volume(name='stop-40G', image_id=image, size=40)[1]
+                vm_id = vm_helper.boot_vm('stop_40G', flavor=flav_id, source='volume', source_id=vol)[1]
 
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
             LOG.info("Vm is up and pingable")
@@ -710,7 +745,8 @@ def test_4911_other_tests(action, backing):
 
                 vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
                 LOG.info("Vm is up and pingable after stop/start")
-                assert is_vm_filesystem_rw(vm_id=vm_id, vm_image_name='cgcs-guest'), \
+
+                assert is_vm_filesystem_rw(vm_id=vm_id, vm_image_name=image), \
                        'rootfs filesystem is not RW after stop/start'
             LOG.info("Delete the vm")
             vm_helper.delete_vms(vm_id, stop_first=False)
