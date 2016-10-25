@@ -584,7 +584,7 @@ def test_cold_migrate_vms_with_large_volume_stress(image_id, backing, vol_size):
 
                 LOG.info("Cold migrate {} vm".format(vol_size))
                 for m in range(10):
-                    code, msg = vm_helper.modified_cold_migrate_vm(vm_id=vm, fail_ok=True, vm_image_name=image_id)
+                    code, msg = vm_helper.cold_migrate_vm(vm_id=vm, fail_ok=True)
                     if code == 0:
                         break
                     elif code == 2 and 'Platform CPU usage' in msg:
@@ -642,11 +642,11 @@ def test_4911_other_tests(action, backing, image, size):
             if size == 'small':
                 LOG.info("Booting vm with 1G volume")
                 vol = cinder_helper.create_volume(name='reboot-1G', image_id=image, size=1)[1]
-                vm_id = vm_helper.boot_vm('reboot_vm_1G', flavor=flav_id, source='volume', source_id=vol)[1]
+                vm_id = vm_helper.boot_vm('reboot_vm_1G', flavor=flav_id, source='volume', source_id=vol, guest_os=image)[1]
             else:
                 LOG.info("Booting vm with 40G volume")
                 vol = cinder_helper.create_volume(name='reboot-40G', image_id=image, size=40)[1]
-                vm_id = vm_helper.boot_vm('reboot_vm_40G', flavor=flav_id, source='volume', source_id=vol)[1]
+                vm_id = vm_helper.boot_vm('reboot_vm_40G', flavor=flav_id, source='volume', source_id=vol, guest_os=image)[1]
 
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
             LOG.info("Vm is up and pingable")
@@ -666,7 +666,7 @@ def test_4911_other_tests(action, backing, image, size):
             LOG.info("Delete the vm")
             vm_helper.delete_vms(vm_id, stop_first=False)
 
-        elif action == 'reboot':
+        elif action == 'livemigrate':
             vm_hosts = host_helper.get_hosts_by_storage_aggregate(backing)
             vm_host = random.choice(vm_hosts)
 
@@ -676,18 +676,18 @@ def test_4911_other_tests(action, backing, image, size):
                 vol_2 = cinder_helper.create_volume(name='live_vm_1G', image_id=image, size=1)[1]
 
                 vm_1 = vm_helper.boot_vm(name='live_migrate_1g', source='volume', source_id=vol_1,
-                                         flavor=flav_id, vm_host=vm_host)[1]
+                                         flavor=flav_id, vm_host=vm_host, guest_os=image)[1]
                 vm_2 = vm_helper.boot_vm(name='live_migrate_1g', source='volume', source_id=vol_2,
-                                         flavor=flav_id, vm_host=vm_host)[1]
+                                         flavor=flav_id, vm_host=vm_host, guest_os=image)[1]
             else:
                 LOG.info("Boot two vms from 20g and 40g volume respectively")
                 vol_1 = cinder_helper.create_volume(name='live_vm_20G', image_id=image, size=20)[1]
                 vol_2 = cinder_helper.create_volume(name='live_vm_40G', image_id=image, size=40)[1]
 
                 vm_1 = vm_helper.boot_vm(name='live_migrate_20g', source='volume', source_id=vol_1,
-                                         flavor=flav_id, vm_host=vm_host)[1]
+                                         flavor=flav_id, vm_host=vm_host, guest_os=image)[1]
                 vm_2 = vm_helper.boot_vm(name='live_migrate_40g', source='volume', source_id=vol_2,
-                                         flavor=flav_id, vm_host=vm_host)[1]
+                                         flavor=flav_id, vm_host=vm_host, guest_os=image)[1]
 
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_1)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_2)
@@ -724,11 +724,11 @@ def test_4911_other_tests(action, backing, image, size):
             if size == 'small':
                 LOG.info("Booting vm with 1G volume")
                 vol = cinder_helper.create_volume(name='stop-1G', image_id=image, size=1)[1]
-                vm_id = vm_helper.boot_vm('stop_1G', flavor=flav_id, source='volume', source_id=vol)[1]
+                vm_id = vm_helper.boot_vm('stop_1G', flavor=flav_id, source='volume', source_id=vol, guest_os=image)[1]
             else:
                 LOG.info("Booting vm with 40G volume")
                 vol = cinder_helper.create_volume(name='stop-40G', image_id=image, size=40)[1]
-                vm_id = vm_helper.boot_vm('stop_40G', flavor=flav_id, source='volume', source_id=vol)[1]
+                vm_id = vm_helper.boot_vm('stop_40G', flavor=flav_id, source='volume', source_id=vol, guest_os=image)[1]
 
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
             LOG.info("Vm is up and pingable")

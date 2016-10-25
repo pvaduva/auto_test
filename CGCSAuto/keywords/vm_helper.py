@@ -2249,6 +2249,7 @@ def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, a
 
     # Modified here
     # TODO Check file in vm
+    wait_for_vm_pingable_from_natbox(vm_id, timeout=240)
     with ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name) as vm_ssh:
         filename = ""
         look_for = ''
