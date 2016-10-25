@@ -501,7 +501,9 @@ def get_user_data_file():
 @mark.parametrize('image_id', [
     'guest1',
     'guest2',
-    'guest3'
+    'guest3',
+    'centos',
+    'cgcsguestconsole'
 ])
 def test_cold_migrate_vms_with_large_volume_stress(image_id):
     end_time = time.time() + 12 * 3600
