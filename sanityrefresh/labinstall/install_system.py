@@ -1121,16 +1121,16 @@ def main():
                                           CERTIFICATE_FILE_NAME),
                                           pre_opts=pre_opts)
 
-                #cmd = "export USER=wrsroot"
-                #rc, output = controller0.telnet_conn.exec_cmd(cmd)
+                cmd = "export USER=wrsroot"
+                rc, output = controller0.telnet_conn.exec_cmd(cmd)
 
                 cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
                 cmd += " config_controller --config-file " + cfgfile
                 #cmd += " config_controller --default"
-                #os.environ["TERM"] = "xterm"
-                #rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+                os.environ["TERM"] = "xterm"
+                rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
                 # Switching to ssh due to CGTS-4051
-                rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+                #rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
                 if rc != 0 or find_error_msg(output, "Configuration failed"):
                     msg = "config_controller failed"
                     log.error(msg)
