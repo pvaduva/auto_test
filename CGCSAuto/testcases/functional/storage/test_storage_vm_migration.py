@@ -499,9 +499,9 @@ def get_user_data_file():
 
 # temp stress test to reproduce a CGTS-4911
 @mark.parametrize('image_id', [
-    'cgcs-guest',
-    'guest-2',
-    'guest-3'
+    'guest1',
+    'guest2',
+    'guest3'
 ])
 def test_cold_migrate_vms_with_large_volume_stress(image_id):
     end_time = time.time() + 12 * 3600

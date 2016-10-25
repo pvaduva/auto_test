@@ -313,7 +313,7 @@ def pytest_unconfigure():
     except:
         pass
 
-    tc_res_path = ProjVar.get_var("TCLIST_PATH")
+    tc_res_path = ProjVar.get_var('LOG_DIR') + '/test_results.log'
 
     with open(tc_res_path, mode='a') as f:
         f.write('\n\nLab: {}\n'
