@@ -1144,6 +1144,16 @@ def main():
 
 
     time.sleep(10)
+
+    # Reconnect ssh session
+    cont0_ssh_conn.disconnect()
+    cont0_ssh_conn = SSHClient(log_path=output_dir +\
+                               "/" + CONTROLLER0 + ".ssh.log")
+    cont0_ssh_conn.connect(hostname=controller0.host_ip,
+                           username=WRSROOT_USERNAME,
+                           password=WRSROOT_PASSWORD)
+    controller0.ssh_conn = cont0_ssh_conn
+
     cmd = "source /etc/nova/openrc"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
