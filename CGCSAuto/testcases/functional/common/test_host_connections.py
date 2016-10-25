@@ -1,13 +1,13 @@
 from pytest import mark
 
+from utils import exceptions
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 
-from keywords import system_helper, network_helper
+from consts.cgcs import HostAvailabilityState
+from keywords import system_helper, network_helper, host_helper
 
 
-@mark.sanity
-@mark.cpe_sanity
 def test_ping_hosts():
     con_ssh = ControllerClient.get_active_controller()
 
@@ -26,3 +26,19 @@ def test_ping_hosts():
     LOG.tc_step("Ensure all packets are received.")
     assert not ping_failed_list, "Dropped/Un-transmitted packets detected when ping hosts. " \
                                  "Details:\n{}".format(ping_failed_list)
+
+
+@mark.sanity
+@mark.cpe_sanity
+def test_ssh_to_hosts():
+    hosts_to_ssh = host_helper.get_hosts(availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.ONLINE])
+    failed_list = []
+    for hostname in hosts_to_ssh:
+        LOG.tc_step("Attempt SSH to {}".format(hostname))
+        try:
+            with host_helper.ssh_to_host(hostname):
+                pass
+        except Exception as e:
+            failed_list.append("\n{}: {}".format(hostname, e.__str__()))
+
+    assert not failed_list, "SSH to host(s) failed: {}".format(failed_list)

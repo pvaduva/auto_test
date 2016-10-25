@@ -326,7 +326,7 @@ def multiple_provider_net_range(request):
         args = '{} {}'.format(nova_host , "-a --nowrap")
         table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
         list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'network type': 'None',
-                                                                     'used by i/f': []})
+                                                                     'used by i/f': '[]'})
 
         if list_interfaces:
             computer_host = nova_host
@@ -352,7 +352,8 @@ def multiple_provider_net_range(request):
     # the name of the range is: providernet_names[0]_range
     range_name = providernet_names[0] + '_range'
 
-    code, range_name = create_vxlan_providernet_range(provider_ids[0], range_name=range_name, range_min=r_min, range_max=r_max)
+    code, range_name = create_vxlan_providernet_range(provider_ids[0], range_name=range_name, range_min=r_min,
+                                                      range_max=r_max)
     def fin_teardown():
         # Clean up: remove the ranges and providers just created
         network_helper.delete_providernet_range(range_name)
@@ -363,7 +364,7 @@ def multiple_provider_net_range(request):
     request.addfinalizer(fin_teardown)
 
     if code > 0:
-        msg = "create first provider network segmentation range {}-{} failed with: {}".format(r_min, r_max, err_info)
+        msg = "create first provider network segmentation range {}-{} failed".format(r_min, r_max)
         assert False, msg
 
     return providernet_names, r_min, r_max, computer_host, if_name, interface

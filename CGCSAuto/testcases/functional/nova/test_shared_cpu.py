@@ -74,18 +74,14 @@ class TestSharedCpuDisabled:
 
         hosts_to_config = []
         for host in hosts:
-            shared_cores_host = host_helper.get_host_cpu_cores_for_function(hostname=host, function='shared')
+            shared_cores_host = host_helper.get_host_cpu_cores_for_function(hostname=host, function='shared', thread=0)
             if shared_cores_host[0] or shared_cores_host[1]:
                 hosts_to_config.append(host)
 
         if not hosts_to_config:
             return storage_backing
 
-        is_cpe = system_helper.is_small_footprint()
         for host_to_config in hosts_to_config:
-            if is_cpe and system_helper.get_active_controller_name() == host_to_config:
-                host_helper.swact_host(host_to_config)
-
             shared_cores = host_helper.get_host_cpu_cores_for_function(host_to_config, 'shared', thread=0)
 
             def _modify(host):

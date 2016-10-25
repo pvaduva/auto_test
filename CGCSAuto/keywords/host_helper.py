@@ -1320,7 +1320,7 @@ def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log
     return res_dict
 
 
-def get_logcores_counts(host, proc_ids=(0, 1), thread='0', con_ssh=None):
+def get_logcores_counts(host, proc_ids=(0, 1), thread='0', functions=None, con_ssh=None):
     """
     Get number of logical cores on given processor on thread 0.
 
@@ -1337,8 +1337,11 @@ def get_logcores_counts(host, proc_ids=(0, 1), thread='0', con_ssh=None):
     table_ = table_parser.filter_table(table_, thread=thread)
 
     rtns = []
+    kwargs = {}
+    if functions:
+        kwargs = {'assigned_function': functions}
     for i in proc_ids:
-        rtns.append(len(table_parser.get_values(table_, 'log_core', processor=str(i))))
+        rtns.append(len(table_parser.get_values(table_, 'log_core', processor=str(i), **kwargs)))
 
     return rtns
 

@@ -211,11 +211,10 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
         else:
             assert 0 == index, "Auto recovery to reboot the vm is not kicked off within timeout."
 
-            LOG.tc_step("Verify instance rebooting active alarm is on")
-            alarms_tab = system_helper.get_alarms_table()
-            reasons = table_parser.get_values(alarms_tab, 'Reason Text', strict=False, **{'Entity ID': vm_id})
-            assert re.search('Instance .* is rebooting on host', '\n'.join(reasons)), \
-                "Instance rebooting active alarm is not listed"
+    LOG.tc_step("Verify instance rebooting active alarm is on")
+    res = system_helper.wait_for_alarm(entity_id=vm_id, reason='Instance .* is rebooting on host',
+                                       regex=True, strict=False)[0]
+    assert res, "Instance rebooting active alarm is not listed within 60 seconds of vm reboot"
 
     LOG.tc_step("Wait for VM reach active state")
     vm_helper.wait_for_vm_values(vm_id, timeout=180, status=VMStatus.ACTIVE)

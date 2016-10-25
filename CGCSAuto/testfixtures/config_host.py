@@ -1,7 +1,7 @@
 from pytest import fixture, mark
 
 from utils.tis_log import LOG
-from keywords import host_helper
+from keywords import host_helper, system_helper
 
 
 @mark.tryfirst
@@ -65,6 +65,9 @@ def config_host_class(request):
 def __config_host_base(scope, request):
 
     def config_host_func(host, modify_func, revert_func=None, *args, **kwargs):
+        if system_helper.get_active_controller_name() == host:
+            LOG.fixture_step("({}) Swact before locking as {} is active controller".format(scope, host))
+            host_helper.swact_host(host)
 
         LOG.fixture_step("({}) Lock host: {}".format(scope, host))
         host_helper.lock_host(host=host)
@@ -72,6 +75,10 @@ def __config_host_base(scope, request):
         # add teardown before running modify (as long as host is locked successfully) in case modify or unlock fails.
         if revert_func is not None:
             def revert_host():
+                if system_helper.get_active_controller_name() == host:
+                    LOG.fixture_step("({}) Swact before locking as {} is active controller".format(scope, host))
+                    host_helper.swact_host(host)
+
                 LOG.fixture_step("({}) Lock host: {}".format(scope, host))
                 host_helper.lock_host(host=host)
                 try:

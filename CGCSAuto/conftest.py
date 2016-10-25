@@ -313,6 +313,17 @@ def pytest_unconfigure():
     except:
         pass
 
+    tc_res_path = ProjVar.get_var("TCLIST_PATH")
+
+    with open(tc_res_path, mode='a') as f:
+        f.write('\n\nLab: {}\n'
+                'Build ID:{}\n'
+                'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, ProjVar.get_var('LOG_DIR')))
+
+    LOG.info("Test Results saved to: {}".format(tc_res_path))
+    with open(tc_res_path, 'r') as fin:
+        print(fin.read())
+
 
 def pytest_collection_modifyitems(items):
     move_to_last = []

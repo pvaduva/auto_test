@@ -162,7 +162,7 @@ def _wait_for_scale_up_down_vm(vm_name=None, expected_count=0, time_out=120, che
     # wait for scale up to happen
     end_time = time.time() + time_out
     while time.time() < end_time:
-        vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strick=False)
+        vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
         if len(vm_id) is expected_count:
             return True
 
@@ -179,12 +179,13 @@ def scale_up_vms(vm_name=None, expected_count=0, time_out=120, check_interval=3,
 
     """
     # create a trigger for auto scale by login to vm and issue dd cmd
-    vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strick=False)
+    vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
         vm_ssh.exec_cmd("dd if=/dev/urandom of=/dev/null")
 
     return _wait_for_scale_up_down_vm(vm_name=vm_name,expected_count=expected_count,time_out=time_out,
                                       check_interval=check_interval,con_ssh=con_ssh,auth_info=auth_info)
+
 
 def scale_down_vms(vm_name=None, expected_count=0, time_out=120, check_interval=3, con_ssh=None, auth_info=None):
     """
@@ -192,7 +193,7 @@ def scale_down_vms(vm_name=None, expected_count=0, time_out=120, check_interval=
 
     """
     # create a trigger for auto scale by login to vm and issue dd cmd
-    vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strick=False)
+    vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
         vm_ssh.exec_cmd("pkill -USR1 -x dd")
 

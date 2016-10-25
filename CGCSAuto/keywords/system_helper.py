@@ -245,7 +245,7 @@ def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
     return table_
 
 
-def unsuppress_all(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
+def unsuppress_all_events(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
     """
 
     Args:
@@ -256,23 +256,36 @@ def unsuppress_all(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
     Returns:
 
     """
+    LOG.info("Un-suppress all events")
     args = '--nowrap --nopaging'
-    table_events = table_parser.table(cli.system('event-unsuppress-all',positional_args=args, ssh_client=ssh_con,
-                                                 fail_ok=fail_ok,auth_info=auth_info, rtn_list=True))
-    get_suppress_list = table_events
-    suppressed_list = table_parser.get_values(table_=get_suppress_list, target_header='Suppressed Alarm ID\'s',
-                                              strict=True, **{'Status': 'suppressed'})
-    if len(suppressed_list) == 0:
-        return 0, "Successfully unsuppressed"
-    msg = "Suppressed was unsuccessfull"
-    if fail_ok:
+    code, output = cli.system('event-unsuppress-all',  positional_args=args, ssh_client=ssh_con, fail_ok=fail_ok,
+                              auth_info=auth_info, rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    if not output:
+        msg = "No suppressed events to un-suppress"
         LOG.warning(msg)
-        return 2, msg
-    raise exceptions.NeutronError(msg)
+        return -1, msg
+
+    table_ = table_parser.table(output)
+    suppressed_list = table_parser.get_values(table_, target_header="Suppressed Alarm ID's", **{'Status': 'suppressed'})
+
+    if suppressed_list:
+        msg = "Unsuppress-all failed. Suppressed Alarm IDs: {}".format(suppressed_list)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, msg
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "All events unsuppressed successfully."
+    LOG.info(succ_msg)
+    return 0, succ_msg
 
 
-def get_events(num=5, uuid=False, show_only=None, show_suppress=False, query_key=None, query_value=None,
-               query_type=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, query_key=None, query_value=None,
+                     query_type=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get a list of events with given criteria as dictionary
     Args:
@@ -340,8 +353,8 @@ def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=No
     """
     end_time = time.time() + timeout
     while time.time() < end_time:
-        events_tab = get_events(num=num, uuid=uuid, show_only=show_only, query_key=query_key, query_value=query_value,
-                                query_type=query_type, con_ssh=con_ssh, auth_info=auth_info)
+        events_tab = get_events_table(num=num, uuid=uuid, show_only=show_only, query_key=query_key, query_value=query_value,
+                                      query_type=query_type, con_ssh=con_ssh, auth_info=auth_info)
         events_tab = table_parser.filter_table(events_tab, strict=strict, regex=regex, **kwargs)
         events = table_parser.get_column(events_tab, rtn_val)
         if events:
@@ -458,6 +471,36 @@ def _get_alarms(alarms_tab):
     entity_ids = table_parser.get_column(alarms_tab, 'Entity ID')
     alarms = list(zip(alarm_ids, entity_ids))
     return alarms
+
+
+def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=None, severity=None, timeout=60,
+                   check_interval=3, regex=False, strict=False, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+
+    kwargs = {}
+    if alarm_id:
+        kwargs['Alarm ID'] = alarm_id
+    if entity_id:
+        kwargs['Entity ID'] = entity_id
+    if reason:
+        kwargs['Reason Text'] = reason
+    if severity:
+        kwargs['Severity'] = severity
+
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
+        if table_parser.get_values(current_alarms_tab, rtn_val, strict=strict, regex=regex, **kwargs):
+            LOG.info('Expected alarm appeared. Filters: {}'.format(kwargs))
+            return True, rtn_val
+
+        time.sleep(check_interval)
+
+    err_msg = "Alarm {} did not appear in system alarm-list within timeout".format(kwargs)
+    if fail_ok:
+        LOG.warning(err_msg)
+        return False, None
+
+    raise exceptions.TimeoutException(err_msg)
 
 
 def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
