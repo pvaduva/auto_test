@@ -465,7 +465,7 @@ class TestHTEnabled:
         LOG.tc_step("Get used cpus for all hosts before scaling vm")
         host_allocated_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')[vm_host]
 
-        expt_vcpu_num_change = 2 if cpu_thread_pol == 'isolate' else 1
+        expt_vcpu_num_change = 2 if (cpu_thread_pol == 'isolate' and vm_host in ht_hosts) else 1
 
         # Scale down test
         if expt_current_cpu > expt_min_cpu:
@@ -592,8 +592,9 @@ class TestHTEnabled:
 
         prev_cpus = pre_hosts_cpus[vm_host]
 
-        check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
-                                          cpu_thr_pol=cpu_thr_pol, min_vcpus=min_vcpus, vm_host=vm_host)
+        prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus,
+                                                          cpu_pol=cpu_pol, cpu_thr_pol=cpu_thr_pol,
+                                                          min_vcpus=min_vcpus, vm_host=vm_host)[1]
 
         # Perform Nova action(s) and check vm topology
         LOG.tc_step("Perform following nova action(s) on vm {}: {}".format(vm_id, nova_actions))
@@ -605,14 +606,18 @@ class TestHTEnabled:
             time.sleep(10)
 
         post_vm_host = nova_helper.get_vm_host(vm_id)
+
         pre_action_cpus = pre_hosts_cpus[post_vm_host]
         if cpu_thr_pol == 'require':
             LOG.tc_step("Check vm is on HT host")
             assert post_vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
+        elif cpu_thr_pol == 'prefer':
+            prev_siblings = prev_siblings if nova_actions == ['live_migrate'] else None
 
         LOG.tc_step("Check VM topology is still correct after {}".format(nova_actions))
         check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=pre_action_cpus, cpu_pol=cpu_pol,
-                                          cpu_thr_pol=cpu_thr_pol, min_vcpus=min_vcpus, vm_host=post_vm_host)
+                                          cpu_thr_pol=cpu_thr_pol, min_vcpus=min_vcpus, vm_host=post_vm_host,
+                                          prev_siblings=prev_siblings)
 
         if vs_numa_affinity == 'strict':
             LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
@@ -963,7 +968,7 @@ class TestMigrateResize:
         LOG.tc_step("Attempt to cold migrate VM")
         code, output = vm_helper.cold_migrate_vm(vm_id, fail_ok=True)
 
-        if cpu_thread_policy not in ['require', 'isolate'] or len(ht_hosts) > 1:
+        if cpu_thread_policy not in ['require'] or len(ht_hosts) > 1:
             LOG.tc_step("Check cold migration succeeded and vm migrated to other host")
             assert 0 == code, "Cold migration failed unexpectedly. Details: {}".format(output)
 

@@ -1994,7 +1994,7 @@ def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fai
     res = {}
     rtn_code = 0
     for host in hosts:
-        if_names = system_helper.get_host_interfaces_info(host, header='name', net_type=network_type, con_ssh=con_ssh)
+        if_names = system_helper.get_host_interfaces_info(host, rtn_val='name', net_type=network_type, con_ssh=con_ssh)
 
         if lock_unlock:
             lock_host(host)
@@ -2037,3 +2037,23 @@ def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fai
         raise exceptions.HostPostCheckFailed(msg)
 
     return rtn_code, res
+
+
+def get_hosts_and_pnets_with_pci_devs(pci_type='pci-sriov', up_hosts_only=True, con_ssh=None, auth_info=Tenant.ADMIN):
+    state = 'up' if up_hosts_only else None
+    hosts = get_hypervisors(state=state)
+
+    hosts_pnets_with_pci = {}
+    for host_ in hosts:
+        pnets_ = system_helper.get_host_interfaces_info(host_, rtn_val='provider networks', net_type=pci_type,
+                                                        con_ssh=con_ssh, auth_info=auth_info)
+        if pnets_ and pnets_ != 'None':
+            pnets_ = pnets_[0].split(sep=',')
+            hosts_pnets_with_pci[host_] = pnets_
+
+    if not hosts_pnets_with_pci:
+        LOG.info("No {} interface found from any of following hosts: {}".format(pci_type, hosts))
+    else:
+        LOG.info("Hosts and provider networks with {} devices: {}".format(pci_type, hosts_pnets_with_pci))
+
+    return hosts_pnets_with_pci

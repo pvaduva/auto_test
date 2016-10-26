@@ -40,7 +40,7 @@ class GuestImages:
     }
 
 
-class NetIP:
+class Networks:
     MGMT_NET_NAME = 'tenant\d-mgmt-net'
     DATA_NET_NAME = 'tenant\d-net'
     INTERNAL_NET_NAME = 'internal'

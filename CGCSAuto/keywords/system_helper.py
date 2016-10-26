@@ -1144,14 +1144,14 @@ def get_host_ports_info(host, header='name', if_name=None, pci_addr=None, proc=N
     return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
-def get_host_interfaces_info(host, header='name', net_type=None, if_type=None, uses_ifs=None, used_by_ifs=None,
+def get_host_interfaces_info(host, rtn_val='name', net_type=None, if_type=None, uses_ifs=None, used_by_ifs=None,
                              show_all=False, strict=True, regex=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     """
     Get specified interfaces info for given host via system host-if-list
 
     Args:
         host (str):
-        header (str): header for return info
+        rtn_val (str): header for return info
         net_type (str): valid values: 'data', 'infra', 'mgmt', 'None' (string 'None' as opposed to None type)
         if_type (str): possible values: 'ethernet', 'ae', 'vlan'
         uses_ifs (str):
@@ -1184,8 +1184,8 @@ def get_host_interfaces_info(host, header='name', net_type=None, if_type=None, u
         if value is not None:
             kwargs[key] = value
 
-    info = table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
-    if header in ['ports', 'used by i/f', 'uses i/f']:
+    info = table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, **kwargs)
+    if rtn_val in ['ports', 'used by i/f', 'uses i/f']:
         info = eval(info)
 
     return info
@@ -1251,7 +1251,7 @@ def get_hosts_interfaces_info(hosts, fields, con_ssh=None, auth_info=Tenant.ADMI
 
     res = {}
     for host in hosts:
-        interfaces = get_host_interfaces_info(host, header='name', strict=strict, **interface_filters)
+        interfaces = get_host_interfaces_info(host, rtn_val='name', strict=strict, **interface_filters)
         host_res = {}
         for interface in interfaces:
             values = get_host_if_show_values(host, interface, fields=fields, con_ssh=con_ssh, auth_info=auth_info)

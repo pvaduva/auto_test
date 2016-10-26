@@ -4,8 +4,8 @@ from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
-from consts.cgcs import FlavorSpec, VMStatus
-from keywords import vm_helper, nova_helper, network_helper, host_helper, common
+from consts.cgcs import FlavorSpec, VMStatus, Networks
+from keywords import vm_helper, nova_helper, network_helper, host_helper, common, glance_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -21,36 +21,39 @@ def vif_model_check(request):
         skip("{} interface not found in lab_setup.conf".format(vif_model))
 
     LOG.fixture_step("Get a PCI network too boot vm from pci providernet info from lab_setup.conf")
-    pci_nets = network_helper.get_pci_nets(vif=interface, rtn_val='name')
+    # pci_nets = network_helper.get_pci_nets(vif=interface, rtn_val='name')
     primary_tenant = Tenant.get_primary()
     primary_tenant_name = common.get_tenant_name(primary_tenant)
     other_tenant = Tenant.TENANT_2 if primary_tenant_name == 'tenant1' else Tenant.TENANT_1
 
     tenant_net = "{}-net"
-    for net in pci_nets:
-        if 'internal' in net:
-            pci_net = net
-            net_type = 'internal'
-            break
-        elif tenant_net.format(primary_tenant_name) in net:
-            pci_net = net
-            net_type = 'data'
-            break
+
+    host_num = 1
+    pci_net = None
+    pci_nets_with_min_two_hosts = network_helper.get_pci_nets_with_min_hosts(min_hosts=2, pci_type=vif_model)
+    if pci_nets_with_min_two_hosts:
+        pci_net = pci_nets_with_min_two_hosts[0]
+        if 'mgmt' not in pci_net:
+            host_num = 2  # or > 2
+
+    if host_num == 1:
+        pci_nets_with_one_host = network_helper.get_pci_nets_with_min_hosts(min_hosts=1, pci_type=vif_model)
+        if not pci_nets_with_one_host:
+            skip("Even though some host(s) configured with {} interface, but none is up".format(vif_model))
+        pci_net = pci_nets_with_one_host[0]
+        if 'mgmt' in pci_net:
+            skip("Only management networks have {} interface.".format(vif_model))
+
+    if 'internal' in pci_net:
+        net_type = 'internal'
     else:
-        for net in pci_nets:
-            if tenant_net.format(other_tenant['tenant']) in net:
-                Tenant.set_primary(other_tenant)
-                pci_net = net
-                net_type = 'data'
+        net_type = 'data'
+        if tenant_net.format(primary_tenant_name) not in pci_net:
+            Tenant.set_primary(other_tenant)
 
-                def _revert_tenant():
-                    Tenant.set_primary(primary_tenant)
-                request.addfinalizer(_revert_tenant)
-                break
-
-        else:
-            skip("No tenant or internal networks have {} configured.".format(vif_model))
-            return
+            def revert_tenant():
+                Tenant.set_primary(primary_tenant)
+            request.addfinalizer(revert_tenant)
 
     LOG.fixture_step("PCI network selected to boot vm: {}".format(pci_net))
 
@@ -65,6 +68,8 @@ def vif_model_check(request):
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
     pci_net_id = network_helper._get_net_ids(net_name=pci_net)[0]
+    pnet_name = network_helper.get_net_info(net_id=pci_net_id, field='provider:physical_network')
+    pnet_id = network_helper.get_providernets(name=pnet_name, rtn_val='id', strict=True)[0]
 
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
             {'net-id': pci_net_id, 'vif-model': 'virtio'}]
@@ -87,7 +92,7 @@ def vif_model_check(request):
     nics_to_test = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                     {'net-id': pci_net_id, 'vif-model': vif_model}]
 
-    return vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type
+    return vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_id
 
 
 def test_pci_resource_usage(vif_model_check):
@@ -100,7 +105,7 @@ def test_pci_resource_usage(vif_model_check):
     Returns (str): id of vm under test
 
     """
-    vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type = vif_model_check
+    vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_id = vif_model_check
 
     if 'sriov' in vif_model:
         vm_type = 'sriov'
@@ -110,8 +115,7 @@ def test_pci_resource_usage(vif_model_check):
         resource_param = 'pci_pfs_used'
 
     LOG.tc_step("Get resource usage for {} interface before booting VM(s)".format(vif_model))
-    pnet_id = network_helper.get_providernet_for_interface(interface=vm_type)
-    LOG.info("provider net id {} for {}".format(pnet_id, vif_model))
+    LOG.info("provider net id for {} interface: {}".format(vif_model, pnet_id))
 
     assert pnet_id, "provider network id for {} interface is not found".format(vif_model)
 
@@ -185,7 +189,7 @@ def test_pci_vm_nova_actions(vif_model_check):
         - Delete created vms and flavor
     """
 
-    vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type = vif_model_check
+    vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_id = vif_model_check
 
     LOG.tc_step("Boot a vm with {} vif model on internal net".format(vif_model))
     res, vm_id, err, vol_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, nics=nics_to_test)
@@ -271,7 +275,7 @@ def test_evacuate_pci_vm(vif_model_check):
     Teardown:
         - Delete created vms and flavor
     """
-    vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type = vif_model_check
+    vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_id = vif_model_check
 
     LOG.tc_step("Boot a vm with {} vif model on {} net".format(vif_model, net_type))
     res, vm_id, err, vol_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, nics=nics_to_test)
@@ -303,7 +307,6 @@ def test_evacuate_pci_vm(vif_model_check):
     vm_helper._wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
     post_evac_host = nova_helper.get_vm_host(vm_id)
     assert post_evac_host != host, "VM is on the same host after original host rebooted."
-
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 

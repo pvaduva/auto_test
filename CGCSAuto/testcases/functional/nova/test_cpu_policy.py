@@ -1,5 +1,3 @@
-import time
-
 from pytest import mark, fixture, skip
 
 from utils.tis_log import LOG
@@ -117,16 +115,17 @@ def test_cpu_pol_vm_actions(flv_vcpus, flv_pol, boot_source):
     vm_helper.start_vms(vm_id)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60)
-    check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=flv_pol, vm_host=vm_host,
-                                      prev_total_cpus=prev_cpus[vm_host])
+    prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=flv_pol, vm_host=vm_host,
+                                                      prev_total_cpus=prev_cpus[vm_host])[1]
 
     LOG.tc_step("Live migrate vm and check vm topology stays the same")
     vm_helper.live_migrate_vm(vm_id=vm_id)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60)
     vm_host = nova_helper.get_vm_host(vm_id)
+    prev_siblings = prev_siblings if flv_pol == 'dedicated' else None   # workaround for
     check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=flv_pol, vm_host=vm_host,
-                                      prev_total_cpus=prev_cpus[vm_host])
+                                      prev_total_cpus=prev_cpus[vm_host], prev_siblings=prev_siblings)
 
     LOG.tc_step("Cold migrate vm and check vm topology stays the same")
     vm_helper.cold_migrate_vm(vm_id=vm_id)

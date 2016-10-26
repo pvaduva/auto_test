@@ -90,7 +90,7 @@ def test_modify_mtu_oam_interface(mtu_range):
     second_host = system_helper.get_active_controller_name()
     HostsToRecover.add([first_host, second_host], scope='function')
 
-    oam_attributes = system_helper.get_host_interfaces_info(host=first_host, header='attributes', net_type='oam')
+    oam_attributes = system_helper.get_host_interfaces_info(host=first_host, rtn_val='attributes', net_type='oam')
     # sample attributes: [MTU=9216,AE_MODE=802.3ad]
     pre_oam_mtu = int(oam_attributes[0].split(',')[0].split('=')[1])
 
@@ -169,7 +169,7 @@ def test_modify_mtu_data_interface(mtu_range):
     mtu = __get_mtu_to_mod(providernet_name='-data', mtu_range=mtu_range)
     LOG.tc_step("Modify data MTU to {} for hosts: {}".format(mtu, hypervisors))
     for host in hypervisors:
-        interfaces = system_helper.get_host_interfaces_info(host=host, header='name', net_type='data')
+        interfaces = system_helper.get_host_interfaces_info(host=host, rtn_val='name', net_type='data')
         for interface in interfaces:
             pre_mtu = int(system_helper.get_host_if_show_values(host, interface, 'imtu')[0])
             HOSTS_IF_MODIFY_ARGS.append("-m {} {} {}".format(pre_mtu, host, interface))
