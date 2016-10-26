@@ -2186,3 +2186,106 @@ def _get_cloud_config_add_user(con_ssh=None):
         raise exceptions.CommonError("userdata file {} does not exist after download".format(file_path))
 
     return file_path
+
+
+def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN, vm_image_name='cgcs-guest'):
+    """
+    Cold migrate modifed for CGTS-4911
+    Args:
+        vm_id (str): vm to cold migrate
+        revert (bool): False to confirm resize, True to revert
+        con_ssh (SSHClient):
+        fail_ok (bool): True if fail ok. Default to False, ie., throws exception upon cold migration fail.
+        auth_info (dict):
+
+    Returns (tuple): (rtn_code, message)
+        (0, success_msg) # Cold migration and confirm/revert succeeded. VM is back to original state or Active state.
+        (1, <stderr>) # cold migration cli rejected as expected
+        (2, <stderr>) # Cold migration cli command rejected. <stderr> is the err message returned by cli cmd.
+        (3, <stdout>) # Cold migration cli accepted, but not finished. <stdout> is the output of cli cmd.
+        (4, timeout_message] # Cold migration command ran successfully, but timed out waiting for VM to reach
+            'Verify Resize' state or Error state.
+        (5, err_msg) # Cold migration command ran successfully, but VM is in Error state.
+        (6, err_msg) # Cold migration command ran successfully, and resize confirm/revert performed. But VM is not in
+            Active state after confirm/revert.
+        (7, err_msg) # Cold migration and resize confirm/revert ran successfully and vm in active state. But host for vm
+            is not as expected. i.e., still the same host after confirm resize, or different host after revert resize.
+
+    """
+    before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+    before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh)
+    if not before_status == VMStatus.ACTIVE:
+        LOG.warning("Non-active VM status before cold migrate: {}".format(before_status))
+
+    LOG.info("Cold migrating VM {} from {}...".format(vm_id, before_host))
+    exitcode, output = cli.nova('migrate --poll', vm_id, ssh_client=con_ssh, auth_info=auth_info,
+                                timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=True, rtn_list=True)
+
+    if exitcode == 1:
+        vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
+        if len(host_helper.get_nova_hosts_with_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
+            LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
+                     "migrate to.".format(vm_id))
+            return 1, output
+        elif fail_ok:
+            LOG.warning("Cold migration of vm {} is rejected.".format(vm_id))
+            return 2, output
+        else:
+            raise exceptions.VMOperationFailed(output)
+
+    if 'Finished' not in output:
+        if fail_ok:
+            LOG.warning("Cold migration is not finished.")
+            return 3, output
+        raise exceptions.VMPostCheckFailed("Failed to cold migrate vm. Output: {}".format(output))
+
+    LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
+
+    vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], timeout=300,
+                                    fail_ok=fail_ok, con_ssh=con_ssh)
+
+    if vm_status is None:
+        return 4, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
+
+    # Modified here
+    # TODO Check file in vm
+    wait_for_vm_pingable_from_natbox(vm_id, timeout=240)
+    with ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name) as vm_ssh:
+        filename = ""
+        look_for = ''
+        # vm_ssh.exec_cmd('cat {} | grep {}'.format(filename, look_for))
+
+    verify_resize_str = 'Revert' if revert else 'Confirm'
+    if vm_status == VMStatus.VERIFY_RESIZE:
+        LOG.info("{}ing resize..".format(verify_resize_str))
+        _confirm_or_revert_resize(vm=vm_id, revert=revert, con_ssh=con_ssh)
+
+    elif vm_status == VMStatus.ERROR:
+        err_msg = "VM {} in Error state after cold migrate. {} resize is not reached.".format(vm_id, verify_resize_str)
+        if fail_ok:
+            return 5, err_msg
+        raise exceptions.VMPostCheckFailed(err_msg)
+
+    post_confirm_state = _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM,
+                                             fail_ok=fail_ok, con_ssh=con_ssh)
+
+    if post_confirm_state is None:
+        err_msg = "VM {} is not in Active state after {} Resize".format(vm_id, verify_resize_str)
+        return 6, err_msg
+
+    # Process results
+    after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+    host_changed = before_host != after_host
+    host_change_str = "changed" if host_changed else "did not change"
+    operation_ok = not host_changed if revert else host_changed
+
+    if not operation_ok:
+        err_msg = ("VM {} host {} after {} Resize. Before host: {}. After host: {}".
+                   format(vm_id, host_change_str, verify_resize_str, before_host, after_host))
+        if fail_ok:
+            return 7, err_msg
+        raise exceptions.VMPostCheckFailed(err_msg)
+
+    success_msg = "VM {} successfully cold migrated and {}ed Resize.".format(vm_id, verify_resize_str)
+    LOG.info(success_msg)
+    return 0, success_msg
