@@ -334,6 +334,7 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_)
         # assert not rc, " alarm(s) found: {}".format(new_alarm)
 
 
+@mark.usefixtures('centos7_image')
 def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
     """
     Test  a vm with a multiple volumes live, cold  migration and evacuation:
@@ -365,20 +366,21 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
     - less than one storage
 
     """
-    LOG.tc_step("Creating  a volume size=4GB.....")
-    vol_id_0 = cinder_helper.create_volume(name='vol_0', image_id=image_, size=4)[1]
+    skip("Currently not working. Centos image doesn't see both volumes")
+    LOG.tc_step("Creating  a volume size=8GB.....")
+    vol_id_0 = cinder_helper.create_volume(name='vol_0', image_id='centos_7', size=8)[1]
     ResourceCleanup.add('volume', vol_id_0, scope='function')
 
-    LOG.tc_step("Creating  a second volume size=4GB.....")
-    vol_id_1 = cinder_helper.create_volume(name='vol_1', image_id=image_, size=4)[1]
+    LOG.tc_step("Creating  a second volume size=8GB.....")
+    vol_id_1 = cinder_helper.create_volume(name='vol_1', image_id='centos_7', size=8)[1]
     LOG.tc_step("Volume id is: {}".format(vol_id_1))
     ResourceCleanup.add('volume', vol_id_1, scope='function')
 
     LOG.tc_step("Booting instance vm_0...")
 
     rc, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm_0', source='volume',
-                                                source_id=vol_id_0, user_data=get_user_data_file())
-    # ResourceCleanup.add('vm', vm_id, scope='function')
+                                                source_id=vol_id_0, guest_os='centos_7')
+    ResourceCleanup.add('vm', vm_id, scope='function')
     assert rc == 0, "VM vm_0 did not succeed: reaon {}".format(msg)
     time.sleep(5)
 
@@ -387,10 +389,14 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
     assert rc,  "VM is not pingable after {} seconds ".format(boot_time)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode....")
-    assert is_vm_filesystem_rw(vm_id), 'vol_0 rootfs filesystem is not RW as expected.'
+    assert is_vm_filesystem_rw(vm_id, vm_image_name='centos_7'), 'vol_0 rootfs filesystem is not RW as expected.'
 
     LOG.tc_step("Attemping to attach a second volume to VM...")
     vm_helper.attach_vol_to_vm(vm_id, vol_id_1)
+
+    LOG.tc_step("Login to VM and to check filesystem is rw mode for both volumes....")
+    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb'], vm_image_name='centos_7'), 'volumes rootfs filesystem is ' \
+                                                                                        'not RW as expected.'
 
     LOG.tc_step("Attemping live migrate VM...")
     code, msg = vm_helper.live_migrate_vm(vm_id=vm_id,  fail_ok=True)
@@ -398,16 +404,18 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
     assert code == 0, "Expected return code 0. Actual return code: {}; details: {}".format(code,  msg)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode after live migration....")
-    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'After live migration  rootfs filesystem is not RW ' \
-                                                              'as expected'
+    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb'], vm_image_name='centos_7'), 'After live migration rootfs ' \
+                                                                                        'filesystem is not RW ' \
+                                                                                        'as expected'
     LOG.tc_step("Attempting  cold migrate VM...")
     code, msg = vm_helper.cold_migrate_vm(vm_id, fail_ok=True)
     LOG.tc_step("Verify cold migration succeeded...")
     assert code == 0, "Expected return code 0. Actual return code: {}; details: {}".format(code,  msg)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode after live migration....")
-    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'After cold migration  rootfs filesystem is not ' \
-                                                              'RW as expected'
+    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb'], vm_image_name='centos_7'), 'After cold migration rootfs ' \
+                                                                                        'filesystem is not ' \
+                                                                                        'RW as expected'
     LOG.tc_step("Testing VM evacuation.....")
     before_host_0 = nova_helper.get_vm_host(vm_id)
 
@@ -424,8 +432,8 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
         "previous host: {}; current host: {}".format(vm_id, before_host_0, after_evac_host_0)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode after live migration....")
-    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'After evacuation filesystem is not RW as expected ' \
-                                                              'for VM vm_0'
+    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb'], vm_image_name='centos_7'), 'After evacuation filesystem is ' \
+                                                                                        'not RW as expected for VM vm_0'
 
 
 def check_vm_boot_time(vm_id):
@@ -445,6 +453,7 @@ def is_vm_filesystem_rw(vm_id, rootfs='vda', vm_image_name='cgcs-guest'):
     Returns:
 
     """
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name) as vm_ssh:
         if isinstance(rootfs, str):
             rootfs = [rootfs]
@@ -488,7 +497,7 @@ def get_user_data_file():
     rc = controller_ssh.exec_cmd(cmd)[0]
     if rc != 0:
         cmd = "cat <<EOF > {}\n" \
-              "#cloud-config\nruncmd: \n - /etc/init.d/sshd restart\n" \
+              "#cloud-config\n\nruncmd: \n - /etc/init.d/sshd restart\n" \
               "EOF".format(user_data_file)
         print(cmd)
         code, output = controller_ssh.exec_cmd(cmd)
@@ -624,7 +633,7 @@ def test_cold_migrate_vms_with_large_volume_stress(image_id, backing, vol_size):
     ('reboot', 'remote', 'guest1', 'small'),
     ('stop', 'remote', 'guest1', 'small'),
 ])
-def test_4911_other_tests(action, backing, image, size):
+def test_4911_other_stress_tests(action, backing, image, size):
     end_time = time.time() + 12 * 3600
     if backing == 'image':
         backing = 'local_image'

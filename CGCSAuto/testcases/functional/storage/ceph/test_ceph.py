@@ -17,7 +17,7 @@ from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.resource_mgmt import ResourceCleanup
 
 PROC_RESTART_TIME = 30          # number of seconds between process restarts
-RESTARTS_BEFORE_ASSERT = 3      # number of process restarts until error assertion
+RESTARTS_BEFORE_ASSERT = 5      # number of process restarts until error assertion
 
 
 # Runtime: 208 seconds - pass on wildcat-7-12 and PV0
@@ -105,6 +105,7 @@ def test_ceph_osd_process_kill():
 
     LOG.tc_step('Repeatedly kill the OSD process until we alarm')       # yang TODO: Better to add a keyword for this
     for i in range(0, RESTARTS_BEFORE_ASSERT):
+        LOG.tc_step("kill OSD process iteration: {}".format(i + 1))
         osd_pid, msg = storage_helper.get_osd_pid(osd_host, osd_id)
         assert osd_pid, msg
         proc_killed, msg = storage_helper.kill_process(osd_host, osd_pid)
@@ -118,22 +119,25 @@ def test_ceph_osd_process_kill():
         assert osd_pid2 != osd_pid, msg
         LOG.info('Old pid is {} and new pid is {}'.format(osd_pid, osd_pid2))
 
-    # Note, we cannot check alarms since the alarms clears too quickly.  Check
-    # events instead.
+        LOG.tc_step('Check events list for OSD failure')
+        entity_instance = 'host={}.process=ceph (osd.{})'.format(osd_host, osd_id)
 
-    LOG.tc_step('Check events list for OSD failure')
-    entity_instance = 'host={}.process=ceph (osd.{})'.format(osd_host, osd_id)
-    system_helper.wait_for_events(30, strict=False, fail_ok=False,
-                                  **{'Entity Instance ID': entity_instance,
-                                     'Event Log ID': EventLogID.STORAGE_DEGRADE,
-                                     'State': 'set'})
+        events = system_helper.wait_for_events(10, num=5, strict=False, fail_ok=True,
+                                               **{'Entity Instance ID': entity_instance,
+                                                  'Event Log ID': EventLogID.STORAGE_DEGRADE,
+                                                  'State': 'set'})
+        if events:
+            # Don't need to kill process anymore
+            break
+    else:
+        # event was not found
+        assert False, "The event for osd {} failing was not found".format(osd_id)
 
     # Loss of replication is too brief to catch
     # Note, the storage host degrade state is so brief that we cannot check
     # for it.
 
     LOG.tc_step('Check the OSD failure event clears')
-    LOG.tc_step('Check events list for OSD failure')
     entity_instance = 'host={}.process=ceph (osd.{})'.format(osd_host, osd_id)
     system_helper.wait_for_events(45, strict=False, fail_ok=False,
                                   **{'Entity Instance ID': entity_instance,
@@ -217,6 +221,7 @@ def test_ceph_mon_process_kill(monitor):
 
     LOG.tc_step('Repeatedly kill the ceph-mon process until we alarm')
     for i in range(0, RESTARTS_BEFORE_ASSERT):
+        LOG.tc_step("kill monitor process iteration: {}".format(i + 1))
         mon_pid, msg = storage_helper.get_mon_pid(monitor)
         assert mon_pid, msg
         proc_killed, msg = storage_helper.kill_process(monitor, mon_pid)
@@ -232,14 +237,16 @@ def test_ceph_mon_process_kill(monitor):
 
     # Note, we cannot check alarms since the alarms clears too quickly.  Check
     # events instead.
-
-    LOG.tc_step('Check events list for ceph monitor failure')
-    entity_instance = 'host={}.process=ceph (mon.{})'.format(monitor, monitor)
-    system_helper.wait_for_events(30, strict=False, fail_ok=False,
-                                  **{'Entity Instance ID': entity_instance,
-                                     'Event Log ID':
-                                     EventLogID.STORAGE_DEGRADE, 'State':
-                                     'set'})
+        LOG.info('Check events list for ceph monitor failure')
+        entity_instance = 'host={}.process=ceph (mon.{})'.format(monitor, monitor)
+        events = system_helper.wait_for_events(10, num=5, strict=False, fail_ok=True,
+                                               **{'Entity Instance ID': entity_instance,
+                                                  'Event Log ID': EventLogID.STORAGE_DEGRADE,
+                                                  'State': 'set'})
+        if events:
+            break
+    else:
+        assert False, "The event for ceph mon {} failing was not found".format(monitor)
 
     LOG.tc_step('Check events list for storage alarm condition')
     reason_text = 'Storage Alarm Condition: HEALTH_WARN'
