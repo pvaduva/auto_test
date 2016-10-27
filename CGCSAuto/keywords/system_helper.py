@@ -1,8 +1,10 @@
 import math
 import time
+import re
 
 from consts.auth import Tenant
 from consts.timeout import SysInvTimeout
+from consts.cgcs import UUID
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -25,7 +27,7 @@ class System:
     def get_system_info(self):
         system = {}
         alarms = get_alarms_table(self.CON_SSH)
-        system['alarms'] = alarms
+        system['alarms_and_events'] = alarms
         # TODO: add networks, providernets, interfaces, flavors, images, volumes, vms info?
 
     # TODO: add methods to set nodes for install delete tests
@@ -163,10 +165,10 @@ def _get_active_standby(controller='active', con_ssh=None):
 def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
                      auth_info=Tenant.ADMIN):
     """
-    Get active alarms dictionary with given criteria
+    Get active alarms_and_events dictionary with given criteria
     Args:
         uuid (bool): whether to show uuid
-        show_suppress (bool): whether to show suppressed alarms
+        show_suppress (bool): whether to show suppressed alarms_and_events
         query_key (str): one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
         query_value (str): expected value for given key
         query_type (str): data type of value. one of these: 'string', 'integer', 'float', 'boolean'
@@ -228,7 +230,7 @@ def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=No
 def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
 
     """
-    Get suppressed alarms as dictionary
+    Get suppressed alarms_and_events as dictionary
     Args:
         uuid (bool): whether to show uuid
         con_ssh (SSHClient):
@@ -291,8 +293,8 @@ def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, que
     Args:
         num (int): max number of event logs to return
         uuid (bool): whether to show uuid
-        show_only (str): 'alarms' or 'logs' to return only alarms or logs
-        show_suppress (bool): whether or not to show suppressed alarms
+        show_only (str): 'alarms_and_events' or 'logs' to return only alarms_and_events or logs
+        show_suppress (bool): whether or not to show suppressed alarms_and_events
         query_key (str): one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
         query_value (str): expected value for given key
         query_type (str): data type of value. one of these: 'string', 'integer', 'float', 'boolean'
@@ -334,7 +336,7 @@ def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=No
         timeout (int): max time to wait in seconds
         num (int): max number of event logs to return
         uuid (bool): whether to show uuid
-        show_only (str): 'alarms' or 'logs' to return only alarms or logs
+        show_only (str): 'alarms_and_events' or 'logs' to return only alarms_and_events or logs
         query_key (str): one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
         query_value (str): expected value for given key
         query_type (str): data type of value. one of these: 'string', 'integer', 'float', 'boolean'
@@ -377,10 +379,10 @@ def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=No
 
 def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """
-    Delete active alarms
+    Delete active alarms_and_events
 
     Args:
-        alarms (list|str): UUID(s) of alarms to delete
+        alarms (list|str): UUID(s) of alarms_and_events to delete
         fail_ok (bool): whether or not to raise exception if any alarm failed to delete
         con_ssh (SSHClient):
         auth_info (dict):
@@ -397,7 +399,7 @@ def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
     if isinstance(alarms, str):
         alarms = [alarms]
 
-    LOG.info("Deleting following alarms: {}".format(alarms))
+    LOG.info("Deleting following alarms_and_events: {}".format(alarms))
 
     res = {}
     failed_clis = []
@@ -506,7 +508,7 @@ def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=Non
 def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
                          auth_info=Tenant.ADMIN):
     """
-    Wait for given alarms to be gone from system alarm-list
+    Wait for given alarms_and_events to be gone from system alarm-list
     Args:
         alarms (list): list of tuple. [(<alarm_id1>, <entity_id1>), ...]
         timeout (int):
@@ -519,7 +521,7 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
 
     """
     pre_alarms = list(alarms)   # Don't update the original list
-    LOG.info("Waiting for alarms to disappear from system alarm-list: {}".format(pre_alarms))
+    LOG.info("Waiting for alarms_and_events to disappear from system alarm-list: {}".format(pre_alarms))
     alarms_to_check = list(pre_alarms)
 
     end_time = time.time() + timeout
@@ -529,18 +531,18 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
 
         for alarm in pre_alarms:
             if alarm not in current_alarms:
-                LOG.info("Removing alarm {} from current alarms list: {}".format(alarm, alarms_to_check))
+                LOG.info("Removing alarm {} from current alarms_and_events list: {}".format(alarm, alarms_to_check))
                 alarms_to_check.remove(alarm)
 
         if not alarms_to_check:
-            LOG.info("Following alarms cleared: {}".format(pre_alarms))
+            LOG.info("Following alarms_and_events cleared: {}".format(pre_alarms))
             return True, []
 
         pre_alarms = alarms_to_check
         time.sleep(check_interval)
 
     else:
-        err_msg = "Following alarms did not clear within {} seconds: {}".format(alarms_to_check, timeout)
+        err_msg = "Following alarms_and_events did not clear within {} seconds: {}".format(alarms_to_check, timeout)
         if fail_ok:
             LOG.warning(err_msg)
             return False, alarms_to_check
@@ -839,6 +841,7 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
         msg = "Alarm {} is not {}".format(alarm_id, expt_status)
         if fail_ok:
             LOG.warning(msg)
+            return 2, msg
         raise exceptions.TiSError(msg)
 
     succ_msg = "Alarm {} is {} successfully".format(alarm_id, expt_status)
@@ -852,6 +855,23 @@ def suppress_alarm(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
 
 def unsuppress_alarm(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
     return __suppress_unsuppress_alarm(alarm_id, False, check_first=check_first, fail_ok=fail_ok, con_ssh=con_ssh)
+
+
+def generate_event(event_id='300.005', state='set', severity='critical', reason_text='Generated for testing',
+                   entity_id='TiS Auto', unknown_text='unknown1', unknown_two='unknown2', con_ssh=None):
+
+    cmd = '''fmClientCli -c  "### ###{}###{}###{}###{}### ###{}### ###{}###{}### ###True###True###"'''.\
+        format(event_id, state, entity_id, reason_text, severity, unknown_text, unknown_two)
+
+    LOG.info("Generate system event: {}".format(cmd))
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    output = con_ssh.exec_cmd(cmd, fail_ok=False)[1]
+    event_uuid = re.findall(UUID, output)[0]
+    LOG.info("Event {} generated successfully".format(event_uuid))
+
+    return event_uuid
 
 
 def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):

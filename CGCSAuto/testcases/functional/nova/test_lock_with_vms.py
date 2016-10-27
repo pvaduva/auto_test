@@ -29,9 +29,12 @@ def _boot_migrable_vms(storage_backing):
     flavor_no_localdisk = nova_helper.create_flavor(ephemeral=0, swap=0, check_storage_backing=False)[1]
     flavors_created.append(flavor_no_localdisk)
     nova_helper.set_flavor_extra_specs(flavor=flavor_no_localdisk, **storage_spec)
+
     vm_1 = vm_helper.boot_vm(flavor=flavor_no_localdisk, source='volume')[1]
+
     block_mig_1 = False
     vms_to_test.append((vm_1, block_mig_1))
+
     if storage_backing != 'local_lvm':
         LOG.info("Boot a VM from image if host storage backing is local_image or remote...")
         vm_2 = vm_helper.boot_vm(flavor=flavor_no_localdisk, source='image')[1]

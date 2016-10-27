@@ -205,22 +205,22 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
         natbox_ssh = NATBoxClient.get_natbox_client()
         index = natbox_ssh.expect("Power button pressed", timeout=60, fail_ok=True)
 
-        if not expt_autorecovery:
-            assert 0 > index, "VM is rebooted automatically even though Auto Recovery is set to false."
+    if not expt_autorecovery:
+        assert 0 > index, "VM is rebooted automatically even though Auto Recovery is set to false."
 
-        else:
-            assert 0 == index, "Auto recovery to reboot the vm is not kicked off within timeout."
+    else:
+        assert 0 == index, "Auto recovery to reboot the vm is not kicked off within timeout."
 
-    LOG.tc_step("Verify instance rebooting active alarm is on")
-    res = system_helper.wait_for_alarm(entity_id=vm_id, reason='Instance .* is rebooting on host',
-                                       regex=True, strict=False)[0]
-    assert res, "Instance rebooting active alarm is not listed within 60 seconds of vm reboot"
+        LOG.tc_step("Verify instance rebooting active alarm is on")
+        res = system_helper.wait_for_alarm(entity_id=vm_id, reason='Instance .* is rebooting on host',
+                                           regex=True, strict=False)[0]
+        assert res, "Instance rebooting active alarm is not listed within 60 seconds of vm reboot"
 
-    LOG.tc_step("Wait for VM reach active state")
-    vm_helper.wait_for_vm_values(vm_id, timeout=180, status=VMStatus.ACTIVE)
+        LOG.tc_step("Wait for VM reach active state")
+        vm_helper.wait_for_vm_values(vm_id, timeout=180, status=VMStatus.ACTIVE)
 
-    LOG.tc_step("Ensure vm is still pingable after auto recovery")
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        LOG.tc_step("Ensure vm is still pingable after auto recovery")
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 @mark.features(Features.HEARTBEAT)

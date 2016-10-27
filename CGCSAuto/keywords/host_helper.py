@@ -114,7 +114,6 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         time.sleep(20)
         con_ssh.connect(retry=True, retry_timeout=timeout)
         _wait_for_openstack_cli_enable(con_ssh=con_ssh)
-        hostnames.append(controller)
 
     if not wait_for_reboot_finish:
         msg = "Reboot hosts command sent."
@@ -130,6 +129,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     if not hosts_in_rebooting:
         hosts_info = get_host_show_values_for_hosts(hostnames, 'task', 'availability', con_ssh=con_ssh)
         raise exceptions.HostError("Some hosts are not rebooting. \nHosts info:{}".format(hosts_info))
+
+    if reboot_con:
+        hostnames.append(controller)
 
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
     unlocked_hosts_all = table_parser.get_values(table_, 'hostname', administrative='unlocked')
@@ -1340,8 +1342,11 @@ def get_logcores_counts(host, proc_ids=(0, 1), thread='0', functions=None, con_s
     kwargs = {}
     if functions:
         kwargs = {'assigned_function': functions}
+
     for i in proc_ids:
-        rtns.append(len(table_parser.get_values(table_, 'log_core', processor=str(i), **kwargs)))
+        cores_on_proc = table_parser.get_values(table_, 'log_core', processor=str(i), **kwargs)
+        LOG.info("Cores on proc {}: {}".format(i, cores_on_proc))
+        rtns.append(len(cores_on_proc))
 
     return rtns
 

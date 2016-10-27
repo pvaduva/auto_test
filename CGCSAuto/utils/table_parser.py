@@ -448,13 +448,16 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
     len_ = len(row_indexes)
     target_row_indexes = []
 
-    # Check every item in the first row_index list and see if it's also in the rest of the row_index lists
-    for item in row_indexes[0]:
-        for i in range(1, len_):
-            if item not in row_indexes[i]:
-                break
-        else:
-            target_row_indexes.append(item)
+    if len_ == 1:
+        target_row_indexes = row_indexes[0]
+    elif len_ > 1:
+        # Check every item in the first row_index list and see if it's also in the rest of the row_index lists
+        for item in row_indexes[0]:
+            for i in range(1, len_):
+                if item not in row_indexes[i]:
+                    break
+            else:
+                target_row_indexes.append(item)
 
     target_column = get_column(table_, target_header)
     target_values = []
