@@ -218,10 +218,10 @@ def test_host_install_log(setup_host_install):
 
     search_for = ['sw-patch-controller-daemon.*INFO: Running host-install for {}'.format(host),
                   'sw-patch-controller-daemon.*INFO.*Patch installation request sent to {}'.format(host)]
-    res = check_logs(search_for, lines=25, api=False)
+    res = check_logs(search_for, lines=50, api=False)
     assert res, "FAIL: uploading patches did not generate the expected logs in patching.log"
 
     search_for = ['sw-patch-controller-daemon.*INFO: User: wrsroot/admin '
                   'Action: Running host-install for {}'.format(host)]
-    res = check_logs(search_for, lines=10, api=True)
+    res = check_logs(search_for, lines=25, api=True)
     assert res, "FAIL: uploading patches did not generate the expected logs in patching-api.log"
