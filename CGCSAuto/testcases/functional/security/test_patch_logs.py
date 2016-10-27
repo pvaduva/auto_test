@@ -15,7 +15,7 @@ def get_patch_name():
     Assumes that the patch has been stored in /home/wrsroot/test_patches on the server
     - Change patch_name to whatever the patch's name is before testing
     """
-    patch_name = 'US82830_designer_patch'
+    patch_name = 'TS_16.10_FC_TEST_ALLNODES_RR'
 
     return patch_name
 
