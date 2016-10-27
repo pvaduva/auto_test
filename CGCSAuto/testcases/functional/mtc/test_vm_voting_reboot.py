@@ -122,7 +122,7 @@ def test_vm_voting_reboot(vm_):
         exitcode, output = cli.nova('reboot', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN, rtn_list=True, fail_ok=False)
 
     time.sleep(30)
-    events_tab = system_helper.get_events()
+    events_tab = system_helper.get_events_table()
     reasons = table_parser.get_values(events_tab, 'Reason Text', strict=False, **{'Entity Instance ID': vm_id})
     assert re.search('Reboot complete for instance .* now enabled on host', '\n'.join(reasons)), \
         "Was not able to reboot VM even though voting is removed"
@@ -136,7 +136,7 @@ def test_vm_voting_reboot(vm_):
                                     fail_ok=False)
 
     time.sleep(30)
-    events_tab = system_helper.get_events()
+    events_tab = system_helper.get_events_table()
     reasons = table_parser.get_values(events_tab, 'Reason Text', strict=False, **{'Entity Instance ID': vm_id})
     assert re.search('Reboot complete for instance .* now enabled on host', '\n'.join(reasons)), \
         "Was not able to reboot VM even though voting is removed"

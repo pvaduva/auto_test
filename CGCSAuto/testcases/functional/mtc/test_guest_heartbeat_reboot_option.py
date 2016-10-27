@@ -104,7 +104,7 @@ def test_guest_heartbeat_reboot_option(vm_):
     LOG.tc_step("Verify VM automatically reboots.")
 
     time.sleep(20)
-    events_tab = system_helper.get_events()
+    events_tab = system_helper.get_events_table()
     reasons = table_parser.get_values(events_tab, 'Reason Text', strict=False, **{'Entity Instance ID': vm_id})
     assert re.search('Reboot complete for instance .* now enabled on host', '\n'.join(reasons)), \
         "Was not able to reboot VM"
