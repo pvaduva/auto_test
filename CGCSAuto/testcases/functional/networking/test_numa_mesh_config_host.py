@@ -189,7 +189,8 @@ class TestVSwitchCPUReconfig:
 
         # FIXME
         # total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1))
-        total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1), functions=['VMs, vSwitch, Platform'])
+        total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1),
+                                                             functions=['VMs', 'vSwitch', 'Platform'])
 
         # convert test params if host to config has more than 10 cores per proc & threaad
         if 'NO_VM_CORE' in expt_err:
