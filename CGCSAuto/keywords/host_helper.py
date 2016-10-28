@@ -120,15 +120,16 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         LOG.info(msg)
         return -1, msg
 
-    time.sleep(30)
-    hostnames = sorted(hostnames)
-    hosts_in_rebooting = _wait_for_hosts_states(
-            hostnames, timeout=HostTimeout.FAIL_AFTER_REBOOT, check_interval=10, duration=8, con_ssh=con_ssh,
-            availability=[HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED])
+    if hostnames:
+        time.sleep(30)
+        hostnames = sorted(hostnames)
+        hosts_in_rebooting = _wait_for_hosts_states(
+                hostnames, timeout=HostTimeout.FAIL_AFTER_REBOOT, check_interval=10, duration=8, con_ssh=con_ssh,
+                availability=[HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED])
 
-    if not hosts_in_rebooting:
-        hosts_info = get_host_show_values_for_hosts(hostnames, 'task', 'availability', con_ssh=con_ssh)
-        raise exceptions.HostError("Some hosts are not rebooting. \nHosts info:{}".format(hosts_info))
+        if not hosts_in_rebooting:
+            hosts_info = get_host_show_values_for_hosts(hostnames, 'task', 'availability', con_ssh=con_ssh)
+            raise exceptions.HostError("Some hosts are not rebooting. \nHosts info:{}".format(hosts_info))
 
     if reboot_con:
         hostnames.append(controller)
