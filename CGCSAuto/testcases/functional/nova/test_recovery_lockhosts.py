@@ -30,7 +30,7 @@ def target_host(request):
     request.addfinalizer(unlock)
 
     for host in hosts_to_lock:
-        host_helper.lock_host(host)
+        host_helper.lock_host(host, swact=False)
 
     return target_host
 

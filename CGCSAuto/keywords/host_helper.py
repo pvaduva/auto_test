@@ -192,7 +192,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     states_vals = {}
     task_unfinished_msg = ''
     for host in hostnames:
-        vals = get_hostshow_values(host, con_ssh, 'task', 'availability')
+        vals = get_hostshow_values(host, fields=['task', 'availability'])
         if not vals['task'] == '':
             task_unfinished_msg = ' '.join([task_unfinished_msg, "{} still in task: {}.".format(host, vals['task'])])
         states_vals[host] = vals
@@ -212,10 +212,13 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         raise exceptions.HostPostCheckFailed(err_msg)
 
 
-def get_host_show_values_for_hosts(hostnames, *fields, con_ssh):
+def get_host_show_values_for_hosts(hostnames, fields, merge_lines=False, con_ssh=None):
+    if isinstance(fields, str):
+        fields = [fields]
+
     states_vals = {}
     for host in hostnames:
-        vals = get_hostshow_values(host, con_ssh, *fields)
+        vals = get_hostshow_values(host, fields, merge_lines=merge_lines)
         states_vals[host] = vals
 
     return states_vals
@@ -302,7 +305,7 @@ def __hosts_in_states(hosts, con_ssh=None, **states):
 
 
 def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTimeout.ONLINE_AFTER_LOCK, con_ssh=None,
-              fail_ok=False, check_first=True):
+              fail_ok=False, check_first=True, swact=False):
     """
     lock a host.
 
@@ -314,6 +317,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         con_ssh (SSHClient):
         fail_ok (bool):
         check_first (bool):
+        swact (bool): whether to check if host is active controller and do a swact before attempt locking
 
     Returns: (return_code(int), msg(str))   # 1, 2, 3, 4, 5 only returns when fail_ok=True
         (-1, "Host already locked. Do nothing.")
@@ -335,6 +339,11 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         if admin_state == 'locked':
             LOG.info("Host already locked. Do nothing.")
             return -1, "Host already locked. Do nothing."
+
+    if swact:
+        if is_active_controller(host):
+            LOG.info("{} is active controller, swact first before attempt to lock.")
+            swact_host(host, con_ssh=con_ssh)
 
     positional_arg = host
     extra_msg = ''
@@ -592,7 +601,7 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
     return res
 
 
-def get_hostshow_value(host, field, con_ssh=None):
+def get_hostshow_value(host, field, merge_lines=False, con_ssh=None):
     """
     Retrieve the value of certain field in the system host-show from get_hostshow_values()
 
@@ -609,10 +618,10 @@ def get_hostshow_value(host, field, con_ssh=None):
         The value of the specified field for given host
 
     """
-    return get_hostshow_values(host, con_ssh, field)[field]
+    return get_hostshow_values(host, field, merge_lines=merge_lines, con_ssh=con_ssh)[field]
 
 
-def get_hostshow_values(host, con_ssh=None, *fields):
+def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None):
     """
     Get values of specified fields for given host
 
@@ -629,9 +638,12 @@ def get_hostshow_values(host, con_ssh=None, *fields):
     if not fields:
         raise ValueError("At least one field name needs to provided via *fields")
 
+    if isinstance(fields, str):
+        fields = [fields]
+
     rtn = {}
     for field in fields:
-        val = table_parser.get_value_two_col_table(table_, field)
+        val = table_parser.get_value_two_col_table(table_, field, merge_lines=merge_lines)
         rtn[field] = val
     return rtn
 
@@ -1547,7 +1559,7 @@ def modify_host_lvg(host, lvm='nova-local', inst_backing=None, inst_lv_size=None
             return -1, msg
 
     if lock:
-        lock_host(host, con_ssh=con_ssh)
+        lock_host(host, con_ssh=con_ssh, swact=True)
 
     LOG.info("Modifying host-lvg for {} with params: {}".format(host, args))
     code, output = cli.system('host-lvg-modify', args, fail_ok=fail_ok, rtn_list=True, auth_info=auth_info,
@@ -2003,7 +2015,7 @@ def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fai
         if_names = system_helper.get_host_interfaces_info(host, rtn_val='name', net_type=network_type, con_ssh=con_ssh)
 
         if lock_unlock:
-            lock_host(host)
+            lock_host(host, swact=True)
 
         LOG.info("Modify MTU for {} {} interfaces to: {}".format(host, network_type, mtu_val))
 
@@ -2063,3 +2075,9 @@ def get_hosts_and_pnets_with_pci_devs(pci_type='pci-sriov', up_hosts_only=True, 
         LOG.info("Hosts and provider networks with {} devices: {}".format(pci_type, hosts_pnets_with_pci))
 
     return hosts_pnets_with_pci
+
+
+def is_active_controller(host, con_ssh=None):
+    personality = eval(get_hostshow_value(host, field='capabilities',
+                                          merge_lines=True, con_ssh=con_ssh)).get('Personality', '')
+    return personality.lower() == 'Controller-Active'.lower()

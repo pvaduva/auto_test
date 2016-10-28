@@ -75,7 +75,7 @@ def ensure_sufficient_4k_pages(request):
                 host_helper.wait_for_hypervisors_up(host)
 
             HostsToRecover.add(host, scope='module')
-            host_helper.lock_host(host)
+            host_helper.lock_host(host, swact=False)
 
             # chose to set 4k page of proc1 to 600000
             system_helper.set_host_4k_pages(host, proc_id=1, smallpage_num=600000)

@@ -73,7 +73,7 @@ def test_dvr_update_router(router_info):
         LOG.tc_step("Verify router is in active state and vm can be ping'd from NatBox")
         assert RouterStatus.ACTIVE == network_helper.get_router_info(router_id, field='status'), \
             "Router is not in active state after updating distributed to {}.".format(update_to_val)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False, timeout=60)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
 
 @mark.parametrize(('vms_num', 'srv_grp_policy'), [

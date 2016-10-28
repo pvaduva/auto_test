@@ -677,7 +677,7 @@ def test_storgroup_semantic_checks():
     LOG.info("The following storage hosts are on the system: {}".format(storage_nodes))
 
     for host in storage_nodes:
-        peers = host_helper.get_hostshow_values(host, con_ssh, 'peers')
+        peers = host_helper.get_hostshow_values(host, 'peers')
         peers = ast.literal_eval(list(peers.values())[0])
         hosts = peers['hosts']
         hosts.remove(host)

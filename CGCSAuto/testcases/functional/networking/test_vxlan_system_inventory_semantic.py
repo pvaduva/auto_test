@@ -45,7 +45,7 @@ def get_interface_(request):
         assert find, "Can not find a free data interface "
 
     # now lock the computer
-    host_helper.lock_host(computer_host)
+    host_helper.lock_host(computer_host, swact=True)
     HostsToRecover.add(computer_host, scope='module')
 
     interface = random.choice(list_interfaces)

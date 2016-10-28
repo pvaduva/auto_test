@@ -177,7 +177,7 @@ class TestLockWithVMs:
             pre_vms_status = nova_helper.get_vms_info(vm_ids=vms_on_host, field='Status')
 
             LOG.tc_step("Lock target host {}...".format(host))
-            lock_code, lock_output = host_helper.lock_host(host=host, check_first=False, fail_ok=True)
+            lock_code, lock_output = host_helper.lock_host(host=host, check_first=False, fail_ok=True, swact=True)
 
             # Add locked host to cleanup list
             if lock_code in [0, 3]:
@@ -263,7 +263,7 @@ class TestLockWithVMsNegative:
             pre_vms_status = nova_helper.get_vms_info(vm_ids=vms_on_host, field='Status')
 
             LOG.tc_step("Lock target host {}...".format(host))
-            lock_code, lock_output = host_helper.lock_host(host=host, check_first=False, fail_ok=True)
+            lock_code, lock_output = host_helper.lock_host(host=host, check_first=False, fail_ok=True, swact=True)
 
             # Add locked host to cleanup list
             if lock_code in [0, 3]:

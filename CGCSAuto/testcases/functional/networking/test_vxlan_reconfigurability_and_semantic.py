@@ -338,7 +338,7 @@ def multiple_provider_net_range(request):
     # Find a free port from host-if-list -a
     if_name = random.choice(list_interfaces)
 
-    host_helper.lock_host(computer_host)
+    host_helper.lock_host(computer_host, swact=True)
     HostsToRecover.add(computer_host, scope='module')
 
     # Create an interface associate with the two providers just create

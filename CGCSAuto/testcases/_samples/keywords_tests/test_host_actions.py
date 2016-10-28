@@ -8,6 +8,14 @@ from keywords import host_helper, system_helper
 _skip = False
 
 
+def test_is_active_con():
+    active_con, standby_con = system_helper.get_active_standby_controllers()
+    assert host_helper.is_active_controller(active_con)
+
+    if standby_con:
+        assert not host_helper.is_active_controller(standby_con)
+
+
 @mark.skipif(_skip, reason='test skip if')
 # @mark.usefixtures('check_alarms')
 @mark.parametrize(('hostname', 'timeout', 'fail_ok'), [
@@ -38,10 +46,10 @@ def test_swact_host(hostname, timeout, fail_ok):
     else:
         if timeout == 1:
             with raises(exceptions.HostPostCheckFailed):
-                host_helper.swact_host(hostname=hostname, swact_start_timeout=1, fail_ok=fail_ok)
+                host_helper.swact_host(hostname=hostname, swact_start_timeout=1, fail_ok=False)
             host_helper._wait_for_swact_complete(hostname, fail_ok=False)
         else:
-            host_helper.swact_host(hostname=hostname, swact_start_timeout=timeout, fail_ok=fail_ok)
+            host_helper.swact_host(hostname=hostname, swact_start_timeout=timeout, fail_ok=False)
 
 
 @mark.parametrize(('hostname', 'force'), [

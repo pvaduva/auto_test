@@ -924,7 +924,7 @@ class TestMigrateResize:
 
                 for host in hosts_to_lock:
                     HostsToRecover.add(host, scope='class')
-                    host_helper.lock_host(host)
+                    host_helper.lock_host(host, swact=True)
                 # Now system only has one ht host
                 ht_hosts = [host_to_test]
 

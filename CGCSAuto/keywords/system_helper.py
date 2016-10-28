@@ -162,6 +162,17 @@ def _get_active_standby(controller='active', con_ssh=None):
     return controllers
 
 
+def get_active_standby_controllers(con_ssh=None):
+    table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh))
+
+    table_ = table_parser.filter_table(table_, service_group_name='controller-services')
+    active_con = table_parser.get_values(table_, 'hostname', state='active', strict=False)[0]
+    standby_con = table_parser.get_values(table_, 'hostname', state='standby', strict=False)
+
+    standby_con = standby_con[0] if standby_con else None
+    return active_con, standby_con
+
+
 def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
                      auth_info=Tenant.ADMIN):
     """
