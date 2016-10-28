@@ -203,14 +203,12 @@ class TestDnsSettings:
 
     DNS_SETTING_FILE = '/etc/resolv.conf'
 
-    @staticmethod
     @repeat_checking(repeat_times=10, wait_time=6)
     def wait_for_dns_changed(self, expected_ip_addres=None):
         ip_addr_list = expected_ip_addres if expected_ip_addres is not None else []
 
         controller_ssh = ControllerClient.get_active_controller()
 
-        # cmd_get_saved_dns = 'cat {}'.format(self.DNS_SETTING_FILE)
         cmd_get_saved_dns = 'cat {}'.format(TestDnsSettings.DNS_SETTING_FILE)
         code, output = controller_ssh.exec_cmd(cmd_get_saved_dns, expect_timeout=20)
 
