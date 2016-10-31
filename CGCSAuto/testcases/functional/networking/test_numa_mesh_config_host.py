@@ -252,9 +252,12 @@ class TestVSwitchCPUReconfig:
 @mark.slow
 class TestVMSchedulingLockHosts:
 
-    @fixture(scope='class', autouse=False)
+    @fixture(scope='class', autouse=True)
     def hosts_to_lock(self, host_to_config):
         host_to_set, ht_enabled, is_cpe = host_to_config
+
+        if is_cpe:
+            skip("CPE system detected.")
 
         nova_hosts = host_helper.get_nova_hosts()
         assert host_to_set in nova_hosts, "{} is not in nova host-list. Check previous test case.".format(host_to_set)
