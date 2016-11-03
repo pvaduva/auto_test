@@ -1,6 +1,6 @@
 import logging
 import os
-from time import strftime
+from time import strftime, gmtime
 
 import pytest
 
@@ -283,12 +283,13 @@ def pytest_addoption(parser):
 def config_logger(log_dir):
     # logger for log saved in file
     file_name = log_dir + '/TIS_AUTOMATION.log'
-    formatter_file = "'%(asctime)s %(lineno)-4d%(levelname)-5s %(filename)-10s %(funcName)-10s: %(message)s'"
+    logging.Formatter.converter = gmtime
+    formatter_file = "'[%(asctime)s] %(lineno)-4d%(levelname)-5s %(filename)-10s %(funcName)-10s:: %(message)s'"
     logging.basicConfig(level=logging.NOTSET, format=formatter_file, filename=file_name, filemode='w')
 
     # logger for stream output
     stream_hdler = logging.StreamHandler()
-    formatter_stream = logging.Formatter('%(lineno)-4d%(levelname)-5s %(module)s.%(funcName)-8s: %(message)s')
+    formatter_stream = logging.Formatter('[%(asctime)s] %(lineno)-4d%(levelname)-5s %(module)s.%(funcName)-8s:: %(message)s')
     stream_hdler.setFormatter(formatter_stream)
     stream_hdler.setLevel(logging.INFO)
     LOG.addHandler(stream_hdler)
@@ -311,6 +312,17 @@ def pytest_unconfigure():
         natbox_ssh.close()
     except:
         pass
+
+    tc_res_path = ProjVar.get_var('LOG_DIR') + '/test_results.log'
+
+    with open(tc_res_path, mode='a') as f:
+        f.write('\n\nLab: {}\n'
+                'Build ID:{}\n'
+                'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, ProjVar.get_var('LOG_DIR')))
+
+    LOG.info("Test Results saved to: {}".format(tc_res_path))
+    with open(tc_res_path, 'r') as fin:
+        print(fin.read())
 
 
 def pytest_collection_modifyitems(items):

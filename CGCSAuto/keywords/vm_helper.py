@@ -1,20 +1,20 @@
 import random
 import re
 import time
-from pexpect import TIMEOUT as ExpectTimeout
 from contextlib import contextmanager
 
+from pexpect import TIMEOUT as ExpectTimeout
+
+from consts.auth import Tenant, SvcCgcsAuto
+from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
+    VMNetworkStr
+from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
+from consts.proj_vars import ProjVar
+from consts.timeout import VMTimeout, CMDTimeout
+from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
 from utils.tis_log import LOG
-from consts.auth import Tenant, SvcCgcsAuto, Guest
-from consts.timeout import VMTimeout, CMDTimeout
-from consts.proj_vars import ProjVar
-from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, \
-    VifMapping, VMNetworkStr
-from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
-
-from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 
 
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
@@ -88,7 +88,8 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True):
+            vm_host=None, avail_zone='nova', fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False,
+            guest_os='', poll=True):
     """
 
     Args:
@@ -207,7 +208,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if hint:
         hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
 
-    avail_zone = 'nova:{}'.format(vm_host) if vm_host else None
+    host_zone = '{}:{}'.format(avail_zone, vm_host) if vm_host else None
 
     if user_data is None and guest_os and 'cgcs-guest' not in guest_os:
         # create userdata cloud init file to run right after vm initialization to get ip on interfaces other than eth0.
@@ -230,7 +231,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--ephemeral': ephemeral,
                           '--block-device': block_device,
                           '--hint': hint,
-                          '--availability-zone': avail_zone,
+                          '--availability-zone': host_zone,
                           }
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
@@ -644,8 +645,8 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
     LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
 
-    vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], fail_ok=fail_ok,
-                                    con_ssh=con_ssh)
+    vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], timeout=300,
+                                    fail_ok=fail_ok, con_ssh=con_ssh)
 
     if vm_status is None:
         return 4, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
@@ -700,7 +701,7 @@ def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_
 
     LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
     vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], fail_ok=fail_ok,
-                                    con_ssh=con_ssh)
+                                    timeout=300, con_ssh=con_ssh)
 
     if vm_status is None:
         return 2, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
@@ -849,43 +850,6 @@ def _confirm_or_revert_resize(vm, revert=False, con_ssh=None):
             cli.nova('resize-confirm', vm, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
 
 
-__PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
-
-
-def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
-    """
-
-    Args:
-        server (str): server ip to ping
-        ssh_client (SSHClient): ping from this ssh client
-        num_pings (int):
-        timeout (int): max time to wait for ping response in seconds
-        fail_ok (bool): whether to raise exception if packet loss rate is 100%
-
-    Returns (int): packet loss percentile, such as 100, 0, 25
-
-    """
-    cmd = 'ping -c {} {}'.format(num_pings, server)
-
-    output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
-    packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
-    packet_loss_rate = int(packet_loss_rate)
-
-    if packet_loss_rate == 100:
-        msg = "Ping from {} to {} failed.".format(ssh_client.host, server)
-        if not fail_ok:
-            raise exceptions.VMNetworkError(msg)
-        else:
-            LOG.warning(msg)
-    elif packet_loss_rate > 0:
-        LOG.warning("Some packets dropped when ping from {} to {}. Packet loss rate: {}%".
-                    format(ssh_client.host, server, packet_loss_rate))
-    else:
-        LOG.info("All packets received by {}".format(server))
-
-    return packet_loss_rate
-
-
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
               net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True):
     """
@@ -944,8 +908,8 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     res_dict = {}
     for i in range(retry + 1):
         for ip in vms_ips:
-            packet_loss_rate = _ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings, timeout=timeout,
-                                            fail_ok=True)
+            packet_loss_rate = network_helper._ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings,
+                                                           timeout=timeout, fail_ok=True)[0]
             res_dict[ip] = packet_loss_rate
 
         res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
@@ -1067,7 +1031,8 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                prompt=prompt, con_ssh=con_ssh, vm_ip=vm_ip, use_fip=use_fip) as from_vm_ssh:
-        return _ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings, timeout=timeout, fail_ok=fail_ok)
+        return network_helper._ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings,
+                                           timeout=timeout, fail_ok=fail_ok)[0]
 
 
 @contextmanager
@@ -2221,3 +2186,106 @@ def _get_cloud_config_add_user(con_ssh=None):
         raise exceptions.CommonError("userdata file {} does not exist after download".format(file_path))
 
     return file_path
+
+
+def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN, vm_image_name='cgcs-guest'):
+    """
+    Cold migrate modifed for CGTS-4911
+    Args:
+        vm_id (str): vm to cold migrate
+        revert (bool): False to confirm resize, True to revert
+        con_ssh (SSHClient):
+        fail_ok (bool): True if fail ok. Default to False, ie., throws exception upon cold migration fail.
+        auth_info (dict):
+
+    Returns (tuple): (rtn_code, message)
+        (0, success_msg) # Cold migration and confirm/revert succeeded. VM is back to original state or Active state.
+        (1, <stderr>) # cold migration cli rejected as expected
+        (2, <stderr>) # Cold migration cli command rejected. <stderr> is the err message returned by cli cmd.
+        (3, <stdout>) # Cold migration cli accepted, but not finished. <stdout> is the output of cli cmd.
+        (4, timeout_message] # Cold migration command ran successfully, but timed out waiting for VM to reach
+            'Verify Resize' state or Error state.
+        (5, err_msg) # Cold migration command ran successfully, but VM is in Error state.
+        (6, err_msg) # Cold migration command ran successfully, and resize confirm/revert performed. But VM is not in
+            Active state after confirm/revert.
+        (7, err_msg) # Cold migration and resize confirm/revert ran successfully and vm in active state. But host for vm
+            is not as expected. i.e., still the same host after confirm resize, or different host after revert resize.
+
+    """
+    before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+    before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh)
+    if not before_status == VMStatus.ACTIVE:
+        LOG.warning("Non-active VM status before cold migrate: {}".format(before_status))
+
+    LOG.info("Cold migrating VM {} from {}...".format(vm_id, before_host))
+    exitcode, output = cli.nova('migrate --poll', vm_id, ssh_client=con_ssh, auth_info=auth_info,
+                                timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=True, rtn_list=True)
+
+    if exitcode == 1:
+        vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
+        if len(host_helper.get_nova_hosts_with_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
+            LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
+                     "migrate to.".format(vm_id))
+            return 1, output
+        elif fail_ok:
+            LOG.warning("Cold migration of vm {} is rejected.".format(vm_id))
+            return 2, output
+        else:
+            raise exceptions.VMOperationFailed(output)
+
+    if 'Finished' not in output:
+        if fail_ok:
+            LOG.warning("Cold migration is not finished.")
+            return 3, output
+        raise exceptions.VMPostCheckFailed("Failed to cold migrate vm. Output: {}".format(output))
+
+    LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
+
+    vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], timeout=300,
+                                    fail_ok=fail_ok, con_ssh=con_ssh)
+
+    if vm_status is None:
+        return 4, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
+
+    # Modified here
+    # TODO Check file in vm
+    wait_for_vm_pingable_from_natbox(vm_id, timeout=240)
+    with ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name) as vm_ssh:
+        filename = ""
+        look_for = ''
+        # vm_ssh.exec_cmd('cat {} | grep {}'.format(filename, look_for))
+
+    verify_resize_str = 'Revert' if revert else 'Confirm'
+    if vm_status == VMStatus.VERIFY_RESIZE:
+        LOG.info("{}ing resize..".format(verify_resize_str))
+        _confirm_or_revert_resize(vm=vm_id, revert=revert, con_ssh=con_ssh)
+
+    elif vm_status == VMStatus.ERROR:
+        err_msg = "VM {} in Error state after cold migrate. {} resize is not reached.".format(vm_id, verify_resize_str)
+        if fail_ok:
+            return 5, err_msg
+        raise exceptions.VMPostCheckFailed(err_msg)
+
+    post_confirm_state = _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM,
+                                             fail_ok=fail_ok, con_ssh=con_ssh)
+
+    if post_confirm_state is None:
+        err_msg = "VM {} is not in Active state after {} Resize".format(vm_id, verify_resize_str)
+        return 6, err_msg
+
+    # Process results
+    after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+    host_changed = before_host != after_host
+    host_change_str = "changed" if host_changed else "did not change"
+    operation_ok = not host_changed if revert else host_changed
+
+    if not operation_ok:
+        err_msg = ("VM {} host {} after {} Resize. Before host: {}. After host: {}".
+                   format(vm_id, host_change_str, verify_resize_str, before_host, after_host))
+        if fail_ok:
+            return 7, err_msg
+        raise exceptions.VMPostCheckFailed(err_msg)
+
+    success_msg = "VM {} successfully cold migrated and {}ed Resize.".format(vm_id, verify_resize_str)
+    LOG.info(success_msg)
+    return 0, success_msg

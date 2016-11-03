@@ -17,45 +17,43 @@ from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import nova_helper, vm_helper, host_helper, system_helper, network_helper
 
-
-def modify_mtu_on_interface(hostname, mtu, network_type):
-
-    LOG.tc_step('This Test will take 10min+ to execute as it lock, modify and unlock a node. ')
-
-    if not hostname:
-        raise exceptions.HostError("Expected a valid hostname but got nothing instead")
-
-    # get the port_uuid for network_type interface only
-    table_ = table_parser.table(cli.system('host-if-list --nowrap', hostname))
-    port_uuid_list = table_parser.get_values(table_, 'uuid', **{'network type': network_type})
-
-    # lock the node
-    LOG.tc_step('lock the standby')
-    HostsToRecover.add(hostname, scope='function')
-    host_helper.lock_host(hostname)
-    sleep(30)
-
-    # config the page number after lock the compute node
-    LOG.tc_step('modify the mtu on locked host {}'.format(hostname))
-
-    imtu = " --imtu " + mtu
-    LOG.tc_step("Modifying {} interfaces to have {} mtu".format(network_type, mtu))
-    # change all MTUs on ports of the same network type
-    for port_uuid in port_uuid_list:
-        args = hostname + " " + port_uuid + imtu
-        # system host-if-modify controller-1 <port_uuid>--imtu <mtu_value>
-        output = cli.system('host-if-modify', args, auth_info=Tenant.ADMIN, fail_ok=False)
-
-    # unlock the node
-    LOG.tc_step('unlock the standby')
-
-    # check webservice are up when host are unlocked
-    sleep(30)
-    host_helper.unlock_host(hostname, check_webservice_up=True)
+HOSTS_IF_MODIFY_ARGS = []
 
 
-@mark.parametrize('mtu', ['1400', '1500'])
-def test_oam_intf_mtu_modified(mtu):
+def __get_mtu_to_mod(providernet_name, mtu_range='middle'):
+    LOG.tc_step("Get a MTU value that is in mtu {} range".format(mtu_range))
+    pnet_mtus = network_helper.get_providernets(name=providernet_name, rtn_val='mtu', strict=False)
+    pnet_types = network_helper.get_providernets(name=providernet_name, rtn_val='type', strict=False)
+
+    min_mtu = 1000
+    max_mtu = 9216
+    for pnet_type in pnet_types:
+        if 'vxlan' in pnet_type:
+            max_mtu = 9000
+            break
+
+    for pnet_mtu in pnet_mtus:
+        pnet_mtu = int(pnet_mtu)
+        if pnet_mtu > min_mtu:
+            min_mtu = pnet_mtu
+
+    if min_mtu == max_mtu:
+        mtu = max_mtu
+    else:
+        if mtu_range == 'middle':
+            mtu = random.choice(range(min_mtu + 1, max_mtu - 1))
+        elif mtu_range == 'min':
+            mtu = min_mtu
+        else:
+            mtu = max_mtu
+
+    return mtu
+
+
+@mark.parametrize('mtu_range', [
+    'middle'
+])
+def test_modify_mtu_oam_interface(mtu_range):
     """
 
     of the 2016-04-04 sysinv_test_plan.pdf
@@ -83,43 +81,51 @@ def test_oam_intf_mtu_modified(mtu):
         - Nothing
 
     """
-    pnet_mtus = network_helper.get_providernets(name='ext', rtn_val='mtu', strict=False)
-    for pnet_mtu in pnet_mtus:
-        if int(pnet_mtu) > int(mtu):
-            mtu = pnet_mtu
-    LOG.info("Changing mtu to {} because of providernet minimum mtu".format(mtu))
-    mtu = str(mtu)
+    mtu = __get_mtu_to_mod(providernet_name='-ext', mtu_range=mtu_range)
 
-    # retrieve standby controller
     first_host = system_helper.get_standby_controller_name()
-    # modify mtu on standby controller
-    modify_mtu_on_interface(first_host, mtu, 'oam')
-    # swact active and standby controller
+    if not first_host:
+        skip("Standby controller unavailable. Cannot lock controller.")
 
+    second_host = system_helper.get_active_controller_name()
+    HostsToRecover.add([first_host, second_host], scope='function')
+
+    oam_attributes = system_helper.get_host_interfaces_info(host=first_host, rtn_val='attributes', net_type='oam')
+    # sample attributes: [MTU=9216,AE_MODE=802.3ad]
+    pre_oam_mtu = int(oam_attributes[0].split(',')[0].split('=')[1])
+
+    LOG.tc_step("Modify {} oam interface MTU from {} to {}, and "
+                "ensure it's applied successfully after unlock".format(first_host, pre_oam_mtu, mtu))
+    code, res = host_helper.modify_mtu_on_interfaces(first_host, mtu_val=mtu, network_type='oam',
+                                                     lock_unlock=True, fail_ok=True)
+
+    LOG.tc_step("Revert OAM MTU to original value: {}".format(pre_oam_mtu))
+    code_revert, res_revert = host_helper.modify_mtu_on_interfaces(first_host, mtu_val=pre_oam_mtu, network_type='oam',
+                                                                   lock_unlock=True, fail_ok=True)
+    assert 0 == code, "OAM MTU is not modified successfully. Result: {}".format(res)
+    assert 0 == code_revert, "OAM MTU is not reverted successfully. Result: {}".format(res_revert)
+
+    LOG.tc_step("Swact active controller")
     host_helper.swact_host(fail_ok=False)
-    sleep(30)
-    # modify mtu on new standby controller
-    second_host = system_helper.get_standby_controller_name()
-    # modify mtu on new standby controller
-    modify_mtu_on_interface(second_host, mtu, 'oam')
+    host_helper.wait_for_webservice_up(first_host)
 
-    # check mtu is updated
-    table_ = table_ = table_parser.table(cli.system('host-if-list --nowrap', first_host))
-    mtu_list = table_parser.get_values(table_, 'attributes', **{'network type': 'oam'})
-    # parse the string of MTU=xxxx
-    actual_mtu_one = mtu_list[0][4:]
+    LOG.tc_step("Modify new standby controller {} oam interface MTU to: {}, and "
+                "ensure it's applied successfully after unlock".format(second_host, mtu))
 
-    table_ = table_parser.table(cli.system('host-if-list --nowrap', second_host))
-    mtu_list = table_parser.get_values(table_, 'attributes', **{'network type': 'oam'})
-    actual_mtu_two = mtu_list[0][4:]
+    code, res = host_helper.modify_mtu_on_interfaces(second_host, mtu_val=mtu, network_type='oam',
+                                               lock_unlock=True, fail_ok=True)
 
-    assert mtu == actual_mtu_one == actual_mtu_two, "Expect MTU={} after modification. Actual active host MTU={}, " \
-                                                    "Actual standby host " \
-                                                    "MTU={}".format(mtu, actual_mtu_one, actual_mtu_two)
+    LOG.tc_step("Revert OAM MTU to original value: {}".format(pre_oam_mtu))
+    code_revert, res_revert = host_helper.modify_mtu_on_interfaces(second_host, mtu_val=pre_oam_mtu, network_type='oam',
+                                                                   lock_unlock=True, fail_ok=True)
+    assert 0 == code, "OAM MTU is not modified successfully for second controller. Result: {}".format(res)
+    assert 0 == code_revert, "OAM MTU is not reverted successfully. Result: {}".format(res_revert)
 
 
-@mark.parametrize('mtu', ['1550', '1500'])
-def test_data_intf_mtu_modified(mtu):
+@mark.parametrize('mtu_range', [
+    'middle',
+    ])
+def test_modify_mtu_data_interface(mtu_range):
     """
     23) Change the MTU value of the data interface using CLI
     Verify that MTU on data interfaces on all compute node can be modified by cli
@@ -140,35 +146,49 @@ def test_data_intf_mtu_modified(mtu):
         - Nothing
 
     """
-    pnet_mtus = network_helper.get_providernets(name='data', rtn_val='mtu', strict=False)
-    for pnet_mtu in pnet_mtus:
-        if int(pnet_mtu) > int(mtu):
-            mtu = pnet_mtu
-    LOG.info("Changing mtu to {} because of providernet minimum mtu".format(mtu))
-    mtu = str(mtu)
 
-    # test all compute node that are up and enabled
-    compute_list = host_helper.get_hypervisors(state='up', status='enabled')
+    hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
+    if len(hypervisors) < 2:
+        skip("Less than two hypervisors available.")
 
-    for host in compute_list:
-        # For CPE labs
-        if host == system_helper.get_active_controller_name():
-            if len(compute_list) < 2:
-                host_helper.unlock_host(system_helper.get_standby_controller_name(), check_hypervisor_up=True)
-            host_helper.swact_host()
-            sleep(30)
+    if system_helper.is_small_footprint():
+        standby = system_helper.get_standby_controller_name()
+        if not standby:
+            skip("Standby controller unavailable on CPE system. Unable to lock host")
+        hypervisors = [standby]
+    else:
+        if len(hypervisors) > 4:
+            hypervisors = random.sample(hypervisors, 4)
 
-        modify_mtu_on_interface(host, mtu, 'data')
+    # To remove
+    # hypervisors = [host_helper.get_nova_host_with_min_or_max_vms(rtn_max=False)]
 
-        # check mtu is updated
-        table_ = table_parser.table(cli.system('host-if-list --nowrap', host))
-        mtu_list = table_parser.get_values(table_, 'attributes', **{'network type': 'data'})
-        # parse the string of MTU=xxxx
+    LOG.tc_step("Delete vms to reduce lock time")
+    vm_helper.delete_vms()
 
-        for port_mtu in mtu_list:
+    mtu = __get_mtu_to_mod(providernet_name='-data', mtu_range=mtu_range)
+    LOG.tc_step("Modify data MTU to {} for hosts: {}".format(mtu, hypervisors))
+    for host in hypervisors:
+        interfaces = system_helper.get_host_interfaces_info(host=host, rtn_val='name', net_type='data')
+        for interface in interfaces:
+            pre_mtu = int(system_helper.get_host_if_show_values(host, interface, 'imtu')[0])
+            HOSTS_IF_MODIFY_ARGS.append("-m {} {} {}".format(pre_mtu, host, interface))
 
-            mtu_list = port_mtu.split(',')
-            actual_mtu = mtu_list[0][4:]
-            # verfiy each data ports on each hosts
-            assert mtu == actual_mtu, "On {} ports Expect MTU={} after modification. " \
-                                      "Actual active host MTU={} ".format(host,mtu, actual_mtu)
+    HostsToRecover.add(hypervisors)
+    code, res = host_helper.modify_mtu_on_interfaces(hypervisors, mtu_val=mtu, network_type='data',
+                                                     lock_unlock=True, fail_ok=True)
+
+    LOG.tc_step("Revert host data interface MTU to original settings: {}".format(HOSTS_IF_MODIFY_ARGS))
+    for host in hypervisors:
+        host_helper.lock_host(host)
+
+    failed_args = []
+    for args in HOSTS_IF_MODIFY_ARGS:
+        code_revert, output = cli.system('host-if-modify', args, fail_ok=True, rtn_list=True)
+        if not code_revert == 0:
+            failed_args.append(args)
+
+    # Let host recover fixture to unlock the hosts after revert modify to save run time
+
+    assert 0 == code, "Failed to modify data MTU. Return code:{}; Details: {}".format(code, res)
+    assert not failed_args, "Host if modify with below args failed: {}".format(failed_args)

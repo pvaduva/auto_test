@@ -23,9 +23,10 @@ def test_ceilometer_vswitch_port_samples_5_min_record():
     meter = 'vswitch.port.transmit.util'
 
     LOG.tc_step("Get resource IDs for last two vswitch.port.transmit.util entries in sample-list")
-    last_two_samples = __wait_for_records(limit=2, meter=meter, query=None, entry_num=2, timeout=60)
+    last_two_samples = __wait_for_records(limit=2, meter=meter, query=None, entry_num=2, timeout=300)
 
-    assert 2 == len(last_two_samples), "Number of entries for {} meter is {} instead of 2".format(meter, last_two_samples)
+    assert 2 == len(last_two_samples), "Number of entries for {} meter is {} instead of 2".\
+        format(meter, last_two_samples)
 
     LOG.tc_step("Verify 10 vswitch.port.transmit.util entries exist in sample-list per resource id")
     for resource_id in last_two_samples:

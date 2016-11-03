@@ -117,6 +117,9 @@ def test_boot_vm_mem_page_size(flavor_2g, flavor_mem_page_size, image_mempage, i
 
     if expt_code != 0:
         assert re.search(NovaCLIOutput.VM_BOOT_REJECT_MEM_PAGE_SIZE_FORBIDDEN, msg)
+    else:
+        LOG.tc_step("Ensure VM is pingable from NatBox")
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 @fixture(scope='module')
@@ -192,3 +195,6 @@ def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_, add_1g_and_4k_pages):
     assert sum(pre_used_mems) + 2048 == sum(post_used_mems), "Used memory is not increase by 2048MiB"
     assert sum(pre_avail_mems) - 2048 == sum(post_avail_mems), ("Available memory in {} page pool is not decreased "
                                                                 "by 2048MiB").format(mem_page_size)
+
+    LOG.tc_step("Ensure vm is pingable from NatBox")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

@@ -20,7 +20,7 @@ def delete_resources_func(request):
 
     Examples:
         - see nova/conftest.py for importing
-        - see ResourceCleanup.add function usages in nova/test_shared_cpu_enabled.py for adding resources to cleanups
+        - see ResourceCleanup.add function usages in nova/test_shared_cpu.py for adding resources to cleanups
 
     Args:
         request: pytest param present caller test function
@@ -42,7 +42,7 @@ def delete_resources_class(request):
 
     Examples:
         - see nova/conftest.py for importing
-        - see ResourceCleanup.add function usages in nova/test_shared_cpu_enabled.py for adding resources to cleanups
+        - see ResourceCleanup.add function usages in nova/test_shared_cpu.py for adding resources to cleanups
 
     Args:
         request: pytest param present caller test function
@@ -64,7 +64,7 @@ def delete_resources_module(request):
 
     Examples:
         - see nova/conftest.py for importing
-        - see ResourceCleanup.add function usages in nova/test_shared_cpu_enabled.py for adding resources to cleanups
+        - see ResourceCleanup.add function usages in nova/test_shared_cpu.py for adding resources to cleanups
 
     Args:
         request: pytest param present caller test function

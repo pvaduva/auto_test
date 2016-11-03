@@ -273,6 +273,14 @@ class Labs:
         'storage_nodes': [23301, 23302],
     }
 
+    WCP_99_104 = {
+        'short_name': 'wcp_99_104',
+        'name': 'yow-cgcs-wildcat-99_104',
+        'floating ip': '128.224.151.94',
+        'controller-0 ip': '128.224.151.103',
+        'controller-1 ip': '128.224.151.13',
+    }
+
     VBOX = {
         'short_name': 'vbox',
         'name': 'vbox',

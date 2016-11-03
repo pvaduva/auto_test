@@ -15,7 +15,7 @@ from consts.auth import Tenant
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper,  common
 
 
-def test_alarm_overwritten(con_ssh=None):
+def test_alarm_overwritten():
     """
     Verify the chronological order to the alarms
 

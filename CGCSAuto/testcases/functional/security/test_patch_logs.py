@@ -15,7 +15,7 @@ def get_patch_name():
     Assumes that the patch has been stored in /home/wrsroot/test_patches on the server
     - Change patch_name to whatever the patch's name is before testing
     """
-    patch_name = 'US82830_designer_patch'
+    patch_name = 'TS_16.10_FC_TEST_ALLNODES_RR'
 
     return patch_name
 
@@ -218,10 +218,10 @@ def test_host_install_log(setup_host_install):
 
     search_for = ['sw-patch-controller-daemon.*INFO: Running host-install for {}'.format(host),
                   'sw-patch-controller-daemon.*INFO.*Patch installation request sent to {}'.format(host)]
-    res = check_logs(search_for, lines=25, api=False)
+    res = check_logs(search_for, lines=50, api=False)
     assert res, "FAIL: uploading patches did not generate the expected logs in patching.log"
 
     search_for = ['sw-patch-controller-daemon.*INFO: User: wrsroot/admin '
                   'Action: Running host-install for {}'.format(host)]
-    res = check_logs(search_for, lines=10, api=True)
+    res = check_logs(search_for, lines=25, api=True)
     assert res, "FAIL: uploading patches did not generate the expected logs in patching-api.log"

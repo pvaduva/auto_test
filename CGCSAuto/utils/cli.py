@@ -57,14 +57,6 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
     exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout)
 
-    # The commented code is to convert output to dictionary or list.
-    # But it might be a overkill, and hides the return type.
-    # if not raw_output:
-    #    cmd_output = table_parser.tables(cmd_output)
-    #    # return dictionary if output contains only 1 table, otherwise return a list of tables.
-    #    if len(cmd_output) == 1:
-    #        cmd_output = cmd_output[0]
-
     if fail_ok:
         if exit_code in [0, 1]:
             return exit_code, cmd_output
@@ -74,7 +66,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
         else:
             return cmd_output
 
-    raise exceptions.CLIRejected("CLI command failed to execute: {}".format(cmd_output))
+    raise exceptions.CLIRejected("CLI '{}' failed to execute. Output: {}".format(complete_cmd, cmd_output))
 
 
 def __convert_args(args):

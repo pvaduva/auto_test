@@ -29,8 +29,10 @@ def _get_computes_for_local_backing_type(ls_type='image', con_ssh=None):
     return hosts_of_type
 
 
-def _less_than_2_hypervisors():
-    return len(host_helper.get_nova_hosts()) < 2
+@fixture(scope='module')
+def ensure_two_hypervisors():
+    if len(host_helper.get_hypervisors(state='up', status='enabled')) < 2:
+        skip("Less than two up hypervisors on system")
 
 
 class TestLocalStorage(object):
@@ -297,12 +299,11 @@ class TestLocalStorage(object):
 
         return host_pv_sizes
 
-    @mark.skipif(_less_than_2_hypervisors(), reason='Requires 2 or more hyperviors to run the testcase')
     @mark.parametrize('local_storage_type', [
         mark.p1('lvm'),
         mark.p1('image'),
     ])
-    def test_local_storage_operations(self, local_storage_type):
+    def test_local_storage_operations(self, local_storage_type, ensure_two_hypervisors):
         """
         Args:
             local_storage_type(str): type of local-storage backing, should be image, lvm
@@ -385,12 +386,11 @@ class TestLocalStorage(object):
         assert host_helper.check_host_local_backing_type(compute_dest, storage_type=local_storage_type), \
             'Local-storage backing failed to change to {} on host:{}'.format(local_storage_type, compute_dest)
 
-    @mark.skipif(_less_than_2_hypervisors(), reason='Requires 2 or more computes to test this test case')
     @mark.parametrize('local_storage_type', [
         mark.p2('image'),
         mark.p2('lvm'),
     ])
-    def test_apply_profile_to_smaller_sized_host(self, local_storage_type):
+    def test_apply_profile_to_smaller_sized_host(self, local_storage_type, ensure_two_hypervisors):
         """
 
         Args:

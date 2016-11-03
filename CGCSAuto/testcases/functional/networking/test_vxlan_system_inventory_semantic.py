@@ -35,7 +35,7 @@ def get_interface_(request):
         args = '{} {}'.format(nova_host , "-a --nowrap")
         table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
         list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'network type': 'None',
-                                                                     'used by i/f': []})
+                                                                     'used by i/f': '[]'})
 
         if list_interfaces:
             find = True
@@ -45,7 +45,7 @@ def get_interface_(request):
         assert find, "Can not find a free data interface "
 
     # now lock the computer
-    host_helper.lock_host(computer_host)
+    host_helper.lock_host(computer_host, swact=True)
     HostsToRecover.add(computer_host, scope='module')
 
     interface = random.choice(list_interfaces)
@@ -398,7 +398,7 @@ def test_ip_unique_across_all_compute_nodes(get_interface_):
 
     LOG.tc_step("random get a ip from any compute node")
     # randomly get a compute
-    cmp = random.choice(host_helper.get_hosts(personality='compute'))
+    cmp = random.choice(host_helper.get_hypervisors(state='up', status='enabled'))
 
     table_ = table_parser.table(cli.system('host-addr-list', cmp))
     ip = random.choice(table_parser.get_values(table_, 'address'))

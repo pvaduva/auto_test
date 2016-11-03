@@ -113,9 +113,9 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path):
         # ssh private key should now exist under keyfile_path
         con_0_ssh.exec_cmd('stat {}'.format(keyfile_name), fail_ok=False)
 
-        # TODO: remove
-        cmd_2 = 'chmod 777 ' + keyfile_name
-        con_0_ssh.exec_sudo_cmd(cmd_2, fail_ok=False)
+        # # TODO: remove
+        # cmd_2 = 'chmod 777 ' + keyfile_name
+        # con_0_ssh.exec_sudo_cmd(cmd_2, fail_ok=False)
 
         cmd_3 = 'scp {} {}@{}:{}'.format(keyfile_name, natbox['user'], natbox['ip'], keyfile_path)
         con_0_ssh.send(cmd_3)

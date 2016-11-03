@@ -12,7 +12,7 @@ from keywords.common import Count
 
 def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=None, ephemeral=None, swap=None,
                   is_public=None, rxtx_factor=None, guest_os=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None,
-                  check_storage_backing=True):
+                  storage_backing=None, check_storage_backing=True):
     """
     Create a flavor with given critria.
 
@@ -30,13 +30,17 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=None,
         fail_ok (bool): whether it's okay to fail to create a flavor. Default to False.
         auth_info (dict): This is set to Admin by default. Can be set to other tenant for negative test.
         con_ssh (SSHClient):
-        check_storage_backing (bool): whether to set local_storage spec based on the hosts configuration
+        storage_backing (str): storage backing in extra flavor. Auto set storage backing based on system config if None.
+            Valid values: 'local_image', 'local_lvm', 'remote'
+        check_storage_backing (bool): whether to check the system storage backing configuration to auto determine the
+            local_storage extra spec if storage_backing param is set to None.
 
     Returns (tuple): (rtn_code (int), flavor_id/err_msg (str))
         (0, <flavor_id>): flavor created successfully
         (1, <stderr>): create flavor cli rejected
 
     """
+
     candidate_args = {
         '--ephemeral': ephemeral,
         '--swap': swap,
@@ -73,46 +77,74 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=None,
     flavor_id = table_parser.get_column(table_, 'ID')[0]
     LOG.info("Flavor {} created successfully.".format(flavor_name))
 
-    if check_storage_backing:
-        LOG.info("Setting local_storage spec to storage backing with max number of hosts on system if not local_image")
-        local_image_hosts = ['local_image', host_helper.get_hosts_by_storage_aggregate(con_ssh=con_ssh)]
-        local_lvm_hosts = ['local_lvm', host_helper.get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh)]
-        remote_hosts = ['remote', host_helper.get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh)]
+    if not storage_backing:
+        if check_storage_backing:
+            LOG.info("Choose storage backing used by most hosts")
+            storage_backing, hosts = get_storage_backing_with_max_hosts(rtn_down_hosts=True, con_ssh=con_ssh)
+        else:
+            storage_backing = 'local_image'
 
-        hosts_in_aggregates = [local_image_hosts, local_lvm_hosts, remote_hosts]
+    if storage_backing != 'local_image':
+        LOG.info("Setting local_storage extra spec to {}".format(storage_backing))
+        set_flavor_extra_specs(flavor_id, con_ssh=con_ssh, auth_info=auth_info,
+                               **{FlavorSpec.STORAGE_BACKING: storage_backing})
 
-        storage_backing_spec = None
-        max_num = 0
-        for hosts_with_backing in hosts_in_aggregates:
-            hosts_num = len(hosts_with_backing[1])
-            if hosts_num > max_num:
-                storage_backing_spec = hosts_with_backing[0]
-                max_num = hosts_num
+    return 0, flavor_id, storage_backing
 
-        if max_num == 0:
-            image_hosts_num = lvm_hosts_num = remote_hosts_num = 0
-            down_hosts = host_helper.get_hypervisors(state='down', con_ssh=con_ssh)
-            for down_host in down_hosts:
-                host_instance_backing = host_helper.get_local_storage_backing(down_host, con_ssh=con_ssh)
-                if 'image' in host_instance_backing:
-                    image_hosts_num += 1
-                elif 'lvm' in host_instance_backing:
-                    lvm_hosts_num += 1
-                else:
-                    remote_hosts_num += 1
-            hosts_nums = [image_hosts_num, lvm_hosts_num, remote_hosts_num]
-            max_num = max(hosts_nums)
-            storage_backing_spec = ['local_image', 'local_lvm', 'remote'][hosts_nums.index(max_num)]
-            LOG.warning("No up hosts in host-aggregate. Using {} storage spec based on instance backing for down hosts."
-                        .format(storage_backing_spec))
 
-        if storage_backing_spec != 'local_image':
-            LOG.info("Setting local_storage extra spec to {}. Number of hosts with this storage backing: {}".format(
-                    storage_backing_spec, max_num))
-            set_flavor_extra_specs(flavor_id, con_ssh=con_ssh, auth_info=auth_info,
-                                   **{FlavorSpec.STORAGE_BACKING: storage_backing_spec})
+def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=False, con_ssh=None):
 
-    return 0, flavor_id
+    hosts_by_backing = {'local_image': host_helper.get_hosts_by_storage_aggregate(con_ssh=con_ssh),
+                        'local_lvm': host_helper.get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh),
+                        'remote': host_helper.get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh)
+                        }
+
+    valid_backings = ['local_image', 'local_lvm', 'remote']
+    valid_backings.remove(prefer)
+    valid_backings.insert(0, prefer)
+
+    storage_backing_spec = prefer
+    max_num = 0
+    for backing in valid_backings:
+        hosts_num = len(hosts_by_backing[backing])
+        if hosts_num > max_num:
+            storage_backing_spec = backing
+            max_num = hosts_num
+
+    if max_num > 0:
+        LOG.info("{} backing has most hosts in aggregate: {}".format(storage_backing_spec,
+                                                                     hosts_by_backing[storage_backing_spec]))
+    elif max_num == 0 and not rtn_down_hosts:
+        LOG.warning("No host in host-aggregate. Return preferred storage backing")
+
+    else:
+        image_hosts_num = lvm_hosts_num = remote_hosts_num = 0
+        down_hosts = host_helper.get_hypervisors(state='down', con_ssh=con_ssh)
+        for down_host in down_hosts:
+            host_instance_backing = host_helper.get_local_storage_backing(down_host, con_ssh=con_ssh)
+            if 'image' in host_instance_backing:
+                backing = 'local_image'
+                image_hosts_num += 1
+            elif 'lvm' in host_instance_backing:
+                backing = 'local_lvm'
+                lvm_hosts_num += 1
+            else:
+                backing = 'remote'
+                remote_hosts_num += 1
+
+            hosts_by_backing[backing].append(down_host)
+
+        hosts_nums = {'local_image': image_hosts_num, 'local_lvm': lvm_hosts_num, 'remote': remote_hosts_num}
+        max_num = max(list(hosts_nums.values()))
+        for backing in valid_backings:
+            if max_num == hosts_nums[backing]:
+                storage_backing_spec = backing
+                break
+
+        LOG.warning("No up hosts in host-aggregate. Return {} storage backing based on instance backing for down hosts."
+                    .format(storage_backing_spec))
+
+    return storage_backing_spec, hosts_by_backing[storage_backing_spec]
 
 
 def flavor_exists(flavor, header='ID', con_ssh=None, auth_info=None):

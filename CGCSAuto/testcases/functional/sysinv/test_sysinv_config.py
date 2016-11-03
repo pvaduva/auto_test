@@ -13,6 +13,27 @@ from consts.timeout import SysInvTimeout
 from keywords import system_helper
 from keywords import network_helper
 
+from functools import wraps
+
+
+def repeat_checking(repeat_times=20, wait_time=6):
+    def actual_decorator(func):
+        @wraps(func)
+        def wrapped_func(*args, **kwargs):
+            cnt = 0
+            while(cnt < repeat_times):
+                code, output = func(args, kwargs)
+                LOG.info('repeating checking {} times, got {}'.format(cnt+1, output))
+                if code == 0:
+                    LOG.info('repeating checking {} times, OK, got {}'.format(cnt+1, output))
+                    return code, output
+                cnt += 1
+                time.sleep(wait_time)
+            LOG.info('repeating checking {} times, FAIL, got {}'.format(cnt, output))
+            return -1, output
+
+        return wrapped_func
+    return actual_decorator
 
 def test_system_type():
     """
@@ -144,7 +165,7 @@ class TestRetentionPeriod:
         else:
             expect_fail = False
         LOG.tc_step('Attempt to change to new value:{}'.format(new_retention_period))
-        code, msg = system_helper.set_retention_period(fail_ok=expect_fail, con_ssh=None, auth_info=Tenant.ADMIN,
+        code, msg = system_helper.set_retention_period(fail_ok=expect_fail, auth_info=Tenant.ADMIN,
                                                        period=new_retention_period)
         LOG.tc_step('Check if CLI succeeded')
         if expect_fail:
@@ -181,6 +202,31 @@ class TestDnsSettings:
     """
 
     DNS_SETTING_FILE = '/etc/resolv.conf'
+
+    @repeat_checking(repeat_times=10, wait_time=6)
+    def wait_for_dns_changed(self, expected_ip_addres=None):
+        ip_addr_list = expected_ip_addres if expected_ip_addres is not None else []
+
+        controller_ssh = ControllerClient.get_active_controller()
+
+        cmd_get_saved_dns = 'cat {}'.format(TestDnsSettings.DNS_SETTING_FILE)
+        code, output = controller_ssh.exec_cmd(cmd_get_saved_dns, expect_timeout=20)
+
+        assert 0 == code, 'Failed to get saved DNS settings: {}'.format(cmd_get_saved_dns)
+
+        LOG.info('Find saved DNS servers:{}'.format(output))
+        saved_dns = []
+        for line in output.splitlines():
+            if line.strip().startswith('nameserver'):
+                saved_dns.append(line.strip().split()[1])
+
+        LOG.info('Verify all input DNS servers are saved, expecting:{}'.format(expected_ip_addres))
+        if set(ip_addr_list).issubset(set(saved_dns)):
+            return 0, saved_dns
+        else:
+            return 1, 'Saved DNS servers are different from the input DNS servers\nActual:{}\nExpected:{}\n'\
+                .format(saved_dns, ip_addr_list)
+
 
     @fixture(scope='class', autouse=True)
     def backup_restore_dns_settings(self, request):
@@ -260,21 +306,8 @@ class TestDnsSettings:
             assert 0 == code, 'Failed to change DNS setting, msg={}'.format(msg)
 
         LOG.tc_step('Wait {} seconds'.format(SysInvTimeout.DNS_SERVERS_SAVED))
-        time.sleep(SysInvTimeout.DNS_SERVERS_SAVED)
 
         LOG.tc_step('Check if the changes are saved into persistent storage')
-        controller_ssh = ControllerClient.get_active_controller()
-
-        cmd_get_saved_dns = 'cat {}'.format(self.DNS_SETTING_FILE)
-        code, output = controller_ssh.exec_cmd(cmd_get_saved_dns, expect_timeout=20)
-        assert 0 == code, 'Failed to get saved DNS settings: {}'.format(cmd_get_saved_dns)
-
-        LOG.info('Find saved DNS servers:{}'.format(output))
-        saved_dns = []
-        for line in output.splitlines():
-            if line.strip().startswith('nameserver'):
-                saved_dns.append(line.strip().split()[1])
-
-        LOG.info('Verify all input DNS servers are saved')
-        assert set(ip_addr_list).issubset(set(saved_dns)), \
-            'Saved DNS servers are different from the input DNS servers'
+        code, output = self.wait_for_dns_changed(ip_addr_list)
+        assert code == 0, \
+            'Saved DNS servers are different from the input DNS servers:\n{}'.format(output)

@@ -37,7 +37,7 @@ def get_any_volume(status='available', bootable=True, auth_info=None, con_ssh=No
 
 
 def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=None, status=None, attached_vm=None,
-                bootable=None, auth_info=Tenant.ADMIN, con_ssh=None):
+                bootable=None, rtn_val='ID', auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Return a list of volume ids based on the given criteria
 
@@ -80,9 +80,9 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         table_ = table_parser.filter_table(table_, **criteria)
 
     if name is None and not criteria:
-        LOG.warning("No criteria specified, return ids for all volumes for specific tenant")
+        LOG.warning("No criteria specified, return {}s for all volumes for specific tenant".format(rtn_val))
 
-    return table_parser.get_column(table_, 'ID')
+    return table_parser.get_column(table_, rtn_val)
 
 
 def get_volumes_attached_to_vms(volumes=None, vms=None, header='ID', con_ssh=None, auth_info=Tenant.ADMIN):
@@ -160,7 +160,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     if name is None:
         name = 'vol-{}'.format(common.get_tenant_name())
 
-    name = common.get_unique_name(name, resource_type='volume', existing_names=get_volumes())
+    name = common.get_unique_name(name, resource_type='volume', existing_names=get_volumes(rtn_val='Name'))
     subcmd = ''
     source_arg = ''
     if bootable:

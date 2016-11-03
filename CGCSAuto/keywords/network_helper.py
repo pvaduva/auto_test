@@ -4,7 +4,7 @@ import re
 import time
 
 from consts.auth import Tenant
-from consts.cgcs import NetIP, DNS_NAMESERVERS
+from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE
 from consts.timeout import VMTimeout
 from keywords import common, keystone_helper, host_helper
 from utils import table_parser, cli, exceptions
@@ -562,7 +562,7 @@ def get_neutron_port(name=None, con_ssh=None, auth_info=None):
 def get_providernets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN,
                      **kwargs):
     """
-    Get the neutron provider net list based on name if given for ADMIN user.
+    Get the neutron provider net list based on name if given
 
     Args:
         rtn_val (str): id or name
@@ -806,7 +806,7 @@ def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=NetIP.DATA_NET_NAME, ip_pattern=NetIP.DATA_IP, vms=vms, con_ssh=con_ssh,
+    return _get_net_ips_for_vms(netname_pattern=Networks.DATA_NET_NAME, ip_pattern=Networks.DATA_IP, vms=vms, con_ssh=con_ssh,
                                 auth_info=auth_info, rtn_dict=rtn_dict)
 
 
@@ -825,7 +825,7 @@ def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=NetIP.INTERNAL_NET_NAME, ip_pattern=NetIP.INTERNAL_IP, vms=vms,
+    return _get_net_ips_for_vms(netname_pattern=Networks.INTERNAL_NET_NAME, ip_pattern=Networks.INTERNAL_IP, vms=vms,
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, use_fip=False)
 
 
@@ -845,7 +845,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=NetIP.MGMT_NET_NAME, ip_pattern=NetIP.MGMT_IP, vms=vms, con_ssh=con_ssh,
+    return _get_net_ips_for_vms(netname_pattern=Networks.MGMT_NET_NAME, ip_pattern=Networks.MGMT_IP, vms=vms, con_ssh=con_ssh,
                                 auth_info=auth_info, rtn_dict=rtn_dict, use_fip=use_fip)
 
 
@@ -1664,17 +1664,23 @@ def get_networks_on_providernet(providernet_id, rtn_val='id', con_ssh=None, auth
     Returns:
         statue (0 or 1) and the list of network ID
     """
+    if not providernet_id:
+        raise ValueError("No providernet_id provided.")
+
     table_ = table_parser.table(cli.neutron(cmd='net-list-on-providernet', positional_args=providernet_id,
                                             auth_info=auth_info, ssh_client=con_ssh))
 
-    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, **kwargs)
+    networks = table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, **kwargs)
+
+    LOG.info("Networks on providernet {} with args - '{}': {}".format(providernet_id, kwargs, networks))
+    return list(set(networks))
 
 
-def get_pci_nets(vif='sriov', rtn_val='name', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_pci_nets(vif='sriov', rtn_val='name', vlan_id=0, con_ssh=None, auth_info=Tenant.ADMIN):
 
     pnet_id = get_providernet_for_interface(interface=vif, con_ssh=con_ssh, auth_info=auth_info)
 
-    return get_networks_on_providernet(pnet_id, rtn_val, con_ssh=con_ssh, auth_info=auth_info)
+    return get_networks_on_providernet(pnet_id, rtn_val, con_ssh=con_ssh, auth_info=auth_info, vlan_id=vlan_id)
 
 
 def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_ssh=None):
@@ -1928,3 +1934,115 @@ def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     nics = [eval(nic_) for nic_ in nics]
 
     return nics
+
+
+__PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
+
+def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
+    """
+
+    Args:
+        server (str): server ip to ping
+        ssh_client (SSHClient): ping from this ssh client
+        num_pings (int):
+        timeout (int): max time to wait for ping response in seconds
+        fail_ok (bool): whether to raise exception if packet loss rate is 100%
+
+    Returns (int): packet loss percentile, such as 100, 0, 25
+
+    """
+    cmd = 'ping -c {} {}'.format(num_pings, server)
+
+    output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
+    packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
+    packet_loss_rate = int(packet_loss_rate)
+
+    if packet_loss_rate == 100:
+        msg = "Ping from {} to {} failed.".format(ssh_client.host, server)
+        if not fail_ok:
+            raise exceptions.VMNetworkError(msg)
+        else:
+            LOG.warning(msg)
+    elif packet_loss_rate > 0:
+        LOG.warning("Some packets dropped when ping from {} ssh session to {}. Packet loss rate: {}%".
+                    format(ssh_client.host, server, packet_loss_rate))
+    else:
+        LOG.info("All packets received by {}".format(server))
+
+    untransmitted_packets = int(num_pings) - int(re.findall("(\d+) packets transmitted,", output)[0])
+    return packet_loss_rate, untransmitted_packets
+
+
+def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only=True, vlan_id=0, net_name=None,
+                                strict=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        min_hosts (int):
+        pci_type (str): pci-sriov or pci-passthrough
+        up_hosts_only (bool): whether or not to exclude down hypervisors
+        net_name (str):
+        strict (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (list): list of network names with given pci interfaces with given minimum host number
+
+    """
+    valid_types = ['pci-sriov', 'pci-passthrough']
+    if pci_type not in valid_types:
+        raise ValueError("pci_type has to be one of these: {}".format(valid_types))
+
+    LOG.info("Searching for networks with {} interface on at least {} hosts".format(pci_type, min_hosts))
+    hosts_and_pnets = host_helper.get_hosts_and_pnets_with_pci_devs(pci_type=pci_type, up_hosts_only=up_hosts_only,
+                                                                    con_ssh=con_ssh, auth_info=auth_info)
+
+    all_pci_pnets = []
+    for pnets in hosts_and_pnets.values():
+        all_pci_pnets = all_pci_pnets + pnets
+
+    all_pci_pnets = list(set(all_pci_pnets))
+
+    LOG.info("All pnets: {}".format(all_pci_pnets))
+
+    specified_nets = []
+    internal_nets = []
+    tenant_nets = []
+    mgmt_nets = []
+
+    for pci_net in all_pci_pnets:
+        hosts_with_pnet = []
+        for host, pnets in hosts_and_pnets.items():
+            if pci_net in pnets:
+                hosts_with_pnet.append(host)
+
+        if len(hosts_with_pnet) >= min_hosts:
+            pnet_id = get_providernets(name=pci_net, rtn_val='id', strict=True, con_ssh=con_ssh, auth_info=auth_info)[0]
+            nets_on_pnet = get_networks_on_providernet(providernet_id=pnet_id, rtn_val='name', con_ssh=con_ssh,
+                                                       auth_info=auth_info, vlan_id=vlan_id)
+            for net in nets_on_pnet:
+                if net_name:
+                    if strict:
+                        if re.match(net_name, net):
+                            specified_nets.append(net)
+                    else:
+                        if re.search(net_name, net):
+                            specified_nets.append(net)
+                # If net_name unspecified:
+                elif re.search(Networks.INTERNAL_NET_NAME, net):
+                    internal_nets.append(net)
+                elif re.search(Networks.DATA_NET_NAME, net):
+                    tenant_nets.append(net)
+                elif re.search(Networks.MGMT_NET_NAME, net):
+                    mgmt_nets.append(net)
+                else:
+                    LOG.warning("Unknown network with {} interface: {}. Ignore.".format(pci_type, net))
+
+    for nets in (specified_nets, internal_nets, tenant_nets, mgmt_nets):
+        if nets:
+            LOG.info("Preferred networks for {} interfaces with at least {} hosts: {}".format(pci_type, min_hosts,
+                                                                                              nets))
+            return nets
+
+    LOG.warning("No networks found for {} interfaces with at least {} hosts".format(pci_type, min_hosts))
+    return []

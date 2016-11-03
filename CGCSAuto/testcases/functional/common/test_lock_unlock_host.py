@@ -13,7 +13,7 @@ from keywords import host_helper,system_helper, nova_helper, vm_helper
 
 @mark.sanity
 @mark.cpe_sanity
-def test_lock_unlock_active_controller():
+def test_lock_active_controller_reject():
     """
     Verify lock unlock active controller. Expected it to fail
 
@@ -37,7 +37,7 @@ def test_lock_unlock_active_controller():
 
     # lock standby controller node and verify it is successfully locked
     LOG.tc_step("Lock active controller and ensure it fail to lock")
-    exit_code, cmd_output = host_helper.lock_host(active_controller, fail_ok=True)
+    exit_code, cmd_output = host_helper.lock_host(active_controller, fail_ok=True, swact=False)
 
     assert exit_code == 1, 'Locking of active controller passed. However it was expected to fail'
 
@@ -68,7 +68,7 @@ def test_lock_unlock_standby_controller():
 
     # lock standby controller node and verify it is successfully locked
     LOG.tc_step("Lock standby controller and ensure it is successfully locked")
-    host_helper.lock_host(standby_controller)
+    host_helper.lock_host(standby_controller, swact=False)
 
     locked_controller_admin_state = host_helper.get_hostshow_value(standby_controller, 'administrative')
     assert locked_controller_admin_state == 'locked', 'Test Failed. Standby Controller {} should be in locked ' \
@@ -120,7 +120,7 @@ def test_lock_unlock_vm_host():
 
     # lock compute node and verify compute node is successfully unlocked
     LOG.tc_step("Lock vm host {} and ensure it is locked successfully".format(vm_host))
-    host_helper.lock_host(vm_host, check_first=False)
+    host_helper.lock_host(vm_host, check_first=False, swact=True)
 
     LOG.tc_step("Check vms are migrated to different host and in ACTIVE state")
     for vm in [vm_id1, vm_id2]:

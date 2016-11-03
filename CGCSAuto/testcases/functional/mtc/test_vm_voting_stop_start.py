@@ -113,7 +113,7 @@ def test_vm_voting_stop_start(vm_):
         exitcode, output = cli.nova('stop', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN, rtn_list=True, fail_ok=False)
 
     time.sleep(30)
-    events_tab = system_helper.get_events()
+    events_tab = system_helper.get_events_table()
     reasons = table_parser.get_values(events_tab, 'Reason Text', strict=False, **{'Entity Instance ID': vm_id})
     assert re.search('Stop complete for instance .* now disabled on host', '\n'.join(reasons)), \
         "Was not able to stop VM even though voting is removed"
@@ -125,7 +125,7 @@ def test_vm_voting_stop_start(vm_):
                                     fail_ok=False)
 
     time.sleep(120)
-    events_tab = system_helper.get_events()
+    events_tab = system_helper.get_events_table()
     reasons = table_parser.get_values(events_tab, 'Reason Text', strict=False, **{'Entity Instance ID': vm_id})
     assert re.search('Start complete for instance .* now enabled on host', '\n'.join(reasons)), \
         "Was not able to stop VM even though voting is removed"

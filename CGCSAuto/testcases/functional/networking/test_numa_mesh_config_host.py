@@ -29,17 +29,17 @@ def host_to_config(request):
     vswitch_proc_core_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch', core_type='log_core')
     pform_proc_core_dict = host_helper.get_host_cpu_cores_for_function(host, function='platform', core_type='log_core')
 
-    vswitch_original_num_p0 = len(vswitch_proc_core_dict[0]) if 0 in vswitch_proc_core_dict.keys() else 0
-    vswitch_original_num_p1 = len(vswitch_proc_core_dict[1]) if 1 in vswitch_proc_core_dict.keys() else 0
+    vswitch_original_num_p0 = len(vswitch_proc_core_dict[0])
+    vswitch_original_num_p1 = len(vswitch_proc_core_dict[1])
     platform_ogigin_num_p0 = len(pform_proc_core_dict[0])
-    platform_original_num_p1 = len(pform_proc_core_dict[1]) if 1 in pform_proc_core_dict.keys() else 0
+    platform_original_num_p1 = len(pform_proc_core_dict[1])
 
     def revert():
         post_vswitch_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch', core_type='log_core')
         post_pform_dict = host_helper.get_host_cpu_cores_for_function(host, function='platform', core_type='log_core')
         HostsToRecover.add(host, scope='module')
         if vswitch_proc_core_dict != post_vswitch_dict or pform_proc_core_dict != post_pform_dict:
-            host_helper.lock_host(host)
+            host_helper.lock_host(host, swact=True)
             host_helper.modify_host_cpu(host, 'vswitch', p0=vswitch_original_num_p0, p1=vswitch_original_num_p1)
             host_helper.modify_host_cpu(host, 'platform', p0=platform_ogigin_num_p0, p1=platform_original_num_p1)
             host_helper.unlock_host(host, check_hypervisor_up=True)
@@ -117,7 +117,12 @@ class TestVSwitchCPUReconfig:
                 if j is not None:
                     vswitch_args['p'+str(j)] = vswitch[j]
 
-            host_helper.lock_host(host)
+            if is_cpe and system_helper.get_active_controller_name() == host:
+                LOG.tc_step("{} is active controller, swact first".format(host))
+                host_helper.swact_host(host)
+
+            LOG.tc_step("Lock and modify cpu for {}".format(host))
+            host_helper.lock_host(host, swact=True)
             if platform is not None:
                 host_helper.modify_host_cpu(host, 'platform', **platform_args)
             if vswitch is not None:
@@ -148,7 +153,8 @@ class TestVSwitchCPUReconfig:
         ((1, 1), (8, 10), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES"),  # Assume total <= 10 cores/per proc&thread
         mark.p3(((2, 0), (0, 0), None, None, "CpuAssignment.VSWITCH_INSUFFICIENT_CORES")),
     ], ids=id_params_cores)
-    def test_vswitch_cpu_reconfig_negative(self, host_to_config, platform, vswitch, ht_required, cpe_required, expt_err):
+    def test_vswitch_cpu_reconfig_negative(self, host_to_config, platform, vswitch, ht_required, cpe_required,
+                                           expt_err):
         """
         Test negative cases for setting vSwitch cores.
         Args:
@@ -181,10 +187,18 @@ class TestVSwitchCPUReconfig:
         if cpe_required is not None and (cpe_required is not is_cpe):
             skip("Requires {} system.".format("non-CPE" if is_cpe else "CPE"))
 
-        total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1))
+        # FIXME
+        # total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1))
+        total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1),
+                                                             functions=['VMs', 'vSwitch', 'Platform'])
 
         # convert test params if host to config has more than 10 cores per proc & threaad
         if 'NO_VM_CORE' in expt_err:
+            # Unsure about expected behavior with Shared cores. FIXME
+            # shared_p0, shared_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1), functions='Shared')
+            # if shared_p0 > 0 or shared_p1 > 0:
+            #     skip("{} has shared core configured. Skip NO_VM_CORE semantic check".format(host))
+            #
             platform = int(total_p0) - 2, int(total_p1) - 2
         elif 'TOTAL_TOO_MANY_CORES' in expt_err:
             diff = 0
@@ -208,8 +222,12 @@ class TestVSwitchCPUReconfig:
             if j is not None:
                 vswitch_args['p' + str(j)] = vswitch[j]
 
+        if is_cpe and system_helper.get_active_controller_name() == host:
+            LOG.tc_step("{} is active controller, swact first".format(host))
+            host_helper.swact_host(host)
+
         LOG.tc_step("Lock {}".format(host))
-        host_helper.lock_host(host)
+        host_helper.lock_host(host, swact=False)
 
         LOG.tc_step("Attempt to reconfigure host cpus. Platform: {}, vSwitch: {}".format(platform, vswitch))
         # host_helper.modify_host_cpu(host, 'vswitch', **{'p0': 1, 'p1': 0})
@@ -223,7 +241,7 @@ class TestVSwitchCPUReconfig:
             proc_id = 0 if platform[0] + vswitch[0] > total_p0 else 1
             expt_err = eval(expt_err).format(proc_id)
         elif "VSWITCH_INSUFFICIENT_CORES" in expt_err:
-            min_core_num = 2 if is_cpe else 1
+            min_core_num = 1        # 2 min platform cores for CPE
             expt_err = eval(expt_err).format(min_core_num)
         else:
             expt_err = eval(expt_err)
@@ -235,17 +253,24 @@ class TestVSwitchCPUReconfig:
 class TestVMSchedulingLockHosts:
 
     @fixture(scope='class', autouse=True)
-    def lock_hosts(self, host_to_config):
-        host_to_set = host_to_config[0]
+    def hosts_to_lock(self, host_to_config):
+        host_to_set, ht_enabled, is_cpe = host_to_config
+
+        if is_cpe:
+            skip("CPE system detected.")
+
         nova_hosts = host_helper.get_nova_hosts()
         assert host_to_set in nova_hosts, "{} is not in nova host-list. Check previous test case.".format(host_to_set)
 
         nova_hosts.remove(host_to_set)
         HostsToRecover.add(nova_hosts, scope='class')
 
-        vm_helper.delete_vms(fail_ok=True, delete_volumes=False)
-        for host in nova_hosts:
-            host_helper.lock_host(host)
+        LOG.fixture_step("Delete all vms on system if any")
+        vm_helper.delete_vms(stop_first=False, fail_ok=True, delete_volumes=False)
+
+        # for host in nova_hosts:
+        #     host_helper.lock_host(host)
+        return nova_hosts
 
     @staticmethod
     def __get_vms_cores_nums(host, vswitch_cores_dict):
@@ -257,23 +282,26 @@ class TestVMSchedulingLockHosts:
         Returns (tuple): number of cores for VMs function on non-vSwitch numa node, and vSwitch numa node
 
         """
+        #  vswitch and non-vswitch nodes should be one each when this is called
+
         vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, function='VMs')
 
-        # vms_cores_nums = []
-        # for value in vms_cores_dict.values():
-        #     vms_cores_nums.append(len(value))
-        #
-        # max_num = max(vms_cores_nums)
-        vswitch_proc = list(vswitch_cores_dict.keys())[0]
-        nonvswitch_proc = 1 if int(vswitch_proc) == 0 else 0
+        vswitch_procs = [proc for proc in vms_cores_dict if vswitch_cores_dict[proc]]
+        nonvswitch_procs = [proc for proc in vms_cores_dict if not vswitch_cores_dict[proc]]
 
-        return len(vms_cores_dict[nonvswitch_proc]), len(vms_cores_dict[vswitch_proc])
+        vswitch_node_vm_cores = nonvswitch_node_vm_cores = 0
+        if vswitch_procs:
+            vswitch_node_vm_cores = len(vms_cores_dict[vswitch_procs[0]])
+        if nonvswitch_procs:
+            nonvswitch_node_vm_cores = len(vms_cores_dict[nonvswitch_procs[0]])
+
+        return vswitch_node_vm_cores, nonvswitch_node_vm_cores
 
     @mark.parametrize('resize_revert', [
         mark.p1(False),
         mark.p1(True)
     ], ids=['confirm', 'revert'])
-    def test_resize_vm_vswitch_node_insufficient(self, host_to_config, resize_revert):
+    def test_resize_vm_vswitch_node_insufficient(self, hosts_to_lock, host_to_config, resize_revert):
         """
         Test vm moves to non-vSwitch Numa node when resize to a flavor with more vcpus than current numa node
 
@@ -299,35 +327,47 @@ class TestVMSchedulingLockHosts:
             - Revert host platform and vswitch cpu configs      (module)
 
         """
-        host, ht_enabled, is_cpe = host_to_config
+        host_to_set, ht_enabled, is_cpe = host_to_config
 
-        LOG.tc_step("Delete all vms on target host if any")
-        vms_to_del = nova_helper.get_vms_on_hypervisor(hostname=host)
-        if vms_to_del:
-            vm_helper.delete_vms(vms_to_del, stop_first=False)
+        LOG.tc_step("Check vswitch numa node on {} doesn't have the most vm cores.".format(host_to_set))
+        vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(host_to_set, function='vSwitch')
+        vswitch_procs = [proc for proc in vswitch_cores_dict if vswitch_cores_dict[proc]]
 
-        LOG.tc_step("Check vswitch numa node on {} doesn't have the most vm cores.".format(host))
-        vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch')
-        max_vm_cores_num, vswitch_vm_cores_num = self.__get_vms_cores_nums(host, vswitch_cores_dict)
-
-        if len(vswitch_cores_dict) > 1 or vswitch_vm_cores_num == max_vm_cores_num:
+        # Assume 2 procs exist
+        if not vswitch_procs == [0]:
             LOG.tc_step("Modify host vSwitch cores to: 'p0': 2, 'p1': 0")
-            host_helper.lock_host(host)
-            host_helper.modify_host_cpu(host, 'vSwitch', **{'p0': 2, 'p1': 0})
-            host_helper.unlock_host(host, check_hypervisor_up=True)
-            host_helper.wait_for_hypervisors_up(host)
-            host_helper.wait_for_hosts_in_nova_compute(host)
-            vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch')
-            max_vm_cores_num, vswitch_vm_cores_num = self.__get_vms_cores_nums(host, vswitch_cores_dict)
 
-        assert max_vm_cores_num > vswitch_vm_cores_num, "vSwitch numa node has the most vm cores."
+            if is_cpe and system_helper.get_active_controller_name() == host_to_set:
+                LOG.fixture_step("Host under test {} is active controller, swact before modify.".format(host_to_set))
+                host_helper.swact_host(host_to_set)
+
+            host_helper.lock_host(host_to_set)
+            host_helper.modify_host_cpu(host_to_set, 'vSwitch', **{'p0': 2, 'p1': 0})
+            host_helper.unlock_host(host_to_set, check_hypervisor_up=True)
+
+            host_helper.wait_for_hypervisors_up(host_to_set)
+            host_helper.wait_for_hosts_in_nova_compute(host_to_set)
+
+            if is_cpe:
+                host_helper.swact_host()
+
+            vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(host_to_set, function='vSwitch')
+
+        LOG.tc_step("Lock all hyperviors except the one under test")
+        for host_ in hosts_to_lock:
+            host_helper.lock_host(host_)
+        if is_cpe:
+            HostsToRecover.add(hosts_to_lock)
+
+        vswitch_vm_cores_num, nonvswitch_vm_cores_num = self.__get_vms_cores_nums(host_to_set, vswitch_cores_dict)
+        assert nonvswitch_vm_cores_num > vswitch_vm_cores_num, "vSwitch numa node has the most vm cores."
 
         if ht_enabled:
             vswitch_vm_cores_num *= 2
-            max_vm_cores_num *= 2
+            nonvswitch_vm_cores_num *= 2
 
-        if nova_helper.get_quotas(quotas='cores')[0] < max_vm_cores_num + 10:
-            nova_helper.update_quotas(cores=max_vm_cores_num + 10)
+        if nova_helper.get_quotas(quotas='cores')[0] < nonvswitch_vm_cores_num + 10:
+            nova_helper.update_quotas(cores=nonvswitch_vm_cores_num + 10)
 
         LOG.tc_step("Create a basic flavor with 2 vcpus and boot a vm with this flavor.")
         pre_flavor = nova_helper.create_flavor(name='2_vcpus', vcpus=2)[1]
@@ -337,9 +377,9 @@ class TestVMSchedulingLockHosts:
         ResourceCleanup.add('vm', resource_id=vm_id)
 
         vswitch_proc = list(vswitch_cores_dict.keys())[0]
-        LOG.tc_step("Check vm is booted on same numa node with vSwitch of {} via vm-topology".format(host))
+        LOG.tc_step("Check vm is booted on same numa node with vSwitch of {} via vm-topology".format(host_to_set))
         pre_vm_host, pre_numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
-        assert host == pre_vm_host, "VM host is not host under test"
+        assert host_to_set == pre_vm_host, "VM host is not host under test"
         assert vswitch_proc == pre_numa_nodes[0], "VM {} is not booted on vswitch numa node {}".\
             format(vm_id, vswitch_proc)
 
@@ -353,10 +393,10 @@ class TestVMSchedulingLockHosts:
 
         LOG.tc_step("Check vm is on same host")
         post_vm_host, post_numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
-        assert host == post_vm_host, "VM is no longer on same host"
+        assert host_to_set == post_vm_host, "VM is no longer on same host"
 
         if resize_revert:
-            LOG.tc_step("Check vm remains on same numa node on {}".format(host))
+            LOG.tc_step("Check vm remains on same numa node on {}".format(host_to_set))
             assert vswitch_proc == post_numa_nodes[0]
         else:
             LOG.tc_step("Check vm is resized to use the other numa node on same host")
@@ -366,7 +406,7 @@ class TestVMSchedulingLockHosts:
         mark.p3((0, 2)),
         mark.p1((2, 0)),
     ], ids=['0_2', '2_0'])
-    def test_boot_vm_vswitch_node_full(self, host_to_config, vswitch):
+    def test_boot_vm_vswitch_node_full(self, hosts_to_lock, host_to_config, vswitch):
         """
         Test vms are first scheduled on vSwitch numa node until full, then will be scheduled on different numa node
         Args:
@@ -402,9 +442,21 @@ class TestVMSchedulingLockHosts:
             if j is not None:
                 vswitch_args['p' + str(j)] = vswitch[j]
 
-        host_helper.lock_host(host),
+        if is_cpe and host_helper.is_active_controller(host):
+            host_helper.swact_host(host)
+
+        host_helper.lock_host(host, swact=True),
         host_helper.modify_host_cpu(host, 'vswitch', **vswitch_args)
         host_helper.unlock_host(host, check_hypervisor_up=True)
+
+        if is_cpe:
+            host_helper.swact_host()
+
+        LOG.tc_step("Lock all hypervisors except {}".format(host))
+        for host_ in hosts_to_lock:
+            host_helper.lock_host(host_)
+        if is_cpe:
+            HostsToRecover.add(hosts_to_lock)
 
         LOG.tc_step("Create a flavor with vcpus set to (vSwitch node VMs cores / 3) +1")
         proc_id = 1 if vswitch[0] == 0 else 0

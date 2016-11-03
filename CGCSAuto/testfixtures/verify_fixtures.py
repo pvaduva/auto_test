@@ -79,7 +79,7 @@ def __get_alarms(scope):
     return alarms
 
 
-@fixture(scope='session', autouse=True)
+@fixture(scope='session')
 def pre_coredumps_and_crash_reports_session():
     return __get_system_crash_and_coredumps('session')
 
@@ -159,23 +159,6 @@ def ping_vms_from_nat(request):
 
         LOG.info("Ping from NAT Box to VMs verified.")
     request.addfinalizer(verify_nat_ping)
-    return
-
-
-@fixture()
-def ping_vm_from_vm(request):
-    # TODO: Everything below
-    LOG.info("Gathering VM ping to other VMs before test begins.")
-
-    before_ping_result = vm_helper.ping_vms_from_vm()
-
-    def verify_vms_ping():
-        after_ping_result = vm_helper.ping_vms_from_vm()
-
-        assert before_ping_result == after_ping_result
-
-        LOG.info("Ping from VM to other VMs verified.")
-    request.addfinalizer(verify_vms_ping)
     return
 
 
