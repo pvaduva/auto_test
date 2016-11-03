@@ -1971,7 +1971,7 @@ def get_hosts_per_storage_backing(con_ssh=None):
 
 
 def get_coredumps_and_crashreports():
-    LOG.info("Getting existing system crash reports and coredumps list")
+    LOG.info("Getting existing system crash reports from /var/crash/ and coredumps from /var/lib/systemd/coredump/")
 
     hosts_tab = table_parser.table(cli.system('host-list'))
     all_hosts = table_parser.get_column(hosts_tab, 'hostname')
