@@ -1,5 +1,6 @@
 import re
 import time
+import configparser
 
 from utils import exceptions
 from utils.tis_log import LOG
@@ -307,3 +308,34 @@ def get_auth_via_openrc(con_ssh):
                 auth_dict[key.strip().upper()] = value.strip()
 
     return auth_dict
+
+
+def set_install_params(lab, installconf_path):
+    if not lab and not installconf_path:
+        raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
+                         "has to be provided")
+
+    errors = []
+    lab_to_install = lab
+    if installconf_path:
+        installconf = configparser.ConfigParser()
+        installconf.read(installconf_path)
+        lab_info = installconf_path['LAB']
+        lab_name = lab_info['LAB_NAME']
+        if lab_name:
+            lab_to_install = get_lab_dict(lab_name)
+
+        if lab_to_install:
+            con0_ip = lab_info['CONTROLLER0_IP']
+            if con0_ip:
+                lab_to_install['controller-0 ip'] = con0_ip
+
+            con1_ip = lab_info['CONTROLLER0_IP']
+            if con1_ip:
+                lab_to_install['controller-1 ip'] = con1_ip
+        else:
+            errors.append("lab name has to be provided via ")
+
+
+    if not lab_to_install.get('controller-0 ip', None):
+        errors.append('Controller-0 ip has to be provided for custom lab')

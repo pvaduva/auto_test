@@ -207,9 +207,13 @@ def check_process_exists(cmd_output=None, process_name=None,
     else:
         LOG.info('Unexpected process: %s' % lines)
 
-@mark.skipif(system_helper.is_small_footprint(), reason="Skip for small footprint lab.")
+@fixture(scope='module')
+def _is_cpe():
+    return system_helper.is_small_footprint()
+
+
 @mark.usefixtures('check_computes_availability')
-def test_435_launching_guest_instances_on_first_compute():
+def test_435_launching_guest_instances_on_first_compute(_is_cpe):
     """
     Test launching Guest instances (ubuntu) on 1st Compute
 
@@ -225,6 +229,10 @@ def test_435_launching_guest_instances_on_first_compute():
     1. lock all computes except first one
     2. boot 2 ubuntu VMs
     """
+
+    if _is_cpe:
+        skip("Skip for CPE lab")
+
     vm_name1 = 'ubuntu-test'
     vm_name2 = 'ubuntu-test-1'
     image_name = 'ubuntu-precise-amd64'
@@ -239,9 +247,8 @@ def test_435_launching_guest_instances_on_first_compute():
                                 instance_name2=vm_name2)
 
 
-@mark.skipif(system_helper.is_small_footprint(), reason="Skip for small footprint lab.")
 @mark.usefixtures('check_computes_availability')
-def test_437_launching_guest_instances_on_second_compute():
+def test_437_launching_guest_instances_on_second_compute(_is_cpe):
     """
     Test launching Guest ubuntu instances on 2nd Compute
 
@@ -257,6 +264,9 @@ def test_437_launching_guest_instances_on_second_compute():
               --image=ubuntu-precise-amd64 ubuntu-test-1
     2. Verify VMs successfully boot
     """
+    if _is_cpe:
+        skip("Skip for CPE lab")
+
     vm_name1 = 'ubuntu-test'
     vm_name2 = 'ubuntu-test-1'
     image_name = 'ubuntu-precise-amd64'
@@ -270,8 +280,7 @@ def test_437_launching_guest_instances_on_second_compute():
                                 instance_name2=vm_name2)
 
 
-@mark.skipif(system_helper.is_small_footprint(), reason="Skip for small footprint lab.")
-def test_438_launching_cgcs_guest_instances_on_second_compute():
+def test_438_launching_cgcs_guest_instances_on_second_compute(_is_cpe):
     """
     Test launching Guest cgcs-guest instances on 2nd Compute
 
@@ -287,6 +296,9 @@ def test_438_launching_cgcs_guest_instances_on_second_compute():
               --image=wrl5-avp wrl5-avp-test-1
     2. Verify VMs successfully boot
     """
+    if _is_cpe:
+        skip("Skip for CPE lab")
+
     vm_name1 = 'wrl5-avp-test'
     vm_name2 = 'wrl5-avp-test1'
     comp_name = 'compute-1'

@@ -1,6 +1,5 @@
-DEFAULT_HOST_DAILY = 'CGCS_3.0_Centos_Build/'
-DEFAULT_GUEST_DAILY = 'CGCS_3.0_Guest_Daily_Build/'
-DEFAULT_WORKSPACE = '/localdisk/loadbuild/jenkins'
+
+
 
 YOW_CGTS4_LX = {
     'name': 'yow-cgts4-lx',

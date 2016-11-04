@@ -4,16 +4,12 @@
 # It specifically cover testcase 40 Local Storage Negative Test (Storage Host → Non-storage Host)
 ###
 
-from pytest import fixture, mark, skip
-import ast
+from pytest import fixture, skip
 
-from utils import cli
-from utils import table_parser
 from consts.auth import Tenant
-from utils.tis_log import LOG
-from keywords import nova_helper, vm_helper, host_helper, system_helper
-from setup_consts import P1, P2, P3
+from keywords import host_helper, system_helper
 from testfixtures.recover_hosts import HostsToRecover
+from utils import cli
 
 
 #creating a storage profile on storage-0 node

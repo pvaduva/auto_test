@@ -1,6 +1,5 @@
 from pytest import mark
 
-import setups
 from utils.tis_log import LOG
 
 
@@ -9,7 +8,8 @@ def skip_condition_met():
     # check system to decide whether skip condition is met
     return True
 
-@mark.skipif(skip_condition_met, reason="reason for skipping the test function")
+
+# @mark.skipif(skip_condition_met, reason="reason for skipping the test function")
 @mark.usefixtures('check_alarms')
 @mark.parametrize(
     ('test_param1', 'test_param2'), [

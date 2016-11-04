@@ -1,15 +1,11 @@
 import os
 import subprocess
-import setups
-from pytest import fixture, mark
 from time import sleep
-from utils import table_parser, cli, exceptions
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient, ssh_to_controller0
-from consts.auth import Tenant
-from consts.cgcs import VMStatus, FlavorSpec, NetworkingVmMapping
+
 from consts.proj_vars import ProjVar
-from keywords import vm_helper, nova_helper, host_helper, glance_helper,system_helper
+from keywords import host_helper
+from utils.ssh import ControllerClient
+from utils.tis_log import LOG
 
 WRSUSER='wrsroot'
 WRSPASS='Li69nux*'
