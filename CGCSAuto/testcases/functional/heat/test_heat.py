@@ -5,7 +5,7 @@ from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, heat_helper,ceilometer_helper,network_helper,cinder_helper,glance_helper,\
-    host_helper
+    host_helper, common
 from setup_consts import P1, P2, P3
 import time
 from consts.heat import Heat
@@ -160,10 +160,13 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     t_name, yaml = template_name.split('.')
     params = getattr(Heat, t_name)['params']
     heat_user = getattr(Heat, t_name)['heat_user']
-    stack_name = t_name
     to_verify = getattr(Heat, t_name)['verify']
     if heat_user is 'admin':
         auth_info=Tenant.ADMIN
+
+    table_ = table_parser.table(cli.heat('stack-list', auth_info=auth_info))
+    names = table_parser.get_values(table_, 'stack_name')
+    stack_name = common.get_unique_name(t_name, existing_names=names)
 
     template_path = os.path.join(WRSROOT_HOME, HEAT_PATH, template_name)
     cmd_list = ['-f %s ' % template_path]
@@ -185,7 +188,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     LOG.info("Stack {} created sucessfully.".format(stack_name))
 
     ### add the heat stack name for deleteion on failure
-    ResourceCleanup.add(resource_type='heat_stack', resource_id=t_name)
+    ResourceCleanup.add(resource_type='heat_stack', resource_id=stack_name)
 
     LOG.tc_step("Verifying Heat Stack Status for CREATE_COMPLETE for stack %s",stack_name)
 

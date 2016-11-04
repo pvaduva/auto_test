@@ -195,7 +195,7 @@ class ResourceCleanup:
             LOG.fixture_step("({}) Attempt to delete following heat stacks: {}".format(scope, heat_stacks))
             auth_info = None
             for stack in heat_stacks:
-                heat_user = getattr(Heat, stack)['heat_user']
+                heat_user = getattr(Heat, stack.split('-')[0])['heat_user']
                 if heat_user is 'admin':
                     auth_info = Tenant.ADMIN
                 code, msg = heat_helper.delete_stack(stack, check_first=True, auth_info=auth_info, fail_ok=True)
