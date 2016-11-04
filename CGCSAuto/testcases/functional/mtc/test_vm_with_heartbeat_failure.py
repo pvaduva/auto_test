@@ -19,6 +19,7 @@ from consts.auth import Tenant
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
+
 @fixture(scope='module')
 def flavor_(request):
     flavor_id = nova_helper.create_flavor(name='heartbeat')[1]
@@ -90,8 +91,8 @@ def test_vm_with_heartbeat_failure(vm_):
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         cmd = "ps -ef | grep 'heartbeat' | grep -v grep | awk '{print $2}'"
         exitcode, output = vm_ssh.exec_cmd(cmd)
-        cmd = "echo 'Li69nux*' | sudo -S kill -9 %s" % output
-        exitcode, output = vm_ssh.exec_cmd(cmd, expect_timeout=90)
+        cmd = "kill -9 %s" % output
+        vm_ssh.exec_sudo_cmd(cmd, expect_timeout=90)
 
     LOG.tc_step("Verify an active alarm for the reboot is present")
     time.sleep(10)
@@ -104,9 +105,11 @@ def test_vm_with_heartbeat_failure(vm_):
     LOG.tc_step("Kill the heartbeat daemon again")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         cmd = "ps -ef | grep 'heartbeat' | grep -v grep | awk '{print $2}'"
-        exitcode, output = vm_ssh.exec_cmd(cmd)
-        cmd = "echo 'Li69nux*' | sudo -S kill -9 %s" % output
-        exitcode, output = vm_ssh.exec_cmd(cmd, expect_timeout=90)
+        exitcode, out = vm_ssh.exec_cmd(cmd)
+        while not out:
+            exitcode, out = vm_ssh.exec_cmd(cmd)
+        cmd = "kill -9 %s" % out
+        vm_ssh.exec_sudo_cmd(cmd, expect_timeout=90)
     time.sleep(10)
 
     LOG.tc_step('Determine which compute the vm is on after the reboot')

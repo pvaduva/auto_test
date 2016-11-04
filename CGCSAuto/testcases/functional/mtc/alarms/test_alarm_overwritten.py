@@ -23,21 +23,8 @@ def test_alarm_overwritten():
     1. Query the alarm table
     2. Verify the list is shown most recent alarm to oldest (based on timestamp) [REQ-14]
     """
-    # if not con_ssh:
-    #     con_ssh = ControllerClient.get_active_controller()
-    # if not con_ssh.get_hostname() == 'controller-0':
-    #     host_helper.swact_host()
-    #
-    # test_result = True
-    # LOG.info("Execute system alarm-history-list")
-    # # output continues but waits for enter or q to continue with output or exit table
-    # # causes expect to timeout
-    # with host_helper.ssh_to_host('controller-0') as cont_ssh:
-    #     exitcode, output = cli.exec_cli('echo q | system', 'event-list --limit 50 --uuid',
-    #                                     rtn_list=True, auth_info=Tenant.ADMIN)
-
-    exitcode, output = cli.exec_cli('echo q | system', 'event-list --limit 50 --uuid',
-                                    rtn_list=True, auth_info=Tenant.ADMIN)
+    output = cli.system('event-list', '--limit 10 --nowrap --nopaging --uuid',
+                                  auth_info=Tenant.ADMIN)
     alarm_table = table_parser.table(output, combine_multiline_entry=True)
     size = len(alarm_table['values'])
 

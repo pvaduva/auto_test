@@ -83,7 +83,7 @@ def test_vm_reboot_with_heartbeat():
         vm_ssh.exec_cmd("touch /tmp/unhealthy")
 
     LOG.tc_step("Wait for reboot to complete and verify heartbeat is running.")
-    time.sleep(60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 
         # verify that the heartbeat is running on the vm

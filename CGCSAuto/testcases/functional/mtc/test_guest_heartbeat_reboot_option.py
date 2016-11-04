@@ -83,9 +83,6 @@ def test_guest_heartbeat_reboot_option(vm_):
     vm_id = vm_
     time.sleep(30)
 
-    LOG.tc_step('Determine which compute the vm is on')
-    compute_name = nova_helper.get_vm_host(vm_id)
-
     LOG.tc_step("Login to vm: %s and confirm the guest-client is running" % vm_name)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         exitcode, pid = vm_ssh.exec_cmd("ps -ef | grep guest-client | grep -v grep | awk '{print $2}'")
