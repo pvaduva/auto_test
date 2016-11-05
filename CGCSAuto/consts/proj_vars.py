@@ -1,3 +1,5 @@
+from consts.filepaths import BuildServerPath
+
 class ProjVar:
     __var_dict = {}
 
@@ -40,44 +42,52 @@ class ProjVar:
 
 
 class InstallVars:
-    DEFAULT_BUILD_SERVER = 'yow-cgts4-lx'
-    __var_dict = {
-        'TIS_BUILD_DIR': '/localdisk/loadbuild/jenkins/TS_16.10_Host/',
 
-    }
+    __var_dict = {}
     __install_steps = {}
 
     @classmethod
-    def set_install_vars(cls, lab, resume, host_build_dir, controllers, computes, storages, hosts_bulk_add,
-                         boot_if_settings, license_path, tis_config, skip_labsetup, lab_setup, guest_image,
-                         heat_templates, build_server=DEFAULT_BUILD_SERVER):
+    def set_install_vars(cls, lab, resume, skip_labsetup,
+                         build_server=None,
+                         host_build_dir=None,
+                         guest_image=None,
+                         files_server=None,
+                         hosts_bulk_add=None,
+                         boot_if_settings=None,
+                         tis_config=None,
+                         lab_setup=None,
+                         heat_templates=None,
+                         license_path=None):
+
+        __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
 
         cls.__var_dict = {
             'LAB': lab,
             'LAB_NAME': lab['short_name'],
             'RESUME': resume,
+            'SKIP_LABSETUP': skip_labsetup,
 
             # TIS BUILD info
-            'BUILD_SERVER': build_server,
-            'TIS_BUILD_DIR': host_build_dir,
-            'LAB_CONF_DIR': "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(host_build_dir,
-                                                                                                lab['name']),
-            # Nodes info
-            'CONTROLLERS_CODES': controllers,
-            'COMPUTES_CODES': computes,
-            'STORAGES': storages,
-            'BOOT_IF_SETTINGS': boot_if_settings,
-            'HOSTS_BULK_ADD': hosts_bulk_add,
+            'BUILD_SERVER': __build_server,
+            'TIS_BUILD_DIR': host_build_dir if host_build_dir else BuildServerPath.DEFAULT_HOST_BUILD_PATH,
 
-            # Config controller info
+            # Files paths
+            'FILES_SERVER': files_server if files_server else __build_server,
+            'DEFAULT_LAB_FILES_DIR': "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(
+                    host_build_dir, lab['name']),
+
+            # Default path is <DEFAULT_LAB_FILES_DIR>/TiS_config.ini_centos|hosts_bulk_add.xml|lab_setup.conf if
+            # Unspecified. This needs to be parsed/converted when rsync/scp files.
+            # Lab specific
             'TIS_CONFIG': tis_config,
-            'LICENSE': license_path,
-
-            # Lab setup and test files
-            'SKIP_LABSETUP': skip_labsetup,
+            'HOSTS_BULK_ADD': hosts_bulk_add,
+            'BOOT_IF_SETTINGS': boot_if_settings,
             'LAB_SETUP_PATH': lab_setup,
-            'GUEST_IMAGE': guest_image,
-            'HEAT_TEMPLATES': heat_templates,
+
+            # Generic
+            'LICENSE': license_path if license_path else BuildServerPath.DEFAULT_LICENSE_PATH,
+            'GUEST_IMAGE': guest_image if guest_image else BuildServerPath.DEFAULT_GUEST_IMAGE_PATH,
+            'HEAT_TEMPLATES': heat_templates if heat_templates else BuildServerPath.HEAT_TEMPLATES,
 
         }
 

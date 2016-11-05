@@ -6,6 +6,7 @@ class TiSPath:
     TIS_CENTOS_PATH = '/home/wrsroot/userdata/centos_if_config.sh'
     USERDATA = '/home/wrsroot/userdata/'
     IMAGES = '/home/wrsroot/images/'
+    INSTALL_STATUS = 'home/wrsroot/autoinstall_status.log'
 
 
 class VMPath:
@@ -27,4 +28,12 @@ class TestServerPath:
 class PrivKeyPath:
     OPT_PLATFORM = "/opt/platform/id_rsa"
     WRS_HOME = '/home/wrsroot/.ssh/id_rsa'
+
+
+class BuildServerPath:
+    DEFAULT_BUILD_SERVER = 'yow-cgts4-lx'
+    DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_3.0_Guest_Daily_Build/cgcs-guest.img'
+    DEFAULT_HOST_BUILD_PATH = '/localdisk/loadbuild/jenkins/CGCS_3.0_Centos_Build/latest_build/'
+    DEFAULT_LICENSE_PATH = '/folk/cgts/lab/TiS16-full.lic'
+    HEAT_TEMPLATES = ''
 

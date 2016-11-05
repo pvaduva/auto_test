@@ -10,7 +10,7 @@ from consts.auth import Tenant, CliAuth
 from consts.cgcs import Prompt
 from consts.filepaths import PrivKeyPath
 from consts.lab import Labs, add_lab_entry, NatBoxes
-from consts.proj_vars import ProjVar
+from consts.proj_vars import ProjVar, InstallVars
 
 from keywords import vm_helper, host_helper, nova_helper
 from keywords.common import scp_to_local
@@ -310,17 +310,53 @@ def get_auth_via_openrc(con_ssh):
     return auth_dict
 
 
-def set_install_params(lab, installconf_path):
+def get_lab_from_cmdline(lab_arg, installconf_path):
+    if not lab_arg and not installconf_path:
+        raise ValueError("lab is not specified!")
+
+    if installconf_path:
+        installconf = configparser.ConfigParser()
+        installconf.read(installconf_path)
+
+        # Parse lab info
+        lab_info = installconf['LAB']
+        lab_name = lab_info['LAB_NAME']
+        if not lab_name:
+            raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
+                             "has to be provided")
+        if lab_arg and lab_arg.lower() != lab_name.lower():
+            LOG.warning("Conflict in --lab={} and install conf file LAB_NAME={}. LAB_NAME in conf file will be used".
+                        format(lab_arg, lab_name))
+        lab_arg = lab_name
+
+    return get_lab_dict(lab_arg)
+
+
+def set_install_params(lab, skip_labsetup, resume, installconf_path):
+
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
                          "has to be provided")
 
     errors = []
     lab_to_install = lab
+    build_server = None
+    host_build_dir = None
+    guest_image = None
+    files_server = None
+    hosts_bulk_add = None
+    boot_if_settings = None
+    tis_config = None
+    lab_setup = None
+    heat_templates = None
+    license_path = None
+
     if installconf_path:
         installconf = configparser.ConfigParser()
         installconf.read(installconf_path)
-        lab_info = installconf_path['LAB']
+
+        # Parse lab info
+        lab_info = installconf['LAB']
         lab_name = lab_info['LAB_NAME']
         if lab_name:
             lab_to_install = get_lab_dict(lab_name)
@@ -334,8 +370,76 @@ def set_install_params(lab, installconf_path):
             if con1_ip:
                 lab_to_install['controller-1 ip'] = con1_ip
         else:
-            errors.append("lab name has to be provided via ")
+            raise ValueError("lab name has to be provided via cmdline option --lab=<lab_name> or inside install_conf "
+                             "file")
 
+        # Parse nodes info
+        nodes_info = installconf['NODES']
+        naming_map = {'CONTROLLERS': 'controller_nodes',
+                      'COMPUTES': 'compute_nodes',
+                      'STORAGES': 'storage_nodes'}
+
+        for confkey, constkey in naming_map.items():
+            value_in_conf = nodes_info[confkey]
+            if value_in_conf:
+                barcodes = value_in_conf.split(sep=' ')
+                lab_to_install[constkey] = barcodes
+
+        if not lab_to_install['controller_nodes']:
+            errors.append("Nodes barcodes have to be provided for custom lab")
+
+        # Parse build info
+        build_info = installconf['BUILD']
+        conf_build_server = build_info['BUILD_SERVER']
+        conf_host_build_dir = build_info['TIS_BUILD_PATH']
+        if conf_build_server:
+            build_server = conf_build_server
+        if conf_host_build_dir:
+            host_build_dir = conf_host_build_dir
+
+        # Parse files info
+        conf_files = installconf['CONF_FILES']
+        conf_files_server = conf_files['FILES_SERVER']
+        conf_license_path = conf_files['LICENSE_PATH']
+        conf_tis_config = conf_files['TIS_CONFIG_PATH']
+        conf_boot_if_settings = conf_files['BOOT_IF_SETTINGS_PATH']
+        conf_hosts_bulk_add = conf_files['HOST_BULK_ADD_PATH']
+        conf_labsetup = conf_files['LAB_SETUP_CONF_PATH']
+        conf_guest_image = conf_files['GUEST_IMAGE_PATH']
+        conf_heat_templates = conf_files['HEAT_TEMPLATES']
+
+        if conf_files_server:
+            files_server = conf_files_server
+        if conf_license_path:
+            license_path = conf_license_path
+        if conf_tis_config:
+            tis_config = conf_tis_config
+        if conf_boot_if_settings:
+            boot_if_settings = conf_boot_if_settings
+        if conf_hosts_bulk_add:
+            hosts_bulk_add = conf_hosts_bulk_add
+        if conf_labsetup:
+            lab_setup = conf_labsetup
+        if conf_guest_image:
+            guest_image = conf_guest_image
+        if conf_heat_templates:
+            heat_templates = conf_heat_templates
 
     if not lab_to_install.get('controller-0 ip', None):
         errors.append('Controller-0 ip has to be provided for custom lab')
+
+    if errors:
+        raise ValueError("Install param error(s): {}".format(errors))
+
+    InstallVars.set_install_vars(lab=lab_to_install, resume=resume, skip_labsetup=skip_labsetup,
+                                 build_server=build_server,
+                                 host_build_dir=host_build_dir,
+                                 guest_image=guest_image,
+                                 files_server=files_server,
+                                 hosts_bulk_add=hosts_bulk_add,
+                                 boot_if_settings=boot_if_settings,
+                                 tis_config=tis_config,
+                                 lab_setup=lab_setup,
+                                 heat_templates=heat_templates,
+                                 license_path=license_path,
+                                 )
