@@ -113,6 +113,7 @@ def vms_(volumes_):
     return vms
 
 
+@mark.storage_sanity
 def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
     """
     Test instantiate a vm with a large volume ( 20 GB and 40 GB) and live migrate:
