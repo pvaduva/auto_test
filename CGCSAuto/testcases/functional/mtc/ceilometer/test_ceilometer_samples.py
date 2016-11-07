@@ -13,7 +13,7 @@ from keywords import ceilometer_helper
 
 @mark.sanity
 @mark.cpe_sanity
-def test_ceilometer_vswitch_port_samples_5_min_record():
+def test_ceilometer_vswitch_port_samples():
     """
     Test Steps:
         - Get resource IDs for last two vswitch.port.transmit.util entries in ceilometer sample-list
@@ -28,11 +28,13 @@ def test_ceilometer_vswitch_port_samples_5_min_record():
     assert 2 == len(last_two_samples), "Number of entries for {} meter is {} instead of 2".\
         format(meter, last_two_samples)
 
-    LOG.tc_step("Verify 10 vswitch.port.transmit.util entries exist in sample-list per resource id")
+    LOG.tc_step("Verify vswitch.port.transmit.util entries exist in sample-list per resource id")
+    limit = 20
     for resource_id in last_two_samples:
         query = 'resource={}'.format(resource_id)
-        samples = __wait_for_records(limit=30, meter=meter, query=query, entry_num=10, timeout=300)
-        assert 10 == len(samples), "Entries for resource {} for {} meter is not 10".format(resource_id, meter)
+        samples = __wait_for_records(limit=limit, meter=meter, query=query, entry_num=limit, timeout=300)
+        assert limit == len(samples), "Number of samples for resource {} for {} meter is not {}".format(resource_id,
+                                                                                                        meter, limit)
 
 
 def __wait_for_records(limit, meter, query, entry_num, timeout):
