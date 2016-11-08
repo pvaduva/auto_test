@@ -283,7 +283,10 @@ def unsuppress_all_events(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
         return -1, msg
 
     table_ = table_parser.table(output)
-    suppressed_list = table_parser.get_values(table_, target_header="Suppressed Alarm ID's", **{'Status': 'suppressed'})
+    if not table_['values']:
+        suppressed_list = []
+    else:
+        suppressed_list = table_parser.get_values(table_, target_header="Suppressed Alarm ID's", **{'Status': 'suppressed'})
 
     if suppressed_list:
         msg = "Unsuppress-all failed. Suppressed Alarm IDs: {}".format(suppressed_list)
@@ -828,12 +831,15 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
     suppressed_alarms_tab = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
 
     alarm_status = "unsuppressed" if suppress else "suppressed"
-    cmd = "event-suppress" if suppress else "alarm-unsuppress"
+    cmd = "event-suppress" if suppress else "event-unsuppress"
     alarm_filter = {"Suppressed Alarm ID's": alarm_id}
 
     if check_first:
-        pre_status = table_parser.get_values(table_=suppressed_alarms_tab, target_header='Status', strict=True,
-                                             **alarm_filter)[0]
+        if not suppressed_alarms_tab['values']:
+            pre_status = "unsuppressed"
+        else:
+            pre_status = table_parser.get_values(table_=suppressed_alarms_tab, target_header='Status', strict=True,
+                                                 **alarm_filter)[0]
         if pre_status.lower() != alarm_status:
             msg = "Alarm is already {}. Do nothing".format(pre_status)
             LOG.info(msg)
@@ -845,8 +851,11 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
         return 1, output
 
     post_suppressed_alarms_tab = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
-    post_status = table_parser.get_values(table_=post_suppressed_alarms_tab, target_header="Status", strict=True,
-                                          **{"UUID": alarm_id})
+    if not post_suppressed_alarms_tab['values']:
+        post_status = ["unsuppressed"]
+    else:
+        post_status = table_parser.get_values(table_=post_suppressed_alarms_tab, target_header="Status", strict=True,
+                                              **{"Event id": alarm_id})
     expt_status = "suppressed" if suppress else "unsuppressed"
     if post_status[0].lower() != expt_status:
         msg = "Alarm {} is not {}".format(alarm_id, expt_status)
