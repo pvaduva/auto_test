@@ -61,19 +61,23 @@ def _perform_action(vm_id, action, expt_fail):
                                                              destination_host=dest_host)
             assert ('action-rejected' in message), "The vm voted against migrating but live migration was not rejected"
             assert nova_helper.get_vm_host(vm_id) == vm_host, "The vm voted against migrating but was live migrated"
+
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
 
             LOG.tc_step("Verify that attempts to cold migrate the VM is not allowed")
             return_code, message = vm_helper.cold_migrate_vm(vm_id, fail_ok=True)
             assert ('action-rejected' in message), "The vm voted against migrating but cold migration was not rejected"
             assert nova_helper.get_vm_host(vm_id) == vm_host, "The vm voted against migrating but was cold migrated"
+
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
+
         else:
             LOG.tc_step("Verify the VM can be live migrated")
             return_code, message = vm_helper.live_migrate_vm(vm_id, block_migrate=False,
                                                              destination_host=dest_host)
             vm_host_2 = nova_helper.get_vm_host(vm_id)
             assert return_code in [0, 1] and ('action-rejected' not in message), message
+
             assert vm_host != vm_host_2, "The vm didn't change hosts"
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
@@ -84,6 +88,7 @@ def _perform_action(vm_id, action, expt_fail):
             assert vm_host_2 != vm_host_3, "The vm didn't change hosts"
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
+
     elif action == 'suspend':
         if expt_fail:
             # TODO check the rejection output or exitcode == 1
@@ -92,6 +97,7 @@ def _perform_action(vm_id, action, expt_fail):
             vm_state = nova_helper.get_vm_status(vm_id)
             LOG.info(out)
             assert vm_state == VMStatus.ACTIVE
+
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
 
             LOG.tc_step("Verify that attempts to suspend the VM is not allowed")
@@ -99,6 +105,7 @@ def _perform_action(vm_id, action, expt_fail):
             vm_state = nova_helper.get_vm_status(vm_id)
             LOG.info(out)
             assert vm_state == VMStatus.ACTIVE
+
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
 
         else:
@@ -106,6 +113,7 @@ def _perform_action(vm_id, action, expt_fail):
             vm_helper.pause_vm(vm_id)
             vm_state = nova_helper.get_vm_status(vm_id)
             assert vm_state == VMStatus.PAUSED
+
             assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True), \
                 "The vm is still pingable after pause"
 
@@ -118,6 +126,7 @@ def _perform_action(vm_id, action, expt_fail):
             vm_helper.suspend_vm(vm_id)
             vm_state = nova_helper.get_vm_status(vm_id)
             assert vm_state == VMStatus.SUSPENDED
+
             assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True), \
                 "The vm is still pingable after suspend"
 
@@ -126,11 +135,13 @@ def _perform_action(vm_id, action, expt_fail):
             assert vm_state == VMStatus.ACTIVE
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
+
     elif action == 'reboot':
         if expt_fail:
             LOG.tc_step("Verify that attempts to soft reboot the VM is not allowed")
             exitcode, output = vm_helper.reboot_vm(vm_id, hard=False, fail_ok=True)
             assert ('action-rejected' in output)
+
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
 
             LOG.tc_step("Verify that attempts to hard reboot the VM is not allowed")
@@ -163,6 +174,7 @@ def _perform_action(vm_id, action, expt_fail):
             LOG.tc_step("Attempt to stop a VM")
             exitcode, output = vm_helper.stop_vms(vm_id, fail_ok=True)
             assert ('Unable to stop the specified server' in output and 1 == exitcode)
+
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
         else:
             LOG.tc_step("Verify a VM can be stopped")
@@ -178,6 +190,7 @@ def _perform_action(vm_id, action, expt_fail):
 
             LOG.tc_step("Verify a VM can be started again")
             vm_helper.start_vms(vm_id)
+
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
             events_tab = system_helper.get_events_table(num=10)

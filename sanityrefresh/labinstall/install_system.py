@@ -1110,9 +1110,9 @@ def main():
             if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
                 cfg_found = True
                 # check if HTTPS is enabled and if yes get the certification file
-                cmd = " grep ENABLE_HTTPS " + cfgpath + " | awk \'{print $3}\' "
+                cmd = "grep ENABLE_HTTPS " + cfgpath + " | awk \'{print $3}\'"
                 rc, output = controller0.ssh_conn.exec_cmd(cmd)
-                match = re.compile('(^\s*)Y(\s*?)$')
+                match = re.compile("Y")
                 if rc == 0 and match.match(output):
                     log.info("Getting certificate file")
                     bld_server_conn.rsync(CERTIFICATE_FILE_PATH,

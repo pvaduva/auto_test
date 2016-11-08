@@ -17,7 +17,10 @@ def test_ceilometer_vswitch_port_samples():
     """
     Test Steps:
         - Get resource IDs for last two vswitch.port.transmit.util entries in ceilometer sample-list
-        - Verify 10 vswitch.port.transmit.util entries exist in sample-list per resource id (wait for up to 5 minute)
+        - Verify 20 vswitch.port.transmit.util entries exist in sample-list per resource id (wait for up to 5 minute)
+
+    Notes: vswitch samples used to be saved in the in-memory database for last 5 minute records. This has been changed
+    in CGTS-5760 to eliminate usage of in-memory db. Now all the historic records for vswitch samples are kept.
 
     """
     meter = 'vswitch.port.transmit.util'

@@ -52,6 +52,7 @@ def launch_instance_on_compute(network_name=None,
     LOG.tc_step('Locking unused computes and making sure {} is unlocked'.format(host_name))
     host_helper.unlock_host(host_name)
     _lock_unlock_computes_except_one(host_name, action='lock')
+
     assert host_name in host_helper.get_hosts(availability=[HostAvailabilityState.AVAILABLE,
                                                             HostAvailabilityState.DEGRADED])
 
