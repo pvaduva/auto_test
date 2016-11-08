@@ -55,6 +55,7 @@ def host_to_modify(request):
     pre_procs = table_parser.get_column(pre_mem_tab, 'processor')
     pre_2m_pages = table_parser.get_column(pre_mem_tab, 'vm_hp_total_2M')
     pre_1g_pages = table_parser.get_column(pre_mem_tab, 'vm_hp_total_1G')
+
     HostsToRecover.add(hostname, scope='module')
 
     def reset_huge_page():

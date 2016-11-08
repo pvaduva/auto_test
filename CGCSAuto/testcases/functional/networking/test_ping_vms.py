@@ -76,8 +76,11 @@ def test_ping_between_two_vms(guest_os, ubuntu14_image):
 
 
 @mark.features('guest_os')
-@mark.usefixtures('centos7_image', 'centos6_image', 'ubuntu14_image',
-                  'opensuse12_image', 'opensuse11_image',
+@mark.usefixtures('centos7_image',
+                  'centos6_image',
+                  'ubuntu14_image',
+                  'opensuse12_image',
+                  'opensuse11_image',
                   'rhel7_image')
 @mark.parametrize('guest_os', [
     'centos_7',
@@ -88,9 +91,26 @@ def test_ping_between_two_vms(guest_os, ubuntu14_image):
     'rhel_7',
 ])
 def test_ping_vm_basic(guest_os):
+    """
+    Args:
+    guest_os (str): guest os to test
+
+    Setups:
+        - scp various guest images from test server to /home/wrsroot/images     (session)
+        - create glance image from it    (session)
+
+    Test Steps:
+        - create a flavor with dedicated cpu policy
+        - Boot two vms from volume/image with above flavor and specified guest os
+        - Ping vm from NatBox
+        - Ping vm from the other vm
+
+     Teardown:
+        - Delete created vm, volume, flavor
+
+    """
     vm_id = vm_helper.boot_vm(name=guest_os, guest_os=guest_os)[1]
     ResourceCleanup.add('vm', vm_id)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
-    time.sleep(30)
     vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['mgmt'])

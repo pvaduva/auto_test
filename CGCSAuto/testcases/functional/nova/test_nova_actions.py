@@ -80,6 +80,27 @@ class TestVariousGuests:
         ('rhel_6', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
     ], ids=id_gen)
     def test_nova_actions_various_guest(self, guest_os, cpu_pol, boot_source, actions):
+        """
+
+        Args:
+            guest_os:
+            cpu_pol:
+            boot_source:
+            actions:
+
+        Setups:
+            - scp various guest images from test server to /home/wrsroot/images     (session)
+            - create glance image from it    (session)
+
+        Test Steps:
+            - create a flavor with dedicated cpu policy
+            - Boot a vm from volume/image with above flavor and specified guest os
+            - Do nova actions on the VM
+
+         Teardown:
+            - Delete created vm, volume, flavor
+
+        """
         if guest_os == 'opensuse_12' and boot_source == 'volume':
             if not cinder_helper.is_volumes_pool_sufficient(min_size=30):
                 skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)

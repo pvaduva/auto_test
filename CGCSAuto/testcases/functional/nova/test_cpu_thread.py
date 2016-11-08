@@ -19,23 +19,6 @@ def id_gen(val):
         return '-'.join(val)
 
 
-@fixture(scope='module')
-def ht_and_nonht_hosts():
-    LOG.fixture_step("Look for hyper-threading enabled and disabled hosts")
-    nova_hosts = host_helper.get_nova_hosts()
-    ht_hosts = []
-    non_ht_hosts = []
-    for host in nova_hosts:
-        if system_helper.is_hyperthreading_enabled(host):
-            ht_hosts.append(host)
-        else:
-            non_ht_hosts.append(host)
-
-    LOG.fixture_step('Hyper-threading enabled hosts: {}; Hyper-threading disabled hosts: {}'.
-                     format(ht_hosts, non_ht_hosts))
-    return ht_hosts, non_ht_hosts
-
-
 @mark.parametrize(('cpu_policy', 'cpu_thread_policy', 'shared_vcpu', 'min_vcpus', 'expt_err'), [
     mark.p1((None, 'isolate', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED_FLAVOR')),
     mark.p1((None, 'require', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED_FLAVOR')),
@@ -59,6 +42,25 @@ def ht_and_nonht_hosts():
 
 ])
 def test_cpu_thread_flavor_set_negative(cpu_policy, cpu_thread_policy, shared_vcpu, min_vcpus, expt_err):
+    """
+    Test cpu thread flavor spec cannot be set due to conflict with other flavor specs in same cli
+    Args:
+        cpu_policy (str): cpu policy to be set in flavor extra specs
+        cpu_thread_policy (str): cpu thread policy to be set in flavor extra specs
+        shared_vcpu (str): number of shared_vcpu to be set in flavor extra specs
+        min_vcpus (str): min_vcpus to be set in flavor extra specs
+        expt_err (str): Expected error string for if negative result is expected
+
+
+    Test Steps:
+        - Create a flavor with 2 vcpus
+        - Attempt to set flavor extra specs as per test params
+        - check extra spec required cannot be set and expected error is returned when setting extra specs
+
+    Teardowns:
+        - Delete created flavor if any
+
+    """
     LOG.tc_step("Create a flavor with 2 vcpus")
     flavor_id = nova_helper.create_flavor(name='cpu_thread_neg1', check_storage_backing=False, vcpus=2)[1]
     ResourceCleanup.add('flavor', flavor_id)
@@ -91,6 +93,24 @@ def test_cpu_thread_flavor_set_negative(cpu_policy, cpu_thread_policy, shared_vc
     mark.p2(({FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.SHARED_VCPU: '0'}, {FlavorSpec.CPU_THREAD_POLICY: 'require'}, 'CPUThreadErr.UNSET_SHARED_VCPU')),
 ])
 def test_cpu_thread_flavor_add_negative(specs_preset, specs_to_set, expt_err):
+    """
+    Test cpu thread flavor cannot be set due to conflict with existing flavor specs
+
+    Args:
+        specs_preset (dict): list of extra specs dictionary to preset
+        specs_to_set (dict): thread policy extra spec to set
+        expt_err (str): expected error message
+
+    Test Steps:
+        - Create a flavor with 2 vcpus
+        - Set flavor with extra specs defined in specs_preset
+        - Attempt to set given cpu thread policy extra spec
+        - Check required cpu thread policy cannot be set and expected error is returned when setting extra specs
+
+    Teardowns:
+        - Delete created flavor if any
+
+    """
     LOG.tc_step("Create a flavor with 2 vcpus")
     flavor_id = nova_helper.create_flavor(name='cpu_thread_neg1', check_storage_backing=False, vcpus=2)[1]
     ResourceCleanup.add('flavor', flavor_id)
@@ -120,6 +140,22 @@ def test_cpu_thread_flavor_add_negative(specs_preset, specs_to_set, expt_err):
     'prefer',
 ])
 def test_cpu_thread_flavor_delete_negative(cpu_thread_policy):
+    """
+    Test cpu policy spec cannot be deleted from flavor when cpu thread policy is also set
+
+    Args:
+        cpu_thread_policy (str): cpu thread policy to be included in flavor
+
+    Test Steps:
+        - Create a flavor with 2 vcpus
+        - Set flavor cpu_polic=dedicated and given cpu thread policy
+        - Attempt to delete cpu policy extra spec
+        - Check cpu policy cannot be deleted when cpu thread policy is also set
+
+    Teardowns:
+        - Delete created flavor if any
+
+    """
     LOG.tc_step("Create a flavor")
     flavor_id = nova_helper.create_flavor(name='cpu_thread_neg2', check_storage_backing=False)[1]
     ResourceCleanup.add('flavor', flavor_id)
@@ -135,6 +171,23 @@ def test_cpu_thread_flavor_delete_negative(cpu_thread_policy):
     assert CPUThreadErr.DEDICATED_CPU_REQUIRED_FLAVOR in output
 
 
+@fixture(scope='module')
+def ht_and_nonht_hosts():
+    LOG.fixture_step("Look for hyper-threading enabled and disabled hosts")
+    nova_hosts = host_helper.get_nova_hosts()
+    ht_hosts = []
+    non_ht_hosts = []
+    for host in nova_hosts:
+        if system_helper.is_hyperthreading_enabled(host):
+            ht_hosts.append(host)
+        else:
+            non_ht_hosts.append(host)
+
+    LOG.fixture_step('Hyper-threading enabled hosts: {}; Hyper-threading disabled hosts: {}'.
+                     format(ht_hosts, non_ht_hosts))
+    return ht_hosts, non_ht_hosts
+
+
 class TestHTEnabled:
 
     @fixture(scope='class', autouse=True)
@@ -148,19 +201,43 @@ class TestHTEnabled:
 
     @mark.p1
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus'), [
-        # mark.p1((2, 'isolate', None)),
-        # mark.p1((2, 'require', None)),
-        # mark.p1((2, 'isolate', '2')),
         mark.p1((5, 'isolate', 2)),
         mark.p1((4, 'isolate', None)),
         mark.p1((4, 'require', None)),
         mark.p1((3, 'require', None)),
         mark.p2((3, 'prefer', None)),
         mark.p2((2, 'prefer', 1)),
-        mark.p2((3, None, 1)),       # should default to prefer policy behaviour, covered by cpu_policy tests
-        mark.p2((2, None, None)),
+        mark.p2((3, None, 1)),          # should default to prefer policy behaviour
+        mark.p2((2, None, None)),       # should default to prefer policy behaviour
     ])
     def test_boot_vm_cpu_thread_positive(self, vcpus, cpu_thread_policy, min_vcpus, ht_hosts_):
+        """
+        Test boot vm with specific cpu thread policy requirement
+
+        Args:
+            vcpus (int): number of vpus to set when creating flavor
+            cpu_thread_policy (str): cpu thread policy to set in flavor
+            min_vcpus (int): min_vcpus extra spec to set
+            ht_hosts_ (tuple): (ht_hosts, non-ht_hosts)
+
+        Skip condition:
+            - no host is hyperthreading enabled on system
+
+        Setups:
+            - Find out HT hosts and non-HT_hosts on system   (module)
+
+        Test Steps:
+            - Create a flavor with given number of vcpus
+            - Set cpu policy to dedicated and extra specs as per test params
+            - Get the host vcpu usage before booting vm
+            - Boot a vm with above flavor
+            - Ensure vm is booted on HT host for 'require' vm
+            - Check vm-topology, host side vcpu usage, topology from within the guest to ensure vm is properly booted
+
+        Teardown:
+            - Delete created vm, volume, flavor
+
+        """
         ht_hosts, non_ht_hosts = ht_hosts_
         LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
         flavor_id = nova_helper.create_flavor(name='cpu_thread_{}'.format(cpu_thread_policy), vcpus=vcpus)[1]
@@ -220,6 +297,43 @@ class TestHTEnabled:
     ])
     def test_boot_vm_cpu_thread_image(self, flv_vcpus, flv_cpu_pol, flv_cpu_thr_pol, img_cpu_thr_pol, img_cpu_pol,
                                       create_vol, expt_err, ht_hosts_):
+
+        """
+        Test boot vm with specific cpu thread policy requirement
+
+        Args:
+            flv_vcpus (int): number of vpus to set when creating flavor
+            flv_cpu_pol (str): cpu policy in flavor
+            flv_cpu_thr_pol (str): cpu thread policy in flavor
+            img_cpu_thr_pol: (str) cpu thread policy in image metadata
+            img_cpu_pol (str): cpu policy in image metadata
+            create_vol (bool): whether to boot from volume or image
+            expt_err (str|None): expected error message when booting vm if any
+            ht_hosts_ (tuple): (ht_hosts, non-ht_hosts)
+
+        Skip condition:
+            - no host is hyperthreading enabled on system
+
+        Setups:
+            - Find out HT hosts and non-HT_hosts on system   (module)
+
+        Test Steps:
+            - Create a flavor with given number of vcpus
+            - Set cpu policy to dedicated and extra specs as per flavor related test params
+            - Create an image from cgcs-guest
+            - Set image metadata as per image related test params
+            - Get the host vcpu usage before booting vm
+            - Attempt to boot a vm with above flavor and image
+                - if expt_err is None:
+                    - Ensure vm is booted on HT host for 'require' vm
+                    - Check vm-topology, host side vcpu usage, topology from within the guest to ensure vm
+                        is properly booted
+                - else, ensure expected error message is included in nova show
+
+        Teardown:
+            - Delete created vm, volume, flavor, image
+
+        """
         ht_hosts, non_ht_hosts = ht_hosts_
         LOG.tc_step("Create flavor with {} vcpus".format(flv_vcpus))
         flavor_id = nova_helper.create_flavor(name='cpu_thread_image', vcpus=flv_vcpus)[1]
@@ -349,6 +463,33 @@ class TestHTEnabled:
 
     @mark.p2
     def test_boot_multiple_vms_cpu_thread_isolate(self, prepare_multi_vm_env):
+        """
+        Test isolate thread policy with multiple vms
+
+        Args:
+            prepare_multi_vm_env (tuple): Calculate max number of isolate vms can be booted on specified HT host
+
+        Skip condition:
+            - no host is hyperthreading enabled on system
+
+        Setups:
+            - Find out HT hosts and non-HT_hosts on system   (module)
+            - Ensure system only has one HT host  (function)
+
+        Test Steps:
+            - Create a flavor with 4 vcpus
+            - Set cpu policy to dedicated and cpu thread policy to isolate
+            - Get the host vcpu usage before booting vm
+            - Boot a vm with above flavor and image
+            - Ensure vm is booted on target host
+            - Check vm-topology, host side vcpu usage, topology from within the guest to ensure vm is properly booted
+            - Repeat boot vm steps until pre-calculated maximum number of vms reached
+            - Boot one more vm and ensure it's rejected
+
+        Teardown:
+            - Delete created vms, volumes, flavor
+
+        """
         ht_host, max_vm_num, flavor_id, left_over_isolate_cores, non_ht_hosts = prepare_multi_vm_env
         log_cores_siblings = host_helper.get_logcore_siblings(host=ht_host)
 
@@ -847,22 +988,55 @@ class TestHTEnabled:
 
 class TestHTDisabled:
 
+    @fixture(scope='class', autouse=True)
+    def ensure_nonht(self, ht_and_nonht_hosts):
+        ht_hosts, non_ht_hosts = ht_and_nonht_hosts
+        if ht_hosts:
+            skip("There are HT enabled hosts")
+
     @mark.p1
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus', 'expt_err'), [
         (2, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
         (3, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
-        # (2, 'isolate', 2, None),
-        # (3, 'isolate', None, None),
-        (3, 'isolate', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
-        (2, 'isolate', '2', 'CPUThreadErr.HT_HOST_UNAVAIL'),
+        (2, 'isolate', 2, None),
+        (3, 'isolate', None, None),
+        # (3, 'isolate', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
+        # (2, 'isolate', '2', 'CPUThreadErr.HT_HOST_UNAVAIL'),
         (2, 'prefer', None, None),
         (3, 'prefer', 2, None),
     ])
-    def test_boot_vm_cpu_thread_ht_disabled(self, vcpus, cpu_thread_policy, min_vcpus, expt_err, ht_and_nonht_hosts):
+    def test_boot_vm_cpu_thread_ht_disabled(self, vcpus, cpu_thread_policy, min_vcpus, expt_err):
+        """
+        Test boot vm with specified cpu thread policy when no HT host is available on system
 
-        ht_hosts, non_ht_hosts = ht_and_nonht_hosts
-        if ht_hosts:
-            skip("There are HT enabled hosts")
+        Args:
+            vcpus (int): number of vcpus to set in flavor
+            cpu_thread_policy (str): cpu thread policy in flavor extra spec
+            min_vcpus (int): min_vpus in flavor extra spec
+            expt_err (str|None): expected error message in nova show if any
+
+        Skip condition:
+            - no host is hyperthreading enabled on system
+
+        Setups:
+            - Find out HT hosts and non-HT_hosts on system   (module)
+
+        Test Steps:
+            - Create a flavor with given number of vcpus
+            - Set flavor extra specs as per test params
+            - Get the host vcpu usage before booting vm
+            - Attempt to boot a vm with above flavor
+                - if expt_err is None:
+                    - Ensure vm is booted on HT host for 'require' vm
+                    - Check vm-topology, host side vcpu usage, topology from within the guest to ensure vm
+                        is properly booted
+                - else, ensure expected error message is included in nova show
+
+        Teardown:
+            - Delete created vm, volume, flavor
+
+        """
+
         LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
         flavor_id = nova_helper.create_flavor(name='cpu_thread', vcpus=vcpus)[1]
         ResourceCleanup.add('flavor', flavor_id)
@@ -892,7 +1066,8 @@ class TestHTDisabled:
             assert 0 == code, "Boot vm with isolate policy was unsuccessful. Details: {}".format(msg)
 
 
-class TestMigrateResize:
+class TestVariousHT:
+
     @fixture(scope='class', autouse=True, params=['two_plus_ht', 'one_ht'])
     def ht_hosts_(self, request, ht_and_nonht_hosts):
 
@@ -940,6 +1115,34 @@ class TestMigrateResize:
         mark.p1((3, 'require', None)),
     ])
     def test_cold_migrate_vm_cpu_thread(self, vcpus, cpu_thread_policy, min_vcpus, ht_hosts_):
+        """
+        Test cold migrate VM with specified cpu thread policy and various ht hosts number (1 or 2+) on system
+        Args:
+            vcpus:
+            cpu_thread_policy:
+            min_vcpus:
+            ht_hosts_:
+
+        Skip conditions:
+            - Less than two up hypervisors in system
+            - System does not have up host with hyper-threading enabled
+
+        Setups:
+            - Ensure system has specified number of HT hosts as per fixture param, lock host(s) when needed   (class)
+
+        Test Steps:
+            - Create a flavor with specified vcpus, cpu thread policy and min_vcpus
+            - Boot a vm with above flavor
+            - Attempt to cold migrate vm
+                - Ensure cold migrate is rejected for require vm with only 1 HT host
+                    - Ensure lock vm host is also rejected due to no other HT host
+                - Ensure cold migrate succeeded otherwise
+
+        Teardown:
+            - Delete created vm, volume, flavor
+            - Unlock any locked hosts in setup      (class)
+
+        """
         ht_hosts, non_ht_hosts = ht_hosts_
 
         LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
