@@ -101,8 +101,8 @@ def test_vm_with_health_check_failure(vm_):
         cmd = "ps -ef | grep 'kvm -c' | grep -v grep | awk '{print $2}'"
         exitcode, output = compute_ssh.exec_cmd(cmd, expect_timeout=90)
         time.sleep(10)
-        cmd = "echo 'Li69nux*' | sudo -S kill -9 %s" % output
-        exitcode, output = compute_ssh.exec_cmd(cmd, expect_timeout=90)
+        cmd = "kill -9 %s" % output
+        compute_ssh.exec_sudo_cmd(cmd, expect_timeout=90)
 
     time.sleep(10)
     LOG.tc_step('Determine which compute the vm is on after the reboot')

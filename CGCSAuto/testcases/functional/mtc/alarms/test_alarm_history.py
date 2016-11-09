@@ -45,9 +45,7 @@ def test_system_alarm_history_list():
                      "{0}".format(alarm[0]))
 
     # Get the historical list of alarms
-    res, out = cli.exec_cli('echo q | system', 'event-list --limit 50 --uuid',
-                            rtn_list=True, auth_info=Tenant.ADMIN)
-    hist_alarm_table = table_parser.table(out)
+    hist_alarm_table = system_helper.get_events_table(num=15, uuid=True)
 
     # Check that a valid alarm header is present
     alarm_header = ['UUID', 'Time Stamp', 'State', 'Event Log ID', 'Reason Text', 'Entity Instance ID', 'Severity']
@@ -60,7 +58,7 @@ def test_system_alarm_history_list():
         kwargs = {"Event Log ID": name}
         alarm_state = table_parser.get_values(hist_alarm_table, 'State', **kwargs)
         LOG.info('alarm: %s  state: %s' % (name, alarm_state))
-        if alarm_state != 'set':
+        if alarm_state != ['set']:
             LOG.info('Alarm state is incorrect')
             test_res = False
             break
@@ -98,15 +96,13 @@ def test_system_alarm_history_list():
 
     # Verify the new alarms are present in the historical list in state 'set'
     # Get the historical list of alarms
-    res, out = cli.exec_cli('echo q | system', 'event-list --limit 50 --uuid',
-                            rtn_list=True, auth_info=Tenant.ADMIN)
-    hist_alarm_table = table_parser.table(out)
+    hist_alarm_table = system_helper.get_events_table(num=15, uuid=True)
 
     for name in new_alarm_list:
         kwargs = {"Event Log ID": name}
         alarm_state = table_parser.get_values(hist_alarm_table, 'State', **kwargs)
         LOG.info('new alarm: %s  state: %s' % (name, alarm_state))
-        if alarm_state != 'set':
+        if alarm_state != ['set']:
             LOG.info('Alarm state is incorrect')
             test_res = False
             break
@@ -118,15 +114,13 @@ def test_system_alarm_history_list():
 
     #Verify the alarm clear is shown in the historical table
     LOG.info("Verify event-list command returns list of active alarms")
-    res, out = cli.exec_cli('echo q | system', 'event-list --limit 50 --uuid',
-                            rtn_list=True, auth_info=Tenant.ADMIN)
-    hist_alarm_table = table_parser.table(out)
+    hist_alarm_table = system_helper.get_events_table(num=15, uuid=True)
 
     for name in new_alarm_list:
         kwargs = {"Event Log ID": name}
         alarm_state = table_parser.get_values(hist_alarm_table, 'State', **kwargs)
         LOG.info('new alarm: %s  state: %s' % (name, alarm_state))
-        if alarm_state != 'clear':
+        if alarm_state != ['clear']:
             LOG.info('Alarm state is incorrect')
             test_res = False
             break

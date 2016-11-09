@@ -34,24 +34,17 @@ def heartbeat_flavor_vm(request):
     heartbeat_spec = {FlavorSpec.GUEST_HEARTBEAT: heartbeat}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
 
-    boot_source = 'image'
-    vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
-    ResourceCleanup.add('vm', vm_id, scope='module')
-    events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
-                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
-                                              EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
-    if heartbeat == 'True':
-        assert events, "VM heartbeat is not enabled."
-        assert EventLogID.HEARTBEAT_ENABLED == events[0], "VM heartbeat failed to establish."
-    else:
-        assert not events, "Heartbeat event generated unexpectedly: {}".format(events)
-
     # use volume to boot a vm by default
     vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
     ResourceCleanup.add('vm', vm_id, scope='module')
     events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [
-                                              EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
+                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
+    if heartbeat == 'True':
+        assert events, "VM heartbeat is not enabled."
+        assert EventLogID.HEARTBEAT_ENABLED == events[0], "VM heartbeat failed to establish."
+    else:
+        assert not events, "Heartbeat event generated unexpectedly: {}".format(events)
 
     vm = {'id': vm_id,
           'heartbeat': heartbeat
@@ -95,7 +88,7 @@ def test_clean_vm_deletion_after_live_migration(heartbeat_flavor_vm):
     vm_helper.delete_vms(vm_id)
 
     # On the compute node hosting the VM, inspect /var/log/guestServer.log
-    # On the active controller, inspect /var/log/guestAgent.log
+    # look for line : Info : c84d5215-3d9b-4176-9a60-cc2907d803af delete
     with host_helper.ssh_to_host(vm_host) as vm_compute_node:
         compare_line = "Info : "+vm_id+" delete"
         compute_cmd = "cat /var/log/guestServer.log | grep '"+compare_line+"'"
@@ -104,13 +97,9 @@ def test_clean_vm_deletion_after_live_migration(heartbeat_flavor_vm):
         LOG.tc_step("confirm line '{}' exist ".format(compare_line))
         assert code == 0, "delete output found in /var/log/guestServer.log"
 
-    # On the compute node hosting the VM, inspect /var/log/guestServer.log
-    # look for line : Info : c84d5215-3d9b-4176-9a60-cc2907d803af delete
-
     # On the active controller, inspect /var/log/guestAgent.log
     # look for line : Info : compute-0 removed instance c84d5215-3d9b-4176-9a60-cc2907d803af
     # the result should be different
-
     active_host = system_helper.get_active_controller_name()
     with host_helper.ssh_to_host(active_host) as vm_compute_node:
 
@@ -120,9 +109,3 @@ def test_clean_vm_deletion_after_live_migration(heartbeat_flavor_vm):
 
         LOG.tc_step("confirm line '{}' exist ".format(compare_line))
         assert code == 0, "delete output found in /var/log/guestAgent.log"
-    # On the compute node hosting the VM, inspect /var/log/guestServer.log
-    # look for line : Info : c84d5215-3d9b-4176-9a60-cc2907d803af delete
-
-    # On the active controller, inspect /var/log/guestAgent.log
-    # look for line : Info : compute-0 removed instance c84d5215-3d9b-4176-9a60-cc2907d803af
-    # the result should be different

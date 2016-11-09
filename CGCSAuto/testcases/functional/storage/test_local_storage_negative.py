@@ -33,6 +33,8 @@ def storage_node_not_exist():
 
 @fixture(scope='module')
 def create_storage_profile(request):
+    if storage_node_not_exist():
+        skip("No storage node exist within lab for automation to continue")
 
     profile_name = 'storage_test_profile'
     host_name = 'storage-0'
@@ -49,8 +51,6 @@ def create_storage_profile(request):
 
 def test_storage_profile_on_compute(create_storage_profile):
     # apply that profile to compute-0
-    if storage_node_not_exist():
-        skip("No storage node exist within lab for automation to continue")
     host_name = 'compute-0'
     profile_name = create_storage_profile['profile_name']
     positional_arg = host_name + ' ' + profile_name
@@ -72,8 +72,6 @@ def test_storage_profile_on_controller(create_storage_profile):
     #apply that profile to the standby controller
     #verify rejected message
 
-    if storage_node_not_exist():
-        skip("No storage node exist within lab for automation to continue")
     host_name = system_helper.get_standby_controller_name()
     profile_name = create_storage_profile['profile_name']
     positional_arg = host_name + ' ' + profile_name

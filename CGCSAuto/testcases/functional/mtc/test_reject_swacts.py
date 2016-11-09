@@ -32,9 +32,8 @@ def test_swact_standby_controller_negative():
 @fixture(scope='function')
 def fail_controller(request):
     standby = system_helper.get_standby_controller_name()
-    host_helper.reboot_hosts(standby, wait_for_reboot_finish=False)
-
     HostsToRecover.add(standby, scope='function')
+    host_helper.reboot_hosts(standby, wait_for_reboot_finish=False)
 
     return True
 
