@@ -1300,3 +1300,205 @@ def get_hosts_interfaces_info(hosts, fields, con_ssh=None, auth_info=Tenant.ADMI
         res[host] = host_res
 
     return res
+
+
+def get_service_parameter_values(rtn_value='value', service=None, section=None, name=None, con_ssh=None):
+    """
+    Returns the table from system service-parameter-list
+    service, section, name can be used to filter the table
+    Args:
+        service (str):
+        section (str):
+        name (str):
+        con_ssh:
+
+    Returns (dict):
+
+    """
+    kwargs = {}
+    if service:
+        kwargs['service'] = service
+    if section:
+        kwargs['section'] = section
+    if name:
+        kwargs['name'] = name
+
+    table_ = table_parser.table(cli.system('service-parameter-list', ssh_client=con_ssh))
+    return table_parser.get_values(table_, rtn_value, **kwargs)
+
+
+def create_service_parameter(service, section, name, value, con_ssh=None, fail_ok=False,
+                             check_first=True, modify_existing=True):
+    """
+    Add service-parameter
+    system service-parameter-add (service) (section) (name)=(value)
+    Args:
+        service (str): Required
+        section (str): Required
+        name (str): Required
+        value (str): Required
+        con_ssh:
+        fail_ok:
+        check_first (bool): Check if the service parameter exists before
+        modify_existing (bool): Whether to modify the service parameter if it already exists
+
+    Returns (tuple): (rtn_code, err_msg or param_uuid)
+
+    """
+    if check_first:
+        val = get_service_parameter_values(service=service, section=section, name=name, con_ssh=con_ssh)
+        if val:
+            msg = "The service parameter {} {} {} already exists".format(service, section, name)
+            LOG.info(msg)
+            if modify_existing:
+                return modify_service_parameter(service, section, name, value,
+                                                con_ssh=con_ssh, fail_ok=fail_ok, check_first=False)
+            return -1, msg
+
+    LOG.info("Creating service parameter")
+    args = service + ' ' + section + ' ' + name + '=' + value
+    res, out = cli.system('service-parameter-add', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
+
+    if res == 1:
+        return 1, out
+
+    LOG.info("Verifying the service parameter value")
+    val = get_service_parameter_values(service=service, section=section, name=name, con_ssh=con_ssh)[0]
+    if val != value:
+        msg = 'The service parameter was not added with the correct value'
+        if fail_ok:
+            return 2, msg
+        raise exceptions.SysinvError(msg)
+    LOG.info("Service parameter was added with the correct value")
+    uuid = get_service_parameter_values(rtn_value='uuid', service=service, section=section, name=name,
+                                        con_ssh=con_ssh)[0]
+
+    return 0, uuid
+
+
+def modify_service_parameter(service, section, name, value, con_ssh=None, fail_ok=False,
+                             check_first=True, create=True):
+    """
+    Modify a service parameter
+    Args:
+        service (str): Required
+        section (str): Required
+        name (str): Required
+        value (str): Required
+        con_ssh:
+        fail_ok:
+        check_first (bool): Check if the parameter exists first
+        create (bool): Whether to create the parameter if it does not exist
+
+    Returns (tuple): (rtn_code, message)
+
+    """
+    if check_first:
+        val = get_service_parameter_values(service=service, section=section, name=name, con_ssh=con_ssh)
+        if not val:
+            msg = "The service parameter {} {} {} doesn't exist".format(service, section, name)
+            LOG.info(msg)
+            if create:
+                return create_service_parameter(service, section, name, value,
+                                                con_ssh=con_ssh, fail_ok=fail_ok, check_first=False)
+            return -1, msg
+        if val[0] == value:
+            msg = "The service parameter value is already set to {}".format(val)
+            return -1, msg
+
+    LOG.info("Modifying service parameter")
+    args = service + ' ' + section + ' ' + name + '=' + value
+    res, out = cli.system('service-parameter-modify', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
+
+    if res == 1:
+        return 1, out
+
+    LOG.info("Verifying the service parameter value")
+    val = get_service_parameter_values(service=service, section=section, name=name, con_ssh=con_ssh)[0]
+    if val != value:
+        msg = 'The service parameter was not modified to the correct value'
+        if fail_ok:
+            return 2, msg
+        raise exceptions.SysinvError(msg)
+    msg = "Service parameter modified to {}".format(val)
+    LOG.info(msg)
+    return 0, msg
+
+
+def delete_service_parameter(uuid, con_ssh=None, fail_ok=False, check_first=True):
+    """
+    Delete a service parameter
+    Args:
+        uuid (str): Required
+        con_ssh:
+        fail_ok:
+        check_first (bool): Check if the service parameter exists before
+
+    Returns:
+
+    """
+    if check_first:
+        uuids = get_service_parameter_values(rtn_value='uuid', con_ssh=con_ssh)
+        if uuid not in uuids:
+            return -1, "There is no service parameter with uuid {}".format(uuid)
+
+    res, out = cli.system('service-parameter-delete', uuid, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
+
+    if res == 1:
+        return 1, out
+
+    LOG.info("Deleting service parameter")
+    uuids = get_service_parameter_values(rtn_value='uuid', con_ssh=con_ssh)
+    if uuid in uuids:
+        err_msg = "Service parameter was not deleted"
+        if fail_ok:
+            return 2, err_msg
+        raise exceptions.SysinvError(err_msg)
+    msg = "The service parameter {} was deleted".format(uuid)
+    LOG.info(msg)
+    return 0, msg
+
+
+def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh=None, fail_ok=False):
+    """
+    Apply service parameters
+    Args:
+        service (str): Required
+        wait_for_config (bool): Wait for config out of date alarms to clear
+        timeout (int):
+        con_ssh:
+        fail_ok:
+
+    Returns (tuple): (rtn_code, message)
+
+    """
+    LOG.info("Applying service parameters {}".format(service))
+    res, out = cli.system('service-parameter-apply', service, rtn_list=True, fail_ok=fail_ok, ssh_client=con_ssh)
+
+    if res == 1:
+        return res, out
+
+    alarm_id = '250.001'
+    time.sleep(10)
+
+    if wait_for_config:
+        LOG.info("Waiting for config-out-of-date alarms to clear. "
+                 "There may be cli errors when active controller's config updates")
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            res, out = cli.system('alarm-list', '--uuid',
+                                  ssh_client=con_ssh, fail_ok=True)
+            if res == 0:
+                alarms_tab = table_parser.filter_table(table_parser.table(out), **{'Alarm ID': alarm_id})
+                uuids = table_parser.get_values(alarms_tab, 'uuid')
+                if not uuids:
+                    LOG.info("Config has been applied")
+                    break
+            time.sleep(5)
+        else:
+            err_msg = "The config has not finished applying after timeout"
+            if fail_ok:
+                return 2, err_msg
+            raise exceptions.TimeoutException(err_msg)
+
+    return 0, "The {} service parameter was applied".format(service)
