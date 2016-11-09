@@ -16,6 +16,26 @@ Test fixtures to configure a host with lock/unlock
     :undoc-members:
     :show-inheritance:
 
+recover_hosts module
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Fixtures can be used to cleanup created resources as test teardown.
+Examples can be seen here (TODO)
+
+.. automodule:: testfixtures.recover_hosts
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+resources_create module
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Fixtures can be used to cleanup created resources as test teardown.
+Examples can be seen here (TODO)
+
+.. automodule:: testfixtures.resources_create
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 resources_mgmt module
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Fixtures can be used to cleanup created resources as test teardown.
@@ -35,13 +55,5 @@ Common system verification test fixtures
     :undoc-members:
     :show-inheritance:
 
-wait_for_hosts_recover module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-
-.. automodule:: testfixtures.wait_for_hosts_recover
-    :members:
-    :undoc-members:
-    :show-inheritance:
 
 
