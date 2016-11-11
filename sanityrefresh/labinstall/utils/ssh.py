@@ -163,7 +163,7 @@ class SSHClient(pxssh.pxssh):
             pre_opts = ""
 
         ssh_opts = '"ssh {}" '.format(" ".join(RSYNC_SSH_OPTIONS))
-        cmd = "{} rsync -ave {} {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
+        cmd = "{} rsync -avre {} {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
         if self.exec_cmd(cmd, RSYNC_TIMEOUT, show_output=False)[0] != 0:
             msg = "Rsync failed"

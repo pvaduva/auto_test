@@ -179,7 +179,7 @@ TIMEOUT_BUFFER = 2
 # Prompts
 LOGIN_PROMPT = "ogin:"
 PASSWORD_PROMPT = "assword:"
-PROMPT = ".*\$ "
+PROMPT = ".*\$ ?"
 
 # Other
 LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
@@ -201,3 +201,17 @@ EMAIL_FROM = 'no_reply_automated_labinstall@wrs.com'
 EMAIL_SUBJECT = 'Automated Lab Install: '
 EMAIL_ERROR_MSG = "Automated lab install has encountered problem." \
     "\nReason: "
+
+
+# lab type
+LAB_TYPES = ['regular_lab', 'storge_lab', 'cpe_lab', 'tis_on_tis', 'tis_on_tis_storage']
+
+# tmp install vars path
+INSTALL_VARS_TMP_PATH = "/tmp"
+INSTALL_VARS_FILE_EXT = "_install_vars.ini"
+INSTALL_EXECUTED_STEPS_FILE_EXT = "_executed_steps.txt"
+
+# Resume install message
+RESUME_INSTALL_MSG = 'Please correct error and re-run auto-install with ' \
+                     '--lab=<lab name>  and ' \
+                     '--continue options to continue install'

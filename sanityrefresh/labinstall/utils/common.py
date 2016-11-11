@@ -168,6 +168,12 @@ def vlm_reserve(barcodes, note=None):
         log.error(msg)
         wr_exit()._exit(1, msg)
 
+def vlm_unreserve(barcodes):
+    log.info("Target(s) nodes: {}".format(str(barcodes)))
+    reservedbyme = vlm_findmine()
+    for bc in barcodes:
+        if bc in reservedbyme:
+            vlm_exec_cmd(VLM_UNRESERVE, bc)
 
 def vlm_getattr(barcodes):
     attr_values = []
@@ -239,12 +245,26 @@ class wr_exit(object):
             self.email_to = None
             self.status_msg = ''
             self.lab_name = ''
+            self.executed_steps = []
+            self.lab_barcodes = []
 
         def _set_email_attr(self, **kwargs):
             for key in kwargs:
                 setattr(self, key, kwargs[key])
 
         def _exit(self, status, msg=None):
+            # dump executed if status is not 0
+            if status is not 0:
+                self._dump_executed_steps()
+                if len(self.lab_barcodes) > 0:
+                    vlm_unreserve(self.lab_barcodes)
+
+            else:
+                install_vars_filename = self.lab_name + INSTALL_VARS_FILE_EXT
+                file_path = os.path.join(INSTALL_VARS_TMP_PATH, install_vars_filename)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+
             #check if we need to send email
             if self.email_to is not None:
                 _msg = ''
@@ -267,6 +287,21 @@ class wr_exit(object):
             s.send_message(msg_body)
             s.quit()
 
+        def _dump_executed_steps(self):
+            executed_steps_filename = self.lab_name + INSTALL_EXECUTED_STEPS_FILE_EXT
+            executed_steps_path = os.path.join(INSTALL_VARS_TMP_PATH, executed_steps_filename)
+            if os.path.exists(executed_steps_path):
+                os.remove(executed_steps_path)
+            file = open(executed_steps_path, 'w')
+            if len(self.executed_steps) > 0:
+                for step in self.executed_steps:
+                    file.write("{}\n".format(step))
+                log.info(RESUME_INSTALL_MSG)
+            file.close()
+
+        def _add_executed_step(self, step):
+            self.executed_steps.append(step)
+
     instance = None
 
     def __new__(cls):
@@ -279,3 +314,17 @@ class wr_exit(object):
 
     def __setattr__(self, name):
         return setattr(self.instance, name)
+
+
+
+class install_step(object):
+
+    def __init__(self, name, rank, lab_types):
+        self.name = name
+        self.rank = rank
+        self.lab_types = list(lab_types)
+        self.step_full_name = "Step{}_{}".format(rank, name)
+
+    def is_step_valid(self, lab_type):
+        return (lab_type in self.lab_types)
+
