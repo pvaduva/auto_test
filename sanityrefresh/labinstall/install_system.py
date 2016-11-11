@@ -67,8 +67,8 @@ def parse_args():
                                      " Server load on specified configuration.")
 
     parser.add_argument('--lab', dest='lab_name',
-                          help="Official lab name",
-                          required=True)
+                          help="Official lab name")
+                          #required=True)
     parser.add_argument('--continue', dest='continue_install',
                         action='store_true', help="Continue lab install"
                         " from its last step")
@@ -540,9 +540,12 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
         wr_exit()._exit(1, msg)
 
     expected_state_count = 0
+    search_attempts = MAX_SEARCH_ATTEMPTS
     sleep_secs = int(REBOOT_TIMEOUT/MAX_SEARCH_ATTEMPTS)
+    sleep_secs /= 2
+    search_attempts = MAX_SEARCH_ATTEMPTS * 2
     node_count = len(nodes)
-    while count < MAX_SEARCH_ATTEMPTS:
+    while count < search_attempts:
         output = controller0.ssh_conn.exec_cmd("source /etc/nova/openrc; system host-list")[1]
         # Remove table header and footer
         output = "\n".join(output.splitlines()[3:-1])
@@ -590,7 +593,7 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
             log.info("Sleeping for {} seconds...".format(str(sleep_secs)))
             time.sleep(sleep_secs)
         count += 1
-    if count == MAX_SEARCH_ATTEMPTS:
+    if count == search_attempts:
         msg = 'Waited {} seconds and {} did not become \"{}\"'.format(str(REBOOT_TIMEOUT), node_names, expected_state)
         log.error(msg)
         wr_exit()._exit(1, msg)
@@ -605,16 +608,18 @@ def get_availability_controller1():
     return output
 
 def get_system_name(bld_server_conn, lab_cfg_path):
-    '''
+    """
     Args: Gets the lab system name from lab_setup.conf file
         bld_server_conn:
         lab_cfg_path:
 
-    Returns: system name
+    Returns: system lab name
 
-    '''
+    """
     cmd = "grep SYSTEM_NAME " + lab_cfg_path + "/" + LAB_SETUP_CFG_FILENAME
-    return bld_server_conn.exec_cmd(cmd)[1]
+    system_name = bld_server_conn.exec_cmd(cmd)[1]
+    return ((system_name.split('=')[1])[5:]).replace('"', '')
+
 
 def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True):
     ''' Initiate the boot and installation operation.
@@ -747,17 +752,57 @@ def wait_until_drbd_sync_complete(controller0, timeout=600, check_interval=180):
     return sync_complete
 
 
-def labInstallVars():
+def write_install_vars(args):
     config = configparser.ConfigParser()
+
+    lab_name = args.lab_name
+    if lab_name is None:
+        msg = "Lab is not specified; cannot write install variables to file."
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
+    install_vars_filename = lab_name + INSTALL_VARS_FILE_EXT
+    file_path = os.path.join(INSTALL_VARS_TMP_PATH, install_vars_filename)
+
+    install_vars = dict((k, str(v)) for k, v, in (vars(args)).items())
+
+    config['INSTALL_CONFIG'] = install_vars
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+    with open(file_path, "w") as install_var_file:
+        config.write(install_var_file)
+        install_var_file.close()
+
+def read_install_from_file(args):
+
+    lab_name = args.lab_name
+    if lab_name is None:
+        msg = "Lab is not specified; cannot read install variables from file."
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
+    config = configparser.ConfigParser()
+    install_vars_filename = lab_name + INSTALL_VARS_FILE_EXT
+    file_path = os.path.join(INSTALL_VARS_TMP_PATH, install_vars_filename)
+    install_vars = {}
+    if len(config.read(file_path)) > 0:
+        import ast
+        install_vars = dict(config['INSTALL_CONFIG'])
+
+        for (k, v) in install_vars.items():
+            if v == 'False' or v == 'True' or v == 'None':
+                install_vars[k] = ast.literal_eval(v)
+
+        return Namespace(**install_vars)
+    else:
+        return None
+
+def labInstallVars():
+
     args = parse_args()
 
     lab_name = args.lab_name
-
-    install_vars_filename = lab_name + INSTALL_VARS_FILE_EXT
-    executed_steps_filename = lab_name + INSTALL_EXECUTED_STEPS_FILE_EXT
-    executed_steps_path = os.path.join(INSTALL_VARS_TMP_PATH, executed_steps_filename)
-    file_path = os.path.join(INSTALL_VARS_TMP_PATH, install_vars_filename)
-
 
     #rc, labs = verifyLabName(args.lab_name)
     #if not rc:
@@ -765,35 +810,27 @@ def labInstallVars():
     #    return False, msg
 
     if not args.continue_install:
-        # new install, write all arguments to file
-        install_vars = dict((k, str(v)) for k, v, in (vars(args)).items())
-
-        config['INSTALL_CONFIG'] = install_vars
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
-        with open(file_path, "w") as install_var_file:
-            config.write(install_var_file)
-            install_var_file.close()
+        if lab_name is not None:
+            write_install_vars(args)
         return args
     else:
-         if len(config.read(file_path)) > 0:
-             import ast
-             install_vars = dict(config['INSTALL_CONFIG'])
-
-             for (k, v) in install_vars.items():
-                 if v == 'False' or v == 'True' or v == 'None':
-                    install_vars[k] = ast.literal_eval(v)
+         install_vars = read_install_from_file(args)
+         if install_vars is not None:
              #update continue_install
-             install_vars['continue_install'] = True
+             install_vars.continue_install = True
+
+
              global executed_install_steps
+             executed_steps_filename = lab_name + INSTALL_EXECUTED_STEPS_FILE_EXT
+             executed_steps_path = os.path.join(INSTALL_VARS_TMP_PATH, executed_steps_filename)
+
              if os.path.exists(executed_steps_path):
-                 with open(executed_steps_path) as file:
+                with open(executed_steps_path) as file:
                     executed_install_steps = file.read().splitlines()
 
-             return Namespace(**install_vars)
+             return install_vars
          else:
-             msg = "Lab Install Variable file: {} not found.".format(file_path)
+             msg = "Lab Install Variable file not found."
              print(msg)
              wr_exit()._exit(1, msg)
 
@@ -1444,8 +1481,16 @@ def main():
 
     # get lab name from config file
     #lab_name = get_system_name(bld_server_conn, lab_cfg_path)
-    if lab_name is not None:
-        installer_exit.lab_name = lab_name
+    if lab_name is  None:
+        lab_name = get_system_name(bld_server_conn, lab_cfg_path)
+        print(lab_name)
+        #lab_name = ((_lab_name.split('=')[1])[5:]).replace('"', '')
+        #print(lab_name)
+        args.lab_name = lab_name
+        write_install_vars(args)
+
+    installer_exit.lab_name = lab_name
+
 
     if tis_on_tis:
 
