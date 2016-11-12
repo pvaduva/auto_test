@@ -841,10 +841,11 @@ def get_nova_hosts(zone='nova', con_ssh=None, auth_info=Tenant.ADMIN):
     System: Regular, Small footprint
 
     Args:
+        zone (str): returns only the hosts with specified zone
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (list): a list of nova computes
+    Returns (list): a list of hypervisors in given zone
     """
 
     table_ = table_parser.table(cli.nova('host-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -961,6 +962,26 @@ def wait_for_webservice_up(hosts, timeout=90, check_interval=3, fail_ok=False, c
         raise exceptions.HostTimeout(msg)
 
 
+def get_hosts_in_aggregate(aggregate, con_ssh=None):
+    aggregates_tab = table_parser.table(cli.nova('aggregate-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    avail_aggregates = table_parser.get_column(aggregates_tab, 'Name')
+    if aggregate not in avail_aggregates:
+        LOG.warning("Requested aggregate {} is not in nova aggregate-list".format(aggregate))
+        return []
+
+    table_ = table_parser.table(cli.nova('aggregate-details', aggregate, ssh_client=con_ssh,
+                                         auth_info=Tenant.ADMIN))
+    hosts = table_parser.get_values(table_, 'Hosts', Name=aggregate)[0]
+    hosts = hosts.split(',')
+    if len(hosts) == 0 or hosts == ['']:
+        hosts = []
+    else:
+        hosts = [eval(host) for host in hosts]
+
+    LOG.info("Hosts in {} aggregate: {}".format(aggregate, hosts))
+    return hosts
+
+
 def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
     """
     Return a list of hosts that supports the given storage backing.
@@ -987,20 +1008,7 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
         raise ValueError("Invalid storage backing provided. "
                          "Please use one of these: 'local_image', 'local_lvm', 'remote'")
 
-    aggregates_tab = table_parser.table(cli.nova('aggregate-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    avail_aggregates = table_parser.get_column(aggregates_tab, 'Name')
-    if aggregate not in avail_aggregates:
-        LOG.warning("Requested aggregate {} is not in nova aggregate-list".format(aggregate))
-        return []
-
-    table_ = table_parser.table(cli.nova('aggregate-details', aggregate, ssh_client=con_ssh,
-                                         auth_info=Tenant.ADMIN))
-    hosts = table_parser.get_values(table_, 'Hosts', Name=aggregate)[0]
-    hosts = hosts.split(',')
-    if len(hosts) == 0 or hosts == ['']:
-        hosts = []
-    else:
-        hosts = [eval(host) for host in hosts]
+    hosts = get_hosts_in_aggregate(aggregate, con_ssh=con_ssh)
 
     LOG.info("Hosts with {} backing: {}".format(storage_backing, hosts))
     return hosts
