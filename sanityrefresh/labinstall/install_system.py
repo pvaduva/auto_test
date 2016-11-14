@@ -305,11 +305,11 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_o
     '''
 
     lab_settings_filepath = None
-    if host_os == "wrlinux":
-        lab_cfg_rel_path = LAB_YOW_REL_PATH + "/" + lab_cfg_location
+    if host_os == "centos":
+        lab_cfg_rel_path = CENTOS_LAB_REL_PATH + "/yow/" + lab_cfg_location
         lab_cfg_path = load_path + "/" + lab_cfg_rel_path
     else:
-        lab_cfg_rel_path = CENTOS_LAB_REL_PATH + "/yow/" + lab_cfg_location
+        lab_cfg_rel_path = LAB_YOW_REL_PATH + "/" + lab_cfg_location
         lab_cfg_path = load_path + "/" + lab_cfg_rel_path
 
     cmd = "test -d " + lab_cfg_path
@@ -405,7 +405,7 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
         bld_server_conn.sendline("cd " + load_path)
         bld_server_conn.find_prompt()
 
-        bld_server_conn.rsync("export/extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
+        bld_server_conn.rsync("extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
         bld_server_conn.rsync(RPM_INSTALL_REL_PATH + "/boot/isolinux/vmlinuz", USERNAME, tuxlab_server, feed_path)
         bld_server_conn.rsync(RPM_INSTALL_REL_PATH + "/boot/isolinux/initrd", USERNAME, tuxlab_server, feed_path + "/initrd.img")
 
@@ -720,32 +720,34 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
     #node.telnet_conn.get_read_until("Rebooting...")
     node.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
 
-def wait_until_drbd_sync_complete(controller0, timeout=600, check_interval=180):
+def wait_until_alarm_clears(controller0, timeout=600, check_interval=180, alarm_id="800.001", host_os="centos"):
     '''
-    Function for waiting until the drbd alarm is cleared
+    Function for waiting until an alarm clears
     '''
 
-    sync_complete = False
+    alarm_cleared = False
     end_time = time.time() + timeout
 
     while True:
         if time.time() < end_time:
             time.sleep(15)
-            cmd = "source /etc/nova/openrc; system alarm-list"
+            if host_os == "centos":
+                cmd = "source /etc/nova/openrc; system alarm-list --nowrap"
+            else:
+                cmd = "source /etc/nova/openrc; system alarm-list"
             output = controller0.ssh_conn.exec_cmd(cmd)[1]
-            print('Waiting for data sync to complete')
+            log.info('Waiting for alarm {} to clear'.format(alarm_id))
 
-            if not find_error_msg(output, "data-syncing"):
-                print('Data sync is complete')
-                sync_complete = True
+            if not find_error_msg(output, alarm_id):
+                log.info('Alarm {} has cleared'.format(alarm_id))
+                alarm_cleared = True
                 break
             time.sleep(check_interval)
         else:
-            message = "FAIL: DRBD data sysnc was not completed in expected time."
-            print(message)
+            log.info("Alarm {} was not cleared in expected time".format(alarm_id))
             break
 
-    return sync_complete
+    return alarm_cleared
 
 
 def write_install_vars(args):
@@ -1062,9 +1064,10 @@ def configureController(bld_server_conn, host_os, install_output_dir):
             cmd += " config_controller --config-file " + cfgfile
             #cmd += " config_controller --default"
             os.environ["TERM"] = "xterm"
-            rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
-            # Switching to ssh due to CGTS-4051
-            #rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+            if host_os == "centos":
+                rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
+            else:
+                rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
             if rc != 0 or find_error_msg(output, "Configuration failed"):
                 msg = "config_controller failed"
                 log.error(msg)
@@ -1620,7 +1623,7 @@ def main():
                 installer_exit._exit(1, msg)
             set_install_step_complete( lab_install_step)
 
-     # Lab-install Step 6 -  cpe_compute_config_complet - applicable cpe labs only
+     # Lab-install Step 6 -  cpe_compute_config_complete - applicable cpe labs only
     lab_install_step = install_step("cpe_compute_config_complete", 6, ['cpe'])
     if do_next_install_step(lab_type, lab_install_step):
         if small_footprint:
