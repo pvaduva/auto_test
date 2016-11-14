@@ -720,7 +720,7 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
     #node.telnet_conn.get_read_until("Rebooting...")
     node.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
 
-def wait_until_alarm_clears(controller0, timeout=600, check_interval=180, alarm_id="800.001", host_os="centos"):
+def wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os="centos"):
     '''
     Function for waiting until an alarm clears
     '''
@@ -728,6 +728,7 @@ def wait_until_alarm_clears(controller0, timeout=600, check_interval=180, alarm_
     alarm_cleared = False
     end_time = time.time() + timeout
 
+    log.info('Waiting for alarm {} to clear'.format(alarm_id))
     while True:
         if time.time() < end_time:
             time.sleep(15)
@@ -736,7 +737,6 @@ def wait_until_alarm_clears(controller0, timeout=600, check_interval=180, alarm_
             else:
                 cmd = "source /etc/nova/openrc; system alarm-list"
             output = controller0.ssh_conn.exec_cmd(cmd)[1]
-            log.info('Waiting for alarm {} to clear'.format(alarm_id))
 
             if not find_error_msg(output, alarm_id):
                 log.info('Alarm {} has cleared'.format(alarm_id))
@@ -1722,6 +1722,10 @@ def main():
         unlock_node(nodes, selection_filter="storage")
         wait_state(node, OPERATIONAL, ENABLED)
         set_install_step_complete( lab_install_step)
+
+    # After unlocking storage nodes, wait for ceph to come up
+    if lab_type is 'storage':
+        wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os=host_os)
 
     # for Storage lab  run lab setup
     # Lab-install Step 14 -  run_lab_setup - applicable storage labs
