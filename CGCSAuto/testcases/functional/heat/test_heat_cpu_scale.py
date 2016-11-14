@@ -1,17 +1,15 @@
 import os
 import time
 
-from pytest import fixture, mark, skip
+from pytest import mark
 
+from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec
+from consts.filepaths import WRSROOT_HOME
+from keywords import nova_helper, vm_helper, heat_helper, network_helper
+from setup_consts import P1
+from testfixtures.resource_mgmt import ResourceCleanup
 from utils import cli
 from utils.tis_log import LOG
-
-from setup_consts import P1, P2, P3
-from consts.cgcs import HEAT_PATH, HEAT_SCENARIO_PATH, FlavorSpec
-from consts.filepaths import WRSROOT_HOME
-
-from keywords import nova_helper, vm_helper, heat_helper, ceilometer_helper, network_helper
-from testfixtures.resource_mgmt import ResourceCleanup
 
 
 def launch_vm_scaling_stack(con_ssh=None, auth_info=None):

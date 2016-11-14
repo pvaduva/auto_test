@@ -1,5 +1,6 @@
 import logging
 import os
+import configparser
 from time import strftime, gmtime
 
 import pytest
@@ -7,60 +8,12 @@ import pytest
 import setup_consts
 import setups
 from consts.auth import CliAuth, Tenant
-from consts.proj_vars import ProjVar
-from utils.tis_log import LOG
+from consts.proj_vars import ProjVar, InstallVars
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
+from utils.tis_log import LOG
 
-
-natbox_ssh = None
-con_ssh = None
 tc_start_time = None
 has_fail = False
-build_id = None
-
-
-@pytest.fixture(scope='session', autouse=True)
-def setup_test_session():
-    """
-    Setup primary tenant and Nax Box ssh before the first test gets executed.
-    TIS ssh was already set up at collecting phase.
-    """
-    global build_id
-    build_id = setups.get_build_id(con_ssh)
-
-    os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
-    setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
-    setups.set_env_vars(con_ssh)
-
-    setups.copy_files_to_con1()
-
-    global natbox_ssh
-    natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'))
-
-    # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
-
-
-@pytest.fixture(scope='function', autouse=True)
-def reconnect_before_test():
-    """
-    Before each test function start, Reconnect to TIS via ssh if disconnection is detected
-    """
-    con_ssh.flush()
-    con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
-    natbox_ssh.flush()
-    natbox_ssh.connect(retry=False)
-
-
-@pytest.fixture(scope='function', autouse=False)
-def tis_ssh():
-    """
-    Used when a test function wants to get active controller ssh handle.
-    This is usually useful when multiple ssh sessions are created, and test func needs to explicitly specify which ssh
-    session to run which command.
-
-    Returns: ssh client of the active controller session
-    """
-    return con_ssh
 
 
 ################################
@@ -152,21 +105,22 @@ def pytest_runtest_makereport(item, call, __multicall__):
 
     return report
 
-
-def pytest_collectstart():
-    """
-    Set up the ssh session at collectstart. Because skipif condition is evaluated at the collecting test cases phase.
-    """
-    global con_ssh
-    con_ssh = setups.setup_tis_ssh(ProjVar.get_var("LAB"))
-    CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
-    Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
-    Tenant._set_region(CliAuth.get_var('OS_REGION_NAME'))
+#
+# def pytest_collectstart():
+#     """
+#     Set up the ssh session at collectstart. Because skipif condition is evaluated at the collecting test cases phase.
+#     """
+#     global con_ssh
+#     con_ssh = setups.setup_tis_ssh(ProjVar.get_var("LAB"))
+#     CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
+#     Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
+#     Tenant._set_region(CliAuth.get_var('OS_REGION_NAME'))
 
 
 def pytest_runtest_setup(item):
     global tc_start_time
-    tc_start_time = setups.get_tis_timestamp(con_ssh)
+    # tc_start_time = setups.get_tis_timestamp(con_ssh)
+    tc_start_time = strftime("%Y%m%d %H:%M:%S", gmtime())
     print('')
     message = "Setup started:"
     testcase_log(message, item.nodeid, log_type='tc_setup')
@@ -182,8 +136,8 @@ def pytest_runtest_teardown(item):
     print('')
     message = 'Teardown started:'
     testcase_log(message, item.nodeid, log_type='tc_teardown')
-    con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
-    con_ssh.flush()
+    # con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
+    # con_ssh.flush()
 
 
 def testcase_log(msg, nodeid, separator=None, log_type=None):
@@ -217,18 +171,22 @@ def pytest_configure(config):
     config.addinivalue_line("markers",
                             "known_issue(CGTS-xxxx): mark known issue with JIRA ID or description if no JIRA needed.")
 
-    lab_arg = config.getoption('lab')
-    natbox_arg = config.getoption('natbox')
-    tenant_arg = config.getoption('tenant')
-    bootvms_arg = config.getoption('bootvms')
+    # Common reporting params
     collect_all = config.getoption('collectall')
     report_all = config.getoption('reportall')
     report_tag = config.getoption('report_tag')
     resultlog = config.getoption('resultlog')
+
+    # Test case params on installed system
+    lab_arg = config.getoption('lab')
+    natbox_arg = config.getoption('natbox')
+    tenant_arg = config.getoption('tenant')
+    bootvms_arg = config.getoption('bootvms')
     openstack_cli = config.getoption('openstackcli')
+    install_conf = config.getoption('installconf')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
-    lab = setups.get_lab_dict(lab_arg) if lab_arg else setup_consts.LAB
+    lab = setups.get_lab_from_cmdline(lab_arg=lab_arg, installconf_path=install_conf)
     natbox = setups.get_natbox_dict(natbox_arg) if natbox_arg else setup_consts.NATBOX
     tenant = setups.get_tenant_dict(tenant_arg) if tenant_arg else setup_consts.PRIMARY_TENANT
     is_boot = True if bootvms_arg else setup_consts.BOOT_VMS
@@ -265,19 +223,34 @@ def pytest_addoption(parser):
     report_help = "Upload results and logs to the test results database."
     tag_help = "Tag to be used for uploading logs to the test results database."
     openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
+    skiplabsetup_help = "Do not run lab_setup post lab install"
+    installconf_help = "Full path of lab install configuration file. Template location: " \
+                       "/folk/cgts/lab/autoinstall_template.ini"
+    resumeinstall_help = 'Resume install of current lab from where it stopped/failed'
 
-    parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
-    parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
-    parser.addoption('--natbox', action='store', metavar='natboxname', default=None, help=natbox_help)
-    parser.addoption('--report_tag', action='store', dest='report_tag', metavar='tagname', default=None, help=tag_help)
-
-    parser.addoption('--bootvms', '--boot_vms', '--boot-vms', dest='bootvms', action='store_true', help=bootvm_help)
+    # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
                      help=collect_all_help)
     parser.addoption('--reportall', '--report_all', '--report-all', dest='reportall', action='store_true',
                      help=report_help)
+    parser.addoption('--report_tag', action='store', dest='report_tag', metavar='tagname', default=None, help=tag_help)
+
+    # Test session options on installed lab:
+    parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
+    parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
+    parser.addoption('--natbox', action='store', metavar='natboxname', default=None, help=natbox_help)
+    parser.addoption('--bootvms', '--boot_vms', '--boot-vms', dest='bootvms', action='store_true', help=bootvm_help)
     parser.addoption('--openstackcli', '--openstack_cli', '--openstack-cli', action='store_true', dest='openstackcli',
                      help=openstackcli_help)
+
+    # Lab install options:
+    parser.addoption('--resumeinstall', '--resume-install', dest='resumeinstall', action='store_true',
+                     help=resumeinstall_help)
+    parser.addoption('--skiplabsetup', '--skip-labsetup', dest='skiplabsetup', action='store_true',
+                     help=skiplabsetup_help)
+    parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
+                     help=installconf_help)
+    # Note --lab is also a lab install option, when config file is not provided.
 
 
 def config_logger(log_dir):
@@ -297,32 +270,34 @@ def config_logger(log_dir):
 
 def pytest_unconfigure():
     # collect all if needed
+
+    try:
+        natbox_ssh = ProjVar.get_var('NATBOX_SSH')
+        natbox_ssh.close()
+    except:
+        pass
+
+    try:
+        from utils.ssh import ControllerClient
+        con_ssh = ControllerClient.get_active_controller()
+    except:
+        LOG.warning("cannot find con_ssh")
+        return
+
     if has_fail and ProjVar.get_var('COLLECT_ALL'):
         # Collect tis logs if collect all required upon test(s) failure
         # Failure on collect all would not change the result of the last test case.
-        setups.collect_tis_logs(con_ssh)
+        try:
+            setups.collect_tis_logs(con_ssh)
+        except:
+            LOG.warning("'collect all' failed.")
+            pass
 
     # close ssh session
     try:
         con_ssh.close()
     except:
         pass
-
-    try:
-        natbox_ssh.close()
-    except:
-        pass
-
-    tc_res_path = ProjVar.get_var('LOG_DIR') + '/test_results.log'
-
-    with open(tc_res_path, mode='a') as f:
-        f.write('\n\nLab: {}\n'
-                'Build ID:{}\n'
-                'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, ProjVar.get_var('LOG_DIR')))
-
-    LOG.info("Test Results saved to: {}".format(tc_res_path))
-    with open(tc_res_path, 'r') as fin:
-        print(fin.read())
 
 
 def pytest_collection_modifyitems(items):

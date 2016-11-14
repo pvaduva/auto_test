@@ -113,8 +113,6 @@ def test_swact_to_locked_controller_negative(lock_controller):
                                   "Previous: {} Current: {}".format(active, curr_active)
 
 
-
-@mark.skipif(system_helper.is_small_footprint(), reason="Small footprint lab. No compute nodes.")
 def test_swact_compute_negative():
     """
     TC610_5
@@ -124,6 +122,9 @@ def test_swact_compute_negative():
         - Attempt to swact from a compute
 
     """
+    if system_helper.is_small_footprint():
+        skip("Skip for CPE system.")
+
     computes = system_helper.get_computes()
     for compute in computes:
         LOG.tc_step("Attempting to swact from {}".format(compute))

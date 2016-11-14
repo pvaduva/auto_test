@@ -61,3 +61,26 @@ class Controller(Host):
         super().__init__(*initial_data, **kwargs)
 
 
+class SystemLab(object):
+    """System lab representation.
+
+    SystemLab contains various attributes such as system floating ip address,
+    controller, compute and storage node objects etc., and methods to execute
+    various functions on the lab  (e.g. install, upgrade, etc.).
+
+    """
+    def __init__(self, **kwargs):
+
+
+        self.name = None
+        self.controller0 = None
+        self.controller1 = None
+        self.floating_ip = None
+        self.software_version = ''
+        self.computes = None
+        self.storages = None
+
+
+        for key in kwargs:
+            setattr(self, key, kwargs[key])
+
