@@ -54,7 +54,7 @@ Install VirtualBox on Linux or Windows Host
 .	e.g. for windows
 .	./vbox_install.elt -r <windows machine IP> pull_new_image=yes topology=2x1 con=MI_O str=MI com=MI_D
 .	e.g for linux
-	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install.elt pull_new_image=yes topology=1x1 rel2=yes con=MI_O str=MI com=MI_D patch=yes https=no
+	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install.elt pull_new_image=yes topology=1x1 rel2=yes con=MI_O str=MI com=MI_D patch=no https=yes
 .
 . 	Supported topology
 . 		2only 	- controller-0 controller-1
@@ -275,7 +275,7 @@ $console_win=nc localhost 7000
 $boot_image_win=/drives/c/Users/$USER/VBox/latest_bootimage.iso
 
 ## Patch
-$patch=no
+$patch=yes
 
 >date +%F_%T#
 +$DATE=\n(.+)#
