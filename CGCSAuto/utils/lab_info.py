@@ -1,4 +1,7 @@
 import re
+import subprocess
+import os
+import sys
 from time import strftime
 
 from utils.ssh import SSHClient, CONTROLLER_PROMPT
@@ -91,3 +94,32 @@ def __get_lab_dict(labname):
         lab_valid_short_names = [lab['short_name'] for lab in labs]
         # lab_valid_names = [lab['name'] for lab in labs]
         raise ValueError("{} is not found! Available labs: {}".format(labname, lab_valid_short_names))
+
+
+def get_latest_logdir(labname, log_root_dir='~'):
+    """
+    Get the log dir
+    Args:
+        labname (str):
+        log_root_dir (str):
+
+    Returns:
+
+    """
+    log_root_dir = os.path.expanduser(log_root_dir)
+    log_lab_dir = '{}/AUTOMATION_LOGS/{}/'.format(log_root_dir, labname.lower().replace('-', '_'))
+
+    cmd = 'ls -t {} | head -n1'.format(log_lab_dir)
+
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, close_fds=True)
+
+    rtn_code = p.wait()
+    (stderr, stdout) = (p.stderr, p.stdout)
+    if not rtn_code == 0:
+        print(str(stderr.read(), encoding='utf-8'))
+        sys.exit(rtn_code)
+
+    dir_timestamp = str(stdout.read(), encoding='utf-8')
+    full_path = log_lab_dir + dir_timestamp
+
+    return full_path
