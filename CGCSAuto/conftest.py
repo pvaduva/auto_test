@@ -102,12 +102,19 @@ class MakeReport:
             return cls(item)
 
 
+class TestRes:
+    PASSNUM = 0
+    FAILNUM = 0
+    SKIPNUM = 0
+    TOTALNUM = 0
+
+
 def pytest_runtest_makereport(item, call, __multicall__):
     report = __multicall__.execute()
     my_rep = MakeReport.get_report(item)
     my_rep.update_results(call, report)
 
-    test_name = item.nodeid
+    test_name = item.nodeid.replace('::()::', '::').replace('testcases/', '')
     res_in_tests = ''
     if report.when == 'teardown':
         res_in_log = 'Test Passed'
@@ -136,6 +143,15 @@ def pytest_runtest_makereport(item, call, __multicall__):
 
         if not res_in_tests:
             res_in_tests = 'Unknown!'
+
+        # count testcases by status
+        TestRes.TOTALNUM += 1
+        if res_in_tests == 'Passed':
+            TestRes.PASSNUM += 1
+        elif res_in_tests == 'Failed':
+            TestRes.FAILNUM += 1
+        elif res_in_tests == 'Skipped':
+            TestRes.SKIPNUM += 1
 
         global tc_start_time
         with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
@@ -315,10 +331,19 @@ def pytest_unconfigure():
 
     tc_res_path = ProjVar.get_var('LOG_DIR') + '/test_results.log'
 
+    total_exec = TestRes.PASSNUM + TestRes.FAILNUM
+    pass_rate = round(TestRes.PASSNUM / total_exec, 2)
+    fail_rate = round(TestRes.FAILNUM / total_exec, 2)
     with open(tc_res_path, mode='a') as f:
+        # Append general info to result log
         f.write('\n\nLab: {}\n'
-                'Build ID:{}\n'
+                'Build ID: {}\n'
                 'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, ProjVar.get_var('LOG_DIR')))
+        # Add result summary to beginning of the file
+        f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal: {}\n'.
+                format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, TestRes.TOTALNUM))
+        if TestRes.SKIPNUM > 0:
+            f.write('Skipped: {}'.format(TestRes.SKIPNUM))
 
     LOG.info("Test Results saved to: {}".format(tc_res_path))
     with open(tc_res_path, 'r') as fin:
