@@ -1502,3 +1502,22 @@ def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh
             raise exceptions.TimeoutException(err_msg)
 
     return 0, "The {} service parameter was applied".format(service)
+
+
+def get_hosts_by_personality(con_ssh=None):
+    """
+    get hosts by different personality
+    Args:
+        con_ssh (SSHClient):
+
+    Returns (tuple): (controllers_list, computes_list, storages_list)
+        Examples: for CPE with 2 controllers, returns:
+            ([controller-0, controller-1], [], [])
+
+    """
+    hosts_tab = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
+    controllers = table_parser.get_values(hosts_tab, 'hostname', personality='controller')
+    computes = table_parser.get_values(hosts_tab, 'hostname', personality='compute')
+    storages = table_parser.get_values(hosts_tab, 'hostname', personality='storage')
+
+    return controllers, computes, storages

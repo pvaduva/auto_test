@@ -8,14 +8,19 @@ from utils.ssh import SSHClient, CONTROLLER_PROMPT
 from consts.lab import Labs
 from consts.proj_vars import ProjVar
 
+from keywords import system_helper
+
 
 def get_lab_floating_ip(labname=None):
     lab_dict = __get_lab_dict(labname)
     return lab_dict['floating ip']
 
 
-def get_build_id(labname=None, log_dir=None):
-    con_ssh = __get_lab_ssh(labname=labname, log_dir=log_dir)
+def get_build_id(labname=None, log_dir=None, con_ssh=None):
+    close = False
+    if con_ssh is None:
+        close = True
+        con_ssh = __get_lab_ssh(labname=labname, log_dir=log_dir)
 
     code, output = con_ssh.exec_cmd('cat /etc/build.info')
     if code != 0:
@@ -31,7 +36,8 @@ def get_build_id(labname=None, log_dir=None):
             else:
                 build_id = ' '
 
-    con_ssh.close()
+    if close:
+        con_ssh.close()
     return build_id
 
 
@@ -76,6 +82,33 @@ def _get_all_targets_by_host_type(labname=None):
     storages = [str(bar_code) for bar_code in lab_dict.get('storage_nodes', [])]
 
     return controllers, computes, storages
+
+
+def _get_sys_type(labname=None, log_dir=None, con_ssh=None):
+    """
+
+    Args:
+        labname (str): such as wcp_76-77
+        log_dir (str): where to save logs
+        con_ssh (SSHClient):
+
+    Returns (str): such as 2+2, 2+4+2, CPE, etc
+
+    """
+
+    close = False
+    if con_ssh is None:
+        close = True
+        con_ssh = __get_lab_ssh(labname=labname, log_dir=log_dir)
+
+    controllers, computes, storages = system_helper.get_hosts_by_personality(con_ssh=con_ssh)
+
+    sys_type = "{}+{}+{}".format(len(controllers), len(computes), len(storages)).replace('+0', '')
+
+    if close:
+        con_ssh.close()
+
+    return sys_type
 
 
 def __get_lab_dict(labname):
@@ -123,3 +156,23 @@ def get_latest_logdir(labname, log_root_dir='~'):
     full_path = log_lab_dir + dir_timestamp
 
     return full_path
+
+
+def get_lab_info(labname=None, log_dir=None):
+    """
+    Get build id (e.g., 2016-11-14_22-01-28), system type (e.g., 2+4+2)
+    Args:
+        labname (str): such as WCP_76-77, PV0, IP_1-4
+        log_dir (str): log directory. logs will be saved to /tmp/AUTOMATION_LOGS/<LAB> if unset
+
+    Returns (tuple):
+
+    """
+    con_ssh = __get_lab_ssh(labname=labname, log_dir=log_dir)
+
+    # get build id
+    build_id = get_build_id(labname=labname, log_dir=log_dir, con_ssh=con_ssh)
+    sys_type = _get_sys_type(labname=labname, log_dir=log_dir, con_ssh=con_ssh)
+
+    con_ssh.close()
+    return build_id, sys_type
