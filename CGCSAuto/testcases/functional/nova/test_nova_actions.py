@@ -61,6 +61,7 @@ def test_nova_actions(guest_os, cpu_pol, actions):
 
 class TestVariousGuests:
 
+    @mark.p2
     @mark.features('guest_os')
     @mark.usefixtures('ubuntu14_image',
                       'centos6_image', 'centos7_image',

@@ -664,6 +664,7 @@ class TestHTEnabled:
         LOG.tc_step("Check vm vcpus in nova show did not change")
         check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
+    @mark.p1
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol',  'min_vcpus', 'numa_0', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'host_action'), [
         (1, 'dedicated', 'isolate', None, None, None, 'volume', 'live_migrate', None),
         (2, 'dedicated', 'isolate', 1, None, None, 'image', 'live_migrate', None),
@@ -793,6 +794,7 @@ class TestHTEnabled:
             LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
             vm_helper.ping_vms_from_natbox(vm_id)
 
+    @mark.p1
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'cpu_thr_in_flv'), [
         (2, 'dedicated', 'isolate', None, 'volume', 'live_migrate', False),
         (4, 'dedicated', 'require', 'strict', 'image', 'live_migrate', False),
@@ -900,9 +902,9 @@ class TestHTEnabled:
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol', 'cpu_thr_source', 'vs_numa_affinity', 'boot_source'), [
         # (2, 'dedicated', 'isolate', 'flavor', 'strict', 'volume'),
         # (1, 'dedicated', 'isolate', 'flavor', None, 'image'),
-        (4, 'dedicated', 'require', 'flavor', None, 'volume'),
+        mark.p3((4, 'dedicated', 'require', 'flavor', None, 'volume')),
         # (3, 'dedicated', 'isolate', 'image', None, 'volume'),
-        (2, 'dedicated', 'require', 'image', None, 'volume')
+        mark.p3((2, 'dedicated', 'require', 'image', None, 'volume'))
     ])
     def test_cpu_thr_live_mig_negative(self, vcpus, cpu_pol, cpu_thr_pol, cpu_thr_source, vs_numa_affinity,
                                        boot_source, ht_hosts_):
@@ -994,16 +996,15 @@ class TestHTDisabled:
         if ht_hosts:
             skip("There are HT enabled hosts")
 
-    @mark.p1
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus', 'expt_err'), [
-        (2, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
-        (3, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
-        (2, 'isolate', 2, None),
-        (3, 'isolate', None, None),
+        mark.p1((2, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL')),
+        mark.p1((3, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL')),
+        mark.p2((2, 'isolate', 2, None)),
+        mark.p2((3, 'isolate', None, None)),
         # (3, 'isolate', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
         # (2, 'isolate', '2', 'CPUThreadErr.HT_HOST_UNAVAIL'),
-        (2, 'prefer', None, None),
-        (3, 'prefer', 2, None),
+        mark.p3((2, 'prefer', None, None)),
+        mark.p3((3, 'prefer', 2, None)),
     ])
     def test_boot_vm_cpu_thread_ht_disabled(self, vcpus, cpu_thread_policy, min_vcpus, expt_err):
         """

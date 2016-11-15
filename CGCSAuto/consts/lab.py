@@ -244,8 +244,8 @@ class Labs:
     }
 
     WCP_85_89 = {
-        'short_name': 'wcp_80_84',
-        'name': 'yow-cgcs-wildcat-80_84',
+        'short_name': 'wcp_85_89',
+        'name': 'yow-cgcs-wildcat-85_89',
         'floating ip': '128.224.150.224',
         'controller-0 ip': '128.224.150.244',
         'controller-1 ip': '128.224.150.202',
@@ -254,8 +254,8 @@ class Labs:
     }
 
     WCP_90_91 = {
-        'short_name': 'wcp_80_84',
-        'name': 'yow-cgcs-wildcat-80_84',
+        'short_name': 'wcp_90_91',
+        'name': 'yow-cgcs-wildcat-90_91',
         'floating ip': '128.224.151.162',
         'controller-0 ip': '128.224.151.151',
         'controller-1 ip': '128.224.151.153',
@@ -263,8 +263,8 @@ class Labs:
     }
 
     WCP_92_98 = {
-        'short_name': 'wcp_80_84',
-        'name': 'yow-cgcs-wildcat-80_84',
+        'short_name': 'wcp_92_98',
+        'name': 'yow-cgcs-wildcat-92_98',
         'floating ip': '128.224.151.15',
         'controller-0 ip': '128.224.151.111',
         'controller-1 ip': '128.224.151.205',
@@ -273,9 +273,9 @@ class Labs:
         'storage_nodes': [23301, 23302],
     }
 
-    WCP_99_104 = {
-        'short_name': 'wcp_99_104',
-        'name': 'yow-cgcs-wildcat-99_104',
+    WCP_99_103 = {
+        'short_name': 'wcp_99_103',
+        'name': 'yow-cgcs-wildcat-99_103',
         'floating ip': '128.224.151.94',
         'controller-0 ip': '128.224.151.103',
         'controller-1 ip': '128.224.151.13',

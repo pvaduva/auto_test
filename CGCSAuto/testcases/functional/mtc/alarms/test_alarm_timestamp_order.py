@@ -14,6 +14,7 @@ from consts.auth import Tenant
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
 
 
+@mark.p3
 def test_alarm_timestamp_order():
     """
     Verify the chronological order to the alarms

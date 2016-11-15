@@ -236,8 +236,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 # This should be a relatively static condition.i.e., independent with test params values
 #@mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
-@mark.parametrize(
-    ('template_name'), [
+@mark.parametrize(('template_name'), [
         mark.sanity(('WR_Neutron_ProviderNetRange.yaml')),
         P1(('WR_Neutron_ProviderNet.yaml')),
         P1(('OS_Cinder_Volume.yaml')),
@@ -258,7 +257,6 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
         P1(('OS_Nova_Server.yaml')),
         P1(('OS_Heat_AccessPolicy.yaml')),
         P1(('OS_Heat_AutoScalingGroup.yaml')),
-
     ])
 # can add test fixture to configure hosts to be certain storage backing
 def test_heat_template(template_name):

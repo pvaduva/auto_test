@@ -31,46 +31,6 @@ class TestCoreDumpsAndCrashes:
         assert not existing_files, "{} exist on {}. Details: \n{}".format(report_type, existing_files.keys(),
                                                                           existing_files)
 
-    # @mark.abslast
-    # @mark.sanity
-    # @mark.cpe_sanity
-    # @mark.parametrize('report_type', [
-    #     'core_dumps',
-    #     'crash_reports',
-    # ])
-    # def test_system_coredumps_and_crash_reports(self, report_type, pre_coredumps_and_crash_reports_session,
-    #                                             post_coredumps_and_crash_reports):
-    #
-    #     LOG.tc_step("Compare post test {} with pre test record".format(report_type))
-    #     new_files = {}
-    #     for host in post_coredumps_and_crash_reports:
-    #         post_coredumps, post_crash_reports = post_coredumps_and_crash_reports[host]
-    #         if not post_coredumps and not post_crash_reports:
-    #             LOG.debug("No core dumps or crash_reports found for {}".format(host))
-    #             continue
-    #
-    #         if host not in pre_coredumps_and_crash_reports_session:
-    #             LOG.warning("No pre session cores dumps and crash_reports info for {}".format(host))
-    #
-    #             if report_type == 'core_dumps' and post_coredumps:
-    #                 new_files[host] = post_coredumps
-    #             elif report_type == 'crash_reports' and post_crash_reports:
-    #                 new_files[host] = post_crash_reports
-    #
-    #         else:
-    #             pre_coredumps, pre_crash_reports = pre_coredumps_and_crash_reports_session[host]
-    #             if report_type == 'core_dumps':
-    #                 new_coredumps = list(set(post_coredumps) - set(pre_coredumps))
-    #                 if new_coredumps:
-    #                     new_files[host] = new_coredumps
-    #
-    #             else:
-    #                 new_crash_reports = list(set(post_crash_reports) - set(pre_crash_reports))
-    #                 if new_crash_reports:
-    #                     new_files[host] = new_crash_reports
-    #
-    #     assert not new_files, "New {} found: {}".format(report_type, new_files)
-
 
 @mark.abslast
 @mark.sanity

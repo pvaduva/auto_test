@@ -21,6 +21,7 @@ def flavor_and_volume():
     return flavor, volume
 
 
+@mark.p2
 @mark.parametrize('vcpu_model', [
     'Conroe',
     'Penryn',

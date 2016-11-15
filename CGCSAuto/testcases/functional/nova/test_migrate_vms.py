@@ -206,6 +206,7 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
+@mark.p1
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'boot_source'), [
     ('local_image', 0, 0, 'image'),
     ('local_image', 1, 0, 'volume'),
@@ -331,6 +332,7 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu14_image):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
 
 
+@mark.p2
 @mark.usefixtures('ubuntu14_image',
                   'centos6_image', 'centos7_image',
                   'opensuse11_image', 'opensuse12_image',

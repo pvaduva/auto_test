@@ -29,6 +29,7 @@ def flavor_2_nodes(request):
     return flavor
 
 
+@mark.p3
 @mark.parametrize(('cpu_policy', 'numa_0', 'numa_1'), [
     ('dedicated', 1, 0),
     ('dedicated', 0, 1),
@@ -92,6 +93,8 @@ def flavor_1_node(request):
 
     return flavor
 
+
+@mark.p3
 @mark.parametrize('numa_node_spec', [
     {"hw:numa_node.2": 0},
     {"hw:numa_node.-1": 0},
@@ -140,6 +143,7 @@ def flavor_unset(request):
     return flavor
 
 
+@mark.p3
 def test_1_node_unset_numa_nodes(flavor_unset):
     LOG.tc_step("Set number of numa nodes to 1 in extra specs")
     nova_helper.set_flavor_extra_specs(flavor_unset, **{FlavorSpec.NUMA_NODES: 1})
@@ -155,6 +159,7 @@ def test_1_node_unset_numa_nodes(flavor_unset):
     nova_helper.unset_flavor_extra_specs(flavor_unset, FlavorSpec.NUMA_0)
 
 
+@mark.p3
 def test_2_nodes_unset_numa_nodes(flavor_unset):
     LOG.tc_step("Set number of numa nodes to 2 in extra specs")
     nova_helper.set_flavor_extra_specs(flavor_unset, **{FlavorSpec.NUMA_NODES: 2})
@@ -170,6 +175,7 @@ def test_2_nodes_unset_numa_nodes(flavor_unset):
     nova_helper.unset_flavor_extra_specs(flavor_unset, [FlavorSpec.NUMA_NODES, FlavorSpec.NUMA_0, FlavorSpec.NUMA_1])
 
 
+@mark.p3
 def test_2_nodes_unset_numa_nodes_reject(flavor_unset):
     """
     Attempt to unset hw:numa_nodes spec when hw:numa_node.1 is set, and ensure it's rejected.
@@ -216,6 +222,7 @@ def flavor_0_node(request):
     return flavor
 
 
+@mark.p3
 def test_0_node_set_guest_numa_node_value_reject(flavor_0_node):
     """
     Test set numa_node.1 is rejected when number of NUMA nodes is not set in extra specs.
@@ -240,6 +247,7 @@ def test_0_node_set_guest_numa_node_value_reject(flavor_0_node):
     assert 1 == code, "Expect nova flavor-key set cli to be rejected. Actual: {}".format(output)
 
 
+@mark.p3
 def test_0_node_unset_numa_nodes_reject(flavor_0_node):
     LOG.tc_step("Attempt to unset numa nodes spec when it's not in the spec, and verify cli is rejected.")
     code, output = nova_helper.unset_flavor_extra_specs(flavor_0_node, FlavorSpec.NUMA_NODES, fail_ok=True,
@@ -251,6 +259,7 @@ def test_0_node_unset_numa_nodes_reject(flavor_0_node):
 # Test vm NUMA node(s) configs #
 ################################
 
+@mark.p2
 @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'numa_node1'), [
     (2, 1, 0, None),
     (2, 2, 1, 0),

@@ -134,6 +134,7 @@ class TestLockWithVMs:
         return target_hosts, storages_to_test
 
     # @mark.usefixtures('delete_all_vms')
+    @mark.p1
     def test_lock_with_vms(self, target_hosts):
         """
         Test lock host with vms on it.
