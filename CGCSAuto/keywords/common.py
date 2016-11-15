@@ -72,6 +72,65 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
     else:
         return dest_path
 
+def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=120,
+                                                      is_dir=False, con_ssh=None):
+
+    """
+    SCP file or files under a directory from test server to TiS server
+
+    Args:
+        source_path (str): test server file path or directory path
+        dest_dir (str): destination directory. should end with '/'
+        dest_name (str): destination file name if not dir
+        timeout (int):
+        is_dir (bool):
+        con_ssh:
+
+    Returns (str|None): destination file/dir path if scp successful else None
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    dir_option = '-r ' if is_dir else ''
+    dest_server = SvcCgcsAuto.SERVER
+    dest_user = SvcCgcsAuto.USER
+    dest_password = SvcCgcsAuto.PASSWORD
+
+    if not is_dir and dest_name is None:
+        dest_name = source_path.split(sep='/')[-1]
+
+    dest_path = dest_dir if not dest_name else dest_dir + dest_name
+
+    scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{} {}@{}:{}'.format(
+        dir_option, source_path, dest_user, dest_server, dest_path)
+
+    if con_ssh.file_exists(file_path=dest_path):
+        LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
+        return dest_path
+
+    LOG.debug('Create destination directory on tis server if not already exists')
+    cmd = 'mkdir -p {}'.format(dest_dir)
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
+    LOG.info("scp file(s) from test server to tis server")
+    con_ssh.send(scp_cmd)
+    index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout)
+    if index == 2:
+        con_ssh.send('yes')
+        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=timeout)
+    if index == 1:
+        con_ssh.send(dest_password)
+        index = con_ssh.expect()
+    if index != 0:
+        LOG.error("Failed to scp files")
+
+    if not con_ssh.file_exists(file_path=dest_path):
+        LOG.error("File path {} does not exist after scp".format(dest_path))
+        return None
+    else:
+        return dest_path
+
 
 def scp_to_active_controller(source_path, dest_path='',
                    dest_user='wrsroot', dest_password='Li69nux*',
