@@ -8,8 +8,8 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 
 @mark.parametrize(('srv_grp_msging_flavor', 'policy', 'group_size', 'best_effort', 'vms_num'), [
-    mark.p1((None, 'affinity', 4, None, 1)),
-    mark.p1((None, 'anti-affinity', 3, True, 1)),
+    mark.domain_sanity((None, 'affinity', 4, None, 1)),
+    mark.domain_sanity((None, 'anti-affinity', 3, True, 1)),
     mark.p2((True, 'anti-affinity', 2, None, 2)),
 ])
 def test_boot_vms_server_group(srv_grp_msging_flavor, policy, group_size, best_effort, vms_num):

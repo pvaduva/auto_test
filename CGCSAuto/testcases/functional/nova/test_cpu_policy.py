@@ -10,14 +10,14 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 
 @mark.parametrize(('flv_vcpus', 'flv_pol', 'img_pol', 'boot_source', 'expt_err'), [
-    mark.p2((5, None, 'dedicated', 'volume', None)),
-    mark.p2((3, None, 'shared', 'image', None)),
-    mark.p2((4, None, None, 'image', None)),
+    # mark.domain_sanity((5, None, 'dedicated', 'volume', None)),   covered by test_cpu_pol_vm_actions
+    mark.p1((3, None, 'shared', 'image', None)),
+    # mark.p2((4, None, None, 'image', None)),  covered by test_cpu_pol_vm_actions
     mark.p3((4, 'dedicated', 'dedicated', 'volume', None)),
     mark.p3((1, 'dedicated', None, 'image', None)),
     mark.p3((1, 'shared', 'shared', 'volume', None)),
     mark.p3((2, 'shared', None, 'image', None)),
-    mark.p1((3, 'dedicated', 'shared', 'volume', None)),
+    mark.domain_sanity((3, 'dedicated', 'shared', 'volume', None)),
     mark.p2((1, 'shared', 'dedicated', 'image', 'CPUPolicyErr.CONFLICT_FLV_IMG')),
 ])
 def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt_err):
@@ -74,32 +74,50 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
                                       prev_total_cpus=prev_cpus[vm_host])
 
 
-@mark.parametrize(('flv_vcpus', 'flv_pol', 'boot_source'), [
-    mark.p1((4, None, 'image')),
-    mark.p1((2, 'dedicated', 'volume')),
-    mark.p2((3, 'shared', 'volume')),
-    mark.p2((1, 'dedicated', 'image')),
+@mark.parametrize(('flv_vcpus', 'cpu_pol', 'pol_source', 'boot_source'), [
+    mark.p1((4, None, 'flavor', 'image')),
+    mark.domain_sanity((2, 'dedicated', 'flavor', 'volume')),
+    mark.p2((3, 'shared', 'flavor', 'volume')),
+    mark.p1((1, 'dedicated', 'flavor', 'image')),
+    mark.p1((2, 'dedicated', 'image', 'volume')),
+    mark.p2((3, 'shared', 'image', 'volume')),
+    mark.domain_sanity((1, 'dedicated', 'image', 'image')),
 ])
-def test_cpu_pol_vm_actions(flv_vcpus, flv_pol, boot_source):
+def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
     LOG.tc_step("Create flavor with {} vcpus".format(flv_vcpus))
-    flavor_id = nova_helper.create_flavor(name='cpu_pol_image', vcpus=flv_vcpus)[1]
+    flavor_id = nova_helper.create_flavor(name='cpu_pol', vcpus=flv_vcpus)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
-    if flv_pol is not None:
-        specs = {FlavorSpec.CPU_POLICY: flv_pol}
+    image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
+    if cpu_pol is not None:
+        if pol_source == 'flavor':
+            specs = {FlavorSpec.CPU_POLICY: cpu_pol}
 
-        LOG.tc_step("Set following extra specs: {}".format(specs))
-        nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+            LOG.tc_step("Set following extra specs: {}".format(specs))
+            nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+        else:
+            image_meta = {ImageMetadata.CPU_POLICY: cpu_pol}
+            LOG.tc_step("Create image with following metadata: {}".format(image_meta))
+            image_id = glance_helper.create_image(name='cpu_pol_{}'.format(cpu_pol), **image_meta)[1]
+            ResourceCleanup.add('image', image_id)
+
+    if boot_source == 'volume':
+        LOG.tc_step("Create a volume from image")
+        source_id = cinder_helper.create_volume(name='cpu_pol'.format(cpu_pol), image_id=image_id)[1]
+        ResourceCleanup.add('volume', source_id)
+    else:
+        source_id = image_id
 
     prev_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
 
     LOG.tc_step("Boot a vm from {} with above flavor and check vm topology is as expected".format(boot_source))
-    vm_id = vm_helper.boot_vm(name='cpu_pol_{}_{}'.format(flv_pol, flv_vcpus), flavor=flavor_id, source=boot_source)[1]
+    vm_id = vm_helper.boot_vm(name='cpu_pol_{}_{}'.format(cpu_pol, flv_vcpus), flavor=flavor_id, source=boot_source,
+                              source_id=source_id)[1]
     ResourceCleanup.add('vm', vm_id)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     vm_host = nova_helper.get_vm_host(vm_id)
-    check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=flv_pol, vm_host=vm_host,
+    check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=cpu_pol, vm_host=vm_host,
                                       prev_total_cpus=prev_cpus[vm_host])
 
     LOG.tc_step("Suspend/Resume vm and check vm topology stays the same")
@@ -107,7 +125,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, flv_pol, boot_source):
     vm_helper.resume_vm(vm_id)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60)
-    check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=flv_pol, vm_host=vm_host,
+    check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=cpu_pol, vm_host=vm_host,
                                       prev_total_cpus=prev_cpus[vm_host])
 
     LOG.tc_step("Stop/Start vm and check vm topology stays the same")
@@ -115,7 +133,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, flv_pol, boot_source):
     vm_helper.start_vms(vm_id)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60)
-    prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=flv_pol, vm_host=vm_host,
+    prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=cpu_pol, vm_host=vm_host,
                                                       prev_total_cpus=prev_cpus[vm_host])[1]
 
     LOG.tc_step("Live migrate vm and check vm topology stays the same")
@@ -123,8 +141,8 @@ def test_cpu_pol_vm_actions(flv_vcpus, flv_pol, boot_source):
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60)
     vm_host = nova_helper.get_vm_host(vm_id)
-    prev_siblings = prev_siblings if flv_pol == 'dedicated' else None   # workaround for
-    check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=flv_pol, vm_host=vm_host,
+    prev_siblings = prev_siblings if cpu_pol == 'dedicated' else None   # workaround for
+    check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=cpu_pol, vm_host=vm_host,
                                       prev_total_cpus=prev_cpus[vm_host], prev_siblings=prev_siblings)
 
     LOG.tc_step("Cold migrate vm and check vm topology stays the same")
@@ -132,5 +150,5 @@ def test_cpu_pol_vm_actions(flv_vcpus, flv_pol, boot_source):
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60)
     vm_host = nova_helper.get_vm_host(vm_id)
-    check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=flv_pol, vm_host=vm_host,
+    check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=cpu_pol, vm_host=vm_host,
                                       prev_total_cpus=prev_cpus[vm_host])

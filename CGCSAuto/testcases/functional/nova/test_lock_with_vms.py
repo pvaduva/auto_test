@@ -134,7 +134,7 @@ class TestLockWithVMs:
         return target_hosts, storages_to_test
 
     # @mark.usefixtures('delete_all_vms')
-    @mark.p1
+    @mark.domain_sanity
     def test_lock_with_vms(self, target_hosts):
         """
         Test lock host with vms on it.
@@ -191,6 +191,7 @@ class TestLockWithVMs:
             assert pre_vms_status == post_vms_status, "VM(s) status has changed after host-lock {}".format(host)
 
 
+@mark.p2
 class TestLockWithVMsNegative:
     @fixture()
     def target_hosts_negative(self, request):

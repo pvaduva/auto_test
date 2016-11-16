@@ -20,7 +20,7 @@ def create_backup():
                 ~/opt/backups/titanium_backup_'+date+'_image.tgz '
 
     dest_dir = SvcCgcsAuto.HOME+'/backup_restore'
-    dest_path = common.scp_from_active_controller(source_path=source_file, dest_path=,
+    dest_path = common.scp_from_active_controller(source_path=source_file, dest_path='tmp_rm_err',
                                src_user='wrsroot', src_password='Li69nux*',
                                timeout=60, is_dir=False)
 

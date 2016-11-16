@@ -57,6 +57,7 @@ def id_params_cores(val):
 
 class TestVSwitchCPUReconfig:
 
+    @mark.p3
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required'), [
         # (None, None, None, None),           # Test without reconfig
         ((1, 0), (1, 1), None, False),      # Standard lab only
@@ -145,12 +146,12 @@ class TestVSwitchCPUReconfig:
 
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required', 'expt_err'), [
         mark.p1(((1, 1), (5, 5), False, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
-        ((7, 9), (2, 2), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES"),   # Assume total<=10 cores/per proc & thread
-        mark.p1((('cores-2', 'cores-2'), (2, 2), None, None, "CpuAssignment.NO_VM_CORE")),
-        ((1, 1), (9, 8), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES"),   # Assume total <= 10 cores/per proc & thread
-        ((5, 5), (5, 4), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES"),
+        mark.p3(((7, 9), (2, 2), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),   # Assume total<=10 cores/per proc & thread
+        mark.p3((('cores-2', 'cores-2'), (2, 2), None, None, "CpuAssignment.NO_VM_CORE")),
+        mark.p3(((1, 1), (9, 8), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),   # Assume total <= 10 cores/per proc & thread
+        mark.p3(((5, 5), (5, 4), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
         mark.p1(((5, 5), (6, 5), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),  # Assume total<=10core/proc&thread
-        ((1, 1), (8, 10), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES"),  # Assume total <= 10 cores/per proc&thread
+        mark.p3(((1, 1), (8, 10), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),  # Assume total <= 10 cores/per proc&thread
         mark.p3(((2, 0), (0, 0), None, None, "CpuAssignment.VSWITCH_INSUFFICIENT_CORES")),
     ], ids=id_params_cores)
     def test_vswitch_cpu_reconfig_negative(self, host_to_config, platform, vswitch, ht_required, cpe_required,
@@ -298,8 +299,8 @@ class TestVMSchedulingLockHosts:
         return vswitch_node_vm_cores, nonvswitch_node_vm_cores
 
     @mark.parametrize('resize_revert', [
-        mark.p1(False),
-        mark.p1(True)
+        mark.p2(False),
+        mark.p2(True)
     ], ids=['confirm', 'revert'])
     def test_resize_vm_vswitch_node_insufficient(self, hosts_to_lock, host_to_config, resize_revert):
         """
@@ -404,7 +405,7 @@ class TestVMSchedulingLockHosts:
 
     @mark.parametrize('vswitch', [
         mark.p3((0, 2)),
-        mark.p1((2, 0)),
+        mark.p2((2, 0)),
     ], ids=['0_2', '2_0'])
     def test_boot_vm_vswitch_node_full(self, hosts_to_lock, host_to_config, vswitch):
         """

@@ -21,7 +21,7 @@ def repeat_checking(repeat_times=20, wait_time=6):
         @wraps(func)
         def wrapped_func(*args, **kwargs):
             cnt = 0
-            while(cnt < repeat_times):
+            while cnt < repeat_times:
                 code, output = func(args, kwargs)
                 LOG.info('repeating checking {} times, got {}'.format(cnt+1, output))
                 if code == 0:
@@ -35,6 +35,8 @@ def repeat_checking(repeat_times=20, wait_time=6):
         return wrapped_func
     return actual_decorator
 
+
+@mark.p3
 def test_system_type():
     """
     Verify the System Type can be retrieved from SysInv and is correct
@@ -65,6 +67,7 @@ def test_system_type():
         format(expt_system_type, displayed_system_type)
 
 
+@mark.p3
 def test_system_type_is_readonly():
     """
     Verify System Type is readonly
@@ -96,6 +99,7 @@ def test_system_type_is_readonly():
     assert 1 == code, msg
 
 
+@mark.p3
 class TestRetentionPeriod:
     """
     Test modification of Retention Period of the TiS system
@@ -123,10 +127,9 @@ class TestRetentionPeriod:
 
         def restore_rention_period():
             LOG.info('Restore Retention Period to its orignal value {}'.format(self.retention_period))
-            system_helper.set_retention_period(fail_ok=True, con_ssh=None, period=int(self.retention_period))
+            system_helper.set_retention_period(fail_ok=True, period=int(self.retention_period))
 
         request.addfinalizer(restore_rention_period)
-
 
     @mark.parametrize(
         "new_retention_period", [
@@ -196,6 +199,7 @@ class TestRetentionPeriod:
                         format(rec.split('=')[0], new_retention_period, saved_period)
 
 
+@mark.p3
 class TestDnsSettings:
     """
     Test modifying the settings about DNS servers
@@ -227,7 +231,6 @@ class TestDnsSettings:
             return 1, 'Saved DNS servers are different from the input DNS servers\nActual:{}\nExpected:{}\n'\
                 .format(saved_dns, ip_addr_list)
 
-
     @fixture(scope='class', autouse=True)
     def backup_restore_dns_settings(self, request):
         """
@@ -247,7 +250,6 @@ class TestDnsSettings:
             # nameservers=','.join(self.dns_servers))
 
         request.addfinalizer(restore_dns_settings)
-
 
     @mark.parametrize(
         'new_dns_servers', [

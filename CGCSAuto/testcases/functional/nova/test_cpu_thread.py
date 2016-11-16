@@ -199,7 +199,6 @@ class TestHTEnabled:
 
         return ht_hosts, non_ht_hosts
 
-    @mark.p1
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus'), [
         mark.p1((5, 'isolate', 2)),
         mark.p1((4, 'isolate', None)),
@@ -566,12 +565,12 @@ class TestHTEnabled:
         assert CPUThreadErr.INSUFFICIENT_CORES_FOR_ISOLATE.format(ht_host, 4) in fault_msg
 
     @mark.parametrize(('vcpus', 'cpu_thread_pol', 'min_vcpus', 'numa_0'), [
-        mark.p1((6, 'require', None, 1)),   # Not allowed to set min_vcpus with require
-        mark.p1((6, 'isolate', 3, 0)),
-        mark.p1((6, 'prefer', 1, 0)),
-        mark.p1((6, None, 4, 1)),     # should default to prefer behaviour
+        mark.p2((6, 'require', None, 1)),   # Not allowed to set min_vcpus with require
+        mark.p2((6, 'isolate', 3, 0)),
+        mark.p2((6, 'prefer', 1, 0)),
+        mark.p2((6, None, 4, 1)),     # should default to prefer behaviour
         mark.p2((5, 'isolate', 2, None)),
-        mark.p1((5, 'prefer', 1, None)),
+        mark.p2((5, 'prefer', 1, None)),
     ])
     def test_cpu_scale_cpu_thread_pol(self, vcpus, cpu_thread_pol, min_vcpus, numa_0, ht_hosts_):
         ht_hosts, non_ht_hosts = ht_hosts_
@@ -664,23 +663,22 @@ class TestHTEnabled:
         LOG.tc_step("Check vm vcpus in nova show did not change")
         check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
-    @mark.p1
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol',  'min_vcpus', 'numa_0', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'host_action'), [
-        (1, 'dedicated', 'isolate', None, None, None, 'volume', 'live_migrate', None),
-        (2, 'dedicated', 'isolate', 1, None, None, 'image', 'live_migrate', None),
-        (4, 'dedicated', 'require', None, None, 'strict', 'volume', 'live_migrate', None),
-        (3, 'dedicated', 'prefer', 2, None, 'strict', 'volume', 'live_migrate', None),
-        (6, 'dedicated', 'isolate', 4, 0, None, 'volume', 'cold_migrate', None),
-        (4, 'dedicated', 'require', None, None, 'strict', 'volume', 'cold_migrate', None),
-        (4, 'dedicated', 'prefer', 2, None, 'strict', 'volume', 'cold_migrate', None),
-        (2, 'dedicated', 'require', None, None, None, 'volume', 'cold_mig_revert', None),
-        (3, 'dedicated', 'isolate', None, None, 'strict', 'volume', 'cold_mig_revert', None),
-        (2, 'dedicated', 'prefer', None, None, None, 'volume', 'cold_mig_revert', None),
-        (4, 'dedicated', 'isolate', 2, None, None, 'volume', ['suspend', 'resume', 'rebuild'], None),
-        (6, 'dedicated', 'require', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None),
-        (5, 'dedicated', 'prefer', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None),
+        mark.p1((1, 'dedicated', 'isolate', None, None, None, 'volume', 'live_migrate', None)),
+        mark.p1((2, 'dedicated', 'isolate', 1, None, None, 'image', 'live_migrate', None)),
+        mark.domain_sanity((4, 'dedicated', 'require', None, None, 'strict', 'volume', 'live_migrate', None)),
+        mark.p1((3, 'dedicated', 'prefer', 2, None, 'strict', 'volume', 'live_migrate', None)),
+        mark.p1((6, 'dedicated', 'isolate', 4, 0, None, 'volume', 'cold_migrate', None)),
+        mark.domain_sanity((4, 'dedicated', 'require', None, None, 'strict', 'volume', 'cold_migrate', None)),
+        mark.p1((4, 'dedicated', 'prefer', 2, None, 'strict', 'volume', 'cold_migrate', None)),
+        mark.p1((2, 'dedicated', 'require', None, None, None, 'volume', 'cold_mig_revert', None)),
+        mark.p1((3, 'dedicated', 'isolate', None, None, 'strict', 'volume', 'cold_mig_revert', None)),
+        mark.p1((2, 'dedicated', 'prefer', None, None, None, 'volume', 'cold_mig_revert', None)),
+        mark.p1((4, 'dedicated', 'isolate', 2, None, None, 'volume', ['suspend', 'resume', 'rebuild'], None)),
+        mark.domain_sanity((6, 'dedicated', 'require', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
+        mark.p1((5, 'dedicated', 'prefer', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
         # mark.skipif(True, reason="Evacuation JIRA CGTS-4917")
-        (3, 'dedicated', 'isolate', None, None, 'strict', 'volume', ['cold_migrate', 'live_migrate'], 'evacuate'),
+        mark.domain_sanity((3, 'dedicated', 'isolate', None, None, 'strict', 'volume', ['cold_migrate', 'live_migrate'], 'evacuate')),
     ], ids=id_gen)
     def test_cpu_thread_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol, min_vcpus, numa_0,
                                                  vs_numa_affinity, boot_source, nova_actions, host_action, ht_hosts_):
@@ -794,23 +792,22 @@ class TestHTEnabled:
             LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
             vm_helper.ping_vms_from_natbox(vm_id)
 
-    @mark.p1
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'cpu_thr_in_flv'), [
-        (2, 'dedicated', 'isolate', None, 'volume', 'live_migrate', False),
-        (4, 'dedicated', 'require', 'strict', 'image', 'live_migrate', False),
-        (3, 'dedicated', 'require', 'strict', 'volume', 'live_migrate', False),
-        (3, 'dedicated', 'prefer', 'strict', 'image', 'live_migrate', False),
-        (1, 'dedicated', 'isolate', 'strict', 'volume', 'live_migrate', True),
-        (3, 'dedicated', 'prefer', None, 'volume', 'live_migrate', True),
-        (3, 'dedicated', 'require', None, 'volume', 'live_migrate', True),
-        (3, 'dedicated', 'isolate', None, 'volume', 'cold_migrate', False),
-        (2, 'dedicated', 'require', None, 'volume', 'cold_migrate', False),
-        (2, 'dedicated', 'require', None, 'volume', 'cold_mig_revert', True),
-        (5, 'dedicated', 'prefer', None, 'volume', 'cold_mig_revert', False),
-        (4, 'dedicated', 'isolate', None, 'image', ['suspend', 'resume', 'rebuild'], False),
-        (6, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], True),
-        (5, 'dedicated', 'prefer', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False),
-        (3, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False),
+        mark.domain_sanity((2, 'dedicated', 'isolate', None, 'volume', 'live_migrate', False)),
+        mark.domain_sanity((4, 'dedicated', 'require', 'strict', 'image', 'live_migrate', False)),
+        mark.domain_sanity((3, 'dedicated', 'require', 'strict', 'volume', 'live_migrate', False)),
+        mark.p1((3, 'dedicated', 'prefer', 'strict', 'image', 'live_migrate', False)),
+        mark.p1((1, 'dedicated', 'isolate', 'strict', 'volume', 'live_migrate', True)),
+        mark.p1((3, 'dedicated', 'prefer', None, 'volume', 'live_migrate', True)),
+        mark.p1((3, 'dedicated', 'require', None, 'volume', 'live_migrate', True)),
+        mark.domain_sanity((3, 'dedicated', 'isolate', None, 'volume', 'cold_migrate', False)),
+        mark.domain_sanity((2, 'dedicated', 'require', None, 'volume', 'cold_migrate', False)),
+        mark.p1((2, 'dedicated', 'require', None, 'volume', 'cold_mig_revert', True)),
+        mark.p1((5, 'dedicated', 'prefer', None, 'volume', 'cold_mig_revert', False)),
+        mark.p1((4, 'dedicated', 'isolate', None, 'image', ['suspend', 'resume', 'rebuild'], False)),
+        mark.p1((6, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], True)),
+        mark.p1((5, 'dedicated', 'prefer', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False)),
+        mark.domain_sanity((3, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False)),
     ], ids=id_gen)
     def test_cpu_thread_image_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol, vs_numa_affinity,
                                                        boot_source, nova_actions, cpu_thr_in_flv, ht_hosts_):
@@ -1109,11 +1106,11 @@ class TestVariousHT:
         return ht_hosts, non_ht_hosts
 
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus'), [
-        mark.p1((2, 'isolate', None)),
-        mark.p1((2, 'require', None)),
-        mark.p1((2, 'isolate', 2)),
-        mark.p1((3, 'prefer', None)),
-        mark.p1((3, 'require', None)),
+        mark.p3((2, 'isolate', None)),
+        mark.p3((2, 'require', None)),
+        mark.p3((2, 'isolate', 2)),
+        mark.p3((3, 'prefer', None)),
+        mark.p3((3, 'require', None)),
     ])
     def test_cold_migrate_vm_cpu_thread(self, vcpus, cpu_thread_policy, min_vcpus, ht_hosts_):
         """

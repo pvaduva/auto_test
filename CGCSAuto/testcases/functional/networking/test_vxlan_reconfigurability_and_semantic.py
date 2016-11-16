@@ -35,6 +35,7 @@ def providernet_(request):
     return provider, range_name
 
 
+@mark.p3
 @mark.parametrize(('r_min', 'r_max'), [
     (1, pow(2, 24)),
     (0, pow(2, 24)-1),
@@ -76,6 +77,7 @@ def test_vxlan_vni_maximum_range_negative(r_min, r_max, providernet_):
         assert 1 == code, "Should not pass when range out bourn"
 
 
+@mark.p3
 @mark.parametrize('addr', [
     '223.255.255.255',
     '240.0.0.0',
@@ -119,6 +121,7 @@ def test_vxlan_valid_multicast_addr_negative(addr, providernet_):
         assert 1 == code, "Should not pass when multicast addresses are out of range"
 
 
+@mark.p3
 @mark.parametrize('the_port', [
     8473,
     4788,
@@ -166,6 +169,7 @@ def test_vxlan_valid_port_negative(the_port, providernet_):
         assert 1 == code, "Should not pass when port is not valid"
 
 
+@mark.p3
 @mark.parametrize('the_ttl', [
     0,
     256,
@@ -240,6 +244,7 @@ def prepare_segmentation_range(request):
     return provider_id, range_name, min_rang, max_rang
 
 
+@mark.p3
 @mark.parametrize(('r_min', 'r_max'), [
     (0, 0),  # the range will be:  low_rang+r_min to high_rang+r_max
     (-5, -5),
@@ -370,6 +375,7 @@ def multiple_provider_net_range(request):
     return providernet_names, r_min, r_max, computer_host, if_name, interface
 
 
+@mark.p3
 @mark.parametrize(('r_min', 'r_max'), [
     (0, 0),
     (-10, -10),
@@ -427,6 +433,7 @@ def test_vxlan_same_ranges_on_different_provider_negative(multiple_provider_net_
         assert 1 == code, "Should not pass when two range overlap and associate to same data if"
 
 
+@mark.p3
 @mark.parametrize('the_mtu', [
     1573,
     1500,

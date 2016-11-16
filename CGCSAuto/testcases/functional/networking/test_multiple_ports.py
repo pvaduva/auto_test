@@ -79,6 +79,7 @@ class TestMutiPortsBasic:
 
         return base_vm, vm_under_test
 
+    @mark.p2
     @mark.parametrize("vm_actions", [
         (['live_migrate']),
         (['cold_migrate']),
@@ -128,6 +129,7 @@ class TestMutiPortsBasic:
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
 
     # @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
+    @mark.p2
     def test_multiports_on_same_network_evacuate_vm(self, vms_to_test):
         """
         Test evacuate vm with multiple ports on same network
@@ -235,9 +237,9 @@ class TestMutiPortsPCI:
         return base_vm_pci, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id, seg_id
 
     @mark.parametrize('vifs', [
-        (['pci-sriov', 'pci-passthrough']),
-        (['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov']),
-        (['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov']),
+        mark.p3((['pci-sriov', 'pci-passthrough'])),
+        mark.domain_sanity((['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov'])),
+        mark.p3((['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov'])),
     ], ids=id_params)
     def test_multiports_on_same_network_pci_vm_actions(self, base_setup_pci, vifs):
         """
@@ -317,7 +319,7 @@ class TestMutiPortsPCI:
     # @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
     @mark.parametrize('vifs', [
         # (['pci-sriov', 'pci-passthrough']),
-        (['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov']),
+        mark.domain_sanity((['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov'])),
         # (['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov']),
     ], ids=id_params)
     def test_multiports_on_same_network_pci_evacuate_vm(self, base_setup_pci, vifs):

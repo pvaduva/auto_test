@@ -176,6 +176,7 @@ def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
         # assert not rc, " alarm(s) found: {}".format(new_alarm)
 
 
+@mark.domain_sanity
 def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
     """
    Test instantiate a vm with a large volume ( 20 GB and 40 GB) and evacuate:
@@ -269,6 +270,7 @@ def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
                                                  'for VM {}'.format((vms_[1])['display_name'])
 
 
+@mark.domain_sanity
 def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_):
     """
     Test instantiate a vm with a large volume ( 20 GB and 40 GB) and cold migrate:

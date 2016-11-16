@@ -319,7 +319,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         check_first (bool):
         swact (bool): whether to check if host is active controller and do a swact before attempt locking
 
-    Returns: (return_code(int), msg(str))   # 1, 2, 3, 4, 5 only returns when fail_ok=True
+    Returns: (return_code(int), msg(str))   # 1, 2, 3, 4, 5, 6 only returns when fail_ok=True
         (-1, "Host already locked. Do nothing.")
         (0, "Host is locked and in online state."]
         (1, <stderr>)   # Lock host cli rejected

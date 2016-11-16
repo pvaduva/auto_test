@@ -332,8 +332,10 @@ def pytest_unconfigure():
     tc_res_path = ProjVar.get_var('LOG_DIR') + '/test_results.log'
 
     total_exec = TestRes.PASSNUM + TestRes.FAILNUM
-    pass_rate = "{}%".format(round(TestRes.PASSNUM / total_exec, 4) * 100)
-    fail_rate = "{}%".format(round(TestRes.FAILNUM / total_exec, 4) * 100)
+    pass_rate = fail_rate = '0'
+    if total_exec > 0:
+        pass_rate = "{}%".format(round(TestRes.PASSNUM / total_exec, 4) * 100)
+        fail_rate = "{}%".format(round(TestRes.FAILNUM / total_exec, 4) * 100)
     with open(tc_res_path, mode='a') as f:
         # Append general info to result log
         f.write('\n\nLab: {}\n'

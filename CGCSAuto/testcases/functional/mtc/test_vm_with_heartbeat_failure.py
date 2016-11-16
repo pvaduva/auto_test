@@ -28,10 +28,6 @@ def flavor_(request):
     extra_specs = {FlavorSpec.GUEST_HEARTBEAT: 'True'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
-    def delete_flavor():
-        nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
-
-    request.addfinalizer(delete_flavor)
     return flavor_id
 
 
@@ -42,8 +38,8 @@ def vm_(request, flavor_):
     flavor_id = flavor_
 
     vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id)[1]
-    time.sleep(30)
     ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [
@@ -51,14 +47,6 @@ def vm_(request, flavor_):
 
     assert events, "VM heartbeat is not enabled."
     assert EventLogID.HEARTBEAT_ENABLED == events[0], "VM heartbeat failed to establish."
-
-
-    # Teardown to remove the vm and flavor
-    def remove_vms():
-        LOG.fixture_step("Cleaning up vms..")
-        vm_helper.delete_vms(vm_id, delete_volumes=True)
-
-    request.addfinalizer(remove_vms)
 
     return vm_id
 

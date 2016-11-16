@@ -49,6 +49,7 @@ def create_storage_profile(request):
     return storage_profile
 
 
+@mark.p3
 def test_storage_profile_on_compute(create_storage_profile):
     # apply that profile to compute-0
     host_name = 'compute-0'
@@ -67,6 +68,7 @@ def test_storage_profile_on_compute(create_storage_profile):
     #echo $? is 1
 
 
+@mark.p3
 def test_storage_profile_on_controller(create_storage_profile):
     # need to check is it true that you can not lock active controller
     #apply that profile to the standby controller

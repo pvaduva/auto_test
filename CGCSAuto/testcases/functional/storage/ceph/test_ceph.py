@@ -152,6 +152,7 @@ def test_ceph_osd_process_kill():
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
     assert ceph_healthy, msg
 
+
 # Runtime: 572.98 seconds - pass on PV0
 # CGTS-4520 - All ceph monitors observed to be down in alarm-list when 1
 # monitor killed
@@ -288,6 +289,7 @@ def test_ceph_mon_process_kill(monitor):
 
 # Pass on 700 seconds on PV0
 @mark.usefixtures('ceph_precheck')
+@mark.domain_sanity
 def test_ceph_reboot_storage_node():
     """
     us69932_tc2_ceph_mon_process_kill from us69932_ceph_monitoring.odt
@@ -535,6 +537,7 @@ def test_lock_stor_check_osds_down(host):
         osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
         msg = 'OSD ID {} should be up but is not'.format(osd_id)
         assert osd_up, msg
+
 
 # Pass on PV0 603.47 seconds
 @mark.usefixtures('ceph_precheck')

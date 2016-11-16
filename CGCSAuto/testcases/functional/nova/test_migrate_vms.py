@@ -19,14 +19,14 @@ def hosts_per_stor_backing():
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'block_mig'), [
     mark.p1(('local_image', 0, 0, None, 1, 'volume', False)),
     mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume', False)),
-    mark.p1(('local_image', 0, 0, 'shared', 2, 'image', True)),
-    mark.p1(('local_image', 1, 1, 'dedicated', 1, 'image', False)),
+    mark.domain_sanity(('local_image', 0, 0, 'shared', 2, 'image', True)),
+    mark.domain_sanity(('local_image', 1, 1, 'dedicated', 1, 'image', False)),
     mark.p1(('local_lvm', 0, 0, None, 1, 'volume', False)),
     mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'volume', False)),
     mark.p1(('remote', 0, 0, None, 2, 'volume', False)),
     mark.p1(('remote', 1, 0, 'dedicated', 1, 'volume', False)),
-    mark.p1(('remote', 1, 1, None, 1, 'image', False)),
-    mark.p1(('remote', 0, 1, 'dedicated', 2, 'image_with_vol', False)),
+    mark.domain_sanity(('remote', 1, 1, None, 1, 'image', False)),
+    mark.domain_sanity(('remote', 0, 1, 'dedicated', 2, 'image_with_vol', False)),
 ])
 def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, block_mig,
                                   hosts_per_stor_backing):
@@ -137,18 +137,18 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'resize'), [
     mark.p1(('local_image', 0, 0, None, 1, 'volume', 'confirm')),
     mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume', 'confirm')),
-    mark.p1(('local_image', 1, 0, 'shared', 2, 'image', 'confirm')),
-    mark.p1(('local_image', 0, 1, 'dedicated', 1, 'image', 'confirm')),
-    mark.p1(('local_image', 0, 0, None, 1, 'image_with_vol', 'confirm')),
+    mark.domain_sanity(('local_image', 1, 0, 'shared', 2, 'image', 'confirm')),
+    mark.domain_sanity(('local_image', 0, 1, 'dedicated', 1, 'image', 'confirm')),
+    mark.domain_sanity(('local_image', 0, 0, None, 1, 'image_with_vol', 'confirm')),
     mark.p1(('local_lvm', 0, 0, None, 1, 'volume', 'confirm')),
     mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'image', 'confirm')),
-    mark.p1(('local_lvm', 0, 0, 'dedicated', 1, 'image_with_vol', 'confirm')),
+    mark.domain_sanity(('local_lvm', 0, 0, 'dedicated', 1, 'image_with_vol', 'confirm')),
     mark.p1(('local_lvm', 0, 1, None, 2, 'volume', 'confirm')),
-    mark.p1(('local_lvm', 1, 1, 'dedicated', 2, 'volume', 'confirm')),
+    mark.domain_sanity(('local_lvm', 1, 1, 'dedicated', 2, 'volume', 'confirm')),
     mark.p1(('remote', 0, 0, None, 2, 'volume', 'confirm')),
     mark.p1(('remote', 1, 0, None, 1, 'volume', 'confirm')),
-    mark.p1(('remote', 1, 1, None, 1, 'image', 'confirm')),
-    mark.p1(('remote', 0, 0, None, 2, 'image_with_vol', 'confirm')),
+    mark.domain_sanity(('remote', 1, 1, None, 1, 'image', 'confirm')),
+    mark.domain_sanity(('remote', 0, 0, None, 2, 'image_with_vol', 'confirm')),
     mark.p1(('local_image', 0, 0, None, 2, 'volume', 'revert')),
     mark.p1(('local_image', 0, 0, 'dedicated', 1, 'volume', 'revert')),
     mark.p1(('local_image', 1, 0, 'shared', 2, 'image', 'revert')),
@@ -206,7 +206,7 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
-@mark.p1
+@mark.p3
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'boot_source'), [
     ('local_image', 0, 0, 'image'),
     ('local_image', 1, 0, 'volume'),

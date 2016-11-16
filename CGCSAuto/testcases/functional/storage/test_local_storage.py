@@ -300,8 +300,8 @@ class TestLocalStorage(object):
         return host_pv_sizes
 
     @mark.parametrize('local_storage_type', [
-        mark.p1('lvm'),
-        mark.p1('image'),
+        mark.domain_sanity('lvm'),
+        mark.domain_sanity('image'),
     ])
     def test_local_storage_operations(self, local_storage_type, ensure_two_hypervisors):
         """

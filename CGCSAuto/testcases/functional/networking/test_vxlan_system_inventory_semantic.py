@@ -86,6 +86,7 @@ def set_interface_ip_(get_interface_):
     return compute, provider, new_interface_
 
 
+@mark.p3
 def test_providernet_requires_ip_on_interface_before_assignment(get_interface_):
 
     """
@@ -120,6 +121,7 @@ def test_providernet_requires_ip_on_interface_before_assignment(get_interface_):
         assert 1 == code, "There is no ip address add in interface yet, so the host can not be unlock"
 
 
+@mark.p3
 def test_wrong_ip_addressing_mode(get_interface_):
     """
     TC3) data interface address mode must be set to “static” before allowing any IP address
@@ -153,6 +155,7 @@ def test_wrong_ip_addressing_mode(get_interface_):
         assert 1 == code, "Should not be here."
 
 
+@mark.p3
 def test_set_data_if_ip_address_mode_to_none_static_when_ip_exist(get_interface_):
     """
     TC4: setting data interface address mode to anything but “static” should not be allowed if addresses
@@ -204,6 +207,7 @@ def test_set_data_if_ip_address_mode_to_none_static_when_ip_exist(get_interface_
     cli.system('host-addr-delete', table_parser.get_values(table_, 'uuid', **{'ifname': new_interface_}))
 
 
+@mark.p3
 def test_create_null_ip_addr(get_interface_):
     """
     TC5: IP address must not be zero
@@ -242,6 +246,7 @@ def test_create_null_ip_addr(get_interface_):
         assert 1 == code, 'should not be here'
 
 
+@mark.p3
 def test_null_ip_network_partion(get_interface_):
     """
     TC6: IP address network portion must not be zero
@@ -280,6 +285,7 @@ def test_null_ip_network_partion(get_interface_):
         assert 1 == code, 'should not be here'
 
 
+@mark.p3
 def test_null_ip_host_portion(get_interface_):
     """
     TC7: 7) IP address host portion must not be zero
@@ -319,6 +325,7 @@ def test_null_ip_host_portion(get_interface_):
         assert 1 == code, 'should not be here'
 
 
+@mark.p3
 def test_ip_should_be_unicast_address(get_interface_):
     """
     TC8: 8) IP address should be a unicast address (ie., not multicast and not broadcast)
@@ -366,6 +373,7 @@ def test_ip_should_be_unicast_address(get_interface_):
         assert 1 == code, 'should not be here'
 
 
+@mark.p3
 def test_ip_unique_across_all_compute_nodes(get_interface_):
     """
     TC10 ) IP address should be unique across all compute nodes
@@ -414,6 +422,7 @@ def test_ip_unique_across_all_compute_nodes(get_interface_):
         assert 1 == code, 'should not be here'
 
 
+@mark.p3
 @mark.parametrize(('prefix', 'status', 'ipv'), [
     (33, False, 4),    # fail expected
     (345, False, 4),    # fail expected
@@ -476,6 +485,7 @@ def test_route_prefix_validation(set_interface_ip_, prefix, status, ipv):
             assert 0 == code, 'Test should fail, but it passed'
 
 
+@mark.p3
 def test_route_gateway_validation(set_interface_ip_):
     """
     16) IP route gateway address must not be null (e.g., ::, 0.0.0.0)
@@ -514,6 +524,7 @@ def test_route_gateway_validation(set_interface_ip_):
         assert 1 == code, 'should not be here'
 
 
+@mark.p3
 def test_route_network_ip_validation(set_interface_ip_):
     """
     17) IP route network address must be valid
@@ -551,6 +562,7 @@ def test_route_network_ip_validation(set_interface_ip_):
         assert 1 == code, 'should not be here'
 
 
+@mark.p3
 def test_route_gateway_ip_validation(set_interface_ip_):
     """
     18) IP route gateway address must be valid
@@ -589,6 +601,7 @@ def test_route_gateway_ip_validation(set_interface_ip_):
         assert 1 == code, 'should not be here'
 
 
+@mark.p3
 @mark.parametrize(('gateway', 'nt', 'prefix'), [
     ('192.168.102.0', 'FE80::', 64),    # fail expected
     ('FE80:0000:0000:0000:0202:B3FF:FE1E:0000', '192.168.102.0', 24),    # fail expected
@@ -631,6 +644,7 @@ def test_route_network_gateway_ip_in_same_families(set_interface_ip_, gateway, n
         assert 1 == code, 'should not be here'
 
 
+@mark.p3
 @mark.parametrize('gateway', [
     ("192.168.3.11"),   #  gateway should be 172.16.102.1
     ("192.168.3.3"),    #  local address  TC26
@@ -681,6 +695,7 @@ def test_route_gateway_addr_validation(set_interface_ip_, gateway):
         assert 1 == code, 'should not be here'
 
 
+@mark.p3
 @mark.parametrize('nt', [
     ('192.168.3.1'),    # try gateway addr
     ('192.168.3.2'),    # try DHCP addr
@@ -724,6 +739,7 @@ def test_route_network_addr_must_be_unicast(set_interface_ip_, nt):
         assert 1 == code, 'should not be here'
 
 
+@mark.p3
 def test_route_unique(set_interface_ip_):
     """
     27) IP route must be unique (network + prefix + gateway)

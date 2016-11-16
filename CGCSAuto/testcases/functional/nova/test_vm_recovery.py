@@ -12,10 +12,11 @@ from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
+# Note auto recovery metadata in image will not passed to vm if vm is booted from Volume
 @mark.features(Features.AUTO_RECOV)
 @mark.parametrize(('auto_recovery', 'disk_format', 'container_format'), [
-    mark.p1(('true', 'qcow2', 'bare')),
-    mark.p1(('False', 'raw', 'bare')),
+    mark.p3(('true', 'qcow2', 'bare')),
+    mark.p3(('False', 'raw', 'bare')),
 ])
 def test_image_metadata_in_volume(auto_recovery, disk_format, container_format):
     """
@@ -65,7 +66,7 @@ def test_image_metadata_in_volume(auto_recovery, disk_format, container_format):
     mark.p1((None, 'false', 'true', 'qcow2', 'bare', False)),
     mark.p1((None, 'true', 'false', 'raw', 'bare', True)),
     mark.p1(('dedicated', 'false', None, 'raw', 'bare', False)),
-    mark.p1(('dedicated', None, 'false', 'qcow2', 'bare', False)),
+    mark.domain_sanity(('dedicated', None, 'false', 'qcow2', 'bare', False)),
     mark.p1(('shared', None, 'true', 'raw', 'bare', True)),
     mark.p1(('shared', 'false', None, 'raw', 'bare', False)),
 ])
@@ -228,7 +229,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
     mark.p1((None, False)),
     mark.p1(('true', True)),
     mark.p1(('false', False)),
-    mark.p1(('True', True)),
+    mark.domain_sanity(('True', True)),
 ])
 def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
     """

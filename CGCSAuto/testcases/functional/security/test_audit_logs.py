@@ -1,6 +1,8 @@
 import time
 import re
 
+from pytest import mark
+
 from consts.cgcs import Prompt
 from keywords import html_helper, host_helper, system_helper
 from utils.tis_log import LOG
@@ -20,6 +22,7 @@ def exec_sudo_cmd_fail(ssh, cmd):
         ssh.expect(blob_list=[ssh.prompt])
 
 
+@mark.p2
 def test_sudo_log():
     """
     TC5202 Test the logs created during successful and failed sudo commands
@@ -79,6 +82,7 @@ def test_sudo_log():
                                              "Expecting to find: {} found: {}".format(searching_for, found)
 
 
+@mark.p2
 def test_postgress():
     """
     TC5204 Test postgres login and logout logs
@@ -125,6 +129,7 @@ def test_postgress():
                                              .format(searching_for, found)
 
 
+@mark.p3
 def test_sudo_su():
     """
     TC5205 Test logs created by sudo su
