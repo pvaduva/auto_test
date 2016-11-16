@@ -380,15 +380,10 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
 
     log.info("Copy load into feed directory")
     feed_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
-    if tuxlab_conn.exec_cmd("test -d " + tuxlab_sub_dir)[0] != 0:
-
-        #feed_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
-        tuxlab_conn.sendline("mkdir -p " + tuxlab_sub_dir)
-        tuxlab_conn.find_prompt()
-        tuxlab_conn.sendline("chmod 755 " + tuxlab_sub_dir)
-        tuxlab_conn.find_prompt()
-    else:
-        log.info("Build directory \"{}\" already exists".format(tuxlab_sub_dir))
+    tuxlab_conn.sendline("mkdir -p " + tuxlab_sub_dir)
+    tuxlab_conn.find_prompt()
+    tuxlab_conn.sendline("chmod 755 " + tuxlab_sub_dir)
+    tuxlab_conn.find_prompt()
 
 
     # Extra forward slash at end is required to indicate the sync is for
