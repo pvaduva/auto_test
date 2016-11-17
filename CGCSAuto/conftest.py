@@ -342,10 +342,10 @@ def pytest_unconfigure():
                 'Build ID: {}\n'
                 'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, ProjVar.get_var('LOG_DIR')))
         # Add result summary to beginning of the file
-        f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal: {}\n'.
-                format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, TestRes.TOTALNUM))
+        f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
+                format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
         if TestRes.SKIPNUM > 0:
-            f.write('Skipped: {}'.format(TestRes.SKIPNUM))
+            f.write('------------\nSkipped: {}'.format(TestRes.SKIPNUM))
 
     LOG.info("Test Results saved to: {}".format(tc_res_path))
     with open(tc_res_path, 'r') as fin:
