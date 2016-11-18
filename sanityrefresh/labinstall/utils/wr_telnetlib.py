@@ -983,7 +983,7 @@ class Telnet:
                     if hasattr(node, "host_kickstart_menu_selection"):
                         selection_menu_option =  getattr(node, "host_kickstart_menu_selection")
 
-                    log.info("Kickstart boot  menu selection = {}".format(selection_menu_option))
+                    log.info("Kickstart boot menu selection = {}".format(selection_menu_option))
 
                     self.write_line(selection_menu_option)
 

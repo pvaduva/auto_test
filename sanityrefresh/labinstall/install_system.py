@@ -144,6 +144,11 @@ def parse_args():
                          choices=HOST_OS, default=DEFAULT_HOST_OS,
                          help="Centos or wrlinux based install")
 
+    # Grab the latest configuration files
+    lab_grp.add_argument('--override', dest='override',
+                         default='no',
+                         help="Use the latest config files")
+
     #TODO: Custom directory path is not supported yet. Need to add code
     #      to rsync files from custom directory path on local PC to controller-0
     #      Can use rsync exec_cmd(...) in common.py to do the transfer locally
@@ -299,13 +304,15 @@ def verify_custom_lab_cfg_location(lab_cfg_location):
                                 + CUSTOM_LAB_SETTINGS_FILENAME
     return lab_cfg_path, lab_settings_filepath
 
-def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_os):
+def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_os, override, guest_load_path):
     ''' Get the directory path for the configuration file that is used in
         setting up the lab.
     '''
 
-    lab_settings_filepath = None
-    if host_os == "centos":
+    if override == "yes":
+        load_path = DEFAULT_WKSPCE + "/" + DEFAULT_REL + "/" + DEFAULT_BLD
+
+    if host_os == "centos" or override == "yes":
         lab_cfg_rel_path = CENTOS_LAB_REL_PATH + "/yow/" + lab_cfg_location
         lab_cfg_path = load_path + "/" + lab_cfg_rel_path
     else:
@@ -314,18 +321,73 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_o
 
     cmd = "test -d " + lab_cfg_path
     if bld_server_conn.exec_cmd(cmd)[0] != 0:
-        msg = 'Lab config directory \"{}\" not found in {}'.format(
+        msg = 'Lab config directory {} not found in {}'.format(
             lab_cfg_location, lab_cfg_path)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+    log.info('Using lab config directory: {}'.format(lab_cfg_path))
+
+    # Confirm we have a valid config controller file before starting
+    if host_os == "centos":
+        cfgfile_list = CENTOS_CFGFILE_LIST
+    else:
+        cfgfile_list = WRL_CFGFILE_LIST
+
+    cfg_found = False
+    for cfgfile in cfgfile_list:
+        cmd = "test -f " + lab_cfg_path + "/" + cfgfile
+        if bld_server_conn.exec_cmd(cmd)[0] == 0:
+            cfg_found = True
+            log.info('Using config controller file: {}'.format(cfgfile))
+            break
+
+    if not cfg_found:
+        msg = 'No valid config controller files found in {}'.format(lab_cfg_path)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
+    # Confirm we have a valid host_bulk_add
+    bulkfile_found = False
+    for bulkfile in BULKCFG_LIST:
+        cmd = "test -f " + lab_cfg_path + "/" + bulkfile
+        if bld_server_conn.exec_cmd(cmd)[0] == 0:
+            bulkfile_found = True
+            log.info('Using host bulk add file: {}'.format(bulkfile))
+            break
+
+    if not bulkfile_found:
+        msg = 'No valid host bulk add file found in {}'.format(lab_cfg_path)
         log.error(msg)
         wr_exit()._exit(1, msg)
 
     # ~/wassp-repos/testcases/cgcs/sanityrefresh/labinstall/lab_settings/*.ini
-    lab_settings_rel_path = LAB_SETTINGS_DIR + "/{}.ini".format(
-        lab_cfg_location)
+    lab_settings_rel_path = LAB_SETTINGS_DIR + "/{}.ini".format(lab_cfg_location)
     lab_settings_filepath = SCRIPT_DIR + "/" + lab_settings_rel_path
+
     if not os.path.isfile(lab_settings_filepath):
-        log.error('Lab settings filepath was not found.')
+        msg = 'Lab settings file path was not found: {}'.format(lab_settings_filepath)
         lab_settings_filepath = None
+    else:
+        log.info('Using lab settings file path: {}'.format(lab_settings_filepath))
+
+    # Check the guest directory exists
+    cmd = "test -d " + guest_load_path
+    if bld_server_conn.exec_cmd(cmd)[0] == 0:
+        log.info('Using guest directory path: {}'.format(guest_load_path))
+    else:
+        msg = 'Guest directory path does not exist on build server: {}'.format(guest_load_path)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
+    # Confirm we have a valid cgcs guest
+    guest_path = guest_load_path + "/" + DEFAULT_GUEST
+    cmd = "test -f " + guest_path
+    if bld_server_conn.exec_cmd(cmd)[0] == 0:
+        log.info('Using guest location: {}'.format(guest_path))
+    else:
+        msg = 'Guest {} not found in {}'.format(DEFAULT_GUEST, guest_path)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
 
     return lab_cfg_path, lab_settings_filepath
 
@@ -390,11 +452,13 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
     # all of the contents of RPM_INSTALL_REL_PATH into the feed path
 
     if host_os == "centos":
+        log.info("Installing Centos load")
         bld_server_conn.sendline("cd " + load_path)
         bld_server_conn.find_prompt()
         bld_server_conn.rsync(CENTOS_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete", "--force"])
         bld_server_conn.rsync("export/extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
     else:
+        log.info("Installing wrlinux load")
         bld_server_conn.rsync(load_path + "/" + RPM_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete", "--force"])
 
         bld_server_conn.sendline("cd " + load_path)
@@ -764,6 +828,7 @@ def write_install_vars(args):
         os.remove(file_path)
 
     with open(file_path, "w") as install_var_file:
+        os.chmod(file_path, 0o666)
         config.write(install_var_file)
         install_var_file.close()
 
@@ -964,19 +1029,17 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
 
 
 def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
-                           guest_load_path, host_os, small_footprint):
+                           guest_load_path, host_os, override,
+                           small_footprint, lab_cfg_location):
 
     # Download configuration files
-
 
     pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
     bld_server_conn.rsync(LICENSE_FILEPATH, WRSROOT_USERNAME,
                           controller0.host_ip,
                           os.path.join(WRSROOT_HOME_DIR, "license.lic"),
                           pre_opts=pre_opts)
-    bld_server_conn.rsync(os.path.join(lab_cfg_path, "*"),
-                          WRSROOT_USERNAME, controller0.host_ip,
-                          WRSROOT_HOME_DIR, pre_opts=pre_opts)
+
     if host_os == "centos":
         scripts_path = load_path + "/" + CENTOS_LAB_REL_PATH + "/scripts/"
         bld_server_conn.rsync(os.path.join(scripts_path, "*"),
@@ -991,6 +1054,18 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
         bld_server_conn.rsync(os.path.join(load_path, LAB_SCRIPTS_REL_PATH, "*"),
                           WRSROOT_USERNAME, controller0.host_ip,
                           WRSROOT_HOME_DIR, pre_opts=pre_opts)
+
+    # If override is set to yes, grab the TiS_config.ini_<host_os> file from
+    # latest release and directory
+    if override == "yes":
+        load_path = "-L " + DEFAULT_WKSPCE + "/" + DEFAULT_REL + "/" + DEFAULT_BLD
+        lab_cfg_rel_path = CENTOS_LAB_REL_PATH + "/yow/" + lab_cfg_location
+        lab_cfg_path = load_path + "/" + lab_cfg_rel_path
+
+    bld_server_conn.rsync(os.path.join(lab_cfg_path, "*"),
+                          WRSROOT_USERNAME, controller0.host_ip,
+                          WRSROOT_HOME_DIR, pre_opts=pre_opts)
+
     bld_server_conn.rsync(os.path.join(guest_load_path, "cgcs-guest.img"),
                           WRSROOT_USERNAME, controller0.host_ip, \
                           WRSROOT_IMAGES_DIR + "/",\
@@ -1002,14 +1077,15 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
                           os.path.join(WRSROOT_HOME_DIR, "license.lic"),
                           pre_opts=pre_opts)
 
-    cmd = 'grep -q "TMOUT=" ' + WRSROOT_ETC_PROFILE
-    cmd += " && echo " + WRSROOT_PASSWORD + " | sudo -S"
-    cmd += ' sed -i.bkp "/\(TMOUT=\|export TMOUT\)/d"'
-    cmd += " " + WRSROOT_ETC_PROFILE
-    controller0.ssh_conn.exec_cmd(cmd)
+    if host_os == "centos":
+        wrsroot_etc_profile = WRSROOT_ETC_PROFILE
+    else:
+        wrsroot_etc_profile = WRSROOT_ETC_PROFILE_LEGACY
+
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
-    cmd += ' sed -i.bkp "$ a\TMOUT=\\nexport TMOUT"'
-    cmd += " " + WRSROOT_ETC_PROFILE
+    cmd += " sed -i.bkp 's/TMOUT=900/TMOUT=0/g' " + wrsroot_etc_profile
+    controller0.ssh_conn.exec_cmd(cmd)
+    cmd = "unset TMOUT"
     controller0.ssh_conn.exec_cmd(cmd)
     cmd = 'echo \'export HISTTIMEFORMAT="%Y-%m-%d %T "\' >>'
     cmd += " " + WRSROOT_HOME_DIR + "/.bashrc"
@@ -1017,7 +1093,6 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
     cmd = 'echo \'export PROMPT_COMMAND="date; $PROMPT_COMMAND"\' >>'
     cmd += " " + WRSROOT_HOME_DIR + "/.bashrc"
     controller0.ssh_conn.exec_cmd(cmd)
-    controller0.ssh_conn.exec_cmd("source " + WRSROOT_ETC_PROFILE)
     controller0.ssh_conn.exec_cmd("source " + WRSROOT_HOME_DIR + "/.bashrc")
 
 
@@ -1350,6 +1425,8 @@ def main():
 
     host_os = args.host_os
 
+    override = args.override
+
     bld_server = args.bld_server + HOST_EXT
 
     bld_server_wkspce = args.bld_server_wkspce
@@ -1388,13 +1465,13 @@ def main():
         log.info("Resuming install for lab {}".format(lab_name))
 
     logutils.print_step("Arguments:")
-    logutils.print_name_value("LAB Name:", lab_name)
-    logutils.print_name_value("Resume Insall:", continue_install)
+    logutils.print_name_value("LAB Name", lab_name)
+    logutils.print_name_value("Resume Install", continue_install)
 
     if tis_on_tis:
         logutils.print_name_value("TiS-on-TiS", tis_on_tis)
 
-    logutils.print_name_value("Logs location:", 'http://128.224.150.21/install_logs/')
+    logutils.print_name_value("Logs location", 'http://128.224.150.21/install_logs/')
     logutils.print_name_value("Lab config location", lab_cfg_location)
 
     if not tis_on_tis:
@@ -1418,6 +1495,8 @@ def main():
     logutils.print_name_value("Log level", log_level)
 
     logutils.print_name_value("Host OS", host_os)
+
+    logutils.print_name_value("Override", override)
 
     email_info = {}
     email_info['email_server'] = EMAIL_SERVER
@@ -1447,7 +1526,8 @@ def main():
     else:
         lab_cfg_path, lab_settings_filepath = verify_lab_cfg_location(bld_server_conn,
                                                   lab_cfg_location, load_path,
-                                                  host_os)
+                                                  host_os, override,
+                                                  guest_load_path)
 
     if lab_settings_filepath:
         log.info("Lab settings file path: " + lab_settings_filepath)
@@ -1474,12 +1554,14 @@ def main():
                 pass
 
     # get lab name from config file
-    #lab_name = get_system_name(bld_server_conn, lab_cfg_path)
-    if lab_name is  None:
+    if lab_name is None:
+        if override == "yes":
+            or_load_path = DEFAULT_WKSPCE + "/" + DEFAULT_REL + "/" + DEFAULT_BLD
+            lab_cfg_rel_path = CENTOS_LAB_REL_PATH + "/yow/" + lab_cfg_location
+            lab_cfg_path = or_load_path + "/" + lab_cfg_rel_path
+
         lab_name = get_system_name(bld_server_conn, lab_cfg_path)
-        print(lab_name)
-        #lab_name = ((_lab_name.split('=')[1])[5:]).replace('"', '')
-        #print(lab_name)
+        log.info(lab_name)
         args.lab_name = lab_name
         write_install_vars(args)
 
@@ -1536,6 +1618,7 @@ def main():
     # Unreserve first to close any opened telnet sessions.
     if not tis_on_tis:
         [barcodes.append(node.barcode) for node in nodes]
+        installer_exit.lab_barcodes = barcodes
         vlm_unreserve(barcodes)
         vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
@@ -1576,7 +1659,8 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
 
         downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
-                           guest_load_path, host_os, small_footprint)
+                           guest_load_path, host_os, override, small_footprint,
+                           lab_cfg_location)
         set_install_step_complete( lab_install_step)
 
 
@@ -1655,6 +1739,7 @@ def main():
 
     # Wait for all nodes to be online to allow lab_setup to set
     # interfaces properly
+    time.sleep(10)
     wait_state(nodes, AVAILABILITY, ONLINE)
 
     log.info("Beginning lab setup procedure for {} lab".format(lab_type))
@@ -1782,13 +1867,11 @@ def main():
         log.error("Failed to get build info")
         #wr_exit()._exit(1, msg)
 
-    #TODO: Add unreserving of targets if you exit early for some reason
-    #      This needs to be in the exception error handling for failure cases
-    for barcode in barcodes:
-        vlm_exec_cmd(VLM_UNRESERVE, barcode)
-
     wr_exit()._exit(0, "Installer completed.\n" + installed_load_info)
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        wr_exit()._exit(2, "Keyboard Interrupt Detected")
