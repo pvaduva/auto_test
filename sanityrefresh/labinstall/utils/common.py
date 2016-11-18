@@ -253,11 +253,17 @@ class wr_exit(object):
                 setattr(self, key, kwargs[key])
 
         def _exit(self, status, msg=None):
-            # dump executed if status is not 0
+
+            if status == 2 or status == 0:
+                log.info(msg)
+
             if status is not 0:
                 self._dump_executed_steps()
-                if len(self.lab_barcodes) > 0:
-                    vlm_unreserve(self.lab_barcodes)
+
+            # Unreserve targets on exit
+            if len(self.lab_barcodes) > 0:
+                log.info("Unreserving targets")
+                vlm_unreserve(self.lab_barcodes)
 
             else:
                 install_vars_filename = self.lab_name + INSTALL_VARS_FILE_EXT
@@ -293,6 +299,7 @@ class wr_exit(object):
             if os.path.exists(executed_steps_path):
                 os.remove(executed_steps_path)
             file = open(executed_steps_path, 'w')
+            os.chmod(executed_steps_path, 0o666)
             if len(self.executed_steps) > 0:
                 for step in self.executed_steps:
                     file.write("{}\n".format(step))
