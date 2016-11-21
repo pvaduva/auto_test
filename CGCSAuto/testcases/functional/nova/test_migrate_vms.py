@@ -380,8 +380,8 @@ def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     vm_host_origin = nova_helper.get_vm_host(vm_id)
-    check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_origin],
-                                      vm_host=vm_host_origin, cpu_pol=cpu_pol)
+    prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_origin],
+                                      vm_host=vm_host_origin, cpu_pol=cpu_pol)[1]
 
     LOG.tc_step("Live migrate {} VM".format(guest_os))
     vm_helper.live_migrate_vm(vm_id)
@@ -390,8 +390,12 @@ def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
 
     vm_host_live_mig = nova_helper.get_vm_host(vm_id)
+    # vm topology from inside vm will not change after live-migrate between HT and non-HT vm
+    if not cpu_pol == 'dedicated':
+        prev_siblings = None
+
     check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_live_mig],
-                                      vm_host=vm_host_live_mig, cpu_pol=cpu_pol)
+                                      vm_host=vm_host_live_mig, cpu_pol=cpu_pol, prev_siblings=prev_siblings)
 
     LOG.tc_step("Cold migrate vm and check vm is moved to different host")
     vm_helper.cold_migrate_vm(vm_id)
