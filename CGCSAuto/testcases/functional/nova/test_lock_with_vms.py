@@ -256,7 +256,7 @@ class TestLockWithVMsNegative:
         LOG.info("Negative test: host-lock attempt on host(s) with {} storage backing(s). \n"
                  "Host(s) to attempt lock: {}".format(storages_to_test, target_hosts_negative))
         for host in target_hosts:
-            if system_helper.get_active_controller_name(host) == host:
+            if system_helper.get_active_controller_name() == host:
                 host_helper.swact_host(hostname=host)
                 host_helper.wait_for_hypervisors_up(host)
                 host_helper.wait_for_webservice_up(host)
