@@ -1915,12 +1915,18 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
 
                     output_pre = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
                     if vlan_name not in output_pre:
+                        if eth_name not in output_pre:
+                            LOG.info("Append new interface {} to /etc/network/interfaces".format(eth_name))
+                            if_to_add = VMNetworkStr.NET_IF.format(eth_name, eth_name)
+                            vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
+                                            format(if_to_add), fail_ok=False)
+
                         if '.' + net_seg_id in output_pre:
-                            LOG.info("Modify existing interface to {} in file.".format(vlan_name))
+                            LOG.info("Modify existing interface to {} in /etc/network/interfaces".format(vlan_name))
                             vm_ssh.exec_cmd(r"sed -i -e 's/eth[0-9]\(.{}\)/{}\1/g' /etc/network/interfaces".
                                             format(net_seg_id, eth_name), fail_ok=False)
                         else:
-                            LOG.info("Append new interface {} to file".format(vlan_name))
+                            LOG.info("Append new interface {} to /etc/network/interfaces".format(vlan_name))
                             if_to_add = VMNetworkStr.NET_IF.format(vlan_name, vlan_name)
                             vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
                                             format(if_to_add), fail_ok=False)
