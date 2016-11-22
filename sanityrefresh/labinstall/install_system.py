@@ -112,7 +112,7 @@ def parse_args():
     lab_grp.add_argument('--small-footprint', dest='small_footprint',
                          action='store_true', help="Run installation"
                          " as small footprint. Not applicable"
-                         " for ts-on-tis install")
+                         " for tis-on-tis install")
 
     lab_grp.add_argument('--tis-on-tis', dest='tis_on_tis', action='store_true',
                          help=" Run installation for Cumulus TiS on TiS. ")
@@ -146,7 +146,7 @@ def parse_args():
 
     # Grab the latest configuration files
     lab_grp.add_argument('--override', dest='override',
-                         default='no',
+                         choices=['yes', 'no'], default='no',
                          help="Use the latest config files")
 
     #TODO: Custom directory path is not supported yet. Need to add code
