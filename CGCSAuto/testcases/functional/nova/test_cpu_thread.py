@@ -593,6 +593,11 @@ class TestHTEnabled:
         vm_id = vm_helper.boot_vm(name='vcpu{}_min{}_{}'.format(vcpus, min_vcpus, cpu_thread_pol), flavor=flavor_id)[1]
         ResourceCleanup.add('vm', vm_id)
 
+        LOG.tc_step("Wait for vm pingable from NatBox and guest_agent process running on VM")
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        if min_vcpus:
+            vm_helper.wait_for_process(process='guest_agent', vm_id=vm_id, disappear=False, timeout=120, fail_ok=False)
+
         vm_host = nova_helper.get_vm_host(vm_id)
         if cpu_thread_pol == 'require':
             assert vm_host in ht_hosts, "require VM is not on hyperthreaded host"
@@ -796,7 +801,7 @@ class TestHTEnabled:
         mark.domain_sanity((2, 'dedicated', 'isolate', None, 'volume', 'live_migrate', False)),
         mark.domain_sanity((4, 'dedicated', 'require', 'strict', 'image', 'live_migrate', False)),
         mark.domain_sanity((3, 'dedicated', 'require', 'strict', 'volume', 'live_migrate', False)),
-        mark.p1((3, 'dedicated', 'prefer', 'strict', 'image', 'live_migrate', False)),
+        mark.p1((4, 'dedicated', 'prefer', 'strict', 'image', 'live_migrate', False)),
         mark.p1((1, 'dedicated', 'isolate', 'strict', 'volume', 'live_migrate', True)),
         mark.p1((3, 'dedicated', 'prefer', None, 'volume', 'live_migrate', True)),
         mark.p1((3, 'dedicated', 'require', None, 'volume', 'live_migrate', True)),
@@ -868,17 +873,20 @@ class TestHTEnabled:
 
         prev_cpus = pre_hosts_cpus[vm_host]
 
-        check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
-                                          cpu_thr_pol=cpu_thr_pol, vm_host=vm_host)
+        prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
+                                          cpu_thr_pol=cpu_thr_pol, vm_host=vm_host)[1]
 
         LOG.tc_step("Perform following nova action(s) on vm {}: {}".format(vm_id, nova_actions))
         if isinstance(nova_actions, str):
             nova_actions = [nova_actions]
 
+        check_prev_siblings = False
         for action in nova_actions:
             kwargs = {}
             if action == 'rebuild':
                 kwargs['image_id'] = image_id
+            elif action == 'live_migrate':
+                check_prev_siblings = True
             vm_helper.perform_action_on_vm(vm_id, action=action, **kwargs)
 
         post_vm_host = nova_helper.get_vm_host(vm_id)
@@ -889,8 +897,11 @@ class TestHTEnabled:
             assert post_vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
 
         LOG.tc_step("Check VM topology is still correct after {}".format(nova_actions))
+        if cpu_pol != 'dedicated' or not check_prev_siblings:
+            # Allow prev_siblings in live migration case
+            prev_siblings = None
         check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=pre_action_cpus, cpu_pol=cpu_pol,
-                                          cpu_thr_pol=cpu_thr_pol, vm_host=post_vm_host)
+                                          cpu_thr_pol=cpu_thr_pol, vm_host=post_vm_host, prev_siblings=prev_siblings)
 
         if vs_numa_affinity == 'strict':
             LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
@@ -905,13 +916,44 @@ class TestHTEnabled:
     ])
     def test_cpu_thr_live_mig_negative(self, vcpus, cpu_pol, cpu_thr_pol, cpu_thr_source, vs_numa_affinity,
                                        boot_source, ht_hosts_):
+        """
+        Test live migration is rejected for require VM when only one HT host available
+
+        Args:
+            vcpus:
+            cpu_pol:
+            cpu_thr_pol:
+            cpu_thr_source:
+            vs_numa_affinity:
+            boot_source:
+            ht_hosts_:
+
+        Skip condition:
+            - More than one HT host available
+            - Less than two up hypervisors available
+
+        Test Steps:
+            - Ensure system has only one HT host
+            - Create a flavor with given number of vcpus
+            - Add vs_numa_affinity to flavor extra spec if specified
+            - Based on the cpu_thr_source
+                - If cpu_thr_source=flavor: Add cpu policy and cpu thread policy to flavor extra specs
+                - If cpu_thr_source=image: Create image with cpu policy and thread policy metadata
+            - Boot vm from specified boot source from above flavor and image
+            - Check vm is booted with correct topology
+            - Attempt to live migrate vm and ensure it's rejected
+
+        Teardown:
+            - Delete created vm, volume, flavor, image
+
+        """
         ht_hosts, non_ht_hosts = ht_hosts_
         LOG.tc_step("Ensure system has only one HT host")
 
         if len(ht_hosts) > 1:
             skip(SkipReason.MORE_THAN_ONE_HT_HOSTS)
 
-        if len(host_helper.get_nova_hosts()) < 2:
+        if len(host_helper.get_hypervisors(state='up', status='available')) < 2:
             skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
 
         specs = {}

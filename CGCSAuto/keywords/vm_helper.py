@@ -1915,12 +1915,18 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
 
                     output_pre = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
                     if vlan_name not in output_pre:
+                        if eth_name not in output_pre:
+                            LOG.info("Append new interface {} to /etc/network/interfaces".format(eth_name))
+                            if_to_add = VMNetworkStr.NET_IF.format(eth_name, eth_name)
+                            vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
+                                            format(if_to_add), fail_ok=False)
+
                         if '.' + net_seg_id in output_pre:
-                            LOG.info("Modify existing interface to {} in file.".format(vlan_name))
+                            LOG.info("Modify existing interface to {} in /etc/network/interfaces".format(vlan_name))
                             vm_ssh.exec_cmd(r"sed -i -e 's/eth[0-9]\(.{}\)/{}\1/g' /etc/network/interfaces".
                                             format(net_seg_id, eth_name), fail_ok=False)
                         else:
-                            LOG.info("Append new interface {} to file".format(vlan_name))
+                            LOG.info("Append new interface {} to /etc/network/interfaces".format(vlan_name))
                             if_to_add = VMNetworkStr.NET_IF.format(vlan_name, vlan_name)
                             vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
                                             format(if_to_add), fail_ok=False)
@@ -2289,3 +2295,35 @@ def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, a
     success_msg = "VM {} successfully cold migrated and {}ed Resize.".format(vm_id, verify_resize_str)
     LOG.info(success_msg)
     return 0, success_msg
+
+
+def wait_for_process(process, vm_id=None, vm_ssh=None, disappear=False, timeout=120, check_interval=3, fail_ok=True,
+                     con_ssh=None):
+    """
+    Wait for given process to appear or disappear on a VM
+
+    Args:
+        process (str): PID or unique proc name
+        vm_id (str): vm id if vm_ssh is not provided
+        vm_ssh (VMSSHClient): when vm_ssh is given, vm_id param will be ignored
+        disappear (bool):
+        timeout (int): max seconds to wait
+        check_interval (int):
+        fail_ok (bool): whether to raise exception upon wait fail
+        con_ssh (SSHClient): active controller ssh.
+
+    Returns (bool): whether or not process appear/disappear within timeout. False return only possible when fail_ok=True
+
+    """
+    if not vm_ssh and not vm_id:
+        raise ValueError("Either vm_id or vm_ssh has to be provided")
+
+    if not vm_ssh:
+        with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh) as vm_ssh:
+            return common.wait_for_process(ssh_client=vm_ssh, process=process, disappear=disappear,
+                                           timeout=timeout, check_interval=check_interval, fail_ok=fail_ok)
+
+    else:
+        return common.wait_for_process(ssh_client=vm_ssh, process=process, disappear=disappear, timeout=timeout,
+                                       check_interval=check_interval, fail_ok=fail_ok)
+

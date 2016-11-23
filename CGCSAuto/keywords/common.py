@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from consts.cgcs import Prompt
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.proj_vars import ProjVar
+from utils import exceptions
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 
@@ -417,3 +418,40 @@ def wait_for_val_from_func(expt_val, timeout, check_interval, func, *args, **kwa
         time.sleep(check_interval)
 
     return False, current_val
+
+
+def wait_for_process(ssh_client, process, sudo=False, disappear=False, timeout=60, check_interval=3, fail_ok=True):
+    """
+    Wait for given process to appear or disappear
+
+    Args:
+        ssh_client (SSH_Client):
+        process (str): unique identification of process, such as pid, or unique proc name
+        disappear (bool): whether to wait for proc appear or disappear
+        timeout (int): max wait time
+        check_interval (int): how often to check
+
+    Returns (bool): whether or not process appear/disappear within timeout
+
+    """
+    cmd = 'ps aux | grep --color=never {} | grep -v grep'.format(process)
+    msg_str = 'disappear' if disappear else 'appear'
+
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        if not sudo:
+            code, out = ssh_client.exec_cmd(cmd=cmd, fail_ok=True)
+        else:
+            code, out = ssh_client.exec_sudo_cmd(cmd=cmd, fail_ok=True)
+
+        if (disappear and not out) or (out and not disappear):
+            LOG.info("Process {} {}ed".format(process, msg_str))
+            return True
+
+        time.sleep(check_interval)
+
+    LOG.warning("Process {} did not {} within {} seconds".format(process, msg_str, timeout))
+    if fail_ok:
+        return False
+    else:
+        raise exceptions.TimeoutException("Timed out waiting for process {} to {}".format(process, msg_str))

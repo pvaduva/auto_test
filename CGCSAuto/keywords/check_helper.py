@@ -64,6 +64,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
         cpu_pol (str): dedicated or shared
         cpu_thr_pol (str): isolate, require, or prefer
         expt_increase (int): expected total vcpu increase on vm host compared to prev_total_cpus
+        prev_siblings (list): list of siblings total. Usually used when checking vm topology after live migration
         con_ssh (SSHClient)
 
     """
@@ -281,6 +282,10 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
         assert max_vcpus == len(pcpus_total), "Max vcpus: {}, pcpus list: {}".format(max_vcpus, pcpus_total)
         assert current_vcpus == len(set(pcpus_total)), "Current vcpus: {}, pcpus: {}".format(max_vcpus, pcpus_total)
 
+    if not siblings_total:
+        siblings_total = [[vcpu_] for vcpu_ in range(current_vcpus)]
+
+    LOG.info("vm {} on {} - pcpus total: {}; siblings total: {}".format(vm_id, vm_host, pcpus_total, siblings_total))
     return pcpus_total, siblings_total
 
 
