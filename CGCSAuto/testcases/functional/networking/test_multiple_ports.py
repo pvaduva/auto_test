@@ -193,7 +193,7 @@ class TestMutiPortsPCI:
         if not sriov_info or not pcipt_info:
             skip(SkipReason.PCI_IF_UNAVAIL)
 
-        LOG.fixture_step("(class) Get a PCI network too boot vm from pci providernet info from lab_setup.conf")
+        LOG.fixture_step("(class) Get a PCI network to boot vm from pci providernet info from lab_setup.conf")
         pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')
         pci_pthru_nets = network_helper.get_pci_nets(vif='pthru', rtn_val='name')
         avail_nets = list(set(pci_pthru_nets) & set(pci_sriov_nets))
@@ -374,6 +374,10 @@ class TestMutiPortsPCI:
         LOG.tc_step("Reboot vm host {}".format(host))
         host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
         HostsToRecover.add(host, scope='function')
+
+        LOG.tc_step("Wait for vm to reach ERROR or REBUILD state with best effort")
+        vm_helper._wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
+                                       timeout=120)
 
         LOG.tc_step("Verify vm is evacuated to other host")
         vm_helper._wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=120, fail_ok=False)

@@ -20,7 +20,7 @@ def vif_model_check(request):
     if not pci_info:
         skip("{} interface not found in lab_setup.conf".format(vif_model))
 
-    LOG.fixture_step("Get a PCI network too boot vm from pci providernet info from lab_setup.conf")
+    LOG.fixture_step("Get a PCI network to boot vm from pci providernet info from lab_setup.conf")
     # pci_nets = network_helper.get_pci_nets(vif=interface, rtn_val='name')
     primary_tenant = Tenant.get_primary()
     primary_tenant_name = common.get_tenant_name(primary_tenant)
