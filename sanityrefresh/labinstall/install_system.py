@@ -281,8 +281,9 @@ def verify_custom_lab_cfg_location(lab_cfg_location):
             found_lab_setup_cfg_file = True
 
     # Tell the user what files are missing
+    msg = ''
     if not found_bulk_cfg_file:
-        msg = 'Failed to find {} in {}'.format(BULK_CFG_FILENAME,
+        msg += 'Failed to find {} in {}'.format(BULK_CFG_FILENAME,
                                                lab_cfg_location)
     if not found_system_cfg_file:
         msg += '\nFailed to find {} in {}'.format(cfgfile_list, lab_cfg_location)
