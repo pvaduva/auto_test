@@ -149,6 +149,10 @@ def parse_args():
                          choices=['yes', 'no'], default='no',
                          help="Use the latest config files")
 
+    lab_grp.add_argument('--banner', dest='banner',
+                         choices=['before', 'after', 'no'], default='no',
+                         help='If there are banner files, install before or after config controller')
+
     #TODO: Custom directory path is not supported yet. Need to add code
     #      to rsync files from custom directory path on local PC to controller-0
     #      Can use rsync exec_cmd(...) in common.py to do the transfer locally
@@ -304,7 +308,7 @@ def verify_custom_lab_cfg_location(lab_cfg_location):
                                 + CUSTOM_LAB_SETTINGS_FILENAME
     return lab_cfg_path, lab_settings_filepath
 
-def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_os, override, guest_load_path):
+def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_os, override, guest_load_path, banner):
     ''' Get the directory path for the configuration file that is used in
         setting up the lab.
     '''
@@ -359,6 +363,16 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_o
         msg = 'No valid host bulk add file found in {}'.format(lab_cfg_path)
         log.error(msg)
         wr_exit()._exit(1, msg)
+
+    # Confirm if have a valid banner file (if specified)
+    if banner != "no":
+        cmd = 'test -d ' + lab_cfg_path + "/banner"
+        if bld_server_conn.exec_cmd(cmd)[0] == 0:
+            log.info('Found banner directory in {}'.format(lab_cfg_path))
+        else:
+            msg = 'No valid banner directory found in {}'.format(lab_cfg_path)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
     # ~/wassp-repos/testcases/cgcs/sanityrefresh/labinstall/lab_settings/*.ini
     lab_settings_rel_path = LAB_SETTINGS_DIR + "/{}.ini".format(lab_cfg_location)
@@ -695,6 +709,39 @@ def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_di
     if close_telnet_conn:
         node.telnet_conn.close()
 
+def apply_banner(node, banner):
+    ''' Apply banner files if they exist
+    '''
+
+    log.info('Attempting to apply banner files')
+
+    cmd = 'test -d ' + BANNER_SRC
+    if node.telnet_conn.exec_cmd(cmd)[0] != 0:
+        msg = 'Banner files not found for this lab'
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
+
+    cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
+    cmd += " mv BANNER_SRC BANNER_DEST"
+    if node.telnet_conn.exec_cmd(cmd)[0] != 0:
+        msg = 'Unable to move banner files from {} to {}'.format(BANNER_SRC,
+        BANNER_DEST)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
+    if banner == 'after':
+        cmd = "/usr/sbin/apply_banner_customization"
+        if node.telnet_conn.exec_cmd(cmd)[0] != 0:
+            msg = 'Banner application failed'
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+        else:
+            log.info('Banner files have been applied')
+
+    return
+
+
 def apply_patches(node, bld_server_conn, patch_dir_paths):
     ''' Apply any patches after the load is installed.
     '''
@@ -1013,7 +1060,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
 
     controller0.ssh_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
 
-     # Apply patches if patch dir is not none
+    # Apply patches if patch dir is not none
 
     if patch_dir_paths is not None:
         apply_patches(controller0, bld_server_conn, patch_dir_paths)
@@ -1096,12 +1143,16 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
     controller0.ssh_conn.exec_cmd("source " + WRSROOT_HOME_DIR + "/.bashrc")
 
 
-def configureController(bld_server_conn, host_os, install_output_dir):
+def configureController(bld_server_conn, host_os, install_output_dir, banner):
     # Configure the controller as required
     global controller0
     if controller0.telnet_conn is None:
         controller0.telnet_conn = open_telnet_session(controller0, install_output_dir)
         controller0.telnet_conn.login()
+
+    # Apply banner if specified by user
+    if banner == 'before' and host_os == 'centos':
+        apply_banner(controller0, banner)
 
     # No consistency in naming of config file naming
     pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
@@ -1148,6 +1199,12 @@ def configureController(bld_server_conn, host_os, install_output_dir):
         msg = "Configuration failed: No configuration files found"
         log.error(msg)
         wr_exit()._exit(1, msg)
+
+    # Apply banner if specified by the user
+    if banner == 'after' and host_os == 'centos':
+        apply_banner(controller0, banner)
+
+    return
 
 def bulkAddHosts():
     # Run host bulk add
@@ -1427,6 +1484,8 @@ def main():
 
     override = args.override
 
+    banner = args.banner
+
     bld_server = args.bld_server + HOST_EXT
 
     bld_server_wkspce = args.bld_server_wkspce
@@ -1498,6 +1557,8 @@ def main():
 
     logutils.print_name_value("Override", override)
 
+    logutils.print_name_value("Banner", banner)
+
     email_info = {}
     email_info['email_server'] = EMAIL_SERVER
     email_info['email_from'] = EMAIL_FROM
@@ -1527,7 +1588,7 @@ def main():
         lab_cfg_path, lab_settings_filepath = verify_lab_cfg_location(bld_server_conn,
                                                   lab_cfg_location, load_path,
                                                   host_os, override,
-                                                  guest_load_path)
+                                                  guest_load_path, banner)
 
     if lab_settings_filepath:
         log.info("Lab settings file path: " + lab_settings_filepath)
@@ -1663,12 +1724,11 @@ def main():
                            lab_cfg_location)
         set_install_step_complete( lab_install_step)
 
-
     # Lab-install Step 3 -  Configure Controller - applicable all lab types
     lab_install_step = install_step("Configure_controller", 3, ['regular', 'storage', 'cpe'])
 
     if do_next_install_step(lab_type, lab_install_step):
-        configureController(bld_server_conn, host_os, install_output_dir)
+        configureController(bld_server_conn, host_os, install_output_dir, banner)
         set_install_step_complete( lab_install_step)
 
 
