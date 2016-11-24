@@ -112,7 +112,7 @@ def parse_args():
     lab_grp.add_argument('--small-footprint', dest='small_footprint',
                          action='store_true', help="Run installation"
                          " as small footprint. Not applicable"
-                         " for ts-on-tis install")
+                         " for tis-on-tis install")
 
     lab_grp.add_argument('--tis-on-tis', dest='tis_on_tis', action='store_true',
                          help=" Run installation for Cumulus TiS on TiS. ")
@@ -144,10 +144,22 @@ def parse_args():
                          choices=HOST_OS, default=DEFAULT_HOST_OS,
                          help="Centos or wrlinux based install")
 
+    lab_grp.add_argument('--stop', dest='stop', default='99',
+                         help="Integer value that represents when to stop the install\n"
+                         "0 - Stop after setting up network feed\n"
+                         "1 - Stop after booting controller-0\n"
+                         "2 - Stop after downloading config files\n"
+                         "3 - Stop after running config controller\n"
+                         "4 - Stop after running host bulk add\n")
+
     # Grab the latest configuration files
     lab_grp.add_argument('--override', dest='override',
-                         default='no',
+                         choices=['yes', 'no'], default='no',
                          help="Use the latest config files")
+
+    lab_grp.add_argument('--banner', dest='banner',
+                         choices=['before', 'after', 'no'], default='no',
+                         help='If there are banner files, install before or after config controller')
 
     #TODO: Custom directory path is not supported yet. Need to add code
     #      to rsync files from custom directory path on local PC to controller-0
@@ -171,7 +183,7 @@ def parse_args():
                                         -> hosts_bulk_add.xml'''))
     bld_grp = parser.add_argument_group("Build server and paths")
     bld_grp.add_argument('--build-server', metavar='SERVER',
-                         dest='bld_server', choices=BLD_SERVERS,
+                         dest='bld_server',
                          default=DEFAULT_BLD_SERVER,
                          help="Titanium Server build server"
                          " host name\n(default: %(default)s)")
@@ -281,8 +293,9 @@ def verify_custom_lab_cfg_location(lab_cfg_location):
             found_lab_setup_cfg_file = True
 
     # Tell the user what files are missing
+    msg = ''
     if not found_bulk_cfg_file:
-        msg = 'Failed to find {} in {}'.format(BULK_CFG_FILENAME,
+        msg += 'Failed to find {} in {}'.format(BULK_CFG_FILENAME,
                                                lab_cfg_location)
     if not found_system_cfg_file:
         msg += '\nFailed to find {} in {}'.format(cfgfile_list, lab_cfg_location)
@@ -304,7 +317,7 @@ def verify_custom_lab_cfg_location(lab_cfg_location):
                                 + CUSTOM_LAB_SETTINGS_FILENAME
     return lab_cfg_path, lab_settings_filepath
 
-def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_os, override, guest_load_path):
+def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_os, override, guest_load_path, banner):
     ''' Get the directory path for the configuration file that is used in
         setting up the lab.
     '''
@@ -359,6 +372,16 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_o
         msg = 'No valid host bulk add file found in {}'.format(lab_cfg_path)
         log.error(msg)
         wr_exit()._exit(1, msg)
+
+    # Confirm if have a valid banner file (if specified)
+    if banner != "no":
+        cmd = 'test -d ' + lab_cfg_path + "/banner"
+        if bld_server_conn.exec_cmd(cmd)[0] == 0:
+            log.info('Found banner directory in {}'.format(lab_cfg_path))
+        else:
+            msg = 'No valid banner directory found in {}'.format(lab_cfg_path)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
     # ~/wassp-repos/testcases/cgcs/sanityrefresh/labinstall/lab_settings/*.ini
     lab_settings_rel_path = LAB_SETTINGS_DIR + "/{}.ini".format(lab_cfg_location)
@@ -695,6 +718,39 @@ def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_di
     if close_telnet_conn:
         node.telnet_conn.close()
 
+def apply_banner(node, banner):
+    ''' Apply banner files if they exist
+    '''
+
+    log.info('Attempting to apply banner files')
+
+    cmd = 'test -d ' + BANNER_SRC
+    if node.telnet_conn.exec_cmd(cmd)[0] != 0:
+        msg = 'Banner files not found for this lab'
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
+
+    cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
+    cmd += " mv BANNER_SRC BANNER_DEST"
+    if node.telnet_conn.exec_cmd(cmd)[0] != 0:
+        msg = 'Unable to move banner files from {} to {}'.format(BANNER_SRC,
+        BANNER_DEST)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
+    if banner == 'after':
+        cmd = "/usr/sbin/apply_banner_customization"
+        if node.telnet_conn.exec_cmd(cmd)[0] != 0:
+            msg = 'Banner application failed'
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+        else:
+            log.info('Banner files have been applied')
+
+    return
+
+
 def apply_patches(node, bld_server_conn, patch_dir_paths):
     ''' Apply any patches after the load is installed.
     '''
@@ -1013,7 +1069,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
 
     controller0.ssh_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
 
-     # Apply patches if patch dir is not none
+    # Apply patches if patch dir is not none
 
     if patch_dir_paths is not None:
         apply_patches(controller0, bld_server_conn, patch_dir_paths)
@@ -1096,12 +1152,16 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
     controller0.ssh_conn.exec_cmd("source " + WRSROOT_HOME_DIR + "/.bashrc")
 
 
-def configureController(bld_server_conn, host_os, install_output_dir):
+def configureController(bld_server_conn, host_os, install_output_dir, banner):
     # Configure the controller as required
     global controller0
     if controller0.telnet_conn is None:
         controller0.telnet_conn = open_telnet_session(controller0, install_output_dir)
         controller0.telnet_conn.login()
+
+    # Apply banner if specified by user
+    if banner == 'before' and host_os == 'centos':
+        apply_banner(controller0, banner)
 
     # No consistency in naming of config file naming
     pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
@@ -1148,6 +1208,12 @@ def configureController(bld_server_conn, host_os, install_output_dir):
         msg = "Configuration failed: No configuration files found"
         log.error(msg)
         wr_exit()._exit(1, msg)
+
+    # Apply banner if specified by the user
+    if banner == 'after' and host_os == 'centos':
+        apply_banner(controller0, banner)
+
+    return
 
 def bulkAddHosts():
     # Run host bulk add
@@ -1425,9 +1491,13 @@ def main():
 
     host_os = args.host_os
 
+    stop = args.stop
+
     override = args.override
 
-    bld_server = args.bld_server + HOST_EXT
+    banner = args.banner
+
+    bld_server = args.bld_server
 
     bld_server_wkspce = args.bld_server_wkspce
 
@@ -1496,7 +1566,11 @@ def main():
 
     logutils.print_name_value("Host OS", host_os)
 
+    logutils.print_name_value("Stop", stop)
+
     logutils.print_name_value("Override", override)
+
+    logutils.print_name_value("Banner", banner)
 
     email_info = {}
     email_info['email_server'] = EMAIL_SERVER
@@ -1527,7 +1601,7 @@ def main():
         lab_cfg_path, lab_settings_filepath = verify_lab_cfg_location(bld_server_conn,
                                                   lab_cfg_location, load_path,
                                                   host_os, override,
-                                                  guest_load_path)
+                                                  guest_load_path, banner)
 
     if lab_settings_filepath:
         log.info("Lab settings file path: " + lab_settings_filepath)
@@ -1602,7 +1676,8 @@ def main():
 
     executed = False
     # Lab-install Step 0 -  boot controller from tuxlab or usb or cumulus
-    lab_install_step = install_step("Set_up_network_feed", 0, ['regular', 'storage', 'cpe'])
+    msg = 'Set_up_network_feed'
+    lab_install_step = install_step(msg, 0, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
     #if not executed:
         if str(boot_device_dict.get('controller-0')) != "USB" \
@@ -1638,7 +1713,11 @@ def main():
         for thread in threads:
             thread.join()
 
+    if stop == "0":
+        wr_exit()._exit(0, "User requested stop after {}".format(msg))
+
     # Lab-install Step 1 -  boot controller from tuxlab or usb or cumulus
+    msg = 'boot_controller-0'
     lab_install_step = install_step("boot_controller-0", 1, ['regular', 'storage', 'cpe'])
 
     executed = False
@@ -1648,8 +1727,12 @@ def main():
                           boot_device_dict, small_footprint, burn_usb, tis_on_tis)
         set_install_step_complete(lab_install_step)
 
+    if stop == "1":
+        wr_exit()._exit(0, "User requested stop after {}".format(msg))
+
     # Lab-install Step 2 -  Download lab configuration files - applicable all lab types
-    lab_install_step = install_step("Download_lab_config_files", 2, ['regular', 'storage', 'cpe'])
+    msg = 'Download_lab_config_files'
+    lab_install_step = install_step(msg, 2, ['regular', 'storage', 'cpe'])
 
     #establish ssh connection if not connected
     if controller0.ssh_conn is None:
@@ -1663,12 +1746,15 @@ def main():
                            lab_cfg_location)
         set_install_step_complete( lab_install_step)
 
+    if stop == "2":
+        wr_exit()._exit(0, "User requested stop after {}".format(msg))
 
     # Lab-install Step 3 -  Configure Controller - applicable all lab types
-    lab_install_step = install_step("Configure_controller", 3, ['regular', 'storage', 'cpe'])
+    msg = 'Configure_controller'
+    lab_install_step = install_step(msg, 3, ['regular', 'storage', 'cpe'])
 
     if do_next_install_step(lab_type, lab_install_step):
-        configureController(bld_server_conn, host_os, install_output_dir)
+        configureController(bld_server_conn, host_os, install_output_dir, banner)
         set_install_step_complete( lab_install_step)
 
 
@@ -1681,13 +1767,22 @@ def main():
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
 
+    if stop == "3":
+        wr_exit()._exit(0, "User requested stop after {}".format(msg))
+
     # Lab-install Step 4 -  Bulk hosts add- applicable all lab types
+    msg = 'bulk_hosts_add'
     lab_install_step = install_step("bulk_hosts_add", 4, ['regular', 'storage', 'cpe'])
 
     if do_next_install_step(lab_type, lab_install_step):
         if not tis_on_tis:
             bulkAddHosts()
             set_install_step_complete( lab_install_step)
+
+    if stop == "4":
+        wr_exit()._exit(0, "User requested stop after {}".format(msg))
+
+    # Lab-install Step 4 -  Bulk hosts add- applicable all lab types
 
     # Complete controller0 configuration either as a regular host
     # or a small footprint host.
