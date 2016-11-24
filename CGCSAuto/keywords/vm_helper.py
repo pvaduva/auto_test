@@ -5,16 +5,19 @@ from contextlib import contextmanager
 
 from pexpect import TIMEOUT as ExpectTimeout
 
-from consts.auth import Tenant, SvcCgcsAuto
-from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
-    VMNetworkStr
-from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
-from consts.proj_vars import ProjVar
-from consts.timeout import VMTimeout, CMDTimeout
-from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
 from utils.tis_log import LOG
+
+from consts.auth import Tenant, SvcCgcsAuto
+from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
+    VMNetworkStr, EventLogID
+from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
+from consts.proj_vars import ProjVar
+from consts.timeout import VMTimeout, CMDTimeout
+
+
+from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 
 
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
@@ -1899,10 +1902,8 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
                 elif 'rename' in eth_name:
                     LOG.warning("Retry {}: non-existing interface {} found on pci-passthrough nic in vm {}, "
                                 "reboot vm to try to recover".format(i + 1, eth_name, vm_id))
-                    sudo_reboot_from_vm(vm_ssh=vm_ssh)
-
-                    _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=False)
-                    wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
+                    sudo_reboot_from_vm(vm_id=vm_id, vm_ssh=vm_ssh)
+                    wait_for_vm_pingable_from_natbox(vm_id)
                     break
 
                 else:
@@ -1951,11 +1952,22 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
         raise exceptions.VMNetworkError("pci-passthrough interface(s) not found in vm {}".format(vm_id))
 
 
-def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
+def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True, con_ssh=None):
+
+    if check_host_unchanged:
+        pre_vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+
+    LOG.info("Initiate sudo reboot from vm")
+
     def _sudo_reboot(vm_ssh_):
-        vm_ssh_.exec_sudo_cmd('reboot')
+        code, output = vm_ssh_.exec_sudo_cmd('reboot')
+        expt_string = 'The system is going down for reboot'
+        if expt_string in output:
+            # Sometimes system rebooting msg will be displayed right after reboot cmd sent
+            vm_ssh_.parent.flush()
+            return
         try:
-            index = vm_ssh_.expect(['The system is going down for reboot', vm_ssh.prompt], timeout=60)
+            index = vm_ssh_.expect([expt_string, vm_ssh.prompt], timeout=60)
             if index == 1:
                 raise exceptions.VMOperationFailed("Unable to reboot vm {}")
             vm_ssh_.parent.flush()
@@ -1965,12 +1977,22 @@ def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
             raise
 
     if not vm_ssh:
-            if not vm_id:
-                raise ValueError("vm_id or vm_ssh needs to be provided")
-            with ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-                _sudo_reboot(vm_ssh)
+        with ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+            _sudo_reboot(vm_ssh)
     else:
         _sudo_reboot(vm_ssh)
+
+    LOG.info("sudo vm reboot initiated - wait for reboot completes and VM reaches active state")
+    system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, strict=False, fail_ok=False, con_ssh=con_ssh
+                                  **{'Entity Instance ID': vm_id,
+                                     'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
+    _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=False, con_ssh=con_ssh)
+
+    if check_host_unchanged:
+        post_vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+        if not pre_vm_host == post_vm_host:
+            raise exceptions.HostError("VM host changed from {} to {} after sudo reboot vm".format(
+                    pre_vm_host, post_vm_host))
 
 
 def get_proc_nums_from_vm(vm_ssh):
