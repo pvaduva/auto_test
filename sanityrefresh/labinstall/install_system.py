@@ -144,6 +144,14 @@ def parse_args():
                          choices=HOST_OS, default=DEFAULT_HOST_OS,
                          help="Centos or wrlinux based install")
 
+    lab_grp.add_argument('--stop', dest='stop', default='99',
+                         help="Integer value that represents when to stop the install\n"
+                         "0 - Stop after setting up network feed\n"
+                         "1 - Stop after booting controller-0\n"
+                         "2 - Stop after downloading config files\n"
+                         "3 - Stop after running config controller\n"
+                         "4 - Stop after running host bulk add\n")
+
     # Grab the latest configuration files
     lab_grp.add_argument('--override', dest='override',
                          choices=['yes', 'no'], default='no',
@@ -175,7 +183,7 @@ def parse_args():
                                         -> hosts_bulk_add.xml'''))
     bld_grp = parser.add_argument_group("Build server and paths")
     bld_grp.add_argument('--build-server', metavar='SERVER',
-                         dest='bld_server', choices=BLD_SERVERS,
+                         dest='bld_server',
                          default=DEFAULT_BLD_SERVER,
                          help="Titanium Server build server"
                          " host name\n(default: %(default)s)")
@@ -1483,11 +1491,13 @@ def main():
 
     host_os = args.host_os
 
+    stop = args.stop
+
     override = args.override
 
     banner = args.banner
 
-    bld_server = args.bld_server + HOST_EXT
+    bld_server = args.bld_server
 
     bld_server_wkspce = args.bld_server_wkspce
 
@@ -1555,6 +1565,8 @@ def main():
     logutils.print_name_value("Log level", log_level)
 
     logutils.print_name_value("Host OS", host_os)
+
+    logutils.print_name_value("Stop", stop)
 
     logutils.print_name_value("Override", override)
 
@@ -1664,7 +1676,8 @@ def main():
 
     executed = False
     # Lab-install Step 0 -  boot controller from tuxlab or usb or cumulus
-    lab_install_step = install_step("Set_up_network_feed", 0, ['regular', 'storage', 'cpe'])
+    msg = 'Set_up_network_feed'
+    lab_install_step = install_step(msg, 0, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
     #if not executed:
         if str(boot_device_dict.get('controller-0')) != "USB" \
@@ -1700,7 +1713,11 @@ def main():
         for thread in threads:
             thread.join()
 
+    if stop == "0":
+        wr_exit()._exit(0, "User requested stop after {}".format(msg))
+
     # Lab-install Step 1 -  boot controller from tuxlab or usb or cumulus
+    msg = 'boot_controller-0'
     lab_install_step = install_step("boot_controller-0", 1, ['regular', 'storage', 'cpe'])
 
     executed = False
@@ -1710,8 +1727,12 @@ def main():
                           boot_device_dict, small_footprint, burn_usb, tis_on_tis)
         set_install_step_complete(lab_install_step)
 
+    if stop == "1":
+        wr_exit()._exit(0, "User requested stop after {}".format(msg))
+
     # Lab-install Step 2 -  Download lab configuration files - applicable all lab types
-    lab_install_step = install_step("Download_lab_config_files", 2, ['regular', 'storage', 'cpe'])
+    msg = 'Download_lab_config_files'
+    lab_install_step = install_step(msg, 2, ['regular', 'storage', 'cpe'])
 
     #establish ssh connection if not connected
     if controller0.ssh_conn is None:
@@ -1725,8 +1746,12 @@ def main():
                            lab_cfg_location)
         set_install_step_complete( lab_install_step)
 
+    if stop == "2":
+        wr_exit()._exit(0, "User requested stop after {}".format(msg))
+
     # Lab-install Step 3 -  Configure Controller - applicable all lab types
-    lab_install_step = install_step("Configure_controller", 3, ['regular', 'storage', 'cpe'])
+    msg = 'Configure_controller'
+    lab_install_step = install_step(msg, 3, ['regular', 'storage', 'cpe'])
 
     if do_next_install_step(lab_type, lab_install_step):
         configureController(bld_server_conn, host_os, install_output_dir, banner)
@@ -1742,13 +1767,22 @@ def main():
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
 
+    if stop == "3":
+        wr_exit()._exit(0, "User requested stop after {}".format(msg))
+
     # Lab-install Step 4 -  Bulk hosts add- applicable all lab types
+    msg = 'bulk_hosts_add'
     lab_install_step = install_step("bulk_hosts_add", 4, ['regular', 'storage', 'cpe'])
 
     if do_next_install_step(lab_type, lab_install_step):
         if not tis_on_tis:
             bulkAddHosts()
             set_install_step_complete( lab_install_step)
+
+    if stop == "4":
+        wr_exit()._exit(0, "User requested stop after {}".format(msg))
+
+    # Lab-install Step 4 -  Bulk hosts add- applicable all lab types
 
     # Complete controller0 configuration either as a regular host
     # or a small footprint host.
