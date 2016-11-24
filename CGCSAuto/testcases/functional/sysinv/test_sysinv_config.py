@@ -22,14 +22,11 @@ def repeat_checking(repeat_times=20, wait_time=6):
         def wrapped_func(*args, **kwargs):
             cnt = 0
             while cnt < repeat_times:
-                code, output = func(args, kwargs)
-                LOG.info('repeating checking {} times, got {}'.format(cnt+1, output))
-                if code == 0:
-                    LOG.info('repeating checking {} times, OK, got {}'.format(cnt+1, output))
-                    return code, output
                 cnt += 1
+                code, output = func(*args, **kwargs)
+                if code == 0:
+                    return code, output
                 time.sleep(wait_time)
-            LOG.info('repeating checking {} times, FAIL, got {}'.format(cnt, output))
             return -1, output
 
         return wrapped_func
