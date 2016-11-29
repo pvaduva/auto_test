@@ -124,8 +124,8 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
 
     # Fixme: Add back after FC
     # Remove detailed error message checking as error messages seem to change often and will break tests
-    # assert eval(expt_err) in output, "Expected error message {} is not in actual error message: {}".\
-    #     format(eval(expt_err), output)
+    assert eval(expt_err) in output, "Expected error message {} is not in actual error message: {}".\
+        format(eval(expt_err), output)
 
     post_vm_host = nova_helper.get_vm_host(vm_id)
     assert prev_vm_host == post_vm_host, "VM host changed even though live migration request rejected."
