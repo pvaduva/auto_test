@@ -140,7 +140,7 @@ def delete_request(url, headers):
         Returns (dict): The response for the request
 
         """
-    LOG.info("Sending POST request to {}. Headers: {}".format(url, headers))
+    LOG.info("Sending DELETE request to {}. Headers: {}".format(url, headers))
     resp = requests.delete(url, headers=headers)
 
     if resp.status_code == requests.codes.ok:
