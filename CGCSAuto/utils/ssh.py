@@ -1,5 +1,6 @@
 import os
 import re
+import threading
 import time
 from contextlib import contextmanager
 
@@ -899,29 +900,50 @@ class NATBoxClient:
         Returns (SSHClient): natbox ssh client
 
         """
+        curr_thread = threading.current_thread()
+        idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
         if not natbox_ip:
             num_natbox = len(cls.__natbox_ssh_map)
             if num_natbox == 0:
                 raise exceptions.NatBoxClientUnsetException
-            elif num_natbox == 1:
-                return list(cls.__natbox_ssh_map.values())[0]
-            else:
-                for ip in cls.__natbox_ssh_map:
-                    LOG.warning("More than one natbox clients available, returning the first one found: {}".format(ip))
-                    return cls.__natbox_ssh_map[ip]
 
-        return cls.__natbox_ssh_map[natbox_ip]   # KeyError will be thrown if not exist
+            if not NatBoxes.NAT_BOX_HW['ip'] in cls.__natbox_ssh_map:
+                LOG.warning("More than one natbox client available, returning the first one found.")
+                for ip in cls.__natbox_ssh_map:
+                    if not len(cls.__natbox_ssh_map[ip]) < idx:
+                        return cls.__natbox_ssh_map[ip][idx]
+                raise exceptions.NatBoxClientUnsetException
+            else:
+                natbox_ip = NatBoxes.NAT_BOX_HW['ip']
+
+        return cls.__natbox_ssh_map[natbox_ip][idx]   # KeyError will be thrown if not exist
 
     @classmethod
     def set_natbox_client(cls, natbox_ip=NatBoxes.NAT_BOX_HW['ip']):
         for natbox in cls.__natbox_list:
             ip = natbox['ip']
             if ip == natbox_ip.strip():
+                curr_thread = threading.current_thread()
+                idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
                 user = natbox['user']
                 nat_ssh = SSHClient(ip, user, natbox['password'], initial_prompt=user + cls._PROMPT)
-                nat_ssh.connect()
+                nat_ssh.connect(use_current=False)
                 nat_ssh.exec_cmd(cmd='TMOUT=0')
-                cls.__natbox_ssh_map[ip] = nat_ssh
+
+                if ip not in cls.__natbox_ssh_map:
+                    cls.__natbox_ssh_map[ip] = []
+
+                if len(cls.__natbox_ssh_map[ip]) == idx:
+                    cls.__natbox_ssh_map[ip].append(nat_ssh)
+                elif len(cls.__natbox_ssh_map[ip]) > idx:
+                    cls.__natbox_ssh_map[ip][idx] = nat_ssh
+                else:
+                    new_ssh = SSHClient(ip, user, natbox['password'], initial_prompt=user + cls._PROMPT)
+                    new_ssh.connect(use_current=False)
+                    while len(cls.__natbox_ssh_map[ip]) < idx:
+                        cls.__natbox_ssh_map[ip].append(new_ssh)
+                    cls.__natbox_ssh_map[ip].append(nat_ssh)
+
                 LOG.info("NatBox {} ssh client is set".format(ip))
                 return nat_ssh
 
@@ -934,12 +956,12 @@ class ControllerClient:
     # Each entry is a lab dictionary such as Labs.VBOX. For newly created dict entry, 'name' must be provided.
     __lab_attr_list = [attr for attr in dir(Labs) if not attr.startswith('__')]
     __lab_list = [getattr(Labs, attr) for attr in __lab_attr_list]
-    __lab_ssh_map = {}     # item such as 'PV0': con_ssh
+    __lab_ssh_map = {}     # item such as 'PV0': [con_ssh, ...]
 
     @classmethod
     def get_active_controller(cls, lab_name=None, fail_ok=False):
         """
-
+        Attempt to match given lab or current lab, otherwise return first ssh
         Args:
             lab_name: The lab dictionary name in Labs class, such as 'PV0', 'HP380'
             fail_ok: when True: return None if no active controller was set
@@ -948,21 +970,33 @@ class ControllerClient:
 
         """
         if not lab_name:
-            # LOG.debug("No lab name specified. Getting the active controller ssh client if one is set.")
+            lab_dict = ProjVar.get_var('lab')
+            for lab_ in cls.__lab_list:
+                if lab_dict['floating ip'] == lab_['floating ip']:
+                    lab_name = lab_['short_name']
+                    break
+            else:
+                lab_name = 'no_name'
+
+        curr_thread = threading.current_thread()
+        idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
+        for lab_ in cls.__lab_ssh_map:
+            if lab_ == lab_name.lower():
+                LOG.debug("Getting active controller client for {}".format(lab_))
+                controller_ssh = cls.__lab_ssh_map[lab_][idx]
+                if isinstance(controller_ssh, SSHClient):
+                    return controller_ssh
+
+        if not lab_name:
+            LOG.debug("No lab ssh matched. Getting an active controller ssh client if one is set.")
             controllers = cls.get_active_controllers(fail_ok=fail_ok)
             if len(controllers) == 0:
                 return None
             if len(controllers) > 1:
-                LOG.warning("Multiple active controller sessions available. Returning the first one.")
-            # LOG.debug("ssh client for {} returned".format(controllers[0].host))
-            return controllers[0]
+                LOG.warning("Multiple active controller sessions available. Returning the one for this thread.")
+                LOG.debug("ssh client for {} returned".format(controllers[0].host))
+                return controllers[0]
 
-        for lab_ in cls.__lab_ssh_map:
-            if lab_ == lab_name.lower():
-                LOG.debug("Getting active controller client for {}".format(lab_))
-                controller_ssh = cls.__lab_ssh_map[lab_]
-                if isinstance(controller_ssh, SSHClient):
-                    return controller_ssh
         if fail_ok:
             return None
         raise exceptions.ActiveControllerUnsetException(("The lab_name provided - {} does not have a corresponding "
@@ -1009,7 +1043,27 @@ class ControllerClient:
         else:
             lab_name_ = 'no_name'
 
-        cls.__lab_ssh_map[lab_name_] = ssh_client
+        # new lab or ip address
+        if lab_name_ not in cls.__lab_ssh_map:
+            cls.__lab_ssh_map[lab_name_] = []
+
+        curr_thread = threading.current_thread()
+        idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
+        # set ssh for new lab
+        if len(cls.__lab_ssh_map[lab_name_]) == idx:
+            cls.__lab_ssh_map[lab_name_].append(ssh_client)
+        # change existing ssh
+        elif len(cls.__lab_ssh_map[lab_name_]) > idx:
+            cls.__lab_ssh_map[lab_name_][idx] = ssh_client
+        # fill with copy of new ssh session until list is correct length
+        # (only when a different lab or ip address has also been added)
+        else:
+            new_ssh = SSHClient(ssh_client.host, ssh_client.user, ssh_client.password)
+            new_ssh.connect(use_current=False)
+            while len(cls.__lab_ssh_map[lab_name_]) < idx:
+                cls.__lab_ssh_map[lab_name_].append(new_ssh)
+            cls.__lab_ssh_map[lab_name_].append(ssh_client)
+
         LOG.info("Active controller client for {} is set. Host ip/name: {}".format(lab_name_.upper(), ssh_client.host))
 
     @classmethod

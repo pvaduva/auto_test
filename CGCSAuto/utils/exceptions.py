@@ -155,3 +155,7 @@ class KeystoneError(TiSError):
 
 class BuildServerError(TiSError):
     message = "Build Server error."
+
+
+class ThreadingError(TiSError):
+    message = "Multi threading error."

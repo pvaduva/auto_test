@@ -1,5 +1,6 @@
 import logging
 import os
+import threading    # Used for formatting logger
 from time import strftime, gmtime
 
 import pytest   # Don't remove. Used in eval
@@ -313,12 +314,12 @@ def config_logger(log_dir):
     # logger for log saved in file
     file_name = log_dir + '/TIS_AUTOMATION.log'
     logging.Formatter.converter = gmtime
-    formatter_file = "'[%(asctime)s] %(lineno)-4d%(levelname)-5s %(filename)-10s %(funcName)-10s:: %(message)s'"
+    formatter_file = "'[%(asctime)s] %(lineno)-4d%(levelname)-5s %(threadName)-8s %(filename)-10s %(funcName)-10s:: %(message)s'"
     logging.basicConfig(level=logging.NOTSET, format=formatter_file, filename=file_name, filemode='w')
 
     # logger for stream output
     stream_hdler = logging.StreamHandler()
-    formatter_stream = logging.Formatter('[%(asctime)s] %(lineno)-4d%(levelname)-5s %(module)s.%(funcName)-8s:: %(message)s')
+    formatter_stream = logging.Formatter('[%(asctime)s] %(lineno)-4d%(levelname)-5s %(threadName)-8s %(module)s.%(funcName)-8s:: %(message)s')
     stream_hdler.setFormatter(formatter_stream)
     stream_hdler.setLevel(logging.INFO)
     LOG.addHandler(stream_hdler)
