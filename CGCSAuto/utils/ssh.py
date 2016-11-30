@@ -25,6 +25,8 @@ COMPUTE_PROMPT = Prompt.COMPUTE_PROMPT
 PASSWORD_PROMPT = Prompt.PASSWORD_PROMPT
 ROOT_PROMPT = Prompt.ROOT_PROMPT
 CONNECTION_REFUSED = '.*Connection refused.*'
+AUTHORIZED_KEYS_FPATH = "~/.ssh/authorized_keys"
+
 
 _SSH_OPTS = (' -o RSAAuthentication=no' + ' -o PubkeyAuthentication=no' + ' -o StrictHostKeyChecking=no' +
              ' -o UserKnownHostsFile=/dev/null')
@@ -117,6 +119,7 @@ class SSHClient:
                 self._session.SSH_OPTS = _SSH_OPTS
                 self._session.force_password = self.force_password
                 self.logpath = self.__get_logpath()
+
                 self._session.logfile = open(self.logpath, 'w+')
 
                 # Login
@@ -230,6 +233,7 @@ class SSHClient:
 
         LOG.debug("Command sent successfully")
         self.cmd_sent = cmd
+
         return str(rtn)
 
     def flush(self, timeout=3):
@@ -296,7 +300,6 @@ class SSHClient:
         before_str = self._parse_output(self._session.before)
         after_str = self._parse_output(self._session.after)
         output = before_str + after_str
-
         if not self.cmd_sent == '':
             output_list = output.split('\r\n')
             output_list[0] = ''        # do not display the sent command
@@ -309,7 +312,6 @@ class SSHClient:
         self.cmd_sent = ''              # Make sure sent line is only removed once
 
         self.cmd_output = output
-
         extra_str = ''        # extra logging info
         if not exit_cmd and len(blob_list) > 1:
             extra_str = ' for \'{}\''.format(blob_list[index])
@@ -356,6 +358,7 @@ class SSHClient:
         return code, output
 
     def __process_exec_result(self, cmd, rm_date=True):
+
         cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
         # LOG.debug("cmd output list: {}".format(cmd_output_list))
         # cmd_output_list[0] = ''                                       # exclude command, already done in expect
@@ -405,7 +408,7 @@ class SSHClient:
             pre_opts = ''
 
         ssh_opts = 'ssh {}'.format(' '.join(RSYNC_SSH_OPTIONS))
-        cmd = "{} rsync -ave {} {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
+        cmd = "{} rsync -avre \"{}\" {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
         self.send(cmd)
         index = self.expect([self.prompt, PASSWORD_PROMPT], timeout=timeout)
@@ -559,6 +562,15 @@ class SSHClient:
 
         else:
             return False
+
+    def deploy_ssh_key(self, ssh_key=None):
+        if ssh_key:
+            self.exec_cmd("mkdir -p ~/.ssh/")
+            cmd = 'grep -q "{}" {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH)
+            if self.exec_cmd(cmd) != 0:
+                LOG.info("Adding public key to {}".format(AUTHORIZED_KEYS_FPATH))
+                self.exec_cmd('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
+                self.exec_cmd("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
 
 
 class SSHFromSSH(SSHClient):

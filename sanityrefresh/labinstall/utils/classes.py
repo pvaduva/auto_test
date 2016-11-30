@@ -79,7 +79,7 @@ class SystemLab(object):
         self.software_version = ''
         self.computes = None
         self.storages = None
-
+        self.ssh_conn = None
 
         for key in kwargs:
             setattr(self, key, kwargs[key])

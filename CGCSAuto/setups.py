@@ -5,7 +5,7 @@ import configparser
 from utils import exceptions
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
-
+from utils.lab_info import create_node_boot_dict, create_node_dict
 from consts.auth import Tenant, CliAuth
 from consts.cgcs import Prompt
 from consts.filepaths import PrivKeyPath
@@ -148,7 +148,7 @@ def get_lab_dict(labname):
     labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
 
     for lab in labs:
-        if labname in lab['name'].replace('-', '_').lower().strip() \
+        if 'name' in lab and labname in lab['name'].replace('-', '_').lower().strip() \
                 or labname == lab['short_name'].replace('-', '_').lower().strip() \
                 or labname == lab['floating ip']:
             return lab
@@ -350,6 +350,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path):
     lab_setup = None
     heat_templates = None
     license_path = None
+    out_put_dir = None
 
     if installconf_path:
         installconf = configparser.ConfigParser()
@@ -425,11 +426,27 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path):
         if conf_heat_templates:
             heat_templates = conf_heat_templates
 
+    else:
+        lab_to_install = get_lab_dict(lab)
+
     if not lab_to_install.get('controller-0 ip', None):
         errors.append('Controller-0 ip has to be provided for custom lab')
 
     if errors:
         raise ValueError("Install param error(s): {}".format(errors))
+
+    # compute directory for all logs based on lab, and timestamp on local machine
+    out_put_dir = "/tmp/output_" + lab_to_install['name'] + '/' + time.strftime("%Y%m%d-%H%M%S")
+
+    # add nodes dictionary
+    lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller'))
+    if 'compute_nodes' in lab_to_install:
+        lab_to_install.update( create_node_dict(lab_to_install['compute_nodes'], 'compute'))
+    if 'storage_nodes' in lab_to_install:
+        lab_to_install.update(create_node_dict(lab_to_install['storage_nodes'], 'storage'))
+
+    lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
+
 
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume, skip_labsetup=skip_labsetup,
                                  build_server=build_server,
@@ -442,4 +459,5 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path):
                                  lab_setup=lab_setup,
                                  heat_templates=heat_templates,
                                  license_path=license_path,
+                                 out_put_dir=out_put_dir,
                                  )

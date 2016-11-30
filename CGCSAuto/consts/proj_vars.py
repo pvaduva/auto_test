@@ -1,3 +1,4 @@
+import getpass
 from consts.filepaths import BuildServerPath
 
 class ProjVar:
@@ -23,7 +24,8 @@ class ProjVar:
             'COLLECT_ALL': collect_all,
             'REPORT_ALL': report_all,
             'REPORT_TAG': report_tag,
-            'OPENSTACK_CLI': openstack_cli
+            'OPENSTACK_CLI': openstack_cli,
+            'SOURCE_ADMIN': False
         }
 
     @classmethod
@@ -57,7 +59,9 @@ class InstallVars:
                          tis_config=None,
                          lab_setup=None,
                          heat_templates=None,
-                         license_path=None):
+                         license_path=None,
+                         out_put_dir=None):
+
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
 
@@ -88,7 +92,8 @@ class InstallVars:
             'LICENSE': license_path if license_path else BuildServerPath.DEFAULT_LICENSE_PATH,
             'GUEST_IMAGE': guest_image if guest_image else BuildServerPath.DEFAULT_GUEST_IMAGE_PATH,
             'HEAT_TEMPLATES': heat_templates if heat_templates else BuildServerPath.HEAT_TEMPLATES,
-
+            'OUT_PUT_DIR': out_put_dir,
+            'BUILD_ID': None,
         }
 
     @classmethod
@@ -116,3 +121,69 @@ class InstallVars:
             raise ValueError("Invalid var_name. Valid vars: {}".format(valid_vars))
 
         return cls.__var_dict[var_name]
+
+
+    @classmethod
+    def get_install_vars(cls):
+        return cls.__var_dict
+
+
+class UpgradeVars:
+
+    _var_dict = {}
+    __upgrade_steps = {}
+
+    @classmethod
+    def set_upgrade_vars(cls, build_server=None,
+                         tis_build_dir=None,
+                         upgrade_version=None,
+                         upgrade_license_path=None):
+
+        __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
+
+        cls.__var_dict = {
+
+            # TIS BUILD info
+            'BUILD_SERVER': __build_server,
+            'TIS_BUILD_DIR': tis_build_dir if tis_build_dir else BuildServerPath.DEFAULT_HOST_BUILD_PATH,
+
+            # Generic
+            'UPGRADE_LICENSE': upgrade_license_path,
+            'UPGRADE_VERSION': upgrade_version,
+
+            #User/password to build server
+            "USERNAME": getpass.getuser(),
+            "PASSWORD": getpass.getpass(),
+        }
+
+    @classmethod
+    def set_upgrade_status(cls, **steps):
+        for key, value in steps.items():
+            cls.__upgrade_steps[key.upper()] = value
+
+    @classmethod
+    def get_upgrade_status(cls, step=None):
+        if step is None:
+            return cls.__upgrade_steps
+
+        return cls.__upgrade_steps[step]
+
+    @classmethod
+    def set_upgrade_var(cls, **kwargs):
+        for key, val in kwargs.items():
+            print("Key: {} Value: {}".format(key, val))
+            cls.__var_dict[key.upper()] = val
+
+    @classmethod
+    def get_upgrade_var(cls, var_name):
+        var_name = var_name.upper()
+        valid_vars = cls.__var_dict.keys()
+        if var_name not in valid_vars:
+            raise ValueError("Invalid var_name. Valid vars: {}".format(valid_vars))
+
+        return cls.__var_dict[var_name]
+
+
+    @classmethod
+    def get_upgrade_vars(cls):
+        return cls.__var_dict

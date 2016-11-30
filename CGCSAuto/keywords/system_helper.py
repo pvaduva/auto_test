@@ -126,7 +126,7 @@ def _get_nodes(con_ssh=None):
     return nodes
 
 
-def get_active_controller_name(con_ssh=None):
+def get_active_controller_name(con_ssh=None, source_auth_info=False):
     """
     This assumes system has 1 active controller
     Args:
@@ -135,7 +135,7 @@ def get_active_controller_name(con_ssh=None):
     Returns: hostname of the active controller
         Further info such as ip, uuid can be obtained via System.CONTROLLERS[hostname]['uuid']
     """
-    return _get_active_standby(controller='active', con_ssh=con_ssh)[0]
+    return _get_active_standby(controller='active', con_ssh=con_ssh, source_auth_info=source_auth_info)[0]
 
 
 def get_standby_controller_name(con_ssh=None):
@@ -151,7 +151,7 @@ def get_standby_controller_name(con_ssh=None):
     return '' if len(standby) == 0 else standby[0]
 
 
-def _get_active_standby(controller='active', con_ssh=None):
+def _get_active_standby(controller='active', con_ssh=None, source_auth_info=False):
     table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh))
     table_ = table_parser.filter_table(table_, service_group_name='controller-services')
     controllers = table_parser.get_values(table_, 'hostname', state=controller, strict=False)
@@ -1270,6 +1270,48 @@ def get_host_ports_for_net_type(host, net_type='data', rtn_list=True, con_ssh=No
 
     return total_ports
 
+def get_host_port_pci_address(host, interface, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        host:
+        interface:
+        con_ssh:
+        auth_info:
+
+    Returns: pci address of interface
+
+    """
+    table_ = table_parser.table(cli.system('host-port-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
+    pci_addresses = table_parser.get_values(table_, 'pci address', name=interface)
+
+    pci_address = pci_addresses.pop()
+
+    LOG.info("pci address of interface {} for host is: {}".format(interface, pci_address))
+
+    return pci_address
+
+def get_host_port_pci_address_for_net_type(host, net_type='mgmt', rtn_list=True, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        host:
+        net_type:
+        rtn_list:
+        con_ssh:
+        auth_info:
+
+    Returns:
+
+    """
+    ports = get_host_ports_for_net_type(host, net_type=net_type, rtn_list=rtn_list, con_ssh=con_ssh, auth_info=auth_info)
+    pci_addresses = []
+    for port in ports:
+        pci_address = get_host_port_pci_address(host, port, con_ssh=con_ssh, auth_info=auth_info)
+        pci_addresses.append(pci_address)
+
+    return pci_addresses
+
 
 def get_host_if_show_values(host, interface, fields, con_ssh=None, auth_info=Tenant.ADMIN):
     args = "{} {}".format(host, interface)
@@ -1300,3 +1342,258 @@ def get_hosts_interfaces_info(hosts, fields, con_ssh=None, auth_info=Tenant.ADMI
         res[host] = host_res
 
     return res
+
+
+def are_hosts_unlocked(con_ssh=None):
+
+    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
+    return  "locked" not in (table_parser.get_column(table_, 'administrative'))
+
+
+def get_system_health_query_upgrade(con_ssh=None):
+
+    output = (cli.system('health-query-upgrade', ssh_client=con_ssh)).splitlines()
+    failed = {}
+    ok = {}
+    for line in output:
+        if ":" in line:
+            k, v = line.split(":")
+            if v.strip() is "[OK]":
+                ok[k.strip()] = v.strip()
+            elif v.strip() is "[Failed]":
+                failed[k.strip()] = v.strip()
+    if len(failed) > 0:
+        return 1, failed
+    else:
+        return 0, None
+
+def system_upgrade_start(con_ssh=None):
+    """
+
+    Args:
+        con_ssh:
+
+    Returns (tuple):
+        (0, output)
+        (1, <stderr>)   # cli returns stderr.
+        (2, "upgrade-start rejected: An upgrade is already in progress."
+
+    """
+
+    rc, output = cli.system("upgrade-start", fail_ok=True, ssh_client=con_ssh)
+
+    if rc == 0:
+        LOG.info("system upgrade-start ran successfully.")
+        return 0, output
+
+    else:
+        if "An upgrade is already in progress" in output:
+            # upgrade already in progress
+            LOG.warning("Upgrade is already in progress. No need to start")
+            return 2, output
+        else:
+            return 1, output
+
+
+def system_upgrade_show(con_ssh=None):
+
+    """
+
+    Args:
+        con_ssh:
+
+    Returns (tuple):
+        (0, dict/list)
+        (1, <stderr>)   # cli returns stderr.
+
+    """
+
+    rc, output = cli.system("upgrade-show", fail_ok=True, ssh_client=con_ssh)
+
+    if rc == 0:
+        return rc, table_parser.table(output)
+    else:
+        return rc, output
+
+
+def activate_upgrade(con_ssh=None):
+    rc, output = cli.system('upgrade-activate', ssh_client=con_ssh, fail_ok=True, rtn_list=True)
+    if rc != 0:
+        return rc, output
+
+    if not wait_for_alarm_gone("250.001", con_ssh=con_ssh, timeout=900, check_interval=60, fail_ok=True):
+
+        alarms = get_alarms( alarm_id="250.001")
+        message = "Alarms not cleared: {}".format(alarms)
+        return 1, message
+
+    if not wait_for_upgrade_activate_complete(fail_ok=True):
+        message = "Upgrade activate failed"
+        return 1, message
+
+    return 0, "Upgrade activation complete"
+
+
+def get_hosts_upgrade_status(con_ssh=None):
+    return table_parser.table(cli.system('host-upgrade-list', ssh_client=con_ssh))
+
+
+def get_upgrade_state(con_ssh=None):
+
+    output = cli.system('upgrade-show', ssh_client=con_ssh)
+
+    if ("+" and "-" and "|") in output:
+        table_ = table_parser.table(output)
+        table_ = table_parser.filter_table(table_, Property="state")
+        return table_parser.get_column(table_, "Value")
+    else:
+        return output
+
+
+def wait_for_upgrade_activate_complete(timeout=300, check_interval=60, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        upgrade_state = get_upgrade_state()
+        if "activation-complete" in upgrade_state:
+            LOG.info('Upgrade activation-complete')
+            return True
+
+        time.sleep(check_interval)
+
+    err_msg = "Upgrade activation did not complete after waiting for {} seconds. Current state is {}".format(timeout, upgrade_state)
+    if fail_ok:
+        LOG.warning(err_msg)
+        return False, None
+    raise exceptions.TimeoutException(err_msg)
+
+
+def complete_upgrade(con_ssh=None):
+    rc, output = cli.system('upgrade_complete', ssh_client=con_ssh, fail_ok=True, rtn_list=True)
+    if rc != 0:
+        return rc, output
+    return 0, "Upgrade  complete"
+
+def is_patch_current(con_ssh=None):
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    output = con_ssh.exec_cmd('system health-query')[1]
+
+    patch_line = [l for l in output.splitlines() if "patch" in l]
+    return ('OK' in patch_line.pop())
+
+
+def source_admin(con_ssh=None, fail_ok=False):
+    return cli.source_admin(ssh_client=con_ssh, fail_ok=fail_ok)
+
+def get_system_software_version(con_ssh=None, fail_ok=False):
+    build_info = get_buildinfo(con_ssh=con_ssh)
+    sw_line = [l for l in build_info.splitlines() if "SW_VERSION" in l]
+    return ((sw_line.pop()).split("=")[1]).replace('"', '')
+
+def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_admin_=None):
+    rc, output = cli.system('load-import', load_path, ssh_client=con_ssh,
+                            fail_ok=fail_ok, source_admin_=source_admin_)
+
+    if rc == 0:
+        table_ = table_parser.table(output)
+        id  = (table_parser.get_values(table_, "Value", Property='id')).pop()
+        soft_ver =  (table_parser.get_values(table_, "Value", Property='software_version')).pop()
+        LOG.info('Waiting to finsish importing  load id {} version {}'.format(id, soft_ver))
+
+        end_time = time.time() + timeout
+
+        while time.time() < end_time:
+
+            state = get_imported_load_state(id, load_version=soft_ver,
+                                        con_ssh=con_ssh, source_admin_=source_admin_)
+            LOG.info("Import state {}".format(state))
+            if "imported" in state:
+                LOG.info("Importing load {} is completed".format(soft_ver))
+                return [rc, id, soft_ver]
+
+            time.sleep(3)
+
+        err_msg = "Timeout waiting to complete importing load {}".format(soft_ver)
+        LOG.warning(err_msg)
+        return [1, err_msg]
+    else:
+        return [rc, output]
+
+
+def get_imported_load_id(load_version=None, con_ssh=None, fail_ok=False, source_admin_=None):
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh,
+                                           source_admin_=source_admin_ ))
+    if load_version:
+        table_ = table_parser.filter_table(table_, state='imported', software_version=load_version)
+    else:
+        table_ = table_parser.filter_table(table_, state='imported')
+
+    return table_parser.get_values(table_, 'id')
+
+def get_imported_load_state(id, load_version=None, con_ssh=None, fail_ok=False, source_admin_=None):
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh,
+                                           source_admin_=source_admin_ ))
+    if load_version:
+        table_ = table_parser.filter_table(table_, id=id, software_version=load_version)
+    else:
+        table_ = table_parser.filter_table(table_, id=id)
+
+    return (table_parser.get_values(table_, 'state')).pop()
+
+
+def get_imported_load_version( con_ssh=None, fail_ok=False, source_admin_=None):
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh,
+                                           source_admin_=source_admin_ ))
+    table_ = table_parser.filter_table(table_, state='imported')
+
+    return table_parser.get_values(table_, 'software_version')
+
+
+def get_active_load_id(con_ssh=None, fail_ok=False, source_admin_=None):
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh,
+                                           source_admin_=source_admin_ ))
+
+    table_ = table_parser.filter_table(table_, state="active")
+    return table_parser.get_values(table_, 'id')
+
+
+def get_software_loads(rtn_vals=('id', 'state', 'software_version'), id=None, state=None, software_version=None,
+                strict=False, show_suppress=False, con_ssh=None, auth_info=Tenant.ADMIN, source_admin_=None):
+
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh,
+                                           source_admin_=source_admin_ ))
+
+    kwargs_dict = {
+        'id': id,
+        'state': state,
+        'software_version': software_version,
+    }
+
+    kwargs = {}
+    for key, value in kwargs_dict.items():
+        if value is not None:
+            kwargs[key] = value
+
+    if kwargs:
+        table_ = table_parser.filter_table(table_, strict=strict, **kwargs)
+
+    rtn_vals_list = []
+    for val in rtn_vals:
+        vals = table_parser.get_column(table_, val)
+        rtn_vals_list.append(vals)
+
+    rtn_vals_list = zip(*rtn_vals_list)
+
+    rtn_vals_list = [' '.join(vals) for vals in rtn_vals_list]
+
+    return rtn_vals_list
+
+
+def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False,
+                         source_admin_=None):
+    ids = get_imported_load_id(load_version=load_version, con_ssh=con_ssh, fail_ok=fail_ok,
+                     source_admin_=source_admin_)
+    for id in ids:
+        cli.system('load-delete', id, ssh_client=con_ssh,
+                      fail_ok=fail_ok, source_admin_=source_admin_)
