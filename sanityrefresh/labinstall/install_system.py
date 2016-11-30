@@ -269,7 +269,7 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
 
     return load_path
 
-def verify_custom_lab_cfg_location(lab_cfg_location):
+def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis):
     ''' Verify that the correct configuration file is used in setting up the
         lab.
     '''
@@ -294,7 +294,7 @@ def verify_custom_lab_cfg_location(lab_cfg_location):
 
     # Tell the user what files are missing
     msg = ''
-    if not found_bulk_cfg_file:
+    if not found_bulk_cfg_file and not tis_on_tis:
         msg += 'Failed to find {} in {}'.format(BULK_CFG_FILENAME,
                                                lab_cfg_location)
     if not found_system_cfg_file:
@@ -317,7 +317,7 @@ def verify_custom_lab_cfg_location(lab_cfg_location):
                                 + CUSTOM_LAB_SETTINGS_FILENAME
     return lab_cfg_path, lab_settings_filepath
 
-def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_os, override, guest_load_path, banner):
+def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on_tis, host_os, override, guest_load_path, banner):
     ''' Get the directory path for the configuration file that is used in
         setting up the lab.
     '''
@@ -368,7 +368,7 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, host_o
             log.info('Using host bulk add file: {}'.format(bulkfile))
             break
 
-    if not bulkfile_found:
+    if not bulkfile_found and not tis_on_tis:
         msg = 'No valid host bulk add file found in {}'.format(lab_cfg_path)
         log.error(msg)
         wr_exit()._exit(1, msg)
@@ -1008,7 +1008,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
                       host_os, boot_device_dict, small_footprint, burn_usb, tis_on_tis):
 
     global controller0
-    global cumulus
+    #global cumulus
 
     if not tis_on_tis:
         if controller0.telnet_conn is None:
@@ -1097,11 +1097,18 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
                           pre_opts=pre_opts)
 
     if host_os == "centos":
-        scripts_path = load_path + "/" + CENTOS_LAB_REL_PATH + "/scripts/"
+        if cumulus:
+           scripts_path = os.path.join(DEFAULT_WKSPCE, DEFAULT_REL, 
+                                       DEFAULT_BLD, CENTOS_LAB_REL_PATH, "scripts")
+           heat_path = os.path.join(DEFAULT_WKSPCE, DEFAULT_REL,
+                                       DEFAULT_BLD, HEAT_TEMPLATES_PATH)
+        else:
+           scripts_path = load_path + "/" + CENTOS_LAB_REL_PATH + "/scripts/"
+           heat_path = load_path + "/" + HEAT_TEMPLATES_PATH
+
         bld_server_conn.rsync(os.path.join(scripts_path, "*"),
                           WRSROOT_USERNAME, controller0.host_ip,
                           WRSROOT_HOME_DIR, pre_opts=pre_opts)
-        heat_path = load_path + "/" + HEAT_TEMPLATES_PATH
         bld_server_conn.rsync(os.path.join(heat_path, "*"),
                            WRSROOT_USERNAME, controller0.host_ip, \
                            WRSROOT_HEAT_DIR + "/",\
@@ -1155,9 +1162,10 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
 def configureController(bld_server_conn, host_os, install_output_dir, banner):
     # Configure the controller as required
     global controller0
-    if controller0.telnet_conn is None:
-        controller0.telnet_conn = open_telnet_session(controller0, install_output_dir)
-        controller0.telnet_conn.login()
+    if not cumulus:
+        if controller0.telnet_conn is None:
+            controller0.telnet_conn = open_telnet_session(controller0, install_output_dir)
+            controller0.telnet_conn.login()
 
     # Apply banner if specified by user
     if banner == 'before' and host_os == 'centos':
@@ -1188,13 +1196,15 @@ def configureController(bld_server_conn, host_os, install_output_dir, banner):
                                       pre_opts=pre_opts)
 
             cmd = "export USER=wrsroot"
-            rc, output = controller0.telnet_conn.exec_cmd(cmd)
-
+            if not cumulus:
+                rc, output = controller0.telnet_conn.exec_cmd(cmd)
+            else:
+                rc, output = controller0.ssh_conn.exec_cmd(cmd)
             cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
             cmd += " config_controller --config-file " + cfgfile
             #cmd += " config_controller --default"
             os.environ["TERM"] = "xterm"
-            if host_os == "centos":
+            if host_os == "centos" and not cumulus:
                 rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
             else:
                 rc, output = controller0.ssh_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
@@ -1452,6 +1462,7 @@ def main():
     global lab_type
     global executed_install_steps
     global log
+    global cumulus
 
     PASSWORD = args.password or getpass.getpass()
     PUBLIC_SSH_KEY = get_ssh_key()
@@ -1596,11 +1607,11 @@ def main():
     load_path = get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
                                   tis_bld_dir)
     if os.path.isdir(lab_cfg_location):
-        lab_cfg_path, lab_settings_filepath = verify_custom_lab_cfg_location(lab_cfg_location)
+        lab_cfg_path, lab_settings_filepath = verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis)
     else:
         lab_cfg_path, lab_settings_filepath = verify_lab_cfg_location(bld_server_conn,
                                                   lab_cfg_location, load_path,
-                                                  host_os, override,
+                                                  tis_on_tis, host_os, override,
                                                   guest_load_path, banner)
 
     if lab_settings_filepath:
@@ -1643,6 +1654,7 @@ def main():
 
     if tis_on_tis:
 
+        guest_load_path = "{}/{}".format(DEFAULT_WKSPCE, guest_bld_dir)
         tis_on_tis_info = {'userid': args.cumulus_userid,
                             'password': cumulus_password,
                             'server': CUMULUS_SERVER_IP,
@@ -1653,7 +1665,7 @@ def main():
                             'lab_cfg_path': lab_cfg_path}
 
         cumulus = Cumulus_TiS(**tis_on_tis_info)
-        
+
     if tis_on_tis:
         controller_dict = create_cumulus_node_dict((0, 1), CONTROLLER)
         compute_dict = create_cumulus_node_dict(range(0, cumulus.get_number_of_computes()), COMPUTE)
