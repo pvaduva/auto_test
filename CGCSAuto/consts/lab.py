@@ -236,9 +236,9 @@ class Labs:
     WCP_78_79 = {
         'short_name': 'wcp_78_79',
         'name': 'yow-cgcs-wildcat-78_79',
-        'floating ip': '128.224.151.235',
-        'controller-0 ip': '128.224.151.236',
-        'controller-1 ip': '128.224.151.237',
+        'floating ip': '128.224.151.237',
+        'controller-0 ip': '128.224.151.235',
+        'controller-1 ip': '128.224.151.236',
         'controller_nodes': [23278, 23279],
     }
 
