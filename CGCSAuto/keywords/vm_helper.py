@@ -502,6 +502,11 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     elif exit_code > 1:             # this is already handled by CLI module
         raise exceptions.CLIRejected("Live migration command rejected.")
 
+    LOG.info("Waiting for VM status change to {} with best effort".format(VMStatus.MIGRATING))
+    in_mig_state = _wait_for_vm_status(vm_id, status=VMStatus.MIGRATING, timeout=60)
+    if not in_mig_state:
+        LOG.warning("VM did not reach {} state after triggering live-migration".format(VMStatus.MIGRATING))
+
     LOG.info("Waiting for VM status change to original state {}".format(before_status))
     end_time = time.time() + VMTimeout.LIVE_MIGRATE_COMPLETE
     while time.time() < end_time:
@@ -617,6 +622,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
             Active state after confirm/revert.
         (7, err_msg) # Cold migration and resize confirm/revert ran successfully and vm in active state. But host for vm
             is not as expected. i.e., still the same host after confirm resize, or different host after revert resize.
+        (8, <stderr>) # Confirm/Revert resize cli rejected
 
     """
     before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
@@ -657,7 +663,13 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     verify_resize_str = 'Revert' if revert else 'Confirm'
     if vm_status == VMStatus.VERIFY_RESIZE:
         LOG.info("{}ing resize..".format(verify_resize_str))
-        _confirm_or_revert_resize(vm=vm_id, revert=revert, con_ssh=con_ssh)
+        res, out = _confirm_or_revert_resize(vm=vm_id, revert=revert, fail_ok=True, con_ssh=con_ssh)
+        if res == 1:
+            err_msg = "{} resize cli rejected".format(verify_resize_str)
+            if fail_ok:
+                LOG.warning(err_msg)
+                return 8, out
+            raise exceptions.VMOperationFailed(err_msg)
 
     elif vm_status == VMStatus.ERROR:
         err_msg = "VM {} in Error state after cold migrate. {} resize is not reached.".format(vm_id, verify_resize_str)
@@ -846,11 +858,11 @@ def _wait_for_vm_status(vm_id, status, timeout=VMTimeout.STATUS_CHANGE, check_in
         raise exceptions.VMTimeout(err_msg)
 
 
-def _confirm_or_revert_resize(vm, revert=False, con_ssh=None):
-        if revert:
-            cli.nova('resize-revert', vm, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
-        else:
-            cli.nova('resize-confirm', vm, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
+def _confirm_or_revert_resize(vm, revert=False, con_ssh=None, fail_ok=False):
+        cmd = 'resize-revert' if revert else 'resize-confirm'
+
+        return cli.nova(cmd, vm, ssh_client=con_ssh, auth_info=Tenant.ADMIN, rtn_list=True,
+                        fail_ok=fail_ok)
 
 
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
@@ -1858,7 +1870,7 @@ def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **
     if action == 'cold_mig_revert':
         kwargs['revert'] = True
 
-    action_function_map[action](vm_id, con_ssh=con_ssh, auth_info=auth_info, **kwargs)
+    return action_function_map[action](vm_id, con_ssh=con_ssh, auth_info=auth_info, **kwargs)
 
 
 def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
@@ -1960,7 +1972,7 @@ def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True, con_ssh=N
     LOG.info("Initiate sudo reboot from vm")
 
     def _sudo_reboot(vm_ssh_):
-        code, output = vm_ssh_.exec_sudo_cmd('reboot')
+        code, output = vm_ssh_.exec_sudo_cmd('reboot', get_exit_code=False)
         expt_string = 'The system is going down for reboot'
         if expt_string in output:
             # Sometimes system rebooting msg will be displayed right after reboot cmd sent
