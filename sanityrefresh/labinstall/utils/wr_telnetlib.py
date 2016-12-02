@@ -920,7 +920,7 @@ class Telnet:
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 log.error(msg)
-                wr_exit()._exit(1, msg)
+                #wr_exit()._exit(1, msg)
             log.info("Boot device is: " + str(boot_device_regex))
 
             self.get_read_until("Please select boot device", 60)
