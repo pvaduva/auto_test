@@ -41,6 +41,7 @@ def add_1g_and_4k_pages(config_host_module):
     host_helper.wait_for_hosts_in_nova_compute(host)
 
     storage_backing = host_helper.get_local_storage_backing(host)
+    LOG.info("Host's storage backing: {}".format(storage_backing))
     if 'image' in storage_backing:
         storage_backing = 'local_image'
     elif 'lvm' in storage_backing:
