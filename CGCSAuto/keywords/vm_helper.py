@@ -1983,7 +1983,7 @@ def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True, con_ssh=N
         _sudo_reboot(vm_ssh)
 
     LOG.info("sudo vm reboot initiated - wait for reboot completes and VM reaches active state")
-    system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, strict=False, fail_ok=False, con_ssh=con_ssh
+    system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, strict=False, fail_ok=False, con_ssh=con_ssh,
                                   **{'Entity Instance ID': vm_id,
                                      'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
     _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=False, con_ssh=con_ssh)
