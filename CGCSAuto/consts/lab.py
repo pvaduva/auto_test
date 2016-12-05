@@ -300,6 +300,7 @@ class Labs:
 
     UNKNOWN = {
         'short_name': 'unknown',
+        'name': 'unknown',
         'floating ip': 'unknow_fip',
         'controller-0 ip': 'unknown_con0_ip',
         'controller-1 ip': 'unknown_con1_ip',

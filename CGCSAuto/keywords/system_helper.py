@@ -1367,17 +1367,18 @@ def get_system_health_query_upgrade(con_ssh=None):
     else:
         return 0, None
 
-def system_upgrade_start(con_ssh=None):
+def system_upgrade_start(con_ssh=None, fail_ok=False):
     """
 
     Args:
         con_ssh:
+        fail_ok:
 
     Returns (tuple):
         (0, output)
-        (1, <stderr>)   # cli returns stderr.
-        (2, "upgrade-start rejected: An upgrade is already in progress."
-
+        (1, <stderr>) : "if fail_ok is true # cli returns stderr.
+        (2, <stderr>) : "applicable only if fail_ok is true. upgrade-start rejected:
+        An upgrade is already in progress."
     """
 
     rc, output = cli.system("upgrade-start", fail_ok=True, ssh_client=con_ssh)
@@ -1390,9 +1391,17 @@ def system_upgrade_start(con_ssh=None):
         if "An upgrade is already in progress" in output:
             # upgrade already in progress
             LOG.warning("Upgrade is already in progress. No need to start")
-            return 2, output
+            if fail_ok:
+                return 2, output
+            else:
+                raise exceptions.CLIRejected(output)
         else:
-            return 1, output
+            err_msg = "CLI system command failed: {}".format(output)
+            LOG.warning(err_msg)
+            if fail_ok:
+                return 1, output
+            else:
+                raise exceptions.CLIRejected(err_msg)
 
 
 def system_upgrade_show(con_ssh=None):
@@ -1416,22 +1425,47 @@ def system_upgrade_show(con_ssh=None):
         return rc, output
 
 
-def activate_upgrade(con_ssh=None):
+def activate_upgrade(con_ssh=None, fail_ok=False):
+    """
+    Activates upgrade
+    Args:
+        con_ssh (SSHClient):
+        fail_ok (bool):
+
+    Returns (tuple):
+        (0, dict/list)
+        (1, <stderr>)   # cli returns stderr, applicable if fail_ok is true
+
+    """
     rc, output = cli.system('upgrade-activate', ssh_client=con_ssh, fail_ok=True, rtn_list=True)
     if rc != 0:
-        return rc, output
+        err_msg = "CLI system uprade-activate failed: {}".format(output)
+        LOG.warning(err_msg)
+        if fail_ok:
+            return rc, output
+        else:
+            raise exceptions.CLIRejected(err_msg)
 
     if not wait_for_alarm_gone("250.001", con_ssh=con_ssh, timeout=900, check_interval=60, fail_ok=True):
 
         alarms = get_alarms( alarm_id="250.001")
-        message = "Alarms not cleared: {}".format(alarms)
-        return 1, message
+        err_msg = "After activating upgrade alarms are not cleared : {}".format(alarms)
+        LOG.warning(err_msg)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
 
     if not wait_for_upgrade_activate_complete(fail_ok=True):
-        message = "Upgrade activate failed"
-        return 1, message
+        err_msg = "Upgrade activate failed"
+        LOG.warning(err_msg)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
 
-    return 0, "Upgrade activation complete"
+    LOG.info("Upgrade activation complete")
+    return 0, None
 
 
 def get_hosts_upgrade_status(con_ssh=None):
@@ -1467,11 +1501,28 @@ def wait_for_upgrade_activate_complete(timeout=300, check_interval=60, fail_ok=F
     raise exceptions.TimeoutException(err_msg)
 
 
-def complete_upgrade(con_ssh=None):
-    rc, output = cli.system('upgrade_complete', ssh_client=con_ssh, fail_ok=True, rtn_list=True)
+def complete_upgrade(con_ssh=None, fail_ok=False):
+    """
+    Completes upgrade
+    Args:
+        con_ssh (SSHClient):
+        fail_ok (bool):
+
+    Returns (tuple):
+        (0, dict/list)
+        (1, <stderr>)   # cli returns stderr, applicable if fail_ok is true
+
+    """
+    rc, output = cli.system('upgrade-complete', ssh_client=con_ssh, fail_ok=True, rtn_list=True)
     if rc != 0:
-        return rc, output
-    return 0, "Upgrade  complete"
+        err_msg = "CLI system upgrade-complete rejected: {}".format(output)
+        LOG.warning(err_msg)
+        if fail_ok:
+            return 1, output
+        else:
+            raise exceptions.CLIRejected(err_msg)
+
+    return 0, "Upgrade complete"
 
 def is_patch_current(con_ssh=None):
     if con_ssh is None:
@@ -1493,7 +1544,7 @@ def get_system_software_version(con_ssh=None, fail_ok=False):
 
 def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_admin_=None):
     rc, output = cli.system('load-import', load_path, ssh_client=con_ssh,
-                            fail_ok=fail_ok, source_admin_=source_admin_)
+                            fail_ok=True, source_admin_=source_admin_)
 
     if rc == 0:
         table_ = table_parser.table(output)
@@ -1516,9 +1567,16 @@ def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_admi
 
         err_msg = "Timeout waiting to complete importing load {}".format(soft_ver)
         LOG.warning(err_msg)
-        return [1, err_msg]
+        if fail_ok:
+            return [1, err_msg]
+        else:
+            raise exceptions.TimeoutException(err_msg)
     else:
-        return [rc, output]
+        err_msg = "CLI command rejected: {}".format(output)
+        if fail_ok:
+            return [1, err_msg]
+        else:
+            raise exceptions.CLIRejected(err_msg)
 
 
 def get_imported_load_id(load_version=None, con_ssh=None, fail_ok=False, source_admin_=None):
@@ -1529,7 +1587,7 @@ def get_imported_load_id(load_version=None, con_ssh=None, fail_ok=False, source_
     else:
         table_ = table_parser.filter_table(table_, state='imported')
 
-    return table_parser.get_values(table_, 'id')
+    return table_parser.get_values(table_, 'id')[0]
 
 def get_imported_load_state(id, load_version=None, con_ssh=None, fail_ok=False, source_admin_=None):
     table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh,
@@ -1592,8 +1650,10 @@ def get_software_loads(rtn_vals=('id', 'state', 'software_version'), id=None, st
 
 def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False,
                          source_admin_=None):
-    ids = get_imported_load_id(load_version=load_version, con_ssh=con_ssh, fail_ok=fail_ok,
+    id = get_imported_load_id(load_version=load_version, con_ssh=con_ssh, fail_ok=fail_ok,
                      source_admin_=source_admin_)
-    for id in ids:
-        cli.system('load-delete', id, ssh_client=con_ssh,
-                      fail_ok=fail_ok, source_admin_=source_admin_)
+
+    rc, output = cli.system('load-delete', id, ssh_client=con_ssh,
+                            fail_ok=fail_ok, source_admin_=source_admin_)
+    #TODO: add check if load is deleted
+    return id

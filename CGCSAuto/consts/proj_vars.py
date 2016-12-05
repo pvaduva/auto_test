@@ -143,13 +143,14 @@ class UpgradeVars:
 
         cls.__var_dict = {
 
+            'UPGRADE_VERSION': upgrade_version,
             # TIS BUILD info
             'BUILD_SERVER': __build_server,
-            'TIS_BUILD_DIR': tis_build_dir if tis_build_dir else BuildServerPath.DEFAULT_HOST_BUILD_PATH,
+            'TIS_BUILD_DIR': tis_build_dir if tis_build_dir else
+                BuildServerPath.LATEST_HOST_BUILD_PATHS[upgrade_version],
 
             # Generic
             'UPGRADE_LICENSE': upgrade_license_path,
-            'UPGRADE_VERSION': upgrade_version,
 
             #User/password to build server
             "USERNAME": getpass.getuser(),

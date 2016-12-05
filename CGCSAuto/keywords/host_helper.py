@@ -404,13 +404,15 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         raise exceptions.HostPostCheckFailed(msg)
 
 
-def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, availability_state=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
                 check_hypervisor_up=True, check_webservice_up=True):
     """
     Unlock given host
     Args:
         host (str):
         timeout (int): MAX seconds to wait for host to become available or degraded after unlocking
+        availability_state(str/list): Specific availability state ( available or upgraded) that this procedure
+        should wait before return,  Otherwise it waits for either states.
         fail_ok (bool):
         con_ssh (SSHClient):
         auth_info (dict):
@@ -450,9 +452,26 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=False, con_
                                  fail_ok=fail_ok):
         return 2, "Host is not in unlocked state"
 
-    if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-                                 availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]):
-        return 3, "Host state did not change to available or degraded within timeout"
+    if availability_state:
+        if isinstance(availability_state, str):
+            availability_state = [availability_state]
+
+        if (state != HostAvailabilityState.AVAILABLE  or state != HostAvailabilityState.DEGRADED
+            for state in availability_state):
+            LOG.warning("The referred specific availability state {} must be ether of {}. "
+                        "Switching to either states. ".format(availability_state,
+                        [HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]))
+
+            availability_state = [HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]
+
+        if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+                                     availability=availability_state):
+            return 3, "Host state did not change to {} or {} within timeout".format(HostAvailabilityState.AVAILABL,
+                                                                                    HostAvailabilityState.DEGRADED)
+    else:
+        if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+                                     availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]):
+            return 3, "Host state did not change to available or degraded within timeout"
 
     if not _wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh, task=''):
         return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
@@ -2083,7 +2102,8 @@ def is_active_controller(host, con_ssh=None):
     return personality.lower() == 'Controller-Active'.lower()
 
 
-def host_upgrade(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN, unlock=True):
+def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+                 lock=False, unlock=False):
     """
     Upgrade given host
     Args:
@@ -2097,69 +2117,89 @@ def host_upgrade(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
 
     Returns (tuple):
         (0, "Host is upgraded and in online state.")
-        (1, <stderr>)   # cli returns stderr. only applicable if fail_ok
+        (1, "Cli host upgrade rejected. Applicable only if ail_ok")
+        (2, "Host failed data migration. Applicable only if fail_ok")
+        (3, "Host did not come online after upgrade. Applicable if fail_ok ")
+        (4, "Host fail lock before starting upgrade". Applicable if lock arg is True and fail_ok")
+        (5, "Host fail to unlock after host upgrade.  Applicable if unlock arg is True and fail_ok")
 
     """
     LOG.info("Upgrading host {}...".format(host))
 
-    if get_hostshow_value(host, 'administrative', con_ssh=con_ssh) == HostAdminState.UNLOCKED:
-        message = "Host is not locked. Locking host  before starting upgrade"
-        LOG.info(message)
-        rc, output = lock_host(host, con_ssh=con_ssh, fail_ok=fail_ok)
+    if lock:
+        if get_hostshow_value(host, 'administrative', con_ssh=con_ssh) == HostAdminState.UNLOCKED:
+            message = "Host is not locked. Locking host  before starting upgrade"
+            LOG.info(message)
+            rc, output = lock_host(host, con_ssh=con_ssh, fail_ok=fail_ok)
 
-        if rc != 0 and rc != -1:
-            return rc, output
+            if rc != 0 and rc != -1:
+                err_msg = "Host {} fail on lock before starting upgrade: {}".fromat(host, output)
+                if fail_ok:
+                    return 4, err_msg
+                else:
+                    raise exceptions.HostError(err_msg)
 
-    exitcode, output = cli.system('host-upgrade', host, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
-                                  fail_ok=fail_ok, timeout=timeout)
+    exitcode, output = cli.system('host-upgrade', host, ssh_client=con_ssh, auth_info=auth_info,
+                                  rtn_list=True, fail_ok=True, timeout=timeout)
     if exitcode == 1:
-        return 1, output
+        err_msg = "Host {} cli upgrade host failed: {}".format(host, output)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
 
     if host.strip() == "controller-1":
-        if not _wait_for_upgrade_data_migration_complete(timeout=timeout, check_interval=180,
-                                auth_info=auth_info, fail_ok=fail_ok, con_ssh=con_ssh):
-            return 1, "Upgrade data migration did not complete with the specified time {}".format(timeout)
+        rc, output =  _wait_for_upgrade_data_migration_complete(timeout=timeout,
+                                auth_info=auth_info, fail_ok=fail_ok, con_ssh=con_ssh)
+        if rc != 0:
+            err_msg = "Host {} updrade data migration failure: {}".format(host, output)
+            if fail_ok:
+                return 2, err_msg
+            else:
+                raise exceptions.HostError(err_msg)
     else:
         # sleep for 180 seconds to let host be re-installed with upgrade release
         time.sleep(180)
 
-    if not _wait_for_host_states(host, timeout=timeout, check_interval=180, availability=HostAvailabilityState.ONLINE,
+    if not _wait_for_host_states(host, timeout=timeout, check_interval=60, availability=HostAvailabilityState.ONLINE,
                                  con_ssh=con_ssh, fail_ok=fail_ok):
-        return 1, "Host is not in online state"
+        err_msg = "Host {} did not become online  after upgrade".format(host)
+        if fail_ok:
+            return 3, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
 
     if unlock:
-        rc, output = unlock_host(host)
-        if rc == 4:
-            # host is unlocked in degraded state, wait until it becomes avaialbe
-            LOG.info("Host {} is unlocked in degraded state. Waiting to become available".format(host))
-            if not _wait_for_host_states(host, availability="available"):
-                return 1, "Host is in a degraded state"
-        elif rc != 0:
-            return rc, output
+        rc, output = unlock_host(host, availability_state=HostAvailabilityState.AVAILABLE)
+        if rc != 0:
+            err_msg = "Host {} fail to unlock after host upgrade: ".format(host, output)
+            if fail_ok:
+                return 5, err_msg
+            else:
+                raise exceptions.HostError(err_msg)
 
         # wait until  400.001  alarms get cleared
-        if not system_helper.wait_for_alarm_gone("400.001", fail_ok=True):
-            return 1, "Host {} is unlocked but service related alarms are not cleared".format(host)
+        system_helper.wait_for_alarm_gone("400.001")
 
-    return exitcode, output
+    LOG.info("Upgrading host {} complete ...".format(host))
+    return 0, None
 
 
-def hosts_upgrade(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN, unlock=True):
+def upgrade_hosts(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+                  lock=False, unlock=False):
     """
     Upgrade given hosts list one by one
     Args:
-        host (str):
+        hosts (list): list of hostname of hosts to be upgraded
         timeout (int): MAX seconds to wait for host to become online after upgrading
         fail_ok (bool):
         con_ssh (SSHClient):
         auth_info (str):
         unlock (bool):
 
-
-
     Returns (tuple):
-        (0, "Host is upgraded and in online state.")
-        (1, <stderr>)   # cli returns stderr. only applicable if fail_ok
+        (0, "Hosts are upgraded and in online state.")
+        (1, "Upgrade on host failed. applicable if fail_ok
 
     """
     LOG.info("Upgrading {}...".format(hosts))
@@ -2173,28 +2213,43 @@ def hosts_upgrade(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=Non
         message = " Active controller {} is not upgraded.  Must be upgraded first".format(active_controller)
         LOG.info(message)
         return 1, message
+    #keep original host
 
-    controllers = [h for h in hosts if "controller" in h]
-    controllers.sort()
-    storages = [h for h in hosts if "storage" in h]
-    storages.sort()
-    computes = [h for h in hosts if "compute" in h]
-    computes.sort()
+    controllers = sorted([h for h in hosts if "controller" in h])
+    storages = sorted([h for h in hosts if "storage" in h])
+    computes = sorted([h for h in hosts if h not in storages and h not in controllers])
     upgrade_hosts = controllers + storages + computes
 
-
     for host in upgrade_hosts:
-        rc, output =  host_upgrade(host, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
-                                   auth_info=auth_info, unlock=unlock)
+        rc, output =  upgrade_host(host, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh,
+                                   auth_info=auth_info, lock=lock, unlock=unlock)
         if rc != 0:
-            return rc, output
+            if fail_ok:
+                return rc, output
+            else:
+                raise exceptions.HostError(output)
         else:
             LOG.info("Host {} upgrade completed".format(host))
 
     return 0, "hosts {} upgrade done ".format(upgrade_hosts)
 
 
-def _wait_for_upgrade_data_migration_complete(timeout=1800, check_interval=180, auth_info=Tenant.ADMIN, fail_ok=False, con_ssh=None):
+def _wait_for_upgrade_data_migration_complete(timeout=1800, check_interval=60, auth_info=Tenant.ADMIN, fail_ok=False, con_ssh=None):
+    """
+    Waits until upgrade data migration is complete or fail
+    Args:
+        timeout (int): MAX seconds to wait for data migration to complete
+        fail_ok (bool): if true return error code
+        con_ssh (SSHClient):
+        auth_info (str):
+
+    Returns (tuple):
+        (0, "Upgrade data migration complete.")
+        (1, "Upgrade dat migration failed. Applicable only if ail_ok")
+        (2, "Upgrade data migration timeout out before complete. Applicable only if fail_ok")
+        (3, "Timeout waiting the Host upgrade data migration to complete. Applicable if fail_ok ")
+
+    """
 
     endtime = time.time() + timeout
     while time.time() < endtime:
@@ -2202,14 +2257,21 @@ def _wait_for_upgrade_data_migration_complete(timeout=1800, check_interval=180, 
         upgrade_progress_tab = table_parser.filter_table(upgrade_progress_tab, Property="state")
         if "data-migration-complete" in table_parser.get_column(upgrade_progress_tab, 'Value'):
             LOG.info("Upgrade data migration is complete")
-            return True
+            return 0, "Upgrade data migration is complete"
+        elif "data-migration-failed" in table_parser.get_column(upgrade_progress_tab, 'Value'):
+            err_msg = "Host Upgrade data migration failed."
+            LOG.warning(err_msg)
+            if fail_ok:
+                return 1, err_msg
+            else:
+                raise exceptions.HostError(err_msg)
 
         time.sleep(check_interval)
 
-    err_msg = "Timed out waiting for upgrade data migration to complete"
+    err_msg = "Timed out waiting for upgrade data migration to complete state"
     if fail_ok:
         LOG.warning(err_msg)
-        return False
+        return 3, err_msg
     else:
         raise exceptions.HostError(err_msg)
 
@@ -2232,41 +2294,36 @@ def get_hosts_upgrade_running_release(hostnames, con_ssh=None):
     return table_parser.get_column(table_, "running_release")
 
 
-def lock_unlock_host(host, force=False, con_ssh=None, fail_ok=False, check_first=True, swact=False):
-
+def ensure_host_provisioned(host, cons_ssh=None):
     """
-    lock/ unlock a host.
+    check if host is provisioned.
 
     Args:
         host (str): hostname or id in string format
-        force (bool):
         con_ssh (SSHClient):
-        fail_ok (bool):
-        check_first (bool):
-        swact (bool): whether to check if host is active controller and do a swact before attempt locking
 
     Returns: (return_code(int), msg(str))   # 1, 2, 3, 4, 5 only returns when fail_ok=True
-        (0, "Host is locked/unlocked and in online state."]
-        (1, <stderr>)   # Lock host cli rejected
-
+        (0, "Host is host is provisioned)
     """
-    LOG.info("Locking/unlocking host {} ...".format(host))
-    unlock = False
-    rc, output = lock_host(host,con_ssh=con_ssh,fail_ok=fail_ok, check_first=check_first,swact=swact)
-    if rc != 0 and rc != -1:
-        return rc, output
+    LOG.info("Checking if host {} is already provisioned ....".format(host))
+    if is_host_provisioned(host, con_ssh=None):
+        return 0, "Host {} is provisioned"
 
-    # Unlock host
-    rc, output = unlock_host(host, fail_ok=fail_ok, con_ssh=con_ssh)
-    if rc == 4:
-        # host is unlocked in degraded state, wait until it becomes available
-        LOG.info("Host {} is unlocked in degraded state. Waiting to become available".format(host))
-        if not _wait_for_host_states(host, availability="available"):
-            return 1, "Host is in a degraded state"
-    elif rc == 0:
-        return 0, output
-    else:
-        return 1, output
+    LOG.info("Host {} not provisioned ; doing lock/unlock to provision the host ....".format(host))
+    rc, output = lock_host(host,con_ssh=cons_ssh)
+    if rc != 0:
+        err_msg =  "Lock host {} rejected".format(host)
+        raise exceptions.HostError(err_msg)
+
+    rc, output = unlock_host(host, availability_state=HostAvailabilityState.AVAILABLE, con_ssh=cons_ssh)
+    if rc != 0:
+        err_msg = "Unlock host {} failed: {}".format(host, output)
+        raise exceptions.HostError(err_msg)
+
+    LOG.info("Checking if host {} is provisioned after lock/unlock ....".format(host))
+    if not is_host_provisioned(host, con_ssh=None):
+        raise exceptions.HostError("Failed to provision host {}")
+    return 0, "Host {} is provisioned after lock/unlock"
 
 
 def is_host_provisioned(host, con_ssh=None):

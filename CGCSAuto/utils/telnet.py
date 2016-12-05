@@ -60,6 +60,8 @@ except ImportError:
     from time import time as _time
 from utils import exceptions
 from utils.tis_log import LOG
+import sys
+sys.path.append('../sanityrefresh/labinstall')
 from constants import *
 
 __all__ = ["Telnet"]
@@ -828,7 +830,7 @@ class Telnet:
 
             raise exceptions.TelnetException(msg)
         if index == 0:
-            rc = remove_markers(match.group(0).decode('utf-8','ignore'))
+            rc = (match.group(0).decode('utf-8','ignore')).translate({ord('['): '', ord(']'): ''})
             LOG.info("Return code: " + rc)
         else:
             msg = "Timeout occurred: Failed to find return code"

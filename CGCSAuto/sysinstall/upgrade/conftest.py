@@ -3,7 +3,7 @@
 import pytest
 
 import time
-from consts import build_server
+from consts import build_server, filepaths
 from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
 from keywords import system_helper, host_helper
 from utils.ssh import ControllerClient, ssh_to_controller0
@@ -22,21 +22,22 @@ def pytest_addoption(parser):
                            "Valid options are: {}".format(' '.join(v[1] for v in SUPPORTED_UPRADES))
     build_server_help = "TiS build server host name where the upgrade release software is downloaded from." \
                         " ( default: {})".format(build_server.DEFAULT_BUILD_SERVER['name'])
-    upgrade_build_dir_path = "The path to the upgrade software build directory." \
-                             " (default: the latest_build in build server i.e " \
-                             "/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build"
+    upgrade_build_dir_path = "The path to the upgrade software release build directory in build server." \
+                             " eg: /localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/. " \
+                             " Otherwise the default  build dir path for the upgrade software " \
+                             "version will be used"
+
 
     license_help = "The full path to the new release software license file in build-server. " \
-                   "e.g /folk/cgts/lab/TiS16-full.lic or /folk/cgts/lab/TiS16-CPE-full.lic"
+                   "e.g /folk/cgts/lab/TiS16-full.lic or /folk/cgts/lab/TiS16-CPE-full.lic." \
+                   " Otherwise, default license for the upgrade release will be used"
     parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
-                     action='store', metavar='VERSION', default="16.10", help=upgrade_version_help)
+                     action='store', metavar='VERSION', required=True,  help=upgrade_version_help)
     parser.addoption('--build-server', '--build_server',  dest='build_server',
                      action='store', metavar='SERVER', default=build_server.DEFAULT_BUILD_SERVER['name'], help=build_server_help)
     parser.addoption('--tis-build-dir', '--tis_build_dir',  dest='tis_build_dir',
-                     action='store', metavar='DIR', default='/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build',
-                     help=upgrade_build_dir_path)
-    parser.addoption('--license',  dest='upgrade_license',
-                     action='store', metavar='license full path', default="/folk/cgts/lab/TiS16-full.lic", help=license_help)
+                     action='store', metavar='DIR',  help=upgrade_build_dir_path)
+    parser.addoption('--license',  dest='upgrade_license', action='store', metavar='license full path', help=license_help)
 
 
 def pytest_configure(config):

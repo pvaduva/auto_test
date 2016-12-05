@@ -1,21 +1,17 @@
 import os
-import time
 from utils.ssh import SSHClient
 from utils import telnet as telnetlib
 from consts.build_server import Server
 from consts.proj_vars import ProjVar, InstallVars, UpgradeVars
+from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.cgcs import HostAvailabilityState
+from consts.auth import Host
 from utils.tis_log import LOG
-from keywords import system_helper, host_helper
+from keywords import system_helper, host_helper, common
 from utils import local_host
 import threading
 from consts.build_server import get_build_server_info
-from consts.cgcs import Prompt
 
-# wrsroot user
-WRSROOT_USERNAME = "wrsroot"
-WRSROOT_DEFAULT_PASSWORD = WRSROOT_USERNAME
-WRSROOT_PASSWORD = "Li69nux*"
-WRSROOT_HOME_DIR = "/home/wrsroot"
 
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
@@ -36,12 +32,27 @@ def test_system_upgrade():
     LOG.tc_func_start("UPGRADE_TEST")
 
     lab = InstallVars.get_install_var('LAB')
+
+    # establish ssh connection with controller-0
+    controller0_conn = SSHClient(lab['controller-0 ip'])
+    controller0_conn.connect()
+
+    cpe = system_helper.is_small_footprint(controller0_conn)
+
+    upgrade_version = UpgradeVars.get_upgrade_var('UPGRADE_VERSION')
     license_path = UpgradeVars.get_upgrade_var('UPGRADE_LICENSE')
+    if license_path is None:
+        if cpe:
+            license_path = BuildServerPath.TIS_LICENSE_PATHS[upgrade_version][1]
+        else:
+            license_path = BuildServerPath.TIS_LICENSE_PATHS[upgrade_version][0]
+
     bld_server = get_build_server_info(UpgradeVars.get_upgrade_var('BUILD_SERVER'))
     load_path = UpgradeVars.get_upgrade_var('TIS_BUILD_DIR')
     output_dir = ProjVar.get_var('LOG_DIR')
-    upgrade_version = UpgradeVars.get_upgrade_var('UPGRADE_VERSION')
+
     current_version = get_current_system_version()
+
 
     bld_server_attr = {}
     bld_server_attr['name'] = bld_server['name']
@@ -59,26 +70,21 @@ def test_system_upgrade():
 
     bld_server_obj = Server(**bld_server_attr)
 
-
-    # establish ssh connection with controller-0
-    controller0_conn = SSHClient(lab['controller-0 ip'])
-    controller0_conn.connect()
-
     # # get upgrade license file for release
     LOG.info("Dowloading the license {}:{} for target release {}".format(bld_server_obj.name,
                                                                          license_path, upgrade_version))
     download_upgrade_license(lab, bld_server_obj, license_path)
 
     LOG.tc_step("Checking if target release license is downloaded......")
-    cmd = "test -e " + os.path.join(WRSROOT_HOME_DIR, "upgrade_license.lic")
+    cmd = "test -e " + os.path.join(WRSROOT_HOME, "upgrade_license.lic")
     assert controller0_conn.exec_cmd(cmd)[0] == 0, "Upgrade license file not present in Controller-0"
 
 
     # get upgrade load iso file
-    LOG.info("Dowloading the {} target release  load iso image file {}:{}".format(upgrade_version, bld_server_obj.name,
-                                                                         license_path, load_path))
+    LOG.info("Dowloading the {} target release  load iso image file {}:{}".format(
+            upgrade_version, bld_server_obj.name, load_path))
     download_upgrade_load(lab, bld_server_obj, load_path)
-    upgrade_load_path = os.path.join(WRSROOT_HOME_DIR, UPGRADE_LOAD_ISO_FILE)
+    upgrade_load_path = os.path.join(WRSROOT_HOME, UPGRADE_LOAD_ISO_FILE)
 
     LOG.tc_step("Checking if target release load is downloaded......")
     cmd = "test -e {}".format(upgrade_load_path)
@@ -88,16 +94,15 @@ def test_system_upgrade():
 
     #Install the license file for release
     LOG.info("Installing the target release {} license file".format(upgrade_version))
-    rc = install_upgrade_license(controller0_conn)
+    rc = common.install_upgrade_license(controller0_conn, os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
     LOG.tc_step("Checking if target release license is installed......")
     assert rc == 0, "Unable to install upgrade license file in Controller-0"
+    LOG.tc_step("Target release license is installed......")
 
     # Run the load_import command to import the new release iso image build
-    LOG.info("Importing the target release {} load iso file".format(upgrade_version))
-    output = system_helper.import_load(upgrade_load_path, fail_ok=True)
-
-    if output[0] != 0 and "Imported load exists." not in output[1].splitlines():
-        assert False, "Unable to import upgrade release on Controller-0"
+    LOG.info("Importing the target release  load iso file".format(upgrade_load_path))
+    output = system_helper.import_load(upgrade_load_path)
+    LOG.info("The target release  load iso file {} imported".format(upgrade_load_path))
 
     # check if upgrade load software is imported successfully
     if output[0] == 0:
@@ -126,52 +131,37 @@ def test_system_upgrade():
                                                 "active before starting upgrade"
 
     LOG.info("Starting upgrade from release {} to target release {}".format(current_version, upgrade_version))
-    rc, output = system_helper.system_upgrade_start()
-    LOG.tc_step("Checking if upgrade started successfully......")
-    assert rc == 0, "system upgrade-start return error: {}".format(output)
+    system_helper.system_upgrade_start()
+    LOG.tc_step("upgrade started successfully......")
 
     # upgrade standby controller
-    LOG.info("Upgrading controller-1")
-    rc, output = host_helper.host_upgrade("controller-1", fail_ok=True)
-    LOG.tc_step("Checking if controller-1 is upgraded successfully......")
-    assert rc == 0, "Failed to upgrade controller-1: {}".format(output)
-    LOG.info("controller-1 is upgraded successfully")
+    LOG.tc_step("Upgrading controller-1")
+    host_helper.upgrade_host("controller-1", lock=True)
+    LOG.tc_step("Host controller-1 is upgraded successfully......")
 
-
+   # unlocke upgraded controller-1
+    LOG.tc_step("Unlocking controller-1 after upgrade......")
+    host_helper.unlock_host("controller-1", availability_state=HostAvailabilityState.AVAILABLE)
+    LOG.tc_step("Host controller-1 unlocked after upgrade......")
 
     # Swact to standby controller-1
-    LOG.info("Swacting to controller-1 .....")
-    rc, output = host_helper.swact_host(hostname="controller-0", fail_ok=True)
-    LOG.tc_step("Checking  if controller-1 has become active......")
+    LOG.tc_step("Swacting to controller-1 .....")
+    rc, output = host_helper.swact_host(hostname="controller-0")
     assert rc == 0, "Failed to swact: {}".format(output)
+    LOG.tc_step("Swacted and  controller-1 has become active......")
 
+    LOG.info("Updating active controller is  controller-1")
     active_controller = system_helper.get_active_controller_name()
-    # Upgrade other hosts starting with controller-0
-    hosts = system_helper.get_hostnames()
-    hosts.remove(active_controller)
-
-    controllers = [h for h in hosts if "controller" in h]
-    controllers.sort()
-    storages = [h for h in hosts if "storage" in h]
-    storages.sort()
-    computes = [h for h in hosts if "compute" in h]
-    computes.sort()
-    upgrade_hosts = controllers + storages + computes
 
     # upgrade  controller-0
     LOG.info("Starting upgrading  controller-0")
-
     controller0 = lab['controller-0']
     boot_device = get_mgmt_boot_device(controller0)
     LOG.info("Mgmt boot device for {} is {}".format(controller0.name, boot_device))
 
-    LOG.info("Checking if  controller-0 is provisioned.....")
-    if not host_helper.is_host_provisioned("controller-0"):
-        LOG.info("controller-0 is not provisioned; Performing lock/unlock on controller-0.....")
-        if (host_helper.lock_unlock_host("controller-0", fail_ok=True))[0] != 0:
-            assert False, "Failed to lock/unlock controller-0"
-        assert host_helper.is_host_provisioned("controller-0"), "controller-0 is still not provisioned" \
-                                                                " after lock/unlock"
+    LOG.tc_step("Ensure controller-0 is provisioned before upgrade.....")
+    host_helper.ensure_host_provisioned(controller0.name)
+    LOG.tc_step("Host {} is provisioned for upgrade.....".format(controller0.name))
 
     # open vlm console for controller-0 for boot through mgmt interface
     LOG.info("Opening a vlm console for controller-0 .....")
@@ -187,41 +177,53 @@ def test_system_upgrade():
     LOG.info("Starting thread for {}".format(node_thread.name))
     node_thread.start()
 
-    rc, output = host_helper.host_upgrade("controller-0", fail_ok=True)
+    LOG.tc_step("Starting {} upgrade.....".format(controller0.name))
+    host_helper.upgrade_host(controller0.name, lock=True)
+    LOG.tc_step("controller-0 is upgraded successfully.....")
 
-    LOG.tc_step("Checking  if controller-0 is upgraded successfully.....")
-    assert rc == 0, "Failed to upgrade controller-0: {}".format(output)
+    # unlocke upgraded controller-0
+    LOG.tc_step("Unlocking controller-0 after upgrade......")
+    host_helper.unlock_host(controller0.name, availability_state=HostAvailabilityState.AVAILABLE)
+    LOG.tc_step("Host {} unlocked after upgrade......".format(controller0.name))
+
 
     # upgrade  remaining hosts, if present
-    upgrade_hosts.remove('controller-0')
+    hosts = system_helper.get_hostnames()
+    hosts.remove(active_controller)
 
-    LOG.info("Starting upgrade of the other system hosts: {}".format(upgrade_hosts))
+    controllers = sorted([h for h in hosts if "controller" in h])
+    storages = sorted([h for h in hosts if "storage" in h])
+    computes = sorted([h for h in hosts if h not in storages and h not in controllers])
+    upgrade_hosts =  storages + computes
 
-    rc, output = host_helper.hosts_upgrade(upgrade_hosts, fail_ok=True)
-    LOG.tc_step("Checking  hosts {} are upgraded successfully.....".format(upgrade_hosts))
-    assert rc == 0, "Failed to upgrade hosts: {}".format(output)
+    LOG.tc_step("Starting upgrade of the other system hosts: {}".format(upgrade_hosts))
+    host_helper.upgrade_hosts(upgrade_hosts, lock=True, unlock=True)
+    LOG.tc_step("Hosts {} are upgraded successfully.....".format(upgrade_hosts))
+
 
     # Activate the upgrade
-    LOG.info("Activating upgrade")
+    LOG.tc_step("Activating upgrade....")
     rc, ouput = system_helper.activate_upgrade()
-    LOG.tc_step("Checking  if upgrade is activated.....")
-    assert rc == 0, "Failed to activate upgrade"
+    LOG.tc_step("Upgrade activate complete.....")
 
     # Make controller-0 the active controller
     # Swact to standby controller-0
-    LOG.info("Making controller-0 active")
-    rc, output = host_helper.swact_host(hostname="controller-1", fail_ok=True)
-    LOG.tc_step("Checking  if controller-0 has become active......")
+    LOG.tc_step("Making controller-0 active.....")
+    rc, output = host_helper.swact_host(hostname="controller-1")
     assert rc == 0, "Failed to swact: {}".format(output)
+    LOG.tc_step("Swacted to controller-0 ......")
 
     # Complete upgrade
-    LOG.info("Completing upgrade from  {} to {}".format(current_version, upgrade_version))
-    rc, output = system_helper.complete_upgrade()
-    LOG.tc_step("Checking  if upgrade is complete......")
-    assert rc == 0, "Failed to complete upgrade: {}".format(output)
+    LOG.tc_step("Completing upgrade from  {} to {}".format(current_version, upgrade_version))
+    system_helper.complete_upgrade()
+    LOG.tc_step("Upgrade is complete......")
 
     LOG.info("Lab: {} upgraded successfully".format(lab['name']))
 
+    # Delete the previous load
+    LOG.tc_step("Deleting  previous load version {} ".format(current_version))
+    system_helper.delete_imported_load()
+    LOG.tc_step("Deletdc  previous load version {}".format(current_version))
 
 def download_upgrade_license(lab, server, license_path):
 
@@ -229,9 +231,9 @@ def download_upgrade_license(lab, server, license_path):
     assert server.ssh_conn.exec_cmd(cmd)[0] == 0,  'Upgrade license file not found in {}:{}'.format(
             server.name, license_path)
 
-    pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(Host.PASSWORD)
     server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'],
-                          os.path.join(WRSROOT_HOME_DIR, "upgrade_license.lic"),
+                          os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
                           pre_opts=pre_opts)
 
 
@@ -242,10 +244,10 @@ def download_upgrade_load(lab, server, load_path):
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Upgrade build iso file not found in {}:{}'.format(
             server.name, load_path)
     iso_file_path = os.path.join(load_path, "export", UPGRADE_LOAD_ISO_FILE)
-    pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(Host.PASSWORD)
     server.ssh_conn.rsync(iso_file_path,
                           lab['controller-0 ip'],
-                          WRSROOT_HOME_DIR, pre_opts=pre_opts)
+                          WRSROOT_HOME, pre_opts=pre_opts)
 
 
 def get_mgmt_boot_device(node):
@@ -282,26 +284,6 @@ def controller_console_up(node, boot_device, install_output_dir, close_telnet_co
     if close_telnet_conn:
         node.telnet_conn.close()
 
-
-def install_upgrade_license(controller0_conn, timeout=30):
-
-    cmd = " sudo license-install " + os.path.join(WRSROOT_HOME_DIR, "upgrade_license.lic")
-    controller0_conn.send(cmd)
-    end_time = time.time() + timeout
-    rc = 1
-    while time.time() < end_time:
-        index = controller0_conn.expect([controller0_conn.prompt, Prompt.PASSWORD_PROMPT, Prompt.Y_N_PROMPT], timeout=timeout)
-        if index == 2:
-            controller0_conn.send('y')
-
-        if index == 1:
-            controller0_conn.send(WRSROOT_PASSWORD)
-
-        if index == 0:
-            rc = controller0_conn.exec_cmd("echo $?")[0]
-            break
-
-    return rc
 
 
 

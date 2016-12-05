@@ -5,7 +5,7 @@ import configparser
 from utils import exceptions
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
-from utils.lab_info import create_node_boot_dict, create_node_dict
+from utils.node import create_node_boot_dict, create_node_dict
 from consts.auth import Tenant, CliAuth
 from consts.cgcs import Prompt
 from consts.filepaths import PrivKeyPath
@@ -148,7 +148,7 @@ def get_lab_dict(labname):
     labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
 
     for lab in labs:
-        if 'name' in lab and labname in lab['name'].replace('-', '_').lower().strip() \
+        if labname in lab['name'].replace('-', '_').lower().strip() \
                 or labname == lab['short_name'].replace('-', '_').lower().strip() \
                 or labname == lab['floating ip']:
             return lab
