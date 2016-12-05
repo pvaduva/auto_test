@@ -196,6 +196,8 @@ class TestMutiPortsPCI:
         pcipt_info = network_helper.get_pci_interface_info(interface='pthru')
         if not sriov_info:
             skip(SkipReason.SRIOV_IF_UNAVAIL)
+        if not pcipt_info:
+            skip(SkipReason.PCIPT_IF_UNAVAIL)
 
         LOG.fixture_step("(class) Get a PCI network to boot vm from pci providernet info from lab_setup.conf")
         pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')

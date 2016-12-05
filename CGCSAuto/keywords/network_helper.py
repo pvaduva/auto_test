@@ -1617,7 +1617,19 @@ def get_pci_interface_info(interface='pthru', filepath=None, con_ssh=None):
     if 'No such file or directory' in sriov_if_override:
         raise ValueError("File '{}' cannot be found".format(filepath))
 
-    return sriov_if_override.split(sep='=')[-1]
+    ifs = sriov_if_override.split('\n')
+    info = []
+    for data in ifs:
+        intf = data.split('=')[-1]
+        # remove lines with blank entries or are commented out
+        if intf == '\"\"' or intf == '\'\'' or '#' in data:
+            continue
+        info.append(intf)
+
+    if not info:
+        LOG.warning("There is no {} interface set in lab_setup.conf".format(interface))
+        return ''
+    return info[0]
 
 
 def get_providernet_for_interface(interface='pthru', rtn_val='id', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
