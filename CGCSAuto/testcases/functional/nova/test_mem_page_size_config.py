@@ -14,8 +14,10 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 
 @fixture(scope='module')
-def flavor_2g():
-    flavor = nova_helper.create_flavor(name='flavor-2g', ram=2048)[1]
+def flavor_2g(add_1g_and_4k_pages):
+    storage_backing = add_1g_and_4k_pages[1]
+    flavor = nova_helper.create_flavor(name='flavor-2g', ram=2048, check_storage_backing=False,
+                                       storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', resource_id=flavor, scope='module')
 
     return flavor
@@ -34,9 +36,18 @@ def _revert(host):
 @fixture(scope='module', autouse=True)
 def add_1g_and_4k_pages(config_host_module):
     host = host_helper.get_nova_host_with_min_or_max_vms(rtn_max=False)
+
     config_host_module(host=host, modify_func=_modify, revert_func=_revert)
     host_helper.wait_for_hosts_in_nova_compute(host)
-    return host
+
+    storage_backing = host_helper.get_local_storage_backing(host)
+    LOG.info("Host's storage backing: {}".format(storage_backing))
+    if 'image' in storage_backing:
+        storage_backing = 'local_image'
+    elif 'lvm' in storage_backing:
+        storage_backing = 'local_lvm'
+
+    return host, storage_backing
 
 
 testdata = [None, 'any', 'large', 'small', '2048', '1048576']
@@ -117,6 +128,9 @@ def test_boot_vm_mem_page_size(flavor_2g, flavor_mem_page_size, image_mempage, i
 
     if expt_code != 0:
         assert re.search(NovaCLIOutput.VM_BOOT_REJECT_MEM_PAGE_SIZE_FORBIDDEN, msg)
+    else:
+        LOG.tc_step("Ensure VM is pingable from NatBox")
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 @fixture(scope='module')
@@ -126,10 +140,10 @@ def volume_():
     return vol_id
 
 
-@mark.p1
+@mark.usefixtures('add_admin_role_module')
 @mark.parametrize('mem_page_size', [
-    '1048576',
-    'large',
+    mark.domain_sanity('1048576'),
+    mark.p1('large'),
 ])
 def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_, add_1g_and_4k_pages):
     """
@@ -157,28 +171,31 @@ def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_, add_1g_and_4k_pages):
         - Re-Configure the compute to have 0 hugepages (module)
 
     """
+    host_configured, storage_backing = add_1g_and_4k_pages
     LOG.tc_step("Set memory page size extra spec in flavor")
     nova_helper.set_flavor_extra_specs(flavor_2g, **{FlavorSpec.CPU_POLICY: 'dedicated',
                                                      FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
 
-    host_helper.wait_for_hosts_in_nova_compute(add_1g_and_4k_pages)
+    host_helper.wait_for_hosts_in_nova_compute(host_configured)
     pre_computes_tab = system_helper.get_vm_topology_tables('computes')[0]
 
     LOG.tc_step("Boot a vm with mem page size spec - {}".format(mem_page_size))
-    code, vm_id, msg, vo = vm_helper.boot_vm('mempool_1g', flavor_2g, source='volume', source_id=volume_, fail_ok=True)
+    boot_host = host_configured if mem_page_size == 'large' else None
+
+    code, vm_id, msg, vo = vm_helper.boot_vm('mempool_1g', flavor_2g, source='volume', source_id=volume_, fail_ok=True,
+                                             avail_zone='nova', vm_host=boot_host)
     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
     assert 0 == code, "VM is not successfully booted."
 
     vm_host = nova_helper.get_vm_host(vm_id)
-    assert add_1g_and_4k_pages == vm_host, "VM is not created on the configured host {}".format(vm_host)
+    assert host_configured == vm_host, "VM is not created on the configured host {}".format(vm_host)
+
     LOG.tc_step("Calculate memory change on vm host - {}".format(vm_host))
 
     pre_computes_tab = table_parser.filter_table(pre_computes_tab, Host=vm_host)
     pre_used_mems = [int(mem) for mem in table_parser.get_column(pre_computes_tab, 'U:memory')[0]]
     pre_avail_mems = table_parser.get_column(pre_computes_tab, 'A:mem_1G')[0]
     pre_avail_mems = [int(mem) for mem in pre_avail_mems]
-    # FIXME: if large is set, check if vm_host has 1G pre vm boot, if not, 2M mem should be used.
-    # if mem_page_size == 'large':
 
     post_computes_tab = system_helper.get_vm_topology_tables('computes')[0]
     post_computes_tab = table_parser.filter_table(post_computes_tab, Host=vm_host)
@@ -192,3 +209,6 @@ def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_, add_1g_and_4k_pages):
     assert sum(pre_used_mems) + 2048 == sum(post_used_mems), "Used memory is not increase by 2048MiB"
     assert sum(pre_avail_mems) - 2048 == sum(post_avail_mems), ("Available memory in {} page pool is not decreased "
                                                                 "by 2048MiB").format(mem_page_size)
+
+    LOG.tc_step("Ensure vm is pingable from NatBox")
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

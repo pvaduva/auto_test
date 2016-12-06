@@ -43,12 +43,11 @@ def volume_():
     return vol_id
 
 
-@mark.p1
 @mark.parametrize('mem_page_size', [
-    '2048',
-    'large',
-    'small',
-    '1048576',
+    mark.domain_sanity('2048'),
+    mark.p1('large'),
+    mark.domain_sanity('small'),
+    mark.p1('1048576'),
 ])
 def test_vm_mem_pool(flavor_1g, mem_page_size, volume_):
     """

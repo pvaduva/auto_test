@@ -8,7 +8,6 @@ from pytest import mark
 from pytest import skip
 from pytest import fixture
 
-from consts.proj_vars import ProjVar
 from consts.cgcs import LocalStorage
 
 from utils.tis_log import LOG
@@ -30,8 +29,25 @@ def _get_computes_for_local_backing_type(ls_type='image', con_ssh=None):
     return hosts_of_type
 
 
-def _less_than_2_hypervisors():
-    return len(host_helper.get_nova_hosts()) < 2
+def min_no_disks_hypervisor(con_ssh=None):
+    hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
+
+    host_disks = [local_storage_helper.get_host_disk_sizes(host=hypervisor) for hypervisor in hypervisors]
+
+    LOG.debug('host_disks={}'.format(host_disks))
+    return min([len(hd.keys()) for hd in host_disks])
+
+
+@fixture(scope='module')
+def ensure_multiple_disks():
+    if (min_no_disks_hypervisor() < 2):
+        skip('Every hypervisor must have 2+ hard disks')
+
+
+@fixture(scope='module')
+def ensure_two_hypervisors():
+    if len(host_helper.get_hypervisors(state='up', status='enabled')) < 2:
+        skip("Less than two up hypervisors on system")
 
 
 class TestLocalStorage(object):
@@ -61,11 +77,11 @@ class TestLocalStorage(object):
 
                 while old_new_types:
                     host, old_type, _ = old_new_types.pop()
-                    HostsToRecover.add(host, scope='function')
+                    HostsToRecover.add(host, scope='class')
                     host_helper.lock_host(host)
                     cmd = 'host-lvg-modify -b {} {} nova-local'.format(old_type, host)
                     cli.system(cmd, fail_ok=False)
-                    # host_helper.unlock_host(host)
+                    host_helper.unlock_host(host)
             finally:
                 pass
 
@@ -153,8 +169,6 @@ class TestLocalStorage(object):
 
         LOG.debug('unlock {} now'.format(compute))
         host_helper.unlock_host(compute)
-        if 0 == rtn_code:
-            self._remove_from_cleanup_list(list_type='locked', to_remove=compute)
 
     def setup_local_storage_type_on_lab(self, ls_type='image'):
         LOG.debug('Chose one compute to change its local-storage-backing to expected type: {}'.format(ls_type))
@@ -166,23 +180,21 @@ class TestLocalStorage(object):
             computes_unlocked = host_helper.get_nova_hosts()
             compute_to_change = random.choice([c for c in computes_unlocked
                                                if c != system_helper.get_active_controller_name()])
-        if ls_type == 'image' and host_helper.get_local_storage_backing(compute_to_change) == 'lvm':
-            skip("Avoid reboot loop. CGTS-4855.")
         self.set_local_storage_backing(compute=compute_to_change, to_type=ls_type)
 
         return compute_to_change
 
-    def _is_profile_applicable_to(self, storage_profile=None, compute_dest=None):
-        LOG.debug('compare storage-sizes of the storage-profile:{} with compute:{}'.\
-                 format(storage_profile, compute_dest))
-
-        disk, size_profile = local_storage_helper.get_storprof_diskconfig(profile=storage_profile)
-        size_disk = local_storage_helper.get_host_disk_size(compute_dest, disk)
-
-        if size_disk >= size_profile:
-            return True
-
-        return False
+    # def _is_profile_applicable_to(self, storage_profile=None, compute_dest=None):
+    #     LOG.debug('compare storage-sizes of the storage-profile:{} with compute:{}'.\
+    #              format(storage_profile, compute_dest))
+    #
+    #     disk, size_profile = local_storage_helper.get_storprof_diskconfig(profile=storage_profile)
+    #     size_disk = local_storage_helper.get_host_disk_size(compute_dest, disk)
+    #
+    #     if size_disk >= size_profile:
+    #         return True
+    #
+    #     return False
 
     def _choose_compute_locked_diff_type(self, ls_type='image'):
         computes_locked_diff_type = [c for c in
@@ -291,6 +303,7 @@ class TestLocalStorage(object):
                 compute_src = active_controller
             else:
                 compute_src = random.choice(computes_of_ls_type)
+        LOG.info('-from {} create a local-storage profile of backing type:{}'.format(compute_src, ls_type))
         prof_uuid = self.create_storage_profile(compute_src, ls_type=ls_type)
 
         return prof_uuid, compute_src
@@ -302,12 +315,12 @@ class TestLocalStorage(object):
 
         return host_pv_sizes
 
-    @mark.skipif(_less_than_2_hypervisors(), reason='Requires 2 or more hyperviors to run the testcase')
+
     @mark.parametrize('local_storage_type', [
-        mark.p1('lvm'),
-        mark.p1('image'),
+        mark.domain_sanity('lvm'),
+        mark.domain_sanity('image'),
     ])
-    def test_local_storage_operations(self, local_storage_type):
+    def test_local_storage_operations(self, local_storage_type, ensure_two_hypervisors, ensure_multiple_disks):
         """
         Args:
             local_storage_type(str): type of local-storage backing, should be image, lvm
@@ -365,7 +378,7 @@ class TestLocalStorage(object):
 
         LOG.tc_step('Choose a compute other than {} to apply the storage-profile'.format(compute_src))
         compute_dest = self.select_target_compute(compute_src, ls_type=local_storage_type)
-        LOG.debug('target compute:{}'.format(compute_dest))
+        LOG.info('target compute:{}'.format(compute_dest))
 
         LOG.debug('Check if the storprofile is applicable to the target compute')
         if not local_storage_helper.is_storprof_applicable_to(host=compute_dest, profile=prof_uuid):
@@ -384,20 +397,17 @@ class TestLocalStorage(object):
 
         LOG.tc_step('Check if the changes take effect after unlocking')
         rtn_code = host_helper.unlock_host(compute_dest)
-        if 0 == rtn_code:
-            self._remove_from_cleanup_list(to_remove=compute_dest, list_type='locked')
 
         LOG.tc_step('Verify the local-storage type changed to {} on host:{}'
                     .format(local_storage_type, compute_dest))
         assert host_helper.check_host_local_backing_type(compute_dest, storage_type=local_storage_type), \
             'Local-storage backing failed to change to {} on host:{}'.format(local_storage_type, compute_dest)
 
-    @mark.skipif(_less_than_2_hypervisors(), reason='Requires 2 or more computes to test this test case')
     @mark.parametrize('local_storage_type', [
         mark.p2('image'),
         mark.p2('lvm'),
     ])
-    def test_apply_profile_to_smaller_sized_host(self, local_storage_type):
+    def test_apply_profile_to_smaller_sized_host(self, local_storage_type, ensure_two_hypervisors):
         """
 
         Args:
@@ -744,7 +754,7 @@ class TestLocalStorage(object):
         LOG.tc_step('Get the name of the profile and check if it is existing')
         local_file = self.get_local_storprfoile_file(local_storage_type=local_storage_type)
         if not local_file:
-            msg = 'Cannot find the porfile:{}'.format(local_file)
+            msg = 'Cannot find the profile:{}'.format(local_file)
             LOG.tc_step(msg)
             skip(msg)
             return -1

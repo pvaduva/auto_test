@@ -1,18 +1,21 @@
 import random
 import re
 import time
-from pexpect import TIMEOUT as ExpectTimeout
 from contextlib import contextmanager
+
+from pexpect import TIMEOUT as ExpectTimeout
 
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
 from utils.tis_log import LOG
+
 from consts.auth import Tenant, SvcCgcsAuto
-from consts.timeout import VMTimeout, CMDTimeout
+from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
+    VMNetworkStr, EventLogID
+from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 from consts.proj_vars import ProjVar
-from consts.cgcs import VMStatus, PING_LOSS_RATE, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, \
-    VifMapping, VMNetworkStr
-from consts.filepaths import TiSPath, VMPath
+from consts.timeout import VMTimeout, CMDTimeout
+
 
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 
@@ -88,7 +91,8 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            vm_host=None, fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True):
+            vm_host=None, avail_zone='nova', fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False,
+            guest_os='', poll=True):
     """
 
     Args:
@@ -101,7 +105,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         key_name (str):
         swap (int):
         ephemeral (int):
-        user_data (str):
+        user_data (str|list):
         vm_host (str): which host to place the vm
         block_device:
         auth_info (dict):
@@ -193,7 +197,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     elif source.lower() == 'image':
         img_name = guest_os if guest_os else 'cgcs-guest'
-        image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=False)
+        image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=True)
 
     elif source.lower() == 'snapshot':
         if not snapshot_id:
@@ -207,12 +211,17 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if hint:
         hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
 
-    avail_zone = 'nova:{}'.format(vm_host) if vm_host else None
+    host_zone = '{}:{}'.format(avail_zone, vm_host) if vm_host else None
 
-    # create userdata cloud init file to run right after vm initialization to get ip on interfaces other than eth0.
-    if guest_os and not user_data and 'cgcs-guest' not in guest_os:
+    if user_data is None and guest_os and 'cgcs-guest' not in guest_os:
+        # create userdata cloud init file to run right after vm initialization to get ip on interfaces other than eth0.
         user_data = _create_cloud_init_if_conf(guest_os, nics_num=len(nics))
 
+        # # Add wrsroot/li69nux user to non cgcs-guest vm
+        # user_data_adduser = _get_cloud_config_add_user(con_ssh=con_ssh)
+        # user_data.append(user_data_adduser)
+
+    # create cmd
     optional_args_dict = {'--flavor': flavor,
                           '--image': image,
                           '--boot-volume': volume_id,
@@ -221,11 +230,11 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--max-count': str(max_count) if max_count is not None else None,
                           '--key-name': key_name,
                           '--swap': swap,
-                          '--ephemeral': ephemeral,
                           '--user-data': user_data,
+                          '--ephemeral': ephemeral,
                           '--block-device': block_device,
                           '--hint': hint,
-                          '--availability-zone': avail_zone,
+                          '--availability-zone': host_zone,
                           }
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
@@ -493,9 +502,15 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     elif exit_code > 1:             # this is already handled by CLI module
         raise exceptions.CLIRejected("Live migration command rejected.")
 
+    LOG.info("Waiting for VM status change to {} with best effort".format(VMStatus.MIGRATING))
+    in_mig_state = _wait_for_vm_status(vm_id, status=VMStatus.MIGRATING, timeout=60)
+    if not in_mig_state:
+        LOG.warning("VM did not reach {} state after triggering live-migration".format(VMStatus.MIGRATING))
+
     LOG.info("Waiting for VM status change to original state {}".format(before_status))
     end_time = time.time() + VMTimeout.LIVE_MIGRATE_COMPLETE
     while time.time() < end_time:
+        time.sleep(2)
         status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
                                                     auth_info=Tenant.ADMIN)
         if status == before_status:
@@ -507,7 +522,6 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
             raise exceptions.VMPostCheckFailed(
                 "VM {} is in {} state after live migration. Original state before live migration is: {}".
                 format(vm_id, VMStatus.ERROR, before_status))
-        time.sleep(2)
     else:
         if fail_ok:
             return 4, "Post action check failed: VM is not in original state."
@@ -547,7 +561,7 @@ def _is_live_migration_allowed(vm_id, con_ssh=None, block_migrate=None):
         if storage_backing == 'remote':
             return True
         else:
-            LOG.warning("Live migration without block is not allowed for vm {}".format(vm_id))
+            LOG.warning("Live migration is not allowed for localdisk vm with non-remote storage. vm: {}".format(vm_id))
             return False
 
     # auto choose block-mig without local disk
@@ -608,6 +622,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
             Active state after confirm/revert.
         (7, err_msg) # Cold migration and resize confirm/revert ran successfully and vm in active state. But host for vm
             is not as expected. i.e., still the same host after confirm resize, or different host after revert resize.
+        (8, <stderr>) # Confirm/Revert resize cli rejected
 
     """
     before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
@@ -615,7 +630,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     if not before_status == VMStatus.ACTIVE:
         LOG.warning("Non-active VM status before cold migrate: {}".format(before_status))
 
-    LOG.info("Colding migrating VM {} from {}...".format(vm_id, before_host))
+    LOG.info("Cold migrating VM {} from {}...".format(vm_id, before_host))
     exitcode, output = cli.nova('migrate --poll', vm_id, ssh_client=con_ssh, auth_info=auth_info,
                                 timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=True, rtn_list=True)
 
@@ -639,8 +654,8 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
     LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
 
-    vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], fail_ok=fail_ok,
-                                    con_ssh=con_ssh)
+    vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], timeout=300,
+                                    fail_ok=fail_ok, con_ssh=con_ssh)
 
     if vm_status is None:
         return 4, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
@@ -648,7 +663,13 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     verify_resize_str = 'Revert' if revert else 'Confirm'
     if vm_status == VMStatus.VERIFY_RESIZE:
         LOG.info("{}ing resize..".format(verify_resize_str))
-        _confirm_or_revert_resize(vm=vm_id, revert=revert, con_ssh=con_ssh)
+        res, out = _confirm_or_revert_resize(vm=vm_id, revert=revert, fail_ok=True, con_ssh=con_ssh)
+        if res == 1:
+            err_msg = "{} resize cli rejected".format(verify_resize_str)
+            if fail_ok:
+                LOG.warning(err_msg)
+                return 8, out
+            raise exceptions.VMOperationFailed(err_msg)
 
     elif vm_status == VMStatus.ERROR:
         err_msg = "VM {} in Error state after cold migrate. {} resize is not reached.".format(vm_id, verify_resize_str)
@@ -695,7 +716,7 @@ def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_
 
     LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
     vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], fail_ok=fail_ok,
-                                    con_ssh=con_ssh)
+                                    timeout=300, con_ssh=con_ssh)
 
     if vm_status is None:
         return 2, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
@@ -769,20 +790,23 @@ def wait_for_vm_values(vm_id, timeout=VMTimeout.STATUS_CHANGE, check_interval=3,
     while time.time() < end_time:
         table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
         for field in fields_to_check:
-            expt_val = kwargs[field]
+            expt_vals = kwargs[field]
             actual_val = table_parser.get_value_two_col_table(table_, field)
             results[field] = actual_val
-            if regex:
-                match_found = re.match(expt_val, actual_val) if strict else re.search(expt_val, actual_val)
-            else:
-                match_found = expt_val == actual_val if strict else expt_val in actual_val
+            if not isinstance(expt_vals, list):
+                expt_vals = [expt_vals]
+            for expt_val in expt_vals:
+                if regex:
+                    match_found = re.match(expt_val, actual_val) if strict else re.search(expt_val, actual_val)
+                else:
+                    match_found = expt_val == actual_val if strict else expt_val in actual_val
 
-            if match_found:
-                fields_to_check.remove(field)
+                if match_found:
+                    fields_to_check.remove(field)
 
-            if not fields_to_check:
-                LOG.info("VM has reached states: {}".format(results))
-                return True, results
+                if not fields_to_check:
+                    LOG.info("VM has reached states: {}".format(results))
+                    return True, results
 
         time.sleep(check_interval)
 
@@ -834,48 +858,11 @@ def _wait_for_vm_status(vm_id, status, timeout=VMTimeout.STATUS_CHANGE, check_in
         raise exceptions.VMTimeout(err_msg)
 
 
-def _confirm_or_revert_resize(vm, revert=False, con_ssh=None):
-        if revert:
-            cli.nova('resize-revert', vm, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
-        else:
-            cli.nova('resize-confirm', vm, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
+def _confirm_or_revert_resize(vm, revert=False, con_ssh=None, fail_ok=False):
+        cmd = 'resize-revert' if revert else 'resize-confirm'
 
-
-__PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
-
-
-def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
-    """
-
-    Args:
-        server (str): server ip to ping
-        ssh_client (SSHClient): ping from this ssh client
-        num_pings (int):
-        timeout (int): max time to wait for ping response in seconds
-        fail_ok (bool): whether to raise exception if packet loss rate is 100%
-
-    Returns (int): packet loss percentile, such as 100, 0, 25
-
-    """
-    cmd = 'ping -c {} {}'.format(num_pings, server)
-
-    output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
-    packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
-    packet_loss_rate = int(packet_loss_rate)
-
-    if packet_loss_rate == 100:
-        msg = "Ping from {} to {} failed.".format(ssh_client.host, server)
-        if not fail_ok:
-            raise exceptions.VMNetworkError(msg)
-        else:
-            LOG.warning(msg)
-    elif packet_loss_rate > 0:
-        LOG.warning("Some packets dropped when ping from {} to {}. Packet loss rate: {}%".
-                    format(ssh_client.host, server, packet_loss_rate))
-    else:
-        LOG.info("All packets received by {}".format(server))
-
-    return packet_loss_rate
+        return cli.nova(cmd, vm, ssh_client=con_ssh, auth_info=Tenant.ADMIN, rtn_list=True,
+                        fail_ok=fail_ok)
 
 
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
@@ -936,8 +923,8 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     res_dict = {}
     for i in range(retry + 1):
         for ip in vms_ips:
-            packet_loss_rate = _ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings, timeout=timeout,
-                                            fail_ok=True)
+            packet_loss_rate = network_helper._ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings,
+                                                           timeout=timeout, fail_ok=True)[0]
             res_dict[ip] = packet_loss_rate
 
         res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
@@ -1059,7 +1046,8 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                prompt=prompt, con_ssh=con_ssh, vm_ip=vm_ip, use_fip=use_fip) as from_vm_ssh:
-        return _ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings, timeout=timeout, fail_ok=fail_ok)
+        return network_helper._ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings,
+                                           timeout=timeout, fail_ok=fail_ok)[0]
 
 
 @contextmanager
@@ -1673,7 +1661,7 @@ def rebuild_vm(vm_id, image_id=None, new_name=None, preserve_ephemeral=None, fai
                auth_info=Tenant.ADMIN, **metadata):
 
     if image_id is None:
-        image_id = glance_helper.get_image_id_from_name('cgcs-guest')
+        image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
 
     args = '{} {}'.format(vm_id, image_id)
 
@@ -1687,7 +1675,7 @@ def rebuild_vm(vm_id, image_id=None, new_name=None, preserve_ephemeral=None, fai
         args += ' --meta {}={}'.format(key, value)
 
     LOG.info("Rebuilding vm {}".format(vm_id))
-    code, output = cli.nova('rebuild', args, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    code, output = cli.nova('rebuild', args, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
     if code == 1:
         return code, output
 
@@ -1882,7 +1870,7 @@ def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **
     if action == 'cold_mig_revert':
         kwargs['revert'] = True
 
-    action_function_map[action](vm_id, con_ssh=con_ssh, auth_info=auth_info, **kwargs)
+    return action_function_map[action](vm_id, con_ssh=con_ssh, auth_info=auth_info, **kwargs)
 
 
 def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
@@ -1926,10 +1914,8 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
                 elif 'rename' in eth_name:
                     LOG.warning("Retry {}: non-existing interface {} found on pci-passthrough nic in vm {}, "
                                 "reboot vm to try to recover".format(i + 1, eth_name, vm_id))
-                    sudo_reboot_from_vm(vm_ssh=vm_ssh)
-
-                    _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=False)
-                    wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
+                    sudo_reboot_from_vm(vm_id=vm_id, vm_ssh=vm_ssh)
+                    wait_for_vm_pingable_from_natbox(vm_id)
                     break
 
                 else:
@@ -1942,12 +1928,18 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
 
                     output_pre = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
                     if vlan_name not in output_pre:
+                        if eth_name not in output_pre:
+                            LOG.info("Append new interface {} to /etc/network/interfaces".format(eth_name))
+                            if_to_add = VMNetworkStr.NET_IF.format(eth_name, eth_name)
+                            vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
+                                            format(if_to_add), fail_ok=False)
+
                         if '.' + net_seg_id in output_pre:
-                            LOG.info("Modify existing interface to {} in file.".format(vlan_name))
+                            LOG.info("Modify existing interface to {} in /etc/network/interfaces".format(vlan_name))
                             vm_ssh.exec_cmd(r"sed -i -e 's/eth[0-9]\(.{}\)/{}\1/g' /etc/network/interfaces".
                                             format(net_seg_id, eth_name), fail_ok=False)
                         else:
-                            LOG.info("Append new interface {} to file".format(vlan_name))
+                            LOG.info("Append new interface {} to /etc/network/interfaces".format(vlan_name))
                             if_to_add = VMNetworkStr.NET_IF.format(vlan_name, vlan_name)
                             vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
                                             format(if_to_add), fail_ok=False)
@@ -1972,11 +1964,22 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
         raise exceptions.VMNetworkError("pci-passthrough interface(s) not found in vm {}".format(vm_id))
 
 
-def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
+def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True, con_ssh=None):
+
+    if check_host_unchanged:
+        pre_vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+
+    LOG.info("Initiate sudo reboot from vm")
+
     def _sudo_reboot(vm_ssh_):
-        vm_ssh_.exec_sudo_cmd('reboot')
+        code, output = vm_ssh_.exec_sudo_cmd('reboot', get_exit_code=False)
+        expt_string = 'The system is going down for reboot'
+        if expt_string in output:
+            # Sometimes system rebooting msg will be displayed right after reboot cmd sent
+            vm_ssh_.parent.flush()
+            return
         try:
-            index = vm_ssh_.expect(['The system is going down for reboot', vm_ssh.prompt], timeout=60)
+            index = vm_ssh_.expect([expt_string, vm_ssh.prompt], timeout=60)
             if index == 1:
                 raise exceptions.VMOperationFailed("Unable to reboot vm {}")
             vm_ssh_.parent.flush()
@@ -1986,16 +1989,30 @@ def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
             raise
 
     if not vm_ssh:
-            if not vm_id:
-                raise ValueError("vm_id or vm_ssh needs to be provided")
-            with ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-                _sudo_reboot(vm_ssh)
+        with ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+            _sudo_reboot(vm_ssh)
     else:
         _sudo_reboot(vm_ssh)
 
+    LOG.info("sudo vm reboot initiated - wait for reboot completes and VM reaches active state")
+    system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, strict=False, fail_ok=False, con_ssh=con_ssh,
+                                  **{'Entity Instance ID': vm_id,
+                                     'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
+    _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=False, con_ssh=con_ssh)
 
-def get_proc_num_from_vm(vm_ssh):
-    return int(vm_ssh.exec_cmd('cat /proc/cpuinfo | grep processor | wc -l', fail_ok=False)[1])
+    if check_host_unchanged:
+        post_vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+        if not pre_vm_host == post_vm_host:
+            raise exceptions.HostError("VM host changed from {} to {} after sudo reboot vm".format(
+                    pre_vm_host, post_vm_host))
+
+
+def get_proc_nums_from_vm(vm_ssh):
+    total_cores = common._parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/present', fail_ok=False)[1])
+    online_cores = common._parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/online', fail_ok=False)[1])
+    offline_cores = common._parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/offline', fail_ok=False)[1])
+
+    return total_cores, online_cores, offline_cores
 
 
 def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=None, con_ssh=None):
@@ -2101,7 +2118,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
         guest_os:
         nics_num:
 
-    Returns (str): file path of the cloud init userdata file for given guest os and number of nics
+    Returns (str|None): file path of the cloud init userdata file for given guest os and number of nics
         Sample file content for Centos vm:
             #!/bin/bash
             sudo cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth1
@@ -2114,20 +2131,21 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     """
 
     file_dir = TiSPath.USERDATA
+    guest_os = guest_os.lower()
+
+    # default eth_path for non-ubuntu image
+    eth_path = VMPath.ETH_PATH_CENTOS
+    new_user = None
 
     if 'ubuntu' in guest_os:
-        guest_os = 'ubuntu'
+        guest_os = 'ubuntu_14'
         # vm_if_path = VMPath.VM_IF_PATH_UBUNTU
         eth_path = VMPath.ETH_PATH_UBUNTU
+        new_user = 'ubuntu'
     elif 'centos' in guest_os:
-        guest_os = guest_os
         # vm_if_path = VMPath.VM_IF_PATH_CENTOS
-        eth_path = VMPath.ETH_PATH_CENTOS
+        new_user = 'centos'
 
-    else:
-        raise ValueError("Unknown guest os")
-
-    eth0_path = eth_path.format('eth0')
     file_name = '{}_{}nic_cloud_init_if_conf.sh'.format(guest_os, nics_num)
 
     file_path = file_dir + file_name
@@ -2136,25 +2154,210 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
         LOG.info('userdata {} already exists. Return existing path'.format(file_path))
         return file_path
 
-    LOG.debug('Create userdata directory if not already exists')
+    LOG.info('Create userdata directory if not already exists')
     cmd = 'mkdir -p {}'.format(file_dir)
     con_ssh.exec_cmd(cmd, fail_ok=False)
 
     tmp_file = ProjVar.get_var('TEMP_DIR') + file_name
-    if 'centos7' in guest_os:
-        shell = '/usr/bin/bash'
-    else:
-        shell = '/bin/bash'
+
+    # No longer need to specify bash using cloud-config
+    # if 'centos_7' in guest_os:
+    #     shell = '/usr/bin/bash'
+    # else:
+    #     shell = '/bin/bash'
 
     with open(tmp_file, mode='a') as f:
-        f.write('#!{}\n\n'.format(shell))
-        for i in range(nics_num-1):
-            ethi_name = 'eth{}'.format(i+1)
-            ethi_path = eth_path.format(ethi_name)
-            f.write('cp {} {}\n'.format(eth0_path, ethi_path))
-            f.write("sed -i 's/eth0/{}/g' {}\n".format(ethi_name, ethi_path))
-            f.write('ifup {}\n'.format(ethi_name))
+        f.write("#cloud-config\n")
+
+        if new_user is not None:
+            f.write("user: {}\n"
+                    "password: {}\n"
+                    "chpasswd: {{ expire: False}}\n"
+                    "ssh_pwauth: True\n\n".format(new_user, new_user))
+
+        if eth_path is not None:
+            eth0_path = eth_path.format('eth0')
+            f.write("runcmd:\n")
+            # f.write(" - echo '#!{}'\n".format(shell))
+            for i in range(nics_num-1):
+                ethi_name = 'eth{}'.format(i+1)
+                ethi_path = eth_path.format(ethi_name)
+                f.write(' - cp {} {}\n'.format(eth0_path, ethi_path))
+                f.write(" - sed -i 's/eth0/{}/g' {}\n".format(ethi_name, ethi_path))
+                f.write(' - ifup {}\n'.format(ethi_name))
 
     common.scp_to_active_controller(source_path=tmp_file, dest_path=file_path, is_dir=False)
 
+    LOG.info("Userdata file created: {}".format(file_path))
     return file_path
+
+
+def _get_cloud_config_add_user(con_ssh=None):
+    """
+    copy the cloud-config userdata to TiS server.
+    This userdata adds wrsroot/li69nux user to guest
+
+    Args:
+        con_ssh (SSHClient):
+
+    Returns (str): TiS filepath of the userdata
+
+    """
+    file_dir = TiSPath.USERDATA
+    file_name = UserData.ADDUSER_WRSROOT
+    file_path = file_dir + file_name
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+    if con_ssh.file_exists(file_path=file_path):
+        LOG.info('userdata {} already exists. Return existing path'.format(file_path))
+        return file_path
+
+    LOG.debug('Create userdata directory if not already exists')
+    cmd = 'mkdir -p {}'.format(file_dir)
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
+    source_file = TestServerPath.USER_DATA + file_name
+
+    dest_path = common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=file_dir,
+                                                                 dest_name=file_name, is_dir=False, con_ssh=con_ssh)
+
+    if dest_path is None:
+        raise exceptions.CommonError("userdata file {} does not exist after download".format(file_path))
+
+    return file_path
+
+
+def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN, vm_image_name='cgcs-guest'):
+    """
+    Cold migrate modifed for CGTS-4911
+    Args:
+        vm_id (str): vm to cold migrate
+        revert (bool): False to confirm resize, True to revert
+        con_ssh (SSHClient):
+        fail_ok (bool): True if fail ok. Default to False, ie., throws exception upon cold migration fail.
+        auth_info (dict):
+
+    Returns (tuple): (rtn_code, message)
+        (0, success_msg) # Cold migration and confirm/revert succeeded. VM is back to original state or Active state.
+        (1, <stderr>) # cold migration cli rejected as expected
+        (2, <stderr>) # Cold migration cli command rejected. <stderr> is the err message returned by cli cmd.
+        (3, <stdout>) # Cold migration cli accepted, but not finished. <stdout> is the output of cli cmd.
+        (4, timeout_message] # Cold migration command ran successfully, but timed out waiting for VM to reach
+            'Verify Resize' state or Error state.
+        (5, err_msg) # Cold migration command ran successfully, but VM is in Error state.
+        (6, err_msg) # Cold migration command ran successfully, and resize confirm/revert performed. But VM is not in
+            Active state after confirm/revert.
+        (7, err_msg) # Cold migration and resize confirm/revert ran successfully and vm in active state. But host for vm
+            is not as expected. i.e., still the same host after confirm resize, or different host after revert resize.
+
+    """
+    before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+    before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh)
+    if not before_status == VMStatus.ACTIVE:
+        LOG.warning("Non-active VM status before cold migrate: {}".format(before_status))
+
+    LOG.info("Cold migrating VM {} from {}...".format(vm_id, before_host))
+    exitcode, output = cli.nova('migrate --poll', vm_id, ssh_client=con_ssh, auth_info=auth_info,
+                                timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=True, rtn_list=True)
+
+    if exitcode == 1:
+        vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
+        if len(host_helper.get_nova_hosts_with_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
+            LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
+                     "migrate to.".format(vm_id))
+            return 1, output
+        elif fail_ok:
+            LOG.warning("Cold migration of vm {} is rejected.".format(vm_id))
+            return 2, output
+        else:
+            raise exceptions.VMOperationFailed(output)
+
+    if 'Finished' not in output:
+        if fail_ok:
+            LOG.warning("Cold migration is not finished.")
+            return 3, output
+        raise exceptions.VMPostCheckFailed("Failed to cold migrate vm. Output: {}".format(output))
+
+    LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
+
+    vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], timeout=300,
+                                    fail_ok=fail_ok, con_ssh=con_ssh)
+
+    if vm_status is None:
+        return 4, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
+
+    # Modified here
+    # TODO Check file in vm
+    wait_for_vm_pingable_from_natbox(vm_id, timeout=240)
+    with ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name) as vm_ssh:
+        filename = ""
+        look_for = ''
+        # vm_ssh.exec_cmd('cat {} | grep {}'.format(filename, look_for))
+
+    verify_resize_str = 'Revert' if revert else 'Confirm'
+    if vm_status == VMStatus.VERIFY_RESIZE:
+        LOG.info("{}ing resize..".format(verify_resize_str))
+        _confirm_or_revert_resize(vm=vm_id, revert=revert, con_ssh=con_ssh)
+
+    elif vm_status == VMStatus.ERROR:
+        err_msg = "VM {} in Error state after cold migrate. {} resize is not reached.".format(vm_id, verify_resize_str)
+        if fail_ok:
+            return 5, err_msg
+        raise exceptions.VMPostCheckFailed(err_msg)
+
+    post_confirm_state = _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM,
+                                             fail_ok=fail_ok, con_ssh=con_ssh)
+
+    if post_confirm_state is None:
+        err_msg = "VM {} is not in Active state after {} Resize".format(vm_id, verify_resize_str)
+        return 6, err_msg
+
+    # Process results
+    after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+    host_changed = before_host != after_host
+    host_change_str = "changed" if host_changed else "did not change"
+    operation_ok = not host_changed if revert else host_changed
+
+    if not operation_ok:
+        err_msg = ("VM {} host {} after {} Resize. Before host: {}. After host: {}".
+                   format(vm_id, host_change_str, verify_resize_str, before_host, after_host))
+        if fail_ok:
+            return 7, err_msg
+        raise exceptions.VMPostCheckFailed(err_msg)
+
+    success_msg = "VM {} successfully cold migrated and {}ed Resize.".format(vm_id, verify_resize_str)
+    LOG.info(success_msg)
+    return 0, success_msg
+
+
+def wait_for_process(process, vm_id=None, vm_ssh=None, disappear=False, timeout=120, check_interval=3, fail_ok=True,
+                     con_ssh=None):
+    """
+    Wait for given process to appear or disappear on a VM
+
+    Args:
+        process (str): PID or unique proc name
+        vm_id (str): vm id if vm_ssh is not provided
+        vm_ssh (VMSSHClient): when vm_ssh is given, vm_id param will be ignored
+        disappear (bool):
+        timeout (int): max seconds to wait
+        check_interval (int):
+        fail_ok (bool): whether to raise exception upon wait fail
+        con_ssh (SSHClient): active controller ssh.
+
+    Returns (bool): whether or not process appear/disappear within timeout. False return only possible when fail_ok=True
+
+    """
+    if not vm_ssh and not vm_id:
+        raise ValueError("Either vm_id or vm_ssh has to be provided")
+
+    if not vm_ssh:
+        with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh) as vm_ssh:
+            return common.wait_for_process(ssh_client=vm_ssh, process=process, disappear=disappear,
+                                           timeout=timeout, check_interval=check_interval, fail_ok=fail_ok)
+
+    else:
+        return common.wait_for_process(ssh_client=vm_ssh, process=process, disappear=disappear, timeout=timeout,
+                                       check_interval=check_interval, fail_ok=fail_ok)
+

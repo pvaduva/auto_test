@@ -4,15 +4,15 @@ import re
 from utils import cli, exceptions
 from utils import table_parser
 from utils.tis_log import LOG
-from consts.auth import Tenant
-from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec
+from consts.auth import Tenant, Guest
+from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec, GuestImages
 from keywords import keystone_helper, host_helper, common
 from keywords.common import Count
 
 
-def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ephemeral=None, swap=None,
-                  is_public=None, rxtx_factor=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None,
-                  check_storage_backing=True):
+def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=None, ephemeral=None, swap=None,
+                  is_public=None, rxtx_factor=None, guest_os=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None,
+                  storage_backing=None, check_storage_backing=True):
     """
     Create a flavor with given critria.
 
@@ -30,13 +30,17 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
         fail_ok (bool): whether it's okay to fail to create a flavor. Default to False.
         auth_info (dict): This is set to Admin by default. Can be set to other tenant for negative test.
         con_ssh (SSHClient):
-        check_storage_backing (bool): whether to set local_storage spec based on the hosts configuration
+        storage_backing (str): storage backing in extra flavor. Auto set storage backing based on system config if None.
+            Valid values: 'local_image', 'local_lvm', 'remote'
+        check_storage_backing (bool): whether to check the system storage backing configuration to auto determine the
+            local_storage extra spec if storage_backing param is set to None.
 
     Returns (tuple): (rtn_code (int), flavor_id/err_msg (str))
         (0, <flavor_id>): flavor created successfully
         (1, <stderr>): create flavor cli rejected
 
     """
+
     candidate_args = {
         '--ephemeral': ephemeral,
         '--swap': swap,
@@ -50,23 +54,9 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
     if name is None:
         name = 'flavor'
     flavor_name = common.get_unique_name(name_str=name, existing_names=existing_names, resource_type='flavor')
-    # if name is not None:
-    #     flavor_name = name
-    #     if name in existing_names:
-    #         for i in range(50):
-    #             tmp_name = '-'.join([name, str(i)])
-    #             if tmp_name not in existing_names:
-    #                 flavor_name = tmp_name
-    #                 break
-    # else:
-    #     name = 'flavor'
-    #     for i in range(10):
-    #         tmp_name = '-'.join([name, str(Count.get_flavor_count())])
-    #         if tmp_name not in existing_names:
-    #             flavor_name = tmp_name
-    #             break
-    #     else:
-    #         exceptions.FlavorError("Unable to get a proper name for flavor creation.")
+
+    if root_disk is None:
+        root_disk = GuestImages.IMAGE_FILES[guest_os][1] if guest_os else 1
 
     mandatory_args = ' '.join([flavor_name, flavor_id, str(ram), str(root_disk), str(vcpus)])
 
@@ -87,46 +77,74 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=1, ep
     flavor_id = table_parser.get_column(table_, 'ID')[0]
     LOG.info("Flavor {} created successfully.".format(flavor_name))
 
-    if check_storage_backing:
-        LOG.info("Setting local_storage spec to storage backing with max number of hosts on system if not local_image")
-        local_image_hosts = ['local_image', host_helper.get_hosts_by_storage_aggregate(con_ssh=con_ssh)]
-        local_lvm_hosts = ['local_lvm', host_helper.get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh)]
-        remote_hosts = ['remote', host_helper.get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh)]
+    if not storage_backing:
+        if check_storage_backing:
+            LOG.info("Choose storage backing used by most hosts")
+            storage_backing, hosts = get_storage_backing_with_max_hosts(rtn_down_hosts=True, con_ssh=con_ssh)
+        else:
+            storage_backing = 'local_image'
 
-        hosts_in_aggregates = [local_image_hosts, local_lvm_hosts, remote_hosts]
+    if storage_backing != 'local_image':
+        LOG.info("Setting local_storage extra spec to {}".format(storage_backing))
+        set_flavor_extra_specs(flavor_id, con_ssh=con_ssh, auth_info=auth_info,
+                               **{FlavorSpec.STORAGE_BACKING: storage_backing})
 
-        storage_backing_spec = None
-        max_num = 0
-        for hosts_with_backing in hosts_in_aggregates:
-            hosts_num = len(hosts_with_backing[1])
-            if hosts_num > max_num:
-                storage_backing_spec = hosts_with_backing[0]
-                max_num = hosts_num
+    return 0, flavor_id, storage_backing
 
-        if max_num == 0:
-            image_hosts_num = lvm_hosts_num = remote_hosts_num = 0
-            down_hosts = host_helper.get_hypervisors(state='down', con_ssh=con_ssh)
-            for down_host in down_hosts:
-                host_instance_backing = host_helper.get_local_storage_backing(down_host, con_ssh=con_ssh)
-                if 'image' in host_instance_backing:
-                    image_hosts_num += 1
-                elif 'lvm' in host_instance_backing:
-                    lvm_hosts_num += 1
-                else:
-                    remote_hosts_num += 1
-            hosts_nums = [image_hosts_num, lvm_hosts_num, remote_hosts_num]
-            max_num = max(hosts_nums)
-            storage_backing_spec = ['local_image', 'local_lvm', 'remote'][hosts_nums.index(max_num)]
-            LOG.warning("No up hosts in host-aggregate. Using {} storage spec based on instance backing for down hosts."
-                        .format(storage_backing_spec))
 
-        if storage_backing_spec != 'local_image':
-            LOG.info("Setting local_storage extra spec to {}. Number of hosts with this storage backing: {}".format(
-                    storage_backing_spec, max_num))
-            set_flavor_extra_specs(flavor_id, con_ssh=con_ssh, auth_info=auth_info,
-                                   **{FlavorSpec.STORAGE_BACKING: storage_backing_spec})
+def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=False, con_ssh=None):
 
-    return 0, flavor_id
+    hosts_by_backing = {'local_image': host_helper.get_hosts_by_storage_aggregate(con_ssh=con_ssh),
+                        'local_lvm': host_helper.get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh),
+                        'remote': host_helper.get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh)
+                        }
+
+    valid_backings = ['local_image', 'local_lvm', 'remote']
+    valid_backings.remove(prefer)
+    valid_backings.insert(0, prefer)
+
+    storage_backing_spec = prefer
+    max_num = 0
+    for backing in valid_backings:
+        hosts_num = len(hosts_by_backing[backing])
+        if hosts_num > max_num:
+            storage_backing_spec = backing
+            max_num = hosts_num
+
+    if max_num > 0:
+        LOG.info("{} backing has most hosts in aggregate: {}".format(storage_backing_spec,
+                                                                     hosts_by_backing[storage_backing_spec]))
+    elif max_num == 0 and not rtn_down_hosts:
+        LOG.warning("No host in host-aggregate. Return preferred storage backing")
+
+    else:
+        image_hosts_num = lvm_hosts_num = remote_hosts_num = 0
+        down_hosts = host_helper.get_hypervisors(state='down', con_ssh=con_ssh)
+        for down_host in down_hosts:
+            host_instance_backing = host_helper.get_local_storage_backing(down_host, con_ssh=con_ssh)
+            if 'image' in host_instance_backing:
+                backing = 'local_image'
+                image_hosts_num += 1
+            elif 'lvm' in host_instance_backing:
+                backing = 'local_lvm'
+                lvm_hosts_num += 1
+            else:
+                backing = 'remote'
+                remote_hosts_num += 1
+
+            hosts_by_backing[backing].append(down_host)
+
+        hosts_nums = {'local_image': image_hosts_num, 'local_lvm': lvm_hosts_num, 'remote': remote_hosts_num}
+        max_num = max(list(hosts_nums.values()))
+        for backing in valid_backings:
+            if max_num == hosts_nums[backing]:
+                storage_backing_spec = backing
+                break
+
+        LOG.warning("No up hosts in host-aggregate. Return {} storage backing based on instance backing for down hosts."
+                    .format(storage_backing_spec))
+
+    return storage_backing_spec, hosts_by_backing[storage_backing_spec]
 
 
 def flavor_exists(flavor, header='ID', con_ssh=None, auth_info=None):
@@ -268,10 +286,11 @@ def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     """
     size = 1
     if guest_os and 'cgcs-guest' not in guest_os:
-        if 'ubuntu' in guest_os:
-            size = 9
-        elif 'centos' in guest_os:
-            size = 9
+        # if 'ubuntu' in guest_os:
+        #     size = 9
+        # elif 'centos' in guest_os:
+        #     size = 9
+        size = GuestImages.IMAGE_FILES[guest_os][1]
 
     default_flavor_name = 'flavor-default-size{}'.format(size)
     flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)
@@ -591,7 +610,7 @@ def unset_server_group_metadata(srv_grp_id, fail_ok=False, auth_info=None, con_s
 
     args = srv_grp_id + ' '
     metadata = [item.lower() for item in metadata]
-    args += ' '.join([item + "=" for item in metadata])
+    args += ' '.join([str(item) + "=" for item in metadata])
 
     code, output = cli.nova('server-group-set-metadata', args, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
                             fail_ok=fail_ok)
@@ -993,7 +1012,7 @@ def get_key_pair(name=None, con_ssh=None, auth_info=None):
     """
     table_ = table_parser.table(cli.nova('keypair-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is not None:
-        return table_parser.get_values(table_,'Name',Name=name)
+        return table_parser.get_values(table_, 'Name', Name=name)
     else:
         return table_parser.get_column(table_, 'Name')
 
@@ -1033,7 +1052,7 @@ def get_vm_boot_info(vm_id, auth_info=None, con_ssh=None):
         if len(volumes) == 0:
             raise exceptions.VMError("Booted from volume, but no volume id found.")
         elif len(volumes) > 1:
-            raise exceptions.VMError("VM booted from volume. Multiple volumes found! Did you attach extra volume?")
+            LOG.warning("VM booted from volume. Multiple volumes found, taking the first volume as boot source")
         return {'type': 'volume', 'id': volumes[0]}
     else:
         match = re.search(UUID, image)
@@ -1389,3 +1408,264 @@ def get_vm_instance_name(vm_id, con_ssh=None):
 
 def get_nova_services_table(auth_info=Tenant.ADMIN, con_ssh=None):
     return table_parser.table(cli.nova('service-list', ssh_client=con_ssh, auth_info=auth_info))
+
+
+def create_aggregate(rtn_val='name', name=None, avail_zone=None, check_first=True, fail_ok=False, con_ssh=None,
+                     auth_info=Tenant.ADMIN):
+    """
+    Add a aggregate with given name and availability zone.
+
+    Args:
+        rtn_val (str): name or id
+        name (str): name for aggregate to create
+        avail_zone (str):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+        (0, <rtn_val>)          -- aggregate successfully created
+        (1, <stderr>)           -- cli rejected
+        (2, "Created aggregate is not as specified")    -- name and/or availability zone mismatch
+
+    """
+    if not name:
+        existing_names = get_aggregates(rtn_val='name')
+        name = common.get_unique_name(name_str='cgcsauto', existing_names=existing_names)
+
+    subcmd = name
+    if avail_zone:
+        subcmd += ' {}'.format(avail_zone)
+
+    if check_first:
+        aggregates_ = get_aggregates(rtn_val=rtn_val, name=name, avail_zone=avail_zone)
+        if aggregates_:
+            LOG.warning("Aggregate {} already exists. Do nothing.".format(name))
+            return -1, aggregates_[0]
+
+    LOG.info("Adding aggregate {}".format(name))
+
+    res, out = cli.nova('aggregate-create', subcmd, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                        fail_ok=fail_ok)
+    if res == 1:
+        return res, out
+
+    out_tab = table_parser.table(out)
+    expt_avail = avail_zone if avail_zone else ''
+    actual_values = table_parser.get_values(out_tab, rtn_val, **{'Name': name, 'Availability Zone': expt_avail})
+
+    if not actual_values:
+        err_msg = "Created aggregate is not as specified"
+        if fail_ok:
+            return 2, err_msg
+        else:
+            raise exceptions.NovaError(err_msg)
+
+    succ_msg = "Aggregate {} is successfully created".format(name)
+    LOG.info(succ_msg)
+    return 0, actual_values[0]
+
+
+def get_aggregates(rtn_val='name', name=None, avail_zone=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get a list of aggregates
+
+    Args:
+        rtn_val (str): id or name
+        name (str): filter out the aggregates with given name if specified
+        avail_zone (str): filter out the aggregates with given availability zone if specified
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (list):
+
+    """
+    kwargs = {}
+    if avail_zone:
+        kwargs['Availability Zone'] = avail_zone
+
+    if name:
+        kwargs['Name'] = name
+
+    aggregates_tab = table_parser.table(cli.nova('aggregate-list', ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_values(aggregates_tab, rtn_val, **kwargs)
+
+
+def delete_aggregate(name, check_first=True, remove_hosts=True, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Add a aggregate with given name and availability zone.
+
+    Args:
+        name (str): name for aggregate to delete
+        check_first (bool)
+        remove_hosts (bool)
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+        (0, "Aggregate <name> is successfully deleted")          -- aggregate successfully deletec
+        (1, <stderr>)           -- cli rejected
+        (2, "Aggregate <name> still exists in aggregate-list after deletion")    -- failed although cli accepted
+
+    """
+    if check_first:
+        if not get_aggregates(name=name):
+            msg = 'Aggregate {} does not exists. Do nothing.'.format(name)
+            LOG.warning(msg)
+            return -1, msg
+
+    if remove_hosts:
+        remove_hosts_from_aggregate(aggregate=name, check_first=True)
+
+    LOG.info("Deleting aggregate {}".format(name))
+
+    res, out = cli.nova('aggregate-delete', name, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                        fail_ok=fail_ok)
+    if res == 1:
+        return res, out
+
+    post_aggregates = get_aggregates(rtn_val='name', con_ssh=con_ssh, auth_info=auth_info)
+    if name in post_aggregates:
+        err_msg = "Aggregate {} still exists in aggregate-list after deletion."
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        else:
+            raise exceptions.NovaError(err_msg)
+
+    succ_msg = "Aggregate {} is successfully deleted".format(name)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def remove_hosts_from_aggregate(aggregate, hosts=None, check_first=True, fail_ok=False, con_ssh=None,
+                                auth_info=Tenant.ADMIN):
+    """
+    Remove hosts from specified aggregate
+
+    Args:
+        aggregate (str): name of the aggregate to remove hosts. cgcsauto aggregate can be added via add_cgcsauto_zone
+            session fixture
+        hosts (list|str): host(s) to remove from aggregate
+        check_first (bool):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+        (0, "Hosts successfully removed from aggregate")
+        (1, <stderr>)       cli rejected on at least one host
+        (2, "Host(s) still exist in aggregate <aggr> after aggregate-remove-host: <unremoved_hosts>)
+
+    """
+    __remove_or_add_hosts_in_aggregate(remove=True, aggregate=aggregate, hosts=hosts, check_first=check_first,
+                                       fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
+
+
+def add_hosts_to_aggregate(aggregate, hosts, check_first=True, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Add host(s) to specified aggregate
+
+    Args:
+        aggregate (str): name of the aggregate to add hosts. cgcsauto aggregate can be added via add_cgcsauto_zone
+            session fixture
+        hosts (list|str): host(s) to add to aggregate
+        check_first (bool):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+        (0, "Hosts successfully added from aggregate")
+        (1, <stderr>)       cli rejected on at least one host
+        (2, "aggregate-add-host accepted, but some host(s) are not added in aggregate")
+
+    """
+    __remove_or_add_hosts_in_aggregate(remove=False, aggregate=aggregate, hosts=hosts, check_first=check_first,
+                                       fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
+
+
+def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, check_first=True, fail_ok=False,
+                                       con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Remove/Add hosts from/to given aggregate
+
+    Args:
+        aggregate (str): name of the aggregate to add/remove hosts. cgcsauto aggregate can be added via
+            add_cgcsauto_zone session fixture
+        hosts (list|str):
+        remove (bool): True if remove hosts from given aggregate, otherwise add hosts to aggregate
+        check_first (bool):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+        (0, "Hosts successfully removed from aggregate")
+        (1, <stderr>)       cli rejected on at least one host
+        (2, "Host(s) still exist in aggregate <aggr> after aggregate-remove-host: <unremoved_hosts>)
+
+    """
+    hosts_in_aggregate = host_helper.get_hosts_in_aggregate(aggregate, con_ssh=con_ssh)
+
+    if hosts is None:
+        if remove:
+            hosts = hosts_in_aggregate
+        else:
+            hosts = host_helper.get_hosts()
+
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    msg_str = 'Remov' if remove else 'Add'
+    LOG.info("{}ing hosts {} in aggregate {}".format(msg_str, hosts, aggregate))
+    if check_first:
+        if remove:
+            hosts_to_rm_or_add = list(set(hosts) & set(hosts_in_aggregate))
+        else:
+            hosts_to_rm_or_add = list(set(hosts) - set(hosts_in_aggregate))
+    else:
+        hosts_to_rm_or_add = list(hosts)
+
+    if not hosts_to_rm_or_add:
+        warn_str = 'No' if remove else 'All'
+        msg = "{} given host(s) in aggregate {}. Do nothing. Given hosts: {}; hosts in aggregate: {}".format(warn_str,
+              aggregate, hosts, hosts_in_aggregate)
+        LOG.warning(msg)
+        return -1, msg
+
+    failed_res = {}
+    cmd = 'aggregate-remove-host' if remove else 'aggregate-add-host'
+    for host in hosts_to_rm_or_add:
+        args = '{} {}'.format(aggregate, host)
+        code, output = cli.nova(cmd, args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_list=True)
+        if code == 1:
+            failed_res[host] = output
+
+    if failed_res:
+        err_msg = "'{}' is rejected for following host(s) in aggregate {}: {}".format(cmd, aggregate, failed_res)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 1, err_msg
+        else:
+            raise exceptions.NovaError(err_msg)
+
+    post_hosts_in_aggregate = host_helper.get_hosts_in_aggregate(aggregate, con_ssh=con_ssh)
+    if remove:
+        failed_hosts = list(set(hosts) & set(post_hosts_in_aggregate))
+    else:
+        failed_hosts = list(set(hosts) - set(post_hosts_in_aggregate))
+
+    if failed_hosts:
+        err_msg = "{} accepted, but some host(s) are not {}ed in aggregate {}: {}".format(cmd, msg_str, aggregate,
+                                                                                          failed_hosts)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        else:
+            raise exceptions.NovaError(err_msg)
+
+    succ_msg = "Hosts successfully {}ed in aggregate {}: {}".format(msg_str.lower(), aggregate, hosts)
+    LOG.info(succ_msg)
+    return 0, succ_msg

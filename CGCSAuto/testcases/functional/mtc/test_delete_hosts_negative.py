@@ -1,8 +1,10 @@
+from pytest import mark
 from utils.tis_log import LOG
 from utils import cli, exceptions
 from keywords import system_helper, host_helper
 
 
+@mark.domain_sanity
 def test_delete_unlocked_node():
     """
     Attempts to delete each unlocked node.
@@ -31,8 +33,8 @@ def test_delete_unlocked_node():
         LOG.tc_step("Confirming that the node was not deleted")
         res, out = cli.system('host-show', node, fail_ok=True, rtn_list=True)
 
-        if 'host not found' in out:
-            #the node was deleted even though it said it wasn't
+        if 'host not found' in out or res != 0:
+            # the node was deleted even though it said it wasn't
             LOG.tc_step("{} was deleted.".format(node))
             deleted_nodes.append(node)
 

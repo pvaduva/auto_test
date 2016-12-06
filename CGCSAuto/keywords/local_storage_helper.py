@@ -5,23 +5,42 @@ from ast import literal_eval
 
 from consts.cgcs import LocalStorage
 
+
 def get_storprof_diskconfig(profile=None, con_ssh=None):
     if not profile:
         return '', 0
     table = table_parser.table(cli.system('storprofile-show {}'.format(profile), ssh_client=con_ssh))
-    disk, size = (table_parser.get_value_two_col_table(table, 'diskconfig', strict=True, regex=False)).split(':')
 
-    return disk.strip(), int(size.strip())
+    disk_sizes = {}
+    for disk_size in table_parser.get_value_two_col_table(table, 'diskconfig', strict=True, regex=False).split(';'):
+        d, s = disk_size.split(':')
+        disk_sizes[d.strip()] = int(s.strip())
+
+    return disk_sizes
 
 
 def is_storprof_applicable_to(host=None, profile=None, con_ssh=None):
-    profile_disk, profile_size = get_storprof_diskconfig(profile=profile, con_ssh=con_ssh)
-    if not profile_disk or not profile_size:
+    profile_disk_sizes = get_storprof_diskconfig(profile=profile, con_ssh=con_ssh)
+    if not profile_disk_sizes:
+        LOG.warn('empty profile disk sizes:{}'.format(profile_disk_sizes))
         return False
 
-    host_disk_size = get_host_disk_size(host=host, disk=profile_disk, con_ssh=con_ssh)
+    applicable = True
+    host_disk_sizes = get_host_disk_sizes(host=host)
+    for disk in profile_disk_sizes.keys():
+        if disk not in host_disk_sizes.keys():
+            LOG.warn('host does not have disk:{} '.format(host, disk))
+            applicable = False
+            break
+        else:
+            profile_disk_size = profile_disk_sizes[disk]
+            host_disk_size = host_disk_sizes[disk]
+            if host_disk_size < profile_disk_size:
+                LOG.info('host disk size:{} is smaller than that of profile'.format(host_disk_size, profile_disk_size))
+                applicable = False
+                break
 
-    return int(host_disk_size) >= profile_size
+    return applicable
 
 
 def get_pv_of_lvg(host=None, lvg_name='nova-local', con_ssh=None):
@@ -44,12 +63,29 @@ def get_pv_of_lvg(host=None, lvg_name='nova-local', con_ssh=None):
             'idisk_device_node': idisk_device_node}
 
 
+def get_host_disk_sizes(host=None, con_ssh=None):
+    if not host:
+        return {}
+
+    table = table_parser.table(cli.system('host-disk-list {}'.format(host), ssh_client=con_ssh))
+    index_device_node = table['headers'].index('device_node')
+    index_size_mib = table['headers'].index('size_mib')
+
+    disk_sizes = {}
+    for row in table['values']:
+        disk_sizes[row[index_device_node].strip()] = int(row[index_size_mib].strip())
+
+    return disk_sizes
+
+
 def get_host_disk_size(host=None, disk=None, con_ssh=None):
     if not host or not disk:
         return 0
 
     table = table_parser.table(cli.system('host-disk-show {} {}'.format(host, disk), ssh_client=con_ssh))
     size_mib = table_parser.get_value_two_col_table(table, 'size_mib')
+    if not size_mib:
+        return 0
 
     return int(size_mib)
 

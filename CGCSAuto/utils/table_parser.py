@@ -325,6 +325,10 @@ def get_column(table_, header):
 def __get_row_indexes_string(table_, header, value, strict=False, exclude=False):
     if isinstance(value, list):
         value = ''.join(value)
+
+    if not isinstance(value, str):
+        value = str(value)
+
     value = value.strip().lower()
 
     header = header.strip().lower()
@@ -434,30 +438,27 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
     for header, values in kwargs.items():
         if not isinstance(values, list):
             values = [values]
+        elif isinstance(values, tuple):
+            values = list(tuple)
 
         kwarg_row_indexes = []
         for value in values:
             kwarg_row_indexes += _get_row_indexes(table_, header, value, strict=strict, regex=regex)
 
-        if kwarg_row_indexes:
-            row_indexes.append(kwarg_row_indexes)
+        row_indexes.append(list(set(kwarg_row_indexes)))
 
     len_ = len(row_indexes)
     target_row_indexes = []
-    if len_ == 0:
-        LOG.warning("Nothing found with criteria: {}".format(kwargs))
-        target_row_indexes = []
-    elif len == 1:
+
+    if len_ == 1:
         target_row_indexes = row_indexes[0]
-    else:
+    elif len_ > 1:
         # Check every item in the first row_index list and see if it's also in the rest of the row_index lists
         for item in row_indexes[0]:
-            add = True
             for i in range(1, len_):
                 if item not in row_indexes[i]:
-                    add = False
                     break
-            if add:
+            else:
                 target_row_indexes.append(item)
 
     target_column = get_column(table_, target_header)

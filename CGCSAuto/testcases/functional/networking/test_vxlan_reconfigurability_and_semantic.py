@@ -35,6 +35,7 @@ def providernet_(request):
     return provider, range_name
 
 
+@mark.p3
 @mark.parametrize(('r_min', 'r_max'), [
     (1, pow(2, 24)),
     (0, pow(2, 24)-1),
@@ -76,6 +77,7 @@ def test_vxlan_vni_maximum_range_negative(r_min, r_max, providernet_):
         assert 1 == code, "Should not pass when range out bourn"
 
 
+@mark.p3
 @mark.parametrize('addr', [
     '223.255.255.255',
     '240.0.0.0',
@@ -119,6 +121,7 @@ def test_vxlan_valid_multicast_addr_negative(addr, providernet_):
         assert 1 == code, "Should not pass when multicast addresses are out of range"
 
 
+@mark.p3
 @mark.parametrize('the_port', [
     8473,
     4788,
@@ -166,6 +169,7 @@ def test_vxlan_valid_port_negative(the_port, providernet_):
         assert 1 == code, "Should not pass when port is not valid"
 
 
+@mark.p3
 @mark.parametrize('the_ttl', [
     0,
     256,
@@ -205,7 +209,9 @@ def test_vxlan_valid_ttl_negative(the_ttl, providernet_):
     # the two error message one for ttl=0  and another one if for ttl>255
     if code > 0:
         LOG.info("Expect fail when TTL is not in range (1, 255)")
-        assert NetworkingErr.VXLAN_TTL_RANGE_MISSING in err_info or NetworkingErr.VXLAN_TTL_RANGE_TOO_LARGE in err_info
+        assert NetworkingErr.VXLAN_TTL_RANGE_MISSING in err_info or \
+               NetworkingErr.VXLAN_TTL_RANGE_TOO_LARGE in err_info or \
+               NetworkingErr.VXLAN_TTL_RANGE_TOO_SMALL in err_info
     else:
         network_helper.delete_providernet_range(range_name)
         assert 1 == code, "Should not pass when TTL is our of range 1 to 255"
@@ -238,6 +244,7 @@ def prepare_segmentation_range(request):
     return provider_id, range_name, min_rang, max_rang
 
 
+@mark.p3
 @mark.parametrize(('r_min', 'r_max'), [
     (0, 0),  # the range will be:  low_rang+r_min to high_rang+r_max
     (-5, -5),
@@ -313,7 +320,7 @@ def multiple_provider_net_range(request):
 
     # Create interface to associate with the two provider-nets
 
-    nova_hosts = host_helper.get_hypervisors()
+    nova_hosts = host_helper.get_hypervisors(state='up', status='enabled')
 
     if not nova_hosts:
         skip("Can not continue without computer host node")
@@ -324,7 +331,7 @@ def multiple_provider_net_range(request):
         args = '{} {}'.format(nova_host , "-a --nowrap")
         table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
         list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'network type': 'None',
-                                                                     'used by i/f': []})
+                                                                     'used by i/f': '[]'})
 
         if list_interfaces:
             computer_host = nova_host
@@ -336,7 +343,7 @@ def multiple_provider_net_range(request):
     # Find a free port from host-if-list -a
     if_name = random.choice(list_interfaces)
 
-    host_helper.lock_host(computer_host)
+    host_helper.lock_host(computer_host, swact=True)
     HostsToRecover.add(computer_host, scope='module')
 
     # Create an interface associate with the two providers just create
@@ -350,7 +357,8 @@ def multiple_provider_net_range(request):
     # the name of the range is: providernet_names[0]_range
     range_name = providernet_names[0] + '_range'
 
-    code, range_name = create_vxlan_providernet_range(provider_ids[0], range_name=range_name, range_min=r_min, range_max=r_max)
+    code, range_name = create_vxlan_providernet_range(provider_ids[0], range_name=range_name, range_min=r_min,
+                                                      range_max=r_max)
     def fin_teardown():
         # Clean up: remove the ranges and providers just created
         network_helper.delete_providernet_range(range_name)
@@ -361,12 +369,13 @@ def multiple_provider_net_range(request):
     request.addfinalizer(fin_teardown)
 
     if code > 0:
-        msg = "create first provider network segmentation range {}-{} failed with: {}".format(r_min, r_max, err_info)
+        msg = "create first provider network segmentation range {}-{} failed".format(r_min, r_max)
         assert False, msg
 
     return providernet_names, r_min, r_max, computer_host, if_name, interface
 
 
+@mark.p3
 @mark.parametrize(('r_min', 'r_max'), [
     (0, 0),
     (-10, -10),
@@ -424,6 +433,7 @@ def test_vxlan_same_ranges_on_different_provider_negative(multiple_provider_net_
         assert 1 == code, "Should not pass when two range overlap and associate to same data if"
 
 
+@mark.p3
 @mark.parametrize('the_mtu', [
     1573,
     1500,

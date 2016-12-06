@@ -3,7 +3,7 @@ from pytest import mark
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec
-from consts.cli_errs import MinCPUErr
+from consts.cli_errs import MinCPUErr       # Do not remove this import, used by eval()
 from keywords import nova_helper, vm_helper, host_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 

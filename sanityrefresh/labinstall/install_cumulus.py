@@ -60,6 +60,7 @@ class Cumulus_TiS(object):
         self.output_dir = None
         self.lab_cfg_path = None
         self.cumulus_options = None
+        self.storage = False
 
         for key in kwargs:
             setattr(self, key, kwargs[key])
@@ -316,6 +317,8 @@ class Cumulus_TiS(object):
                 msg = " Fail to launch a virtual storage-" + str(i) + "."
                 self.log.error(msg)
                 wr_exit()._exit(1,msg)
+
+            self.storage = True
 
     def parse_cumulus_conf(self, filename):
 

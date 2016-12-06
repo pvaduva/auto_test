@@ -33,12 +33,13 @@ def storage_node_not_exist():
 
 @fixture(scope='module')
 def create_storage_profile(request):
+    if storage_node_not_exist():
+        skip("No storage node exist within lab for automation to continue")
 
     profile_name = 'storage_test_profile'
     host_name = 'storage-0'
     positional_arg = profile_name + ' ' + host_name
-    exitcode, output = cli.system('storprofile-add', positional_arg, fail_ok=True,
-                              auth_info=Tenant.ADMIN, rtn_list=True)
+    cli.system('storprofile-add', positional_arg)
 
     storage_profile = {
         'profile_name': profile_name,
@@ -47,10 +48,10 @@ def create_storage_profile(request):
 
     return storage_profile
 
+
+@mark.p3
 def test_storage_profile_on_compute(create_storage_profile):
     # apply that profile to compute-0
-    if storage_node_not_exist():
-        skip("No storage node exist within lab for automation to continue")
     host_name = 'compute-0'
     profile_name = create_storage_profile['profile_name']
     positional_arg = host_name + ' ' + profile_name
@@ -67,13 +68,12 @@ def test_storage_profile_on_compute(create_storage_profile):
     #echo $? is 1
 
 
+@mark.p3
 def test_storage_profile_on_controller(create_storage_profile):
     # need to check is it true that you can not lock active controller
     #apply that profile to the standby controller
     #verify rejected message
 
-    if storage_node_not_exist():
-        skip("No storage node exist within lab for automation to continue")
     host_name = system_helper.get_standby_controller_name()
     profile_name = create_storage_profile['profile_name']
     positional_arg = host_name + ' ' + profile_name

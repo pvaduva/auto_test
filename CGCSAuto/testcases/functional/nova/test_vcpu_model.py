@@ -1,3 +1,4 @@
+import re
 from pytest import fixture, mark
 
 from utils.tis_log import LOG
@@ -20,6 +21,7 @@ def flavor_and_volume():
     return flavor, volume
 
 
+@mark.p2
 @mark.parametrize('vcpu_model', [
     'Conroe',
     'Penryn',
@@ -71,12 +73,20 @@ def test_vm_vcpu_model(flavor_and_volume, vcpu_model):
             assert ' -cpu  haswell ' in output.lower() or ' -cpu haswell-notsx ' in output.lower(), \
                 'cpu_model Haswell or Haswell-noTSX not found for vm {}'.format(vm)
         else:
-            assert ' -cpu {} '.format(vcpu_model).lower() in output.lower(), 'cpu_model {} not found for vm {}'.\
-                format(vcpu_model, vm)
+            assert re.search(' -cpu {}[\s|,]'.format(vcpu_model).lower(), output.lower()), \
+                'cpu_model {} not found for vm {}'.format(vcpu_model, vm)
+
+        LOG.tc_step("Check vm is pingable from NatBox with vcpu_model {}".format(vcpu_model))
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
     else:
         LOG.tc_step("Check vm in error state due to vcpu model unsupported by hosts.")
         assert 1 == code, "boot vm cli exit code is not 1. Actual fail reason: {}".format(msg)
 
         expt_fault = VCPUSchedulerErr.CPU_MODEL_UNAVAIL
-        res_bool, vals = vm_helper.wait_for_vm_values(vm, 10, regex=True, strict=False, status='ERROR', fault=expt_fault)
+        # res_bool, vals = vm_helper.wait_for_vm_values(vm, 10, regex=True, strict=False, status='ERROR', fault=expt_fault)
+        res_bool, vals = vm_helper.wait_for_vm_values(vm, 10, regex=True, strict=False, status='ERROR')
+        err = nova_helper.get_vm_nova_show_value(vm, field='fault')
         assert res_bool, "VM did not reach expected error state. Actual: {}".format(vals)
+        assert re.search(expt_fault, err), "Incorrect fault reported. Expected: {} Actual: {}"\
+            .format(expt_fault, err)

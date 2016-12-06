@@ -44,6 +44,12 @@ def vm_(request, flavor_):
     time.sleep(30)
     ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
 
+    events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
+                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
+                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
+    assert events, "VM heartbeat is not enabled."
+    assert EventLogID.HEARTBEAT_ENABLED == events[0], "VM heartbeat failed to establish."
+
     # Teardown to remove the vm and flavor
     def restore_hosts():
         LOG.fixture_step("Cleaning up vms..")
@@ -77,9 +83,6 @@ def test_guest_heartbeat_reboot_option(vm_):
     vm_id = vm_
     time.sleep(30)
 
-    LOG.tc_step('Determine which compute the vm is on')
-    compute_name = nova_helper.get_vm_host(vm_id)
-
     LOG.tc_step("Login to vm: %s and confirm the guest-client is running" % vm_name)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         exitcode, pid = vm_ssh.exec_cmd("ps -ef | grep guest-client | grep -v grep | awk '{print $2}'")
@@ -98,7 +101,7 @@ def test_guest_heartbeat_reboot_option(vm_):
     LOG.tc_step("Verify VM automatically reboots.")
 
     time.sleep(20)
-    events_tab = system_helper.get_events()
+    events_tab = system_helper.get_events_table()
     reasons = table_parser.get_values(events_tab, 'Reason Text', strict=False, **{'Entity Instance ID': vm_id})
     assert re.search('Reboot complete for instance .* now enabled on host', '\n'.join(reasons)), \
         "Was not able to reboot VM"

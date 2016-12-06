@@ -6,23 +6,19 @@
 # Directory and file paths/names
 HOST_OS = ["centos", "wrlinux"]
 DEFAULT_HOST_OS = "centos"
+DEFAULT_REL = "latest_dev_stream"
+DEFAULT_BLD = "latest_build"
+DEFAULT_WKSPCE = "/localdisk/loadbuild/jenkins"
+DEFAULT_GUEST = "cgcs-guest.img"
 NODE_INFO_DIR = "node_info"
 LAB_SETTINGS_DIR = "lab_settings"
 LATEST_BUILD_DIR = "latest_build"
 EXPORT_LAB_REL_PATH = "export/lab"
 LAB_YOW_REL_PATH = EXPORT_LAB_REL_PATH + "/yow"
 LAB_SCRIPTS_REL_PATH = EXPORT_LAB_REL_PATH + "/scripts"
-#CENTOS_LAB_BASE_PATH = "/localdisk/designer/jenkins/Secure_Src_Pull_CGCS_DEV_0016/wrlinux-x/addons/wr-cgcs/layers/cgcs/extras.ND/lab/"
-CENTOS_LAB_BASE_PATH = "/localdisk/designer/jenkins/CGCS_3.0_Centos_Pull_CGCS_DEV_0016/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/"
-CENTOS_LAB_REL_PATH = "/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/"
-CENTOS_LAB_SCRIPTS = CENTOS_LAB_BASE_PATH + "scripts/"
-CENTOS_CFG_FILES = CENTOS_LAB_BASE_PATH + "yow/"
-HEAT_TEMPLATES_PATH = "/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates/"
+CENTOS_LAB_REL_PATH = "std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab"
+HEAT_TEMPLATES_PATH = "std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates"
 
-#TODO: Not all labs define their config_controller file as "system_config"
-#      E.g. some refer to it as cgcs_config or TiS_config.ini
-#      Need this filename to be ORed with other options or standardize naming
-#      for config files in Stash
 SYSTEM_CFG_FILENAME = "system_config"
 WRL_CFGFILE_LIST = ["system_config", "TiS_config.ini", "TiS_config.ini_wrl"]
 CENTOS_CFGFILE_LIST = ["TiS_config.ini_centos"]
@@ -32,13 +28,12 @@ BULK_CFG_FILENAME = "hosts_bulk_add.xml"
 LAB_SETUP_SCRIPT = "lab_setup.sh"
 LAB_SETUP_CFG_FILENAME = "lab_setup.conf"
 CUSTOM_LAB_SETTINGS_FILENAME = "settings.ini"
-# TODO: Specifying full path to latest license instead of symlink as there
-#       was a problem rsyncing the symlink "TiS15-GA-eval.lic". Fix this
+
 LIC_FILENAME = "license.lic"
-LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-full-dec2016.lic"
-SFP_LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-CPE-full-dec2016.lic"
-#SFP_LICENSE_FILEPATH = "/folk/cgts/lab/TiS16-CPE-full.lic"
-WRSROOT_ETC_PROFILE = "/etc/profile"
+LICENSE_FILEPATH = "-L /folk/cgts/lab/TiS17-full.lic"
+SFP_LICENSE_FILEPATH = "-L /folk/cgts/lab/TiS17-CPE-full.lic"
+WRSROOT_ETC_PROFILE = "/etc/profile.d/custom.sh"
+WRSROOT_ETC_PROFILE_LEGACY = "/etc/profile"
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards"
 CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
 RPM_INSTALL_REL_PATH = "export/RPM_INSTALL"
@@ -49,6 +44,8 @@ WRSROOT_HEAT_DIR = WRSROOT_HOME_DIR + "/heat"
 JIRA_LOGS_DIR = "/folk/cgts/logs"
 CERTIFICATE_FILE_PATH = "/folk/cgts/lab/server-with-key-with-passwd.pem"
 CERTIFICATE_FILE_NAME = "server-with-key.pem"
+BANNER_DEST = '/opt/banner'
+BANNER_SRC = WRSROOT_HOME_DIR + '/banner'
 
 # Cumulus TiS on TiS setup
 CUMULUS_SERVER_IP="128.224.151.50"
@@ -97,7 +94,7 @@ DEFAULT_BOOT_DEVICE_DICT = {'controller-0': '[ABC]00',
 BIOS_TYPES = [b"American Megatrends", b"Hewlett-Packard", b"Phoenix"]
 BIOS_TYPE_FN_KEY_ESC_CODES = ['\x1b' + '[17~', '\x1b' + '@', '\x1b' + '[24~'] # F6, ESC + @, F12 Phoenix used for R720 nodes (i.e. Dell)
 BIOS_TYPE_FN_HUMAN_READ = ['F6', 'ESC + @', 'F12']
-INSTALL_TIMEOUTS = [2400, 2100, 2100]  # Some labs take longer that 2100 seconds to install; increased to 2400.
+INSTALL_TIMEOUTS = [2400, 2400, 2400]  # Some labs take longer that 2100 seconds to install; increased to 2400.
 SERIAL_KICKSTART_CONTROLLER_INSTALL = "Serial Kickstart Controller Install"
 MAX_BOOT_MENU_LINES = 15
 
@@ -126,7 +123,7 @@ INSTALLATION_RESERVE_NOTE = "AUTO: Lab installation"
 
 # Servers
 BLD_SERVERS = ["yow-cgts1-lx", "yow-cgts2-lx", "yow-cgts3-lx", "yow-cgts4-lx"]
-DEFAULT_BLD_SERVER = "yow-cgts3-lx"
+DEFAULT_BLD_SERVER = "yow-cgts4-lx"
 TUXLAB_SERVERS = ["yow-tuxlab", "yow-tuxlab2"]
 DEFAULT_TUXLAB_SERVER = "yow-tuxlab2"
 DNS_SERVER ="8.8.8.8"
@@ -170,7 +167,7 @@ RSYNC_TIMEOUT = 3600
 REBOOT_TIMEOUT = 7200
 BIOS_TYPE_TIMEOUT = 1800
 CONFIG_CONTROLLER_TIMEOUT = 1800
-LAB_SETUP_TIMEOUT = 1800
+LAB_SETUP_TIMEOUT = 3600
 WIPE_DISK_TIMEOUT = 30
 PING_TIMEOUT = 60
 TIMEOUT_BUFFER = 2
@@ -178,7 +175,7 @@ TIMEOUT_BUFFER = 2
 # Prompts
 LOGIN_PROMPT = "ogin:"
 PASSWORD_PROMPT = "assword:"
-PROMPT = ".*\$ "
+PROMPT = ".*\$ ?"
 
 # Other
 LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
@@ -200,3 +197,17 @@ EMAIL_FROM = 'no_reply_automated_labinstall@wrs.com'
 EMAIL_SUBJECT = 'Automated Lab Install: '
 EMAIL_ERROR_MSG = "Automated lab install has encountered problem." \
     "\nReason: "
+
+
+# lab type
+LAB_TYPES = ['regular_lab', 'storge_lab', 'cpe_lab', 'tis_on_tis', 'tis_on_tis_storage']
+
+# tmp install vars path
+INSTALL_VARS_TMP_PATH = "/tmp"
+INSTALL_VARS_FILE_EXT = "_install_vars.ini"
+INSTALL_EXECUTED_STEPS_FILE_EXT = "_executed_steps.txt"
+
+# Resume install message
+RESUME_INSTALL_MSG = 'Please correct error and re-run auto-install with ' \
+                     '--lab=<lab name>  and ' \
+                     '--continue options to continue install'

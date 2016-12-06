@@ -5,12 +5,13 @@ from utils import exceptions
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
 
-from consts.auth import Tenant
+from consts.auth import Tenant, CliAuth
 from consts.cgcs import Prompt
+from consts.filepaths import PrivKeyPath
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar
 
-from keywords import vm_helper, host_helper
+from keywords import vm_helper, host_helper, nova_helper
 from keywords.common import scp_to_local
 
 
@@ -21,9 +22,8 @@ def setup_tis_ssh(lab):
         con_ssh = SSHClient(lab['floating ip'], 'wrsroot', 'Li69nux*', CONTROLLER_PROMPT)
         con_ssh.connect()
         ControllerClient.set_active_controller(con_ssh)
-    if 'auth_url' in lab:
-        Tenant._set_url(lab['auth_url'])
-
+    # if 'auth_url' in lab:
+    #     Tenant._set_url(lab['auth_url'])
     return con_ssh
 
 
@@ -69,44 +69,65 @@ def setup_natbox_ssh(keyfile_path, natbox):
 
 
 def __copy_keyfile_to_natbox(natbox, keyfile_path):
-    # con_ssh = ControllerClient.get_active_controller()
+    """
+    copy private keyfile from controller-0:/opt/platform to natbox: priv_keys/
+    Args:
+        natbox (dict): NATBox info such as ip
+        keyfile_path (str): Natbox path to scp keyfile to
+    """
+
+    # Assume the tenant key-pair was added by lab_setup from exiting keys from controller-0:/home/wrsroot/.ssh
+    LOG.info("scp key file from controller-0 to NATBox")
+    keyfile_name = keyfile_path.split(sep='/')[-1]
     with host_helper.ssh_to_host('controller-0') as con_0_ssh:
-        # con_0_ssh = ssh_to_controller0(ssh_client=con_ssh)
-        if not con_0_ssh.file_exists('/home/wrsroot/.ssh/id_rsa'):
-            passphrase_prompt_1 = '.*Enter passphrase.*'
-            passphrase_prompt_2 = '.*Enter same passphrase again.*'
 
-            con_0_ssh.send('ssh-keygen')
-            index = con_0_ssh.expect([passphrase_prompt_1, '.*Enter file in which to save the key.*'])
-            if index == 1:
-                con_0_ssh.send()
-                con_0_ssh.expect(passphrase_prompt_1)
-            con_0_ssh.send()    # Enter empty passphrase
-            con_0_ssh.expect(passphrase_prompt_2)
-            con_0_ssh.send()    # Repeat passphrase
-            con_0_ssh.expect(Prompt.CONTROLLER_0)
+        if not con_0_ssh.file_exists(keyfile_name):
+            if not con_0_ssh.file_exists(PrivKeyPath.OPT_PLATFORM):
+                if not con_0_ssh.file_exists(PrivKeyPath.WRS_HOME):
+                    if nova_helper.get_key_pair():
+                        raise exceptions.TiSError("Cannot find ssh keys for existing nova keypair.")
 
-        keyfile_name = keyfile_path.split(sep='/')[-1]
-        cmd_1 = 'cp /home/wrsroot/.ssh/id_rsa ' + keyfile_name
-        cmd_2 = 'chmod 600 ' + keyfile_name
+                    passphrase_prompt_1 = '.*Enter passphrase.*'
+                    passphrase_prompt_2 = '.*Enter same passphrase again.*'
+
+                    con_0_ssh.send('ssh-keygen')
+                    index = con_0_ssh.expect([passphrase_prompt_1, '.*Enter file in which to save the key.*'])
+                    if index == 1:
+                        con_0_ssh.send()
+                        con_0_ssh.expect(passphrase_prompt_1)
+                    con_0_ssh.send()    # Enter empty passphrase
+                    con_0_ssh.expect(passphrase_prompt_2)
+                    con_0_ssh.send()    # Repeat passphrase
+                    con_0_ssh.expect(Prompt.CONTROLLER_0)
+
+                # ssh keys should now exist under wrsroot home dir
+                con_0_ssh.exec_sudo_cmd('cp {} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.OPT_PLATFORM), fail_ok=False)
+
+            # ssh private key should now exist under /opt/platform dir
+            cmd_1 = 'cp {} {}'.format(PrivKeyPath.OPT_PLATFORM, keyfile_name)
+            con_0_ssh.exec_sudo_cmd(cmd_1, fail_ok=False)
+
+            cmd_2 = 'chmod 777 ' + keyfile_name
+            con_0_ssh.exec_sudo_cmd(cmd_2, fail_ok=False)
+
+        # ssh private key should now exist under keyfile_path
+        con_0_ssh.exec_cmd('stat {}'.format(keyfile_name), fail_ok=False)
+
+        # # TODO: remove
+        # cmd_2 = 'chmod 777 ' + keyfile_name
+        # con_0_ssh.exec_sudo_cmd(cmd_2, fail_ok=False)
+
         cmd_3 = 'scp {} {}@{}:{}'.format(keyfile_name, natbox['user'], natbox['ip'], keyfile_path)
-
-        rtn_1 = con_0_ssh.exec_cmd(cmd_1)[0]
-        if not rtn_1 == 0:
-            raise exceptions.CommonError("Failed to create new keyfile on controller")
-        rtn_2 = con_0_ssh.exec_cmd(cmd_2)[0]
-        if not rtn_2 == 0:
-            raise exceptions.CommonError("Failed to update permission for created keyfile")
-
         con_0_ssh.send(cmd_3)
         rtn_3_index = con_0_ssh.expect(['.*\(yes/no\)\?.*', Prompt.PASSWORD_PROMPT])
         if rtn_3_index == 0:
             con_0_ssh.send('yes')
             con_0_ssh.expect(Prompt.PASSWORD_PROMPT)
         con_0_ssh.send(natbox['password'])
-        con_0_ssh.expect()
+        con_0_ssh.expect(timeout=30)
         if not con_0_ssh.get_exit_code() == 0:
             raise exceptions.CommonError("Failed to copy keyfile to NatBox")
+    LOG.info("key file is successfully copied from controller-0 to NATBox")
 
 
 def boot_vms(is_boot):
@@ -261,3 +282,28 @@ def copy_files_to_con1():
 
         else:
             raise exceptions.TimeoutException("Timed out rsync files to controller-1")
+
+
+def get_auth_via_openrc(con_ssh):
+    valid_keys = ['OS_AUTH_URL',
+                  'OS_ENDPOINT_TYPE',
+                  'CINDER_ENDPOINT_TYPE',
+                  'OS_USER_DOMAIN_NAME',
+                  'OS_PROJECT_DOMAIN_NAME',
+                  'OS_IDENTITY_API_VERSION',
+                  'OS_REGION_NAME',
+                  'OS_INTERFACE']
+
+    code, output = con_ssh.exec_cmd('cat /etc/nova/openrc')
+    if code != 0:
+        return None
+
+    lines = output.splitlines()
+    auth_dict = {}
+    for line in lines:
+        if 'export' in line:
+            if line.split('export ')[1].split(sep='=')[0] in valid_keys:
+                key, value = line.split(sep='export ')[1].split(sep='=')
+                auth_dict[key.strip().upper()] = value.strip()
+
+    return auth_dict

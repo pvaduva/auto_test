@@ -920,7 +920,7 @@ class Telnet:
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 log.error(msg)
-                wr_exit()._exit(1, msg)
+                #wr_exit()._exit(1, msg)
             log.info("Boot device is: " + str(boot_device_regex))
 
             self.get_read_until("Please select boot device", 60)
@@ -983,7 +983,7 @@ class Telnet:
                     if hasattr(node, "host_kickstart_menu_selection"):
                         selection_menu_option =  getattr(node, "host_kickstart_menu_selection")
 
-                    log.info("Kickstart boot  menu selection = {}".format(selection_menu_option))
+                    log.info("Kickstart boot menu selection = {}".format(selection_menu_option))
 
                     self.write_line(selection_menu_option)
 
@@ -1068,7 +1068,8 @@ class Telnet:
                         time.sleep(1)
                         self.write(str.encode(DOWN))
                         self.write(str.encode(DOWN))
-                        self.write(str.encode(DOWN))
+                        if host_os == 'wrlinux':
+                           self.write(str.encode(DOWN))
                         time.sleep(1)
                         log.info("Pressing ENTER key")
                         self.write(str.encode("\r\r"))

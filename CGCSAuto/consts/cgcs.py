@@ -15,19 +15,32 @@ NAME_UUID = r'(.*) \((' + UUID + r')\)'
 # Message to indicate boot from volume from nova show
 BOOT_FROM_VOLUME = 'Attempt to boot from volume - no image supplied'
 
-
-IMAGE_DIR = '/home/wrsroot/images'
-DEFAULT_GUEST = 'cgcs-guest.img'
-
 DNS_NAMESERVERS = ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
 
-# home dir
-HOME = '/home/wrsroot/'
 # Heat template path
 HEAT_PATH = 'heat/hot/simple/'
-HEAT_SCENARIO_PATH = 'heat/hot/scenario/'
+HEAT_SCENARIO_PATH = 'heat/hot/scenarios/'
+MELLANOX_DEVICE = 'MT27500'
 
-class NetIP:
+
+class GuestImages:
+    IMAGE_DIR = '/home/wrsroot/images'
+    DEFAULT_GUEST = 'cgcs-guest.img'
+    # Image files name and size from yow-cgcs-test.wrs.com:/home/svc-cgcsauto/images
+    IMAGE_FILES = {
+        'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_14.qcow2'),
+        'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2'),
+        'centos_6': ('CentOS-6.8-x86_64-GenericCloud-1608.qcow2', 8, 'centos_6.qcow2'),
+        'centos_7': ('CentOS-7-x86_64-GenericCloud.qcow2', 8, 'centos_7.qcow2'),
+        'rhel_6': ('rhel-6.5-x86_64.qcow2', 11, 'rhel_6.qcow2'),                # OVP img
+        'rhel_7': ('rhel-7.2-x86_64.qcow2', 11, 'rhel_7.qcow2'),               # OVP img
+        'opensuse_11': ('openSUSE-11.3-x86_64.qcow2', 11, 'opensuse_11.qcow2'),     # OVP img
+        'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21, 'opensuse_12.qcow2'),      # OVP img
+        'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16, 'opensuse_13.qcow2'),
+    }
+
+
+class Networks:
     MGMT_NET_NAME = 'tenant\d-mgmt-net'
     DATA_NET_NAME = 'tenant\d-net'
     INTERNAL_NET_NAME = 'internal'
@@ -64,6 +77,7 @@ class VMStatus:
     HARD_REBOOT = 'HARD REBOOT'
     SOFT_REBOOT = 'REBOOT'
     STOPPED = "SHUTOFF"
+    MIGRATING = 'MIGRATING'
 
 
 class HostAdminState:
@@ -116,7 +130,7 @@ class FlavorSpec:
     CPU_POLICY = 'hw:cpu_policy'
     VCPU_MODEL = 'hw:cpu_model'
     SHARED_VCPU = 'hw:wrs:shared_vcpu'
-    CPU_THREAD_POLICY = 'hw:cpu_threads_policy'
+    CPU_THREAD_POLICY = 'hw:cpu_thread_policy'
     VCPU_SCHEDULER = 'hw:wrs:vcpu:scheduler'
     MIN_VCPUS = "hw:wrs:min_vcpus"
     STORAGE_BACKING = 'aggregate_instance_extra_specs:storage'
@@ -140,9 +154,9 @@ class FlavorSpec:
 
 class ImageMetadata:
     MEM_PAGE_SIZE = 'hw_mem_page_size'
-    AUTO_RECOVERRY = 'sw_wrs_auto_recovery'
+    AUTO_RECOVERY = 'sw_wrs_auto_recovery'
     VIF_MODEL = 'hw_vif_model'
-    CPU_THREAD_POLICY = 'hw_cpu_threads_policy'
+    CPU_THREAD_POLICY = 'hw_cpu_thread_policy'
     CPU_POLICY = 'hw_cpu_policy'
 
 
@@ -205,11 +219,11 @@ class NetworkingVmMapping:
 
 class VifMapping:
     VIF_MAP = {'vswitch': 'DPDKAPPS',
-                   'avp': 'AVPAPPS',
-                   'virtio': 'VIRTIOAPPS',
-                   'sriov': 'SRIOVAPPS',
-                   'pcipt': 'PCIPTAPPS'
-                   }
+               'avp': 'AVPAPPS',
+               'virtio': 'VIRTIOAPPS',
+               'sriov': 'SRIOVAPPS',
+               'pcipt': 'PCIPTAPPS'
+               }
 
 
 class LocalStorage:
@@ -229,7 +243,7 @@ class HTTPPorts:
     SYS_PORT = 6385
     SYS_VER = "v1"
     CINDER_PORT = 8776
-    CINDER_VER = "v2" #v1 is also supported
+    CINDER_VER = "v2"   # v1 is also supported
     GLANCE_PORT = 9292
     GLANCE_VER = "v2"
     HEAT_PORT = 8004
@@ -237,7 +251,7 @@ class HTTPPorts:
     HEAT_CFN_PORT = 8000
     HEAT_CFN_VER = "v1"
     NOVA_PORT = 8774
-    NOVA_VER = "v2" #v3 also supported
+    NOVA_VER = "v2"     # v3 also supported
     NOVA_EC2_PORT = 8773
     NOVA_EC2_VER = "v2"
     PATCHING_PORT = 15491
@@ -256,3 +270,4 @@ class QoSSpecs:
     READ_IOPS = 'read_iops_sec'
     WRITE_IOPS = 'write_iops_sec'
     TOTAL_IOPS = 'total_iops_sec'
+

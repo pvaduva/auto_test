@@ -42,18 +42,19 @@ def create_url(ip=None, port=None, version=None, extension=None):
     return url
 
 
-def get_user_token(con_ssh=None):
+def get_user_token(rtn_value='id', con_ssh=None):
     """
     Return an authentication token for the admin.
 
     Args:
+        rtn_value (str):
         con_ssh (SSHClient):
 
     Returns (list): a list containing at most one authentication token
 
     """
     table_ = table_parser.table(cli.openstack('token issue', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    token = table_parser.get_value_two_col_table(table_, 'id')
+    token = table_parser.get_value_two_col_table(table_, rtn_value)
     return token
 
 
@@ -139,7 +140,7 @@ def delete_request(url, headers):
         Returns (dict): The response for the request
 
         """
-    LOG.info("Sending POST request to {}. Headers: {}".format(url, headers))
+    LOG.info("Sending DELETE request to {}. Headers: {}".format(url, headers))
     resp = requests.delete(url, headers=headers)
 
     if resp.status_code == requests.codes.ok:

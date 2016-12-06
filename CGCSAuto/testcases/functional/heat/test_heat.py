@@ -5,11 +5,11 @@ from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, heat_helper,ceilometer_helper,network_helper,cinder_helper,glance_helper,\
-    host_helper
+    host_helper, common
 from setup_consts import P1, P2, P3
 import time
 from consts.heat import Heat
-from consts.cgcs import HOME
+from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HEAT_PATH
 import os
 from consts.auth import Tenant
@@ -118,7 +118,7 @@ def verify_heat_resource(to_verify=None,template_name=None,stack_name=None,auth_
         if not subnet_id:
             return 1
         router_subnets = network_helper.get_router_subnets(router_id=router_id, auth_info=auth_info)
-        if subnet_id in router_subnets:
+        if subnet_id[0] in router_subnets:
             return 0
     elif to_verify is 'security_group':
         LOG.info("Verifying neutron security group")
@@ -160,12 +160,15 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     t_name, yaml = template_name.split('.')
     params = getattr(Heat, t_name)['params']
     heat_user = getattr(Heat, t_name)['heat_user']
-    stack_name = t_name
     to_verify = getattr(Heat, t_name)['verify']
     if heat_user is 'admin':
         auth_info=Tenant.ADMIN
 
-    template_path = os.path.join(HOME, HEAT_PATH, template_name)
+    table_ = table_parser.table(cli.heat('stack-list', auth_info=auth_info))
+    names = table_parser.get_values(table_, 'stack_name')
+    stack_name = common.get_unique_name(t_name, existing_names=names)
+
+    template_path = os.path.join(WRSROOT_HOME, HEAT_PATH, template_name)
     cmd_list = ['-f %s ' % template_path]
 
     if params is not None:
@@ -185,7 +188,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     LOG.info("Stack {} created sucessfully.".format(stack_name))
 
     ### add the heat stack name for deleteion on failure
-    ResourceCleanup.add(resource_type='heat_stack', resource_id=t_name)
+    ResourceCleanup.add(resource_type='heat_stack', resource_id=stack_name)
 
     LOG.tc_step("Verifying Heat Stack Status for CREATE_COMPLETE for stack %s",stack_name)
 
@@ -233,11 +236,11 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 # This should be a relatively static condition.i.e., independent with test params values
 #@mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
-@mark.parametrize(
-    ('template_name'), [
+@mark.parametrize(('template_name'), [
         mark.sanity(('WR_Neutron_ProviderNetRange.yaml')),
         P1(('WR_Neutron_ProviderNet.yaml')),
         P1(('OS_Cinder_Volume.yaml')),
+        P1(('OS_Glance_Image.yaml')),
         P1(('OS_Ceilometer_Alarm.yaml')),
         P1(('OS_Neutron_Port.yaml')),
         P1(('OS_Neutron_Net.yaml')),
@@ -246,6 +249,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
         P1(('OS_Neutron_FloatingIP.yaml')),
         P1(('OS_Neutron_Router.yaml')),
         P1(('OS_Neutron_RouterGateway.yaml')),
+        P1(('OS_Neutron_RouterInterface.yaml')),
         P1(('OS_Neutron_SecurityGroup.yaml')),
         P1(('OS_Nova_ServerGroup.yaml')),
         P1(('OS_Nova_KeyPair.yaml')),
@@ -255,7 +259,6 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
         P1(('OS_Nova_Server.yaml')),
         P1(('OS_Heat_AccessPolicy.yaml')),
         P1(('OS_Heat_AutoScalingGroup.yaml')),
-
     ])
 # can add test fixture to configure hosts to be certain storage backing
 def test_heat_template(template_name):

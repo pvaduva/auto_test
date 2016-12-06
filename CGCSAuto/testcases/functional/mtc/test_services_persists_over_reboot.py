@@ -1,6 +1,6 @@
 import time
 
-from pytest import mark
+from pytest import mark, skip
 
 from utils import table_parser, cli
 from utils.tis_log import LOG
@@ -30,6 +30,7 @@ def test_system_persist_over_host_reboot(host_type):
     neutron_list_table_ = table_parser.table(cli.neutron('agent-list'))
     host_list_table_ = table_parser.table(cli.system('host-list'))
 
+    host = None
     if host_type == 'controller':
         LOG.tc_step("Swact active controller")
         host_helper.swact_host()
@@ -37,11 +38,17 @@ def test_system_persist_over_host_reboot(host_type):
         host = system_helper.get_active_controller_name()
         # give it sometime to setting before rebooting
         time.sleep(10)
-
     elif host_type == 'compute':
         host = host_helper.get_nova_hosts()[-1]
+        if system_helper.is_small_footprint():
+            host = system_helper.get_standby_controller_name()
     elif host_type == 'storage':
-        host = system_helper.get_storage_nodes()[0]
+        # Make a better function for this
+        hosts = host_helper.get_hosts(personality='storage')
+        if hosts:
+            host = hosts[0]
+        else:
+            skip(msg="Lab has no storage nodes. Skip rebooting storage node.")
     else:
         raise ValueError("Unknown host type specified. Valid options: controller, compute, storage")
 

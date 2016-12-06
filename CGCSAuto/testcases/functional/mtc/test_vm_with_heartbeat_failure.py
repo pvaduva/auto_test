@@ -19,18 +19,15 @@ from consts.auth import Tenant
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
+
 @fixture(scope='module')
 def flavor_(request):
     flavor_id = nova_helper.create_flavor(name='heartbeat')[1]
-    ResourceCleanup.add('flavor', flavor_id)
+    ResourceCleanup.add('flavor', flavor_id, scope='module')
 
     extra_specs = {FlavorSpec.GUEST_HEARTBEAT: 'True'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
-    def delete_flavor():
-        nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
-
-    request.addfinalizer(delete_flavor)
     return flavor_id
 
 
@@ -41,15 +38,15 @@ def vm_(request, flavor_):
     flavor_id = flavor_
 
     vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id)[1]
-    time.sleep(30)
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
+    ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-    # Teardown to remove the vm and flavor
-    def remove_vms():
-        LOG.fixture_step("Cleaning up vms..")
-        vm_helper.delete_vms(vm_id, delete_volumes=True)
+    events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
+                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
+                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
 
-    request.addfinalizer(remove_vms)
+    assert events, "VM heartbeat is not enabled."
+    assert EventLogID.HEARTBEAT_ENABLED == events[0], "VM heartbeat failed to establish."
 
     return vm_id
 
@@ -78,24 +75,12 @@ def test_vm_with_heartbeat_failure(vm_):
     LOG.tc_step('Determine which compute the vm is on')
     compute_name = nova_helper.get_vm_host(vm_id)
 
-    #with host_helper.ssh_to_host('controller-0') as cont_ssh:
-    #    vm_table = table_parser.table(cli.nova('show', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN))
-    #    table_param = 'OS-EXT-SRV-ATTR:host'
-    #    compute_name = table_parser.get_value_two_col_table(vm_table, table_param)
-
-    #LOG.tc_step("Verify vm heartbeat is on via event logs")
-    #cat_log = 'cat /var/log/guestServer.log'
-    #host = nova_helper.get_vm_host(vm_id)
-    #with host_helper.ssh_to_host(host) as compute_ssh:
-    #    exitcode, output = compute_ssh.exec_cmd(cat_log, expect_timeout=10)
-    #    assert ('is heartbeating' in output)
-
     LOG.tc_step("Kill the heartbeat daemon")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         cmd = "ps -ef | grep 'heartbeat' | grep -v grep | awk '{print $2}'"
         exitcode, output = vm_ssh.exec_cmd(cmd)
-        cmd = "echo 'Li69nux*' | sudo -S kill -9 %s" % output
-        exitcode, output = vm_ssh.exec_cmd(cmd, expect_timeout=90)
+        cmd = "kill -9 %s" % output
+        vm_ssh.exec_sudo_cmd(cmd, expect_timeout=90)
 
     LOG.tc_step("Verify an active alarm for the reboot is present")
     time.sleep(10)
@@ -108,18 +93,15 @@ def test_vm_with_heartbeat_failure(vm_):
     LOG.tc_step("Kill the heartbeat daemon again")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         cmd = "ps -ef | grep 'heartbeat' | grep -v grep | awk '{print $2}'"
-        exitcode, output = vm_ssh.exec_cmd(cmd)
-        cmd = "echo 'Li69nux*' | sudo -S kill -9 %s" % output
-        exitcode, output = vm_ssh.exec_cmd(cmd, expect_timeout=90)
+        exitcode, out = vm_ssh.exec_cmd(cmd)
+        while not out:
+            exitcode, out = vm_ssh.exec_cmd(cmd)
+        cmd = "kill -9 %s" % out
+        vm_ssh.exec_sudo_cmd(cmd, expect_timeout=90)
     time.sleep(10)
 
     LOG.tc_step('Determine which compute the vm is on after the reboot')
     new_compute_name = nova_helper.get_vm_host(vm_id)
-
-    #with host_helper.ssh_to_host('controller-0') as cont_ssh:
-    #    vm_table = table_parser.table(cli.nova('show', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN))
-    #    table_param = 'OS-EXT-SRV-ATTR:host'
-    #    new_compute_name = table_parser.get_value_two_col_table(vm_table, table_param)
 
     assert (new_compute_name == compute_name)
 

@@ -54,7 +54,7 @@ Install VirtualBox on Linux or Windows Host
 .	e.g. for windows
 .	./vbox_install.elt -r <windows machine IP> pull_new_image=yes topology=2x1 con=MI_O str=MI com=MI_D
 .	e.g for linux
-	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install.elt pull_new_image=yes topology=1x1 rel2=yes con=MI_O str=MI com=MI_D load=GA2 patch=yes https=no
+	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install.elt pull_new_image=yes topology=1x1 rel2=yes con=MI_O str=MI com=MI_D patch=no https=yes
 .
 . 	Supported topology
 . 		2only 	- controller-0 controller-1
@@ -182,7 +182,6 @@ Version 2.0 by senthilkumar
 # assign fail script for debugging
 #*~fail_time.inc
 $load=GA2
-$load=none
 # TiS version  14
 $source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_bootimage.iso
 # TiS version  15
@@ -192,9 +191,9 @@ $source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Unified
 # Centos Version
 $source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Centos_Build/latest_bootimage.iso
 
-?if $load == GA2 ?[
-	$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_bootimage.iso
-]
+
+$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_bootimage.iso
+
 
 $boot_image=/home/$USER/VBox/latest_bootimage.iso
 $boot_dir=$boot_image
@@ -276,7 +275,7 @@ $console_win=nc localhost 7000
 $boot_image_win=/drives/c/Users/$USER/VBox/latest_bootimage.iso
 
 ## Patch
-$patch=no
+$patch=yes
 
 >date +%F_%T#
 +$DATE=\n(.+)#
@@ -862,6 +861,8 @@ $part=1
 ; === protect against blue screen of death
 #>socat UNIX-CONNECT:$serial_pipe - | egrep -i 'restarting system'
 >$console_connect | egrep -i 'restarting system'
+#>$console_connect | egrep -i 'booting'
+
 
 <Restarting system
 >>^C
@@ -929,9 +930,7 @@ $part=1
 ; === install tenant files and guest images
 $install_tenant_files=yes
 $directory=R2_files
-? if $load == GA2 ?[
-	$directory=R2_files
-]
+
 ?if $install_sw !=no? [	
 	# get IP address of host (use netstat -an | grep :22)
 	>netstat -an | grep :22
@@ -960,7 +959,7 @@ $directory=R2_files
 	?if $patch == yes ? [
 		@1500
 		; === Copying Patch file for 15.12
-		>wget -r -nH -nd -np -R index.html* --no-parent http://10.10.10.254:8088/files/install/15.12_patches/
+		>wget -r -nH -nd -np -R index.html* --no-parent http://10.10.10.254:8088/files/install/R2_patches/
 		>mkdir patches
 		>mv *.patch patches/
 		>sudo sw-patch query

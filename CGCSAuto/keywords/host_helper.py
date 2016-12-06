@@ -114,22 +114,25 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         time.sleep(20)
         con_ssh.connect(retry=True, retry_timeout=timeout)
         _wait_for_openstack_cli_enable(con_ssh=con_ssh)
-        hostnames.append(controller)
 
     if not wait_for_reboot_finish:
         msg = "Reboot hosts command sent."
         LOG.info(msg)
         return -1, msg
 
-    time.sleep(30)
-    hostnames = sorted(hostnames)
-    hosts_in_rebooting = _wait_for_hosts_states(
-            hostnames, timeout=HostTimeout.FAIL_AFTER_REBOOT, check_interval=10, duration=8, con_ssh=con_ssh,
-            availability=[HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED])
+    if hostnames:
+        time.sleep(30)
+        hostnames = sorted(hostnames)
+        hosts_in_rebooting = _wait_for_hosts_states(
+                hostnames, timeout=HostTimeout.FAIL_AFTER_REBOOT, check_interval=10, duration=8, con_ssh=con_ssh,
+                availability=[HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED])
 
-    if not hosts_in_rebooting:
-        hosts_info = get_host_show_values_for_hosts(hostnames, 'task', 'availability', con_ssh=con_ssh)
-        raise exceptions.HostError("Some hosts are not rebooting. \nHosts info:{}".format(hosts_info))
+        if not hosts_in_rebooting:
+            hosts_info = get_host_show_values_for_hosts(hostnames, 'task', 'availability', con_ssh=con_ssh)
+            raise exceptions.HostError("Some hosts are not rebooting. \nHosts info:{}".format(hosts_info))
+
+    if reboot_con:
+        hostnames.append(controller)
 
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
     unlocked_hosts_all = table_parser.get_values(table_, 'hostname', administrative='unlocked')
@@ -189,7 +192,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     states_vals = {}
     task_unfinished_msg = ''
     for host in hostnames:
-        vals = get_hostshow_values(host, con_ssh, 'task', 'availability')
+        vals = get_hostshow_values(host, fields=['task', 'availability'])
         if not vals['task'] == '':
             task_unfinished_msg = ' '.join([task_unfinished_msg, "{} still in task: {}.".format(host, vals['task'])])
         states_vals[host] = vals
@@ -209,10 +212,13 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         raise exceptions.HostPostCheckFailed(err_msg)
 
 
-def get_host_show_values_for_hosts(hostnames, *fields, con_ssh):
+def get_host_show_values_for_hosts(hostnames, fields, merge_lines=False, con_ssh=None):
+    if isinstance(fields, str):
+        fields = [fields]
+
     states_vals = {}
     for host in hostnames:
-        vals = get_hostshow_values(host, con_ssh, *fields)
+        vals = get_hostshow_values(host, fields, merge_lines=merge_lines)
         states_vals[host] = vals
 
     return states_vals
@@ -299,7 +305,7 @@ def __hosts_in_states(hosts, con_ssh=None, **states):
 
 
 def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTimeout.ONLINE_AFTER_LOCK, con_ssh=None,
-              fail_ok=False, check_first=True):
+              fail_ok=False, check_first=True, swact=False):
     """
     lock a host.
 
@@ -311,8 +317,9 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         con_ssh (SSHClient):
         fail_ok (bool):
         check_first (bool):
+        swact (bool): whether to check if host is active controller and do a swact before attempt locking
 
-    Returns: (return_code(int), msg(str))   # 1, 2, 3, 4, 5 only returns when fail_ok=True
+    Returns: (return_code(int), msg(str))   # 1, 2, 3, 4, 5, 6 only returns when fail_ok=True
         (-1, "Host already locked. Do nothing.")
         (0, "Host is locked and in online state."]
         (1, <stderr>)   # Lock host cli rejected
@@ -332,6 +339,11 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         if admin_state == 'locked':
             LOG.info("Host already locked. Do nothing.")
             return -1, "Host already locked. Do nothing."
+
+    if swact:
+        if is_active_controller(host):
+            LOG.info("{} is active controller, swact first before attempt to lock.")
+            swact_host(host, con_ssh=con_ssh)
 
     positional_arg = host
     extra_msg = ''
@@ -589,7 +601,7 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
     return res
 
 
-def get_hostshow_value(host, field, con_ssh=None):
+def get_hostshow_value(host, field, merge_lines=False, con_ssh=None):
     """
     Retrieve the value of certain field in the system host-show from get_hostshow_values()
 
@@ -606,10 +618,10 @@ def get_hostshow_value(host, field, con_ssh=None):
         The value of the specified field for given host
 
     """
-    return get_hostshow_values(host, con_ssh, field)[field]
+    return get_hostshow_values(host, field, merge_lines=merge_lines, con_ssh=con_ssh)[field]
 
 
-def get_hostshow_values(host, con_ssh=None, *fields):
+def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None):
     """
     Get values of specified fields for given host
 
@@ -626,9 +638,12 @@ def get_hostshow_values(host, con_ssh=None, *fields):
     if not fields:
         raise ValueError("At least one field name needs to provided via *fields")
 
+    if isinstance(fields, str):
+        fields = [fields]
+
     rtn = {}
     for field in fields:
-        val = table_parser.get_value_two_col_table(table_, field)
+        val = table_parser.get_value_two_col_table(table_, field, merge_lines=merge_lines)
         rtn[field] = val
     return rtn
 
@@ -819,21 +834,22 @@ def get_hosts(hosts=None, con_ssh=None, **states):
     return table_parser.get_values(table_, 'hostname', **states)
 
 
-def get_nova_hosts(con_ssh=None, auth_info=Tenant.ADMIN):
+def get_nova_hosts(zone='nova', con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get nova hosts listed in nova host-list.
 
     System: Regular, Small footprint
 
     Args:
+        zone (str): returns only the hosts with specified zone
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (list): a list of nova computes
+    Returns (list): a list of hypervisors in given zone
     """
 
     table_ = table_parser.table(cli.nova('host-list', ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_values(table_, 'host_name', service='compute', zone='nova')
+    return table_parser.get_values(table_, 'host_name', service='compute', zone=zone)
 
 
 def wait_for_hypervisors_up(hosts, timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL, check_interval=3, fail_ok=False,
@@ -946,6 +962,26 @@ def wait_for_webservice_up(hosts, timeout=90, check_interval=3, fail_ok=False, c
         raise exceptions.HostTimeout(msg)
 
 
+def get_hosts_in_aggregate(aggregate, con_ssh=None):
+    aggregates_tab = table_parser.table(cli.nova('aggregate-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    avail_aggregates = table_parser.get_column(aggregates_tab, 'Name')
+    if aggregate not in avail_aggregates:
+        LOG.warning("Requested aggregate {} is not in nova aggregate-list".format(aggregate))
+        return []
+
+    table_ = table_parser.table(cli.nova('aggregate-details', aggregate, ssh_client=con_ssh,
+                                         auth_info=Tenant.ADMIN))
+    hosts = table_parser.get_values(table_, 'Hosts', Name=aggregate)[0]
+    hosts = hosts.split(',')
+    if len(hosts) == 0 or hosts == ['']:
+        hosts = []
+    else:
+        hosts = [eval(host) for host in hosts]
+
+    LOG.info("Hosts in {} aggregate: {}".format(aggregate, hosts))
+    return hosts
+
+
 def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
     """
     Return a list of hosts that supports the given storage backing.
@@ -972,20 +1008,7 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
         raise ValueError("Invalid storage backing provided. "
                          "Please use one of these: 'local_image', 'local_lvm', 'remote'")
 
-    aggregates_tab = table_parser.table(cli.nova('aggregate-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    avail_aggregates = table_parser.get_column(aggregates_tab, 'Name')
-    if aggregate not in avail_aggregates:
-        LOG.warning("Requested aggregate {} is not in nova aggregate-list".format(aggregate))
-        return []
-
-    table_ = table_parser.table(cli.nova('aggregate-details', aggregate, ssh_client=con_ssh,
-                                         auth_info=Tenant.ADMIN))
-    hosts = table_parser.get_values(table_, 'Hosts', Name=aggregate)[0]
-    hosts = hosts.split(',')
-    if len(hosts) == 0 or hosts == ['']:
-        hosts = []
-    else:
-        hosts = [eval(host) for host in hosts]
+    hosts = get_hosts_in_aggregate(aggregate, con_ssh=con_ssh)
 
     LOG.info("Hosts with {} backing: {}".format(storage_backing, hosts))
     return hosts
@@ -999,29 +1022,35 @@ def get_nova_hosts_with_storage_backing(storage_backing, con_ssh=None):
     return candidate_hosts
 
 
-def get_nova_host_with_min_or_max_vms(rtn_max=True, con_ssh=None):
+def get_nova_host_with_min_or_max_vms(rtn_max=True, hosts=None, con_ssh=None):
     """
     Get name of a compute host with least of most vms.
 
     Args:
         rtn_max (bool): when True, return hostname with the most number of vms on it; otherwise return hostname with
             least number of vms on it.
+        hosts (list): choose from given hosts. If set to None, choose from all up hypervisors
         con_ssh (SSHClient):
 
     Returns (str): hostname
 
     """
-    hosts = get_nova_hosts(con_ssh=con_ssh)
+    hosts_to_check = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
+    if hosts:
+        if isinstance(hosts, str):
+            hosts = [hosts]
+        hosts_to_check = list(set(hosts_to_check) & set(hosts))
+
     table_ = system_helper.get_vm_topology_tables('computes')[0]
 
-    vms_nums = [int(table_parser.get_values(table_, 'servers', Host=host)[0]) for host in hosts]
+    vms_nums = [int(table_parser.get_values(table_, 'servers', Host=host)[0]) for host in hosts_to_check]
 
     if rtn_max:
         index = vms_nums.index(max(vms_nums))
     else:
         index = vms_nums.index(min(vms_nums))
 
-    return hosts[index]
+    return hosts_to_check[index]
 
 
 def get_hypervisors(state=None, status=None, con_ssh=None):
@@ -1284,7 +1313,7 @@ def apply_cpu_profile(host, profile_uuid, timeout=CMDTimeout.CPU_PROFILE_APPLY, 
     return 0, success_msg
 
 
-def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log_core', con_ssh=None,
+def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log_core', thread=0, con_ssh=None,
                                     auth_info=Tenant.ADMIN):
     """
     Get processor/logical cpu cores/per processor on thread 0 for given function for host via system host-cpu-list
@@ -1293,6 +1322,7 @@ def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log
         hostname (str): hostname to pass to system host-cpu-list
         function (str): such as 'Platform', 'vSwitch', or 'VMs'
         core_type (str): 'phy_core' or 'log_core'
+        thread (int): thread number. 0 or 1
         con_ssh (SSHClient):
         auth_info (dict):
 
@@ -1301,33 +1331,43 @@ def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log
 
     """
     table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh, auth_info=auth_info))
-    table_ = table_parser.filter_table(table_, assigned_function=function, thread='0')
-    procs = list(set(table_parser.get_column(table_, 'processor')))
+    procs = list(set(table_parser.get_values(table_, 'processor', thread=thread)))
     res_dict = {}
-    for proc in procs:
-        res_dict[int(proc)] = sorted(int(item) for item in table_parser.get_values(table_, core_type, processor=proc))
+    print(table_parser.get_values(table_, core_type, assigned_function=function))
 
+    for proc in procs:
+        cores = table_parser.get_values(table_, core_type, processor=proc, assigned_function=function, thread=thread)
+        res_dict[int(proc)] = sorted([int(item) for item in cores])
+
+    LOG.info("{} {} {}s per processor on thread {}: {}".format(hostname, function, core_type, thread, res_dict))
     return res_dict
 
 
-def get_logcores_counts(host, proc_ids=(0, 1), con_ssh=None):
+def get_logcores_counts(host, proc_ids=(0, 1), thread='0', functions=None, con_ssh=None):
     """
     Get number of logical cores on given processor on thread 0.
 
     Args:
         host:
         proc_ids:
+        thread:
         con_ssh:
 
     Returns (dict):
 
     """
     table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh))
-    table_ = table_parser.filter_table(table_, thread='0')
+    table_ = table_parser.filter_table(table_, thread=thread)
 
     rtns = []
+    kwargs = {}
+    if functions:
+        kwargs = {'assigned_function': functions}
+
     for i in proc_ids:
-        rtns.append(len(table_parser.get_values(table_, 'log_core', processor=str(i))))
+        cores_on_proc = table_parser.get_values(table_, 'log_core', processor=str(i), **kwargs)
+        LOG.info("Cores on proc {}: {}".format(i, cores_on_proc))
+        rtns.append(len(cores_on_proc))
 
     return rtns
 
@@ -1527,7 +1567,7 @@ def modify_host_lvg(host, lvm='nova-local', inst_backing=None, inst_lv_size=None
             return -1, msg
 
     if lock:
-        lock_host(host, con_ssh=con_ssh)
+        lock_host(host, con_ssh=con_ssh, swact=True)
 
     LOG.info("Modifying host-lvg for {} with params: {}".format(host, args))
     code, output = cli.system('host-lvg-modify', args, fail_ok=fail_ok, rtn_list=True, auth_info=auth_info,
@@ -1640,7 +1680,6 @@ def wait_for_host_in_aggregate(host, storage_backing, timeout=120, check_interva
     else:
         raise exceptions.HostError(err_msg)
 
-
 def is_host_local_image_backing(host, con_ssh=None):
     return check_host_local_backing_type(host, storage_type='image', con_ssh=con_ssh)
 
@@ -1648,31 +1687,31 @@ def is_host_local_image_backing(host, con_ssh=None):
 def is_host_local_lvm_backing(host, con_ssh=None):
     return check_host_local_backing_type(host, storage_type='lvm', con_ssh=con_ssh)
 
-
-def check_lab_local_backing_type(storage_type=None, con_ssh=None):
-    hypervisors = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
-    if not hypervisors:
-        return False
-
-    for hypervisor in hypervisors:
-        if check_host_local_backing_type(hypervisor, storage_type=storage_type):
-            return True
-
-    return False
-
-
-def has_local_image_backing(con_ssh=None):
-    if check_lab_local_backing_type('image'):
-        return True
-
-    return False
-
-
-def has_local_lvm_backing(con_ssh=None):
-    if check_lab_local_backing_type('lvm'):
-        return True
-
-    return False
+# Remove unused keywords for now, Kate has reported these are not working properly
+# def check_lab_local_backing_type(storage_type=None, con_ssh=None):
+#     hypervisors = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
+#     if not hypervisors:
+#         return False
+#
+#     for hypervisor in hypervisors:
+#         if check_host_local_backing_type(hypervisor, storage_type=storage_type):
+#             return True
+#
+#     return False
+#
+#
+# def has_local_image_backing(con_ssh=None):
+#     if check_lab_local_backing_type('image'):
+#         return True
+#
+#     return False
+#
+#
+# def has_local_lvm_backing(con_ssh=None):
+#     if check_lab_local_backing_type('lvm'):
+#         return True
+#
+#     return False
 
 
 def get_hosts_with_local_storage_backing_type(storage_type=None, con_ssh=None):
@@ -1867,6 +1906,8 @@ def get_vcpus_info_in_log(host_ssh, numa_nodes=None, rtn_list=False, con_ssh=Non
                 value = common._parse_cpus_list(value)
             elif key in ['cpu_usage', 'shared']:
                 value = float(value)
+            elif key == 'map':
+                pass
             else:
                 value = int(value)
 
@@ -1934,3 +1975,116 @@ def get_hosts_per_storage_backing(con_ssh=None):
              'remote': get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh)}
 
     return hosts
+
+
+def get_coredumps_and_crashreports():
+    LOG.info("Getting existing system crash reports from /var/crash/ and coredumps from /var/lib/systemd/coredump/")
+
+    hosts_tab = table_parser.table(cli.system('host-list'))
+    all_hosts = table_parser.get_column(hosts_tab, 'hostname')
+
+    hosts_tab = table_parser.filter_table(hosts_tab, exclude=True, availability=HostAvailabilityState.FAILED)
+    hosts_tab = table_parser.filter_table(hosts_tab, exclude=True, availability=HostAvailabilityState.OFFLINE)
+
+    hosts_to_check = table_parser.get_column(hosts_tab, 'hostname')
+
+    if not all_hosts == hosts_to_check:
+        LOG.warning("Some host(s) in offline or failed state - {}, checking other hosts only".
+                    format(set(all_hosts) - set(hosts_to_check)))
+
+    core_dumps_and_reports = {}
+    for host in hosts_to_check:
+        with ssh_to_host(hostname=host) as host_ssh:
+            core_dump_output = host_ssh.exec_cmd('ls -l /var/lib/systemd/coredump/', fail_ok=False)[1]
+            core_dumps = core_dump_output.splitlines()[1:]
+            crash_report_output = host_ssh.exec_cmd('ls -l /var/crash/', fail_ok=False)[1]
+            crash_reports = crash_report_output.splitlines()[1:]
+
+            core_dumps_and_reports[host] = core_dumps, crash_reports
+
+    LOG.info("core dumps and crash reports per host: {}".format(core_dumps_and_reports))
+    return core_dumps_and_reports
+
+
+def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fail_ok=False, con_ssh=None):
+
+    if not hosts:
+        raise exceptions.HostError("No hostname provided.")
+
+    mtu_val = int(mtu_val)
+
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    res = {}
+    rtn_code = 0
+    for host in hosts:
+        if_names = system_helper.get_host_interfaces_info(host, rtn_val='name', net_type=network_type, con_ssh=con_ssh)
+
+        if lock_unlock:
+            lock_host(host, swact=True)
+
+        LOG.info("Modify MTU for {} {} interfaces to: {}".format(host, network_type, mtu_val))
+
+        res_for_ifs = {}
+        for if_name in if_names:
+            args = "-m {} {} {}".format(mtu_val, host, if_name)
+            # system host-if-modify controller-1 <port_uuid>--imtu <mtu_value>
+            code, output = cli.system('host-if-modify', args, fail_ok=fail_ok, rtn_list=True, ssh_client=con_ssh)
+            res_for_ifs[if_name] = code, output
+
+            if code != 0:
+                rtn_code = 1
+
+        res[host] = res_for_ifs
+
+    if lock_unlock:
+        unlock_hosts(hosts, check_hypervisor_up=True, check_webservice_up=True)
+
+    check_failures = []
+    for host in hosts:
+        host_res = res[host]
+        for if_name in host_res:
+            mod_res = host_res[if_name]
+
+            # Check mtu modified correctly
+            if mod_res[0] == 0:
+                actual_mtu = int(system_helper.get_host_if_show_values(host, interface=if_name, fields=['imtu'],
+                                                                       con_ssh=con_ssh)[0])
+                if not actual_mtu == mtu_val:
+                    check_failures.append((host, if_name, actual_mtu))
+
+    if check_failures:
+        msg = "Actual MTU value after modify is not as expected. Expected MTU value: {}. Actual [Host, Interface, " \
+              "MTU value]: {}".format(mtu_val, check_failures)
+        if fail_ok:
+            return 2, msg
+        raise exceptions.HostPostCheckFailed(msg)
+
+    return rtn_code, res
+
+
+def get_hosts_and_pnets_with_pci_devs(pci_type='pci-sriov', up_hosts_only=True, con_ssh=None, auth_info=Tenant.ADMIN):
+    state = 'up' if up_hosts_only else None
+    hosts = get_hypervisors(state=state)
+
+    hosts_pnets_with_pci = {}
+    for host_ in hosts:
+        pnets_ = system_helper.get_host_interfaces_info(host_, rtn_val='provider networks', net_type=pci_type,
+                                                        con_ssh=con_ssh, auth_info=auth_info)
+        if pnets_ and pnets_ != 'None':
+            pnets_ = pnets_[0].split(sep=',')
+            hosts_pnets_with_pci[host_] = pnets_
+
+    if not hosts_pnets_with_pci:
+        LOG.info("No {} interface found from any of following hosts: {}".format(pci_type, hosts))
+    else:
+        LOG.info("Hosts and provider networks with {} devices: {}".format(pci_type, hosts_pnets_with_pci))
+
+    return hosts_pnets_with_pci
+
+
+def is_active_controller(host, con_ssh=None):
+    personality = eval(get_hostshow_value(host, field='capabilities',
+                                          merge_lines=True, con_ssh=con_ssh)).get('Personality', '')
+    return personality.lower() == 'Controller-Active'.lower()

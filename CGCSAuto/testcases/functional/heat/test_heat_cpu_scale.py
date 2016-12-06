@@ -7,7 +7,8 @@ from utils import cli
 from utils.tis_log import LOG
 
 from setup_consts import P1, P2, P3
-from consts.cgcs import HEAT_PATH, HEAT_SCENARIO_PATH, HOME, FlavorSpec
+from consts.cgcs import HEAT_PATH, HEAT_SCENARIO_PATH, FlavorSpec
+from consts.filepaths import WRSROOT_HOME
 
 from keywords import nova_helper, vm_helper, heat_helper, ceilometer_helper, network_helper
 from testfixtures.resource_mgmt import ResourceCleanup
@@ -31,7 +32,7 @@ def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
     t_name, yaml = template_name.split('.')
     stack_name = t_name
 
-    template_path = os.path.join(HOME, HEAT_SCENARIO_PATH, template_name)
+    template_path = os.path.join(WRSROOT_HOME, HEAT_SCENARIO_PATH, template_name)
     cmd_list = ['-f %s ' % template_path]
 
     # create a flavor with Hearbeat enabled]
@@ -42,7 +43,7 @@ def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
     extra_specs = {FlavorSpec.GUEST_HEARTBEAT: 'True'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
-    cmd_list.append("-P FLAVOR=%s " % fl_name)
+    cmd_list.append("-P FLAVOR=%s " % flavor_id)
 
     key_pair = vm_helper.get_any_keypair()
     cmd_list.append("-P KEYPAIR=%s " % key_pair)
@@ -101,8 +102,8 @@ def wait_for_vm_to_scale(vm_name=None, expected_count=0, time_out=120, check_int
         # P1(('scale_up_swact_scale_down')),
     ])
 # can add test fixture to configure hosts to be certain storage backing
-# FIXME test func args are unused.
-def test_heat_vm_scale(template_name, action):
+# FIXME test func args are unused. Deselected before fixing
+def _test_heat_vm_scale(action):
     """
     Basic Heat template testing:
         various Heat templates.
@@ -125,7 +126,7 @@ def test_heat_vm_scale(template_name, action):
     LOG.tc_step("Creating heat stack for auto scaling Vms")
     return_code, msg = launch_vm_scaling_stack()
 
-    assert 1 == return_code, "Expected return code {}. Actual return code: {}; details: {}".format(0, return_code, msg)
+    assert 0 == return_code, "Expected return code {}. Actual return code: {}; details: {}".format(0, return_code, msg)
 
     stack_name = msg
     # verify VM is created

@@ -1,8 +1,10 @@
 import math
 import time
+import re
 
 from consts.auth import Tenant
 from consts.timeout import SysInvTimeout
+from consts.cgcs import UUID
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -25,7 +27,7 @@ class System:
     def get_system_info(self):
         system = {}
         alarms = get_alarms_table(self.CON_SSH)
-        system['alarms'] = alarms
+        system['alarms_and_events'] = alarms
         # TODO: add networks, providernets, interfaces, flavors, images, volumes, vms info?
 
     # TODO: add methods to set nodes for install delete tests
@@ -160,13 +162,24 @@ def _get_active_standby(controller='active', con_ssh=None):
     return controllers
 
 
+def get_active_standby_controllers(con_ssh=None):
+    table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh))
+
+    table_ = table_parser.filter_table(table_, service_group_name='controller-services')
+    active_con = table_parser.get_values(table_, 'hostname', state='active', strict=False)[0]
+    standby_con = table_parser.get_values(table_, 'hostname', state='standby', strict=False)
+
+    standby_con = standby_con[0] if standby_con else None
+    return active_con, standby_con
+
+
 def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
                      auth_info=Tenant.ADMIN):
     """
-    Get active alarms dictionary with given criteria
+    Get active alarms_and_events dictionary with given criteria
     Args:
         uuid (bool): whether to show uuid
-        show_suppress (bool): whether to show suppressed alarms
+        show_suppress (bool): whether to show suppressed alarms_and_events
         query_key (str): one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
         query_value (str): expected value for given key
         query_type (str): data type of value. one of these: 'string', 'integer', 'float', 'boolean'
@@ -188,9 +201,9 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
     return table_
 
 
-def get_alarms(rtn_val='UUID', alarm_id=None, reason_text=None, entity_id=None, severity=None, time_stamp=None,
-               strict=False, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
-               auth_info=Tenant.ADMIN):
+def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=None, entity_id=None,
+               severity=None, time_stamp=None, strict=False, show_suppress=False, query_key=None, query_value=None,
+               query_type=None, con_ssh=None, auth_info=Tenant.ADMIN, combine_entries=True):
 
     table_ = get_alarms_table(show_suppress=show_suppress, query_key=query_key, query_value=query_value,
                               query_type=query_type, con_ssh=con_ssh, auth_info=auth_info)
@@ -210,13 +223,25 @@ def get_alarms(rtn_val='UUID', alarm_id=None, reason_text=None, entity_id=None, 
         if value is not None:
             kwargs[key] = value
 
-    return table_parser.get_values(table_, rtn_val, strict=strict, **kwargs)
+    if kwargs:
+        table_ = table_parser.filter_table(table_, strict=strict, **kwargs)
+
+    rtn_vals_list = []
+    for val in rtn_vals:
+        vals = table_parser.get_column(table_, val)
+        rtn_vals_list.append(vals)
+
+    rtn_vals_list = zip(*rtn_vals_list)
+    if combine_entries:
+        rtn_vals_list = [' '.join(vals) for vals in rtn_vals_list]
+
+    return rtn_vals_list
 
 
 def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
 
     """
-    Get suppressed alarms as dictionary
+    Get suppressed alarms_and_events as dictionary
     Args:
         uuid (bool): whether to show uuid
         con_ssh (SSHClient):
@@ -233,7 +258,7 @@ def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
     return table_
 
 
-def unsuppress_all(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
+def unsuppress_all_events(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
     """
 
     Args:
@@ -244,30 +269,46 @@ def unsuppress_all(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
     Returns:
 
     """
+    LOG.info("Un-suppress all events")
     args = '--nowrap --nopaging'
-    table_events = table_parser.table(cli.system('event-unsuppress-all',positional_args=args, ssh_client=ssh_con,
-                                                 fail_ok=fail_ok,auth_info=auth_info, rtn_list=True))
-    get_suppress_list = table_events
-    suppressed_list = table_parser.get_values(table_=get_suppress_list, target_header='Suppressed Alarm ID\'s',
-                                              strict=True, **{'Status': 'suppressed'})
-    if len(suppressed_list) == 0:
-        return 0, "Successfully unsuppressed"
-    msg = "Suppressed was unsuccessfull"
-    if fail_ok:
+    code, output = cli.system('event-unsuppress-all',  positional_args=args, ssh_client=ssh_con, fail_ok=fail_ok,
+                              auth_info=auth_info, rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    if not output:
+        msg = "No suppressed events to un-suppress"
         LOG.warning(msg)
-        return 2, msg
-    raise exceptions.NeutronError(msg)
+        return -1, msg
+
+    table_ = table_parser.table(output)
+    if not table_['values']:
+        suppressed_list = []
+    else:
+        suppressed_list = table_parser.get_values(table_, target_header="Suppressed Alarm ID's", **{'Status': 'suppressed'})
+
+    if suppressed_list:
+        msg = "Unsuppress-all failed. Suppressed Alarm IDs: {}".format(suppressed_list)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, msg
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "All events unsuppressed successfully."
+    LOG.info(succ_msg)
+    return 0, succ_msg
 
 
-def get_events(num=5, uuid=False, show_only=None, show_suppress=False, query_key=None, query_value=None,
-               query_type=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, query_key=None, query_value=None,
+                     query_type=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get a list of events with given criteria as dictionary
     Args:
         num (int): max number of event logs to return
         uuid (bool): whether to show uuid
-        show_only (str): 'alarms' or 'logs' to return only alarms or logs
-        show_suppress (bool): whether or not to show suppressed alarms
+        show_only (str): 'alarms_and_events' or 'logs' to return only alarms_and_events or logs
+        show_suppress (bool): whether or not to show suppressed alarms_and_events
         query_key (str): one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
         query_value (str): expected value for given key
         query_type (str): data type of value. one of these: 'string', 'integer', 'float', 'boolean'
@@ -309,7 +350,7 @@ def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=No
         timeout (int): max time to wait in seconds
         num (int): max number of event logs to return
         uuid (bool): whether to show uuid
-        show_only (str): 'alarms' or 'logs' to return only alarms or logs
+        show_only (str): 'alarms_and_events' or 'logs' to return only alarms_and_events or logs
         query_key (str): one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
         query_value (str): expected value for given key
         query_type (str): data type of value. one of these: 'string', 'integer', 'float', 'boolean'
@@ -328,8 +369,8 @@ def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=No
     """
     end_time = time.time() + timeout
     while time.time() < end_time:
-        events_tab = get_events(num=num, uuid=uuid, show_only=show_only, query_key=query_key, query_value=query_value,
-                                query_type=query_type, con_ssh=con_ssh, auth_info=auth_info)
+        events_tab = get_events_table(num=num, uuid=uuid, show_only=show_only, query_key=query_key, query_value=query_value,
+                                      query_type=query_type, con_ssh=con_ssh, auth_info=auth_info)
         events_tab = table_parser.filter_table(events_tab, strict=strict, regex=regex, **kwargs)
         events = table_parser.get_column(events_tab, rtn_val)
         if events:
@@ -352,10 +393,10 @@ def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=No
 
 def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """
-    Delete active alarms
+    Delete active alarms_and_events
 
     Args:
-        alarms (list|str): UUID(s) of alarms to delete
+        alarms (list|str): UUID(s) of alarms_and_events to delete
         fail_ok (bool): whether or not to raise exception if any alarm failed to delete
         con_ssh (SSHClient):
         auth_info (dict):
@@ -372,7 +413,7 @@ def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
     if isinstance(alarms, str):
         alarms = [alarms]
 
-    LOG.info("Deleting following alarms: {}".format(alarms))
+    LOG.info("Deleting following alarms_and_events: {}".format(alarms))
 
     res = {}
     failed_clis = []
@@ -441,32 +482,81 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
             raise exceptions.TimeoutException(err_msg)
 
 
-def wait_for_alarms_gone(alarm_uuids, timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
-                         auth_info=Tenant.ADMIN):
+def _get_alarms(alarms_tab):
+    alarm_ids = table_parser.get_column(alarms_tab, 'Alarm_ID')
+    entity_ids = table_parser.get_column(alarms_tab, 'Entity ID')
+    alarms = list(zip(alarm_ids, entity_ids))
+    return alarms
 
-    if isinstance(alarm_uuids, str):
-        alarm_uuids = [alarm_uuids]
 
-    LOG.info("Waiting for alarms to disappear from system alarm-list: {}".format(alarm_uuids))
-    alarms_to_check = list(alarm_uuids)
+def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=None, severity=None, timeout=60,
+                   check_interval=3, regex=False, strict=False, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+
+    kwargs = {}
+    if alarm_id:
+        kwargs['Alarm ID'] = alarm_id
+    if entity_id:
+        kwargs['Entity ID'] = entity_id
+    if reason:
+        kwargs['Reason Text'] = reason
+    if severity:
+        kwargs['Severity'] = severity
 
     end_time = time.time() + timeout
     while time.time() < end_time:
-        alarms_tab = get_alarms_table()
-
-        alarms = table_parser.get_column(alarms_tab, 'UUID')
-
-        for alarm in alarm_uuids:
-            if alarm not in alarms:
-                alarms_to_check.remove(alarm)
-        if not alarms_to_check:
-            LOG.info("Following alarms are cleared: {}".format(alarm_uuids))
-            return True, []
+        current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
+        if table_parser.get_values(current_alarms_tab, rtn_val, strict=strict, regex=regex, **kwargs):
+            LOG.info('Expected alarm appeared. Filters: {}'.format(kwargs))
+            return True, rtn_val
 
         time.sleep(check_interval)
 
+    err_msg = "Alarm {} did not appear in system alarm-list within timeout".format(kwargs)
+    if fail_ok:
+        LOG.warning(err_msg)
+        return False, None
+
+    raise exceptions.TimeoutException(err_msg)
+
+
+def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
+                         auth_info=Tenant.ADMIN):
+    """
+    Wait for given alarms_and_events to be gone from system alarm-list
+    Args:
+        alarms (list): list of tuple. [(<alarm_id1>, <entity_id1>), ...]
+        timeout (int):
+        check_interval (int):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (res(bool), remaining_alarms(tuple))
+
+    """
+    pre_alarms = list(alarms)   # Don't update the original list
+    LOG.info("Waiting for alarms_and_events to disappear from system alarm-list: {}".format(pre_alarms))
+    alarms_to_check = list(pre_alarms)
+
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
+        current_alarms = _get_alarms(current_alarms_tab)
+
+        for alarm in pre_alarms:
+            if alarm not in current_alarms:
+                LOG.info("Removing alarm {} from current alarms_and_events list: {}".format(alarm, alarms_to_check))
+                alarms_to_check.remove(alarm)
+
+        if not alarms_to_check:
+            LOG.info("Following alarms_and_events cleared: {}".format(pre_alarms))
+            return True, []
+
+        pre_alarms = alarms_to_check
+        time.sleep(check_interval)
+
     else:
-        err_msg = "Timed out waiting for following alarms to disappear: {}".format(alarms_to_check)
+        err_msg = "Following alarms_and_events did not clear within {} seconds: {}".format(alarms_to_check, timeout)
         if fail_ok:
             LOG.warning(err_msg)
             return False, alarms_to_check
@@ -741,12 +831,15 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
     suppressed_alarms_tab = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
 
     alarm_status = "unsuppressed" if suppress else "suppressed"
-    cmd = "event-suppress" if suppress else "alarm-unsuppress"
+    cmd = "event-suppress" if suppress else "event-unsuppress"
     alarm_filter = {"Suppressed Alarm ID's": alarm_id}
 
     if check_first:
-        pre_status = table_parser.get_values(table_=suppressed_alarms_tab, target_header='Status', strict=True,
-                                             **alarm_filter)[0]
+        if not suppressed_alarms_tab['values']:
+            pre_status = "unsuppressed"
+        else:
+            pre_status = table_parser.get_values(table_=suppressed_alarms_tab, target_header='Status', strict=True,
+                                                 **alarm_filter)[0]
         if pre_status.lower() != alarm_status:
             msg = "Alarm is already {}. Do nothing".format(pre_status)
             LOG.info(msg)
@@ -758,13 +851,17 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
         return 1, output
 
     post_suppressed_alarms_tab = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
-    post_status = table_parser.get_values(table_=post_suppressed_alarms_tab, target_header="Status", strict=True,
-                                          **{"UUID": alarm_id})
+    if not post_suppressed_alarms_tab['values']:
+        post_status = ["unsuppressed"]
+    else:
+        post_status = table_parser.get_values(table_=post_suppressed_alarms_tab, target_header="Status", strict=True,
+                                              **{"Event id": alarm_id})
     expt_status = "suppressed" if suppress else "unsuppressed"
     if post_status[0].lower() != expt_status:
         msg = "Alarm {} is not {}".format(alarm_id, expt_status)
         if fail_ok:
             LOG.warning(msg)
+            return 2, msg
         raise exceptions.TiSError(msg)
 
     succ_msg = "Alarm {} is {} successfully".format(alarm_id, expt_status)
@@ -778,6 +875,23 @@ def suppress_alarm(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
 
 def unsuppress_alarm(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
     return __suppress_unsuppress_alarm(alarm_id, False, check_first=check_first, fail_ok=fail_ok, con_ssh=con_ssh)
+
+
+def generate_event(event_id='300.005', state='set', severity='critical', reason_text='Generated for testing',
+                   entity_id='TiS Auto', unknown_text='unknown1', unknown_two='unknown2', con_ssh=None):
+
+    cmd = '''fmClientCli -c  "### ###{}###{}###{}###{}### ###{}### ###{}###{}### ###True###True###"'''.\
+        format(event_id, state, entity_id, reason_text, severity, unknown_text, unknown_two)
+
+    LOG.info("Generate system event: {}".format(cmd))
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    output = con_ssh.exec_cmd(cmd, fail_ok=False)[1]
+    event_uuid = re.findall(UUID, output)[0]
+    LOG.info("Event {} generated successfully".format(event_uuid))
+
+    return event_uuid
 
 
 def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
@@ -1070,14 +1184,14 @@ def get_host_ports_info(host, header='name', if_name=None, pci_addr=None, proc=N
     return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
-def get_host_interfaces_info(host, header='name', net_type=None, if_type=None, uses_ifs=None, used_by_ifs=None,
+def get_host_interfaces_info(host, rtn_val='name', net_type=None, if_type=None, uses_ifs=None, used_by_ifs=None,
                              show_all=False, strict=True, regex=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     """
     Get specified interfaces info for given host via system host-if-list
 
     Args:
         host (str):
-        header (str): header for return info
+        rtn_val (str): header for return info
         net_type (str): valid values: 'data', 'infra', 'mgmt', 'None' (string 'None' as opposed to None type)
         if_type (str): possible values: 'ethernet', 'ae', 'vlan'
         uses_ifs (str):
@@ -1110,8 +1224,8 @@ def get_host_interfaces_info(host, header='name', net_type=None, if_type=None, u
         if value is not None:
             kwargs[key] = value
 
-    info = table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
-    if header in ['ports', 'used by i/f', 'uses i/f']:
+    info = table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, **kwargs)
+    if rtn_val in ['ports', 'used by i/f', 'uses i/f']:
         info = eval(info)
 
     return info
@@ -1155,3 +1269,255 @@ def get_host_ports_for_net_type(host, net_type='data', rtn_list=True, con_ssh=No
         return total_ports_list
 
     return total_ports
+
+
+def get_host_if_show_values(host, interface, fields, con_ssh=None, auth_info=Tenant.ADMIN):
+    args = "{} {}".format(host, interface)
+    table_ = table_parser.table(cli.system('host-if-show', args, ssh_client=con_ssh, auth_info=auth_info))
+
+    if isinstance(fields, str):
+        fields = [fields]
+
+    res = []
+    for field in fields:
+        res.append(table_parser.get_value_two_col_table(table_, field))
+
+    return res
+
+
+def get_hosts_interfaces_info(hosts, fields, con_ssh=None, auth_info=Tenant.ADMIN, strict=True, **interface_filters):
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    res = {}
+    for host in hosts:
+        interfaces = get_host_interfaces_info(host, rtn_val='name', strict=strict, **interface_filters)
+        host_res = {}
+        for interface in interfaces:
+            values = get_host_if_show_values(host, interface, fields=fields, con_ssh=con_ssh, auth_info=auth_info)
+            host_res[interface] = values
+
+        res[host] = host_res
+
+    return res
+
+
+def get_service_parameter_values(rtn_value='value', service=None, section=None, name=None, con_ssh=None):
+    """
+    Returns the table from system service-parameter-list
+    service, section, name can be used to filter the table
+    Args:
+        service (str):
+        section (str):
+        name (str):
+        con_ssh:
+
+    Returns (dict):
+
+    """
+    kwargs = {}
+    if service:
+        kwargs['service'] = service
+    if section:
+        kwargs['section'] = section
+    if name:
+        kwargs['name'] = name
+
+    table_ = table_parser.table(cli.system('service-parameter-list', ssh_client=con_ssh))
+    return table_parser.get_values(table_, rtn_value, **kwargs)
+
+
+def create_service_parameter(service, section, name, value, con_ssh=None, fail_ok=False,
+                             check_first=True, modify_existing=True):
+    """
+    Add service-parameter
+    system service-parameter-add (service) (section) (name)=(value)
+    Args:
+        service (str): Required
+        section (str): Required
+        name (str): Required
+        value (str): Required
+        con_ssh:
+        fail_ok:
+        check_first (bool): Check if the service parameter exists before
+        modify_existing (bool): Whether to modify the service parameter if it already exists
+
+    Returns (tuple): (rtn_code, err_msg or param_uuid)
+
+    """
+    if check_first:
+        val = get_service_parameter_values(service=service, section=section, name=name, con_ssh=con_ssh)
+        if val:
+            msg = "The service parameter {} {} {} already exists".format(service, section, name)
+            LOG.info(msg)
+            if modify_existing:
+                return modify_service_parameter(service, section, name, value,
+                                                con_ssh=con_ssh, fail_ok=fail_ok, check_first=False)
+            return -1, msg
+
+    LOG.info("Creating service parameter")
+    args = service + ' ' + section + ' ' + name + '=' + value
+    res, out = cli.system('service-parameter-add', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
+
+    if res == 1:
+        return 1, out
+
+    LOG.info("Verifying the service parameter value")
+    val = get_service_parameter_values(service=service, section=section, name=name, con_ssh=con_ssh)[0]
+    if val != value:
+        msg = 'The service parameter was not added with the correct value'
+        if fail_ok:
+            return 2, msg
+        raise exceptions.SysinvError(msg)
+    LOG.info("Service parameter was added with the correct value")
+    uuid = get_service_parameter_values(rtn_value='uuid', service=service, section=section, name=name,
+                                        con_ssh=con_ssh)[0]
+
+    return 0, uuid
+
+
+def modify_service_parameter(service, section, name, value, con_ssh=None, fail_ok=False,
+                             check_first=True, create=True):
+    """
+    Modify a service parameter
+    Args:
+        service (str): Required
+        section (str): Required
+        name (str): Required
+        value (str): Required
+        con_ssh:
+        fail_ok:
+        check_first (bool): Check if the parameter exists first
+        create (bool): Whether to create the parameter if it does not exist
+
+    Returns (tuple): (rtn_code, message)
+
+    """
+    if check_first:
+        val = get_service_parameter_values(service=service, section=section, name=name, con_ssh=con_ssh)
+        if not val:
+            msg = "The service parameter {} {} {} doesn't exist".format(service, section, name)
+            LOG.info(msg)
+            if create:
+                return create_service_parameter(service, section, name, value,
+                                                con_ssh=con_ssh, fail_ok=fail_ok, check_first=False)
+            return -1, msg
+        if val[0] == value:
+            msg = "The service parameter value is already set to {}".format(val)
+            return -1, msg
+
+    LOG.info("Modifying service parameter")
+    args = service + ' ' + section + ' ' + name + '=' + value
+    res, out = cli.system('service-parameter-modify', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
+
+    if res == 1:
+        return 1, out
+
+    LOG.info("Verifying the service parameter value")
+    val = get_service_parameter_values(service=service, section=section, name=name, con_ssh=con_ssh)[0]
+    if val != value:
+        msg = 'The service parameter was not modified to the correct value'
+        if fail_ok:
+            return 2, msg
+        raise exceptions.SysinvError(msg)
+    msg = "Service parameter modified to {}".format(val)
+    LOG.info(msg)
+    return 0, msg
+
+
+def delete_service_parameter(uuid, con_ssh=None, fail_ok=False, check_first=True):
+    """
+    Delete a service parameter
+    Args:
+        uuid (str): Required
+        con_ssh:
+        fail_ok:
+        check_first (bool): Check if the service parameter exists before
+
+    Returns:
+
+    """
+    if check_first:
+        uuids = get_service_parameter_values(rtn_value='uuid', con_ssh=con_ssh)
+        if uuid not in uuids:
+            return -1, "There is no service parameter with uuid {}".format(uuid)
+
+    res, out = cli.system('service-parameter-delete', uuid, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
+
+    if res == 1:
+        return 1, out
+
+    LOG.info("Deleting service parameter")
+    uuids = get_service_parameter_values(rtn_value='uuid', con_ssh=con_ssh)
+    if uuid in uuids:
+        err_msg = "Service parameter was not deleted"
+        if fail_ok:
+            return 2, err_msg
+        raise exceptions.SysinvError(err_msg)
+    msg = "The service parameter {} was deleted".format(uuid)
+    LOG.info(msg)
+    return 0, msg
+
+
+def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh=None, fail_ok=False):
+    """
+    Apply service parameters
+    Args:
+        service (str): Required
+        wait_for_config (bool): Wait for config out of date alarms to clear
+        timeout (int):
+        con_ssh:
+        fail_ok:
+
+    Returns (tuple): (rtn_code, message)
+
+    """
+    LOG.info("Applying service parameters {}".format(service))
+    res, out = cli.system('service-parameter-apply', service, rtn_list=True, fail_ok=fail_ok, ssh_client=con_ssh)
+
+    if res == 1:
+        return res, out
+
+    alarm_id = '250.001'
+    time.sleep(10)
+
+    if wait_for_config:
+        LOG.info("Waiting for config-out-of-date alarms to clear. "
+                 "There may be cli errors when active controller's config updates")
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            res, out = cli.system('alarm-list', '--uuid',
+                                  ssh_client=con_ssh, fail_ok=True)
+            if res == 0:
+                alarms_tab = table_parser.filter_table(table_parser.table(out), **{'Alarm ID': alarm_id})
+                uuids = table_parser.get_values(alarms_tab, 'uuid')
+                if not uuids:
+                    LOG.info("Config has been applied")
+                    break
+            time.sleep(5)
+        else:
+            err_msg = "The config has not finished applying after timeout"
+            if fail_ok:
+                return 2, err_msg
+            raise exceptions.TimeoutException(err_msg)
+
+    return 0, "The {} service parameter was applied".format(service)
+
+
+def get_hosts_by_personality(con_ssh=None):
+    """
+    get hosts by different personality
+    Args:
+        con_ssh (SSHClient):
+
+    Returns (tuple): (controllers_list, computes_list, storages_list)
+        Examples: for CPE with 2 controllers, returns:
+            ([controller-0, controller-1], [], [])
+
+    """
+    hosts_tab = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
+    controllers = table_parser.get_values(hosts_tab, 'hostname', personality='controller')
+    computes = table_parser.get_values(hosts_tab, 'hostname', personality='compute')
+    storages = table_parser.get_values(hosts_tab, 'hostname', personality='storage')
+
+    return controllers, computes, storages

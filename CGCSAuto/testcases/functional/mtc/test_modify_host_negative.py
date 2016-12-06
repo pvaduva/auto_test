@@ -16,8 +16,7 @@ def test_delete_host_if():
     """
     hosts = host_helper.get_hosts(administrative='unlocked')
     host = hosts[len(hosts) - 1]
-    uuid = system_helper.get_host_interfaces_info(host, header='uuid', if_type='ethernet')[0]
-    # uuid = table_parser.get_values(table_, 'uuid', type='ethernet')[0]
+    uuid = system_helper.get_host_interfaces_info(host, rtn_val='uuid', if_type='ethernet')[0]
     LOG.tc_step("Attempting to delete interface {} from host {}".format(uuid, host))
     code, out = cli.system('host-if-delete', '{} {}'.format(host, uuid), fail_ok=True, rtn_list=True)
     LOG.tc_step("Verify that the cli was rejected")
@@ -56,8 +55,7 @@ def test_modify_non_existing_cpu(lock_):
     while fake_proc_num in cores:
         fake_proc_num += 1
     fake_proc = 'p{}'.format(fake_proc_num)
-    map_ = {}
-    map_[fake_proc] = 1
+    map_ = {fake_proc: 1}
     LOG.tc_step("Attempt to modify fake processor {}'s function to shared".format(fake_proc))
     code, out = host_helper.modify_host_cpu(host, 'shared', fail_ok=True, **map_)
     assert 0 != code, "FAIL: Modifying a non existing processor was not rejected"

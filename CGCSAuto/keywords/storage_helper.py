@@ -314,8 +314,10 @@ def download_images(dload_type='all', img_dest='~/images/', con_ssh=None):
 
     LOG.info('wget images')
     if dload_type == 'ubuntu' or dload_type == 'all':
+        LOG.info("Downloading ubuntu image")
         _wget(ubuntu_image_location)
     elif dload_type == 'centos' or dload_type == 'all':
+        LOG.info("Downloading centos image")
         _wget(centos_image_location)
 
     #return image_names
@@ -396,3 +398,35 @@ def find_image_size(con_ssh, image_name='cgcs-guest.img', location='~/images'):
     return image_size
 
 
+def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, object_=None, fail_ok=False, con_ssh=None):
+    """
+    Modify storage backend pool allocation
+
+    Args:
+        backend (str): storage backend to modify (e.g. ceph)
+        cinder:
+        glance:
+        ephemeral:
+        object_:
+        fail_ok:
+        con_ssh:
+
+    Returns:
+        0, list of new allocation
+        1, cli err message
+
+    """
+
+    args = backend
+    if cinder:
+        args += ' cinder_pool_gib=' + cinder
+    if glance:
+        args += ' glance_pool_gib=' + glance
+    if ephemeral:
+        args += ' ephemeral_pool_gib=' + ephemeral
+    if object_:
+        args += ' object_pool_gib=' + object_
+
+    code, out = cli.system('storage-backend-modify', args, con_ssh, fail_ok=fail_ok, rtn_list=True)
+    # TODO return new values of storage allocation and check they are the right values
+    return code, out
