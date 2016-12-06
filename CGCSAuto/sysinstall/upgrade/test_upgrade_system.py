@@ -93,7 +93,8 @@ def test_system_upgrade():
 
     #Install the license file for release
     LOG.info("Installing the target release {} license file".format(upgrade_version))
-    rc = system_helper.install_upgrade_license(controller0_conn, os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
+    rc = system_helper.install_upgrade_license(os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+                                               con_ssh=controller0_conn)
     LOG.tc_step("Checking if target release license is installed......")
     assert rc == 0, "Unable to install upgrade license file in Controller-0"
     LOG.tc_step("Target release license is installed......")

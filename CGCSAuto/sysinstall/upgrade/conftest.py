@@ -54,6 +54,8 @@ def pytest_configure(config):
                                  tis_build_dir=tis_build_dir,
                                  upgrade_license_path=upgrade_license)
 
+
+
     print("Upgrade vars: {}".format(UpgradeVars.get_upgrade_vars()))
 
 
@@ -64,7 +66,9 @@ def setup_test_session():
     TIS ssh was already set up at collecting phase.
     """
     # os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
+    ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
+    con_ssh.set_prompt()
     setups.set_env_vars(con_ssh)
 
     setups.copy_files_to_con1()

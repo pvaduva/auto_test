@@ -1788,7 +1788,7 @@ def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_admi
         table_ = table_parser.table(output)
         id  = (table_parser.get_values(table_, "Value", Property='id')).pop()
         soft_ver =  (table_parser.get_values(table_, "Value", Property='software_version')).pop()
-        LOG.info('Waiting to finsish importing  load id {} version {}'.format(id, soft_ver))
+        LOG.info('Waiting to finish importing  load id {} version {}'.format(id, soft_ver))
 
         end_time = time.time() + timeout
 
@@ -1912,7 +1912,7 @@ def install_upgrade_license(license_path, timeout=30, con_ssh=None):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    cmd = " sudo license-install " + license_path
+    cmd = "sudo license-install " + license_path
     con_ssh.send(cmd)
     end_time = time.time() + timeout
     rc = 1
