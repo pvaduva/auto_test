@@ -359,36 +359,3 @@ def wait_for_val_from_func(expt_val, timeout, check_interval, func, *args, **kwa
         time.sleep(check_interval)
 
     return False, current_val
-
-def install_upgrade_license(con_ssh, license_path, timeout=30):
-    """
-    Installs upgrade license on controller-0
-    Args:
-        ssh_conn (SSHClient): " SSH connection to controller-0"
-        license_path (str): " license full path in controller-0"
-        timout (int);
-
-    Returns (int): 0 - success; 1 - failure
-
-    """
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
-
-    cmd = " sudo license-install " + license_path
-    con_ssh.send(cmd)
-    end_time = time.time() + timeout
-    rc = 1
-    while time.time() < end_time:
-        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.Y_N_PROMPT], timeout=timeout)
-        if index == 2:
-            con_ssh.send('y')
-
-        if index == 1:
-            con_ssh.send(Host.PASSWORD)
-
-        if index == 0:
-            rc = con_ssh.exec_cmd("echo $?")[0]
-            break
-
-    return rc
-

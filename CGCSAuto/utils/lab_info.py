@@ -83,7 +83,7 @@ def __get_lab_dict(labname):
     labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
 
     for lab in labs:
-        if "name" in lab and labname in lab['name'].replace('-', '_').lower().strip() \
+        if labname in lab['name'].replace('-', '_').lower().strip() \
                 or labname == lab['short_name'].replace('-', '_').lower().strip() \
                 or labname == lab['floating ip']:
             return lab

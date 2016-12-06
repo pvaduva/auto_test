@@ -2,9 +2,9 @@ import math
 import time
 import re
 
-from consts.auth import Tenant
+from consts.auth import Tenant, Host
 from consts.timeout import SysInvTimeout
-from consts.cgcs import UUID
+from consts.cgcs import UUID, Prompt
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -1654,6 +1654,39 @@ def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False,
                      source_admin_=source_admin_)
 
     rc, output = cli.system('load-delete', id, ssh_client=con_ssh,
-                            fail_ok=fail_ok, source_admin_=source_admin_)
+                            fail_ok=True, source_admin_=source_admin_)
     #TODO: add check if load is deleted
     return id
+
+
+def install_upgrade_license(con_ssh, license_path, timeout=30):
+    """
+    Installs upgrade license on controller-0
+    Args:
+        ssh_conn (SSHClient): " SSH connection to controller-0"
+        license_path (str): " license full path in controller-0"
+        timout (int);
+
+    Returns (int): 0 - success; 1 - failure
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    cmd = " sudo license-install " + license_path
+    con_ssh.send(cmd)
+    end_time = time.time() + timeout
+    rc = 1
+    while time.time() < end_time:
+        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.Y_N_PROMPT], timeout=timeout)
+        if index == 2:
+            con_ssh.send('y')
+
+        if index == 1:
+            con_ssh.send(Host.PASSWORD)
+
+        if index == 0:
+            rc = con_ssh.exec_cmd("echo $?")[0]
+            break
+
+    return rc

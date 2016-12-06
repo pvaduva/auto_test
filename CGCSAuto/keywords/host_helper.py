@@ -456,8 +456,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, availability_state=
         if isinstance(availability_state, str):
             availability_state = [availability_state]
 
-        if (state != HostAvailabilityState.AVAILABLE  or state != HostAvailabilityState.DEGRADED
-            for state in availability_state):
+        if True in [state != HostAvailabilityState.AVAILABLE and state != HostAvailabilityState.DEGRADED
+            for state in availability_state]:
             LOG.warning("The referred specific availability state {} must be ether of {}. "
                         "Switching to either states. ".format(availability_state,
                         [HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]))
@@ -2122,6 +2122,8 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
         (3, "Host did not come online after upgrade. Applicable if fail_ok ")
         (4, "Host fail lock before starting upgrade". Applicable if lock arg is True and fail_ok")
         (5, "Host fail to unlock after host upgrade.  Applicable if unlock arg is True and fail_ok")
+        (6, "Host unlocked after upgrade, but alarms are not cleared after 120 seconds.
+        Applicable if unlock arg is True and fail_ok")
 
     """
     LOG.info("Upgrading host {}...".format(host))
@@ -2130,7 +2132,7 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
         if get_hostshow_value(host, 'administrative', con_ssh=con_ssh) == HostAdminState.UNLOCKED:
             message = "Host is not locked. Locking host  before starting upgrade"
             LOG.info(message)
-            rc, output = lock_host(host, con_ssh=con_ssh, fail_ok=fail_ok)
+            rc, output = lock_host(host, con_ssh=con_ssh, fail_ok=True)
 
             if rc != 0 and rc != -1:
                 err_msg = "Host {} fail on lock before starting upgrade: {}".fromat(host, output)
@@ -2170,7 +2172,7 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
             raise exceptions.HostError(err_msg)
 
     if unlock:
-        rc, output = unlock_host(host, availability_state=HostAvailabilityState.AVAILABLE)
+        rc, output = unlock_host(host, fail_ok=True, availability_state=HostAvailabilityState.AVAILABLE)
         if rc != 0:
             err_msg = "Host {} fail to unlock after host upgrade: ".format(host, output)
             if fail_ok:
@@ -2179,7 +2181,12 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
                 raise exceptions.HostError(err_msg)
 
         # wait until  400.001  alarms get cleared
-        system_helper.wait_for_alarm_gone("400.001")
+        if not system_helper.wait_for_alarm_gone("400.001", fail_ok=True):
+            err_msg = "Alarms did not clear after host {} upgrade and unlock: ".format(host)
+            if fail_ok:
+                return 6, err_msg
+            else:
+                raise exceptions.HostError(err_msg)
 
     LOG.info("Upgrading host {} complete ...".format(host))
     return 0, None
