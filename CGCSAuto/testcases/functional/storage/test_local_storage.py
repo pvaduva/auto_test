@@ -29,6 +29,21 @@ def _get_computes_for_local_backing_type(ls_type='image', con_ssh=None):
     return hosts_of_type
 
 
+def min_no_disks_hypervisor(con_ssh=None):
+    hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
+
+    host_disks = [local_storage_helper.get_host_disk_sizes(host=hypervisor) for hypervisor in hypervisors]
+
+    LOG.debug('host_disks={}'.format(host_disks))
+    return min([len(hd.keys()) for hd in host_disks])
+
+
+@fixture(scope='module')
+def ensure_multiple_disks():
+    if (min_no_disks_hypervisor() < 2):
+        skip('Every hypervisor must have 2+ hard disks')
+
+
 @fixture(scope='module')
 def ensure_two_hypervisors():
     if len(host_helper.get_hypervisors(state='up', status='enabled')) < 2:
@@ -300,11 +315,12 @@ class TestLocalStorage(object):
 
         return host_pv_sizes
 
+
     @mark.parametrize('local_storage_type', [
         mark.domain_sanity('lvm'),
         mark.domain_sanity('image'),
     ])
-    def test_local_storage_operations(self, local_storage_type, ensure_two_hypervisors):
+    def test_local_storage_operations(self, local_storage_type, ensure_two_hypervisors, ensure_multiple_disks):
         """
         Args:
             local_storage_type(str): type of local-storage backing, should be image, lvm
