@@ -1,19 +1,18 @@
-from pytest import fixture, mark, skip
+import os
 
-import keywords.system_helper
+from pytest import mark
+
+from consts.auth import Tenant
+from consts.cgcs import HEAT_PATH
+from consts.filepaths import WRSROOT_HOME
+from consts.heat import Heat
+from keywords import nova_helper, heat_helper,ceilometer_helper,network_helper,cinder_helper,glance_helper,\
+    host_helper
+from setup_consts import P1
+from testfixtures.resource_mgmt import ResourceCleanup
 from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
-from keywords import nova_helper, vm_helper, heat_helper,ceilometer_helper,network_helper,cinder_helper,glance_helper,\
-    host_helper, common
-from setup_consts import P1, P2, P3
-import time
-from consts.heat import Heat
-from consts.filepaths import WRSROOT_HOME
-from consts.cgcs import HEAT_PATH
-import os
-from consts.auth import Tenant
-from testfixtures.resource_mgmt import ResourceCleanup
 
 
 def verify_heat_resource(to_verify=None,template_name=None,stack_name=None,auth_info=None):

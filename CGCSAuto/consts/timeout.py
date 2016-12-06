@@ -12,6 +12,7 @@ class HostTimeout:
     FAIL_AFTER_REBOOT = 30
     HYPERVISOR_UP_AFTER_AVAIL = 120
     COMPUTE_LOCK = 30
+    UPGRADE = 7200
 
 
 class VMTimeout:

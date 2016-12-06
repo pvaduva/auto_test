@@ -8,11 +8,12 @@ import time
 from datetime import datetime, timedelta
 
 from consts.cgcs import Prompt
-from consts.auth import Tenant, SvcCgcsAuto
+from consts.auth import Tenant, SvcCgcsAuto, Host
 from consts.proj_vars import ProjVar
 from utils import exceptions
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
+from consts.filepaths import WRSROOT_HOME
 
 
 def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=120,

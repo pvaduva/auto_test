@@ -1,7 +1,10 @@
+# hosts_bulk_add, lab_setup, tis_config will be added to each lab dictionary when initializing install test
+
+
 class Labs:
     HP380 = {
         'short_name': 'hp380',
-        'name': 'yow-cgcs-hp380-1_4',
+        'name': 'cgcs-hp380-1_4',
         'floating ip': '128.224.150.189',
         'controller-0 ip': '128.224.150.199',
         'controller-1 ip': '128.224.150.129',
@@ -33,7 +36,7 @@ class Labs:
 
     IP_7_12 = {
         'short_name': 'ip_7_12',
-        'name': 'yow-cgcs-ironpass-7_12',
+        'name': 'cgcs-ironpass-7_12',
         'floating ip': '128.224.151.243',
         'controller-0 ip': '128.224.150.244',
         'controller-1 ip': '128.224.150.205',
@@ -302,6 +305,14 @@ class Labs:
         'short_name': 'large_office',
         'name': 'large office',
         'floating ip': ''
+    }
+
+    UNKNOWN = {
+        'short_name': 'unknown',
+        'name': 'unknown',
+        'floating ip': 'unknow_fip',
+        'controller-0 ip': 'unknown_con0_ip',
+        'controller-1 ip': 'unknown_con1_ip',
     }
 
 

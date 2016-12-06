@@ -116,6 +116,9 @@ def test_swact_compute_negative():
         - Attempt to swact from a compute
 
     """
+    if system_helper.is_small_footprint():
+        skip("Skip for CPE system.")
+
     computes = system_helper.get_computes()
     for compute in computes:
         LOG.tc_step("Attempting to swact from {}".format(compute))

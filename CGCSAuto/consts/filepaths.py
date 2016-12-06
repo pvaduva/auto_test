@@ -6,6 +6,7 @@ class TiSPath:
     TIS_CENTOS_PATH = '/home/wrsroot/userdata/centos_if_config.sh'
     USERDATA = '/home/wrsroot/userdata/'
     IMAGES = '/home/wrsroot/images/'
+    INSTALL_STATUS = 'home/wrsroot/autoinstall_status.log'
 
 
 class VMPath:
@@ -27,4 +28,21 @@ class TestServerPath:
 class PrivKeyPath:
     OPT_PLATFORM = "/opt/platform/id_rsa"
     WRS_HOME = '/home/wrsroot/.ssh/id_rsa'
+
+
+class BuildServerPath:
+    DEFAULT_BUILD_SERVER = 'yow-cgts4-lx'
+    DEFAULT_WORK_SPACE = '/localdisk/loadbuild/jenkins'
+    DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_3.0_Guest_Daily_Build/cgcs-guest.img'
+    DEFAULT_HOST_BUILD_PATH = '/localdisk/loadbuild/jenkins/CGCS_3.0_Centos_Build/latest_build/'
+    DEFAULT_LICENSE_PATH = '/folk/cgts/lab/TiS16-full.lic'
+    HEAT_TEMPLATES = ''
+    LATEST_HOST_BUILD_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/',
+                               '16.10': '/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/',
+                               '17.00': '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/latest_build/',
+                              }
+    TIS_LICENSE_PATHS = {'15.12': ['/folk/cgts/lab/TiS15-GA-full.lic', '/folk/cgts/lab/TiS15.12-CPE-full-dec2016.lic'],
+                         '16.10': ['/folk/cgts/lab/TiS16-full.lic', '/folk/cgts/lab/TiS16-CPE-full.lic'],
+                         '17.00': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
+                        }
 

@@ -2,11 +2,11 @@ from pytest import fixture, mark, skip
 
 import keywords.host_helper
 import keywords.system_helper
+from keywords import nova_helper, vm_helper, host_helper
+from setup_consts import P1, P2, P3
 from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
-from keywords import nova_helper, vm_helper, host_helper
-from setup_consts import P1, P2, P3
 
 
 # overall skip condition
@@ -159,7 +159,7 @@ def prepare_hosts(request):
     return request.param
 
 
-@mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
+# @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')      # Setup/teardown fixture that are not directly related to test case
 @mark.parametrize("storage", ['local_lvm', 'local_image', 'remote'])
 @mark.parametrize("interface", ['virtio', 'vswitch', 'avp'])

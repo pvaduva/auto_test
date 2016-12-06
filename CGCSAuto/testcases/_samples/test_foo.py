@@ -1,8 +1,8 @@
-from pytest import fixture, mark, skip
+from pytest import mark, skip
 
-from utils.tis_log import LOG
 from keywords import nova_helper
-from setup_consts import P1, P2, P3
+from setup_consts import P1, P2
+from utils.tis_log import LOG
 
 _skip = True
 

@@ -113,6 +113,7 @@ class Prompt:
     PASSWORD_PROMPT = '.*assword\:.*'
     ADD_HOST = '.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
+    Y_N_PROMPT = '.*\(y/n\)\?.*'
 
 
 class NovaCLIOutput:

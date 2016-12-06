@@ -2,7 +2,6 @@ import re
 import subprocess
 import os
 import sys
-from time import strftime
 
 from utils.ssh import SSHClient, CONTROLLER_PROMPT
 from consts.lab import Labs
@@ -17,6 +16,16 @@ def get_lab_floating_ip(labname=None):
 
 
 def get_build_id(labname=None, log_dir=None, con_ssh=None):
+    """
+
+    Args:
+        labname:
+        log_dir:
+        con_ssh (SSHClient):
+
+    Returns:
+
+    """
     close = False
     if con_ssh is None:
         close = True
@@ -42,6 +51,15 @@ def get_build_id(labname=None, log_dir=None, con_ssh=None):
 
 
 def __get_lab_ssh(labname, log_dir=None):
+    """
+
+    Args:
+        labname:
+        log_dir:
+
+    Returns (SSHClient):
+
+    """
     lab = __get_lab_dict(labname)
     if log_dir is None:
         log_dir = temp_dir = "/tmp/"
@@ -176,3 +194,4 @@ def get_lab_info(labname=None, log_dir=None):
 
     con_ssh.close()
     return build_id, sys_type
+
