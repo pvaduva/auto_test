@@ -1408,3 +1408,264 @@ def get_vm_instance_name(vm_id, con_ssh=None):
 
 def get_nova_services_table(auth_info=Tenant.ADMIN, con_ssh=None):
     return table_parser.table(cli.nova('service-list', ssh_client=con_ssh, auth_info=auth_info))
+
+
+def create_aggregate(rtn_val='name', name=None, avail_zone=None, check_first=True, fail_ok=False, con_ssh=None,
+                     auth_info=Tenant.ADMIN):
+    """
+    Add a aggregate with given name and availability zone.
+
+    Args:
+        rtn_val (str): name or id
+        name (str): name for aggregate to create
+        avail_zone (str):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+        (0, <rtn_val>)          -- aggregate successfully created
+        (1, <stderr>)           -- cli rejected
+        (2, "Created aggregate is not as specified")    -- name and/or availability zone mismatch
+
+    """
+    if not name:
+        existing_names = get_aggregates(rtn_val='name')
+        name = common.get_unique_name(name_str='cgcsauto', existing_names=existing_names)
+
+    subcmd = name
+    if avail_zone:
+        subcmd += ' {}'.format(avail_zone)
+
+    if check_first:
+        aggregates_ = get_aggregates(rtn_val=rtn_val, name=name, avail_zone=avail_zone)
+        if aggregates_:
+            LOG.warning("Aggregate {} already exists. Do nothing.".format(name))
+            return -1, aggregates_[0]
+
+    LOG.info("Adding aggregate {}".format(name))
+
+    res, out = cli.nova('aggregate-create', subcmd, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                        fail_ok=fail_ok)
+    if res == 1:
+        return res, out
+
+    out_tab = table_parser.table(out)
+    expt_avail = avail_zone if avail_zone else ''
+    actual_values = table_parser.get_values(out_tab, rtn_val, **{'Name': name, 'Availability Zone': expt_avail})
+
+    if not actual_values:
+        err_msg = "Created aggregate is not as specified"
+        if fail_ok:
+            return 2, err_msg
+        else:
+            raise exceptions.NovaError(err_msg)
+
+    succ_msg = "Aggregate {} is successfully created".format(name)
+    LOG.info(succ_msg)
+    return 0, actual_values[0]
+
+
+def get_aggregates(rtn_val='name', name=None, avail_zone=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get a list of aggregates
+
+    Args:
+        rtn_val (str): id or name
+        name (str): filter out the aggregates with given name if specified
+        avail_zone (str): filter out the aggregates with given availability zone if specified
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (list):
+
+    """
+    kwargs = {}
+    if avail_zone:
+        kwargs['Availability Zone'] = avail_zone
+
+    if name:
+        kwargs['Name'] = name
+
+    aggregates_tab = table_parser.table(cli.nova('aggregate-list', ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_values(aggregates_tab, rtn_val, **kwargs)
+
+
+def delete_aggregate(name, check_first=True, remove_hosts=True, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Add a aggregate with given name and availability zone.
+
+    Args:
+        name (str): name for aggregate to delete
+        check_first (bool)
+        remove_hosts (bool)
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+        (0, "Aggregate <name> is successfully deleted")          -- aggregate successfully deletec
+        (1, <stderr>)           -- cli rejected
+        (2, "Aggregate <name> still exists in aggregate-list after deletion")    -- failed although cli accepted
+
+    """
+    if check_first:
+        if not get_aggregates(name=name):
+            msg = 'Aggregate {} does not exists. Do nothing.'.format(name)
+            LOG.warning(msg)
+            return -1, msg
+
+    if remove_hosts:
+        remove_hosts_from_aggregate(aggregate=name, check_first=True)
+
+    LOG.info("Deleting aggregate {}".format(name))
+
+    res, out = cli.nova('aggregate-delete', name, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                        fail_ok=fail_ok)
+    if res == 1:
+        return res, out
+
+    post_aggregates = get_aggregates(rtn_val='name', con_ssh=con_ssh, auth_info=auth_info)
+    if name in post_aggregates:
+        err_msg = "Aggregate {} still exists in aggregate-list after deletion."
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        else:
+            raise exceptions.NovaError(err_msg)
+
+    succ_msg = "Aggregate {} is successfully deleted".format(name)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def remove_hosts_from_aggregate(aggregate, hosts=None, check_first=True, fail_ok=False, con_ssh=None,
+                                auth_info=Tenant.ADMIN):
+    """
+    Remove hosts from specified aggregate
+
+    Args:
+        aggregate (str): name of the aggregate to remove hosts. cgcsauto aggregate can be added via add_cgcsauto_zone
+            session fixture
+        hosts (list|str): host(s) to remove from aggregate
+        check_first (bool):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+        (0, "Hosts successfully removed from aggregate")
+        (1, <stderr>)       cli rejected on at least one host
+        (2, "Host(s) still exist in aggregate <aggr> after aggregate-remove-host: <unremoved_hosts>)
+
+    """
+    __remove_or_add_hosts_in_aggregate(remove=True, aggregate=aggregate, hosts=hosts, check_first=check_first,
+                                       fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
+
+
+def add_hosts_to_aggregate(aggregate, hosts, check_first=True, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Add host(s) to specified aggregate
+
+    Args:
+        aggregate (str): name of the aggregate to add hosts. cgcsauto aggregate can be added via add_cgcsauto_zone
+            session fixture
+        hosts (list|str): host(s) to add to aggregate
+        check_first (bool):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+        (0, "Hosts successfully added from aggregate")
+        (1, <stderr>)       cli rejected on at least one host
+        (2, "aggregate-add-host accepted, but some host(s) are not added in aggregate")
+
+    """
+    __remove_or_add_hosts_in_aggregate(remove=False, aggregate=aggregate, hosts=hosts, check_first=check_first,
+                                       fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
+
+
+def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, check_first=True, fail_ok=False,
+                                       con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Remove/Add hosts from/to given aggregate
+
+    Args:
+        aggregate (str): name of the aggregate to add/remove hosts. cgcsauto aggregate can be added via
+            add_cgcsauto_zone session fixture
+        hosts (list|str):
+        remove (bool): True if remove hosts from given aggregate, otherwise add hosts to aggregate
+        check_first (bool):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+        (0, "Hosts successfully removed from aggregate")
+        (1, <stderr>)       cli rejected on at least one host
+        (2, "Host(s) still exist in aggregate <aggr> after aggregate-remove-host: <unremoved_hosts>)
+
+    """
+    hosts_in_aggregate = host_helper.get_hosts_in_aggregate(aggregate, con_ssh=con_ssh)
+
+    if hosts is None:
+        if remove:
+            hosts = hosts_in_aggregate
+        else:
+            hosts = host_helper.get_hosts()
+
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    msg_str = 'Remov' if remove else 'Add'
+    LOG.info("{}ing hosts {} in aggregate {}".format(msg_str, hosts, aggregate))
+    if check_first:
+        if remove:
+            hosts_to_rm_or_add = list(set(hosts) & set(hosts_in_aggregate))
+        else:
+            hosts_to_rm_or_add = list(set(hosts) - set(hosts_in_aggregate))
+    else:
+        hosts_to_rm_or_add = list(hosts)
+
+    if not hosts_to_rm_or_add:
+        warn_str = 'No' if remove else 'All'
+        msg = "{} given host(s) in aggregate {}. Do nothing. Given hosts: {}; hosts in aggregate: {}".format(warn_str,
+              aggregate, hosts, hosts_in_aggregate)
+        LOG.warning(msg)
+        return -1, msg
+
+    failed_res = {}
+    cmd = 'aggregate-remove-host' if remove else 'aggregate-add-host'
+    for host in hosts_to_rm_or_add:
+        args = '{} {}'.format(aggregate, host)
+        code, output = cli.nova(cmd, args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_list=True)
+        if code == 1:
+            failed_res[host] = output
+
+    if failed_res:
+        err_msg = "'{}' is rejected for following host(s) in aggregate {}: {}".format(cmd, aggregate, failed_res)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 1, err_msg
+        else:
+            raise exceptions.NovaError(err_msg)
+
+    post_hosts_in_aggregate = host_helper.get_hosts_in_aggregate(aggregate, con_ssh=con_ssh)
+    if remove:
+        failed_hosts = list(set(hosts) & set(post_hosts_in_aggregate))
+    else:
+        failed_hosts = list(set(hosts) - set(post_hosts_in_aggregate))
+
+    if failed_hosts:
+        err_msg = "{} accepted, but some host(s) are not {}ed in aggregate {}: {}".format(cmd, msg_str, aggregate,
+                                                                                          failed_hosts)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        else:
+            raise exceptions.NovaError(err_msg)
+
+    succ_msg = "Hosts successfully {}ed in aggregate {}: {}".format(msg_str.lower(), aggregate, hosts)
+    LOG.info(succ_msg)
+    return 0, succ_msg

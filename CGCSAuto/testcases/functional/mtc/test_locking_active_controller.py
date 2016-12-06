@@ -15,6 +15,7 @@ from utils.ssh import ControllerClient
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
 
 
+@mark.domain_sanity
 def test_locking_active_controller():
     """
     Finds the active controller and attempts to lock it..

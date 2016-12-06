@@ -1,4 +1,5 @@
 import re
+from pytest import mark
 from decimal import Decimal
 
 from utils import cli, table_parser
@@ -9,6 +10,7 @@ from consts.cgcs import UUID
 from keywords import system_helper
 
 
+@mark.p3
 def test_system_host_cpu_list():
     """
     42) Verify that the CPU data can be seen via cli from sysinv_test_plan.pdf
@@ -34,6 +36,7 @@ def test_system_host_cpu_list():
             "Expected headers to be included: {}; Actual headers: {}".format(expt_sub_headers, actual_headers)
 
 
+@mark.p3
 def test_system_show():
     table_ = table_parser.table(cli.system('show'))
     expt_sub_fields = ['name', 'system_type', 'description', 'software_version', 'uuid', 'created_at', 'updated_at']
@@ -51,6 +54,7 @@ def test_system_show():
     assert re.match(UUID, uuid), "Actual uuid is not in expected uuid format"
 
 
+@mark.p3
 def test_patch_query():
     con_ssh = ControllerClient.get_active_controller()
     LOG.tc_step("Check 'sudo sw-patch query' contains expected headers")

@@ -8,6 +8,7 @@ from consts.cgcs import HostAvailabilityState
 from keywords import system_helper, network_helper, host_helper
 
 
+@mark.p3
 def test_ping_hosts():
     con_ssh = ControllerClient.get_active_controller()
 

@@ -1,9 +1,10 @@
 from pytest import fixture
 
 from utils.tis_log import LOG
-from keywords import nova_helper, glance_helper
+from keywords import nova_helper, glance_helper, keystone_helper, host_helper
 
 
+# Session fixture to add affinitiy and anti-affinity server group
 @fixture(scope='session')
 def server_groups():
 
@@ -21,6 +22,47 @@ def server_groups():
         return srv_grps_tenant
 
     return create_server_groups
+
+
+# Session fixture to add cgcsauto aggregate with cgcsauto availability zone
+@fixture(scope='session')
+def add_cgcsauto_zone(request):
+    LOG.fixture_step("Add cgcsauto aggregate and cgcsauto availability zone")
+    nova_helper.create_aggregate(name='cgcsauto', avail_zone='cgcsauto', check_first=True)
+
+    def remove_aggregate():
+        LOG.fixture_step("Delete cgcsauto aggregate")
+        nova_helper.delete_aggregate('cgcsauto')
+    request.addfinalizer(remove_aggregate)
+
+    # return name of aggregate/availability zone
+    return 'cgcsauto'
+
+
+# Fixtures to add admin role to primary tenant
+@fixture(scope='module')
+def add_admin_role_module(request):
+    __add_admin_role(scope='module', request=request)
+
+
+@fixture(scope='class')
+def add_admin_role_class(request):
+    __add_admin_role(scope='class', request=request)
+
+
+@fixture(scope='function')
+def add_admin_role_func(request):
+    __add_admin_role(scope='function', request=request)
+
+
+def __add_admin_role(scope, request):
+    LOG.fixture_step("{} Add admin role to user under primary tenant".format(scope))
+    keystone_helper.add_or_remove_role(add_=True, role='admin')
+
+    def remove_admin():
+        LOG.fixture_step("({}) Remove admin role from user under primary tenant".format(scope))
+        keystone_helper.add_or_remove_role(add_=False, role='admin')
+    request.addfinalizer(remove_admin)
 
 
 @fixture(scope='session')

@@ -50,6 +50,7 @@ def __get_mtu_to_mod(providernet_name, mtu_range='middle'):
     return mtu
 
 
+@mark.p3
 @mark.parametrize('mtu_range', [
     'middle'
 ])
@@ -122,6 +123,7 @@ def test_modify_mtu_oam_interface(mtu_range):
     assert 0 == code_revert, "OAM MTU is not reverted successfully. Result: {}".format(res_revert)
 
 
+@mark.p3
 @mark.parametrize('mtu_range', [
     'middle',
     ])

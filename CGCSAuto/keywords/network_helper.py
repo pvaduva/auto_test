@@ -1358,8 +1358,8 @@ def __set_router_openstack(name=None, admin_state_up=None, distributed=None, no_
     return cli.neutron('router-update', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
 
 
-def _update_router(name=None, admin_state_up=None, distributed=None, no_routes=None, routes=None, external_gateway_info=None,
-                   router_id=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def _update_router(name=None, admin_state_up=None, distributed=None, no_routes=None, routes=None,
+                   external_gateway_info=None, router_id=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """
 
     Args:
@@ -1491,7 +1491,7 @@ def update_router_ext_gateway_snat(router_id=None, ext_net_id=None, enable_snat=
     return 0, succ_msg
 
 
-def update_router_distributed(router_id=None, distributed=True, admin_state_up=False, admin_up_post_update=True,
+def update_router_distributed(router_id=None, distributed=True, pre_admin_down=True, post_admin_up=True,
                               fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Update router to distributed or centralized
@@ -1499,8 +1499,8 @@ def update_router_distributed(router_id=None, distributed=True, admin_state_up=F
     Args:
         router_id (str): id of the router to update
         distributed (bool): True if set to distributed, False if set to centralized
-        admin_state_up (bool|None): whether to set admin state down when updating the distributed state
-        admin_up_post_update (bool): whether to set admin state up after updating the distributed state
+        pre_admin_down (bool|None): whether to set admin state down before updating the distributed state
+        post_admin_up (bool): whether to set admin state up after updating the distributed state
         fail_ok (bool): whether to throw exception if cli got rejected
         auth_info (dict):
         con_ssh (SSHClient):
@@ -1508,13 +1508,17 @@ def update_router_distributed(router_id=None, distributed=True, admin_state_up=F
     Returns:
 
     """
-    code, output = _update_router(distributed=distributed, admin_state_up=admin_state_up, router_id=router_id,
-                                  fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
+    if pre_admin_down:
+        _update_router(admin_state_up=False, router_id=router_id, fail_ok=False, con_ssh=con_ssh,
+                       auth_info=Tenant.ADMIN)
+
+    code, output = _update_router(distributed=distributed, router_id=router_id, fail_ok=fail_ok, con_ssh=con_ssh,
+                                  auth_info=auth_info)
 
     if code == 1:
         return 1, output
 
-    if admin_up_post_update:
+    if post_admin_up:
         _update_router(admin_state_up=True, router_id=router_id, fail_ok=False, con_ssh=con_ssh, auth_info=auth_info)
 
     post_distributed_val = get_router_info(router_id, 'distributed', auth_info=Tenant.ADMIN, con_ssh=con_ssh)
@@ -1613,7 +1617,19 @@ def get_pci_interface_info(interface='pthru', filepath=None, con_ssh=None):
     if 'No such file or directory' in sriov_if_override:
         raise ValueError("File '{}' cannot be found".format(filepath))
 
-    return sriov_if_override.split(sep='=')[-1]
+    ifs = sriov_if_override.split('\n')
+    info = []
+    for data in ifs:
+        intf = data.split('=')[-1]
+        # remove lines with blank entries or are commented out
+        if intf == '\"\"' or intf == '\'\'' or '#' in data:
+            continue
+        info.append(intf)
+
+    if not info:
+        LOG.warning("There is no {} interface set in lab_setup.conf".format(interface))
+        return ''
+    return info[0]
 
 
 def get_providernet_for_interface(interface='pthru', rtn_val='id', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):

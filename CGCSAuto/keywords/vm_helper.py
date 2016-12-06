@@ -5,16 +5,19 @@ from contextlib import contextmanager
 
 from pexpect import TIMEOUT as ExpectTimeout
 
-from consts.auth import Tenant, SvcCgcsAuto
-from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
-    VMNetworkStr
-from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
-from consts.proj_vars import ProjVar
-from consts.timeout import VMTimeout, CMDTimeout
-from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 from utils import exceptions, cli, table_parser
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
 from utils.tis_log import LOG
+
+from consts.auth import Tenant, SvcCgcsAuto
+from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
+    VMNetworkStr, EventLogID
+from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
+from consts.proj_vars import ProjVar
+from consts.timeout import VMTimeout, CMDTimeout
+
+
+from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 
 
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
@@ -499,6 +502,11 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     elif exit_code > 1:             # this is already handled by CLI module
         raise exceptions.CLIRejected("Live migration command rejected.")
 
+    LOG.info("Waiting for VM status change to {} with best effort".format(VMStatus.MIGRATING))
+    in_mig_state = _wait_for_vm_status(vm_id, status=VMStatus.MIGRATING, timeout=60)
+    if not in_mig_state:
+        LOG.warning("VM did not reach {} state after triggering live-migration".format(VMStatus.MIGRATING))
+
     LOG.info("Waiting for VM status change to original state {}".format(before_status))
     end_time = time.time() + VMTimeout.LIVE_MIGRATE_COMPLETE
     while time.time() < end_time:
@@ -614,6 +622,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
             Active state after confirm/revert.
         (7, err_msg) # Cold migration and resize confirm/revert ran successfully and vm in active state. But host for vm
             is not as expected. i.e., still the same host after confirm resize, or different host after revert resize.
+        (8, <stderr>) # Confirm/Revert resize cli rejected
 
     """
     before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
@@ -654,7 +663,13 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     verify_resize_str = 'Revert' if revert else 'Confirm'
     if vm_status == VMStatus.VERIFY_RESIZE:
         LOG.info("{}ing resize..".format(verify_resize_str))
-        _confirm_or_revert_resize(vm=vm_id, revert=revert, con_ssh=con_ssh)
+        res, out = _confirm_or_revert_resize(vm=vm_id, revert=revert, fail_ok=True, con_ssh=con_ssh)
+        if res == 1:
+            err_msg = "{} resize cli rejected".format(verify_resize_str)
+            if fail_ok:
+                LOG.warning(err_msg)
+                return 8, out
+            raise exceptions.VMOperationFailed(err_msg)
 
     elif vm_status == VMStatus.ERROR:
         err_msg = "VM {} in Error state after cold migrate. {} resize is not reached.".format(vm_id, verify_resize_str)
@@ -843,11 +858,11 @@ def _wait_for_vm_status(vm_id, status, timeout=VMTimeout.STATUS_CHANGE, check_in
         raise exceptions.VMTimeout(err_msg)
 
 
-def _confirm_or_revert_resize(vm, revert=False, con_ssh=None):
-        if revert:
-            cli.nova('resize-revert', vm, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
-        else:
-            cli.nova('resize-confirm', vm, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
+def _confirm_or_revert_resize(vm, revert=False, con_ssh=None, fail_ok=False):
+        cmd = 'resize-revert' if revert else 'resize-confirm'
+
+        return cli.nova(cmd, vm, ssh_client=con_ssh, auth_info=Tenant.ADMIN, rtn_list=True,
+                        fail_ok=fail_ok)
 
 
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
@@ -1855,7 +1870,7 @@ def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **
     if action == 'cold_mig_revert':
         kwargs['revert'] = True
 
-    action_function_map[action](vm_id, con_ssh=con_ssh, auth_info=auth_info, **kwargs)
+    return action_function_map[action](vm_id, con_ssh=con_ssh, auth_info=auth_info, **kwargs)
 
 
 def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
@@ -1899,10 +1914,8 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
                 elif 'rename' in eth_name:
                     LOG.warning("Retry {}: non-existing interface {} found on pci-passthrough nic in vm {}, "
                                 "reboot vm to try to recover".format(i + 1, eth_name, vm_id))
-                    sudo_reboot_from_vm(vm_ssh=vm_ssh)
-
-                    _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=False)
-                    wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
+                    sudo_reboot_from_vm(vm_id=vm_id, vm_ssh=vm_ssh)
+                    wait_for_vm_pingable_from_natbox(vm_id)
                     break
 
                 else:
@@ -1915,12 +1928,18 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
 
                     output_pre = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
                     if vlan_name not in output_pre:
+                        if eth_name not in output_pre:
+                            LOG.info("Append new interface {} to /etc/network/interfaces".format(eth_name))
+                            if_to_add = VMNetworkStr.NET_IF.format(eth_name, eth_name)
+                            vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
+                                            format(if_to_add), fail_ok=False)
+
                         if '.' + net_seg_id in output_pre:
-                            LOG.info("Modify existing interface to {} in file.".format(vlan_name))
+                            LOG.info("Modify existing interface to {} in /etc/network/interfaces".format(vlan_name))
                             vm_ssh.exec_cmd(r"sed -i -e 's/eth[0-9]\(.{}\)/{}\1/g' /etc/network/interfaces".
                                             format(net_seg_id, eth_name), fail_ok=False)
                         else:
-                            LOG.info("Append new interface {} to file".format(vlan_name))
+                            LOG.info("Append new interface {} to /etc/network/interfaces".format(vlan_name))
                             if_to_add = VMNetworkStr.NET_IF.format(vlan_name, vlan_name)
                             vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
                                             format(if_to_add), fail_ok=False)
@@ -1945,11 +1964,22 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
         raise exceptions.VMNetworkError("pci-passthrough interface(s) not found in vm {}".format(vm_id))
 
 
-def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
+def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True, con_ssh=None):
+
+    if check_host_unchanged:
+        pre_vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+
+    LOG.info("Initiate sudo reboot from vm")
+
     def _sudo_reboot(vm_ssh_):
-        vm_ssh_.exec_sudo_cmd('reboot')
+        code, output = vm_ssh_.exec_sudo_cmd('reboot', get_exit_code=False)
+        expt_string = 'The system is going down for reboot'
+        if expt_string in output:
+            # Sometimes system rebooting msg will be displayed right after reboot cmd sent
+            vm_ssh_.parent.flush()
+            return
         try:
-            index = vm_ssh_.expect(['The system is going down for reboot', vm_ssh.prompt], timeout=60)
+            index = vm_ssh_.expect([expt_string, vm_ssh.prompt], timeout=60)
             if index == 1:
                 raise exceptions.VMOperationFailed("Unable to reboot vm {}")
             vm_ssh_.parent.flush()
@@ -1959,12 +1989,22 @@ def sudo_reboot_from_vm(vm_id=None, vm_ssh=None):
             raise
 
     if not vm_ssh:
-            if not vm_id:
-                raise ValueError("vm_id or vm_ssh needs to be provided")
-            with ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-                _sudo_reboot(vm_ssh)
+        with ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+            _sudo_reboot(vm_ssh)
     else:
         _sudo_reboot(vm_ssh)
+
+    LOG.info("sudo vm reboot initiated - wait for reboot completes and VM reaches active state")
+    system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, strict=False, fail_ok=False, con_ssh=con_ssh,
+                                  **{'Entity Instance ID': vm_id,
+                                     'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
+    _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=False, con_ssh=con_ssh)
+
+    if check_host_unchanged:
+        post_vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+        if not pre_vm_host == post_vm_host:
+            raise exceptions.HostError("VM host changed from {} to {} after sudo reboot vm".format(
+                    pre_vm_host, post_vm_host))
 
 
 def get_proc_nums_from_vm(vm_ssh):
@@ -2289,3 +2329,35 @@ def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, a
     success_msg = "VM {} successfully cold migrated and {}ed Resize.".format(vm_id, verify_resize_str)
     LOG.info(success_msg)
     return 0, success_msg
+
+
+def wait_for_process(process, vm_id=None, vm_ssh=None, disappear=False, timeout=120, check_interval=3, fail_ok=True,
+                     con_ssh=None):
+    """
+    Wait for given process to appear or disappear on a VM
+
+    Args:
+        process (str): PID or unique proc name
+        vm_id (str): vm id if vm_ssh is not provided
+        vm_ssh (VMSSHClient): when vm_ssh is given, vm_id param will be ignored
+        disappear (bool):
+        timeout (int): max seconds to wait
+        check_interval (int):
+        fail_ok (bool): whether to raise exception upon wait fail
+        con_ssh (SSHClient): active controller ssh.
+
+    Returns (bool): whether or not process appear/disappear within timeout. False return only possible when fail_ok=True
+
+    """
+    if not vm_ssh and not vm_id:
+        raise ValueError("Either vm_id or vm_ssh has to be provided")
+
+    if not vm_ssh:
+        with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh) as vm_ssh:
+            return common.wait_for_process(ssh_client=vm_ssh, process=process, disappear=disappear,
+                                           timeout=timeout, check_interval=check_interval, fail_ok=fail_ok)
+
+    else:
+        return common.wait_for_process(ssh_client=vm_ssh, process=process, disappear=disappear, timeout=timeout,
+                                       check_interval=check_interval, fail_ok=fail_ok)
+

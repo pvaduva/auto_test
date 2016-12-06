@@ -20,7 +20,7 @@ def vif_model_check(request):
     if not pci_info:
         skip("{} interface not found in lab_setup.conf".format(vif_model))
 
-    LOG.fixture_step("Get a PCI network too boot vm from pci providernet info from lab_setup.conf")
+    LOG.fixture_step("Get a PCI network to boot vm from pci providernet info from lab_setup.conf")
     # pci_nets = network_helper.get_pci_nets(vif=interface, rtn_val='name')
     primary_tenant = Tenant.get_primary()
     primary_tenant_name = common.get_tenant_name(primary_tenant)
@@ -95,6 +95,7 @@ def vif_model_check(request):
     return vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_id
 
 
+@mark.p3
 def test_pci_resource_usage(vif_model_check):
     """
     Create a vm under test with specified vifs for tenant network
@@ -164,6 +165,7 @@ def test_pci_resource_usage(vif_model_check):
         pre_resource_value = resource_val
 
 
+@mark.p1
 def test_pci_vm_nova_actions(vif_model_check):
     """
     Test vm actions on vm with multiple ports with given vif models on the same tenant network
@@ -249,6 +251,7 @@ def test_pci_vm_nova_actions(vif_model_check):
     vm_helper.ping_vms_from_vm(from_vm=base_vm, to_vms=vm_id, net_types=['mgmt', net_type], vlan_zero_only=True)
 
 
+@mark.p2
 def test_evacuate_pci_vm(vif_model_check):
     """
     Test evacuate vm with multiple ports on same network

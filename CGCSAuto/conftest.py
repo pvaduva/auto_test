@@ -1,5 +1,5 @@
 import logging
-import os
+import os, sys, signal, _thread
 from time import strftime, gmtime
 
 import pytest
@@ -17,6 +17,7 @@ con_ssh = None
 tc_start_time = None
 has_fail = False
 build_id = None
+stress_iteration = -1
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -79,6 +80,8 @@ class MakeReport:
 
     def update_results(self, call, report):
         if report.failed:
+            global has_fail
+            has_fail = True
             msg = "\n***Failure at test {}: {}".format(call.when, call.excinfo)
             print(msg)
             LOG.debug(msg + "\n***Details: {}".format(report.longrepr))
@@ -102,17 +105,39 @@ class MakeReport:
             return cls(item)
 
 
+class TestRes:
+    PASSNUM = 0
+    FAILNUM = 0
+    SKIPNUM = 0
+    TOTALNUM = 0
+
+
+def _write_results(res_in_tests, test_name):
+    global tc_start_time
+    with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
+        f.write('\n{}\t{}\t{}'.format(res_in_tests, tc_start_time, test_name))
+
+    # reset tc_start and end time for next test case
+    tc_start_time = None
+
+    if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
+        upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id)
+        if not upload_res:
+            with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
+                f.write('\tUPLOAD_UNSUCC')
+
+
 def pytest_runtest_makereport(item, call, __multicall__):
     report = __multicall__.execute()
     my_rep = MakeReport.get_report(item)
     my_rep.update_results(call, report)
 
-    test_name = item.nodeid
+    test_name = item.nodeid.replace('::()::', '::').replace('testcases/', '')
     res_in_tests = ''
+    res = my_rep.get_results()
     if report.when == 'teardown':
         res_in_log = 'Test Passed'
         fail_at = []
-        res = my_rep.get_results()
         for key, val in res.items():
             if val[0] == 'Failed':
                 fail_at.append('test ' + key)
@@ -130,25 +155,28 @@ def pytest_runtest_makereport(item, call, __multicall__):
         if 'Test Passed' in res_in_log:
             res_in_tests = 'Passed'
         elif 'Test Failed' in res_in_log:
-            global has_fail
-            has_fail = True
             res_in_tests = 'Failed'
 
         if not res_in_tests:
             res_in_tests = 'Unknown!'
 
-        global tc_start_time
-        with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
-            f.write('\n{}\t{}\t{}'.format(res_in_tests, tc_start_time, test_name))
+        # count testcases by status
+        TestRes.TOTALNUM += 1
+        if res_in_tests == 'Passed':
+            TestRes.PASSNUM += 1
+        elif res_in_tests == 'Failed':
+            TestRes.FAILNUM += 1
+        elif res_in_tests == 'Skipped':
+            TestRes.SKIPNUM += 1
 
-        # reset tc_start and end time for next test case
-        tc_start_time = None
+        _write_results(res_in_tests=res_in_tests, test_name=test_name)
 
-        if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
-            upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id)
-            if not upload_res:
-                with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
-                    f.write('\tUPLOAD_UNSUCC')
+    if stress_iteration > 0:
+        for key, val in res.items():
+            if val[0] == 'Failed':
+                _write_results(res_in_tests='Failed', test_name=test_name)
+                TestRes.FAILNUM += 1
+                raise KeyboardInterrupt("Skip rest of the iterations upon stress test failure")
 
     return report
 
@@ -182,6 +210,7 @@ def pytest_runtest_teardown(item):
     print('')
     message = 'Teardown started:'
     testcase_log(message, item.nodeid, log_type='tc_teardown')
+
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
     con_ssh.flush()
 
@@ -226,6 +255,8 @@ def pytest_configure(config):
     report_tag = config.getoption('report_tag')
     resultlog = config.getoption('resultlog')
     openstack_cli = config.getoption('openstackcli')
+    global stress_iteration
+    stress_iteration = config.getoption('repeat')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
     lab = setups.get_lab_dict(lab_arg) if lab_arg else setup_consts.LAB
@@ -265,6 +296,7 @@ def pytest_addoption(parser):
     report_help = "Upload results and logs to the test results database."
     tag_help = "Tag to be used for uploading logs to the test results database."
     openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
+    stress_help = "Number of iterations to run specified testcase(s)"
 
     parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
     parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
@@ -278,6 +310,7 @@ def pytest_addoption(parser):
                      help=report_help)
     parser.addoption('--openstackcli', '--openstack_cli', '--openstack-cli', action='store_true', dest='openstackcli',
                      help=openstackcli_help)
+    parser.addoption('--repeat', action='store', metavar='repeat', type=int, default=-1, help=stress_help)
 
 
 def config_logger(log_dir):
@@ -315,10 +348,21 @@ def pytest_unconfigure():
 
     tc_res_path = ProjVar.get_var('LOG_DIR') + '/test_results.log'
 
+    total_exec = TestRes.PASSNUM + TestRes.FAILNUM
+    pass_rate = fail_rate = '0'
+    if total_exec > 0:
+        pass_rate = "{}%".format(round(TestRes.PASSNUM / total_exec, 4) * 100)
+        fail_rate = "{}%".format(round(TestRes.FAILNUM / total_exec, 4) * 100)
     with open(tc_res_path, mode='a') as f:
+        # Append general info to result log
         f.write('\n\nLab: {}\n'
-                'Build ID:{}\n'
+                'Build ID: {}\n'
                 'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, ProjVar.get_var('LOG_DIR')))
+        # Add result summary to beginning of the file
+        f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
+                format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
+        if TestRes.SKIPNUM > 0:
+            f.write('------------\nSkipped: {}'.format(TestRes.SKIPNUM))
 
     LOG.info("Test Results saved to: {}".format(tc_res_path))
     with open(tc_res_path, 'r') as fin:
@@ -369,6 +413,12 @@ def pytest_collection_modifyitems(items):
         items.remove(i)
         items.append(i)
 
+    # # Stress test iterations
+    # TODO: Reorder stress testcases if more than one test collected.
+    # if stress_iteration > 1:
+    #      for i in range(stress_iteration - 2):
+    #          items += items
+
 
 def pytest_generate_tests(metafunc):
     # Modify the order of the fixtures to delete resources before revert host
@@ -382,3 +432,15 @@ def pytest_generate_tests(metafunc):
             index = max([0, index-1])
             metafunc.fixturenames.remove(value)
             metafunc.fixturenames.insert(index, value)
+
+    if metafunc.config.option.repeat > 0:
+        count = int(metafunc.config.option.repeat)
+        for i in range(count):
+            metafunc.addcall()
+
+
+def pytest_sessionfinish(session):
+
+    if stress_iteration > 0 and has_fail:
+        # _thread.interrupt_main()
+        raise KeyboardInterrupt("Abort upon stress test failure")

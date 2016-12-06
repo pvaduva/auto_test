@@ -1,4 +1,4 @@
-from pytest import mark
+from pytest import mark, skip
 
 from utils import table_parser
 from utils.tis_log import LOG
@@ -7,6 +7,8 @@ from keywords import system_helper, nova_helper
 
 @mark.cpe_sanity
 def test_cpe_services_and_functions():
+    if system_helper.host_exists(host='compute-0'):
+        skip("compute-0 exists - skip for non-CPE lab")
 
     LOG.tc_step("Check controller+compute subfunction via system host-show")
     for controller in ['controller-0', 'controller-1']:

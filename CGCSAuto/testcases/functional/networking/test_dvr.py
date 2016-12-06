@@ -37,6 +37,7 @@ def router_info(request):
     return router_id
 
 
+@mark.domain_sanity
 def test_dvr_update_router(router_info):
     """
     Test update router to distributed and non-distributed
@@ -76,6 +77,7 @@ def test_dvr_update_router(router_info):
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
 
+@mark.p3
 @mark.parametrize(('vms_num', 'srv_grp_policy'), [
     (2, 'affinity'),
     (2, 'anti-affinity'),

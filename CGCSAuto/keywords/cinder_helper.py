@@ -130,7 +130,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
         size (int): volume size in GBs
         avail_zone (str): availability zone
         metadata (str): metadata key and value pairs '[<key=value> [<key=value> ...]]'
-        bootable: When False, the source id params will be ignored. i.e., a un-bootable volume will be created.
+        bootable (bool): When False, the source id params will be ignored. i.e., a un-bootable volume will be created.
         fail_ok (bool):
         auth_info (dict):
         con_ssh (SSHClient):
@@ -148,10 +148,10 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
         snapshot_id > source_vol_id > image_id if more than one source ids are provided.
     """
 
-    bootable = str(bootable).lower()
+    bootable_str = str(bootable).lower()
 
     if rtn_exist and name is not None:
-        vol_ids = get_volumes(name=name, status='available', bootable=bootable)
+        vol_ids = get_volumes(name=name, status='available', bootable=bootable_str)
         if vol_ids:
             LOG.info('Volume(s) with name {} and bootable state {} exists and in available state, return an existing '
                      'volume.'.format(name, bootable))
@@ -209,12 +209,12 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
         return 2, volume_id
 
     actual_bootable = get_volume_states(volume_id, fields='bootable', con_ssh=con_ssh, auth_info=auth_info)['bootable']
-    if bootable != actual_bootable:
+    if str(bootable).lower() != actual_bootable.lower():
         if fail_ok:
             LOG.warning("Volume bootable state is not {}".format(bootable))
             return 3, volume_id
         raise exceptions.VolumeError("Volume {} bootable value should be {} instead of {}".
-                                         format(volume_id, bootable, actual_bootable))
+                                     format(volume_id, bootable, actual_bootable))
 
     LOG.info("Volume is created and in available state: {}".format(volume_id))
     return 0, volume_id

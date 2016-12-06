@@ -134,6 +134,7 @@ class TestLockWithVMs:
         return target_hosts, storages_to_test
 
     # @mark.usefixtures('delete_all_vms')
+    @mark.domain_sanity
     def test_lock_with_vms(self, target_hosts):
         """
         Test lock host with vms on it.
@@ -190,6 +191,7 @@ class TestLockWithVMs:
             assert pre_vms_status == post_vms_status, "VM(s) status has changed after host-lock {}".format(host)
 
 
+@mark.p2
 class TestLockWithVMsNegative:
     @fixture()
     def target_hosts_negative(self, request):
@@ -254,7 +256,7 @@ class TestLockWithVMsNegative:
         LOG.info("Negative test: host-lock attempt on host(s) with {} storage backing(s). \n"
                  "Host(s) to attempt lock: {}".format(storages_to_test, target_hosts_negative))
         for host in target_hosts:
-            if system_helper.get_active_controller_name(host) == host:
+            if system_helper.get_active_controller_name() == host:
                 host_helper.swact_host(hostname=host)
                 host_helper.wait_for_hypervisors_up(host)
                 host_helper.wait_for_webservice_up(host)

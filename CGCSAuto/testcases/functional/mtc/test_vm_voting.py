@@ -193,7 +193,7 @@ def _perform_action(vm_id, action, expt_fail):
     'migrate',
     'suspend',
     'reboot',
-    'stop',
+    mark.domain_sanity('stop'),
 ])
 def test_vm_voting(action, vm_):
     """

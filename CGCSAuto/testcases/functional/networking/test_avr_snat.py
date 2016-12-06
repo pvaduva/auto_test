@@ -69,8 +69,8 @@ def enable_snat_as_teardown(request):
 
 @mark.usefixtures('enable_snat_as_teardown')
 @mark.parametrize('snat', [
-    'snat_disabled',
-    'snat_enabled',
+    mark.p3('snat_disabled'),
+    mark.domain_sanity('snat_enabled'),
 ])
 def test_snat_vm_actions(snat_setups, snat):
     """
@@ -148,8 +148,8 @@ def test_snat_vm_actions(snat_setups, snat):
 @mark.slow
 @mark.usefixtures('enable_snat_as_teardown')
 @mark.parametrize('snat', [
-    'snat_disabled',
-    'snat_enabled',
+    mark.p3('snat_disabled'),
+    mark.domain_sanity('snat_enabled'),
 ])
 def test_snat_evacuate_vm(snat_setups, snat):
     """
@@ -208,6 +208,7 @@ def test_snat_evacuate_vm(snat_setups, snat):
 
 @mark.slow
 @mark.trylast
+@mark.p3
 # @mark.skipif(True, reason="Evacuation JIRA CGTS-4917")
 def test_snat_computes_lock_reboot(snat_setups):
     """
@@ -278,6 +279,7 @@ def test_snat_computes_lock_reboot(snat_setups):
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 
+@mark.domain_sanity
 def test_snat_reset_router_ext_gateway(snat_setups):
     """
     Test VM external access after evacuation.

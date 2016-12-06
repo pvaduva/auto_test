@@ -8,7 +8,7 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-@mark.p1
+@mark.p3
 @mark.parametrize('vcpu_id', [
     0,
     2,
@@ -220,21 +220,25 @@ class TestSharedCpuEnabled:
                 skip("No up hypervisor found to reconfigure")
 
             shared_cores = host_helper.get_host_cpu_cores_for_function(host_to_config, 'shared')
+            mod = False
+            if len(shared_cores[0]) != 1 or len(shared_cores[1]) != 1:
+                mod = True
 
-            def _modify(host):
-                host_helper.modify_host_cpu(host, 'shared', p0=1, p1=1)
+            if mod:
+                def _modify(host):
+                    host_helper.modify_host_cpu(host, 'shared', p0=1, p1=1)
 
-            def _revert(host):
-                LOG.fixture_step("Revert {} shared cpu setting to original".format(host))
-                host_helper.modify_host_cpu(host, 'shared', p0=len(shared_cores[0]), p1=len(shared_cores[1]))
+                def _revert(host):
+                    LOG.fixture_step("Revert {} shared cpu setting to original".format(host))
+                    host_helper.modify_host_cpu(host, 'shared', p0=len(shared_cores[0]), p1=len(shared_cores[1]))
 
-            config_host_class(host=host_to_config, modify_func=_modify, revert_func=_revert)
-            host_helper.wait_for_hypervisors_up(host_to_config)
+                config_host_class(host=host_to_config, modify_func=_modify, revert_func=_revert)
+                host_helper.wait_for_hypervisors_up(host_to_config)
 
         return storage_backing
 
     @mark.parametrize(('vcpus', 'cpu_policy', 'numa_nodes', 'numa_node0', 'shared_vcpu'), [
-        mark.p1((2, 'dedicated', 1, 1, 1)),
+        mark.domain_sanity((2, 'dedicated', 1, 1, 1)),
     ])
     def test_launch_vm_with_shared_cpu(self, vcpus, cpu_policy, numa_nodes, numa_node0, shared_vcpu, add_shared_cpu):
         """

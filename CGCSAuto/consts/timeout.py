@@ -19,7 +19,7 @@ class VMTimeout:
     STATUS_VERIFY_RESIZE = 30
     LIVE_MIGRATE_COMPLETE = 120
     COLD_MIGRATE_CONFIRM = 300
-    BOOT_VM = 300
+    BOOT_VM = 600
     DELETE = 180
     VOL_ATTACH = 60
     SSH_LOGIN = 20
@@ -44,7 +44,7 @@ class SysInvTimeout:
 
 
 class CMDTimeout:
-    HOST_CPU_MODIFY = 150
+    HOST_CPU_MODIFY = 300
     RESOURCE_LIST = 60
     REBOOT_VM = 60
     CPU_PROFILE_APPLY = 30

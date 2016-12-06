@@ -70,48 +70,40 @@ def test_swact_failed_controller_negative(fail_controller):
 
 
 @fixture(scope='function')
-def lock_controller(request):
+def lock_controller():
+    LOG.fixture_step("Ensure system has no standby controller available for swact")
     standby = system_helper.get_standby_controller_name()
-    code, out = host_helper.lock_host(standby)
 
-    def unlock_controller():
-        host_helper.unlock_host(standby)
-
-    request.addfinalizer(unlock_controller)
-
-    if code == 0 or code == -1:
-        return True
-
-    return False
+    if standby:
+        HostsToRecover.add(standby)
+        host_helper.lock_host(standby)
 
 
-def test_swact_to_locked_controller_negative(lock_controller):
+@mark.domain_sanity
+def test_swact_no_standby_negative(lock_controller):
     """
     TC610_4
-    Verify that trying to swact a locked controller is rejected
+    Verify swact without standby controller is rejected
 
     Test Setup:
         - Lock the standby controller
 
     Test Steps:
-        - Attempt to swact to the locked controller
+        - Attempt to swact when no standby controller available
 
     Teardown:
         - Unlock the controller
 
     """
-    if not lock_controller:
-        skip("Couldn't lock the controller.")
-
+    LOG.tc_step("Attempting to swact when no standby controller available")
     active = system_helper.get_active_controller_name()
-    LOG.tc_step("Attempting to swact to locked controller.")
-    code, out = host_helper.swact_host(fail_ok=True)
+    code, out = host_helper.swact_host(hostname=active, fail_ok=True)
+
     LOG.tc_step("Verifying that the swact didn't occur.")
     assert 1 == code, "FAIL: The swact wasn't rejected"
     curr_active = system_helper.get_active_controller_name()
     assert curr_active == active, "FAIL: The active controller was changed. " \
                                   "Previous: {} Current: {}".format(active, curr_active)
-
 
 
 @mark.skipif(system_helper.is_small_footprint(), reason="Small footprint lab. No compute nodes.")

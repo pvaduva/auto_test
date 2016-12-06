@@ -61,7 +61,11 @@ class TestMutiPortsBasic:
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}]
         for vif in vifs:
-            nics.append({'net-id': tenant_net_id, 'vif-model': vif})
+            vif_ = vif.split(sep='_x')
+            vif_type = vif_[0]
+            iter_ = int(vif_[1]) if len(vif_) > 1 else 1
+            for i in range(iter_):
+                nics.append({'net-id': tenant_net_id, 'vif-model': vif_type})
 
         # add interface for internal net
         nics.append({'net-id': internal_net_id, 'vif-model': 'avp'})
@@ -79,6 +83,7 @@ class TestMutiPortsBasic:
 
         return base_vm, vm_under_test
 
+    @mark.p2
     @mark.parametrize("vm_actions", [
         (['live_migrate']),
         (['cold_migrate']),
@@ -128,6 +133,7 @@ class TestMutiPortsBasic:
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
 
     # @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
+    @mark.p2
     def test_multiports_on_same_network_evacuate_vm(self, vms_to_test):
         """
         Test evacuate vm with multiple ports on same network
@@ -188,10 +194,12 @@ class TestMutiPortsPCI:
         LOG.fixture_step("(class) Check pci-passthrough and pci-sriov support")
         sriov_info = network_helper.get_pci_interface_info(interface='sriov')
         pcipt_info = network_helper.get_pci_interface_info(interface='pthru')
-        if not sriov_info or not pcipt_info:
-            skip(SkipReason.PCI_IF_UNAVAIL)
+        if not sriov_info:
+            skip(SkipReason.SRIOV_IF_UNAVAIL)
+        if not pcipt_info:
+            skip(SkipReason.PCIPT_IF_UNAVAIL)
 
-        LOG.fixture_step("(class) Get a PCI network too boot vm from pci providernet info from lab_setup.conf")
+        LOG.fixture_step("(class) Get a PCI network to boot vm from pci providernet info from lab_setup.conf")
         pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')
         pci_pthru_nets = network_helper.get_pci_nets(vif='pthru', rtn_val='name')
         avail_nets = list(set(pci_pthru_nets) & set(pci_sriov_nets))
@@ -232,12 +240,14 @@ class TestMutiPortsPCI:
                                              auto_info=Tenant.ADMIN)
         assert seg_id, 'Segmentation id of internal0-net1 is not found'
 
-        return base_vm_pci, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id, seg_id
+        return base_vm_pci, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info
 
     @mark.parametrize('vifs', [
-        (['pci-sriov', 'pci-passthrough']),
-        (['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov']),
-        (['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov']),
+        mark.p2(['virtio_x7', 'avp_x5', 'pci-passthrough']),
+        mark.p2(['virtio_x7', 'avp_x5', 'pci-sriov']),
+        mark.p3((['pci-sriov', 'pci-passthrough'])),
+        mark.domain_sanity((['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov'])),
+        mark.p3((['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov'])),
     ], ids=id_params)
     def test_multiports_on_same_network_pci_vm_actions(self, base_setup_pci, vifs):
         """
@@ -270,20 +280,35 @@ class TestMutiPortsPCI:
         Teardown:
             - Delete created vms and flavor
         """
-        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id = base_setup_pci
+
+        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info = base_setup_pci
+
+        pcipt_included = False
+        for vif in vifs:
+            if 'pci-passthrough' in vif:
+                pcipt_included = True
+                break
+
+        if pcipt_included and not pcipt_info:
+            skip(SkipReason.PCIPT_IF_UNAVAIL)
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'avp'}]
         for vif in vifs:
-            nics.append({'net-id': internal_net_id, 'vif-model': vif})
+            vif_ = vif.split(sep='_x')
+            vif_type = vif_[0]
+            iter_ = int(vif_[1]) if len(vif_) > 1 else 1
+            for i in range(iter_):
+                nics.append({'net-id': internal_net_id, 'vif-model': vif_type})
 
         LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
         vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor, reuse_vol=False)[1]
         ResourceCleanup.add('vm', vm_under_test, scope='function')
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
-        LOG.tc_step("Add vlan to pci-passthrough interface for VM.")
-        vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)
+        if pcipt_included:
+            LOG.tc_step("Add vlan to pci-passthrough interface for VM.")
+            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)
 
         LOG.tc_step("Ping vm's own data and internal (vlan 0 only) network ips")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=['data', 'internal'])
@@ -291,7 +316,7 @@ class TestMutiPortsPCI:
         LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal (vlan 0 only) networks")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
 
-        for vm_actions in [['auto_recover'], ['cold_migrate'], ['suspend', 'resume'], ['pause', 'unpause']]:
+        for vm_actions in [['auto_recover'], ['cold_migrate'], ['pause', 'unpause']]:   # ['suspend', 'resume'],
 
             if 'auto_recover' in vm_actions:
                 LOG.tc_step("Set vm to error state and wait for auto recovery complete, "
@@ -304,7 +329,7 @@ class TestMutiPortsPCI:
                 for action in vm_actions:
                     vm_helper.perform_action_on_vm(vm_under_test, action=action)
 
-            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_under_test, timeout=20)
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_under_test)
 
             LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(vm_under_test))
             vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)
@@ -317,7 +342,7 @@ class TestMutiPortsPCI:
     # @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
     @mark.parametrize('vifs', [
         # (['pci-sriov', 'pci-passthrough']),
-        (['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov']),
+        mark.domain_sanity((['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov'])),
         # (['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov']),
     ], ids=id_params)
     def test_multiports_on_same_network_pci_evacuate_vm(self, base_setup_pci, vifs):
@@ -372,6 +397,10 @@ class TestMutiPortsPCI:
         LOG.tc_step("Reboot vm host {}".format(host))
         host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
         HostsToRecover.add(host, scope='function')
+
+        LOG.tc_step("Wait for vm to reach ERROR or REBUILD state with best effort")
+        vm_helper._wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
+                                       timeout=120)
 
         LOG.tc_step("Verify vm is evacuated to other host")
         vm_helper._wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=120, fail_ok=False)

@@ -10,7 +10,7 @@ from utils.tis_log import LOG
 
 
 #default expected number of pipelines
-NUM_PIPELINES = 2
+NUM_PIPELINES = 1
 IP_ADDR = html_helper.get_ip_addr()
 
 
@@ -242,7 +242,7 @@ def test_modify_cpu(prepare_modify_cpu):
     host = html_helper.get_request(url=url, headers=headers)
     assert 'locked' == host['administrative'], "FAIL: Couldn't lock {}".format(name)
 
-    res, out = host_helper.modify_host_cpu(name, 'shared', p0=1, p1=1, timeout=180)
+    res, out = host_helper.modify_host_cpu(name, 'shared', p0=1, p1=1)
     assert 0 == res, "FAIL: The cpus weren't even modified by cli"
 
     LOG.tc_step("Applying cpu profile")

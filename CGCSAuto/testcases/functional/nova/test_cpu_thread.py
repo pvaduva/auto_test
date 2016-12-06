@@ -199,7 +199,6 @@ class TestHTEnabled:
 
         return ht_hosts, non_ht_hosts
 
-    @mark.p1
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus'), [
         mark.p1((5, 'isolate', 2)),
         mark.p1((4, 'isolate', None)),
@@ -566,12 +565,12 @@ class TestHTEnabled:
         assert CPUThreadErr.INSUFFICIENT_CORES_FOR_ISOLATE.format(ht_host, 4) in fault_msg
 
     @mark.parametrize(('vcpus', 'cpu_thread_pol', 'min_vcpus', 'numa_0'), [
-        mark.p1((6, 'require', None, 1)),   # Not allowed to set min_vcpus with require
-        mark.p1((6, 'isolate', 3, 0)),
-        mark.p1((6, 'prefer', 1, 0)),
-        mark.p1((6, None, 4, 1)),     # should default to prefer behaviour
+        mark.p2((6, 'require', None, 1)),   # Not allowed to set min_vcpus with require
+        mark.p2((6, 'isolate', 3, 0)),
+        mark.p2((6, 'prefer', 1, 0)),
+        mark.p2((6, None, 4, 1)),     # should default to prefer behaviour
         mark.p2((5, 'isolate', 2, None)),
-        mark.p1((5, 'prefer', 1, None)),
+        mark.p2((5, 'prefer', 1, None)),
     ])
     def test_cpu_scale_cpu_thread_pol(self, vcpus, cpu_thread_pol, min_vcpus, numa_0, ht_hosts_):
         ht_hosts, non_ht_hosts = ht_hosts_
@@ -593,6 +592,11 @@ class TestHTEnabled:
         LOG.tc_step("Boot a vm with above flavor and check it booted successfully on a hyperthreaded host.")
         vm_id = vm_helper.boot_vm(name='vcpu{}_min{}_{}'.format(vcpus, min_vcpus, cpu_thread_pol), flavor=flavor_id)[1]
         ResourceCleanup.add('vm', vm_id)
+
+        LOG.tc_step("Wait for vm pingable from NatBox and guest_agent process running on VM")
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        if min_vcpus:
+            vm_helper.wait_for_process(process='guest_agent', vm_id=vm_id, disappear=False, timeout=120, fail_ok=False)
 
         vm_host = nova_helper.get_vm_host(vm_id)
         if cpu_thread_pol == 'require':
@@ -665,21 +669,21 @@ class TestHTEnabled:
         check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol',  'min_vcpus', 'numa_0', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'host_action'), [
-        (1, 'dedicated', 'isolate', None, None, None, 'volume', 'live_migrate', None),
-        (2, 'dedicated', 'isolate', 1, None, None, 'image', 'live_migrate', None),
-        (4, 'dedicated', 'require', None, None, 'strict', 'volume', 'live_migrate', None),
-        (3, 'dedicated', 'prefer', 2, None, 'strict', 'volume', 'live_migrate', None),
-        (6, 'dedicated', 'isolate', 4, 0, None, 'volume', 'cold_migrate', None),
-        (4, 'dedicated', 'require', None, None, 'strict', 'volume', 'cold_migrate', None),
-        (4, 'dedicated', 'prefer', 2, None, 'strict', 'volume', 'cold_migrate', None),
-        (2, 'dedicated', 'require', None, None, None, 'volume', 'cold_mig_revert', None),
-        (3, 'dedicated', 'isolate', None, None, 'strict', 'volume', 'cold_mig_revert', None),
-        (2, 'dedicated', 'prefer', None, None, None, 'volume', 'cold_mig_revert', None),
-        (4, 'dedicated', 'isolate', 2, None, None, 'volume', ['suspend', 'resume', 'rebuild'], None),
-        (6, 'dedicated', 'require', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None),
-        (5, 'dedicated', 'prefer', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None),
+        mark.p1((1, 'dedicated', 'isolate', None, None, None, 'volume', 'live_migrate', None)),
+        mark.p1((2, 'dedicated', 'isolate', 1, None, None, 'image', 'live_migrate', None)),
+        mark.domain_sanity((4, 'dedicated', 'require', None, None, 'strict', 'volume', 'live_migrate', None)),
+        mark.p1((3, 'dedicated', 'prefer', 2, None, 'strict', 'volume', 'live_migrate', None)),
+        mark.p1((6, 'dedicated', 'isolate', 4, 0, None, 'volume', 'cold_migrate', None)),
+        mark.domain_sanity((4, 'dedicated', 'require', None, None, 'strict', 'volume', 'cold_migrate', None)),
+        mark.p1((4, 'dedicated', 'prefer', 2, None, 'strict', 'volume', 'cold_migrate', None)),
+        mark.p1((2, 'dedicated', 'require', None, None, None, 'volume', 'cold_mig_revert', None)),
+        mark.p1((3, 'dedicated', 'isolate', None, None, 'strict', 'volume', 'cold_mig_revert', None)),
+        mark.p1((2, 'dedicated', 'prefer', None, None, None, 'volume', 'cold_mig_revert', None)),
+        mark.p1((4, 'dedicated', 'isolate', 2, None, None, 'volume', ['suspend', 'resume', 'rebuild'], None)),
+        mark.domain_sanity((6, 'dedicated', 'require', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
+        mark.p1((5, 'dedicated', 'prefer', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
         # mark.skipif(True, reason="Evacuation JIRA CGTS-4917")
-        (3, 'dedicated', 'isolate', None, None, 'strict', 'volume', ['cold_migrate', 'live_migrate'], 'evacuate'),
+        mark.domain_sanity((3, 'dedicated', 'isolate', None, None, 'strict', 'volume', ['cold_migrate', 'live_migrate'], 'evacuate')),
     ], ids=id_gen)
     def test_cpu_thread_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol, min_vcpus, numa_0,
                                                  vs_numa_affinity, boot_source, nova_actions, host_action, ht_hosts_):
@@ -794,21 +798,21 @@ class TestHTEnabled:
             vm_helper.ping_vms_from_natbox(vm_id)
 
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'cpu_thr_in_flv'), [
-        (2, 'dedicated', 'isolate', None, 'volume', 'live_migrate', False),
-        (4, 'dedicated', 'require', 'strict', 'image', 'live_migrate', False),
-        (3, 'dedicated', 'require', 'strict', 'volume', 'live_migrate', False),
-        (3, 'dedicated', 'prefer', 'strict', 'image', 'live_migrate', False),
-        (1, 'dedicated', 'isolate', 'strict', 'volume', 'live_migrate', True),
-        (3, 'dedicated', 'prefer', None, 'volume', 'live_migrate', True),
-        (3, 'dedicated', 'require', None, 'volume', 'live_migrate', True),
-        (3, 'dedicated', 'isolate', None, 'volume', 'cold_migrate', False),
-        (2, 'dedicated', 'require', None, 'volume', 'cold_migrate', False),
-        (2, 'dedicated', 'require', None, 'volume', 'cold_mig_revert', True),
-        (5, 'dedicated', 'prefer', None, 'volume', 'cold_mig_revert', False),
-        (4, 'dedicated', 'isolate', None, 'image', ['suspend', 'resume', 'rebuild'], False),
-        (6, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], True),
-        (5, 'dedicated', 'prefer', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False),
-        (3, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False),
+        mark.domain_sanity((2, 'dedicated', 'isolate', None, 'volume', 'live_migrate', False)),
+        mark.domain_sanity((4, 'dedicated', 'require', 'strict', 'image', 'live_migrate', False)),
+        mark.domain_sanity((3, 'dedicated', 'require', 'strict', 'volume', 'live_migrate', False)),
+        mark.p1((4, 'dedicated', 'prefer', 'strict', 'image', 'live_migrate', False)),
+        mark.p1((1, 'dedicated', 'isolate', 'strict', 'volume', 'live_migrate', True)),
+        mark.p1((3, 'dedicated', 'prefer', None, 'volume', 'live_migrate', True)),
+        mark.p1((3, 'dedicated', 'require', None, 'volume', 'live_migrate', True)),
+        mark.domain_sanity((3, 'dedicated', 'isolate', None, 'volume', 'cold_migrate', False)),
+        mark.domain_sanity((2, 'dedicated', 'require', None, 'volume', 'cold_migrate', False)),
+        mark.p1((2, 'dedicated', 'require', None, 'volume', 'cold_mig_revert', True)),
+        mark.p1((5, 'dedicated', 'prefer', None, 'volume', 'cold_mig_revert', False)),
+        mark.p1((4, 'dedicated', 'isolate', None, 'image', ['suspend', 'resume', 'rebuild'], False)),
+        mark.p1((6, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], True)),
+        mark.p1((5, 'dedicated', 'prefer', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False)),
+        mark.domain_sanity((3, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False)),
     ], ids=id_gen)
     def test_cpu_thread_image_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol, vs_numa_affinity,
                                                        boot_source, nova_actions, cpu_thr_in_flv, ht_hosts_):
@@ -869,17 +873,20 @@ class TestHTEnabled:
 
         prev_cpus = pre_hosts_cpus[vm_host]
 
-        check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
-                                          cpu_thr_pol=cpu_thr_pol, vm_host=vm_host)
+        prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
+                                          cpu_thr_pol=cpu_thr_pol, vm_host=vm_host)[1]
 
         LOG.tc_step("Perform following nova action(s) on vm {}: {}".format(vm_id, nova_actions))
         if isinstance(nova_actions, str):
             nova_actions = [nova_actions]
 
+        check_prev_siblings = False
         for action in nova_actions:
             kwargs = {}
             if action == 'rebuild':
                 kwargs['image_id'] = image_id
+            elif action == 'live_migrate':
+                check_prev_siblings = True
             vm_helper.perform_action_on_vm(vm_id, action=action, **kwargs)
 
         post_vm_host = nova_helper.get_vm_host(vm_id)
@@ -890,8 +897,11 @@ class TestHTEnabled:
             assert post_vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
 
         LOG.tc_step("Check VM topology is still correct after {}".format(nova_actions))
+        if cpu_pol != 'dedicated' or not check_prev_siblings:
+            # Allow prev_siblings in live migration case
+            prev_siblings = None
         check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=pre_action_cpus, cpu_pol=cpu_pol,
-                                          cpu_thr_pol=cpu_thr_pol, vm_host=post_vm_host)
+                                          cpu_thr_pol=cpu_thr_pol, vm_host=post_vm_host, prev_siblings=prev_siblings)
 
         if vs_numa_affinity == 'strict':
             LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
@@ -900,19 +910,50 @@ class TestHTEnabled:
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol', 'cpu_thr_source', 'vs_numa_affinity', 'boot_source'), [
         # (2, 'dedicated', 'isolate', 'flavor', 'strict', 'volume'),
         # (1, 'dedicated', 'isolate', 'flavor', None, 'image'),
-        (4, 'dedicated', 'require', 'flavor', None, 'volume'),
+        mark.p3((4, 'dedicated', 'require', 'flavor', None, 'volume')),
         # (3, 'dedicated', 'isolate', 'image', None, 'volume'),
-        (2, 'dedicated', 'require', 'image', None, 'volume')
+        mark.p3((2, 'dedicated', 'require', 'image', None, 'volume'))
     ])
     def test_cpu_thr_live_mig_negative(self, vcpus, cpu_pol, cpu_thr_pol, cpu_thr_source, vs_numa_affinity,
                                        boot_source, ht_hosts_):
+        """
+        Test live migration is rejected for require VM when only one HT host available
+
+        Args:
+            vcpus:
+            cpu_pol:
+            cpu_thr_pol:
+            cpu_thr_source:
+            vs_numa_affinity:
+            boot_source:
+            ht_hosts_:
+
+        Skip condition:
+            - More than one HT host available
+            - Less than two up hypervisors available
+
+        Test Steps:
+            - Ensure system has only one HT host
+            - Create a flavor with given number of vcpus
+            - Add vs_numa_affinity to flavor extra spec if specified
+            - Based on the cpu_thr_source
+                - If cpu_thr_source=flavor: Add cpu policy and cpu thread policy to flavor extra specs
+                - If cpu_thr_source=image: Create image with cpu policy and thread policy metadata
+            - Boot vm from specified boot source from above flavor and image
+            - Check vm is booted with correct topology
+            - Attempt to live migrate vm and ensure it's rejected
+
+        Teardown:
+            - Delete created vm, volume, flavor, image
+
+        """
         ht_hosts, non_ht_hosts = ht_hosts_
         LOG.tc_step("Ensure system has only one HT host")
 
         if len(ht_hosts) > 1:
             skip(SkipReason.MORE_THAN_ONE_HT_HOSTS)
 
-        if len(host_helper.get_nova_hosts()) < 2:
+        if len(host_helper.get_hypervisors(state='up', status='available')) < 2:
             skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
 
         specs = {}
@@ -994,16 +1035,15 @@ class TestHTDisabled:
         if ht_hosts:
             skip("There are HT enabled hosts")
 
-    @mark.p1
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus', 'expt_err'), [
-        (2, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
-        (3, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
-        (2, 'isolate', 2, None),
-        (3, 'isolate', None, None),
+        mark.p1((2, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL')),
+        mark.p1((3, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL')),
+        mark.p2((2, 'isolate', 2, None)),
+        mark.p2((3, 'isolate', None, None)),
         # (3, 'isolate', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
         # (2, 'isolate', '2', 'CPUThreadErr.HT_HOST_UNAVAIL'),
-        (2, 'prefer', None, None),
-        (3, 'prefer', 2, None),
+        mark.p3((2, 'prefer', None, None)),
+        mark.p3((3, 'prefer', 2, None)),
     ])
     def test_boot_vm_cpu_thread_ht_disabled(self, vcpus, cpu_thread_policy, min_vcpus, expt_err):
         """
@@ -1108,11 +1148,11 @@ class TestVariousHT:
         return ht_hosts, non_ht_hosts
 
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus'), [
-        mark.p1((2, 'isolate', None)),
-        mark.p1((2, 'require', None)),
-        mark.p1((2, 'isolate', 2)),
-        mark.p1((3, 'prefer', None)),
-        mark.p1((3, 'require', None)),
+        mark.p3((2, 'isolate', None)),
+        mark.p3((2, 'require', None)),
+        mark.p3((2, 'isolate', 2)),
+        mark.p3((3, 'prefer', None)),
+        mark.p3((3, 'require', None)),
     ])
     def test_cold_migrate_vm_cpu_thread(self, vcpus, cpu_thread_policy, min_vcpus, ht_hosts_):
         """

@@ -319,7 +319,7 @@ class SSHClient:
         return index
 
     def exec_cmd(self, cmd, expect_timeout=10, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
-                 fail_ok=True):
+                 fail_ok=True, get_exit_code=True):
         """
 
         Args:
@@ -348,16 +348,16 @@ class SSHClient:
             else:
                 raise
 
-        code, output = self.__process_exec_result(cmd, rm_date)
+        code, output = self.__process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
 
         if code != 0 and not fail_ok:
             raise exceptions.SSHExecCommandFailed("Non-zero return code for cmd: {}".format(cmd))
 
         return code, output
 
-    def __process_exec_result(self, cmd, rm_date=True):
+    def __process_exec_result(self, cmd, rm_date=True, get_exit_code=True):
         cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
-        # LOG.debug("cmd output list: {}".format(cmd_output_list))
+        # LOG.info("cmd output list: {}".format(cmd_output_list))
         # cmd_output_list[0] = ''                                       # exclude command, already done in expect
 
         if rm_date:  # remove date output if any
@@ -366,10 +366,14 @@ class SSHClient:
 
         cmd_output = '\n'.join(cmd_output_list)
 
-        exit_code = self.get_exit_code()
-        if exit_code != 0:
-            LOG.warning('Issue occurred when executing \'{}\'. Exit_code: {}. Output: {}'.
-                        format(cmd, exit_code, cmd_output))
+        if get_exit_code:
+            exit_code = self.get_exit_code()
+            if exit_code != 0:
+                LOG.warning('Issue occurred when executing \'{}\'. Exit_code: {}. Output: {}'.
+                            format(cmd, exit_code, cmd_output))
+        else:
+            exit_code = -1
+            LOG.info("Actual exit code for following cmd is unknown: {}".format(cmd))
 
         cmd_output = cmd_output.strip()
         return exit_code, cmd_output
@@ -468,7 +472,7 @@ class SSHClient:
                 self.send('exit')
                 self.expect()
 
-    def exec_sudo_cmd(self, cmd, expect_timeout=10, rm_date=True, fail_ok=True):
+    def exec_sudo_cmd(self, cmd, expect_timeout=10, rm_date=True, fail_ok=True, get_exit_code=True):
         """
         Execute a command with sudo.
 
@@ -489,7 +493,7 @@ class SSHClient:
             self.send(self.password)
             self.expect(timeout=expect_timeout)
 
-        code, output = self.__process_exec_result(cmd, rm_date)
+        code, output = self.__process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
         if code != 0 and not fail_ok:
             raise exceptions.SSHExecCommandFailed("Non-zero return code for sudo cmd: {}".format(cmd))
 
@@ -556,6 +560,64 @@ class SSHClient:
                 return True
 
             time.sleep(check_interval)
+
+        else:
+            return False
+
+    def wait_for_cmd_output_persists(self, cmd, content, timeout=60, time_to_stay=10, strict=False, regex=False,
+                                     expt_timeout=10, check_interval=1, exclude=False, non_zero_rtn_ok=False):
+        """
+        Wait for given content to be included/excluded in cmd output for more than <time_to_stay> seconds.
+
+        Args:
+            cmd (str): cmd to run repeatedly until given content appears|disappears or timeout reaches
+            content (str): string expected to appear|disappear in cmd output
+            time_to_stay (int): how long the expected content be included/excluded from cmd output to return True
+            timeout (int): max seconds to wait for content to consistently be included/excluded from cmd output
+            strict (bool): whether to perform strict search  (search is NOT case sensitive even if strict=True)
+            regex (bool): whether given content is regex pattern
+            expt_timeout (int): max time to wait for cmd to return
+            check_interval (int): how long to wait to execute the cmd again in seconds.
+            exclude (bool): whether to wait for content be consistently included or excluded from cmd output
+            non_zero_rtn_ok (bool): whether it's okay for cmd to have none-zero return code. Raise exception if False.
+
+        Returns (bool): True if content appears in cmd output within max wait time.
+
+        """
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+
+            stay_end_time = time.time() + time_to_stay
+            while time.time() < stay_end_time:
+                code, output = self.exec_cmd(cmd, expect_timeout=expt_timeout)
+                if not non_zero_rtn_ok and code > 0:
+                    raise exceptions.SSHExecCommandFailed("Get non-zero return code for command: {}".format(cmd))
+
+                content_exists = False
+                if regex:
+                    if strict:
+                        if re.match(content, output):
+                            content_exists = True
+                    else:
+                        if re.search(content, output):
+                            content_exists = True
+                else:
+                    if strict:
+                        if content.lower() == output.lower():
+                            content_exists = True
+                    else:
+                        if content.lower() in output.lower():
+                            content_exists = True
+
+                if (content_exists and not exclude) or (not content_exists and exclude):
+                    time.sleep(check_interval)
+                    continue
+                else:
+                    LOG.debug("Reset stay start time")
+                    break
+            else:
+                # Did not break - meaning time to stay has reached
+                return True
 
         else:
             return False

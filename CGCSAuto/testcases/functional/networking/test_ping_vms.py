@@ -75,6 +75,7 @@ def test_ping_between_two_vms(guest_os, ubuntu14_image):
     vm_helper.ping_vms_from_vm(to_vms=vms[1], from_vm=vms[0], net_types=['mgmt', 'data', 'internal'])
 
 
+@mark.p2
 @mark.features('guest_os')
 @mark.usefixtures('centos7_image',
                   'centos6_image',

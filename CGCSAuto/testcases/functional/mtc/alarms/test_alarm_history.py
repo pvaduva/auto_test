@@ -16,6 +16,7 @@ from testfixtures.recover_hosts import HostsToRecover
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
 
 
+@mark.p1
 def test_system_alarm_history_list():
     """
     Verify system alarm-history-list command in the system

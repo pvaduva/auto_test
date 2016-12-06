@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 from keywords import host_helper, check_helper
 
 
-@mark.p1
+@mark.p2
 def test_set_cpu_cores_denied_unlocked_host():
     nova_hosts = host_helper.get_nova_hosts()
 
@@ -29,7 +29,7 @@ def test_set_cpu_cores_denied_unlocked_host():
 
 
 # TODO: Add parameter for lab support split and lab that doesn't
-@mark.p1
+@mark.p2
 def test_vswitch_ports_cores_mapping():
     up_hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
     assert up_hypervisors, "No hypervisor is up."

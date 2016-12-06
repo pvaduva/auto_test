@@ -147,3 +147,7 @@ class SysinvError(TiSError):
 
 class CinderError(TiSError):
     message = 'Cinder error'
+
+
+class KeystoneError(TiSError):
+    message = 'Keystone error'

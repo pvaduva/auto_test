@@ -19,14 +19,14 @@ def hosts_per_stor_backing():
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'block_mig'), [
     mark.p1(('local_image', 0, 0, None, 1, 'volume', False)),
     mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume', False)),
-    mark.p1(('local_image', 0, 0, 'shared', 2, 'image', True)),
-    mark.p1(('local_image', 1, 1, 'dedicated', 1, 'image', False)),
+    mark.domain_sanity(('local_image', 0, 0, 'shared', 2, 'image', True)),
+    mark.domain_sanity(('local_image', 1, 1, 'dedicated', 1, 'image', False)),
     mark.p1(('local_lvm', 0, 0, None, 1, 'volume', False)),
     mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'volume', False)),
     mark.p1(('remote', 0, 0, None, 2, 'volume', False)),
     mark.p1(('remote', 1, 0, 'dedicated', 1, 'volume', False)),
-    mark.p1(('remote', 1, 1, None, 1, 'image', False)),
-    mark.p1(('remote', 0, 1, 'dedicated', 2, 'image_with_vol', False)),
+    mark.domain_sanity(('remote', 1, 1, None, 1, 'image', False)),
+    mark.domain_sanity(('remote', 0, 1, 'dedicated', 2, 'image_with_vol', False)),
 ])
 def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, block_mig,
                                   hosts_per_stor_backing):
@@ -124,8 +124,8 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
 
     # Fixme: Add back after FC
     # Remove detailed error message checking as error messages seem to change often and will break tests
-    # assert eval(expt_err) in output, "Expected error message {} is not in actual error message: {}".\
-    #     format(eval(expt_err), output)
+    assert eval(expt_err) in output, "Expected error message {} is not in actual error message: {}".\
+        format(eval(expt_err), output)
 
     post_vm_host = nova_helper.get_vm_host(vm_id)
     assert prev_vm_host == post_vm_host, "VM host changed even though live migration request rejected."
@@ -137,18 +137,18 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'resize'), [
     mark.p1(('local_image', 0, 0, None, 1, 'volume', 'confirm')),
     mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume', 'confirm')),
-    mark.p1(('local_image', 1, 0, 'shared', 2, 'image', 'confirm')),
-    mark.p1(('local_image', 0, 1, 'dedicated', 1, 'image', 'confirm')),
-    mark.p1(('local_image', 0, 0, None, 1, 'image_with_vol', 'confirm')),
+    mark.domain_sanity(('local_image', 1, 0, 'shared', 2, 'image', 'confirm')),
+    mark.domain_sanity(('local_image', 0, 1, 'dedicated', 1, 'image', 'confirm')),
+    mark.domain_sanity(('local_image', 0, 0, None, 1, 'image_with_vol', 'confirm')),
     mark.p1(('local_lvm', 0, 0, None, 1, 'volume', 'confirm')),
     mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'image', 'confirm')),
-    mark.p1(('local_lvm', 0, 0, 'dedicated', 1, 'image_with_vol', 'confirm')),
+    mark.domain_sanity(('local_lvm', 0, 0, 'dedicated', 1, 'image_with_vol', 'confirm')),
     mark.p1(('local_lvm', 0, 1, None, 2, 'volume', 'confirm')),
-    mark.p1(('local_lvm', 1, 1, 'dedicated', 2, 'volume', 'confirm')),
+    mark.domain_sanity(('local_lvm', 1, 1, 'dedicated', 2, 'volume', 'confirm')),
     mark.p1(('remote', 0, 0, None, 2, 'volume', 'confirm')),
     mark.p1(('remote', 1, 0, None, 1, 'volume', 'confirm')),
-    mark.p1(('remote', 1, 1, None, 1, 'image', 'confirm')),
-    mark.p1(('remote', 0, 0, None, 2, 'image_with_vol', 'confirm')),
+    mark.domain_sanity(('remote', 1, 1, None, 1, 'image', 'confirm')),
+    mark.domain_sanity(('remote', 0, 0, None, 2, 'image_with_vol', 'confirm')),
     mark.p1(('local_image', 0, 0, None, 2, 'volume', 'revert')),
     mark.p1(('local_image', 0, 0, 'dedicated', 1, 'volume', 'revert')),
     mark.p1(('local_image', 1, 0, 'shared', 2, 'image', 'revert')),
@@ -206,6 +206,7 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
+@mark.p3
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'boot_source'), [
     ('local_image', 0, 0, 'image'),
     ('local_image', 1, 0, 'volume'),
@@ -331,6 +332,7 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu14_image):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
 
 
+@mark.p2
 @mark.usefixtures('ubuntu14_image',
                   'centos6_image', 'centos7_image',
                   'opensuse11_image', 'opensuse12_image',
@@ -378,8 +380,8 @@ def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     vm_host_origin = nova_helper.get_vm_host(vm_id)
-    check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_origin],
-                                      vm_host=vm_host_origin, cpu_pol=cpu_pol)
+    prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_origin],
+                                      vm_host=vm_host_origin, cpu_pol=cpu_pol)[1]
 
     LOG.tc_step("Live migrate {} VM".format(guest_os))
     vm_helper.live_migrate_vm(vm_id)
@@ -388,8 +390,12 @@ def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
 
     vm_host_live_mig = nova_helper.get_vm_host(vm_id)
+    # vm topology from inside vm will not change after live-migrate between HT and non-HT vm
+    if not cpu_pol == 'dedicated':
+        prev_siblings = None
+
     check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_live_mig],
-                                      vm_host=vm_host_live_mig, cpu_pol=cpu_pol)
+                                      vm_host=vm_host_live_mig, cpu_pol=cpu_pol, prev_siblings=prev_siblings)
 
     LOG.tc_step("Cold migrate vm and check vm is moved to different host")
     vm_helper.cold_migrate_vm(vm_id)

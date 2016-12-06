@@ -77,6 +77,7 @@ class VMStatus:
     HARD_REBOOT = 'HARD REBOOT'
     SOFT_REBOOT = 'REBOOT'
     STOPPED = "SHUTOFF"
+    MIGRATING = 'MIGRATING'
 
 
 class HostAdminState:

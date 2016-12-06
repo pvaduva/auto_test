@@ -21,6 +21,7 @@ def flavor_and_volume():
     return flavor, volume
 
 
+@mark.p2
 @mark.parametrize('vcpu_model', [
     'Conroe',
     'Penryn',
@@ -83,5 +84,9 @@ def test_vm_vcpu_model(flavor_and_volume, vcpu_model):
         assert 1 == code, "boot vm cli exit code is not 1. Actual fail reason: {}".format(msg)
 
         expt_fault = VCPUSchedulerErr.CPU_MODEL_UNAVAIL
-        res_bool, vals = vm_helper.wait_for_vm_values(vm, 10, regex=True, strict=False, status='ERROR', fault=expt_fault)
+        # res_bool, vals = vm_helper.wait_for_vm_values(vm, 10, regex=True, strict=False, status='ERROR', fault=expt_fault)
+        res_bool, vals = vm_helper.wait_for_vm_values(vm, 10, regex=True, strict=False, status='ERROR')
+        err = nova_helper.get_vm_nova_show_value(vm, field='fault')
         assert res_bool, "VM did not reach expected error state. Actual: {}".format(vals)
+        assert re.search(expt_fault, err), "Incorrect fault reported. Expected: {} Actual: {}"\
+            .format(expt_fault, err)

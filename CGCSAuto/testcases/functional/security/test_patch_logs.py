@@ -2,7 +2,7 @@
 #
 import re
 
-from pytest import fixture, skip
+from pytest import fixture, skip, mark
 from consts import timeout
 from keywords import host_helper, system_helper
 from utils.tis_log import LOG
@@ -93,6 +93,7 @@ def check_dir(patch_name):
     return len(search_for) == len(found)
 
 
+@mark.p3
 def test_upload_dir_log(get_patch_name):
     """
     Checks that the correct logs are added when uploading a directory of patches
@@ -127,6 +128,7 @@ def test_upload_dir_log(get_patch_name):
     assert res_3, "FAIL: uploading patches did not generate the expected logs in patching-api.log"
 
 
+@mark.p3
 def test_what_requires_log(get_patch_name):
     """
     Checks that the what_requires query is logged
@@ -191,6 +193,7 @@ def check_install(host):
     return len(search_for) == len(found)
 
 
+@mark.p3
 def test_host_install_log(setup_host_install):
     """
     Checks that host_install produces the correct logs

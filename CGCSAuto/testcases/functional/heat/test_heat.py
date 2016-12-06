@@ -118,7 +118,7 @@ def verify_heat_resource(to_verify=None,template_name=None,stack_name=None,auth_
         if not subnet_id:
             return 1
         router_subnets = network_helper.get_router_subnets(router_id=router_id, auth_info=auth_info)
-        if subnet_id in router_subnets:
+        if subnet_id[0] in router_subnets:
             return 0
     elif to_verify is 'security_group':
         LOG.info("Verifying neutron security group")
@@ -236,11 +236,11 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 # This should be a relatively static condition.i.e., independent with test params values
 #@mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
-@mark.parametrize(
-    ('template_name'), [
+@mark.parametrize(('template_name'), [
         mark.sanity(('WR_Neutron_ProviderNetRange.yaml')),
         P1(('WR_Neutron_ProviderNet.yaml')),
         P1(('OS_Cinder_Volume.yaml')),
+        P1(('OS_Glance_Image.yaml')),
         P1(('OS_Ceilometer_Alarm.yaml')),
         P1(('OS_Neutron_Port.yaml')),
         P1(('OS_Neutron_Net.yaml')),
@@ -249,6 +249,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
         P1(('OS_Neutron_FloatingIP.yaml')),
         P1(('OS_Neutron_Router.yaml')),
         P1(('OS_Neutron_RouterGateway.yaml')),
+        P1(('OS_Neutron_RouterInterface.yaml')),
         P1(('OS_Neutron_SecurityGroup.yaml')),
         P1(('OS_Nova_ServerGroup.yaml')),
         P1(('OS_Nova_KeyPair.yaml')),
@@ -258,7 +259,6 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
         P1(('OS_Nova_Server.yaml')),
         P1(('OS_Heat_AccessPolicy.yaml')),
         P1(('OS_Heat_AutoScalingGroup.yaml')),
-
     ])
 # can add test fixture to configure hosts to be certain storage backing
 def test_heat_template(template_name):

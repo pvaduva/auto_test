@@ -169,17 +169,17 @@ class TestLocalStorage(object):
 
         return compute_to_change
 
-    def _is_profile_applicable_to(self, storage_profile=None, compute_dest=None):
-        LOG.debug('compare storage-sizes of the storage-profile:{} with compute:{}'.\
-                 format(storage_profile, compute_dest))
-
-        disk, size_profile = local_storage_helper.get_storprof_diskconfig(profile=storage_profile)
-        size_disk = local_storage_helper.get_host_disk_size(compute_dest, disk)
-
-        if size_disk >= size_profile:
-            return True
-
-        return False
+    # def _is_profile_applicable_to(self, storage_profile=None, compute_dest=None):
+    #     LOG.debug('compare storage-sizes of the storage-profile:{} with compute:{}'.\
+    #              format(storage_profile, compute_dest))
+    #
+    #     disk, size_profile = local_storage_helper.get_storprof_diskconfig(profile=storage_profile)
+    #     size_disk = local_storage_helper.get_host_disk_size(compute_dest, disk)
+    #
+    #     if size_disk >= size_profile:
+    #         return True
+    #
+    #     return False
 
     def _choose_compute_locked_diff_type(self, ls_type='image'):
         computes_locked_diff_type = [c for c in
@@ -288,6 +288,7 @@ class TestLocalStorage(object):
                 compute_src = active_controller
             else:
                 compute_src = random.choice(computes_of_ls_type)
+        LOG.info('-from {} create a local-storage profile of backing type:{}'.format(compute_src, ls_type))
         prof_uuid = self.create_storage_profile(compute_src, ls_type=ls_type)
 
         return prof_uuid, compute_src
@@ -300,8 +301,8 @@ class TestLocalStorage(object):
         return host_pv_sizes
 
     @mark.parametrize('local_storage_type', [
-        mark.p1('lvm'),
-        mark.p1('image'),
+        mark.domain_sanity('lvm'),
+        mark.domain_sanity('image'),
     ])
     def test_local_storage_operations(self, local_storage_type, ensure_two_hypervisors):
         """
@@ -361,7 +362,7 @@ class TestLocalStorage(object):
 
         LOG.tc_step('Choose a compute other than {} to apply the storage-profile'.format(compute_src))
         compute_dest = self.select_target_compute(compute_src, ls_type=local_storage_type)
-        LOG.debug('target compute:{}'.format(compute_dest))
+        LOG.info('target compute:{}'.format(compute_dest))
 
         LOG.debug('Check if the storprofile is applicable to the target compute')
         if not local_storage_helper.is_storprof_applicable_to(host=compute_dest, profile=prof_uuid):

@@ -56,8 +56,7 @@ def ensure_sufficient_4k_pages(request):
 
         if revert_active_con:
             LOG.fixture_step("Swact active controller and revert host mem page settings")
-            host_helper.swact_host(pre_active_con)
-            host_helper.lock_host(pre_active_con)
+            host_helper.lock_host(pre_active_con, swact=True)
             system_helper.set_host_4k_pages(pre_active_con, proc_id=1, smallpage_num=revert_dict[pre_active_con])
             host_helper.unlock_host(pre_active_con, check_hypervisor_up=True, check_webservice_up=True)
 
@@ -70,12 +69,9 @@ def ensure_sufficient_4k_pages(request):
         proc1_num_4k_page = int(system_helper.get_host_mem_values(host, ['vm_total_4K'], proc_id=1)[0])
 
         if proc0_num_4k_page < 600000 and proc1_num_4k_page < 600000:
-            if system_helper.get_active_controller_name() == host:
-                host_helper.swact_host()
-                host_helper.wait_for_hypervisors_up(host)
 
             HostsToRecover.add(host, scope='module')
-            host_helper.lock_host(host, swact=False)
+            host_helper.lock_host(host, swact=True)
 
             # chose to set 4k page of proc1 to 600000
             system_helper.set_host_4k_pages(host, proc_id=1, smallpage_num=600000)
@@ -124,11 +120,11 @@ def test_boot_4k_vm(boot_source):
     """
     LOG.tc_step("Create a flavor with mem_page_size set to small")
     flavor_id = nova_helper.create_flavor()[1]
-    ResourceCleanup.add('flavor', flavor_id, scope='module')
+    ResourceCleanup.add('flavor', flavor_id, scope='function')
     pagesize_spec = {'hw:mem_page_size': 'small'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **pagesize_spec)
 
-    LOG.tc_step("Boot a 4kvm from {} with above flavor".format(boot_source))
+    LOG.tc_step("Boot a 4k vm from {} with above flavor".format(boot_source))
     vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
     __check_pagesize(vm_id)
