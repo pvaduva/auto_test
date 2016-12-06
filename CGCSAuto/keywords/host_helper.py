@@ -1680,7 +1680,6 @@ def wait_for_host_in_aggregate(host, storage_backing, timeout=120, check_interva
     else:
         raise exceptions.HostError(err_msg)
 
-
 def is_host_local_image_backing(host, con_ssh=None):
     return check_host_local_backing_type(host, storage_type='image', con_ssh=con_ssh)
 
@@ -1688,31 +1687,31 @@ def is_host_local_image_backing(host, con_ssh=None):
 def is_host_local_lvm_backing(host, con_ssh=None):
     return check_host_local_backing_type(host, storage_type='lvm', con_ssh=con_ssh)
 
-
-def check_lab_local_backing_type(storage_type=None, con_ssh=None):
-    hypervisors = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
-    if not hypervisors:
-        return False
-
-    for hypervisor in hypervisors:
-        if check_host_local_backing_type(hypervisor, storage_type=storage_type):
-            return True
-
-    return False
-
-
-def has_local_image_backing(con_ssh=None):
-    if check_lab_local_backing_type('image'):
-        return True
-
-    return False
-
-
-def has_local_lvm_backing(con_ssh=None):
-    if check_lab_local_backing_type('lvm'):
-        return True
-
-    return False
+# Remove unused keywords for now, Kate has reported these are not working properly
+# def check_lab_local_backing_type(storage_type=None, con_ssh=None):
+#     hypervisors = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
+#     if not hypervisors:
+#         return False
+#
+#     for hypervisor in hypervisors:
+#         if check_host_local_backing_type(hypervisor, storage_type=storage_type):
+#             return True
+#
+#     return False
+#
+#
+# def has_local_image_backing(con_ssh=None):
+#     if check_lab_local_backing_type('image'):
+#         return True
+#
+#     return False
+#
+#
+# def has_local_lvm_backing(con_ssh=None):
+#     if check_lab_local_backing_type('lvm'):
+#         return True
+#
+#     return False
 
 
 def get_hosts_with_local_storage_backing_type(storage_type=None, con_ssh=None):
