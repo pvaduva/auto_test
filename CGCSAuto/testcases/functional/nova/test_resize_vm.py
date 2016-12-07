@@ -30,20 +30,20 @@ def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
     ('remote',      (1, 0, 0), (2, 1, 1), 'image'), 
     ('remote',      (1, 1, 1), (2, 2, 2), 'image'), 
     ('remote',      (1, 1, 1), (1, 1, 0), 'image'), 
-    ('remote',      (1, 0, 0), (1, 1, 1), 'volume'),
-    ('remote',      (1, 1, 1), (1, 2, 2), 'volume'),
+    ('remote',      (1, 0, 0), (2, 1, 1), 'volume'),
+    ('remote',      (1, 1, 1), (2, 2, 2), 'volume'),
     ('remote',      (1, 1, 1), (1, 1, 0), 'volume'),
     ('local_lvm',   (1, 0, 0), (2, 1, 1), 'image'), 
     ('local_lvm',   (1, 1, 1), (2, 2, 2), 'image'), 
     ('local_lvm',   (1, 1, 1), (1, 1, 0), 'image'), 
-    ('local_lvm',   (1, 0, 0), (1, 1, 1), 'volume'),
-    ('local_lvm',   (1, 1, 1), (1, 2, 2), 'volume'),
+    ('local_lvm',   (1, 0, 0), (2, 1, 1), 'volume'),
+    ('local_lvm',   (1, 1, 1), (2, 2, 2), 'volume'),
     ('local_lvm',   (1, 1, 1), (1, 1, 0), 'volume'),
     ('local_image', (1, 0, 0), (2, 1, 1), 'image'), 
     ('local_image', (1, 1, 1), (2, 2, 2), 'image'), 
     ('local_image', (1, 1, 1), (1, 1, 0), 'image'), 
-    ('local_image', (1, 0, 0), (1, 1, 1), 'volume'),
-    ('local_image', (1, 1, 1), (1, 2, 2), 'volume'),
+    ('local_image', (1, 0, 0), (2, 1, 1), 'volume'),
+    ('local_image', (1, 1, 1), (2, 2, 2), 'volume'),
     ('local_image', (1, 1, 1), (1, 1, 0), 'volume'),
     ])
 
@@ -95,27 +95,22 @@ def test_resize_vm_positive(add_hosts_to_zone, storage_backing, origin_flavor, d
     vm_info = vm_helper.resize_vm(vm_id, dest_flavor_id, revert=False, fail_ok=False)
     assert vm_info[0] == 0, vm_info[1]
     LOG.info(vm_info[1])
+    #TODO: Check that root Cinder volume does not resize, for appropriate cases
     assert vm_helper.VMInfo(vm_id).get_flavor_id() == dest_flavor_id, 'VM is not set to destination flavor'
 
 
 @mark.parametrize(('storage_backing', 'origin_flavor', 'dest_flavor', 'boot_source'),[
     ('remote',      (1, 0, 0), (0, 0, 0), 'image'),  
     ('remote',      (1, 1, 1), (0, 0, 0), 'image'),  
-    ('remote',      (1, 0, 0), (2, 1, 1), 'volume'), #Currently fails. Expected bevahiour unclear.
-    ('remote',      (1, 0, 0), (0, 0, 0), 'volume'), #Currently fails. Expected bevahiour unclear.
-    ('remote',      (1, 1, 1), (2, 2, 2), 'volume'), #Currently fails. Expected bevahiour unclear.
-    ('remote',      (1, 1, 1), (0, 0, 0), 'volume'), #Currently fails. Expected bevahiour unclear.
+    ('remote',      (1, 0, 0), (0, 0, 0), 'volume'), 
+    ('remote',      (1, 1, 1), (0, 0, 0), 'volume'), 
     ('local_lvm',   (1, 0, 0), (0, 0, 0), 'image'),  
     ('local_lvm',   (1, 1, 1), (0, 0, 0), 'image'),  
-    ('local_lvm',   (1, 0, 0), (2, 1, 1), 'volume'), #Currently fails. Expected bevahiour unclear.
-    ('local_lvm',   (1, 0, 0), (0, 0, 0), 'volume'), #Currently fails. Expected bevahiour unclear.
-    ('local_lvm',   (1, 1, 1), (2, 2, 2), 'volume'), #Currently fails. Expected bevahiour unclear.
+    ('local_lvm',   (1, 0, 0), (0, 0, 0), 'volume'), 
     ('local_lvm',   (1, 1, 1), (0, 0, 0), 'volume'), 
     ('local_image', (1, 0, 0), (0, 0, 0), 'image'),  
     ('local_image', (1, 1, 1), (0, 0, 0), 'image'),  
-    ('local_image', (1, 0, 0), (2, 1, 1), 'volume'), #Currently fails. Expected bevahiour unclear.
-    ('local_image', (1, 0, 0), (0, 0, 0), 'volume'), #Currently fails. Expected bevahiour unclear.
-    ('local_image', (1, 1, 1), (2, 2, 2), 'volume'), #Currently fails. Expected bevahiour unclear.
+    ('local_image', (1, 0, 0), (0, 0, 0), 'volume'), #Currently fails. This might be a bug.
     ('local_image', (1, 1, 1), (0, 0, 0), 'volume'), 
     ])
 
@@ -166,7 +161,6 @@ def test_resize_vm_negative(add_hosts_to_zone, storage_backing, origin_flavor, d
     vm_info = vm_helper.resize_vm(vm_id, dest_flavor_id, revert=False, fail_ok=True)
     assert vm_info[0] != 0, 'VM did not fail resize'
     LOG.info(vm_info[1])
-    #TODO: Check that root Cinder volume does not resize, if applicable.
     assert vm_helper.VMInfo(vm_id).get_flavor_id() == origin_flavor_id, 'VM did not keep origin flavor on resize fail'
 
 
