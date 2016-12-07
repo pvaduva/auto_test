@@ -9,21 +9,17 @@ def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
     hosts = host_helper.get_hosts_per_storage_backing()
     hosts_to_add = []
     avail_hosts = {'remote': '', 'local_lvm': '', 'local_image': ''}
-    if hosts['remote']:
-        hosts_to_add.append(hosts['remote'][0])
-        avail_hosts['remote'] = hosts['remote'][0]
-    if hosts['local_lvm']:
-        hosts_to_add.append(hosts['local_lvm'][0])
-        avail_hosts['local_lvm'] = hosts['local_lvm'][0]
-    if hosts['local_image']:
-        hosts_to_add.append(hosts['local_image'][0])
-        avail_hosts['local_image'] = hosts['local_image'][0]
+    for backing in ['local_image', 'local_lvm', 'remote']:
+        if hosts[backing]:
+            host_to_add = hosts[backing][0]
+            hosts_to_add.append(host_to_add)
+            avail_hosts[backing] = host_to_add
+            LOG.fixture_step('Select host {} with backing {}'.format(host_to_add, backing))
     nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=hosts_to_add)
 
     def remove_hosts_from_zone():
         nova_helper.remove_hosts_from_aggregate(aggregate='cgcsauto', check_first=False)
     request.addfinalizer(remove_hosts_from_zone)
-
     return avail_hosts
 
 @mark.parametrize(('storage_backing', 'origin_flavor', 'dest_flavor', 'boot_source'),[
