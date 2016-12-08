@@ -27,15 +27,15 @@ def __get_mtu_to_mod(providernet_name, mtu_range='middle'):
 
     min_mtu = 1000
     max_mtu = 9216
-    for pnet_type in pnet_types:
-        if 'vxlan' in pnet_type:
-            max_mtu = 9000
-            break
-
     for pnet_mtu in pnet_mtus:
         pnet_mtu = int(pnet_mtu)
         if pnet_mtu > min_mtu:
             min_mtu = pnet_mtu
+
+    for pnet_type in pnet_types:
+        if 'vxlan' in pnet_type:
+            min_mtu = min(min_mtu + 74, max_mtu)
+            break
 
     if min_mtu == max_mtu:
         mtu = max_mtu
