@@ -1,7 +1,8 @@
 import logging
 import os
-
 from time import strftime, gmtime
+
+import pytest   # Don't remove. Used in eval
 
 import setup_consts
 import setups
