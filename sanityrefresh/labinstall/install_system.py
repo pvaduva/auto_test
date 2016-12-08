@@ -780,7 +780,7 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
             log.info("Found patch named: " + patch_name)
             patch_names.append(patch_name)
 
-        bld_server_conn.rsync(dir_path + "/", WRSROOT_USERNAME, node.host_ip, WRSROOT_PATCHES_DIR, pre_opts=pre_opts)
+        bld_server_conn.rsync(dir_path + "/*.patch", WRSROOT_USERNAME, node.host_ip, WRSROOT_PATCHES_DIR, pre_opts=pre_opts)
 
     log.info("List of patches:\n" + "\n".join(patch_names))
 
