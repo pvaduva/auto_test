@@ -1,21 +1,22 @@
 import os
+from pytest import fixture, mark, skip
 
-from pytest import mark
-
-from consts.auth import Tenant
-from consts.cgcs import HEAT_PATH
-from consts.filepaths import WRSROOT_HOME
-from consts.heat import Heat
-from keywords import nova_helper, heat_helper,ceilometer_helper,network_helper,cinder_helper,glance_helper,\
-    host_helper
-from setup_consts import P1
-from testfixtures.resource_mgmt import ResourceCleanup
 from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
+from setup_consts import P1
+
+from consts.heat import Heat
+from consts.filepaths import WRSROOT_HOME
+from consts.cgcs import HEAT_PATH
+from consts.auth import Tenant
+from testfixtures.resource_mgmt import ResourceCleanup
+
+from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper, cinder_helper, glance_helper,\
+    host_helper, common
 
 
-def verify_heat_resource(to_verify=None,template_name=None,stack_name=None,auth_info=None):
+def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, auth_info=None):
     """
         Verify the heat resource creation/deletion for given resources
 
@@ -28,7 +29,7 @@ def verify_heat_resource(to_verify=None,template_name=None,stack_name=None,auth_
 
     """
 
-    if to_verify is 'volume' :
+    if to_verify is 'volume':
         LOG.info("Verifying volume")
         vol_name = getattr(Heat, template_name)['vol_name']
         volume_id = cinder_helper.get_volumes(name=vol_name)
@@ -154,14 +155,14 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 
     """
 
-    fail_ok=0
+    fail_ok = 0
 
     t_name, yaml = template_name.split('.')
     params = getattr(Heat, t_name)['params']
     heat_user = getattr(Heat, t_name)['heat_user']
     to_verify = getattr(Heat, t_name)['verify']
     if heat_user is 'admin':
-        auth_info=Tenant.ADMIN
+        auth_info = Tenant.ADMIN
 
     table_ = table_parser.table(cli.heat('stack-list', auth_info=auth_info))
     names = table_parser.get_values(table_, 'stack_name')
@@ -178,26 +179,26 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     cmd_list.append(" %s" % stack_name)
     params_string = ''.join(cmd_list)
 
-    LOG.tc_step("Creating Heat Stack..using template %s",template_name)
+    LOG.tc_step("Creating Heat Stack..using template %s", template_name)
     exitcode, output = cli.heat('stack-create', params_string, ssh_client=con_ssh, auth_info=auth_info,
-                      fail_ok=fail_ok, rtn_list=True)
+                                fail_ok=fail_ok, rtn_list=True)
     if exitcode == 1:
         LOG.warning("Create heat stack request rejected.")
         return [1, output]
     LOG.info("Stack {} created sucessfully.".format(stack_name))
 
-    ### add the heat stack name for deleteion on failure
+    # add the heat stack name for deleteion on failure
     ResourceCleanup.add(resource_type='heat_stack', resource_id=stack_name)
 
-    LOG.tc_step("Verifying Heat Stack Status for CREATE_COMPLETE for stack %s",stack_name)
+    LOG.tc_step("Verifying Heat Stack Status for CREATE_COMPLETE for stack %s", stack_name)
 
-    if not heat_helper.wait_for_heat_state(stack_name=stack_name,state='CREATE_COMPLETE',auth_info=auth_info):
+    if not heat_helper.wait_for_heat_state(stack_name=stack_name, state='CREATE_COMPLETE', auth_info=auth_info):
         return [1, 'stack did not go to state CREATE_COMPLETE']
     LOG.info("Stack {} is in expected CREATE_COMPLETE state.".format(stack_name))
 
     for item in to_verify:
         LOG.tc_step("Verifying Heat created resources %s for stack %s", item, stack_name)
-        verify_result = verify_heat_resource(to_verify=item, template_name=t_name,stack_name=stack_name,
+        verify_result = verify_heat_resource(to_verify=item, template_name=t_name, stack_name=stack_name,
                                              auth_info=auth_info)
         if verify_result is not 0:
             LOG.warning("Verify resouces %s created by heat stack Failed.", item)
@@ -206,12 +207,12 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     LOG.info("Stack {} resources are created as expected.".format(stack_name))
 
     if delete_after_swact:
-        swact_result=host_helper.swact_host()
+        swact_result = host_helper.swact_host()
         if swact_result is 0:
             return [1, "swact host failed"]
 
     LOG.tc_step("Delete heat stack {} ".format(stack_name))
-    del_res,del_output = heat_helper.delete_stack(stack_name=stack_name, auth_info=auth_info, fail_ok=True)
+    del_res, del_output = heat_helper.delete_stack(stack_name=stack_name, auth_info=auth_info, fail_ok=True)
     if del_res > 0:
         LOG.info("Stack {} delete failed.".format(stack_name))
         output = "Stack {} delete failed".format(stack_name)
@@ -233,7 +234,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 
 # Overall skipif condition for the whole test function (multiple test iterations)
 # This should be a relatively static condition.i.e., independent with test params values
-#@mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
+# @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
 @mark.parametrize(('template_name'), [
         mark.sanity(('WR_Neutron_ProviderNetRange.yaml')),
@@ -280,10 +281,7 @@ def test_heat_template(template_name):
 
     """
 
-
-
     # add test step
-
     return_code, msg = verify_basic_template(template_name)
 
     # Verify test results using assert
@@ -293,7 +291,7 @@ def test_heat_template(template_name):
 
 # Overall skipif condition for the whole test function (multiple test iterations)
 # This should be a relatively static condition.i.e., independent with test params values
-#@mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
+# @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
 @mark.parametrize(
     ('template_name'), [
@@ -323,7 +321,7 @@ def test_delete_heat_after_swact(template_name):
 
 
     # add test step
-    return_code, msg = verify_basic_template(template_name,delete_after_swact=True)
+    return_code, msg = verify_basic_template(template_name, delete_after_swact=True)
 
     # Verify test results using assert
     LOG.tc_step("Verify test result")
