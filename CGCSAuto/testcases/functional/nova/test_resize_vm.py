@@ -83,16 +83,12 @@ def test_resize_vm_positive(add_hosts_to_zone, storage_backing, origin_flavor, d
 
     LOG.tc_step('Resize vm to dest flavor with revert')
     vm_info = vm_helper.resize_vm(vm_id, dest_flavor_id, revert=True, fail_ok=False)
-    assert vm_info[0] == 0, vm_info[1]
     LOG.info(vm_info[1])
-    assert vm_helper.VMInfo(vm_id).get_flavor_id() == origin_flavor_id, 'VM did not keep origin flavor on revert'
     
     LOG.tc_step('Resize vm to dest flavor and confirm')
     vm_info = vm_helper.resize_vm(vm_id, dest_flavor_id, revert=False, fail_ok=False)
-    assert vm_info[0] == 0, vm_info[1]
     LOG.info(vm_info[1])
     #TODO: Check that root Cinder volume does not resize, for appropriate cases
-    assert vm_helper.VMInfo(vm_id).get_flavor_id() == dest_flavor_id, 'VM is not set to destination flavor'
 
 
 @mark.parametrize(('storage_backing', 'origin_flavor', 'dest_flavor', 'boot_source'),[
@@ -151,13 +147,12 @@ def test_resize_vm_negative(add_hosts_to_zone, storage_backing, origin_flavor, d
     LOG.tc_step('Resize vm to dest flavor with revert')
     vm_info = vm_helper.resize_vm(vm_id, dest_flavor_id, revert=True, fail_ok=True)
     LOG.info(vm_info[1])
-    assert vm_helper.VMInfo(vm_id).get_flavor_id() == origin_flavor_id, 'VM did not keep origin flavor on revert'
+    assert vm_helper.get_vm_flavor(vm_id) == origin_flavor_id, 'VM did not keep origin flavor on revert'
     
     LOG.tc_step('Resize vm to dest flavor and confirm')
     vm_info = vm_helper.resize_vm(vm_id, dest_flavor_id, revert=False, fail_ok=True)
-    assert vm_info[0] != 0, 'VM did not fail resize'
+    assert vm_info[0] == 1, vm_info[1]
     LOG.info(vm_info[1])
-    assert vm_helper.VMInfo(vm_id).get_flavor_id() == origin_flavor_id, 'VM did not keep origin flavor on resize fail'
 
 
 def _create_flavor(flavor_info, storage_backing):
