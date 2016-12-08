@@ -12,7 +12,6 @@ from utils.tis_log import LOG
 tc_start_time = None
 has_fail = False
 stress_iteration = -1
-add_repeat_marker = False
 
 
 ################################
@@ -240,6 +239,7 @@ def pytest_configure(config):
     # set resultlog save location
     config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
 
+    # Add 'iter' to stress test names
     # print("config_options: {}".format(config.option))
     file_or_dir = config.getoption('file_or_dir')
     origin_file_dir = list(file_or_dir)
@@ -247,6 +247,7 @@ def pytest_configure(config):
     if stress_iteration > 0:
         for f_or_d in origin_file_dir:
             if '[' in f_or_d:
+                # Below setting seems to have no effect. Test did not continue upon collection failure.
                 # config.option.continue_on_collection_errors = True
                 # return
                 file_or_dir.remove(f_or_d)
@@ -462,7 +463,7 @@ def pytest_generate_tests(metafunc):
             metafunc.fixturenames.remove(value)
             metafunc.fixturenames.insert(index, value)
 
-    #
+    # Stress fixture
     if metafunc.config.option.repeat > 0:
         # Add autorepeat fixture and parametrize the fixture
         param_name = 'autorepeat'
