@@ -316,7 +316,7 @@ class TestMutiPortsPCI:
         LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal (vlan 0 only) networks")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
 
-        for vm_actions in [['auto_recover'], ['cold_migrate'], ['pause', 'unpause']]:   # ['suspend', 'resume'],
+        for vm_actions in [['auto_recover'], ['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
 
             if 'auto_recover' in vm_actions:
                 LOG.tc_step("Set vm to error state and wait for auto recovery complete, "

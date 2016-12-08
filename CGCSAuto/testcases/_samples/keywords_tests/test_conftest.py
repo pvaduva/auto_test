@@ -58,13 +58,17 @@ def test_fixtures(fix2):
     LOG.info("in test")
 
 
+used = 0
 @fixture(scope='module', autouse=True)
 def fix_autouse(request):
-    LOG.fixture_step("I'm a autouse fixture step")
+    global used
+    used += 1
+    LOG.fixture_step("I'm MODULE a autouse fixture step. Used: {}".format(used))
 
     def fix_teardown():
-        LOG.fixture_step("I'm a autouse fixture teardown")
+        LOG.fixture_step("I'm a MODULE autouse fixture teardown. Used: {}".format(used))
     request.addfinalizer(fix_teardown)
+
 
 
 @fixture(scope='function')
@@ -87,9 +91,11 @@ def fix_testparam(request):
     request.addfinalizer(fix_teardown)
     return "testparam returned"
 
+
 test_iter = 0
 @mark.usefixtures('fix_usefixture')
-def test_stress(fix_testparam):
+@mark.parametrize('test', ['atest', 'btest', 'ctest'])
+def test_stress(fix_testparam, test):
     LOG.tc_step("Hey i'm a test step")
     LOG.tc_step(str(fix_testparam))
 

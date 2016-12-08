@@ -404,31 +404,32 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         raise exceptions.HostPostCheckFailed(msg)
 
 
-def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, availability_state=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
-                check_hypervisor_up=True, check_webservice_up=True):
+def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,
+                auth_info=Tenant.ADMIN, check_hypervisor_up=True, check_webservice_up=True):
     """
     Unlock given host
     Args:
         host (str):
         timeout (int): MAX seconds to wait for host to become available or degraded after unlocking
-        availability_state(str/list): Specific availability state ( available or upgraded) that this procedure
-        should wait before return,  Otherwise it waits for either states.
+        available_only(bool): if True, wait for host becomes Available after unlock; otherwise wait for either
+            Degraded or Available
         fail_ok (bool):
         con_ssh (SSHClient):
         auth_info (dict):
         check_hypervisor_up (bool): Whether to check if host is up in nova hypervisor-list
         check_webservice_up (bool): Whether to check if host's web-service is active in system servicegroup-list
 
-    Returns (tuple):
+    Returns (tuple):  Only -1, 0, 4 senarios will be returned if fail_ok=False
         (-1, "Host already unlocked. Do nothing")
         (0, "Host is unlocked and in available state.")
         (1, <stderr>)   # cli returns stderr. only applicable if fail_ok
         (2, "Host is not in unlocked state")    # only applicable if fail_ok
         (3, "Host state did not change to available or degraded within timeout")    # only applicable if fail_ok
-        (4, "Host is in degraded state after unlocked.")
-        (5, "Task is not cleared within 180 seconds after host goes available")
-        (6, "Host is not up in nova hypervisor-list")   # Host with compute function only
-        (7, "Host web-services is not active in system servicegroup-list") # controllers only
+        (4, "Host is in degraded state after unlocked.")    # Only applicable if available_only=False
+        (5, "Task is not cleared within 180 seconds after host goes available")        # Applicable if fail_ok
+        (6, "Host is not up in nova hypervisor-list")   # Host with compute function only. Applicable if fail_ok
+        (7, "Host web-services is not active in system servicegroup-list") # controllers only. Applicable if fail_ok
+        (8, "Failed to wait for host to reach Available state after unlocked to Degraded state")    # only applicable if fail_ok and available_only are True
 
     """
     LOG.info("Unlocking {}...".format(host))
@@ -452,33 +453,23 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, availability_state=
                                  fail_ok=fail_ok):
         return 2, "Host is not in unlocked state"
 
-    if availability_state:
-        if isinstance(availability_state, str):
-            availability_state = [availability_state]
-
-        if True in [state != HostAvailabilityState.AVAILABLE and state != HostAvailabilityState.DEGRADED
-            for state in availability_state]:
-            LOG.warning("The referred specific availability state {} must be ether of {}. "
-                        "Switching to either states. ".format(availability_state,
-                        [HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]))
-
-            availability_state = [HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]
-
-        if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-                                     availability=availability_state):
-            return 3, "Host state did not change to {} or {} within timeout".format(HostAvailabilityState.AVAILABL,
-                                                                                    HostAvailabilityState.DEGRADED)
-    else:
-        if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-                                     availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]):
-            return 3, "Host state did not change to available or degraded within timeout"
+    if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+                                 availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]):
+        return 3, "Host state did not change to available or degraded within timeout"
 
     if not _wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh, task=''):
         return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
 
     if get_hostshow_value(host, 'availability') == HostAvailabilityState.DEGRADED:
-        LOG.warning("Host is in degraded state after unlocked.")
-        return 4, "Host is in degraded state after unlocked."
+        if not available_only:
+            LOG.warning("Host is in degraded state after unlocked.")
+            return 4, "Host is in degraded state after unlocked."
+        else:
+            if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+                                         availability=HostAvailabilityState.AVAILABLE):
+                err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
+                LOG.warning(err_msg)
+                return 8, err_msg
 
     if check_hypervisor_up or check_webservice_up:
 
@@ -1699,7 +1690,6 @@ def wait_for_host_in_aggregate(host, storage_backing, timeout=120, check_interva
     else:
         raise exceptions.HostError(err_msg)
 
-
 def is_host_local_image_backing(host, con_ssh=None):
     return check_host_local_backing_type(host, storage_type='image', con_ssh=con_ssh)
 
@@ -1707,31 +1697,31 @@ def is_host_local_image_backing(host, con_ssh=None):
 def is_host_local_lvm_backing(host, con_ssh=None):
     return check_host_local_backing_type(host, storage_type='lvm', con_ssh=con_ssh)
 
-
-def check_lab_local_backing_type(storage_type=None, con_ssh=None):
-    hypervisors = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
-    if not hypervisors:
-        return False
-
-    for hypervisor in hypervisors:
-        if check_host_local_backing_type(hypervisor, storage_type=storage_type):
-            return True
-
-    return False
-
-
-def has_local_image_backing(con_ssh=None):
-    if check_lab_local_backing_type('image'):
-        return True
-
-    return False
-
-
-def has_local_lvm_backing(con_ssh=None):
-    if check_lab_local_backing_type('lvm'):
-        return True
-
-    return False
+# Remove unused keywords for now, Kate has reported these are not working properly
+# def check_lab_local_backing_type(storage_type=None, con_ssh=None):
+#     hypervisors = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
+#     if not hypervisors:
+#         return False
+#
+#     for hypervisor in hypervisors:
+#         if check_host_local_backing_type(hypervisor, storage_type=storage_type):
+#             return True
+#
+#     return False
+#
+#
+# def has_local_image_backing(con_ssh=None):
+#     if check_lab_local_backing_type('image'):
+#         return True
+#
+#     return False
+#
+#
+# def has_local_lvm_backing(con_ssh=None):
+#     if check_lab_local_backing_type('lvm'):
+#         return True
+#
+#     return False
 
 
 def get_hosts_with_local_storage_backing_type(storage_type=None, con_ssh=None):

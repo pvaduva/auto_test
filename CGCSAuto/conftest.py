@@ -1,6 +1,6 @@
 import logging
 import os
-import pytest
+
 from time import strftime, gmtime
 
 import setup_consts
@@ -12,6 +12,7 @@ from utils.tis_log import LOG
 tc_start_time = None
 has_fail = False
 stress_iteration = -1
+add_repeat_marker = False
 
 
 ################################
@@ -239,6 +240,27 @@ def pytest_configure(config):
     # set resultlog save location
     config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
 
+    # print("config_options: {}".format(config.option))
+    file_or_dir = config.getoption('file_or_dir')
+    origin_file_dir = list(file_or_dir)
+
+    if stress_iteration > 0:
+        for f_or_d in origin_file_dir:
+            if '[' in f_or_d:
+                # config.option.continue_on_collection_errors = True
+                # return
+                file_or_dir.remove(f_or_d)
+                origin_f_or_list = list(f_or_d)
+
+                for i in range(stress_iteration):
+                    extra_str = 'iter{}-'.format(i)
+                    f_or_d_list = list(origin_f_or_list)
+                    f_or_d_list.insert(f_or_d_list.index('[') + 1, extra_str)
+                    new_f_or_d = ''.join(f_or_d_list)
+                    file_or_dir.append(new_f_or_d)
+
+    # print("after modify: {}".format(config.option.file_or_dir))
+
 
 def pytest_addoption(parser):
     lab_help = "Lab to connect to. Valid input: lab name such as 'cgcs-r720-3_7', or floating ip such as " \
@@ -354,6 +376,7 @@ def pytest_unconfigure():
 
 
 def pytest_collection_modifyitems(items):
+    # print("Collection modify")
     move_to_last = []
     absolute_last = []
 
@@ -397,11 +420,33 @@ def pytest_collection_modifyitems(items):
         items.remove(i)
         items.append(i)
 
-    # # Stress test iterations
-    # TODO: Reorder stress testcases if more than one test collected.
-    # if stress_iteration > 1:
-    #      for i in range(stress_iteration - 2):
-    #          items += items
+    # # # Stress test iterations
+    # # TODO: Reorder stress testcases if more than one test collected.
+
+    # original_items = list(items)
+    # if stress_iteration > 0:
+    #     for item in original_items:
+    #         testname = item.nodeid
+    #         if '[' not in testname:
+    #             testname += '[]'
+    #
+    #         items.remove(item)
+    #         items_to_add = []
+    #         for i in range(stress_iteration):
+    #             items_to_add.append(item)
+    #
+    #         for i in range(stress_iteration):
+    #             item_to_add = items_to_add[i]
+    #             testname_list = list(testname)
+    #             index_ = testname_list.index('[') + 1
+    #             extra_str = 'iter{}'.format(i)
+    #             new_name = testname_list.insert(index_, extra_str)
+    #
+    #             # Do not work: cannot set attribute nodeid
+    #             item_to_add.nodeid = new_name
+    #             items.append(item_to_add)
+    #
+    # print("New items : {}".format(items))
 
 
 def pytest_generate_tests(metafunc):
@@ -417,10 +462,22 @@ def pytest_generate_tests(metafunc):
             metafunc.fixturenames.remove(value)
             metafunc.fixturenames.insert(index, value)
 
+    #
     if metafunc.config.option.repeat > 0:
+        # Add autorepeat fixture and parametrize the fixture
+        param_name = 'autorepeat'
+        metafunc.fixturenames.append(param_name)
+
         count = int(metafunc.config.option.repeat)
-        for i in range(count):
-            metafunc.addcall()
+        metafunc.parametrize(param_name, range(count), indirect=True, ids=__params_gen(count))
+
+
+def __params_gen(iterations):
+    ids = []
+    for i in range(iterations):
+        ids.append('iter{}'.format(i))
+
+    return ids
 
 
 def pytest_sessionfinish(session):

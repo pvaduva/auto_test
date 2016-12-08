@@ -141,7 +141,7 @@ def test_system_upgrade():
 
    # unlocke upgraded controller-1
     LOG.tc_step("Unlocking controller-1 after upgrade......")
-    host_helper.unlock_host("controller-1", availability_state=HostAvailabilityState.AVAILABLE)
+    host_helper.unlock_host("controller-1", available_only=True)
     LOG.tc_step("Host controller-1 unlocked after upgrade......")
 
     # Swact to standby controller-1
@@ -183,7 +183,7 @@ def test_system_upgrade():
 
     # unlocke upgraded controller-0
     LOG.tc_step("Unlocking controller-0 after upgrade......")
-    host_helper.unlock_host(controller0.name, availability_state=HostAvailabilityState.AVAILABLE)
+    host_helper.unlock_host(controller0.name, available_only=True)
     LOG.tc_step("Host {} unlocked after upgrade......".format(controller0.name))
 
 

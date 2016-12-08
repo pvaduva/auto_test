@@ -1,3 +1,4 @@
+import re
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
@@ -122,8 +123,8 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
     assert 1 == code, "Expect live migration to have expected fail. Actual: {}".format(output)
     assert 'Unexpected API Error'.lower() not in output.lower(), "'Unexpected API Error' returned."
 
-    # Fixme: Add back after FC
-    # Remove detailed error message checking as error messages seem to change often and will break tests
+    # remove extra spaces in error message
+    output = re.sub(r'\s\s+', " ", output)
     assert eval(expt_err) in output, "Expected error message {} is not in actual error message: {}".\
         format(eval(expt_err), output)
 
