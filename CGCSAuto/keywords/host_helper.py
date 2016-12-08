@@ -430,6 +430,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         (6, "Host is not up in nova hypervisor-list")   # Host with compute function only. Applicable if fail_ok
         (7, "Host web-services is not active in system servicegroup-list") # controllers only. Applicable if fail_ok
         (8, "Failed to wait for host to reach Available state after unlocked to Degraded state")    # only applicable if fail_ok and available_only are True
+        (9, "Host subfunctions operational and availability are not enable and available system host-show") # controllers (CPE) only
+
 
     """
     LOG.info("Unlocking {}...".format(host))
@@ -460,6 +462,18 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
     if not _wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh, task=''):
         return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
 
+    table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
+    subfunctions = table_parser.get_value_two_col_table(table_, 'subfunctions')
+    if subfunctions:
+        # wait for subfunction states to be operational enabled and available
+        if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+                                     subfunction_oper='enabled', subfunction_avail="available" ):
+            err_msg = "Host subfunctions operational and availability did not change to enabled and available" \
+                      " within timeout"
+            LOG.warning(err_msg)
+            return 9, err_msg
+
+
     if get_hostshow_value(host, 'availability') == HostAvailabilityState.DEGRADED:
         if not available_only:
             LOG.warning("Host is in degraded state after unlocked.")
@@ -470,6 +484,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                 err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
                 LOG.warning(err_msg)
                 return 8, err_msg
+
 
     if check_hypervisor_up or check_webservice_up:
 
@@ -672,6 +687,63 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=60, fail_ok=False, chec
                 raise
             time.sleep(check_interval)
 
+
+def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, strict=True, regex=False, fail_ok=True,
+                          con_ssh=None, **states):
+    if not states:
+        raise ValueError("Expected host state(s) has to be specified via keyword argument states")
+
+    LOG.info("Waiting for {} to reach state(s) - {}".format(host, states))
+    end_time = time.time() + timeout
+    last_vals = {}
+    for field in states:
+        last_vals[field] = None
+    while time.time() < end_time:
+        table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
+        for field, expt_vals in states.items():
+            actual_val = table_parser.get_value_two_col_table(table_, field)
+            # ['Lock of host compute-0 rejected because instance vm-from-vol-t1 is', 'suspended.']
+            if isinstance(actual_val, list):
+                actual_val = ' '.join(actual_val)
+
+            actual_val_lower = actual_val.lower()
+            if isinstance(expt_vals, str):
+                expt_vals = [expt_vals]
+
+            for expected_val in expt_vals:
+                expected_val_lower = expected_val.strip().lower()
+                found_match = False
+                if regex:
+                    if strict:
+                        res_ = re.match(expected_val_lower, actual_val_lower)
+                    else:
+                        res_ = re.search(expected_val_lower, actual_val_lower)
+                    if res_:
+                        found_match = True
+                else:
+                    if strict:
+                        found_match = actual_val_lower == expected_val_lower
+                    else:
+                        found_match = actual_val_lower in expected_val_lower
+
+                if found_match:
+                    LOG.info("{} {} has reached: {}".format(host, field, actual_val))
+                    break
+            else:   # no match found. run system host-show again
+                if last_vals[field] != actual_val_lower:
+                    LOG.info("{} {} is {}.".format(host, field, actual_val))
+                last_vals[field] = actual_val_lower
+                break
+        else:
+            LOG.info("{} is in states: {}".format(host, states))
+            return True
+        time.sleep(check_interval)
+    else:
+        msg = "{} did not reach states - {}".format(host, states)
+        if fail_ok:
+            LOG.warning(msg)
+            return False
+        raise exceptions.TimeoutException(msg)
 
 def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, strict=True, regex=False, fail_ok=True,
                           con_ssh=None, **states):
@@ -2170,7 +2242,7 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
             raise exceptions.HostError(err_msg)
 
     if unlock:
-        rc, output = unlock_host(host, fail_ok=True, availability_state=HostAvailabilityState.AVAILABLE)
+        rc, output = unlock_host(host, fail_ok=True, available_only=True)
         if rc != 0:
             err_msg = "Host {} fail to unlock after host upgrade: ".format(host, output)
             if fail_ok:
@@ -2316,11 +2388,11 @@ def ensure_host_provisioned(host, cons_ssh=None):
 
     LOG.info("Host {} not provisioned ; doing lock/unlock to provision the host ....".format(host))
     rc, output = lock_host(host,con_ssh=cons_ssh)
-    if rc != 0:
+    if rc != 0 and rc != -1:
         err_msg =  "Lock host {} rejected".format(host)
         raise exceptions.HostError(err_msg)
 
-    rc, output = unlock_host(host, availability_state=HostAvailabilityState.AVAILABLE, con_ssh=cons_ssh)
+    rc, output = unlock_host(host, available_only=True, con_ssh=cons_ssh)
     if rc != 0:
         err_msg = "Unlock host {} failed: {}".format(host, output)
         raise exceptions.HostError(err_msg)

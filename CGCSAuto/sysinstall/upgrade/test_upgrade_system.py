@@ -38,7 +38,6 @@ def test_system_upgrade():
     controller0_conn.connect()
 
     cpe = system_helper.is_small_footprint(controller0_conn)
-
     upgrade_version = UpgradeVars.get_upgrade_var('UPGRADE_VERSION')
     license_path = UpgradeVars.get_upgrade_var('UPGRADE_LICENSE')
     if license_path is None:
@@ -197,8 +196,17 @@ def test_system_upgrade():
     upgrade_hosts =  storages + computes
 
     LOG.tc_step("Starting upgrade of the other system hosts: {}".format(upgrade_hosts))
-    host_helper.upgrade_hosts(upgrade_hosts, lock=True, unlock=True)
-    LOG.tc_step("Hosts {} are upgraded successfully.....".format(upgrade_hosts))
+    #host_helper.upgrade_hosts(upgrade_hosts, lock=True, unlock=True)
+    #LOG.tc_step("Hosts {} are upgraded successfully.....".format(upgrade_hosts))
+
+    for host in upgrade_hosts:
+        LOG.tc_step("Starting {} upgrade.....".format(host))
+        host_helper.upgrade_host(host, lock=True)
+        LOG.tc_step("{} is upgraded successfully.....".format(host))
+        LOG.tc_step("Unlocking {} after upgrade......".format(host))
+        host_helper.unlock_host(host, available_only=True)
+        LOG.tc_step("Host {} unlocked after upgrade......".format(host))
+        LOG.tc_step("Host {} upgraded successfully.....".format(host))
 
 
     # Activate the upgrade
@@ -223,7 +231,7 @@ def test_system_upgrade():
     # Delete the previous load
     LOG.tc_step("Deleting  previous load version {} ".format(current_version))
     system_helper.delete_imported_load()
-    LOG.tc_step("Deletdc  previous load version {}".format(current_version))
+    LOG.tc_step("Delete  previous load version {}".format(current_version))
 
 def download_upgrade_license(lab, server, license_path):
 

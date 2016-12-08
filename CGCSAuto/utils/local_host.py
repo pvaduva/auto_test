@@ -65,9 +65,17 @@ def reserve_vlm_console(barcode, note=None):
 
     reserved_barcodes = exec_cmd(cmd)[1]
     if not reserved_barcodes or "Error" in reserved_barcodes:
-        msg = "Failed to reserve target(s): " + barcode
-        LOG.error(msg)
-        return 1, msg
+        #check if node is already reserved by user
+        cmd = [VLM, "gtAttr", "-t", str(barcode), "port"]
+        port = exec_cmd(cmd)[1]
+        if "TARGET_NOT_RESERVED_BY_USER" in port:
+            msg = "Failed to reserve target(s): " + str(barcode)
+            LOG.error(msg)
+            return 1, msg
+        else:
+            msg = "Barcode {} reserved: {}".format(barcode, reserved_barcodes)
+            LOG.info(msg)
+            return 0, msg
     else:
         msg = "Barcode {} reserved: {}".format(barcode, reserved_barcodes)
         LOG.info(msg)
