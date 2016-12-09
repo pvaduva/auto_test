@@ -96,8 +96,14 @@ def _is_cpe():
     return system_helper.is_small_footprint()
 
 
-@mark.usefixtures('check_computes_availability')
-def test_435_launching_guest_instances_on_first_compute(_is_cpe):
+@mark.usefixtures('ubuntu14_image')
+@mark.parametrize(('host', 'guest'), [
+    ('compute-0', 'ubuntu_14'),
+    ('compute-0', None),            # cgcs-guest
+    ('compute-1', 'ubuntu_14'),
+    ('compute-1', None),
+    ])
+def test_launch_guest_instances_on_specific_compute(host, guest, _is_cpe):
     """
     Test launching Guest instances on specified compute
 
@@ -117,79 +123,13 @@ def test_435_launching_guest_instances_on_first_compute(_is_cpe):
     if _is_cpe:
         skip("Skip for CPE lab")
 
-    vm_name1 = 'ubuntu-test'
-    vm_name2 = 'ubuntu-test-1'
-    image_name = 'ubuntu-precise-amd64'
-    compute_name = 'compute-0'
+    vm_name1 = 'vm-on-{}-test-1'.format(host)
+    vm_name2 = 'vm-on-{}-test-2'.format(host)
+    compute_name = host
 
     LOG.info('Booting ubuntu image on first compute')
-    launch_instance_on_compute(network_name='private',
-                                flavor=2,
-                                host_name=compute_name,
-                                image_name=image_name,
-                                instance_name1=vm_name1,
-                                instance_name2=vm_name2)
+    launch_instance_on_compute(host_name=compute_name,
+                               image_name=guest,
+                               instance_name1=vm_name1,
+                               instance_name2=vm_name2)
 
-
-@mark.usefixtures('check_computes_availability')
-def test_437_launching_guest_instances_on_second_compute(_is_cpe):
-    """
-    Test launching Guest ubuntu instances on 2nd Compute
-
-    Verification
-    1. Boot 2 VMS with
-    nova boot --key_name=controller-0 --flavor=1
-              --availability-zone=nova-compute:compute-1
-              --nic net-id=<public_net_id> --nic net-id=<internal_net_id>
-              --image=ubuntu-precise-amd64 ubuntu-test
-    nova boot --key_name=controller-0 --flavor=1
-              --availability-zone=nova-compute:compute-1
-              --nic net-id=<public_net_id> --nic net-id=<internal_net_id>
-              --image=ubuntu-precise-amd64 ubuntu-test-1
-    2. Verify VMs successfully boot
-    """
-    if _is_cpe:
-        skip("Skip for CPE lab")
-
-    vm_name1 = 'ubuntu-test'
-    vm_name2 = 'ubuntu-test-1'
-    image_name = 'ubuntu-precise-amd64'
-    comp_name = "compute-1"
-    LOG.info('Booting ubuntu VM on second compute')
-    launch_instance_on_compute(network_name='private',
-                                flavor=2,
-                                host_name=comp_name,
-                                image_name=image_name,
-                                instance_name1=vm_name1,
-                                instance_name2=vm_name2)
-
-
-def test_438_launching_cgcs_guest_instances_on_second_compute(_is_cpe):
-    """
-    Test launching Guest cgcs-guest instances on 2nd Compute
-
-    Verification
-    1. Boot 2 VMS with
-    nova boot --key_name=controller-0 --flavor=1
-              --availability-zone=nova-compute:compute-1
-              --nic net-id=public_net_id --nic net-id=internal_net_id
-              --image=wrl5-avp wrl5-avp-test
-    nova boot --key_name=controller-0 --flavor=1
-              --availability-zone=nova-compute:compute-1
-              --nic net-id=public_net_id --nic net-id=internal_net_id
-              --image=wrl5-avp wrl5-avp-test-1
-    2. Verify VMs successfully boot
-    """
-    if _is_cpe:
-        skip("Skip for CPE lab")
-
-    vm_name1 = 'wrl5-avp-test'
-    vm_name2 = 'wrl5-avp-test1'
-    comp_name = 'compute-1'
-    LOG.debug('Booting cgcs_guest VM on second compute')
-    launch_instance_on_compute(network_name='public',
-                                flavor=101,
-                                host_name=comp_name,
-                                image_name='wrl5-avp',
-                                instance_name1=vm_name1,
-                                instance_name2=vm_name2)
