@@ -13,6 +13,7 @@ from utils.tis_log import LOG
 tc_start_time = None
 has_fail = False
 stress_iteration = -1
+tracebacks = []
 
 
 ################################
@@ -36,6 +37,8 @@ class MakeReport:
             msg = "\n***Failure at test {}: {}".format(call.when, call.excinfo)
             print(msg)
             LOG.debug(msg + "\n***Details: {}".format(report.longrepr))
+            global tracebacks
+            tracebacks.append(str(report.longrepr))
             self.test_results[call.when] = ['Failed', call.excinfo]
         elif report.skipped:
             sep = 'Skipped: '
@@ -336,8 +339,8 @@ def pytest_unconfigure():
     total_exec = TestRes.PASSNUM + TestRes.FAILNUM
     pass_rate = fail_rate = '0'
     if total_exec > 0:
-        pass_rate = "{}%".format(round(TestRes.PASSNUM / total_exec, 4) * 100)
-        fail_rate = "{}%".format(round(TestRes.FAILNUM / total_exec, 4) * 100)
+        pass_rate = "{}%".format(round(TestRes.PASSNUM * 100 / total_exec, 2))
+        fail_rate = "{}%".format(round(TestRes.FAILNUM * 100 / total_exec, 2))
     with open(tc_res_path, mode='a') as f:
         # Append general info to result log
         f.write('\n\nLab: {}\n'
@@ -486,4 +489,5 @@ def pytest_sessionfinish(session):
 
     if stress_iteration > 0 and has_fail:
         # _thread.interrupt_main()
+        print('Printing traceback: \n' + '\n'.join(tracebacks))
         raise KeyboardInterrupt("Abort upon stress test failure")
