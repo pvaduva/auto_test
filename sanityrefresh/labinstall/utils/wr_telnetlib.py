@@ -973,7 +973,12 @@ class Telnet:
                     # 4) CentOS Serial CPE Install
                     log.info("Enter option for {} Controller Install".format(host_os))
                     if host_os == 'wrlinux':
-                        selection_menu_option = '1'
+                        #selection_menu_option = '1'
+                        if small_footprint:
+                            selection_menu_option = '3'
+                        else:
+                            selection_menu_option = '1'
+
                     else:
                         if small_footprint:
                             selection_menu_option = '4'
