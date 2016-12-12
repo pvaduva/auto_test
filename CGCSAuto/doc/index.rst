@@ -18,7 +18,7 @@ Contents:
    workflow
    bestpractice
    testdev
-   api/index
+   api_docs/CGCSAuto
    examples
    overview
 
