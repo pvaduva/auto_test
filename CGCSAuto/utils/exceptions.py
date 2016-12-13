@@ -138,16 +138,20 @@ class HeatError(TiSError):
 
 
 class CeilometerError(TiSError):
-    message = "Ceilometer error"
+    message = "Ceilometer error."
 
 
 class SysinvError(TiSError):
-    message = 'Sysinv error'
+    message = 'Sysinv error.'
 
 
 class CinderError(TiSError):
-    message = 'Cinder error'
+    message = 'Cinder error.'
 
 
 class KeystoneError(TiSError):
-    message = 'Keystone error'
+    message = 'Keystone error.'
+
+
+class BuildServerError(TiSError):
+    message = "Build Server error."

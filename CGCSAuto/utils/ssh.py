@@ -1,3 +1,4 @@
+import os
 import re
 import time
 from contextlib import contextmanager
@@ -90,7 +91,10 @@ class SSHClient:
         else:
             lab_name = self.host
 
-        return ProjVar.get_var('LOG_DIR') + '/ssh_' + lab_name + ".log"
+        log_dir = ProjVar.get_var('LOG_DIR')
+        os.makedirs(log_dir, exist_ok=True)
+        logpath = log_dir + '/ssh_' + lab_name + ".log"
+        return logpath
 
     def connect(self, retry=False, retry_interval=3, retry_timeout=300, prompt=None,
                 use_current=True, timeout=None):
