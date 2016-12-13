@@ -138,9 +138,9 @@ def test_system_upgrade():
     host_helper.upgrade_host("controller-1", lock=True)
     LOG.tc_step("Host controller-1 is upgraded successfully......")
 
-   # unlocke upgraded controller-1
+    # unlocke upgraded controller-1
     LOG.tc_step("Unlocking controller-1 after upgrade......")
-    host_helper.unlock_host("controller-1", available_only=True)
+    host_helper.unlock_host("controller-1", available_only=True, check_hypervisor_up=False)
     LOG.tc_step("Host controller-1 unlocked after upgrade......")
 
     # Swact to standby controller-1
@@ -232,7 +232,7 @@ def test_system_upgrade():
     LOG.tc_step("Deleting  previous load version {} ".format(current_version))
     system_helper.delete_imported_load()
     LOG.tc_step("Delete  previous load version {}".format(current_version))
-
+ 
 def download_upgrade_license(lab, server, license_path):
 
     cmd = "test -h " + license_path
