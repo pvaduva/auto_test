@@ -11,7 +11,7 @@ def wait_for_new_host_and_guest_load(build_server=DEFAULT_BUILD_SERVER,
                                      host_build_dir=BuildServerPath.DEFAULT_HOST_BUILD_PATH,
                                      host_trigger_window=4, host_timeout=4,
                                      guest_build_dir=BuildServerPath.DEFAULT_GUEST_IMAGE_PATH,
-                                     guest_trigger_window=0.3, guest_timeout=0.3):
+                                     guest_trigger_window=4, guest_timeout=0.3):
 
     is_new_build_avail = wait_for_new_host_load(build_server=build_server, build_dir=host_build_dir,
                                                 trigger_window=host_trigger_window, timeout=host_timeout)

@@ -125,7 +125,8 @@ class SSHClient:
                 self._session.force_password = self.force_password
                 self.logpath = self.__get_logpath()
 
-                self._session.logfile = open(self.logpath, 'w+')
+                if self.logpath:
+                    self._session.logfile = open(self.logpath, 'w+')
 
                 # Login
                 self._session.login(self.host, self.user, self.password, login_timeout=timeout,
