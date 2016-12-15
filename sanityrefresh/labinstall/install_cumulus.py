@@ -274,7 +274,8 @@ class Cumulus_TiS(object):
 
         cmd = 'ssh wrsroot@' + controller0_ip
         controller0_ssh_conn._spawn(cmd)
-        controller0_ssh_conn.expect("(yes/no)?")
+        #controller0_ssh_conn.expect("(yes/no)?")
+        controller0_ssh_conn.expect(".*\(yes/no\)\? ?$")
         controller0_ssh_conn.sendline("yes")
         controller0_ssh_conn.expect(PASSWORD_PROMPT)
         controller0_ssh_conn.sendline(WRSROOT_DEFAULT_PASSWORD)
