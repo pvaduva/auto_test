@@ -1,9 +1,13 @@
 import getpass
+import os
 from consts.filepaths import BuildServerPath
+
 
 class ProjVar:
     # BUILD_ID,
-    __var_dict = {'BUILD_ID': None}
+    __var_dict = {'BUILD_ID': None,
+                  'LOG_DIR': None}
+                  # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}
 
     @classmethod
     def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all, report_tag, openstack_cli):

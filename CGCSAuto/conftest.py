@@ -1,5 +1,7 @@
 import logging
 import os
+import threading    # Used for formatting logger
+
 from time import strftime, gmtime
 
 import pytest   # Don't remove. Used in eval
@@ -13,7 +15,7 @@ from utils.tis_log import LOG
 tc_start_time = None
 has_fail = False
 stress_iteration = -1
-add_repeat_marker = False
+tracebacks = []
 
 
 ################################
@@ -37,6 +39,8 @@ class MakeReport:
             msg = "\n***Failure at test {}: {}".format(call.when, call.excinfo)
             print(msg)
             LOG.debug(msg + "\n***Details: {}".format(report.longrepr))
+            global tracebacks
+            tracebacks.append(str(report.longrepr))
             self.test_results[call.when] = ['Failed', call.excinfo]
         elif report.skipped:
             sep = 'Skipped: '
@@ -241,6 +245,7 @@ def pytest_configure(config):
     # set resultlog save location
     config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
 
+    # Add 'iter' to stress test names
     # print("config_options: {}".format(config.option))
     file_or_dir = config.getoption('file_or_dir')
     origin_file_dir = list(file_or_dir)
@@ -248,6 +253,7 @@ def pytest_configure(config):
     if stress_iteration > 0:
         for f_or_d in origin_file_dir:
             if '[' in f_or_d:
+                # Below setting seems to have no effect. Test did not continue upon collection failure.
                 # config.option.continue_on_collection_errors = True
                 # return
                 file_or_dir.remove(f_or_d)
@@ -309,12 +315,12 @@ def config_logger(log_dir):
     # logger for log saved in file
     file_name = log_dir + '/TIS_AUTOMATION.log'
     logging.Formatter.converter = gmtime
-    formatter_file = "'[%(asctime)s] %(lineno)-4d%(levelname)-5s %(filename)-10s %(funcName)-10s:: %(message)s'"
+    formatter_file = "'[%(asctime)s] %(lineno)-4d%(levelname)-5s %(threadName)-8s %(filename)-10s %(funcName)-10s:: %(message)s'"
     logging.basicConfig(level=logging.NOTSET, format=formatter_file, filename=file_name, filemode='w')
 
     # logger for stream output
     stream_hdler = logging.StreamHandler()
-    formatter_stream = logging.Formatter('[%(asctime)s] %(lineno)-4d%(levelname)-5s %(module)s.%(funcName)-8s:: %(message)s')
+    formatter_stream = logging.Formatter('[%(asctime)s] %(lineno)-4d%(levelname)-5s %(threadName)-8s %(module)s.%(funcName)-8s:: %(message)s')
     stream_hdler.setFormatter(formatter_stream)
     stream_hdler.setLevel(logging.INFO)
     LOG.addHandler(stream_hdler)
@@ -335,8 +341,8 @@ def pytest_unconfigure():
     total_exec = TestRes.PASSNUM + TestRes.FAILNUM
     pass_rate = fail_rate = '0'
     if total_exec > 0:
-        pass_rate = "{}%".format(round(TestRes.PASSNUM / total_exec, 4) * 100)
-        fail_rate = "{}%".format(round(TestRes.FAILNUM / total_exec, 4) * 100)
+        pass_rate = "{}%".format(round(TestRes.PASSNUM * 100 / total_exec, 2))
+        fail_rate = "{}%".format(round(TestRes.FAILNUM * 100 / total_exec, 2))
     with open(tc_res_path, mode='a') as f:
         # Append general info to result log
         f.write('\n\nLab: {}\n'
@@ -463,7 +469,7 @@ def pytest_generate_tests(metafunc):
             metafunc.fixturenames.remove(value)
             metafunc.fixturenames.insert(index, value)
 
-    #
+    # Stress fixture
     if metafunc.config.option.repeat > 0:
         # Add autorepeat fixture and parametrize the fixture
         param_name = 'autorepeat'
@@ -485,4 +491,5 @@ def pytest_sessionfinish(session):
 
     if stress_iteration > 0 and has_fail:
         # _thread.interrupt_main()
+        print('Printing traceback: \n' + '\n'.join(tracebacks))
         raise KeyboardInterrupt("Abort upon stress test failure")
