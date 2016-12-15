@@ -37,7 +37,7 @@ WRSROOT_ETC_PROFILE_LEGACY = "/etc/profile"
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards"
 CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
 RPM_INSTALL_REL_PATH = "export/RPM_INSTALL"
-WRSROOT_HOME_DIR = "/home/wrsroot"
+WRSROOT_HOME_DIR = "/home/wrsroot/"
 WRSROOT_PATCHES_DIR = WRSROOT_HOME_DIR + "/patches"
 WRSROOT_IMAGES_DIR = WRSROOT_HOME_DIR + "/images"
 WRSROOT_HEAT_DIR = WRSROOT_HOME_DIR + "/heat"
@@ -136,6 +136,7 @@ WRSROOT_PASSWORD = "Li69nux*"
 
 #Telnet expect
 TELNET_EXPECT_TIMEOUT = 3600
+BOOT_MENU_TIMEOUT = 120
 MAX_SEARCH_ATTEMPTS = 20
 MAX_LOGIN_ATTEMPTS = 5
 
@@ -176,6 +177,16 @@ TIMEOUT_BUFFER = 2
 LOGIN_PROMPT = "ogin:"
 PASSWORD_PROMPT = "assword:"
 PROMPT = ".*\$ ?"
+
+# Stacks
+ADMIN_YAML = "lab_setup-admin-resources.yaml"
+TENANT1_YAML = "lab_setup-tenant1-resources.yaml"
+TENANT2_YAML = "lab_setup-tenant2-resources.yaml"
+YAML = [ADMIN_YAML, TENANT1_YAML, TENANT2_YAML]
+STACK_CREATE_SCRIPT = "create_resource_stacks.sh"
+RESOURCE_STACKS_SCRIPT = "launch_resource_stacks.sh"
+STACK_LAUNCH_SCRIPT = "launch_stacks.sh"
+HEAT_RESOURCES = ".heat_resources"
 
 # Other
 LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']

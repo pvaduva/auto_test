@@ -714,9 +714,12 @@ def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_di
 
     vlm_exec_cmd(VLM_TURNON, node.barcode)
     logutils.print_step("Installing {}...".format(node.name))
-    node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os)
+    rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os)
+
     if close_telnet_conn:
         node.telnet_conn.close()
+
+    return rc
 
 def apply_banner(node, banner):
     ''' Apply banner files if they exist
@@ -1018,7 +1021,10 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
             burn_usb_load_image(controller0, bld_server_conn, load_path)
 
         # Boot up controller0
-        bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False)
+        rc = bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False)
+        if rc != 0:
+            msg = "Unable to bring up controller-0"
+            wr_exit()._exit(1, msg)
         logutils.print_step("Initial login and password set for " + controller0.name)
         controller0.telnet_conn.login(reset=True)
     else:
@@ -1157,6 +1163,60 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
     cmd += " " + WRSROOT_HOME_DIR + "/.bashrc"
     controller0.ssh_conn.exec_cmd(cmd)
     controller0.ssh_conn.exec_cmd("source " + WRSROOT_HOME_DIR + "/.bashrc")
+
+def setupHeat(bld_server_conn):
+    # Check if the /home/wrsroot/.heat_resources file exists
+    heat_resources_path = WRSROOT_HOME_DIR + HEAT_RESOURCES
+    cmd = "test -f " + heat_resources_path
+    rc, output = controller0.ssh_conn.exec_cmd(cmd)
+    if rc != 0:
+        log.info("{} not found.  Skipping heat setup.".format(heat_resources_path))
+        return
+
+    # Check if /home/wrsroot/launch_resource_stacks.sh exists
+    resource_stacks_script = WRSROOT_HOME_DIR + RESOURCE_STACKS_SCRIPT 
+    cmd = "test -f " + stack_launch_script_path
+    rc, output = controller0.ssh_conn.exec_cmd(cmd)
+    if rc != 0:
+        log.info("{} not found.  Skipping heat setup.".format(stack_launch_script_path))
+        return
+
+    # Create the resource stacks
+    cmd = "./" + RESOURCE_STACKS_SCRIPT
+    rc, output = controller0.ssh_conn.exec_cmd(cmd)
+    if rc != 0:
+        msg = "Failure when creating resource stacks"
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
+    # Check expected resources are created
+    for yaml_file in YAML:
+        yaml_path = WRSROOT_HOME_DIR + yaml_file
+        cmd = "test -f " + yaml_file
+        rc, output = controller0.ssh_conn.exec_cmd(cmd)
+        if rc != 0:
+            msg = "Expected file {} not found".format(yaml_file)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+
+    # Check /home/wrsroot/launch_stacks.sh exists
+    stack_launch_script_path = WRSROOT_HOME_DIR + STACK_LAUNCH_SCRIPT
+    cmd = "test -f " + stack_launch_script_path
+    rc, output = controller0.ssh_conn.exec_cmd(cmd)
+    if rc != 0:
+        msg = "Expected file {} not found".format(stack_launch_script_path)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
+    # Run heat stacks
+    for yaml_file in YAML:
+        yaml_path = WRSROOT_HOME_DIR + yaml_file
+        cmd = "./" + STACK_LAUNCH_SCRIPT + yaml_file
+        rc, output = controller0.ssh_conn.exec_cmd(cmd)
+        if rc != 0:
+            msg = "Failed to launch stack script: {}".cmd(yaml_file)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
 
 def configureController(bld_server_conn, host_os, install_output_dir, banner):
@@ -1834,7 +1894,8 @@ def main():
     # Bring up other hosts
     tis_on_tis_storage = False
     # Lab-install Step 8 -  boot_other_lab_hosts - applicable all labs
-    lab_install_step = install_step("boot_other_lab_hosts", 8, ['regular', 'storage', 'cpe'])
+    msg = "boot_other_lab_hosts"
+    lab_install_step = install_step(msg, 8, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
 
         boot_other_lab_hosts(nodes, boot_device_dict, host_os, install_output_dir,
@@ -1848,6 +1909,9 @@ def main():
     # interfaces properly
     time.sleep(10)
     wait_state(nodes, AVAILABILITY, ONLINE)
+
+    if stop == "5":
+        wr_exit()._exit(0, "User requested stop after {}".format(msg))
 
     log.info("Beginning lab setup procedure for {} lab".format(lab_type))
 
@@ -1953,6 +2017,14 @@ def main():
             installer_exit._exit(1, msg)
 
         set_install_step_complete( lab_install_step)
+
+    # Heat stack changes
+    lab_install_step = install_step("check_heat_resources_file", 17, ['regular', 'storage', 'cpe'])
+
+    if do_next_install_step(lab_type, lab_install_step):
+        setupHeat(bld_server_conn)
+
+    set_install_step_complete( lab_install_step)
 
     if lab_type is "cpe":
         for node in nodes:
