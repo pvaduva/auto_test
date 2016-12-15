@@ -61,9 +61,10 @@ def __get_lab_ssh(labname, log_dir=None):
 
     """
     lab = __get_lab_dict(labname)
-    if log_dir is None:
-        log_dir = temp_dir = "/tmp/"
-        ProjVar.set_var(log_dir=log_dir, temp_dir=temp_dir)
+    # Doesn't have to save logs
+    # if log_dir is None:
+    #     log_dir = temp_dir = "/tmp/CGCSAUTO/"
+    ProjVar.set_var(log_dir=log_dir)
     con_ssh = SSHClient(lab['floating ip'], 'wrsroot', 'Li69nux*', CONTROLLER_PROMPT)
     con_ssh.connect()
     # if 'auth_url' in lab:
@@ -130,6 +131,14 @@ def _get_sys_type(labname=None, log_dir=None, con_ssh=None):
 
 
 def __get_lab_dict(labname):
+    """
+
+    Args:
+        labname (str):
+
+    Returns (dict):
+
+    """
     if labname is None:
         return ProjVar.get_var(var_name='LAB')
 
