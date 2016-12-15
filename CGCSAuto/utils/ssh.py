@@ -94,10 +94,18 @@ class SSHClient:
 
         log_dir = ProjVar.get_var('LOG_DIR')
         if log_dir:
+            curr_thread = threading.current_thread()
+            if not isinstance(curr_thread, threading._MainThread):
+                log_dir += '/threads/'
             os.makedirs(log_dir, exist_ok=True)
-            logpath = log_dir + '/ssh_' + lab_name + ".log"
+
+            if isinstance(curr_thread, threading._MainThread):
+                logpath = log_dir + '/ssh_' + lab_name + ".log"
+            else:
+                logpath = log_dir + curr_thread.name + '_ssh_' + lab_name + ".log"
         else:
             logpath = None
+
         return logpath
 
     def connect(self, retry=False, retry_interval=3, retry_timeout=300, prompt=None,
