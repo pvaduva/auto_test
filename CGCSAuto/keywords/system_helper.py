@@ -817,25 +817,24 @@ def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_in
         return 0, "1G memory is modified to {} in pending.".format(hugepage_num)
 
 
-def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail_ok=False, con_ssh=None):
-    # TODO: Update after Jira fix.CGTS-4356
+def __suppress_unsuppress_event(alarm_id, suppress=True, check_first=False, fail_ok=False, con_ssh=None):
     """
-    suppress alarm by uuid
+    suppress/unsuppress an event by uuid
     Args:
-        alarm_id: string
-        fail_ok : Boolean
-        con_ssh : (SSHClient)
-        suppress boolean True or false
+        alarm_id (str):
+        fail_ok (bool):
+        con_ssh (SSHClient)
+        suppress(bool) True or false
 
-    Returns:
-        success 0 ,and output Message
+    Returns (tuple): (rtn_code, message)
+        (0, )
     """
 
     suppressed_alarms_tab = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
 
     alarm_status = "unsuppressed" if suppress else "suppressed"
     cmd = "event-suppress" if suppress else "event-unsuppress"
-    alarm_filter = {"Suppressed Alarm ID's": alarm_id}
+    alarm_filter = {"Suppressed Event ID's": alarm_id}
 
     if check_first:
         if not suppressed_alarms_tab['values']:
@@ -844,7 +843,7 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
             pre_status = table_parser.get_values(table_=suppressed_alarms_tab, target_header='Status', strict=True,
                                                  **alarm_filter)[0]
         if pre_status.lower() != alarm_status:
-            msg = "Alarm is already {}. Do nothing".format(pre_status)
+            msg = "Event is already {}. Do nothing".format(pre_status)
             LOG.info(msg)
             return -1, msg
 
@@ -867,24 +866,24 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
             return 2, msg
         raise exceptions.TiSError(msg)
 
-    succ_msg = "Alarm {} is {} successfully".format(alarm_id, expt_status)
+    succ_msg = "Event {} is {} successfully".format(alarm_id, expt_status)
     LOG.info(succ_msg)
     return 0, succ_msg
 
 
-def suppress_alarm(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
-    return __suppress_unsuppress_alarm(alarm_id, True, check_first=check_first, fail_ok=fail_ok, con_ssh=con_ssh)
+def suppress_event(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
+    return __suppress_unsuppress_event(alarm_id, True, check_first=check_first, fail_ok=fail_ok, con_ssh=con_ssh)
 
 
-def unsuppress_alarm(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
-    return __suppress_unsuppress_alarm(alarm_id, False, check_first=check_first, fail_ok=fail_ok, con_ssh=con_ssh)
+def unsuppress_event(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
+    return __suppress_unsuppress_event(alarm_id, False, check_first=check_first, fail_ok=fail_ok, con_ssh=con_ssh)
 
 
 def generate_event(event_id='300.005', state='set', severity='critical', reason_text='Generated for testing',
-                   entity_id='TiS Auto', unknown_text='unknown1', unknown_two='unknown2', con_ssh=None):
+                   entity_id='CGCSAuto', unknown_text='unknown1', unknown_two='unknown2', con_ssh=None):
 
     cmd = '''fmClientCli -c  "### ###{}###{}###{}###{}### ###{}### ###{}###{}### ###True###True###"'''.\
-        format(event_id, state, entity_id, reason_text, severity, unknown_text, unknown_two)
+        format(event_id, state, reason_text, entity_id, severity, unknown_text, unknown_two)
 
     LOG.info("Generate system event: {}".format(cmd))
     if not con_ssh:
