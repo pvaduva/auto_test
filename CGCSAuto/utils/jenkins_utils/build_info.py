@@ -53,7 +53,6 @@ def __wait_for_new_load(build_server, build_dir, trigger_window, timeout):
     minutes = int(trigger_window * 60)
     hours, minutes = divmod(minutes, 60)
 
-    print("Minutes to wait: {}".format(minutes))
     with install_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
 
         window_time = datetime.timedelta(hours=hours, minutes=minutes)

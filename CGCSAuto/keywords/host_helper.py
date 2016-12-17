@@ -8,7 +8,7 @@ from utils.ssh import ControllerClient, SSHFromSSH
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
-from consts.cgcs import HostAvailabilityState, HostAdminState
+from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState
 from consts.timeout import HostTimeout, CMDTimeout
 
 from keywords import system_helper, common
@@ -405,7 +405,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
 
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,
-                auth_info=Tenant.ADMIN, check_hypervisor_up=True, check_webservice_up=True):
+                auth_info=Tenant.ADMIN, check_hypervisor_up=True, check_webservice_up=True, check_subfunc=True):
     """
     Unlock given host
     Args:
@@ -418,6 +418,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         auth_info (dict):
         check_hypervisor_up (bool): Whether to check if host is up in nova hypervisor-list
         check_webservice_up (bool): Whether to check if host's web-service is active in system servicegroup-list
+        check_subfunc (bool): whether to check subfunction_oper and subfunction_avail for CPE system
 
     Returns (tuple):  Only -1, 0, 4 senarios will be returned if fail_ok=False
         (-1, "Host already unlocked. Do nothing")
@@ -430,8 +431,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         (6, "Host is not up in nova hypervisor-list")   # Host with compute function only. Applicable if fail_ok
         (7, "Host web-services is not active in system servicegroup-list") # controllers only. Applicable if fail_ok
         (8, "Failed to wait for host to reach Available state after unlocked to Degraded state")    # only applicable if fail_ok and available_only are True
-        (9, "Host subfunctions operational and availability are not enable and available system host-show") # controllers (CPE) only
-
+        (9, "Host subfunctions operational and availability are not enable and available system host-show") # CPE only
 
     """
     LOG.info("Unlocking {}...".format(host))
@@ -462,18 +462,6 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
     if not _wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh, task=''):
         return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
 
-    table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
-    subfunctions = table_parser.get_value_two_col_table(table_, 'subfunctions')
-    if subfunctions:
-        # wait for subfunction states to be operational enabled and available
-        if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-                                     subfunction_oper='enabled', subfunction_avail="available" ):
-            err_msg = "Host subfunctions operational and availability did not change to enabled and available" \
-                      " within timeout"
-            LOG.warning(err_msg)
-            return 9, err_msg
-
-
     if get_hostshow_value(host, 'availability') == HostAvailabilityState.DEGRADED:
         if not available_only:
             LOG.warning("Host is in degraded state after unlocked.")
@@ -485,8 +473,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                 LOG.warning(err_msg)
                 return 8, err_msg
 
-
-    if check_hypervisor_up or check_webservice_up:
+    if check_hypervisor_up or check_webservice_up or check_subfunc:
 
         table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
 
@@ -504,6 +491,16 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         if check_webservice_up and is_controller:
             if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[0]:
                 return 7, "Host web-services is not active in system servicegroup-list"
+
+        if check_subfunc and is_controller and is_compute:
+            # wait for subfunction states to be operational enabled and available
+            if not _wait_for_host_states(host, timeout=90, fail_ok=fail_ok, con_ssh=con_ssh,
+                                         subfunction_oper=HostOperationalState.ENABLED,
+                                         subfunction_avail=HostAvailabilityState.AVAILABLE):
+                err_msg = "Host subfunctions operational and availability did not change to enabled and available" \
+                          " within timeout"
+                LOG.warning(err_msg)
+                return 9, err_msg
 
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
