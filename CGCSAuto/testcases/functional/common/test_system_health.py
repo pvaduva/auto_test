@@ -46,7 +46,9 @@ def test_system_alarms(pre_alarms_session):
 
     if new_alarms:
         LOG.tc_step("New alarm(s) found. Waiting for new alarms to clear.")
-        end_time = time.time() + 300
+
+        # Set max wait time to 10 minutes to wait for NTP alarm clear if any.
+        end_time = time.time() + 600
         while time.time() < end_time:
             current_alarms = system_helper.get_alarms()
             alarms_to_check = list(current_alarms)

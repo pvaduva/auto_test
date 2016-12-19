@@ -10,7 +10,8 @@ from keywords import host_helper, system_helper
 
 @mark.sanity
 @mark.cpe_sanity
-def test_swact_controllers(wait_for_con_drdb_sync_complete):
+@mark.usefixtures('wait_for_con_drdb_sync_complete')
+def test_swact_controllers():
     """
     Verify swact active controller
 
@@ -19,8 +20,6 @@ def test_swact_controllers(wait_for_con_drdb_sync_complete):
         - Verify standby controller and active controller are swapped
 
     """
-    assert wait_for_con_drdb_sync_complete, "controller-1 drbd sync did not complete within 20 minutes"
-
     LOG.tc_step('retrieve active and available controllers')
     pre_active_controller = system_helper.get_active_controller_name()
     pre_standby_controller = system_helper.get_standby_controller_name()

@@ -742,63 +742,6 @@ def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, st
             return False
         raise exceptions.TimeoutException(msg)
 
-def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, strict=True, regex=False, fail_ok=True,
-                          con_ssh=None, **states):
-    if not states:
-        raise ValueError("Expected host state(s) has to be specified via keyword argument states")
-
-    LOG.info("Waiting for {} to reach state(s) - {}".format(host, states))
-    end_time = time.time() + timeout
-    last_vals = {}
-    for field in states:
-        last_vals[field] = None
-    while time.time() < end_time:
-        table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
-        for field, expt_vals in states.items():
-            actual_val = table_parser.get_value_two_col_table(table_, field)
-            # ['Lock of host compute-0 rejected because instance vm-from-vol-t1 is', 'suspended.']
-            if isinstance(actual_val, list):
-                actual_val = ' '.join(actual_val)
-
-            actual_val_lower = actual_val.lower()
-            if isinstance(expt_vals, str):
-                expt_vals = [expt_vals]
-
-            for expected_val in expt_vals:
-                expected_val_lower = expected_val.strip().lower()
-                found_match = False
-                if regex:
-                    if strict:
-                        res_ = re.match(expected_val_lower, actual_val_lower)
-                    else:
-                        res_ = re.search(expected_val_lower, actual_val_lower)
-                    if res_:
-                        found_match = True
-                else:
-                    if strict:
-                        found_match = actual_val_lower == expected_val_lower
-                    else:
-                        found_match = actual_val_lower in expected_val_lower
-
-                if found_match:
-                    LOG.info("{} {} has reached: {}".format(host, field, actual_val))
-                    break
-            else:   # no match found. run system host-show again
-                if last_vals[field] != actual_val_lower:
-                    LOG.info("{} {} is {}.".format(host, field, actual_val))
-                last_vals[field] = actual_val_lower
-                break
-        else:
-            LOG.info("{} is in states: {}".format(host, states))
-            return True
-        time.sleep(check_interval)
-    else:
-        msg = "{} did not reach states - {}".format(host, states)
-        if fail_ok:
-            LOG.warning(msg)
-            return False
-        raise exceptions.TimeoutException(msg)
-
 
 def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_complete_timeout=HostTimeout.SWACT,
                fail_ok=False, con_ssh=None):
@@ -2404,3 +2347,102 @@ def is_host_provisioned(host, con_ssh=None):
     invprovisioned = get_hostshow_value(host, "invprovision", con_ssh=con_ssh)
     LOG.info("Host {} is {}".format(host, invprovisioned))
     return "provisioned" == invprovisioned.strip()
+
+
+def get_sm_dump_table(controller, con_ssh=None):
+    """
+
+    Args:
+        controller (str|SSHClient): controller name/ssh client to get sm-dump for
+        con_ssh (SSHClient): ssh client for active controller
+
+    Returns ():
+    table_ (dict): Dictionary of a table parsed by tempest.
+            Example: table =
+            {
+                'headers': ["Field", "Value"];
+                'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
+
+    """
+    if isinstance(controller, str):
+        with ssh_to_host(controller, con_ssh=con_ssh) as host_ssh:
+            return table_parser.sm_dump_table(host_ssh.exec_sudo_cmd('sm-dump', fail_ok=False)[1])
+
+    host_ssh = controller
+    return table_parser.sm_dump_table(host_ssh.exec_sudo_cmd('sm-dump', fail_ok=False)[1])
+
+
+def get_sm_dump_items(controller, item_names=None, con_ssh=None):
+    """
+    get sm dump dict for specified items
+    Args:
+        controller (str|SSHClient): hostname or ssh client for a controller such as controller-0, controller-1
+        item_names (list|str): such as 'oam-services', or ['oam-ip', 'oam-services']
+        con_ssh (SSHClient):
+
+    Returns (dict): such as {'oam-services': {'desired-state': 'active', 'actual-state': 'active'},
+                             'oam-ip': {...}
+                            }
+
+    """
+    sm_dump_tab = get_sm_dump_table(controller=controller, con_ssh=con_ssh)
+    if item_names:
+        if isinstance(item_names, str):
+            item_names = [item_names]
+
+        sm_dump_tab = table_parser.filter_table(sm_dump_tab, name=item_names)
+
+    sm_dump_items = table_parser.row_dict_table(sm_dump_tab, key_header='name', unique_key=True)
+    return sm_dump_items
+
+
+def get_sm_dump_item_states(controller, item_name, con_ssh=None):
+    """
+    get desired and actual states of given item
+
+    Args:
+        controller (str|SSHClient): hostname or host_ssh for a controller such as controller-0, controller-1
+        item_name (str): such as 'oam-services'
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<desired-state>, <actual-state>) such as ('active', 'active')
+
+    """
+    item_value_dict = get_sm_dump_items(controller=controller, item_names=item_name, con_ssh=con_ssh)[item_name]
+
+    return item_value_dict['desired-state'], item_value_dict['actual-state']
+
+
+def wait_for_sm_dump_desired_state(controller, item_name, timeout=60, fail_ok=False, con_ssh=None):
+
+    LOG.info("Waiting for {} {} in sm-dump to reach desired state".format(controller, item_name))
+
+    def __wait_for_desired_state(ssh_client):
+        end_time = time.time() + timeout
+        prev_state = ''
+        while time.time() < end_time:
+            desired_state, actual_state = get_sm_dump_item_states(ssh_client, item_name=item_name, con_ssh=con_ssh)
+            if desired_state == actual_state:
+                LOG.info("{} in sm-dump has reached desired state: {}".format(item_name, desired_state))
+                return True
+
+            elif prev_state and actual_state != prev_state:
+                LOG.info("Actual state changed from {} to {} while desired state is: {}".
+                         format(prev_state, actual_state, desired_state))
+
+            time.sleep(3)
+            prev_state = actual_state
+
+        err_msg = "Timed out waiting for sm-dump {} to reach desired state. Actual: {}, desired: {}".format(
+                item_name, actual_state, desired_state)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return False
+        else:
+            raise exceptions.TimeoutException(err_msg)
+
+    if isinstance(controller, str):
+        with ssh_to_host(controller, con_ssh=con_ssh) as host_ssh:
+            return __wait_for_desired_state(host_ssh)
+    else:
+        return __wait_for_desired_state(controller)
