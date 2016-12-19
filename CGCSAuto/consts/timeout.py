@@ -13,6 +13,9 @@ class HostTimeout:
     HYPERVISOR_UP_AFTER_AVAIL = 120
     COMPUTE_LOCK = 30
     UPGRADE = 7200
+    WIPE_DISK_TIMEOUT = 30
+    PING_TIMEOUT = 60
+    TIMEOUT_BUFFER = 2
 
 
 class VMTimeout:
