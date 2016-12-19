@@ -472,7 +472,7 @@ class SSHClient:
             raise exceptions.SSHException("Failed to scp files")
 
     def file_exists(self, file_path):
-        return self.exec_cmd('stat ' + file_path)[0] == 0
+        return self.exec_cmd('stat {}'.format(file_path), fail_ok=True)[0] == 0
 
     @contextmanager
     def login_as_root(self, timeout=10):
