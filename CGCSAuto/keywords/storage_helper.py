@@ -4,12 +4,12 @@ on CEPH-related helper functions.
 """
 
 import re
+import time
 
-from utils import table_parser, cli
+from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 from keywords import system_helper, host_helper
-
 
 def is_ceph_healthy(con_ssh=None):
     """
@@ -430,3 +430,21 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
     code, out = cli.system('storage-backend-modify', args, con_ssh, fail_ok=fail_ok, rtn_list=True)
     # TODO return new values of storage allocation and check they are the right values
     return code, out
+
+
+def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_interval=5):
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        rc, output = is_ceph_healthy(con_ssh=con_ssh)
+        if rc:
+            return True
+
+        time.sleep(check_interval)
+
+    else:
+        err_msg = "Ceph is not healthy  within {} seconds: {}".format(timeout, output)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return False, err_msg
+        else:
+            raise exceptions.TimeoutException(err_msg)

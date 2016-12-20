@@ -1,5 +1,5 @@
 from utils.tis_log import LOG
-from keywords import system_helper, host_helper, install_helper
+from keywords import system_helper, host_helper, install_helper, storage_helper
 
 
 def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
@@ -27,7 +27,7 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     host_helper.upgrade_host("controller-1", lock=True)
     LOG.info("Host controller-1 is upgraded successfully......")
 
-    # unlocke upgraded controller-1
+    # unlock upgraded controller-1
     LOG.tc_step("Unlocking controller-1 after upgrade......")
     host_helper.unlock_host("controller-1", available_only=True, check_hypervisor_up=False)
     LOG.info("Host controller-1 unlocked after upgrade......")
@@ -66,6 +66,10 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
 
     for host in upgrade_hosts:
         LOG.tc_step("Starting {} upgrade.....".format(host))
+        if "storage" in host:
+            # wait for replication  to be healthy
+            storage_helper.wait_for_ceph_health_ok()
+
         host_helper.upgrade_host(host, lock=True)
         LOG.info("{} is upgraded successfully.....".format(host))
         LOG.tc_step("Unlocking {} after upgrade......".format(host))

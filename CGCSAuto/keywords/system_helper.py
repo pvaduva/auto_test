@@ -1917,8 +1917,8 @@ def wait_for_delete_imported_load(id, timeout=120, check_interval=5,
         table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, auth_info=auth_info))
 
         table_ = table_parser.filter_table(table_, **{'id': id})
-        if len(table_) == 0:
-            break
+        if len(table_parser.get_values(table_, 'id')) == 0:
+            return True
         else:
             if 'deleting' in table_parser.get_column(table_, 'state'):
                 rc, output = cli.system('load-delete', id, ssh_client=con_ssh,
