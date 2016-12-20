@@ -703,6 +703,26 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
 
 def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN):
+    """
+    Resize vm to given flavor
+
+    Args:
+        vm_id (str):
+        flavor_id (str): flavor to resize to
+        revert (bool): True to revert resize, else confirm resize
+        con_ssh (SSHClient):
+        fail_ok (bool):
+        auth_info (dict):
+
+    Returns (tuple): (rtn_code, msg)
+        (0, "VM <vm_id> successfully resized and confirmed/reverted.")
+        (1, <std_err>)  # resize cli rejected
+        (2, "Timed out waiting for Error or Verify_Resize status for VM <vm_id>")
+        (3, "VM <vm_id> in Error state after resizing. VERIFY_RESIZE is not reached.")
+        (4, "VM <vm_id> is not in Active state after confirm/revert Resize")
+        (5, "Flavor is changed after revert resizing.")
+        (6, "VM flavor is not changed to expected after resizing.")
+    """
     before_flavor = nova_helper.get_vm_flavor(vm_id, con_ssh=con_ssh)
     before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh)
     if not before_status == VMStatus.ACTIVE:
@@ -712,14 +732,16 @@ def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_
     exitcode, output = cli.nova('resize --poll', ' '.join([vm_id, flavor_id]), ssh_client=con_ssh, auth_info=auth_info,
                                 timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=fail_ok, rtn_list=True)
     if exitcode == 1:
-        return [exitcode, output]
+        return 1, output
 
     LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
     vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], fail_ok=fail_ok,
                                     timeout=300, con_ssh=con_ssh)
 
     if vm_status is None:
-        return 2, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
+        err_msg = 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
+        LOG.error(err_msg)
+        return 2, err_msg
 
     verify_resize_str = 'Revert' if revert else 'Confirm'
     if vm_status == VMStatus.VERIFY_RESIZE:
@@ -727,8 +749,9 @@ def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_
         _confirm_or_revert_resize(vm=vm_id, revert=revert, con_ssh=con_ssh)
 
     elif vm_status == VMStatus.ERROR:
-        err_msg = "VM {} in Error state after resizing. {} resize is not reached.".format(vm_id, verify_resize_str)
+        err_msg = "VM {} in Error state after resizing. {} is not reached.".format(vm_id, VMStatus.VERIFY_RESIZE)
         if fail_ok:
+            LOG.error(err_msg)
             return 3, err_msg
         raise exceptions.VMPostCheckFailed(err_msg)
 
@@ -737,6 +760,7 @@ def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_
 
     if post_confirm_state is None:
         err_msg = "VM {} is not in Active state after {} Resize".format(vm_id, verify_resize_str)
+        LOG.error(err_msg)
         return 4, err_msg
 
     after_flavor = nova_helper.get_vm_flavor(vm_id)
@@ -744,6 +768,7 @@ def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_
         err_msg = "Flavor is changed after revert resizing. Before flavor: {}, after flavor: {}".format(
                 before_flavor, after_flavor)
         if fail_ok:
+            LOG.error(err_msg)
             return 5, err_msg
         raise exceptions.VMPostCheckFailed(err_msg)
 
@@ -751,6 +776,7 @@ def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_
         err_msg = "VM flavor is not changed to expected after resizing. Before flavor: {}, after flavor: {}".format(
                 flavor_id, before_flavor, after_flavor)
         if fail_ok:
+            LOG.error(err_msg)
             return 6, err_msg
         raise exceptions.VMPostCheckFailed(err_msg)
 

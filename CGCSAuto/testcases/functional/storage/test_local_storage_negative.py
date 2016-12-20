@@ -4,7 +4,7 @@
 # It specifically cover testcase 40 Local Storage Negative Test (Storage Host → Non-storage Host)
 ###
 
-from pytest import fixture, skip
+from pytest import fixture, skip, mark
 
 from consts.auth import Tenant
 from keywords import host_helper, system_helper

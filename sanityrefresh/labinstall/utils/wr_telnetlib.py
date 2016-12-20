@@ -48,6 +48,7 @@ modification history:
 '''
 
 # Imported modules
+import os
 import pdb
 import sys
 import re
@@ -933,7 +934,7 @@ class Telnet:
                 regex = re.compile(b"\[\d+;22(.*?)\x1b")
 
                 try:
-                    index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
+                    index, match = self.expect([regex], BOOT_MENU_TIMEOUT)[:2]
                 except EOFError:
                     msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
                     log.exception(msg)
@@ -957,7 +958,8 @@ class Telnet:
             if count == MAX_SEARCH_ATTEMPTS:
                 msg = "Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex)
                 log.error(msg)
-                wr_exit()._exit(1, msg)
+                return 1
+                #wr_exit()._exit(1, msg)
 
             log.info("Waiting for ESC to exit")
             if node.name == CONTROLLER0:
@@ -1039,7 +1041,7 @@ class Telnet:
                 regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*?)\|")
                 #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
                 try:
-                    index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
+                    index, match = self.expect([regex], BOOT_MENU_TIMEOUT)[:2]
                 except EOFError:
                     msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
                     log.exception(msg)
@@ -1062,7 +1064,8 @@ class Telnet:
             if count == MAX_SEARCH_ATTEMPTS:
                 msg = "Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex)
                 log.error(msg)
-                wr_exit()._exit(1, msg)
+                return 1
+                #wr_exit()._exit(1, msg)
 
             if node.name == CONTROLLER0:
                 # booting device = USB tested only for Ironpass-31_32
@@ -1156,7 +1159,7 @@ class Telnet:
                 # e.g. Integrated NIC 2 BRCM MBA Slot 0101 v16.2.1
                 regex = re.compile(b"\x1B\(B(.*)\x1B\(0x")
                 try:
-                    index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
+                    index, match = self.expect([regex], BOOT_MENU_TIMEOUT)[:2]
                 except EOFError:
                     msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
                     log.exception(msg)
@@ -1180,7 +1183,8 @@ class Telnet:
             if count == MAX_SEARCH_ATTEMPTS:
                 msg = "Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex)
                 log.error(msg)
-                wr_exit()._exit(1, msg)
+                return 1
+                #wr_exit()._exit(1, msg)
         
             if node.name == CONTROLLER0:
                 self.get_read_until("Kickstart Boot Menu", 300)
