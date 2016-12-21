@@ -2,7 +2,7 @@ import pytest
 import os
 import setups
 from consts import build_server as build_server_consts
-from consts.auth import CliAuth, Tenant
+from consts.auth import CliAuth, Tenant, SvcCgcsAuto
 from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
 from keywords import system_helper, install_helper
 from utils.ssh import ControllerClient, SSHClient
@@ -178,11 +178,9 @@ def upgrade_setup(pre_check_upgrade):
     bld_server_attr = dict()
     bld_server_attr['name'] = bld_server['name']
     bld_server_attr['server_ip'] = bld_server['ip']
-    bld_server_attr['prompt'] = '.*yow\-cgts[34]\-lx\:~\$ '
-
-    bld_server_conn = SSHClient(bld_server_attr['name'], user=UpgradeVars.get_upgrade_var('USERNAME'),
-                                password=UpgradeVars.get_upgrade_var('PASSWORD'), initial_prompt=".*\$ ")
-
+    bld_server_attr['prompt'] = '.*yow\-cgts[34]\-lx ~\]\$ '
+    bld_server_conn = SSHClient(bld_server_attr['name'], user=SvcCgcsAuto.USER,
+                                password=SvcCgcsAuto.PASSWORD, initial_prompt=".*\$ ")
     bld_server_conn.connect()
     bld_server_conn.exec_cmd("bash")
     bld_server_conn.set_prompt(bld_server_attr['prompt'])

@@ -158,8 +158,8 @@ class UpgradeVars:
             'UPGRADE_LICENSE': upgrade_license_path,
 
             #User/password to build server
-            "USERNAME": getpass.getuser(),
-            "PASSWORD": getpass.getpass(),
+            #"USERNAME": getpass.getuser(),
+            #"PASSWORD": getpass.getpass(),
         }
 
     @classmethod
