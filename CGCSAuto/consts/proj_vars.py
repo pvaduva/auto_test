@@ -6,7 +6,8 @@ from consts.filepaths import BuildServerPath
 class ProjVar:
     # BUILD_ID,
     __var_dict = {'BUILD_ID': None,
-                  'LOG_DIR': None}
+                  'LOG_DIR': None,
+                  'SOURCE_ADMIN': False}
                   # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}
 
     @classmethod
@@ -30,7 +31,6 @@ class ProjVar:
             'REPORT_ALL': report_all,
             'REPORT_TAG': report_tag,
             'OPENSTACK_CLI': openstack_cli,
-            'SOURCE_ADMIN': False
         })
 
     @classmethod
