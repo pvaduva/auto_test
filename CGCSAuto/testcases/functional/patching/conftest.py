@@ -20,7 +20,7 @@ def pytest_addoption(parser):
     parser.addoption('--patch-build-server', '--patch_build_server',  dest='patch_build_server',
                      action='store', metavar='SERVER', default=build_server_consts.DEFAULT_BUILD_SERVER['name'],
                      help=patch_build_server_help)
-    parser.addoption('--patch-dir', '--patch_dir',  dest='patch_dir',
+    parser.addoption('--patch-dir', '--patch_dir',  dest='patch_dir', default=None,
                      action='store', metavar='DIR',  help=patch_dir_help)
 
 
@@ -28,8 +28,9 @@ def pytest_configure(config):
     patch_build_server = config.getoption('patch_build_server')
     patch_dir = config.getoption('patch_dir')
 
-    PatchingVars.set_patching_var(patch_build_server=patch_build_server,
-                                 patch_dir=patch_dir)
+    if patch_dir is not None:
+        PatchingVars.set_patching_var(patch_build_server=patch_build_server,
+                                      patch_dir=patch_dir)
 
 #
 # @pytest.fixture(scope='session', autouse=True)
