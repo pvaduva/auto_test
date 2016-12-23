@@ -2413,28 +2413,74 @@ def get_sm_dump_item_states(controller, item_name, con_ssh=None):
     return item_value_dict['desired-state'], item_value_dict['actual-state']
 
 
-def wait_for_sm_dump_desired_state(controller, item_name, timeout=60, fail_ok=False, con_ssh=None):
+def wait_for_sm_dump_desired_states(controller, item_names=None, timeout=60, strict=True, fail_ok=False, con_ssh=None):
+    """
+    Wait for sm_dump item(s) to reach desired state(s)
 
-    LOG.info("Waiting for {} {} in sm-dump to reach desired state".format(controller, item_name))
+    Args:
+        controller (str): controller name
+        item_names (str|list|None): item(s) name(s) to wait for desired state(s). Wait for desired states for all items
+            when set to None.
+        timeout (int): max seconds to wait
+        strict (bool): whether to find strict match for given item_names. e.g., item_names='drbd-', strict=False will
+            check all items whose name contain 'drbd-'
+        fail_ok (bool): whether or not to raise exception if any item did not reach desired state before timed out
+        con_ssh (SSHClient):
+
+    Returns (bool): True if all of given items reach desired state
+
+    """
+
+    LOG.info("Waiting for {} {} in sm-dump to reach desired state".format(controller, item_names))
+    if item_names is None:
+        item_names = get_sm_dump_items(controller=controller, item_names=item_names, con_ssh=con_ssh)
+
+    elif not strict:
+        table_ = get_sm_dump_table(controller=controller, con_ssh=con_ssh)
+        item_names = table_parser.get_values(table_, 'name', strict=False, name=item_names)
+
+    if isinstance(item_names, str):
+        item_names = [item_names]
+
+    items_to_check = {}
+    for item in item_names:
+        items_to_check[item] = {}
+        items_to_check[item]['prev-state'] = items_to_check[item]['actual-state'] = \
+            items_to_check[item]['desired-state'] = ''
 
     def __wait_for_desired_state(ssh_client):
         end_time = time.time() + timeout
-        prev_state = ''
+
         while time.time() < end_time:
-            desired_state, actual_state = get_sm_dump_item_states(ssh_client, item_name=item_name, con_ssh=con_ssh)
-            if desired_state == actual_state:
-                LOG.info("{} in sm-dump has reached desired state: {}".format(item_name, desired_state))
+            items_names_to_check = list(items_to_check.keys())
+            items_states = get_sm_dump_items(ssh_client, item_names=items_names_to_check, con_ssh=con_ssh)
+
+            for item_ in items_states:
+                items_to_check[item_].update(**items_states[item_])
+
+                prev_state = items_to_check[item_]['prev-state']
+                desired_state = items_states[item_]['desired-state']
+                actual_state = items_states[item_]['actual-state']
+
+                if desired_state == actual_state:
+                    LOG.info("{} in sm-dump has reached desired state: {}".format(item_, desired_state))
+                    items_to_check.pop(item_)
+                    continue
+
+                elif prev_state and actual_state != prev_state:
+                    LOG.info("{} actual state changed from {} to {} while desired state is: {}".
+                             format(item_, prev_state, actual_state, desired_state))
+
+                # items_to_check[item_].update(actual_state=actual_state)
+                items_to_check[item_].update(prev_state=actual_state)
+                # items_to_check[item_].update(desired_state=desired_state)
+
+            if not items_to_check:
                 return True
 
-            elif prev_state and actual_state != prev_state:
-                LOG.info("Actual state changed from {} to {} while desired state is: {}".
-                         format(prev_state, actual_state, desired_state))
-
             time.sleep(3)
-            prev_state = actual_state
 
-        err_msg = "Timed out waiting for sm-dump {} to reach desired state. Actual: {}, desired: {}".format(
-                item_name, actual_state, desired_state)
+        err_msg = "Timed out waiting for sm-dump item(s) to reach desired state(s): {}".format(items_to_check)
         if fail_ok:
             LOG.warning(err_msg)
             return False

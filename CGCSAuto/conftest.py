@@ -473,10 +473,15 @@ def pytest_generate_tests(metafunc):
     if metafunc.config.option.repeat > 0:
         # Add autorepeat fixture and parametrize the fixture
         param_name = 'autorepeat'
-        metafunc.fixturenames.append(param_name)
+        # metafunc.fixturenames.append(param_name)
 
         count = int(metafunc.config.option.repeat)
         metafunc.parametrize(param_name, range(count), indirect=True, ids=__params_gen(count))
+
+
+@pytest.fixture(autouse=True)
+def autorepeat(request):
+    return
 
 
 def __params_gen(iterations):

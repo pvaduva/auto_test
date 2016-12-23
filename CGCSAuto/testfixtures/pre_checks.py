@@ -7,7 +7,7 @@ from keywords import system_helper, host_helper, common
 
 
 @fixture(scope='session')
-def wait_for_con_drdb_sync_complete():
+def wait_for_con_drbd_sync_complete():
 
     host = 'controller-1'
     LOG.fixture_step("Waiting for controller-1 drbd sync alarm gone if present")
@@ -28,4 +28,4 @@ def wait_for_con_drdb_sync_complete():
     host_helper._wait_for_host_states(host, availability=HostAvailabilityState.AVAILABLE, timeout=30, fail_ok=False)
 
     LOG.fixture_step("Wait for {} drbd-cinder in sm-dump to reach desired state".format(host))
-    host_helper.wait_for_sm_dump_desired_state(host, 'drbd-cinder', timeout=30, fail_ok=False)
+    host_helper.wait_for_sm_dump_desired_states(host, 'drbd-', strict=False, timeout=30, fail_ok=False)
