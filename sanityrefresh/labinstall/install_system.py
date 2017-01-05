@@ -883,8 +883,8 @@ def write_install_vars(args):
     install_vars = dict((k, str(v)) for k, v, in (vars(args)).items())
 
     config['INSTALL_CONFIG'] = install_vars
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    #if os.path.exists(file_path):
+    #    os.remove(file_path)
 
     with open(file_path, "w") as install_var_file:
         os.chmod(file_path, 0o666)
