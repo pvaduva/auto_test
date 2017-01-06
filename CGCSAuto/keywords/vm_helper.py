@@ -91,8 +91,8 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            vm_host=None, avail_zone='nova', fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False,
-            guest_os='', poll=True):
+            block_device_mapping=None,  vm_host=None, avail_zone='nova', file=None, config_drive=False,
+            fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True):
     """
 
     Args:
@@ -108,6 +108,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         user_data (str|list):
         vm_host (str): which host to place the vm
         block_device:
+        block_device_mapping (str):  Block device mapping in the format '<dev-name>=<id>:<type>:<size(GB)>:<delete-on-
+                                terminate>'.
         auth_info (dict):
         con_ssh (SSHClient):
         nics (list): [{'net-id': <net_id1>, 'vif-model': <vif1>}, {'net-id': <net_id2>, 'vif-model': <vif2>}, ...]
@@ -115,6 +117,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                 virtio, avp, e1000, pci-passthrough, pci-sriov, rtl8139, ne2k_pci, pcnet
 
         hint (dict): key/value pair(s) sent to scheduler for custom use. such as group=<server_group_id>
+        file (str): <dst-path=src-path> To store files from local <src-path> to <dst-path> on the new server.
+        config_drive (bool): To enable config drive.
         fail_ok (bool):
         reuse_vol (bool): whether or not to reuse the existing volume
 
@@ -235,6 +239,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--block-device': block_device,
                           '--hint': hint,
                           '--availability-zone': host_zone,
+                          '--file': file,
+                          '--config-drive': str(config_drive) if config_drive else None,
+
                           }
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
