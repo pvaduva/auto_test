@@ -883,8 +883,8 @@ def write_install_vars(args):
     install_vars = dict((k, str(v)) for k, v, in (vars(args)).items())
 
     config['INSTALL_CONFIG'] = install_vars
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    #if os.path.exists(file_path):
+    #    os.remove(file_path)
 
     with open(file_path, "w") as install_var_file:
         os.chmod(file_path, 0o666)
@@ -1173,16 +1173,17 @@ def setupHeat(bld_server_conn):
         log.info("{} not found.  Skipping heat setup.".format(heat_resources_path))
         return
 
-    # Check if /home/wrsroot/launch_resource_stacks.sh exists
-    resource_stacks_script = WRSROOT_HOME_DIR + RESOURCE_STACKS_SCRIPT 
-    cmd = "test -f " + stack_launch_script_path
+    # Check if /home/wrsroot/create_resource_stacks.sh exists
+    stack_create_script = WRSROOT_HOME_DIR + STACK_CREATE_SCRIPT
+    cmd = "test -f " + stack_create_script
     rc, output = controller0.ssh_conn.exec_cmd(cmd)
     if rc != 0:
-        log.info("{} not found.  Skipping heat setup.".format(stack_launch_script_path))
+        log.info("{} not found.  Skipping heat setup.".format(stack_create_script))
         return
 
     # Create the resource stacks
-    cmd = "./" + RESOURCE_STACKS_SCRIPT
+    # Check if /home/wrsroot/create_resource_stacks.sh exists
+    cmd = WRSROOT_HOME_DIR + "./" + STACK_CREATE_SCRIPT
     rc, output = controller0.ssh_conn.exec_cmd(cmd)
     if rc != 0:
         msg = "Failure when creating resource stacks"
@@ -1208,15 +1209,17 @@ def setupHeat(bld_server_conn):
         log.error(msg)
         wr_exit()._exit(1, msg)
 
-    # Run heat stacks
-    for yaml_file in YAML:
-        yaml_path = WRSROOT_HOME_DIR + yaml_file
-        cmd = "./" + STACK_LAUNCH_SCRIPT + yaml_file
-        rc, output = controller0.ssh_conn.exec_cmd(cmd)
-        if rc != 0:
-            msg = "Failed to launch stack script: {}".cmd(yaml_file)
-            log.error(msg)
-            wr_exit()._exit(1, msg)
+    # Temp workaround since permissions in git don't allow execution
+    cmd = "chmod 755 " + stack_launch_script_path
+    rc, output = controller0.ssh_conn.exec_cmd(cmd)
+
+    # Run launch_stacks.sh lab_setup.conf
+    cmd = stack_launch_script_path + " lab_setup.conf" 
+    rc, output = controller0.ssh_conn.exec_cmd(cmd)
+    if rc != 0:
+        msg = "Heat stack launch failed"
+        log.error(msg)
+        wr_exit()._exit(1, msg)
 
 
 def configureController(bld_server_conn, host_os, install_output_dir, banner):
@@ -1875,6 +1878,7 @@ def main():
         if small_footprint:
             run_cpe_compute_config_complete(host_os, install_output_dir)
             set_install_step_complete( lab_install_step)
+
     # Lab-install Step 7 -  Run_lab_setup - applicable cpe labs only
     lab_install_step = install_step("run_lab_setup", 7, ['cpe'])
     if do_next_install_step(lab_type, lab_install_step):
@@ -1891,11 +1895,18 @@ def main():
 
             set_install_step_complete( lab_install_step)
 
+    # Heat stack changes
+    if host_os != "wrlinux":
+        lab_install_step = install_step("check_heat_resources_file", 8, ['cpe'])
+        if do_next_install_step(lab_type, lab_install_step):
+            setupHeat(bld_server_conn)
+            set_install_step_complete( lab_install_step)
+
     # Bring up other hosts
     tis_on_tis_storage = False
     # Lab-install Step 8 -  boot_other_lab_hosts - applicable all labs
     msg = "boot_other_lab_hosts"
-    lab_install_step = install_step(msg, 8, ['regular', 'storage', 'cpe'])
+    lab_install_step = install_step(msg, 9, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
 
         boot_other_lab_hosts(nodes, boot_device_dict, host_os, install_output_dir,
@@ -1916,7 +1927,7 @@ def main():
     log.info("Beginning lab setup procedure for {} lab".format(lab_type))
 
     # Lab-install Step 9 -  run_lab_setup - applicable all labs
-    lab_install_step = install_step("run_lab_setup", 9, ['regular', 'storage', 'cpe'])
+    lab_install_step = install_step("run_lab_setup", 10, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
 
         if run_labsetup()[0] != 0:
@@ -1925,10 +1936,9 @@ def main():
             installer_exit._exit(1, msg)
         set_install_step_complete( lab_install_step)
 
-
     log.info("Beginning lab setup procedure for {} lab".format(lab_type))
     # Lab-install Step 10 -  run_lab_setup - applicable regular and storage labs
-    lab_install_step = install_step("run_lab_setup", 10, ['regular', 'storage'])
+    lab_install_step = install_step("run_lab_setup", 11, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
         if lab_type is "regular" or "storage":
             # do run lab setup again
@@ -1943,7 +1953,7 @@ def main():
     # Unlock Controller-1
     # Lab-install Step 11 -  unlock_controller1 - applicable all labs
 
-    lab_install_step = install_step("unlock_controller1", 11, ['regular', 'storage', 'cpe'])
+    lab_install_step = install_step("unlock_controller1", 12, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
         unlock_node(nodes, selection_filter="controller-1")
         set_install_step_complete( lab_install_step)
@@ -1952,7 +1962,7 @@ def main():
     # For storage lab run lab setup
     executed = False
     # Lab-install Step 12 -  run_lab_setup - applicable storage labs
-    lab_install_step = install_step("run_lab_setup", 12, ['storage'])
+    lab_install_step = install_step("run_lab_setup", 13, ['storage'])
     if do_next_install_step(lab_type, lab_install_step):
     #if not executed:
         # do run lab setup to add osd
@@ -1967,7 +1977,7 @@ def main():
     # For storage lab unlock storage nodes
 
     # Lab-install Step 13 -  unlock_storages - applicable storage labs
-    lab_install_step = install_step("unlock_storages", 13, ['storage'])
+    lab_install_step = install_step("unlock_storages", 14, ['storage'])
     if do_next_install_step(lab_type, lab_install_step):
 
         unlock_node(nodes, selection_filter="storage")
@@ -1980,7 +1990,7 @@ def main():
 
     # for Storage lab  run lab setup
     # Lab-install Step 14 -  run_lab_setup - applicable storage labs
-    lab_install_step = install_step("run_lab_setup", 14, ['storage'])
+    lab_install_step = install_step("run_lab_setup", 15, ['storage'])
     if do_next_install_step(lab_type, lab_install_step):
         #ensure all computes are online first:
         computes = []
@@ -1999,7 +2009,7 @@ def main():
 
     #Unlock computes ( storage or regular)
     # Lab-install Step 15 -  unlock_computes - applicable storage and regular labs
-    lab_install_step = install_step("unlock_computes", 15, ['regular', 'storage'])
+    lab_install_step = install_step("unlock_computes", 16, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
         unlock_node(nodes, selection_filter="compute")
         wait_state(nodes, OPERATIONAL, ENABLED)
@@ -2008,7 +2018,7 @@ def main():
 
     #Run final lab_setup ( storage and regular labs)
     # Lab-install Step 16 -  run_lab_setup - applicable storage and regular labs
-    lab_install_step = install_step("run_lab_setup", 16, ['regular', 'storage'])
+    lab_install_step = install_step("run_lab_setup", 17, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
         # do run lab setup to add osd
         if run_labsetup()[0] != 0:
@@ -2019,12 +2029,11 @@ def main():
         set_install_step_complete( lab_install_step)
 
     # Heat stack changes
-    lab_install_step = install_step("check_heat_resources_file", 17, ['regular', 'storage', 'cpe'])
-
-    if do_next_install_step(lab_type, lab_install_step):
-        setupHeat(bld_server_conn)
-
-    set_install_step_complete( lab_install_step)
+    if host_os != "wrlinux":
+        lab_install_step = install_step("check_heat_resources_file", 18, ['regular', 'storage'])
+        if do_next_install_step(lab_type, lab_install_step):
+            setupHeat(bld_server_conn)
+            set_install_step_complete( lab_install_step)
 
     if lab_type is "cpe":
         for node in nodes:

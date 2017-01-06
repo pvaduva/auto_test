@@ -2349,6 +2349,92 @@ def is_host_provisioned(host, con_ssh=None):
     return "provisioned" == invprovisioned.strip()
 
 
+def get_upgraded_host_names(upgrade_release, con_ssh=None):
+
+    table_ = table_parser.table(cli.system('host-upgrade-list', ssh_client=con_ssh))
+    table_ = table_parser.filter_table(table_, target_release=upgrade_release)
+    return table_parser.get_column(table_, "hostname")
+
+
+def downgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+                 lock=False, unlock=False):
+    """
+    Downgrade given host
+    Args:
+        host (str):
+        timeout (int): MAX seconds to wait for host to become online after unlocking
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (str):
+        unlock (bool):
+
+
+    Returns (tuple):
+        (0, "Host is downgraded and in online state.")
+        (1, "Cli host downgrade rejected. Applicable only if ail_ok")
+        (2, "Host did not come online after downgrade. Applicable if fail_ok ")
+        (3, "Host fail lock before starting downgrade". Applicable if lock arg is True and fail_ok")
+        (4, "Host fail to unlock after host downgrade.  Applicable if unlock arg is True and fail_ok")
+        (5, "Host unlocked after downgrade, but alarms are not cleared after 120 seconds.
+        Applicable if unlock arg is True and fail_ok")
+
+    """
+    LOG.info("Downgrading host {}...".format(host))
+
+    if lock:
+        if get_hostshow_value(host, 'administrative', con_ssh=con_ssh) == HostAdminState.UNLOCKED:
+            message = "Host is not locked. Locking host  before starting downgrade"
+            LOG.info(message)
+            rc, output = lock_host(host, con_ssh=con_ssh, fail_ok=True)
+
+            if rc != 0 and rc != -1:
+                err_msg = "Host {} fail on lock before starting downgrade: {}".fromat(host, output)
+                if fail_ok:
+                    return 3, err_msg
+                else:
+                    raise exceptions.HostError(err_msg)
+
+    exitcode, output = cli.system('host-downgrade', host, ssh_client=con_ssh, auth_info=auth_info,
+                                  rtn_list=True, fail_ok=True, timeout=timeout)
+    if exitcode == 1:
+        err_msg = "Host {} cli downgrade host failed: {}".format(host, output)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
+
+
+    # sleep for 180 seconds to let host be re-installed with previous release
+    time.sleep(180)
+
+    if not _wait_for_host_states(host, timeout=timeout, check_interval=60, availability=HostAvailabilityState.ONLINE,
+                                 con_ssh=con_ssh, fail_ok=fail_ok):
+        err_msg = "Host {} did not become online  after downgrade".format(host)
+        if fail_ok:
+            return 2, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
+
+    if unlock:
+        rc, output = unlock_host(host, fail_ok=True, available_only=True)
+        if rc != 0:
+            err_msg = "Host {} fail to unlock after host downgrade: ".format(host, output)
+            if fail_ok:
+                return 4, err_msg
+            else:
+                raise exceptions.HostError(err_msg)
+
+        # wait until  400.001  alarms get cleared
+        if not system_helper.wait_for_alarm_gone("400.001", fail_ok=True):
+            err_msg = "Alarms did not clear after host {} downgrade and unlock: ".format(host)
+            if fail_ok:
+                return 5, err_msg
+            else:
+                raise exceptions.HostError(err_msg)
+
+    LOG.info("Downgrading host {} complete ...".format(host))
+    return 0, None
+
 def get_sm_dump_table(controller, con_ssh=None):
     """
 
@@ -2492,3 +2578,4 @@ def wait_for_sm_dump_desired_states(controller, item_names=None, timeout=60, str
             return __wait_for_desired_state(host_ssh)
     else:
         return __wait_for_desired_state(controller)
+

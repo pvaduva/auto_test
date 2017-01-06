@@ -115,6 +115,8 @@ class Prompt:
     ADD_HOST = '.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
     Y_N_PROMPT = '.*\(y/n\)\?.*'
+    YES_N_PROMPT = '.*\[yes/N\]\: ?'
+
 
 
 class NovaCLIOutput:

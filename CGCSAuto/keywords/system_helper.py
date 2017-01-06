@@ -1585,20 +1585,22 @@ def get_system_health_query_upgrade(con_ssh=None):
     for line in output:
         if ":" in line:
             k, v = line.split(":")
-            if v.strip() is "[OK]":
+            if "[OK]" in v.strip():
                 ok[k.strip()] = v.strip()
-            elif v.strip() is "[Failed]":
+            elif "[Fail]" in v.strip():
                 failed[k.strip()] = v.strip()
     if len(failed) > 0:
         return 1, failed
     else:
         return 0, None
 
-def system_upgrade_start(con_ssh=None, fail_ok=False):
+
+def system_upgrade_start(con_ssh=None, force=False, fail_ok=False):
     """
 
     Args:
         con_ssh:
+        force:
         fail_ok:
 
     Returns (tuple):
@@ -1607,8 +1609,10 @@ def system_upgrade_start(con_ssh=None, fail_ok=False):
         (2, <stderr>) : "applicable only if fail_ok is true. upgrade-start rejected:
         An upgrade is already in progress."
     """
-
-    rc, output = cli.system("upgrade-start", fail_ok=True, ssh_client=con_ssh)
+    if force:
+        rc, output = cli.system("upgrade-start", positional_args='--force',fail_ok=True, ssh_client=con_ssh)
+    else:
+        rc, output = cli.system("upgrade-start", fail_ok=True, ssh_client=con_ssh)
 
     if rc == 0:
         LOG.info("system upgrade-start ran successfully.")
@@ -1893,8 +1897,40 @@ def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False,
 
     rc, output = cli.system('load-delete', id, ssh_client=con_ssh,
                             fail_ok=True, source_admin_=source_admin_)
-    #TODO: add check if load is deleted
-    return id
+
+    if not wait_for_delete_imported_load(id, con_ssh=con_ssh,  fail_ok=True):
+        err_msg = "Unable to delete imported load {}".format(id)
+        LOG.warning(err_msg)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
+
+
+def wait_for_delete_imported_load(id, timeout=120, check_interval=5,
+                        fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+
+    LOG.info("Waiting for imported load  {} to be deleted from the load-list ".format(id))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, auth_info=auth_info))
+
+        table_ = table_parser.filter_table(table_, **{'id': id})
+        if len(table_parser.get_values(table_, 'id')) == 0:
+            return True
+        else:
+            if 'deleting' in table_parser.get_column(table_, 'state'):
+                rc, output = cli.system('load-delete', id, ssh_client=con_ssh,
+                            fail_ok=True)
+        time.sleep(check_interval)
+
+    else:
+        err_msg = "Timed out waiting for load {} to get deleted".format(id)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return False
+        else:
+            raise exceptions.TimeoutException(err_msg)
 
 
 def install_upgrade_license(license_path, timeout=30, con_ssh=None):
@@ -1925,6 +1961,63 @@ def install_upgrade_license(license_path, timeout=30, con_ssh=None):
 
         if index == 0:
             rc = con_ssh.exec_cmd("echo $?")[0]
+            con_ssh.flush()
             break
 
     return rc
+
+def abort_upgrade(con_ssh=None, timeout=60, fail_ok=False):
+    """
+    Aborts upgrade
+    Args:
+        con_ssh (SSHClient):
+        fail_ok (bool):
+
+    Returns (tuple):
+        (0, dict/list)
+        (1, <stderr>)   # cli returns stderr, applicable if fail_ok is true
+
+    """
+
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    cmd = "source /etc/nova/openrc; system upgrade-abort"
+    con_ssh.send(cmd)
+    end_time = time.time() + timeout
+    rc = 1
+    while time.time() < end_time:
+        index = con_ssh.expect([con_ssh.prompt,  Prompt.YES_N_PROMPT], timeout=timeout)
+        if index == 1:
+            con_ssh.send('yes')
+
+        if index == 0:
+            rc = con_ssh.exec_cmd("echo $?")[0]
+            con_ssh.flush()
+            break
+
+    if rc != 0:
+        err_msg = "CLI system upgrade-abort rejected"
+        LOG.warning(err_msg)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.CLIRejected(err_msg)
+
+    table_ = system_upgrade_show()[1]
+    state = table_parser.get_value_two_col_table(table_, "state")
+    if "aborting" in state:
+        return 0, "Upgrade aborting"
+    else:
+        err_msg = "Upgrade abort failed"
+        if fail_ok:
+            LOG.warn(err_msg)
+            return 1, err_msg
+        else:
+            raise exceptions.CLIRejected(err_msg)
+
+
+
+
+
