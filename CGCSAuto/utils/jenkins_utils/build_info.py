@@ -51,10 +51,11 @@ def __wait_for_new_load(build_server, build_dir, trigger_window, timeout):
     trigger_window = float(trigger_window)
     timeout = float(timeout)
     minutes = int(trigger_window * 60)
+    hours, minutes = divmod(minutes, 60)
 
     with install_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
 
-        window_time = datetime.timedelta(minutes=minutes)
+        window_time = datetime.timedelta(hours=hours, minutes=minutes)
         end_time = time.time() + int(timeout * 3600)
         while time.time() < end_time:
             latest_bld_time = get_modify_time(bld_srv_ssh, build_dir)

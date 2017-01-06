@@ -10,6 +10,7 @@ from keywords import host_helper, system_helper
 
 @mark.sanity
 @mark.cpe_sanity
+@mark.usefixtures('wait_for_con_drbd_sync_complete')
 def test_swact_controllers():
     """
     Verify swact active controller

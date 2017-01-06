@@ -1,10 +1,9 @@
 from time import sleep, time
 
 from testfixtures.resource_mgmt import ResourceCleanup
-from utils.multi_thread import MThread
+from utils.multi_thread import MThread, Events, TiSBarrier, TiSLock
 from utils.tis_log import LOG
-from keywords import nova_helper, vm_helper, cinder_helper
-from utils.ssh import SSHClient, ControllerClient, NATBoxClient
+from keywords import nova_helper, vm_helper
 
 
 def func(func_num, num, extra_arg=None):
@@ -81,3 +80,104 @@ def test_timing():
     LOG.info("Time results:\n"
              "Multithreading: {}\n"
              "Single loop: {}".format(end_1 - start_1, end_2 - start_2))
+
+
+def events_func(func_num, reps, event):
+    for i in range(0, reps):
+        if i > reps / 2:
+            event.wait_for_event(30)
+        LOG.info("Function #{}".format(func_num))
+        sleep(1)
+
+
+def test_events():
+    e = Events("functions should wait here")
+    LOG.tc_step("Create multiple threads")
+    thread_1 = MThread(events_func, 1, 10, e)
+    thread_2 = MThread(events_func, 2, 15, e)
+
+    thread_1.start_thread(60)
+    thread_2.start_thread(60)
+    sleep(20)
+
+    LOG.tc_step("Setting event")
+    e.set()
+    thread_1.wait_for_thread_end()
+    thread_2.wait_for_thread_end()
+    LOG.tc_step("Threads have finished")
+
+    e.clear()
+    e.wait_for_event(20, fail_ok=True)
+
+
+def barr_func(func_num, rep, barrier):
+    barrier.wait(10)
+    for i in range(0, rep):
+        LOG.info("function #{}".format(func_num))
+        sleep(1)
+
+
+def test_barriers():
+    LOG.tc_step("Negative barrier example (not enough threads waiting)")
+    barrier = TiSBarrier(2, timeout=20)
+    thread_1 = MThread(barr_func, 1, 4, barrier)
+    thread_1.start_thread(timeout=30)
+    thread_1.wait_for_thread_end(fail_ok=True)
+
+    LOG.tc_step("Positive barrier example")
+    barrier = TiSBarrier(2, timeout=20)
+    thread_1 = MThread(barr_func, 2, 4, barrier)
+    thread_2 = MThread(barr_func, 3, 4, barrier)
+
+    thread_1.start_thread(timeout=30)
+    thread_2.start_thread(timeout=30)
+    thread_1.wait_for_thread_end()
+    thread_2.wait_for_thread_end()
+
+
+def get_lock(lock, th_num):
+    sleep(1)
+    LOG.info("{} getting lock".format(th_num))
+    if lock.acquire():
+        LOG.info("{} got lock".format(th_num))
+        sleep(5)
+        LOG.info("{} release lock".format(th_num))
+    else:
+        LOG.info("Didn't get lock")
+    lock.release()
+    LOG.info("{} released lock".format(th_num))
+
+
+def get_lock_with(lock, th_num):
+    sleep(1)
+    LOG.info("{} getting lock".format(th_num))
+    with lock as got_lock:
+        if got_lock:
+            LOG.info("{} got lock".format(th_num))
+            sleep(5)
+            LOG.info("{} release lock".format(th_num))
+        else:
+            LOG.info("Didn't get lock")
+    LOG.info("{} released lock".format(th_num))
+
+
+def test_lock():
+    LOG.tc_step("Positive lock example")
+    lock = TiSLock(True)
+    thread_1 = MThread(get_lock, lock, 1)
+    thread_2 = MThread(get_lock, lock, 2)
+    thread_1.start_thread(30)
+    sleep(1)
+    thread_2.start_thread(30)
+    thread_1.wait_for_thread_end(0)
+    thread_2.wait_for_thread_end(30)
+
+    LOG.tc_step("Negative lock example")
+    lock = TiSLock(True, 2)
+    thread_1 = MThread(get_lock, lock, 1)
+    thread_2 = MThread(get_lock, lock, 2)
+    thread_1.start_thread(30)
+    sleep(1)
+    thread_2.start_thread(30)
+    thread_1.wait_for_thread_end(0, fail_ok=True)
+    thread_2.wait_for_thread_end(30, fail_ok=True)

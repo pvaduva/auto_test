@@ -204,6 +204,7 @@ class EventLogID:
     STORAGE_POOLQUOTA = '800.003'
     HOST_LOCK = '200.001'
     NETWORK_AGENT_NOT_RESPOND = '300.003'
+    CON_DRBD_SYNC = '400.001'
 
 
 class NetworkingVmMapping:

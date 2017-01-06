@@ -94,10 +94,18 @@ class SSHClient:
 
         log_dir = ProjVar.get_var('LOG_DIR')
         if log_dir:
+            curr_thread = threading.current_thread()
+            if not isinstance(curr_thread, threading._MainThread):
+                log_dir += '/threads/'
             os.makedirs(log_dir, exist_ok=True)
-            logpath = log_dir + '/ssh_' + lab_name + ".log"
+
+            if isinstance(curr_thread, threading._MainThread):
+                logpath = log_dir + '/ssh_' + lab_name + ".log"
+            else:
+                logpath = log_dir + curr_thread.name + '_ssh_' + lab_name + ".log"
         else:
             logpath = None
+
         return logpath
 
     def connect(self, retry=False, retry_interval=3, retry_timeout=300, prompt=None,
@@ -464,7 +472,7 @@ class SSHClient:
             raise exceptions.SSHException("Failed to scp files")
 
     def file_exists(self, file_path):
-        return self.exec_cmd('stat ' + file_path)[0] == 0
+        return self.exec_cmd('stat {}'.format(file_path), fail_ok=True)[0] == 0
 
     @contextmanager
     def login_as_root(self, timeout=10):
