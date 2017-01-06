@@ -418,8 +418,11 @@ class SSHClient:
     def get_hostname(self):
         return self.exec_cmd('hostname')[1].splitlines()[0]
 
-    def rsync(self, source, dest_server, dest, dest_user='wrsroot', extra_opts=None, pre_opts=None, timeout=60,
-              fail_ok=False):
+    def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, extra_opts=None, pre_opts=None,
+              timeout=60, fail_ok=False):
+
+        dest_user = dest_user or Host.USER
+        dest_password = dest_password or Host.PASSWORD
         if extra_opts:
             extra_opts_str = ' '.join(extra_opts) + ' '
         else:
@@ -431,10 +434,12 @@ class SSHClient:
         ssh_opts = 'ssh {}'.format(' '.join(RSYNC_SSH_OPTIONS))
         cmd = "{} rsync -avre \"{}\" {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
+
         self.send(cmd)
-        index = self.expect([self.prompt, PASSWORD_PROMPT], timeout=timeout)
+        index = self.expect(blob_list=[self.prompt, PASSWORD_PROMPT], timeout=timeout)
+
         if index == 1:
-            self.send(self.password)
+            self.send(dest_password)
             self.expect(timeout=timeout)
 
         code, output = self.__process_exec_result(cmd, rm_date=True)
