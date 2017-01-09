@@ -149,7 +149,7 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
     lab = first_rec['attributes'][0][1]
     build = first_rec['attributes'][1][1]
     mongo_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=RNT&view=list" \
-                "&dateField=[testExecutionTimeStamp]&programs=active&resultsMode=all" \
+                "&dateField=[testExecutionTimeStamp]&programs=active&resultsMode=last" \
                 "&startDate={}&endDate={}" \
                 "&releaseName=[MYSQL1:2226]" \
                 "&tags=__in__[{}]'>Test Results Link</a>".format(start_date, end_date, ','.join(tags))
