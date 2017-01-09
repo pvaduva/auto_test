@@ -337,8 +337,14 @@ class SSHClient:
 
         return index
 
+    def __force_end(self, force):
+        if force:
+            self.flush(3)
+            self.send_control('c')
+            self.flush(10)
+
     def exec_cmd(self, cmd, expect_timeout=10, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
-                 fail_ok=True, get_exit_code=True):
+                 fail_ok=True, get_exit_code=True, blob=None, force_end=False):
         """
 
         Args:
@@ -353,12 +359,15 @@ class SSHClient:
         Returns (tuple): (exit code (int), command output (str))
 
         """
+        if blob is None:
+            blob = self.prompt
+
         LOG.debug("Executing command...")
         if err_only:
             cmd += ' 1> /dev/null'          # discard stdout
         self.send(cmd, reconnect, reconnect_timeout)
         try:
-            self.expect(timeout=expect_timeout)
+            self.expect(blob_list=blob, timeout=expect_timeout)
         except pexpect.TIMEOUT as e:
             self.send_control('c')
             self.flush(timeout=10)
@@ -369,7 +378,9 @@ class SSHClient:
 
         code, output = self.__process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
 
-        if code != 0 and not fail_ok:
+        self.__force_end(force_end)
+
+        if code > 0 and not fail_ok:
             raise exceptions.SSHExecCommandFailed("Non-zero return code for cmd: {}".format(cmd))
 
         return code, output
@@ -402,7 +413,7 @@ class SSHClient:
     def _parse_output(output):
         if type(output) is bytes:
             output = output.decode("utf-8")
-        return output
+        return str(output)
 
     def set_prompt(self, prompt=CONTROLLER_PROMPT):
         self.prompt = prompt
@@ -819,7 +830,12 @@ class SSHFromSSH(SSHClient):
         except OSError:    # TODO: add unit test
             return False
 
-        index = self.expect(blob_list=[self.prompt, self.parent.get_prompt()], timeout=3, fail_ok=fail_ok)
+        index = self.expect(blob_list=[self.prompt, self.parent.get_prompt(), pexpect.TIMEOUT], timeout=3,
+                            fail_ok=fail_ok)
+        if 2 == index:
+            self.send_control('c')
+            index = self.expect(blob_list=[self.prompt, self.parent.get_prompt()], timeout=3,
+                                fail_ok=fail_ok)
         return 0 == index
 
 

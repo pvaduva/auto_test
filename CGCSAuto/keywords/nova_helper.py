@@ -437,7 +437,7 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
 
     Args:
         name (str): name of the server group
-        policy (str): affinity or anti-infinity
+        policy (str): affinity or anti_infinity
         best_effort (bool): best effort metadata value
         max_group_size (int): max instances allowed in this server group
         fail_ok (bool):
@@ -475,6 +475,7 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
         name = 'srv_grp'
     args += " {}-{}".format(name, Count.get_sever_group_count())
 
+    policy = policy.replace('_', '-')
     # process server group policy
     args += ' ' + policy
 
@@ -491,7 +492,8 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
     return 0, srv_grp_id
 
 
-def get_server_groups(name=None, project_id=None, auth_info=None, con_ssh=None, strict=False, regex=False, **kwargs):
+def get_server_groups(name=None, project_id=None, auth_info=Tenant.ADMIN, con_ssh=None, strict=False, regex=False,
+                      all_=True, **kwargs):
     """
     Get server groups ids based on the given criteria
 
@@ -502,12 +504,15 @@ def get_server_groups(name=None, project_id=None, auth_info=None, con_ssh=None, 
         con_ssh (SSHClient):
         strict (bool): whether to do strict search for name and value(s) in kwargs
         regex (bool): whether or not to use regex
+        all_(bool): whether to append '--a' to cli
         **kwargs: extra key/value pair(s) to filter the table. e.g., Policies = 'affinity'
 
     Returns (list): list of server groups ids
 
     """
-    table_ = table_parser.table(cli.nova('server-group-list', ssh_client=con_ssh, auth_info=auth_info))
+    arg = '--a' if all_ else ''
+
+    table_ = table_parser.table(cli.nova('server-group-list', arg, ssh_client=con_ssh, auth_info=auth_info))
 
     if name is not None:
         table_ = table_parser.filter_table(table_, strict=strict, regex=regex, Name=name)
@@ -531,7 +536,7 @@ def get_server_groups_info(server_groups=None, header='Policies', auth_info=None
     Returns (list): server group(s) info as a list
 
     """
-    table_ = table_parser.table(cli.nova('server-group-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.nova('server-group-list', '--a', ssh_client=con_ssh, auth_info=auth_info))
     if server_groups:
         table_ = table_parser.filter_table(table_, Id=server_groups)
 
@@ -646,7 +651,7 @@ def server_group_exists(srv_grp_id, auth_info=Tenant.ADMIN, con_ssh=None):
     Returns (bool): True or False
 
     """
-    table_ = table_parser.table(cli.nova('server-group-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.nova('server-group-list', '--a', ssh_client=con_ssh, auth_info=auth_info))
     existing_server_groups = table_parser.get_column(table_, 'Id')
 
     return srv_grp_id in existing_server_groups
@@ -660,7 +665,7 @@ def delete_server_groups(srv_grp_ids=None, check_first=True, fail_ok=False, auth
         srv_grp_ids (list|str): id(s) for server group(s) to delete.
         check_first (bool): whether to check existence of given server groups before attempt to delete. Default: True.
         fail_ok (bool):
-        auth_info (dict):
+        auth_info (dict|None):
         con_ssh (SSHClient):
 
     Returns (tuple): (rtn_code(int), msg(str))  # rtn_code 1,2,3,4 only returns when fail_ok=True

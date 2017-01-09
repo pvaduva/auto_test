@@ -124,6 +124,9 @@ def _get_sys_type(labname=None, log_dir=None, con_ssh=None):
 
     sys_type = "{}+{}+{}".format(len(controllers), len(computes), len(storages)).replace('+0', '')
 
+    if '+' not in sys_type:
+        sys_type = 'CPE - {} nodes'.format(sys_type)
+
     if close:
         con_ssh.close()
 
