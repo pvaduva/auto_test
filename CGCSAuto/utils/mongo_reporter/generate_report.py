@@ -191,9 +191,9 @@ def send_report(subject, recipients, msg_file=TMP_FILE):
     os.system(cmd)
 
 
-def generate_report(recipients, subject=None, source='mongo', tags=None, start_date=None, end_date=None):
+def generate_report(recipients, subject='', source='mongo', tags=None, start_date=None, end_date=None):
     tmp_file, lab, build, raw_status = write_report_file(source=source, tags=tags, start_date=start_date,
                                                          end_date=end_date)
-    if not subject:
-        subject = "TiS Test Report {} [{}] - {}".format(lab, build, raw_status)
+    subject = subject.strip()
+    subject = "TiS {} Test Report {} [{}] - {}".format(subject, lab, build, raw_status)
     send_report(subject=subject, recipients=recipients)
