@@ -21,6 +21,7 @@ VLM_FINDMINE = 'findMine'
 
 VLM_CMDS = [VLM_RESERVE, VLM_UNRESERVE, VLM_TURNON, VLM_TURNOFF, VLM_FINDMINE]
 
+
 def get_host_name():
     return socket.gethostname()
 

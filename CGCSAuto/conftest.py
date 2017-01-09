@@ -99,7 +99,7 @@ def pytest_runtest_makereport(item, call, __multicall__):
                 fail_at.append('test ' + key)
             elif val[0] == 'Skipped':
                 res_in_log = 'Test Skipped\nReason: {}'.format(val[1])
-                res_in_tests = 'Skipped'
+                res_in_tests = 'SKIP'
                 break
         if fail_at:
             fail_at = ', '.join(fail_at)
@@ -109,20 +109,20 @@ def pytest_runtest_makereport(item, call, __multicall__):
         testcase_log(msg=res_in_log, nodeid=test_name, log_type='tc_res')
 
         if 'Test Passed' in res_in_log:
-            res_in_tests = 'Passed'
+            res_in_tests = 'PASS'
         elif 'Test Failed' in res_in_log:
-            res_in_tests = 'Failed'
+            res_in_tests = 'FAIL'
 
         if not res_in_tests:
-            res_in_tests = 'Unknown!'
+            res_in_tests = 'UNKNOWN'
 
         # count testcases by status
         TestRes.TOTALNUM += 1
-        if res_in_tests == 'Passed':
+        if res_in_tests == 'PASS':
             TestRes.PASSNUM += 1
-        elif res_in_tests == 'Failed':
+        elif res_in_tests == 'FAIL':
             TestRes.FAILNUM += 1
-        elif res_in_tests == 'Skipped':
+        elif res_in_tests == 'SKIP':
             TestRes.SKIPNUM += 1
 
         _write_results(res_in_tests=res_in_tests, test_name=test_name)

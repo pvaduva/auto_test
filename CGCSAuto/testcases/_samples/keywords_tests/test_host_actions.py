@@ -151,3 +151,7 @@ def test_unlock_hosts():
 def test_host_cpus():
     print (host_helper.get_host_cpu_cores_for_function('controller-0', function='shared'))
     print (host_helper.get_host_cpu_cores_for_function('controller-0', function='test'))
+
+
+def test_get_hosts():
+    system_helper.get_hosts_by_personality()

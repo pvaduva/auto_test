@@ -5,6 +5,7 @@ import datetime
 from pytest import fixture, skip
 # from pytest import mark
 
+from consts.auth import Host
 from consts.filepaths import WRSROOT_HOME
 from consts.proj_vars import PatchingVars
 from keywords import host_helper
@@ -198,10 +199,7 @@ def get_patches_dir_to_test(con_ssh=None, single_file_ok=False):
     LOG.info('Downloading patch files to lab:{} from:{}'.format(dest_path, patch_files))
 
     ssh_to_server.rsync(patch_files, html_helper.get_ip_addr(), dest_path,
-                        timeout=900)
-                        # dest_user='wrsroot', dest_password='Li69nux*', timeout=900)
-
-    ssh_to_server.flush()
+                        dest_user=Host.USER, dest_password=Host.PASSWORD, timeout=900)
 
     LOG.info('OK, patch files were downloaded to: {}:{}, from: {} on server: {}'.format(
         html_helper.get_ip_addr(), dest_path, patch_files, patch_build_server))
