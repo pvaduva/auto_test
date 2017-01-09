@@ -52,7 +52,7 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
         tag = ProjVar.get_var('REPORT_TAG')
     else:
         tag = options['tag'] if options['tag'] else 'regression_%s_%s' % (build, lab_name)
-    jira = options['jira'] if options['jira'] else 'Unknown'
+    jira = options['jira'] if options['jira'] else ''
     release_name = options['release_name']
     output = options['output']
     tester_name = options['tester_name'] if options['tester_name'] else os.environ['USER']
@@ -182,7 +182,7 @@ def collect_user_input_and_upload_results(test_name=None, result=None, log_dir=N
     output = options.output
     tester_name = options.tester_name
     tag = options.tag
-    jira = 'Unknown'
+    jira = ''
     
     if log_dir is None:
         logfile = options.logfile

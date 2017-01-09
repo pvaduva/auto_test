@@ -86,6 +86,7 @@ def _get_local_results(res_path):
 
     testcases_res, other_info = raw_res.split(sep='\n\n', maxsplit=1)
     testcases_res = testcases_res.strip()
+    testcases_res = re.sub(r'\t[^\t]*::test', r'\ttest', testcases_res)
     lab = re.findall('Lab: (.*)\n', other_info)[0].strip()
     build = re.findall('Build ID: (.*)\n', other_info)[0].strip()
     log_path = re.findall('Automation LOGs DIR: (.*)\n', other_info)[0].strip()
