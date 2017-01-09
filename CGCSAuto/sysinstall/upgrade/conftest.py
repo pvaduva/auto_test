@@ -2,9 +2,9 @@ import pytest
 import os
 import setups
 from consts import build_server as build_server_consts
-from consts.auth import CliAuth, Tenant, SvcCgcsAuto
+from consts.auth import CliAuth, Tenant, SvcCgcsAuto, Host
 from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
-from keywords import system_helper, install_helper
+from keywords import system_helper, install_helper,  patching_helper
 from utils.ssh import ControllerClient, SSHClient
 from utils import table_parser, cli
 from utils.tis_log import LOG
@@ -33,6 +33,9 @@ def pytest_addoption(parser):
     license_help = "The full path to the new release software license file in build-server. " \
                    "e.g /folk/cgts/lab/TiS16-full.lic or /folk/cgts/lab/TiS16-CPE-full.lic." \
                    " Otherwise, default license for the upgrade release will be used"
+
+    patch_dir_help = "The path to the directory in build server where the patch files are located"
+
     parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
                      action='store', metavar='VERSION', required=True,  help=upgrade_version_help)
     parser.addoption('--build-server', '--build_server',  dest='build_server',
@@ -43,6 +46,9 @@ def pytest_addoption(parser):
     parser.addoption('--license',  dest='upgrade_license', action='store',
                      metavar='license full path', help=license_help)
 
+    parser.addoption('--patch-dir', '--patch_dir',  dest='patch_dir',
+                     action='store', metavar='DIR',  help=patch_dir_help)
+
 
 def pytest_configure(config):
 
@@ -50,12 +56,14 @@ def pytest_configure(config):
     upgrade_license = config.getoption('upgrade_license')
     build_server = config.getoption('build_server')
     tis_build_dir = config.getoption('tis_build_dir')
+    patch_dir = config.getoption('patch_dir')
     print(" Pre Configure Install valrs: {}".format(InstallVars.get_install_vars()))
 
     UpgradeVars.set_upgrade_vars(upgrade_version=upgrade_version,
                                  build_server=build_server,
                                  tis_build_dir=tis_build_dir,
-                                 upgrade_license_path=upgrade_license)
+                                 upgrade_license_path=upgrade_license,
+                                 patch_dir=patch_dir)
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -172,6 +180,7 @@ def upgrade_setup(pre_check_upgrade):
     bld_server = get_build_server_info(UpgradeVars.get_upgrade_var('BUILD_SERVER'))
     load_path = UpgradeVars.get_upgrade_var('TIS_BUILD_DIR')
     output_dir = ProjVar.get_var('LOG_DIR')
+    patch_dir = UpgradeVars.get_upgrade_var('PATCH_DIR')
 
     current_version = install_helper.get_current_system_version()
 
@@ -233,6 +242,10 @@ def upgrade_setup(pre_check_upgrade):
                                    "{}".format(upgrade_version, ver)
     LOG.info("The target release  load iso file {} imported".format(upgrade_load_path))
 
+    # download and apply patches
+    LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
+    apply_patches(lab, bld_server_obj, patch_dir)
+
     _upgrade_setup = {'lab': lab,
                       'cpe': cpe,
                       'output_dir': output_dir,
@@ -284,3 +297,55 @@ def get_system_active_controller():
         controllers = [controllers]
 
     return controllers
+
+
+def apply_patches(lab, server, patch_dir):
+    """
+
+    Args:
+        lab:
+        server:
+        patch_dir:
+
+    Returns:
+
+    """
+    patch_names = []
+    rc = server.ssh_conn.exec_cmd("test -d " + patch_dir)[0]
+    assert rc == 0, "Patch directory path {} not found".format(patch_dir)
+
+    rc, output = server.ssh_conn.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dir))
+    assert rc == 0, "Failed to list patch files in directory path {}.".format(patch_dir)
+
+    #LOG.info("No path found in {} ".format(patch_dir))
+
+    if output is not None:
+        for item in output.splitlines():
+            # Remove ".patch" extension
+            patch_name = os.path.splitext(item)[0]
+            LOG.info("Found patch named: " + patch_name)
+            patch_names.append(patch_name)
+
+        patch_dest_dir = WRSROOT_HOME + "/upgrade_patches"
+
+        pre_opts = 'sshpass -p "{0}"'.format(Host.PASSWORD)
+        server.ssh_conn.rsync(patch_dir + "/*.patch",
+                          lab['controller-0 ip'],
+                          patch_dest_dir, pre_opts=pre_opts)
+
+        avail_patches = " ".join(patch_names)
+        LOG.info("List of patches:\n {}".format(avail_patches))
+
+        LOG.info("Uploading  patches ... ")
+        assert patching_helper.run_patch_cmd("upload-dir", args=patch_dest_dir)[0] == 0, \
+            "Failed to upload  patches : {}".format(avail_patches)
+
+        LOG.info("Quering patches ... ")
+        assert patching_helper.run_patch_cmd("query")[0] == 0, "Failed to query patches"
+
+        LOG.info("Applying patches ... ")
+        rc = patching_helper.run_patch_cmd("apply", args='--all')[0]
+        assert rc == 0, "Failed to apply patches"
+
+        LOG.info("Quering patches ... ")
+        assert patching_helper.run_patch_cmd("query")[0] == 0, "Failed to query patches"

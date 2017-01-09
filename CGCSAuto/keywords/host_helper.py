@@ -489,7 +489,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                 return 6, "Host is not up in nova hypervisor-list"
 
         if check_webservice_up and is_controller:
-            if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[0]:
+            if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=300)[0]:
                 return 7, "Host web-services is not active in system servicegroup-list"
 
         if check_subfunc and is_controller and is_compute:
@@ -501,6 +501,17 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                           " within timeout"
                 LOG.warning(err_msg)
                 return 9, err_msg
+
+    if get_hostshow_value(host, 'availability') == HostAvailabilityState.DEGRADED:
+        if not available_only:
+            LOG.warning("Host is in degraded state after unlocked.")
+            return 4, "Host is in degraded state after unlocked."
+        else:
+            if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+                                         availability=HostAvailabilityState.AVAILABLE):
+                err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
+                LOG.warning(err_msg)
+                return 8, err_msg
 
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."

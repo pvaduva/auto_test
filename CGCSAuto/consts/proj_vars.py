@@ -142,7 +142,8 @@ class UpgradeVars:
     def set_upgrade_vars(cls, build_server=None,
                          tis_build_dir=None,
                          upgrade_version=None,
-                         upgrade_license_path=None):
+                         upgrade_license_path=None,
+                         patch_dir=None):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
 
@@ -153,6 +154,7 @@ class UpgradeVars:
             'BUILD_SERVER': __build_server,
             'TIS_BUILD_DIR': tis_build_dir if tis_build_dir else
                 BuildServerPath.LATEST_HOST_BUILD_PATHS[upgrade_version],
+            'PATCH_DIR': patch_dir if patch_dir else BuildServerPath.PATCH_DIR_PATHS[upgrade_version],
 
             # Generic
             'UPGRADE_LICENSE': upgrade_license_path,

@@ -47,3 +47,6 @@ class BuildServerPath:
                          '17.00': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
                         }
 
+    PATCH_DIR_PATHS = {'15.12': '/folk/cgts/patches-to-verify/15.12',
+                       '16.10': '/folk/cgts/patches-to-verify/16.10',
+                      }
