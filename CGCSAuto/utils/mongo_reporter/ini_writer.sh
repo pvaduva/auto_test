@@ -137,7 +137,6 @@ echo "tcTotal = 1" >> $outfile
 echo "tcPassed = 1" >> $outfile
 echo "userStories = $userstory" >> $outfile
 echo "releaseName = ${release_name}" >> $outfile
-echo "build = $build" >> $outfile
 
 echo "defects=$jira" >> $outfile
 echo "environmentId = titanium_server_15" >> $outfile
