@@ -86,7 +86,10 @@ def _get_local_results(res_path):
 
     testcases_res, other_info = raw_res.split(sep='\n\n', maxsplit=1)
     testcases_res = testcases_res.strip()
+    testcases_res = testcases_res.replace('Passed\t', 'PASS\t').replace('Failed\t', 'FAIL\t').\
+        replace('Skipped\t', 'SKIP\t')
     testcases_res = re.sub(r'\t[^\t]*::test', r'\ttest', testcases_res)
+
     lab = re.findall('Lab: (.*)\n', other_info)[0].strip()
     build = re.findall('Build ID: (.*)\n', other_info)[0].strip()
     log_path = re.findall('Automation LOGs DIR: (.*)\n', other_info)[0].strip()
@@ -144,6 +147,7 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
         testresults_list.append('{}{}\t{}'.format(test_res, extra_str, test_name))
 
     testcases_res = '\n'.join(testresults_list)
+    testcases_res = testcases_res.replace('Skipped\t', 'SKIP\t')
     total_exec = passed + failed
     pass_rate = fail_rate = '0'
     if total_exec > 0:
@@ -160,7 +164,7 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
     first_rec = last_records[0]
     lab = first_rec['attributes'][0][1]
     build = first_rec['attributes'][1][1]
-    panorama_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=RNT&view=list" \
+    panorama_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=WASSP&view=list" \
                    "&dateField=[testExecutionTimeStamp]&programs=active&resultsMode=last" \
                    "&startDate={}&endDate={}" \
                    "&releaseName=[MYSQL1:2226]" \
