@@ -111,10 +111,21 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
     print("MongoDB results query url: {}".format(query_url))
 
     total = failed = passed = skipped = 0
-    results = requests.get(query_url).json()['records']
+    records = requests.get(query_url).json()['records']
+    # sort records by execution timestamp
+    records = sorted(records, key=lambda record: record['testExecutionTimeStamp']['$date'], reverse=True)
+    test_names = []
+    last_records = []
+    for item in records:
+        test_name = item['testName']
+        if test_name not in test_names:
+            test_names.append(test_name)
+            last_records.append(item)
+
+    # print(last_records)
 
     testresults_list = []
-    for item in results:
+    for item in last_records:
         test_name = item['testName']
         test_res = item['testResult']
         total += 1
@@ -146,18 +157,20 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
     # example "attributes" : [ [ "board_name", "WCP_76_77" ], [ "build", "2017-01-05_22-02-35" ],
     # [ "domain", "COMMON" ], [ "kernel", "3.10.71-ovp-rt74-r1_preempt-rt" ], [ "lab", "WCP_76_77" ],
     # [ "project", "CGCS 2.0" ] ]
-    first_rec = results[0]
+    first_rec = last_records[0]
     lab = first_rec['attributes'][0][1]
     build = first_rec['attributes'][1][1]
-    mongo_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=RNT&view=list" \
-                "&dateField=[testExecutionTimeStamp]&programs=active&resultsMode=last" \
-                "&startDate={}&endDate={}" \
-                "&releaseName=[MYSQL1:2226]" \
-                "&tags=__in__[{}]'>Test Results Link</a>".format(start_date, end_date, ','.join(tags))
+    panorama_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=RNT&view=list" \
+                   "&dateField=[testExecutionTimeStamp]&programs=active&resultsMode=last" \
+                   "&startDate={}&endDate={}" \
+                   "&releaseName=[MYSQL1:2226]" \
+                   "&tags=__in__[{}]'>Test Results Link</a>".format(start_date, end_date, ','.join(tags))
+
+    print("Panorama query url: {}".format(panorama_url))
 
     overall_status = _get_overall_status(pass_rate)
 
-    return lab, build, overall_status, mongo_url, summary, testcases_res
+    return lab, build, overall_status, panorama_url, summary, testcases_res
 
 
 def _get_overall_status(pass_rate):
