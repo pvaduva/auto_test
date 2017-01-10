@@ -126,7 +126,8 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
             last_records.append(item)
 
     # print(last_records)
-
+    # resort the records so tests run first will be shown first
+    last_records = sorted(last_records, key=lambda record: record['testExecutionTimeStamp']['$date'])
     testresults_list = []
     for item in last_records:
         test_name = item['testName']
