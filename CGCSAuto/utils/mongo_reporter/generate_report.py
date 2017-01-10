@@ -108,6 +108,7 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
                 "testExecutionTimeStamp_start={}" \
                 "&testExecutionTimeStamp_end={}" \
                 "&tags=[{}]".format(start_date, end_date, tags)
+    print("MongoDB results query url: {}".format(query_url))
 
     total = failed = passed = skipped = 0
     results = requests.get(query_url).json()['records']
@@ -126,7 +127,7 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
 
         extra_str = ''
         if include_bld:
-            test_build = item['detailedResult']
+            test_build = item['attributes'][1][1]
             extra_str = '\t{}'.format(test_build)
 
         testresults_list.append('{}{}\t{}'.format(test_res, extra_str, test_name))
@@ -188,7 +189,7 @@ def send_report(subject, recipients, msg_file=TMP_FILE):
     # cmd = '''/usr/bin/mutt -e "set from='svc-cgcsauto@windriver.com'" -e "set realname='svc-cgcsauto'"
     #          -e "set content_type=text/html" -s "{}" -- "{}" < "{}"'''.format(subject, recipients, msg_file)
 
-    cmd = '''/usr/bin/mutt -e "set content_type=text/html" -s "{}" -- "{}" < "{}"'''.format(subject, recipients, msg_file)
+    cmd = '''mutt -e "set content_type=text/html" -s "{}" -- "{}" < "{}"'''.format(subject, recipients, msg_file)
     os.system(cmd)
 
 
