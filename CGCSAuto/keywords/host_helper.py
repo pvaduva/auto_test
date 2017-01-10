@@ -2171,18 +2171,8 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
         else:
             raise exceptions.HostError(err_msg)
 
-    if host.strip() == "controller-1":
-        rc, output =  _wait_for_upgrade_data_migration_complete(timeout=timeout,
-                                auth_info=auth_info, fail_ok=fail_ok, con_ssh=con_ssh)
-        if rc != 0:
-            err_msg = "Host {} updrade data migration failure: {}".format(host, output)
-            if fail_ok:
-                return 2, err_msg
-            else:
-                raise exceptions.HostError(err_msg)
-    else:
-        # sleep for 180 seconds to let host be re-installed with upgrade release
-        time.sleep(180)
+    # sleep for 180 seconds to let host be re-installed with upgrade release
+    time.sleep(180)
 
     if not _wait_for_host_states(host, timeout=timeout, check_interval=60, availability=HostAvailabilityState.ONLINE,
                                  con_ssh=con_ssh, fail_ok=fail_ok):
@@ -2191,6 +2181,16 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
             return 3, err_msg
         else:
             raise exceptions.HostError(err_msg)
+
+    if host.strip() == "controller-1":
+        rc, output = _wait_for_upgrade_data_migration_complete(timeout=timeout,
+                                                               auth_info=auth_info, fail_ok=fail_ok, con_ssh=con_ssh)
+        if rc != 0:
+            err_msg = "Host {} updrade data migration failure: {}".format(host, output)
+            if fail_ok:
+                return 2, err_msg
+            else:
+                raise exceptions.HostError(err_msg)
 
     if unlock:
         rc, output = unlock_host(host, fail_ok=True, available_only=True)
