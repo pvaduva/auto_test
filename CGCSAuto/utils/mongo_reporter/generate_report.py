@@ -6,7 +6,7 @@ import requests
 from utils import lab_info, local_host
 
 TMP_FILE = '/tmp/cgcs_emailmessage.html'
-
+# YELLOW = '#FFC200'
 REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 <b>Lab: </b>{}
 <b>Load: </b>{}
@@ -62,7 +62,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
     testcases_res = testcases_res.replace('\t', '&#9;').\
         replace('PASS', "<font color='green'>PASS</font>").\
         replace('FAIL', "<font color='red'>FAIL</font>").\
-        replace('SKIP', "<font color='yellow'>SKIP</font>")
+        replace('SKIP', "<font color='#FFC200'>SKIP</font>")
 
     summary = summary.replace('Passed: ', '<b>Passed: </b>').replace('Failed: ', '<b>Failed: </b>').\
         replace('Skipped: ', '<b>Skipped: </b>').replace('Total Executed: ', '<b>Total Executed: </b>')
@@ -184,7 +184,7 @@ def _get_overall_status(pass_rate):
     if pass_rate == 100:
         res = "<font color='green'>GREEN</font>"
     elif 75 <= pass_rate < 100:
-        res = "<font color='yellow'>YELLOW</font>"
+        res = "<font color='#FFC200'>YELLOW</font>"
     else:
         res = "<font color='red'>RED</font>"
 
