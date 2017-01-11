@@ -49,4 +49,5 @@ class BuildServerPath:
 
     PATCH_DIR_PATHS = {'15.12': '/folk/cgts/patches-to-verify/15.12',
                        '16.10': '/folk/cgts/patches-to-verify/16.10',
+                       '17.00': None
                       }

@@ -242,9 +242,10 @@ def upgrade_setup(pre_check_upgrade):
                                    "{}".format(upgrade_version, ver)
     LOG.info("The target release  load iso file {} imported".format(upgrade_load_path))
 
-    # download and apply patches
-    LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
-    apply_patches(lab, bld_server_obj, patch_dir)
+    # download and apply patches if patches are available in patch directory 
+    if patch_dir:
+        LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
+        apply_patches(lab, bld_server_obj, patch_dir)
 
     _upgrade_setup = {'lab': lab,
                       'cpe': cpe,
