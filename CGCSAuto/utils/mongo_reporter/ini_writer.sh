@@ -138,7 +138,7 @@ echo "tcPassed = 1" >> $outfile
 echo "userStories = $userstory" >> $outfile
 echo "releaseName = ${release_name}" >> $outfile
 
-echo "defects=$jira" >> $outfile
+echo "defects = $jira" >> $outfile
 echo "environmentId = titanium_server_15" >> $outfile
 echo "environmentName = FullInstall" >> $outfile
 echo "environmentSpin = " >> $outfile

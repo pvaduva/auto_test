@@ -19,8 +19,9 @@ REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 ------------------------------------------------------
 {}
 
+
 <b>List of Test Cases: </b>
-------------------------------------------------------
+------------------------------
 <pre>{}</pre>
 </html>
 """
@@ -154,10 +155,10 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
     if total_exec > 0:
         pass_rate = "{}%".format(round(passed * 100 / total_exec, 2))
         fail_rate = "{}%".format(round(failed * 100 / total_exec, 2))
-    summary = "Passed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n".format(
+    summary = "Passed: {} ({})\nFailed: {} ({})\nTotal Executed: {}".format(
             passed, pass_rate, failed, fail_rate, total_exec)
     if skipped > 0:
-        summary += '------------\nSkipped: {}'.format(skipped)
+        summary += '\n------------\nSkipped: {}'.format(skipped)
 
     # example "attributes" : [ [ "board_name", "WCP_76_77" ], [ "build", "2017-01-05_22-02-35" ],
     # [ "domain", "COMMON" ], [ "kernel", "3.10.71-ovp-rt74-r1_preempt-rt" ], [ "lab", "WCP_76_77" ],

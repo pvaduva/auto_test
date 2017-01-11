@@ -95,6 +95,8 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
         result = 'PASS'
     elif result == 'Failed' or result == 'failed':
         result = 'FAIL'
+    elif result.lower() == 'skipped':
+        result = 'SKIP'
 
     # create a data file containing test information
     os.system("rm -rf %s" % output)
@@ -140,29 +142,6 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
         print(msg)
 
     return res
-
-    # upload_cmd = "{} {} -f {} >>{} 2>&1 ".format(activate, test_reporter, output, report_file_name)
-    # log_msg += '\nReport upload command: {}'.format(upload_cmd)
-    #
-    # exit_code = os.system(upload_cmd)
-    # LOG.info("mongo reporter exit code: {}".format(exit_code))
-    # if not exit_code:
-    #     msg = "Test result successfully uploaded to MongoDB."
-    #     log_msg += msg
-    #     rtn = True
-    # else:
-    #     log_msg += "\nTest result failed to upload. Please check parameters stored at %s" % output
-    #     msg = log_msg
-    #     rtn = False
-    # today_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    # extra_info = '\nDate: %s. Report tag: %s\n\n' % (today_date, tag)
-    # msg += extra_info
-    # log_msg += extra_info
-    # print(msg)
-    # with open(report_file_name, mode='a') as f:
-    #     f.write(log_msg)
-    #
-    # return rtn
 
 
 def collect_user_input_and_upload_results(test_name=None, result=None, log_dir=None):
