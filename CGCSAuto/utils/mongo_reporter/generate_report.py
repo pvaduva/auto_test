@@ -6,7 +6,7 @@ import requests
 from utils import lab_info, local_host
 
 TMP_FILE = '/tmp/cgcs_emailmessage.html'
-
+# YELLOW = '#FFC200'
 REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 <b>Lab: </b>{}
 <b>Load: </b>{}
@@ -19,8 +19,9 @@ REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 ------------------------------------------------------
 {}
 
+
 <b>List of Test Cases: </b>
-------------------------------------------------------
+------------------------------
 <pre>{}</pre>
 </html>
 """
@@ -62,7 +63,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
     testcases_res = testcases_res.replace('\t', '&#9;').\
         replace('PASS', "<font color='green'>PASS</font>").\
         replace('FAIL', "<font color='red'>FAIL</font>").\
-        replace('SKIP', "<font color='yellow'>SKIP</font>")
+        replace('SKIP', "<font color='#FFC200'>SKIP</font>")
 
     summary = summary.replace('Passed: ', '<b>Passed: </b>').replace('Failed: ', '<b>Failed: </b>').\
         replace('Skipped: ', '<b>Skipped: </b>').replace('Total Executed: ', '<b>Total Executed: </b>')
@@ -86,6 +87,10 @@ def _get_local_results(res_path):
 
     testcases_res, other_info = raw_res.split(sep='\n\n', maxsplit=1)
     testcases_res = testcases_res.strip()
+    testcases_res = testcases_res.replace('Passed\t', 'PASS\t').replace('Failed\t', 'FAIL\t').\
+        replace('Skipped\t', 'SKIP\t')
+    testcases_res = re.sub(r'\t[^\t]*::test', r'\ttest', testcases_res)
+
     lab = re.findall('Lab: (.*)\n', other_info)[0].strip()
     build = re.findall('Build ID: (.*)\n', other_info)[0].strip()
     log_path = re.findall('Automation LOGs DIR: (.*)\n', other_info)[0].strip()
@@ -107,12 +112,25 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
                 "testExecutionTimeStamp_start={}" \
                 "&testExecutionTimeStamp_end={}" \
                 "&tags=[{}]".format(start_date, end_date, tags)
+    print("MongoDB results query url: {}".format(query_url))
 
     total = failed = passed = skipped = 0
-    results = requests.get(query_url).json()['records']
+    records = requests.get(query_url).json()['records']
+    # sort records by execution timestamp
+    records = sorted(records, key=lambda record: record['testExecutionTimeStamp']['$date'], reverse=True)
+    test_names = []
+    last_records = []
+    for item in records:
+        test_name = item['testName']
+        if test_name not in test_names:
+            test_names.append(test_name)
+            last_records.append(item)
 
+    # print(last_records)
+    # resort the records so tests run first will be shown first
+    last_records = sorted(last_records, key=lambda record: record['testExecutionTimeStamp']['$date'])
     testresults_list = []
-    for item in results:
+    for item in last_records:
         test_name = item['testName']
         test_res = item['testResult']
         total += 1
@@ -125,37 +143,40 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
 
         extra_str = ''
         if include_bld:
-            test_build = item['detailedResult']
+            test_build = item['attributes'][1][1]
             extra_str = '\t{}'.format(test_build)
 
         testresults_list.append('{}{}\t{}'.format(test_res, extra_str, test_name))
 
     testcases_res = '\n'.join(testresults_list)
+    testcases_res = testcases_res.replace('Skipped\t', 'SKIP\t')
     total_exec = passed + failed
     pass_rate = fail_rate = '0'
     if total_exec > 0:
         pass_rate = "{}%".format(round(passed * 100 / total_exec, 2))
         fail_rate = "{}%".format(round(failed * 100 / total_exec, 2))
-    summary = "Passed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n".format(
+    summary = "Passed: {} ({})\nFailed: {} ({})\nTotal Executed: {}".format(
             passed, pass_rate, failed, fail_rate, total_exec)
     if skipped > 0:
-        summary += '------------\nSkipped: {}'.format(skipped)
+        summary += '\n------------\nSkipped: {}'.format(skipped)
 
     # example "attributes" : [ [ "board_name", "WCP_76_77" ], [ "build", "2017-01-05_22-02-35" ],
     # [ "domain", "COMMON" ], [ "kernel", "3.10.71-ovp-rt74-r1_preempt-rt" ], [ "lab", "WCP_76_77" ],
     # [ "project", "CGCS 2.0" ] ]
-    first_rec = results[0]
+    first_rec = last_records[0]
     lab = first_rec['attributes'][0][1]
     build = first_rec['attributes'][1][1]
-    mongo_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=RNT&view=list" \
-                "&dateField=[testExecutionTimeStamp]&programs=active&resultsMode=all" \
-                "&startDate={}&endDate={}" \
-                "&releaseName=[MYSQL1:2226]" \
-                "&tags=__in__[{}]'>Test Results Link</a>".format(start_date, end_date, ','.join(tags))
+    panorama_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=WASSP&view=list" \
+                   "&dateField=[testExecutionTimeStamp]&programs=active&resultsMode=last" \
+                   "&startDate={}&endDate={}" \
+                   "&releaseName=[MYSQL1:2226]" \
+                   "&tags=__in__[{}]'>Test Results Link</a>".format(start_date, end_date, ','.join(tags))
+
+    print("Panorama query url: {}".format(panorama_url))
 
     overall_status = _get_overall_status(pass_rate)
 
-    return lab, build, overall_status, mongo_url, summary, testcases_res
+    return lab, build, overall_status, panorama_url, summary, testcases_res
 
 
 def _get_overall_status(pass_rate):
@@ -164,7 +185,7 @@ def _get_overall_status(pass_rate):
     if pass_rate == 100:
         res = "<font color='green'>GREEN</font>"
     elif 75 <= pass_rate < 100:
-        res = "<font color='yellow'>YELLOW</font>"
+        res = "<font color='#FFC200'>YELLOW</font>"
     else:
         res = "<font color='red'>RED</font>"
 
@@ -187,13 +208,13 @@ def send_report(subject, recipients, msg_file=TMP_FILE):
     # cmd = '''/usr/bin/mutt -e "set from='svc-cgcsauto@windriver.com'" -e "set realname='svc-cgcsauto'"
     #          -e "set content_type=text/html" -s "{}" -- "{}" < "{}"'''.format(subject, recipients, msg_file)
 
-    cmd = '''/usr/bin/mutt -e "set content_type=text/html" -s "{}" -- "{}" < "{}"'''.format(subject, recipients, msg_file)
+    cmd = '''mutt -e "set content_type=text/html" -s "{}" -- "{}" < "{}"'''.format(subject, recipients, msg_file)
     os.system(cmd)
 
 
-def generate_report(recipients, subject=None, source='mongo', tags=None, start_date=None, end_date=None):
+def generate_report(recipients, subject='', source='mongo', tags=None, start_date=None, end_date=None):
     tmp_file, lab, build, raw_status = write_report_file(source=source, tags=tags, start_date=start_date,
                                                          end_date=end_date)
-    if not subject:
-        subject = "TiS Test Report {} [{}] - {}".format(lab, build, raw_status)
+    subject = subject.strip()
+    subject = "TiS {} Test Report {} [{}] - {}".format(subject, lab, build, raw_status)
     send_report(subject=subject, recipients=recipients)
