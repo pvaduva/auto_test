@@ -187,7 +187,7 @@ def upgrade_setup(pre_check_upgrade):
     bld_server_attr = dict()
     bld_server_attr['name'] = bld_server['name']
     bld_server_attr['server_ip'] = bld_server['ip']
-    bld_server_attr['prompt'] = '.*yow\-cgts[34]\-lx ~\]\$ '
+    bld_server_attr['prompt'] = '.*yow\-cgts[34]\-lx:?~\]?\$ '
     bld_server_conn = SSHClient(bld_server_attr['name'], user=SvcCgcsAuto.USER,
                                 password=SvcCgcsAuto.PASSWORD, initial_prompt=".*\$ ")
     bld_server_conn.connect()
@@ -242,7 +242,7 @@ def upgrade_setup(pre_check_upgrade):
                                    "{}".format(upgrade_version, ver)
     LOG.info("The target release  load iso file {} imported".format(upgrade_load_path))
 
-    # download and apply patches if patches are available in patch directory 
+    # download and apply patches if patches are available in patch directory
     if patch_dir:
         LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
         apply_patches(lab, bld_server_obj, patch_dir)
