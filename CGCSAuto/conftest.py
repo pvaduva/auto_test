@@ -76,8 +76,10 @@ def _write_results(res_in_tests, test_name):
     # reset tc_start and end time for next test case
     tc_start_time = None
     build_id = ProjVar.get_var('BUILD_ID')
+    build_server = ProjVar.get_var('BUILD_SERVER')
     if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
-        upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id)
+        upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id,
+                                                build_server=build_server)
         if not upload_res:
             with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
                 f.write('\tUPLOAD_UNSUCC')
@@ -337,26 +339,29 @@ def pytest_unconfigure():
 
     tc_res_path = ProjVar.get_var('LOG_DIR') + '/test_results.log'
     build_id = ProjVar.get_var('BUILD_ID')
+    build_server = ProjVar.get_var('BUILD_SERVER')
 
     total_exec = TestRes.PASSNUM + TestRes.FAILNUM
     pass_rate = fail_rate = '0'
     if total_exec > 0:
         pass_rate = "{}%".format(round(TestRes.PASSNUM * 100 / total_exec, 2))
         fail_rate = "{}%".format(round(TestRes.FAILNUM * 100 / total_exec, 2))
-    with open(tc_res_path, mode='a') as f:
-        # Append general info to result log
-        f.write('\n\nLab: {}\n'
-                'Build ID: {}\n'
-                'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, ProjVar.get_var('LOG_DIR')))
-        # Add result summary to beginning of the file
-        f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
-                format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
-        if TestRes.SKIPNUM > 0:
-            f.write('------------\nSkipped: {}'.format(TestRes.SKIPNUM))
+        with open(tc_res_path, mode='a') as f:
+            # Append general info to result log
+            f.write('\n\nLab: {}\n'
+                    'Build ID: {}\n'
+                    'Build Server: {}\n'
+                    'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server,
+                                                       ProjVar.get_var('LOG_DIR')))
+            # Add result summary to beginning of the file
+            f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
+                    format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
+            if TestRes.SKIPNUM > 0:
+                f.write('------------\nSkipped: {}'.format(TestRes.SKIPNUM))
 
-    LOG.info("Test Results saved to: {}".format(tc_res_path))
-    with open(tc_res_path, 'r') as fin:
-        print(fin.read())
+        LOG.info("Test Results saved to: {}".format(tc_res_path))
+        with open(tc_res_path, 'r') as fin:
+            print(fin.read())
 
     # Below needs con_ssh to be initialized
     try:

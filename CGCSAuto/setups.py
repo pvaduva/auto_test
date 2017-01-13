@@ -224,10 +224,11 @@ def get_tis_timestamp(con_ssh):
     return con_ssh.exec_cmd('date +"%T"')[1]
 
 
-def get_build_id(con_ssh):
+def get_build_info(con_ssh):
     code, output = con_ssh.exec_cmd('cat /etc/build.info')
     if code != 0:
         build_id = ' '
+        build_host = ' '
     else:
         build_id = re.findall('''BUILD_ID=\"(.*)\"''', output)
         if build_id and build_id[0] != 'n/a':
@@ -239,7 +240,10 @@ def get_build_id(con_ssh):
             else:
                 build_id = ' '
 
-    return build_id
+        build_host = re.findall('''BUILD_HOST=\"(.*)\"''', output)
+        build_host = build_host[0].split(sep='.')[0] if build_host else ' '
+
+    return build_id, build_host
 
 
 def copy_files_to_con1():
