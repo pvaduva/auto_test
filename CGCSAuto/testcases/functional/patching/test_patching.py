@@ -33,7 +33,7 @@ def is_reboot_required(patch_states):
 
 
 def install_impacted_hosts(patch_ids, cur_states=None, con_ssh=None, remove=False):
-    LOG.info('cur_states:{}, remove?:{}, patch_ids:{}'.format(cur_states, remove, patch_ids))
+    LOG.debug('cur_states:{}, remove?:{}, patch_ids:{}'.format(cur_states, remove, patch_ids))
     patch_states = cur_states['patch_states']
     host_states = cur_states['host_states']
     reboot_required = is_reboot_required(patch_states)
@@ -69,17 +69,22 @@ def install_impacted_hosts(patch_ids, cur_states=None, con_ssh=None, remove=Fals
 
         patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
 
+    assert active_controller is not None, 'No active controller!?!:{}'.format(active_controller)
+        
     if reboot_required and active_controller is not None:
         code, output = host_helper.swact_host(active_controller, fail_ok=False, con_ssh=con_ssh)
         assert 0 == code, 'Failed to swact host: from {}'.format(active_controller)
+
 
     if active_controller is not None:
         patching_helper.host_install(active_controller, reboot_required=reboot_required, con_ssh=con_ssh)
 
     expected_patch_states = ('Applied',) if not remove else ('Removed', 'Available')
 
-    patching_helper.wait_patch_states(
+    code, _ = patching_helper.wait_patch_states(
         patch_ids, expected_states=expected_patch_states, con_ssh=con_ssh, fail_on_nonexisting=True)
+
+    assert 0 == code, 'Patch failed to reach states:{}'.format(expected_patch_states)
 
     patching_helper.check_error_states(
         con_ssh=con_ssh, no_checking=False, pre_states=pre_states, pre_trace_backs=pre_trace_backs)

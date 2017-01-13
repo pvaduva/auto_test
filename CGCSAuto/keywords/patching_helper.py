@@ -3,6 +3,8 @@ import os
 import time
 import functools
 
+from consts.timeout import HostTimeout
+
 from utils import cli
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
