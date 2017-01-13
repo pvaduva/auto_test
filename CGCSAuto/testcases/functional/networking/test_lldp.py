@@ -25,10 +25,10 @@ def test_lldp_neighbor_remote_port():
         for remote_port in host_remote_ports:
 
             LOG.tc_step("Checking LLDP remote_port to ensure it exists")
-            if remote_port.strip() is None:
+            if remote_port is None:
                 LOG.tc_step("Port missing")
                 remote_port_missing = "true"
-            elif remote_port.strip() is "":
+            elif remote_port is "":
                 LOG.tc_step("Port missing")
                 remote_port_missing = "true"
 
