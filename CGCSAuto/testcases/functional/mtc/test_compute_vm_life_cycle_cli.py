@@ -32,7 +32,7 @@ def _lock_unlock_computes_except_one(host_name, action='lock'):
 def launch_instance_on_compute(network_name=None,
                                flavor=None,
                                host_name=None,
-                               image=None,
+                               image_name=None,
                                **instance_names):
     """
     Function for launching VM instance on specific compute node and
@@ -61,14 +61,14 @@ def launch_instance_on_compute(network_name=None,
     if host_name in lvm_hosts:
         backing = 'local_lvm'
     flavor_id = nova_helper.create_flavor(host_name, storage_backing=backing,
-                                          check_storage_backing=False, guest_os=image)[1]
+                                          check_storage_backing=False, guest_os=image_name)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
     LOG.tc_step('Booting instances on {}'.format(host_name))
     vm_ids = []
     for name in instance_names:
 
-        vm_id = vm_helper.boot_vm(name=instance_names[name], flavor=flavor_id, guest_os=image)[1]
+        vm_id = vm_helper.boot_vm(name=instance_names[name], flavor=flavor_id, guest_os=image_name)[1]
         ResourceCleanup.add('vm', vm_id)
         vm_ids.append(vm_id)
 
@@ -86,8 +86,8 @@ def launch_instance_on_compute(network_name=None,
                                               'Value',
                                               Property='OS-EXT-SRV-ATTR:hypervisor_hostname')[0]
         assert host_name == search_name
-        LOG.tc_step("Ssh into {} guest".format(image))
-        with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=image) as vm_ssh:
+        LOG.tc_step("Ssh into {} guest".format(image_name))
+        with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=image_name) as vm_ssh:
             vm_ssh.exec_cmd('pwd')
 
 
