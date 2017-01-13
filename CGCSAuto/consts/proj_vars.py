@@ -6,6 +6,7 @@ from consts.filepaths import BuildServerPath, WRSROOT_HOME
 class ProjVar:
     # BUILD_ID,
     __var_dict = {'BUILD_ID': None,
+                  'BUILD_SERVER': None,
                   'LOG_DIR': None,
                   'SOURCE_ADMIN': False}
                   # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}

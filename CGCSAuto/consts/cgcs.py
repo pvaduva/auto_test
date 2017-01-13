@@ -37,6 +37,7 @@ class GuestImages:
         'opensuse_11': ('openSUSE-11.3-x86_64.qcow2', 11, 'opensuse_11.qcow2'),     # OVP img
         'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21, 'opensuse_12.qcow2'),      # OVP img
         'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16, 'opensuse_13.qcow2'),
+        'win_2012': ('win2012r2.qcow2', 36, 'win_2012.qcow2')   # Service Team img
     }
 
 

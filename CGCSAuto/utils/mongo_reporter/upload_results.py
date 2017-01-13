@@ -41,7 +41,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
     jira = ''
 
     # Parse common test info from test_results.log
-    lab, build, testcases_list, log_dir = __parse_common_info(file_path)
+    lab, build, build_server, testcases_list, log_dir = __parse_common_info(file_path)
 
     logfile = ','.join([os.path.join(log_dir, 'TIS_AUTOMATION.log'), os.path.join(log_dir, 'pytestlog.log')])
     tester_name = tester_name if tester_name else os.environ['USER']
@@ -69,20 +69,20 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
         # Upload result
         if not __upload_result(result_ini=result_ini, tag=tag, tester_name=tester_name, test_name=test_name,
                                result=result, lab=lab, build=build, userstory=userstory, domain=domain, jira=jira,
-                               logfile=logfile, release_name=release_name, upload_log=upload_log):
+                               logfile=logfile, release_name=release_name, upload_log=upload_log,
+                               build_server=build_server):
             exit(1)
 
-    print('All results uploaded successfully from: {}'.format(file_path))
+    print('All results uploaded successfully from: {}\nTag: {}'.format(file_path, tag))
 
 
 def __upload_result(result_ini, tag, tester_name, test_name, result, lab, build, userstory, domain, jira, logfile,
-                    release_name, upload_log):
+                    release_name, upload_log, build_server):
 
     upload_cmd = "{} {} -f {} 2>&1".format(WASSP_PYTHON, WASSP_REPORTER, result_ini)
-    env_params = "-o '%s' -x '%s'  -n '%s' -t '%s' -r '%s' -l '%s' -b '%s' -u '%s' -d '%s' -j '%s' -a '%s' -R '%s'" \
-                 % (result_ini, tag, tester_name, test_name, result,
-                    lab, build, userstory, domain,
-                    jira, logfile, release_name)
+    env_params = "-o '{}' -x '{}'  -n '{}' -t '{}' -r '{}' -l '{}' -b '{}' -u '{}' -d '{}' -j '{}' -a '{}' -R '{}' " \
+                 "-s '{}'".format(result_ini, tag, tester_name, test_name, result, lab, build, userstory, domain,
+                                  jira, logfile, release_name, build_server)
 
     print("\nComposing result ini file for {}: {}".format(test_name, result_ini))
     ini_writer = os.path.join(LOCAL_PATH, 'ini_writer.sh')
@@ -170,6 +170,7 @@ def __parse_common_info(test_results_file):
 
     lab = re.findall('Lab: (.*)\n', other_info)[0].strip().upper()
     build = re.findall('Build ID: (.*)\n', other_info)[0].strip()
+    build_server = re.findall('Build Server: (.*)\n', other_info)[0].strip()
     log_dir = test_results_file.replace('test_results.log', '')
 
-    return lab, build, testcases_list, log_dir
+    return lab, build, build_server, testcases_list, log_dir

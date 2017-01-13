@@ -87,8 +87,9 @@ def setup_test_session():
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
     # set build id to be used to upload/write test results
-    build_id = setups.get_build_id(con_ssh)
+    build_id, build_host = setups.get_build_info(con_ssh)
     ProjVar.set_var(BUILD_ID=build_id)
+    ProjVar.set_var(BUILD_HOST=build_host)
     ProjVar.set_var(SOURCE_ADMIN=True)
     print('precheck source_admin_value: ' + str(ProjVar.get_var('SOURCE_ADMIN')))
 

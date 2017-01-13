@@ -10,6 +10,7 @@ TMP_FILE = '/tmp/cgcs_emailmessage.html'
 REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 <b>Lab: </b>{}
 <b>Load: </b>{}
+<b>Build Server: </b>{}
 <b>Node Config: </b>{}
 
 <b>Overall Status: {}</b>
@@ -49,11 +50,11 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
             start_date = start_date.strftime("%Y-%m-%d")
             end_date = now.strftime("%Y-%m-%d")
 
-        lab, build, overall_status, log_path, summary, testcases_res = \
+        lab, build, build_server, overall_status, log_path, summary, testcases_res = \
             _get_results_from_mongo(tags=tags, start_date=start_date, end_date=end_date)
 
     else:
-        lab, build, overall_status, log_path, summary, testcases_res = _get_local_results(source)
+        lab, build, build_server, overall_status, log_path, summary, testcases_res = _get_local_results(source)
 
     lab = lab.upper()
     if not sys_config:
@@ -69,7 +70,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
         replace('Skipped: ', '<b>Skipped: </b>').replace('Total Executed: ', '<b>Total Executed: </b>')
 
     with open(TMP_FILE, mode='w') as f:
-        f.write(REPORT_FORMAT.format(lab, build, sys_config, overall_status, log_path, summary,
+        f.write(REPORT_FORMAT.format(lab, build, build_server, sys_config, overall_status, log_path, summary,
                                      testcases_res).replace('\n', '<br>'))
     if 'RED' in overall_status:
         raw_status = 'RED'
@@ -78,7 +79,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
     else:
         raw_status = 'YELLOW'
 
-    return TMP_FILE, lab, build, raw_status
+    return TMP_FILE, lab, build, build_server, raw_status
 
 
 def _get_local_results(res_path):
@@ -93,6 +94,7 @@ def _get_local_results(res_path):
 
     lab = re.findall('Lab: (.*)\n', other_info)[0].strip()
     build = re.findall('Build ID: (.*)\n', other_info)[0].strip()
+    build_server = re.findall('Build Server: (.*)\n', other_info)[0].strip()
     log_path = re.findall('Automation LOGs DIR: (.*)\n', other_info)[0].strip()
     hostname = local_host.get_host_name()
     log_path = "{}:{}".format(hostname, log_path)
@@ -100,7 +102,7 @@ def _get_local_results(res_path):
     summary = other_info.split(sep='\nSummary:')[-1].strip()
     overall_status = _get_overall_status(pass_rate)
 
-    return lab, build, overall_status, log_path, summary, testcases_res
+    return lab, build, build_server, overall_status, log_path, summary, testcases_res
 
 
 def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
@@ -163,9 +165,16 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
     # example "attributes" : [ [ "board_name", "WCP_76_77" ], [ "build", "2017-01-05_22-02-35" ],
     # [ "domain", "COMMON" ], [ "kernel", "3.10.71-ovp-rt74-r1_preempt-rt" ], [ "lab", "WCP_76_77" ],
     # [ "project", "CGCS 2.0" ] ]
+    lab = build = build_server = ''
     first_rec = last_records[0]
-    lab = first_rec['attributes'][0][1]
-    build = first_rec['attributes'][1][1]
+    for attr in first_rec['attributes']:
+        if attr[0] == 'board_name':
+            lab = attr[1]
+        elif attr[0] == 'build':
+            build = attr[1]
+        elif attr[0] == 'build_server':
+            build_server = attr[1]
+
     panorama_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=WASSP&view=list" \
                    "&dateField=[testExecutionTimeStamp]&programs=active&resultsMode=last" \
                    "&startDate={}&endDate={}" \
@@ -176,7 +185,7 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
 
     overall_status = _get_overall_status(pass_rate)
 
-    return lab, build, overall_status, panorama_url, summary, testcases_res
+    return lab, build, build_server, overall_status, panorama_url, summary, testcases_res
 
 
 def _get_overall_status(pass_rate):
@@ -213,8 +222,8 @@ def send_report(subject, recipients, msg_file=TMP_FILE):
 
 
 def generate_report(recipients, subject='', source='mongo', tags=None, start_date=None, end_date=None):
-    tmp_file, lab, build, raw_status = write_report_file(source=source, tags=tags, start_date=start_date,
-                                                         end_date=end_date)
+    tmp_file, lab, build, build_server, raw_status = write_report_file(source=source, tags=tags, start_date=start_date,
+                                                                       end_date=end_date)
     subject = subject.strip()
     subject = "TiS {} Test Report {} [{}] - {}".format(subject, lab, build, raw_status)
     send_report(subject=subject, recipients=recipients)
