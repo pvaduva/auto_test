@@ -1071,6 +1071,9 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
             wr_exit()._exit(1, msg)
 
     # Open an ssh session
+    # Temporary workaround for timing issue where ssh fails
+    time.sleep(60)
+
     controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
 
     controller0.ssh_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
