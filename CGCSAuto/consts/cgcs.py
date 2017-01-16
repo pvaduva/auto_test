@@ -155,6 +155,9 @@ class FlavorSpec:
     GUEST_HEARTBEAT = 'sw:wrs:guest:heartbeat'
     SRV_GRP_MSG = "sw:wrs:srv_grp_messaging"
     NIC_ISOLATION = "hw:wrs:nic_isolation"
+    PCI_NUMA_AFFINITY = "hw:wrs:pci_numa_affinity"
+    PCI_PASSTHROUGH_ALIAS = "pci_passthrough:alias"
+    PCI_IRQ_AFFINITY_MASK = "hw:pci_irq_affinity_mask"
 
 
 class ImageMetadata:
