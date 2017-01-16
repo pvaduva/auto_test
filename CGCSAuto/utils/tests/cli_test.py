@@ -30,7 +30,7 @@ def test_system():
     cli.system('host-list')
     cli.system('host-show', 1)
     try:
-        cli.system('host-list', auth_info=auth.TENANT_1)
+        cli.system('host-list', auth_info=auth.TENANT1)
         raise Exception("you should fail!")
     except CLIRejected:
         LOG.info("nova test passed without authentication")
@@ -41,7 +41,7 @@ def test_system():
 
 def test_auth_tenant():
     LOG.tc_func_start()
-    cli.nova('list', auth_info=auth.TENANT_1)
+    cli.nova('list', auth_info=auth.TENANT1)
     LOG.tc_func_end()
 
 if __name__ == '__main__':

@@ -10,7 +10,7 @@ class Tenant:
         'region': __REGION
     }
 
-    TENANT_1 = {
+    TENANT1 = {
         'user': 'tenant1',
         'password': 'tenant1',
         'tenant': 'tenant1',
@@ -18,7 +18,7 @@ class Tenant:
         'region': __REGION
     }
 
-    TENANT_2 = {
+    TENANT2 = {
         'user': 'tenant2',
         'password': 'tenant2',
         'tenant': 'tenant2',
@@ -29,14 +29,14 @@ class Tenant:
     @classmethod
     def _set_url(cls, url):
         cls.ADMIN['auth_url'] = url
-        cls.TENANT_1['auth_url'] = url
-        cls.TENANT_2['auth_url'] = url
+        cls.TENANT1['auth_url'] = url
+        cls.TENANT2['auth_url'] = url
 
     @classmethod
     def _set_region(cls, region):
         cls.ADMIN['region'] = region
-        cls.TENANT_1['region'] = region
-        cls.TENANT_2['region'] = region
+        cls.TENANT1['region'] = region
+        cls.TENANT2['region'] = region
 
     @classmethod
     def add_tenant(cls, tenantname, dictname=None, username=None, password=None):
@@ -47,7 +47,7 @@ class Tenant:
         dict_name = dictname.upper() if dictname else tenantname.upper()
         setattr(cls, dict_name, tenant_dict)
 
-    __primary = TENANT_1
+    __primary = TENANT1
 
     @classmethod
     def set_primary(cls, tenant):
@@ -64,6 +64,26 @@ class Tenant:
     @classmethod
     def get_primary(cls):
         return cls.__primary
+
+    @classmethod
+    def update_tenant_dict(cls, tenant_dictname, username=None, password=None, tenant=None):
+        tenant_dictname = tenant_dictname.upper()
+        tenant_dict = getattr(cls, tenant_dictname)
+        if not isinstance(tenant_dict, dict):
+            raise ValueError("{} dictionary does not exist in CGCSAuto/consts/auth.py".format(tenant_dictname))
+
+        if not username and not password and not tenant:
+            raise ValueError("Please specify username, password and/or tenant to change to for {} dict".
+                             format(tenant_dictname))
+
+        if username:
+            tenant_dict['user'] = username
+        if password:
+            tenant_dict['password'] = password
+        if tenant:
+            tenant_dict['tenant'] = tenant
+
+        setattr(cls, tenant_dictname, tenant_dict)
 
 
 class Host:

@@ -2,8 +2,9 @@ import time
 from pytest import fixture
 
 from utils.tis_log import LOG
+from consts.auth import Tenant
 from consts.cgcs import EventLogID, HostAvailabilityState
-from keywords import system_helper, host_helper, common
+from keywords import system_helper, host_helper, keystone_helper
 
 
 @fixture(scope='session')
@@ -29,3 +30,20 @@ def wait_for_con_drbd_sync_complete():
 
     LOG.fixture_step("Wait for {} drbd-cinder in sm-dump to reach desired state".format(host))
     host_helper.wait_for_sm_dump_desired_states(host, 'drbd-', strict=False, timeout=30, fail_ok=False)
+
+
+@fixture(scope='session')
+def change_admin_password_session(request):
+    prev_pswd = Tenant.ADMIN['password']
+    post_pswd = "'!{}9'".format(prev_pswd)
+
+    LOG.fixture_step('(Session) Changing admin password to {}'.format(post_pswd))
+    keystone_helper.update_user('admin', password=post_pswd)
+
+    def revert_pswd():
+        LOG.fixture_step("(Session) Reverting admin password to {}".format(prev_pswd))
+        keystone_helper.update_user('admin', password=prev_pswd)
+
+    request.addfinalizer(revert_pswd)
+
+    return post_pswd

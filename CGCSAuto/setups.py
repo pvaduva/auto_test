@@ -142,8 +142,8 @@ def boot_vms(is_boot):
             vm_helper.launch_vms_via_script(vm_type='avp', num_vms=1, tenant_name='tenant1')
             vm_helper.launch_vms_via_script(vm_type='virtio', num_vms=1, tenant_name='tenant2')
         else:
-            vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT_1)
-            vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT_2)
+            vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT1)
+            vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT2)
 
 
 def get_lab_dict(labname):
