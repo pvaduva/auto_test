@@ -637,7 +637,7 @@ def set_retention_period(fail_ok=True, check_first=True, con_ssh=None, auth_info
         fail_ok: True or False
         check_first: True or False
         con_ssh (str):
-        auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT_1,Tenant.TENANT_2
+        auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT1,Tenant.TENANT2
 
     Returns (tuple): (rtn_code (int), msg (str))
         (-1, "Retention period not specified")

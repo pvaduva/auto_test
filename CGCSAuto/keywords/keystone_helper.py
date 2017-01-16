@@ -204,3 +204,43 @@ def get_assigned_roles(rtn_val='Role', names=True, role=None, user=None, project
         return []
 
     return table_parser.get_column(role_assignment_tab, rtn_val)
+
+
+def update_user(user, name=None, project=None, password=None, project_doamin=None, email=None, description=None,
+                enable=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+
+    LOG.info("Updating {}...".format(user))
+    arg = ''
+    optional_args = {
+        'name': name,
+        'project': project,
+        'password': password,
+        'project-domain': project_doamin,
+        'email': email,
+        'description': description,
+    }
+    for key, val in optional_args.items():
+        if val is not None:
+            arg += '--{} {} '.format(key, val)
+
+    if enable is not None:
+        arg += '--{} '.format('enable' if enable else 'disable')
+
+    if not arg.strip():
+        raise ValueError("Please specify the param(s) and value(s) to change to")
+
+    arg += user
+
+    code, output = cli.openstack('user set', arg, auth_info=auth_info, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 rtn_list=True)
+
+    if code == 1:
+        return code, output
+
+    if name or project or password:
+        tenant_dictname = user.upper()
+        Tenant.update_tenant_dict(tenant_dictname, username=name, password=password, tenant=project)
+
+    msg = 'User {} updated successfully'.format(user)
+    LOG.info(msg)
+    return 0, msg

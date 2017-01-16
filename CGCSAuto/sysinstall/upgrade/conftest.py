@@ -12,6 +12,9 @@ from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.build_server import Server, get_build_server_info
 from consts.cgcs import Prompt
 
+# Import test fixtures that are applicable to upgrade test
+from testfixtures.pre_checks_and_configs import *
+
 natbox_ssh = None
 con_ssh = None
 SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.00']]

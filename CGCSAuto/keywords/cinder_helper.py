@@ -50,7 +50,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         status:(str)
         attached_vm (str):
         bootable (str|bool): true or false
-        auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT_1,Tenant.TENANT_2
+        auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT1,Tenant.TENANT2
         con_ssh (str):
 
     Returns (list): a list of volume ids based on the given criteria
