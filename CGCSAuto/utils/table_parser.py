@@ -390,7 +390,7 @@ def _get_values(table_, header1, value1, header2, strict=False, regex=False):
     return value2
 
 
-def get_values(table_, target_header, strict=True, regex=False, merge_lines=False, **kwargs):
+def get_values(table_, target_header, strict=True, regex=False, merge_lines=False, exclude=False, **kwargs):
     """
     Return a list of cell(s) that matches the given criteria. Criteria were given via kwargs.
     Args:
@@ -463,6 +463,10 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
 
     target_column = get_column(table_, target_header)
     target_values = []
+    if exclude:
+        total_row_indexes = list(range(len(target_column)))
+        target_row_indexes = list((set(total_row_indexes) - set(target_row_indexes)))
+
     for i in target_row_indexes:
         target_value = target_column[i]
 
