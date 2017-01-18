@@ -41,14 +41,58 @@ class MThread(threading.Thread):
         self.args = args
         self.kwargs = kwargs
         self._output = None
+        self._output_returned = threading.Event()
         self.timeout = None
         self._err = None
+        self._keep_running = threading.Event()
+        self._end = threading.Event()
+        self._end_func = None
+        self._end_args = None
+        self._end_kwargs = None
 
-    def get_output(self):
+    def get_output(self, wait=True, timeout=None):
+        """
+        Get return value of self.func
+
+        Args:
+            wait (bool): Whether or not to wait for the output from self.func
+            timeout:
+
+        Returns: return value from self.func
+
+        """
+        if wait:
+            if timeout is None:
+                timeout = self.timeout
+
+            if timeout:
+                end_time = time.time() + timeout
+                while time.time() < end_time:
+                    if self._output_returned.is_set():
+                        # LOG.info("{}: {} returned: {}".format(self.name, self.func.__name__, self._output.__str__))
+                        break
+
         return self._output
 
     def get_error_info(self):
         return self._err
+
+    def set_end_func(self, end_func, *end_args, **end_kwargs):
+        """
+        Function to execute after 'end' flag is set via end_thread().
+
+        Args:
+            end_func (callable):
+            *end_args: args to pass to end_func
+            **end_kwargs: kwargs to pass to end_func
+
+        Returns:
+
+        """
+        self.keep_alive()
+        self._end_func = end_func
+        self._end_args = end_args
+        self._end_kwargs = end_kwargs
 
     def start_thread(self, timeout=None):
         """
@@ -81,8 +125,25 @@ class MThread(threading.Thread):
             con_ssh.connect(use_current=False)
             ControllerClient.set_active_controller(con_ssh)
             NATBoxClient.set_natbox_client()
-            LOG.info("Execute function {}({}, {})".format(self.func, self.args, self.kwargs))
+            LOG.info("Execute function {}({}, {})".format(self.func.__name__, self.args, self.kwargs))
             self._output = self.func(*self.args, **self.kwargs)
+            self._output_returned.set()
+            LOG.info("{} returned: {}".format(self.func.__name__, self._output.__str__()))
+            while True:
+                # end right away after func returns when keep_running is false
+                if not self._keep_running.is_set():
+                    break
+
+                # Wait for end flag to be set, then finish up the thread using end_func, otherwise check after 1 second
+                if self._end.is_set():
+                    if self._end_func is not None:
+                        LOG.info("Executing end_func: {}({}, {})".format(self._end_func.__name__, self._end_args,
+                                                                         self._end_kwargs))
+                        self._end_func(*self._end_args, **self._end_kwargs)
+                    break
+                time.sleep(1)
+
+            LOG.info("Terminating thread: {}".format(self.thread_id))
         except:
             err = traceback.format_exc()
             LOG.error("Error found in thread call {}".format(err))
@@ -133,6 +194,20 @@ class MThread(threading.Thread):
                 return False
             raise ThreadingError(TIMEOUT_ERR.format(self.func, self.args, self.kwargs))
         return True
+
+    def keep_alive(self):
+        """
+        Keep the thread alive after self.func returns - until end_thread called, thread timeout reaches, or
+        wait_for_thread_end() called
+        """
+        self._keep_running.set()
+
+    def end_thread(self):
+        """
+        End the thread.
+        If end_func was set, then end_func will be executed before ending thread.
+        """
+        self._end.set()
 
 
 def get_multi_threads():
