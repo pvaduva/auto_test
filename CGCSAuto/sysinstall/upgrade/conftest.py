@@ -10,6 +10,7 @@ from utils import table_parser, cli
 from utils.tis_log import LOG
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.build_server import Server, get_build_server_info
+from consts.cgcs import Prompt
 
 natbox_ssh = None
 con_ssh = None
@@ -187,9 +188,11 @@ def upgrade_setup(pre_check_upgrade):
     bld_server_attr = dict()
     bld_server_attr['name'] = bld_server['name']
     bld_server_attr['server_ip'] = bld_server['ip']
-    bld_server_attr['prompt'] = '.*yow\-cgts[34]\-lx:?~\]?\$ '
+    #bld_server_attr['prompt'] = r'.*yow-cgts[1234]-lx.*$ '
+    bld_server_attr['prompt'] = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', bld_server['name'])
+   # '.*yow\-cgts[34]\-lx ?~\]?\$ '
     bld_server_conn = SSHClient(bld_server_attr['name'], user=SvcCgcsAuto.USER,
-                                password=SvcCgcsAuto.PASSWORD, initial_prompt=".*\$ ")
+                                password=SvcCgcsAuto.PASSWORD, initial_prompt=bld_server_attr['prompt'])
     bld_server_conn.connect()
     bld_server_conn.exec_cmd("bash")
     bld_server_conn.set_prompt(bld_server_attr['prompt'])
