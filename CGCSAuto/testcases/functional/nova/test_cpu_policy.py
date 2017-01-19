@@ -1,11 +1,12 @@
 from pytest import mark, fixture, skip
 
+from utils import table_parser
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, ImageMetadata
 from consts.cli_errs import CPUPolicyErr        # used by eval
 
-from keywords import nova_helper, vm_helper, glance_helper, cinder_helper, check_helper, host_helper
+from keywords import nova_helper, vm_helper, glance_helper, cinder_helper, check_helper, host_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
@@ -152,3 +153,112 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
     vm_host = nova_helper.get_vm_host(vm_id)
     check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=cpu_pol, vm_host=vm_host,
                                       prev_total_cpus=prev_cpus[vm_host])
+
+
+@mark.usefixtures('add_admin_role_module')
+@mark.parametrize(('vcpus_dedicated', 'vcpus_shared', 'pol_source', 'boot_source'), [
+    mark.p1((2, 1, 'flavor', 'image')),
+    mark.p1((1, 3, 'image', 'image')),
+    mark.p1((2, 4, 'image', 'volume')),
+    mark.p1((3, 2, 'flavor', 'volume')),
+])
+def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_source, boot_source):
+    """
+    Test two vms coexisting on the same host, one with the dedicated cpu property, and one with the shared cpu property.
+
+    Args:
+        vcpus_dedicated: Amount of vcpu(s) to allocate for the vm with the dedicated CPU_POLICY.
+        vcpus_shared: Amount of vcpu(s) to allocate for the vm with the shared CPU_POLICY.
+        pol_source: Where the CPU_POLICY is set from.
+        boot_source: The boot media the vm will use to boot.
+
+    Test Setups:
+        - Create two flavors, one for each vm.
+        - If using 'flavor' for pol_source, set extra specs for the CPU_POLICY.
+        - If using 'image' for pol_source, set ImageMetaData for the CPU_POLICY.
+        - If using 'volume' for boot_source, create volume from cgcs-guest image.
+        - If using 'image' for boot_source, use cgcs-guest image.
+        - Determine the amount of free vcpu(s) on the compute before testing.
+
+    Test Steps:
+        - Boot the first vm with CPU_POLICY: dedicated.
+        - Wait until vm is pingable from natbox.
+        - Check vm topology for vcpu(s).
+        - Determine the amount of free vcpu(s) on the compute.
+        - Boot the second vm with CPU_POLICY: shared.
+        - Wait until vm is pingable from natbox.
+        - Check vm topology for vcpu(s).
+        - Delete vms
+        - Determine the amount of free vcpu(s) on the compute after testing.
+        - Compare free vcpu(s) on the compute before and after testing, ensuring they are the same.
+
+    Test Teardown
+        - Delete created volumes and flavors
+    """
+    LOG.tc_step("Getting host list")
+    target_hosts = host_helper.get_hypervisors(state='up', status='enabled')
+    target_host = target_hosts[0]
+
+    image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
+    flavor_dedicated_id = ''
+    flavor_shared_id = ''
+
+    collection = ['dedicated', 'shared']
+    for x in collection:
+        if x == 'dedicated':
+            vcpus = vcpus_dedicated
+        else:
+            vcpus = vcpus_shared
+        LOG.tc_step("Create {} flavor with {} vcpus".format(x, vcpus))
+        flavor_id = nova_helper.create_flavor(name=x, vcpus=vcpus)[1]
+        ResourceCleanup.add('flavor', flavor_id)
+
+        if pol_source == 'flavor':
+            LOG.tc_step("Set CPU_POLICY for {} flavor".format(x))
+            specs = {FlavorSpec.CPU_POLICY: x}
+            nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+        else:
+            LOG.tc_step("Create image with CPU_POLICY: {}".format(x))
+            image_meta = {ImageMetadata.CPU_POLICY: x}
+            image_id = glance_helper.create_image(name='cpu_pol_{}'.format(x), **image_meta)[1]
+            ResourceCleanup.add('image', image_id)
+
+        if boot_source == 'volume':
+            LOG.tc_step("Create volume from image")
+            source_id = cinder_helper.create_volume(name='cpu_pol_{}'.format(x), image_id=image_id)[1]
+            ResourceCleanup.add('volume', source_id)
+        else:
+            source_id = image_id
+
+        if x == 'dedicated':
+            flavor_dedicated_id = flavor_id
+            source_dedicated_id = source_id
+        else:
+            flavor_shared_id = flavor_id
+            source_shared_id = source_id
+
+    prev_boot_dedicated_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
+    LOG.tc_step("Booting cpu_pol_dedicated")
+    vm_dedicated_id = vm_helper.boot_vm(name='cpu_pol_dedicated', flavor=flavor_dedicated_id, source=boot_source,
+                                        source_id=source_dedicated_id, vm_host=target_host)[1]
+    ResourceCleanup.add('vm', vm_dedicated_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_dedicated_id)
+    check_helper.check_topology_of_vm(vm_dedicated_id, vcpus=vcpus_dedicated, cpu_pol='dedicated',
+                                      vm_host=target_host, prev_total_cpus=prev_boot_dedicated_cpus[target_host])
+
+    prev_boot_shared_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
+    LOG.tc_step("Booting cpu_pol_shared")
+    vm_shared_id = vm_helper.boot_vm(name='cpu_pol_shared', flavor=flavor_shared_id, source=boot_source,
+                                     source_id=source_shared_id, vm_host=target_host)[1]
+    ResourceCleanup.add('vm', vm_shared_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_shared_id)
+    check_helper.check_topology_of_vm(vm_shared_id, vcpus=vcpus_shared, cpu_pol='shared', vm_host=target_host,
+                                      prev_total_cpus=prev_boot_shared_cpus[target_host])
+
+    LOG.tc_step("Removing cpu_pol_dedicated")
+    vm_helper.delete_vms(vms=vm_dedicated_id)
+    LOG.tc_step("Removing cpu_pol_shared")
+    vm_helper.delete_vms(vms=vm_shared_id)
+    post_delete_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
+    assert post_delete_cpus == prev_boot_dedicated_cpus, "vcpu count after deletion does not equal vcpu count before " \
+                                                         "test"
