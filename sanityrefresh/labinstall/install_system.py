@@ -67,8 +67,8 @@ def parse_args():
                                      " Server load on specified configuration.")
 
     parser.add_argument('--lab', dest='lab_name',
-                          help="Official lab name")
-                          #required=True)
+                        help="Official lab name")
+                        #required=True)
     parser.add_argument('--continue', dest='continue_install',
                         action='store_true', help="Continue lab install"
                         " from its last step")
@@ -296,16 +296,16 @@ def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis):
     msg = ''
     if not found_bulk_cfg_file and not tis_on_tis:
         msg += 'Failed to find {} in {}'.format(BULK_CFG_FILENAME,
-                                               lab_cfg_location)
+                                                lab_cfg_location)
     if not found_system_cfg_file:
         msg += '\nFailed to find {} in {}'.format(cfgfile_list, lab_cfg_location)
     if not found_lab_settings_file:
         msg += '\nFailed to find {} in {}'.format(CUSTOM_LAB_SETTINGS_FILENAME,
-                                               lab_cfg_location)
+                                                  lab_cfg_location)
 
     if not found_lab_setup_cfg_file:
         msg += '\nFailed to find {} in {}'.format(LAB_SETUP_CFG_FILENAME,
-                                               lab_cfg_location)
+                                                  lab_cfg_location)
 
     if not (found_bulk_cfg_file and found_system_cfg_file and
             found_lab_settings_file and found_lab_setup_cfg_file):
@@ -737,8 +737,7 @@ def apply_banner(node, banner):
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
     cmd += " mv BANNER_SRC BANNER_DEST"
     if node.telnet_conn.exec_cmd(cmd)[0] != 0:
-        msg = 'Unable to move banner files from {} to {}'.format(BANNER_SRC,
-        BANNER_DEST)
+        msg = 'Unable to move banner files from {} to {}'.format(BANNER_SRC, BANNER_DEST)
         log.error(msg)
         wr_exit()._exit(1, msg)
 
@@ -931,25 +930,25 @@ def labInstallVars():
             write_install_vars(args)
         return args
     else:
-         install_vars = read_install_from_file(args)
-         if install_vars is not None:
-             #update continue_install
-             install_vars.continue_install = True
+        install_vars = read_install_from_file(args)
+        if install_vars is not None:
+            #update continue_install
+            install_vars.continue_install = True
 
 
-             global executed_install_steps
-             executed_steps_filename = lab_name + INSTALL_EXECUTED_STEPS_FILE_EXT
-             executed_steps_path = os.path.join(INSTALL_VARS_TMP_PATH, executed_steps_filename)
+            global executed_install_steps
+            executed_steps_filename = lab_name + INSTALL_EXECUTED_STEPS_FILE_EXT
+            executed_steps_path = os.path.join(INSTALL_VARS_TMP_PATH, executed_steps_filename)
 
-             if os.path.exists(executed_steps_path):
+            if os.path.exists(executed_steps_path):
                 with open(executed_steps_path) as file:
                     executed_install_steps = file.read().splitlines()
 
-             return install_vars
-         else:
-             msg = "Lab Install Variable file not found."
-             print(msg)
-             wr_exit()._exit(1, msg)
+            return install_vars
+        else:
+            msg = "Lab Install Variable file not found."
+            print(msg)
+            wr_exit()._exit(1, msg)
 
 def verifyLabName(lab_name):
     from os import walk
@@ -1107,25 +1106,25 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
 
     if host_os == "centos":
         if cumulus:
-           scripts_path = os.path.join(DEFAULT_WKSPCE, DEFAULT_REL, 
-                                       DEFAULT_BLD, CENTOS_LAB_REL_PATH, "scripts")
-           heat_path = os.path.join(DEFAULT_WKSPCE, DEFAULT_REL,
-                                       DEFAULT_BLD, HEAT_TEMPLATES_PATH)
+            scripts_path = os.path.join(DEFAULT_WKSPCE, DEFAULT_REL,
+                                        DEFAULT_BLD, CENTOS_LAB_REL_PATH, "scripts")
+            heat_path = os.path.join(DEFAULT_WKSPCE, DEFAULT_REL,
+                                     DEFAULT_BLD, HEAT_TEMPLATES_PATH)
         else:
-           scripts_path = load_path + "/" + CENTOS_LAB_REL_PATH + "/scripts/"
-           heat_path = load_path + "/" + HEAT_TEMPLATES_PATH
+            scripts_path = load_path + "/" + CENTOS_LAB_REL_PATH + "/scripts/"
+            heat_path = load_path + "/" + HEAT_TEMPLATES_PATH
 
         bld_server_conn.rsync(os.path.join(scripts_path, "*"),
-                          WRSROOT_USERNAME, controller0.host_ip,
-                          WRSROOT_HOME_DIR, pre_opts=pre_opts)
+                              WRSROOT_USERNAME, controller0.host_ip,
+                              WRSROOT_HOME_DIR, pre_opts=pre_opts)
         bld_server_conn.rsync(os.path.join(heat_path, "*"),
-                           WRSROOT_USERNAME, controller0.host_ip, \
-                           WRSROOT_HEAT_DIR + "/",\
-                           pre_opts=pre_opts)
+                              WRSROOT_USERNAME, controller0.host_ip, \
+                              WRSROOT_HEAT_DIR + "/",\
+                              pre_opts=pre_opts)
     else:
         bld_server_conn.rsync(os.path.join(load_path, LAB_SCRIPTS_REL_PATH, "*"),
-                          WRSROOT_USERNAME, controller0.host_ip,
-                          WRSROOT_HOME_DIR, pre_opts=pre_opts)
+                              WRSROOT_USERNAME, controller0.host_ip,
+                              WRSROOT_HOME_DIR, pre_opts=pre_opts)
 
     # If override is set to yes, grab the TiS_config.ini_<host_os> file from
     # latest release and directory
@@ -1217,7 +1216,7 @@ def setupHeat(bld_server_conn):
     rc, output = controller0.ssh_conn.exec_cmd(cmd)
 
     # Run launch_stacks.sh lab_setup.conf
-    cmd = stack_launch_script_path + " lab_setup.conf" 
+    cmd = stack_launch_script_path + " lab_setup.conf"
     rc, output = controller0.ssh_conn.exec_cmd(cmd)
     if rc != 0:
         msg = "Heat stack launch failed"
@@ -1406,7 +1405,7 @@ def boot_other_lab_hosts(nodes, boot_device_dict, host_os, install_output_dir,
                 osd_string += "\/dev\/vd" + current_osd + " "
                 current_osd = chr(ord(current_osd) + 1)
             osd_string += '"'
-            cmd =  "sed -i 's/#OSD_STRING/" + osd_string + "/g' lab_setup.conf"
+            cmd = "sed -i 's/#OSD_STRING/" + osd_string + "/g' lab_setup.conf"
             rc, output = controller0.ssh_conn.exec_cmd(cmd)
             if rc is not 0:
                 msg = "Failed to update osd config for lab_setup.sh"
@@ -1439,7 +1438,7 @@ def boot_other_lab_hosts(nodes, boot_device_dict, host_os, install_output_dir,
         compute_count = cumulus.get_number_of_computes()
 
         time.sleep(120)
-        cmd =  "source /etc/nova/openrc; system host-list | awk \'/None/ { print $2 }\'"
+        cmd = "source /etc/nova/openrc; system host-list | awk \'/None/ { print $2 }\'"
         rc, ids = controller0.ssh_conn.exec_cmd(cmd)
         if rc is 0:
             for i in range(0, compute_count):
@@ -1591,7 +1590,7 @@ def main():
 
     if args.output_dir:
         output_dir = args.output_dir
-        
+
         if not os.path.exists(output_dir):
             os.makedirs(output_dir, exist_ok=True)
     else:
@@ -1822,7 +1821,7 @@ def main():
         downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
                            guest_load_path, host_os, override, small_footprint,
                            lab_cfg_location)
-        set_install_step_complete( lab_install_step)
+        set_install_step_complete(lab_install_step)
 
     if stop == "2":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
@@ -1833,7 +1832,7 @@ def main():
 
     if do_next_install_step(lab_type, lab_install_step):
         configureController(bld_server_conn, host_os, install_output_dir, banner)
-        set_install_step_complete( lab_install_step)
+        set_install_step_complete(lab_install_step)
 
 
     time.sleep(10)
@@ -1855,7 +1854,7 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
         if not tis_on_tis:
             bulkAddHosts()
-            set_install_step_complete( lab_install_step)
+            set_install_step_complete(lab_install_step)
 
     if stop == "4":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
@@ -1873,14 +1872,14 @@ def main():
                 msg = "lab_setup failed in small footprint configuration."
                 log.error(msg)
                 installer_exit._exit(1, msg)
-            set_install_step_complete( lab_install_step)
+            set_install_step_complete(lab_install_step)
 
      # Lab-install Step 6 -  cpe_compute_config_complete - applicable cpe labs only
     lab_install_step = install_step("cpe_compute_config_complete", 6, ['cpe'])
     if do_next_install_step(lab_type, lab_install_step):
         if small_footprint:
             run_cpe_compute_config_complete(host_os, install_output_dir)
-            set_install_step_complete( lab_install_step)
+            set_install_step_complete(lab_install_step)
 
     # Lab-install Step 7 -  Run_lab_setup - applicable cpe labs only
     lab_install_step = install_step("run_lab_setup", 7, ['cpe'])
@@ -1896,14 +1895,14 @@ def main():
                 wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
                 wait_state(controller0, OPERATIONAL, ENABLED)
 
-            set_install_step_complete( lab_install_step)
+            set_install_step_complete(lab_install_step)
 
     # Heat stack changes
     if host_os != "wrlinux":
         lab_install_step = install_step("check_heat_resources_file", 8, ['cpe'])
         if do_next_install_step(lab_type, lab_install_step):
             setupHeat(bld_server_conn)
-            set_install_step_complete( lab_install_step)
+            set_install_step_complete(lab_install_step)
 
     # Bring up other hosts
     tis_on_tis_storage = False
@@ -1914,7 +1913,7 @@ def main():
 
         boot_other_lab_hosts(nodes, boot_device_dict, host_os, install_output_dir,
                              small_footprint, tis_on_tis)
-        set_install_step_complete( lab_install_step)
+        set_install_step_complete(lab_install_step)
 
     # Remove controller-0 from the nodes list since it's up
     nodes.remove(controller0)
@@ -1937,7 +1936,7 @@ def main():
             msg = "lab_setup failed in {} lab configuration.".format(lab_type)
             log.error(msg)
             installer_exit._exit(1, msg)
-        set_install_step_complete( lab_install_step)
+        set_install_step_complete(lab_install_step)
 
     log.info("Beginning lab setup procedure for {} lab".format(lab_type))
     # Lab-install Step 10 -  run_lab_setup - applicable regular and storage labs
@@ -1951,7 +1950,7 @@ def main():
                 log.error(msg)
                 installer_exit._exit(1, msg)
 
-            set_install_step_complete( lab_install_step)
+            set_install_step_complete(lab_install_step)
 
     # Unlock Controller-1
     # Lab-install Step 11 -  unlock_controller1 - applicable all labs
@@ -1959,8 +1958,16 @@ def main():
     lab_install_step = install_step("unlock_controller1", 12, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
         unlock_node(nodes, selection_filter="controller-1")
-        set_install_step_complete( lab_install_step)
+        set_install_step_complete(lab_install_step)
 
+    # Wait until the following alarms clear
+    # Service alarms (400.002) e.g directory-services, web-services, etc.
+    # Configuration action is required to provision compute function (250.010)
+    # drbd-sync (400.001)
+    if lab_type is 'cpe':
+        wait_until_alarm_clears(controller0, timeout=840, check_interval=60, alarm_id="400.002", host_os=host_os)
+        wait_until_alarm_clears(controller0, timeout=720, check_interval=60, alarm_id="250.010", host_os=host_os)
+        wait_until_alarm_clears(controller0, timeout=14400, check_interval=60, alarm_id="400.001", host_os=host_os)
 
     # For storage lab run lab setup
     executed = False
@@ -1974,10 +1981,7 @@ def main():
             log.error(msg)
             installer_exit._exit(1, msg)
 
-        set_install_step_complete( lab_install_step)
-
-
-    # For storage lab unlock storage nodes
+        set_install_step_complete(lab_install_step)
 
     # Lab-install Step 13 -  unlock_storages - applicable storage labs
     lab_install_step = install_step("unlock_storages", 14, ['storage'])
@@ -1985,7 +1989,7 @@ def main():
 
         unlock_node(nodes, selection_filter="storage")
         wait_state(node, OPERATIONAL, ENABLED)
-        set_install_step_complete( lab_install_step)
+        set_install_step_complete(lab_install_step)
 
     # After unlocking storage nodes, wait for ceph to come up
     if lab_type is 'storage':
@@ -2029,14 +2033,14 @@ def main():
             log.error(msg)
             installer_exit._exit(1, msg)
 
-        set_install_step_complete( lab_install_step)
+        set_install_step_complete(lab_install_step)
 
     # Heat stack changes
     if host_os != "wrlinux":
         lab_install_step = install_step("check_heat_resources_file", 18, ['regular', 'storage'])
         if do_next_install_step(lab_type, lab_install_step):
             setupHeat(bld_server_conn)
-            set_install_step_complete( lab_install_step)
+            set_install_step_complete(lab_install_step)
 
     if lab_type is "cpe":
         for node in nodes:
