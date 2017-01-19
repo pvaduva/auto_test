@@ -134,7 +134,7 @@ def pytest_runtest_makereport(item, call, __multicall__):
             if val[0] == 'Failed':
                 _write_results(res_in_tests='Failed', test_name=test_name)
                 TestRes.FAILNUM += 1
-                raise KeyboardInterrupt("Skip rest of the iterations upon stress test failure")
+                pytest.exit("Skip rest of the iterations upon stress test failure")
 
     return report
 
@@ -512,4 +512,4 @@ def pytest_sessionfinish(session):
     if stress_iteration > 0 and has_fail:
         # _thread.interrupt_main()
         print('Printing traceback: \n' + '\n'.join(tracebacks))
-        raise KeyboardInterrupt("Abort upon stress test failure")
+        pytest.exit("Abort upon stress test failure")
