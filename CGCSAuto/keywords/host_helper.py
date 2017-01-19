@@ -1780,7 +1780,7 @@ def get_total_allocated_vcpus_in_log(host, con_ssh=None):
         return total_allocated_vcpus
 
 
-def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeout=60):
+def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeout=60, fail_ok=False):
     """
     Wait for total allocated vcpus in nova-compute.log gets updated to a value that is different than given value
 
@@ -1788,6 +1788,7 @@ def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeo
         host_ssh (SSHFromSSH):
         prev_cpus (list):
         timeout (int):
+        fail_ok (bool): whether to raise exception when allocated vcpus number did not change
 
     Returns (float): New value of total allocated vcpus as float with 4 digits after decimal point
 
@@ -1808,7 +1809,11 @@ def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeo
         if allocated_cpus != prev_cpus:
             return allocated_cpus
     else:
-        raise exceptions.HostTimeout("total allocated vcpus is not updated within timeout in nova-compute.log")
+        msg = "Total allocated vcpus is not updated within timeout in nova-compute.log"
+        if fail_ok:
+            LOG.warning(msg)
+            return prev_cpus
+        raise exceptions.HostTimeout(msg)
 
 
 def get_vcpus_for_computes(hosts=None, rtn_val='used_now', con_ssh=None):
