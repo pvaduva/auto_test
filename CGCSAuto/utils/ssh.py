@@ -94,10 +94,18 @@ class SSHClient:
 
         log_dir = ProjVar.get_var('LOG_DIR')
         if log_dir:
+            curr_thread = threading.current_thread()
+            if not isinstance(curr_thread, threading._MainThread):
+                log_dir += '/threads/'
             os.makedirs(log_dir, exist_ok=True)
-            logpath = log_dir + '/ssh_' + lab_name + ".log"
+
+            if isinstance(curr_thread, threading._MainThread):
+                logpath = log_dir + '/ssh_' + lab_name + ".log"
+            else:
+                logpath = log_dir + curr_thread.name + '_ssh_' + lab_name + ".log"
         else:
             logpath = None
+
         return logpath
 
     def connect(self, retry=False, retry_interval=3, retry_timeout=300, prompt=None,
@@ -329,8 +337,14 @@ class SSHClient:
 
         return index
 
+    def __force_end(self, force):
+        if force:
+            self.flush(3)
+            self.send_control('c')
+            self.flush(10)
+
     def exec_cmd(self, cmd, expect_timeout=10, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
-                 fail_ok=True, get_exit_code=True):
+                 fail_ok=True, get_exit_code=True, blob=None, force_end=False):
         """
 
         Args:
@@ -345,12 +359,15 @@ class SSHClient:
         Returns (tuple): (exit code (int), command output (str))
 
         """
+        if blob is None:
+            blob = self.prompt
+
         LOG.debug("Executing command...")
         if err_only:
             cmd += ' 1> /dev/null'          # discard stdout
         self.send(cmd, reconnect, reconnect_timeout)
         try:
-            self.expect(timeout=expect_timeout)
+            self.expect(blob_list=blob, timeout=expect_timeout)
         except pexpect.TIMEOUT as e:
             self.send_control('c')
             self.flush(timeout=10)
@@ -361,7 +378,9 @@ class SSHClient:
 
         code, output = self.__process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
 
-        if code != 0 and not fail_ok:
+        self.__force_end(force_end)
+
+        if code > 0 and not fail_ok:
             raise exceptions.SSHExecCommandFailed("Non-zero return code for cmd: {}".format(cmd))
 
         return code, output
@@ -394,7 +413,7 @@ class SSHClient:
     def _parse_output(output):
         if type(output) is bytes:
             output = output.decode("utf-8")
-        return output
+        return str(output)
 
     def set_prompt(self, prompt=CONTROLLER_PROMPT):
         self.prompt = prompt
@@ -410,8 +429,11 @@ class SSHClient:
     def get_hostname(self):
         return self.exec_cmd('hostname')[1].splitlines()[0]
 
-    def rsync(self, source, dest_server, dest, dest_user='wrsroot', extra_opts=None, pre_opts=None, timeout=60,
-              fail_ok=False):
+    def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, extra_opts=None, pre_opts=None,
+              timeout=60, fail_ok=False):
+
+        dest_user = dest_user or Host.USER
+        dest_password = dest_password or Host.PASSWORD
         if extra_opts:
             extra_opts_str = ' '.join(extra_opts) + ' '
         else:
@@ -423,10 +445,12 @@ class SSHClient:
         ssh_opts = 'ssh {}'.format(' '.join(RSYNC_SSH_OPTIONS))
         cmd = "{} rsync -avre \"{}\" {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
+
         self.send(cmd)
-        index = self.expect([self.prompt, PASSWORD_PROMPT], timeout=timeout)
+        index = self.expect(blob_list=[self.prompt, PASSWORD_PROMPT], timeout=timeout)
+
         if index == 1:
-            self.send(self.password)
+            self.send(dest_password)
             self.expect(timeout=timeout)
 
         code, output = self.__process_exec_result(cmd, rm_date=True)
@@ -464,7 +488,7 @@ class SSHClient:
             raise exceptions.SSHException("Failed to scp files")
 
     def file_exists(self, file_path):
-        return self.exec_cmd('stat ' + file_path)[0] == 0
+        return self.exec_cmd('stat {}'.format(file_path), fail_ok=True)[0] == 0
 
     @contextmanager
     def login_as_root(self, timeout=10):
@@ -806,7 +830,12 @@ class SSHFromSSH(SSHClient):
         except OSError:    # TODO: add unit test
             return False
 
-        index = self.expect(blob_list=[self.prompt, self.parent.get_prompt()], timeout=3, fail_ok=fail_ok)
+        index = self.expect(blob_list=[self.prompt, self.parent.get_prompt(), pexpect.TIMEOUT], timeout=3,
+                            fail_ok=fail_ok)
+        if 2 == index:
+            self.send_control('c')
+            index = self.expect(blob_list=[self.prompt, self.parent.get_prompt()], timeout=3,
+                                fail_ok=fail_ok)
         return 0 == index
 
 

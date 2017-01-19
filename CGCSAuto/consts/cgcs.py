@@ -37,6 +37,7 @@ class GuestImages:
         'opensuse_11': ('openSUSE-11.3-x86_64.qcow2', 11, 'opensuse_11.qcow2'),     # OVP img
         'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21, 'opensuse_12.qcow2'),      # OVP img
         'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16, 'opensuse_13.qcow2'),
+        'win_2012': ('win2012r2.qcow2', 36, 'win_2012.qcow2')   # Service Team img
     }
 
 
@@ -115,6 +116,8 @@ class Prompt:
     ADD_HOST = '.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
     Y_N_PROMPT = '.*\(y/n\)\?.*'
+    YES_N_PROMPT = '.*\[yes/N\]\: ?'
+
 
 
 class NovaCLIOutput:
@@ -152,6 +155,9 @@ class FlavorSpec:
     GUEST_HEARTBEAT = 'sw:wrs:guest:heartbeat'
     SRV_GRP_MSG = "sw:wrs:srv_grp_messaging"
     NIC_ISOLATION = "hw:wrs:nic_isolation"
+    PCI_NUMA_AFFINITY = "hw:wrs:pci_numa_affinity"
+    PCI_PASSTHROUGH_ALIAS = "pci_passthrough:alias"
+    PCI_IRQ_AFFINITY_MASK = "hw:pci_irq_affinity_mask"
 
 
 class ImageMetadata:
@@ -202,6 +208,7 @@ class EventLogID:
     STORAGE_POOLQUOTA = '800.003'
     HOST_LOCK = '200.001'
     NETWORK_AGENT_NOT_RESPOND = '300.003'
+    CON_DRBD_SYNC = '400.001'
 
 
 class NetworkingVmMapping:

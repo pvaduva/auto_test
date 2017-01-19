@@ -62,14 +62,14 @@ def setup_primary_tenant(tenant):
     LOG.info("Primary Tenant for test session is set to {}".format(tenant['tenant']))
 
 
-def setup_natbox_ssh(keyfile_path, natbox):
+def setup_natbox_ssh(keyfile_path, natbox, con_ssh):
     natbox_ip = natbox['ip']
     NATBoxClient.set_natbox_client(natbox_ip)
-    __copy_keyfile_to_natbox(natbox, keyfile_path)
+    __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh=con_ssh)
     return NATBoxClient.get_natbox_client()
 
 
-def __copy_keyfile_to_natbox(natbox, keyfile_path):
+def __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh):
     """
     copy private keyfile from controller-0:/opt/platform to natbox: priv_keys/
     Args:
@@ -78,57 +78,60 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path):
     """
 
     # Assume the tenant key-pair was added by lab_setup from exiting keys from controller-0:/home/wrsroot/.ssh
-    LOG.info("scp key file from controller-0 to NATBox")
+    LOG.info("scp key file from controller to NATBox")
     keyfile_name = keyfile_path.split(sep='/')[-1]
-    with host_helper.ssh_to_host('controller-0') as con_0_ssh:
 
-        if not con_0_ssh.file_exists(keyfile_name):
-            if not con_0_ssh.file_exists(PrivKeyPath.OPT_PLATFORM):
+    if not con_ssh.file_exists(keyfile_name):
+        if not con_ssh.file_exists(PrivKeyPath.OPT_PLATFORM):
+
+            gen_new_key = False
+            with host_helper.ssh_to_host('controller-0') as con_0_ssh:
                 if not con_0_ssh.file_exists(PrivKeyPath.WRS_HOME):
-                    if nova_helper.get_key_pair():
-                        raise exceptions.TiSError("Cannot find ssh keys for existing nova keypair.")
+                    gen_new_key = True
 
-                    passphrase_prompt_1 = '.*Enter passphrase.*'
-                    passphrase_prompt_2 = '.*Enter same passphrase again.*'
+            if gen_new_key:
+                if nova_helper.get_key_pair():
+                    raise exceptions.TiSError("Cannot find ssh keys for existing nova keypair.")
 
-                    con_0_ssh.send('ssh-keygen')
-                    index = con_0_ssh.expect([passphrase_prompt_1, '.*Enter file in which to save the key.*'])
-                    if index == 1:
-                        con_0_ssh.send()
-                        con_0_ssh.expect(passphrase_prompt_1)
-                    con_0_ssh.send()    # Enter empty passphrase
-                    con_0_ssh.expect(passphrase_prompt_2)
-                    con_0_ssh.send()    # Repeat passphrase
-                    con_0_ssh.expect(Prompt.CONTROLLER_0)
+                passphrase_prompt_1 = '.*Enter passphrase.*'
+                passphrase_prompt_2 = '.*Enter same passphrase again.*'
 
-                # ssh keys should now exist under wrsroot home dir
-                con_0_ssh.exec_sudo_cmd('cp {} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.OPT_PLATFORM), fail_ok=False)
+                con_ssh.send('ssh-keygen')
+                index = con_ssh.expect([passphrase_prompt_1, '.*Enter file in which to save the key.*'])
+                if index == 1:
+                    con_ssh.send()
+                    con_ssh.expect(passphrase_prompt_1)
+                con_ssh.send()    # Enter empty passphrase
+                con_ssh.expect(passphrase_prompt_2)
+                con_ssh.send()    # Repeat passphrase
+                con_ssh.expect(Prompt.CONTROLLER_0)
 
-            # ssh private key should now exist under /opt/platform dir
-            cmd_1 = 'cp {} {}'.format(PrivKeyPath.OPT_PLATFORM, keyfile_name)
-            con_0_ssh.exec_sudo_cmd(cmd_1, fail_ok=False)
+            # ssh keys should now exist under wrsroot home dir
+            con_ssh.exec_sudo_cmd('cp {} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.OPT_PLATFORM), fail_ok=False)
 
-            cmd_2 = 'chmod 777 ' + keyfile_name
-            con_0_ssh.exec_sudo_cmd(cmd_2, fail_ok=False)
+        # ssh private key should now exist under /opt/platform dir
+        cmd_1 = 'cp {} {}'.format(PrivKeyPath.OPT_PLATFORM, keyfile_name)
+        con_ssh.exec_sudo_cmd(cmd_1, fail_ok=False)
 
-        # ssh private key should now exist under keyfile_path
-        con_0_ssh.exec_cmd('stat {}'.format(keyfile_name), fail_ok=False)
+        # change user from root to wrsroot
+        cmd_2 = 'chown wrsroot:wrs {}'.format(keyfile_name)
+        con_ssh.exec_sudo_cmd(cmd_2, fail_ok=False)
 
-        # # TODO: remove
-        # cmd_2 = 'chmod 777 ' + keyfile_name
-        # con_0_ssh.exec_sudo_cmd(cmd_2, fail_ok=False)
+    # ssh private key should now exist under keyfile_path
+    con_ssh.exec_cmd('stat {}'.format(keyfile_name), fail_ok=False)
 
-        cmd_3 = 'scp {} {}@{}:{}'.format(keyfile_name, natbox['user'], natbox['ip'], keyfile_path)
-        con_0_ssh.send(cmd_3)
-        rtn_3_index = con_0_ssh.expect(['.*\(yes/no\)\?.*', Prompt.PASSWORD_PROMPT])
-        if rtn_3_index == 0:
-            con_0_ssh.send('yes')
-            con_0_ssh.expect(Prompt.PASSWORD_PROMPT)
-        con_0_ssh.send(natbox['password'])
-        con_0_ssh.expect(timeout=30)
-        if not con_0_ssh.get_exit_code() == 0:
-            raise exceptions.CommonError("Failed to copy keyfile to NatBox")
-    LOG.info("key file is successfully copied from controller-0 to NATBox")
+    cmd_3 = 'scp {} {}@{}:{}'.format(keyfile_name, natbox['user'], natbox['ip'], keyfile_path)
+    con_ssh.send(cmd_3)
+    rtn_3_index = con_ssh.expect(['.*\(yes/no\)\?.*', Prompt.PASSWORD_PROMPT])
+    if rtn_3_index == 0:
+        con_ssh.send('yes')
+        con_ssh.expect(Prompt.PASSWORD_PROMPT)
+    con_ssh.send(natbox['password'])
+    con_ssh.expect(timeout=30)
+    if not con_ssh.get_exit_code() == 0:
+        raise exceptions.CommonError("Failed to copy keyfile to NatBox")
+
+    LOG.info("key file is successfully copied from controller to NATBox")
 
 
 def boot_vms(is_boot):
@@ -139,8 +142,8 @@ def boot_vms(is_boot):
             vm_helper.launch_vms_via_script(vm_type='avp', num_vms=1, tenant_name='tenant1')
             vm_helper.launch_vms_via_script(vm_type='virtio', num_vms=1, tenant_name='tenant2')
         else:
-            vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT_1)
-            vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT_2)
+            vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT1)
+            vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT2)
 
 
 def get_lab_dict(labname):
@@ -221,10 +224,11 @@ def get_tis_timestamp(con_ssh):
     return con_ssh.exec_cmd('date +"%T"')[1]
 
 
-def get_build_id(con_ssh):
+def get_build_info(con_ssh):
     code, output = con_ssh.exec_cmd('cat /etc/build.info')
     if code != 0:
         build_id = ' '
+        build_host = ' '
     else:
         build_id = re.findall('''BUILD_ID=\"(.*)\"''', output)
         if build_id and build_id[0] != 'n/a':
@@ -236,7 +240,10 @@ def get_build_id(con_ssh):
             else:
                 build_id = ' '
 
-    return build_id
+        build_host = re.findall('''BUILD_HOST=\"(.*)\"''', output)
+        build_host = build_host[0].split(sep='.')[0] if build_host else ' '
+
+    return build_id, build_host
 
 
 def copy_files_to_con1():

@@ -1056,7 +1056,7 @@ class Telnet:
                 LOG.error(msg)
                 raise exceptions.TelnetException(msg)
 
-            if node.name == CONTROLLER0:
+            if node.name == CONTROLLER0 and not upgrade:
                 # booting device = USB tested only for Ironpass-31_32
                 if boot_device_regex == 'USB':
                     self.get_read_until("Select kernel options and boot kernel", 120)

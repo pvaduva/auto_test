@@ -18,6 +18,7 @@ function usage {
 	       echo "	-b		Build that was used during test"
 	       echo "	-u		User Story number"
 	       echo "	-a		Artifcact or log file"
+	       echo " 	-s		Build server name: yow-cgts4-lx, yow-cgts3-lx, etc"
 	       echo "	-T		List of test tags"
 	       echo "	"
 	       echo " By Craig Miller - Version: 0.96"
@@ -46,13 +47,14 @@ build=""
 logfile=""
 userstory=""
 release_name=""
+build_server=""
 #tag=""
 
 # test
 #./ini_writer.sh -D -o a -n b -t c -r pass -a junk -d init -j " " -l LLL -u US 
 
 #note have to put in all options, otherwise getopts will choke
-while getopts "hDo:x:n:t:a:r:l:b:d:j:u:R:" options; do
+while getopts "hDo:x:n:t:a:r:l:b:d:j:u:s:R:" options; do
   case $options in
     o ) outfile="$OPTARG"
         let numopts+=2;;
@@ -77,6 +79,8 @@ while getopts "hDo:x:n:t:a:r:l:b:d:j:u:R:" options; do
     u ) userstory="$OPTARG"
         let numopts+=2;;
     R ) release_name="$OPTARG"
+        let numopts+=2;;
+    s ) build_server="$OPTARG"
         let numopts+=2;;
 
 
@@ -138,7 +142,7 @@ echo "tcPassed = 1" >> $outfile
 echo "userStories = $userstory" >> $outfile
 echo "releaseName = ${release_name}" >> $outfile
 
-echo "defects=$jira" >> $outfile
+echo "defects = $jira" >> $outfile
 echo "environmentId = titanium_server_15" >> $outfile
 echo "environmentName = FullInstall" >> $outfile
 echo "environmentSpin = " >> $outfile
@@ -149,9 +153,10 @@ echo "[attributes]" >> $outfile
 echo "project = CGCS 2.0" >> $outfile
 echo "board_name = $lab" >> $outfile
 echo "kernel = 3.10.71-ovp-rt74-r1_preempt-rt" >> $outfile
-echo "domain=$domain" >> $outfile
+echo "domain = $domain" >> $outfile
 echo "lab = $lab" >> $outfile
 echo "build = $build" >> $outfile
+echo "build_server = $build_server" >> $outfile
 
 # This section contains dummy values. 
 # It is only used to satisfy the database upload.
@@ -193,5 +198,3 @@ fi
 #echo "</pre>"
 #echo "---"
 #echo "pau"
-
-

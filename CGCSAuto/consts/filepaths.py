@@ -26,7 +26,7 @@ class TestServerPath:
 
 
 class PrivKeyPath:
-    OPT_PLATFORM = "/opt/platform/id_rsa"
+    OPT_PLATFORM = '/opt/platform/id_rsa'
     WRS_HOME = '/home/wrsroot/.ssh/id_rsa'
 
 

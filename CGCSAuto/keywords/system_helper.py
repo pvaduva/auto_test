@@ -637,7 +637,7 @@ def set_retention_period(fail_ok=True, check_first=True, con_ssh=None, auth_info
         fail_ok: True or False
         check_first: True or False
         con_ssh (str):
-        auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT_1,Tenant.TENANT_2
+        auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT1,Tenant.TENANT2
 
     Returns (tuple): (rtn_code (int), msg (str))
         (-1, "Retention period not specified")
@@ -817,25 +817,24 @@ def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_in
         return 0, "1G memory is modified to {} in pending.".format(hugepage_num)
 
 
-def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail_ok=False, con_ssh=None):
-    # TODO: Update after Jira fix.CGTS-4356
+def __suppress_unsuppress_event(alarm_id, suppress=True, check_first=False, fail_ok=False, con_ssh=None):
     """
-    suppress alarm by uuid
+    suppress/unsuppress an event by uuid
     Args:
-        alarm_id: string
-        fail_ok : Boolean
-        con_ssh : (SSHClient)
-        suppress boolean True or false
+        alarm_id (str):
+        fail_ok (bool):
+        con_ssh (SSHClient)
+        suppress(bool) True or false
 
-    Returns:
-        success 0 ,and output Message
+    Returns (tuple): (rtn_code, message)
+        (0, )
     """
 
     suppressed_alarms_tab = get_suppressed_alarms(uuid=True, con_ssh=con_ssh)
 
     alarm_status = "unsuppressed" if suppress else "suppressed"
     cmd = "event-suppress" if suppress else "event-unsuppress"
-    alarm_filter = {"Suppressed Alarm ID's": alarm_id}
+    alarm_filter = {"Suppressed Event ID's": alarm_id}
 
     if check_first:
         if not suppressed_alarms_tab['values']:
@@ -844,7 +843,7 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
             pre_status = table_parser.get_values(table_=suppressed_alarms_tab, target_header='Status', strict=True,
                                                  **alarm_filter)[0]
         if pre_status.lower() != alarm_status:
-            msg = "Alarm is already {}. Do nothing".format(pre_status)
+            msg = "Event is already {}. Do nothing".format(pre_status)
             LOG.info(msg)
             return -1, msg
 
@@ -867,24 +866,24 @@ def __suppress_unsuppress_alarm(alarm_id, suppress=True, check_first=False, fail
             return 2, msg
         raise exceptions.TiSError(msg)
 
-    succ_msg = "Alarm {} is {} successfully".format(alarm_id, expt_status)
+    succ_msg = "Event {} is {} successfully".format(alarm_id, expt_status)
     LOG.info(succ_msg)
     return 0, succ_msg
 
 
-def suppress_alarm(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
-    return __suppress_unsuppress_alarm(alarm_id, True, check_first=check_first, fail_ok=fail_ok, con_ssh=con_ssh)
+def suppress_event(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
+    return __suppress_unsuppress_event(alarm_id, True, check_first=check_first, fail_ok=fail_ok, con_ssh=con_ssh)
 
 
-def unsuppress_alarm(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
-    return __suppress_unsuppress_alarm(alarm_id, False, check_first=check_first, fail_ok=fail_ok, con_ssh=con_ssh)
+def unsuppress_event(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
+    return __suppress_unsuppress_event(alarm_id, False, check_first=check_first, fail_ok=fail_ok, con_ssh=con_ssh)
 
 
 def generate_event(event_id='300.005', state='set', severity='critical', reason_text='Generated for testing',
-                   entity_id='TiS Auto', unknown_text='unknown1', unknown_two='unknown2', con_ssh=None):
+                   entity_id='CGCSAuto', unknown_text='unknown1', unknown_two='unknown2', con_ssh=None):
 
     cmd = '''fmClientCli -c  "### ###{}###{}###{}###{}### ###{}### ###{}###{}### ###True###True###"'''.\
-        format(event_id, state, entity_id, reason_text, severity, unknown_text, unknown_two)
+        format(event_id, state, reason_text, entity_id, severity, unknown_text, unknown_two)
 
     LOG.info("Generate system event: {}".format(cmd))
     if not con_ssh:
@@ -1586,20 +1585,22 @@ def get_system_health_query_upgrade(con_ssh=None):
     for line in output:
         if ":" in line:
             k, v = line.split(":")
-            if v.strip() is "[OK]":
+            if "[OK]" in v.strip():
                 ok[k.strip()] = v.strip()
-            elif v.strip() is "[Failed]":
+            elif "[Fail]" in v.strip():
                 failed[k.strip()] = v.strip()
     if len(failed) > 0:
         return 1, failed
     else:
         return 0, None
 
-def system_upgrade_start(con_ssh=None, fail_ok=False):
+
+def system_upgrade_start(con_ssh=None, force=False, fail_ok=False):
     """
 
     Args:
         con_ssh:
+        force:
         fail_ok:
 
     Returns (tuple):
@@ -1608,8 +1609,10 @@ def system_upgrade_start(con_ssh=None, fail_ok=False):
         (2, <stderr>) : "applicable only if fail_ok is true. upgrade-start rejected:
         An upgrade is already in progress."
     """
-
-    rc, output = cli.system("upgrade-start", fail_ok=True, ssh_client=con_ssh)
+    if force:
+        rc, output = cli.system("upgrade-start", positional_args='--force',fail_ok=True, ssh_client=con_ssh)
+    else:
+        rc, output = cli.system("upgrade-start", fail_ok=True, ssh_client=con_ssh)
 
     if rc == 0:
         LOG.info("system upgrade-start ran successfully.")
@@ -1894,8 +1897,40 @@ def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False,
 
     rc, output = cli.system('load-delete', id, ssh_client=con_ssh,
                             fail_ok=True, source_admin_=source_admin_)
-    #TODO: add check if load is deleted
-    return id
+
+    if not wait_for_delete_imported_load(id, con_ssh=con_ssh,  fail_ok=True):
+        err_msg = "Unable to delete imported load {}".format(id)
+        LOG.warning(err_msg)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
+
+
+def wait_for_delete_imported_load(id, timeout=120, check_interval=5,
+                        fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+
+    LOG.info("Waiting for imported load  {} to be deleted from the load-list ".format(id))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, auth_info=auth_info))
+
+        table_ = table_parser.filter_table(table_, **{'id': id})
+        if len(table_parser.get_values(table_, 'id')) == 0:
+            return True
+        else:
+            if 'deleting' in table_parser.get_column(table_, 'state'):
+                rc, output = cli.system('load-delete', id, ssh_client=con_ssh,
+                            fail_ok=True)
+        time.sleep(check_interval)
+
+    else:
+        err_msg = "Timed out waiting for load {} to get deleted".format(id)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return False
+        else:
+            raise exceptions.TimeoutException(err_msg)
 
 
 def install_upgrade_license(license_path, timeout=30, con_ssh=None):
@@ -1926,6 +1961,63 @@ def install_upgrade_license(license_path, timeout=30, con_ssh=None):
 
         if index == 0:
             rc = con_ssh.exec_cmd("echo $?")[0]
+            con_ssh.flush()
             break
 
     return rc
+
+def abort_upgrade(con_ssh=None, timeout=60, fail_ok=False):
+    """
+    Aborts upgrade
+    Args:
+        con_ssh (SSHClient):
+        fail_ok (bool):
+
+    Returns (tuple):
+        (0, dict/list)
+        (1, <stderr>)   # cli returns stderr, applicable if fail_ok is true
+
+    """
+
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    cmd = "source /etc/nova/openrc; system upgrade-abort"
+    con_ssh.send(cmd)
+    end_time = time.time() + timeout
+    rc = 1
+    while time.time() < end_time:
+        index = con_ssh.expect([con_ssh.prompt,  Prompt.YES_N_PROMPT], timeout=timeout)
+        if index == 1:
+            con_ssh.send('yes')
+
+        if index == 0:
+            rc = con_ssh.exec_cmd("echo $?")[0]
+            con_ssh.flush()
+            break
+
+    if rc != 0:
+        err_msg = "CLI system upgrade-abort rejected"
+        LOG.warning(err_msg)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.CLIRejected(err_msg)
+
+    table_ = system_upgrade_show()[1]
+    state = table_parser.get_value_two_col_table(table_, "state")
+    if "aborting" in state:
+        return 0, "Upgrade aborting"
+    else:
+        err_msg = "Upgrade abort failed"
+        if fail_ok:
+            LOG.warn(err_msg)
+            return 1, err_msg
+        else:
+            raise exceptions.CLIRejected(err_msg)
+
+
+
+
+

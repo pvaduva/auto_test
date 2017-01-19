@@ -34,7 +34,7 @@ LOCAL_PATH = os.path.dirname(__file__)
 WASSP_PATH = os.path.join(LOCAL_PATH, "..", "..", "..", "..", "..")
 
 
-def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=None):
+def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=None, build_server=None):
     """
     collect the test environment variables 
     """
@@ -46,13 +46,14 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
     lab = options['lab'] if options['lab'] else ProjVar.get_var('LAB')
     lab_name = lab['short_name'].upper()
     build = options['build'] if options['build'] else build
+    build_server = options['build_server'] if options['build_server'] else build_server
     userstory = options['userstory'] if options['userstory'] else setup_consts.USERSTORY.upper()
     
     if ProjVar.get_var('REPORT_TAG'):
         tag = ProjVar.get_var('REPORT_TAG')
     else:
         tag = options['tag'] if options['tag'] else 'regression_%s_%s' % (build, lab_name)
-    jira = options['jira'] if options['jira'] else 'Unknown'
+    jira = options['jira'] if options['jira'] else ''
     release_name = options['release_name']
     output = options['output']
     tester_name = options['tester_name'] if options['tester_name'] else os.environ['USER']
@@ -95,13 +96,15 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
         result = 'PASS'
     elif result == 'Failed' or result == 'failed':
         result = 'FAIL'
+    elif result.lower() == 'skipped':
+        result = 'SKIP'
 
     # create a data file containing test information
     os.system("rm -rf %s" % output)
-    env_params = "-o %s -x %s  -n %s -t %s -r %s -l %s -b '%s' -u %s -d %s -j %s -a '%s' -R '%s'"\
+    env_params = "-o '%s' -x '%s'  -n '%s' -t '%s' -r '%s' -l '%s' -b '%s' -u '%s' -d '%s' -j '%s' -a '%s' -R '%s' -s '%s'"\
                  % (output, tag, tester_name, test_name, result, 
                     lab_name, build, userstory, domain,
-                    jira, logfile, release_name)
+                    jira, logfile, release_name, build_server)
 
     ini_writer = os.path.join(LOCAL_PATH, 'ini_writer.sh')
     cmd = "%s %s" % (ini_writer, env_params)
@@ -141,29 +144,6 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
 
     return res
 
-    # upload_cmd = "{} {} -f {} >>{} 2>&1 ".format(activate, test_reporter, output, report_file_name)
-    # log_msg += '\nReport upload command: {}'.format(upload_cmd)
-    #
-    # exit_code = os.system(upload_cmd)
-    # LOG.info("mongo reporter exit code: {}".format(exit_code))
-    # if not exit_code:
-    #     msg = "Test result successfully uploaded to MongoDB."
-    #     log_msg += msg
-    #     rtn = True
-    # else:
-    #     log_msg += "\nTest result failed to upload. Please check parameters stored at %s" % output
-    #     msg = log_msg
-    #     rtn = False
-    # today_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    # extra_info = '\nDate: %s. Report tag: %s\n\n' % (today_date, tag)
-    # msg += extra_info
-    # log_msg += extra_info
-    # print(msg)
-    # with open(report_file_name, mode='a') as f:
-    #     f.write(log_msg)
-    #
-    # return rtn
-
 
 def collect_user_input_and_upload_results(test_name=None, result=None, log_dir=None):
     """
@@ -182,7 +162,7 @@ def collect_user_input_and_upload_results(test_name=None, result=None, log_dir=N
     output = options.output
     tester_name = options.tester_name
     tag = options.tag
-    jira = 'Unknown'
+    jira = ''
     
     if log_dir is None:
         logfile = options.logfile
@@ -251,6 +231,7 @@ def parse_user_args():
     parser.add_argument('-t', '--test_name', dest='test_name', default=defaults['test_name'])
     parser.add_argument('-x', '--tag', dest='tag', default=defaults['tag'])
     parser.add_argument('-j', '--jira', dest='jira', default=defaults['jira'])
+    parser.add_argument('-s', '--build_server', dest='build_server', default=defaults['build_server'])
     parser.add_argument('-a', '--logfile', dest='logfile', default=defaults['logfile'])
 
     return parser.parse_args()

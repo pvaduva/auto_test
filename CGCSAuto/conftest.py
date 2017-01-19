@@ -76,8 +76,10 @@ def _write_results(res_in_tests, test_name):
     # reset tc_start and end time for next test case
     tc_start_time = None
     build_id = ProjVar.get_var('BUILD_ID')
+    build_server = ProjVar.get_var('BUILD_SERVER')
     if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
-        upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id)
+        upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id,
+                                                build_server=build_server)
         if not upload_res:
             with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
                 f.write('\tUPLOAD_UNSUCC')
@@ -99,7 +101,7 @@ def pytest_runtest_makereport(item, call, __multicall__):
                 fail_at.append('test ' + key)
             elif val[0] == 'Skipped':
                 res_in_log = 'Test Skipped\nReason: {}'.format(val[1])
-                res_in_tests = 'Skipped'
+                res_in_tests = 'SKIP'
                 break
         if fail_at:
             fail_at = ', '.join(fail_at)
@@ -109,20 +111,20 @@ def pytest_runtest_makereport(item, call, __multicall__):
         testcase_log(msg=res_in_log, nodeid=test_name, log_type='tc_res')
 
         if 'Test Passed' in res_in_log:
-            res_in_tests = 'Passed'
+            res_in_tests = 'PASS'
         elif 'Test Failed' in res_in_log:
-            res_in_tests = 'Failed'
+            res_in_tests = 'FAIL'
 
         if not res_in_tests:
-            res_in_tests = 'Unknown!'
+            res_in_tests = 'UNKNOWN'
 
         # count testcases by status
         TestRes.TOTALNUM += 1
-        if res_in_tests == 'Passed':
+        if res_in_tests == 'PASS':
             TestRes.PASSNUM += 1
-        elif res_in_tests == 'Failed':
+        elif res_in_tests == 'FAIL':
             TestRes.FAILNUM += 1
-        elif res_in_tests == 'Skipped':
+        elif res_in_tests == 'SKIP':
             TestRes.SKIPNUM += 1
 
         _write_results(res_in_tests=res_in_tests, test_name=test_name)
@@ -132,7 +134,7 @@ def pytest_runtest_makereport(item, call, __multicall__):
             if val[0] == 'Failed':
                 _write_results(res_in_tests='Failed', test_name=test_name)
                 TestRes.FAILNUM += 1
-                raise KeyboardInterrupt("Skip rest of the iterations upon stress test failure")
+                pytest.exit("Skip rest of the iterations upon stress test failure")
 
     return report
 
@@ -214,6 +216,8 @@ def pytest_configure(config):
     tenant_arg = config.getoption('tenant')
     bootvms_arg = config.getoption('bootvms')
     openstack_cli = config.getoption('openstackcli')
+    global change_admin
+    change_admin = config.getoption('changeadmin')
     global stress_iteration
     stress_iteration = config.getoption('repeat')
     install_conf = config.getoption('installconf')
@@ -284,6 +288,7 @@ def pytest_addoption(parser):
     installconf_help = "Full path of lab install configuration file. Template location: " \
                        "/folk/cgts/lab/autoinstall_template.ini"
     resumeinstall_help = 'Resume install of current lab from where it stopped/failed'
+    changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
 
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
@@ -296,6 +301,8 @@ def pytest_addoption(parser):
     parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
     parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
     parser.addoption('--natbox', action='store', metavar='natboxname', default=None, help=natbox_help)
+    parser.addoption('--changeadmin', '--change-admin', '--change_admin', dest='changeadmin', action='store_true',
+                     help=changeadmin_help)
     parser.addoption('--bootvms', '--boot_vms', '--boot-vms', dest='bootvms', action='store_true', help=bootvm_help)
     parser.addoption('--openstackcli', '--openstack_cli', '--openstack-cli', action='store_true', dest='openstackcli',
                      help=openstackcli_help)
@@ -337,26 +344,29 @@ def pytest_unconfigure():
 
     tc_res_path = ProjVar.get_var('LOG_DIR') + '/test_results.log'
     build_id = ProjVar.get_var('BUILD_ID')
+    build_server = ProjVar.get_var('BUILD_SERVER')
 
     total_exec = TestRes.PASSNUM + TestRes.FAILNUM
     pass_rate = fail_rate = '0'
     if total_exec > 0:
         pass_rate = "{}%".format(round(TestRes.PASSNUM * 100 / total_exec, 2))
         fail_rate = "{}%".format(round(TestRes.FAILNUM * 100 / total_exec, 2))
-    with open(tc_res_path, mode='a') as f:
-        # Append general info to result log
-        f.write('\n\nLab: {}\n'
-                'Build ID: {}\n'
-                'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, ProjVar.get_var('LOG_DIR')))
-        # Add result summary to beginning of the file
-        f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
-                format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
-        if TestRes.SKIPNUM > 0:
-            f.write('------------\nSkipped: {}'.format(TestRes.SKIPNUM))
+        with open(tc_res_path, mode='a') as f:
+            # Append general info to result log
+            f.write('\n\nLab: {}\n'
+                    'Build ID: {}\n'
+                    'Build Server: {}\n'
+                    'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server,
+                                                       ProjVar.get_var('LOG_DIR')))
+            # Add result summary to beginning of the file
+            f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
+                    format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
+            if TestRes.SKIPNUM > 0:
+                f.write('------------\nSkipped: {}'.format(TestRes.SKIPNUM))
 
-    LOG.info("Test Results saved to: {}".format(tc_res_path))
-    with open(tc_res_path, 'r') as fin:
-        print(fin.read())
+        LOG.info("Test Results saved to: {}".format(tc_res_path))
+        with open(tc_res_path, 'r') as fin:
+            print(fin.read())
 
     # Below needs con_ssh to be initialized
     try:
@@ -473,10 +483,20 @@ def pytest_generate_tests(metafunc):
     if metafunc.config.option.repeat > 0:
         # Add autorepeat fixture and parametrize the fixture
         param_name = 'autorepeat'
-        metafunc.fixturenames.append(param_name)
 
         count = int(metafunc.config.option.repeat)
         metafunc.parametrize(param_name, range(count), indirect=True, ids=__params_gen(count))
+
+
+@pytest.fixture(autouse=True)
+def autorepeat(request):
+    return
+
+
+@pytest.fixture(autouse=True)
+def autostart(request):
+    if change_admin:
+        return request.getfuncargvalue('change_admin_password_session')
 
 
 def __params_gen(iterations):
@@ -492,4 +512,4 @@ def pytest_sessionfinish(session):
     if stress_iteration > 0 and has_fail:
         # _thread.interrupt_main()
         print('Printing traceback: \n' + '\n'.join(tracebacks))
-        raise KeyboardInterrupt("Abort upon stress test failure")
+        pytest.exit("Abort upon stress test failure")

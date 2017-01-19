@@ -35,7 +35,7 @@ def test_ceilometer_vswitch_port_samples():
     limit = 20
     for resource_id in last_two_samples:
         query = 'resource={}'.format(resource_id)
-        samples = __wait_for_records(limit=limit, meter=meter, query=query, entry_num=limit, timeout=300)
+        samples = __wait_for_records(limit=limit, meter=meter, query=query, entry_num=limit, timeout=limit * 30)
         assert limit == len(samples), "Number of samples for resource {} for {} meter is not {}".format(resource_id,
                                                                                                         meter, limit)
 

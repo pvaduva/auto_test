@@ -4,12 +4,13 @@ from contextlib import contextmanager
 from xml.etree import ElementTree
 
 from utils import cli, exceptions, table_parser
-from utils.ssh import ControllerClient, SSHFromSSH
+from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
 from utils.tis_log import LOG
 
-from consts.auth import Tenant
-from consts.cgcs import HostAvailabilityState, HostAdminState
+from consts.auth import Tenant, SvcCgcsAuto
+from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState, Prompt
 from consts.timeout import HostTimeout, CMDTimeout
+from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 
 from keywords import system_helper, common
 from keywords.security_helper import LinuxUser
@@ -405,7 +406,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
 
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,
-                auth_info=Tenant.ADMIN, check_hypervisor_up=True, check_webservice_up=True):
+                auth_info=Tenant.ADMIN, check_hypervisor_up=True, check_webservice_up=True, check_subfunc=True):
     """
     Unlock given host
     Args:
@@ -418,6 +419,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         auth_info (dict):
         check_hypervisor_up (bool): Whether to check if host is up in nova hypervisor-list
         check_webservice_up (bool): Whether to check if host's web-service is active in system servicegroup-list
+        check_subfunc (bool): whether to check subfunction_oper and subfunction_avail for CPE system
 
     Returns (tuple):  Only -1, 0, 4 senarios will be returned if fail_ok=False
         (-1, "Host already unlocked. Do nothing")
@@ -430,8 +432,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         (6, "Host is not up in nova hypervisor-list")   # Host with compute function only. Applicable if fail_ok
         (7, "Host web-services is not active in system servicegroup-list") # controllers only. Applicable if fail_ok
         (8, "Failed to wait for host to reach Available state after unlocked to Degraded state")    # only applicable if fail_ok and available_only are True
-        (9, "Host subfunctions operational and availability are not enable and available system host-show") # controllers (CPE) only
-
+        (9, "Host subfunctions operational and availability are not enable and available system host-show") # CPE only
 
     """
     LOG.info("Unlocking {}...".format(host))
@@ -462,18 +463,6 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
     if not _wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh, task=''):
         return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
 
-    table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
-    subfunctions = table_parser.get_value_two_col_table(table_, 'subfunctions')
-    if subfunctions:
-        # wait for subfunction states to be operational enabled and available
-        if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-                                     subfunction_oper='enabled', subfunction_avail="available" ):
-            err_msg = "Host subfunctions operational and availability did not change to enabled and available" \
-                      " within timeout"
-            LOG.warning(err_msg)
-            return 9, err_msg
-
-
     if get_hostshow_value(host, 'availability') == HostAvailabilityState.DEGRADED:
         if not available_only:
             LOG.warning("Host is in degraded state after unlocked.")
@@ -485,8 +474,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                 LOG.warning(err_msg)
                 return 8, err_msg
 
-
-    if check_hypervisor_up or check_webservice_up:
+    if check_hypervisor_up or check_webservice_up or check_subfunc:
 
         table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
 
@@ -504,6 +492,16 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         if check_webservice_up and is_controller:
             if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[0]:
                 return 7, "Host web-services is not active in system servicegroup-list"
+
+        if check_subfunc and is_controller and is_compute:
+            # wait for subfunction states to be operational enabled and available
+            if not _wait_for_host_states(host, timeout=90, fail_ok=fail_ok, con_ssh=con_ssh,
+                                         subfunction_oper=HostOperationalState.ENABLED,
+                                         subfunction_avail=HostAvailabilityState.AVAILABLE):
+                err_msg = "Host subfunctions operational and availability did not change to enabled and available" \
+                          " within timeout"
+                LOG.warning(err_msg)
+                return 9, err_msg
 
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
@@ -687,63 +685,6 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=60, fail_ok=False, chec
                 raise
             time.sleep(check_interval)
 
-
-def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, strict=True, regex=False, fail_ok=True,
-                          con_ssh=None, **states):
-    if not states:
-        raise ValueError("Expected host state(s) has to be specified via keyword argument states")
-
-    LOG.info("Waiting for {} to reach state(s) - {}".format(host, states))
-    end_time = time.time() + timeout
-    last_vals = {}
-    for field in states:
-        last_vals[field] = None
-    while time.time() < end_time:
-        table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
-        for field, expt_vals in states.items():
-            actual_val = table_parser.get_value_two_col_table(table_, field)
-            # ['Lock of host compute-0 rejected because instance vm-from-vol-t1 is', 'suspended.']
-            if isinstance(actual_val, list):
-                actual_val = ' '.join(actual_val)
-
-            actual_val_lower = actual_val.lower()
-            if isinstance(expt_vals, str):
-                expt_vals = [expt_vals]
-
-            for expected_val in expt_vals:
-                expected_val_lower = expected_val.strip().lower()
-                found_match = False
-                if regex:
-                    if strict:
-                        res_ = re.match(expected_val_lower, actual_val_lower)
-                    else:
-                        res_ = re.search(expected_val_lower, actual_val_lower)
-                    if res_:
-                        found_match = True
-                else:
-                    if strict:
-                        found_match = actual_val_lower == expected_val_lower
-                    else:
-                        found_match = actual_val_lower in expected_val_lower
-
-                if found_match:
-                    LOG.info("{} {} has reached: {}".format(host, field, actual_val))
-                    break
-            else:   # no match found. run system host-show again
-                if last_vals[field] != actual_val_lower:
-                    LOG.info("{} {} is {}.".format(host, field, actual_val))
-                last_vals[field] = actual_val_lower
-                break
-        else:
-            LOG.info("{} is in states: {}".format(host, states))
-            return True
-        time.sleep(check_interval)
-    else:
-        msg = "{} did not reach states - {}".format(host, states)
-        if fail_ok:
-            LOG.warning(msg)
-            return False
-        raise exceptions.TimeoutException(msg)
 
 def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, strict=True, regex=False, fail_ok=True,
                           con_ssh=None, **states):
@@ -1828,7 +1769,7 @@ def get_total_allocated_vcpus_in_log(host, con_ssh=None):
         return total_allocated_vcpus
 
 
-def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeout=60):
+def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeout=60, fail_ok=False):
     """
     Wait for total allocated vcpus in nova-compute.log gets updated to a value that is different than given value
 
@@ -1836,6 +1777,7 @@ def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeo
         host_ssh (SSHFromSSH):
         prev_cpus (list):
         timeout (int):
+        fail_ok (bool): whether to raise exception when allocated vcpus number did not change
 
     Returns (float): New value of total allocated vcpus as float with 4 digits after decimal point
 
@@ -1856,7 +1798,11 @@ def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeo
         if allocated_cpus != prev_cpus:
             return allocated_cpus
     else:
-        raise exceptions.HostTimeout("total allocated vcpus is not updated within timeout in nova-compute.log")
+        msg = "Total allocated vcpus is not updated within timeout in nova-compute.log"
+        if fail_ok:
+            LOG.warning(msg)
+            return prev_cpus
+        raise exceptions.HostTimeout(msg)
 
 
 def get_vcpus_for_computes(hosts=None, rtn_val='used_now', con_ssh=None):
@@ -2407,3 +2353,276 @@ def is_host_provisioned(host, con_ssh=None):
     invprovisioned = get_hostshow_value(host, "invprovision", con_ssh=con_ssh)
     LOG.info("Host {} is {}".format(host, invprovisioned))
     return "provisioned" == invprovisioned.strip()
+
+
+def get_upgraded_host_names(upgrade_release, con_ssh=None):
+
+    table_ = table_parser.table(cli.system('host-upgrade-list', ssh_client=con_ssh))
+    table_ = table_parser.filter_table(table_, target_release=upgrade_release)
+    return table_parser.get_column(table_, "hostname")
+
+
+def downgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+                 lock=False, unlock=False):
+    """
+    Downgrade given host
+    Args:
+        host (str):
+        timeout (int): MAX seconds to wait for host to become online after unlocking
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (str):
+        unlock (bool):
+
+
+    Returns (tuple):
+        (0, "Host is downgraded and in online state.")
+        (1, "Cli host downgrade rejected. Applicable only if ail_ok")
+        (2, "Host did not come online after downgrade. Applicable if fail_ok ")
+        (3, "Host fail lock before starting downgrade". Applicable if lock arg is True and fail_ok")
+        (4, "Host fail to unlock after host downgrade.  Applicable if unlock arg is True and fail_ok")
+        (5, "Host unlocked after downgrade, but alarms are not cleared after 120 seconds.
+        Applicable if unlock arg is True and fail_ok")
+
+    """
+    LOG.info("Downgrading host {}...".format(host))
+
+    if lock:
+        if get_hostshow_value(host, 'administrative', con_ssh=con_ssh) == HostAdminState.UNLOCKED:
+            message = "Host is not locked. Locking host  before starting downgrade"
+            LOG.info(message)
+            rc, output = lock_host(host, con_ssh=con_ssh, fail_ok=True)
+
+            if rc != 0 and rc != -1:
+                err_msg = "Host {} fail on lock before starting downgrade: {}".fromat(host, output)
+                if fail_ok:
+                    return 3, err_msg
+                else:
+                    raise exceptions.HostError(err_msg)
+
+    exitcode, output = cli.system('host-downgrade', host, ssh_client=con_ssh, auth_info=auth_info,
+                                  rtn_list=True, fail_ok=True, timeout=timeout)
+    if exitcode == 1:
+        err_msg = "Host {} cli downgrade host failed: {}".format(host, output)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
+
+
+    # sleep for 180 seconds to let host be re-installed with previous release
+    time.sleep(180)
+
+    if not _wait_for_host_states(host, timeout=timeout, check_interval=60, availability=HostAvailabilityState.ONLINE,
+                                 con_ssh=con_ssh, fail_ok=fail_ok):
+        err_msg = "Host {} did not become online  after downgrade".format(host)
+        if fail_ok:
+            return 2, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
+
+    if unlock:
+        rc, output = unlock_host(host, fail_ok=True, available_only=True)
+        if rc != 0:
+            err_msg = "Host {} fail to unlock after host downgrade: ".format(host, output)
+            if fail_ok:
+                return 4, err_msg
+            else:
+                raise exceptions.HostError(err_msg)
+
+        # wait until  400.001  alarms get cleared
+        if not system_helper.wait_for_alarm_gone("400.001", fail_ok=True):
+            err_msg = "Alarms did not clear after host {} downgrade and unlock: ".format(host)
+            if fail_ok:
+                return 5, err_msg
+            else:
+                raise exceptions.HostError(err_msg)
+
+    LOG.info("Downgrading host {} complete ...".format(host))
+    return 0, None
+
+def get_sm_dump_table(controller, con_ssh=None):
+    """
+
+    Args:
+        controller (str|SSHClient): controller name/ssh client to get sm-dump for
+        con_ssh (SSHClient): ssh client for active controller
+
+    Returns ():
+    table_ (dict): Dictionary of a table parsed by tempest.
+            Example: table =
+            {
+                'headers': ["Field", "Value"];
+                'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
+
+    """
+    if isinstance(controller, str):
+        with ssh_to_host(controller, con_ssh=con_ssh) as host_ssh:
+            return table_parser.sm_dump_table(host_ssh.exec_sudo_cmd('sm-dump', fail_ok=False)[1])
+
+    host_ssh = controller
+    return table_parser.sm_dump_table(host_ssh.exec_sudo_cmd('sm-dump', fail_ok=False)[1])
+
+
+def get_sm_dump_items(controller, item_names=None, con_ssh=None):
+    """
+    get sm dump dict for specified items
+    Args:
+        controller (str|SSHClient): hostname or ssh client for a controller such as controller-0, controller-1
+        item_names (list|str): such as 'oam-services', or ['oam-ip', 'oam-services']
+        con_ssh (SSHClient):
+
+    Returns (dict): such as {'oam-services': {'desired-state': 'active', 'actual-state': 'active'},
+                             'oam-ip': {...}
+                            }
+
+    """
+    sm_dump_tab = get_sm_dump_table(controller=controller, con_ssh=con_ssh)
+    if item_names:
+        if isinstance(item_names, str):
+            item_names = [item_names]
+
+        sm_dump_tab = table_parser.filter_table(sm_dump_tab, name=item_names)
+
+    sm_dump_items = table_parser.row_dict_table(sm_dump_tab, key_header='name', unique_key=True)
+    return sm_dump_items
+
+
+def get_sm_dump_item_states(controller, item_name, con_ssh=None):
+    """
+    get desired and actual states of given item
+
+    Args:
+        controller (str|SSHClient): hostname or host_ssh for a controller such as controller-0, controller-1
+        item_name (str): such as 'oam-services'
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<desired-state>, <actual-state>) such as ('active', 'active')
+
+    """
+    item_value_dict = get_sm_dump_items(controller=controller, item_names=item_name, con_ssh=con_ssh)[item_name]
+
+    return item_value_dict['desired-state'], item_value_dict['actual-state']
+
+
+def wait_for_sm_dump_desired_states(controller, item_names=None, timeout=60, strict=True, fail_ok=False, con_ssh=None):
+    """
+    Wait for sm_dump item(s) to reach desired state(s)
+
+    Args:
+        controller (str): controller name
+        item_names (str|list|None): item(s) name(s) to wait for desired state(s). Wait for desired states for all items
+            when set to None.
+        timeout (int): max seconds to wait
+        strict (bool): whether to find strict match for given item_names. e.g., item_names='drbd-', strict=False will
+            check all items whose name contain 'drbd-'
+        fail_ok (bool): whether or not to raise exception if any item did not reach desired state before timed out
+        con_ssh (SSHClient):
+
+    Returns (bool): True if all of given items reach desired state
+
+    """
+
+    LOG.info("Waiting for {} {} in sm-dump to reach desired state".format(controller, item_names))
+    if item_names is None:
+        item_names = get_sm_dump_items(controller=controller, item_names=item_names, con_ssh=con_ssh)
+
+    elif not strict:
+        table_ = get_sm_dump_table(controller=controller, con_ssh=con_ssh)
+        item_names = table_parser.get_values(table_, 'name', strict=False, name=item_names)
+
+    if isinstance(item_names, str):
+        item_names = [item_names]
+
+    items_to_check = {}
+    for item in item_names:
+        items_to_check[item] = {}
+        items_to_check[item]['prev-state'] = items_to_check[item]['actual-state'] = \
+            items_to_check[item]['desired-state'] = ''
+
+    def __wait_for_desired_state(ssh_client):
+        end_time = time.time() + timeout
+
+        while time.time() < end_time:
+            items_names_to_check = list(items_to_check.keys())
+            items_states = get_sm_dump_items(ssh_client, item_names=items_names_to_check, con_ssh=con_ssh)
+
+            for item_ in items_states:
+                items_to_check[item_].update(**items_states[item_])
+
+                prev_state = items_to_check[item_]['prev-state']
+                desired_state = items_states[item_]['desired-state']
+                actual_state = items_states[item_]['actual-state']
+
+                if desired_state == actual_state:
+                    LOG.info("{} in sm-dump has reached desired state: {}".format(item_, desired_state))
+                    items_to_check.pop(item_)
+                    continue
+
+                elif prev_state and actual_state != prev_state:
+                    LOG.info("{} actual state changed from {} to {} while desired state is: {}".
+                             format(item_, prev_state, actual_state, desired_state))
+
+                # items_to_check[item_].update(actual_state=actual_state)
+                items_to_check[item_].update(prev_state=actual_state)
+                # items_to_check[item_].update(desired_state=desired_state)
+
+            if not items_to_check:
+                return True
+
+            time.sleep(3)
+
+        err_msg = "Timed out waiting for sm-dump item(s) to reach desired state(s): {}".format(items_to_check)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return False
+        else:
+            raise exceptions.TimeoutException(err_msg)
+
+    if isinstance(controller, str):
+        with ssh_to_host(controller, con_ssh=con_ssh) as host_ssh:
+            return __wait_for_desired_state(host_ssh)
+    else:
+        return __wait_for_desired_state(controller)
+
+
+# This is a copy from installer_helper due to blocking issues in installer_helper on importing non-exist modules
+@contextmanager
+def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+                        prompt=None):
+    """
+    ssh to given build server.
+    Usage: Use with context_manager. i.e.,
+        with ssh_to_build_server(bld_srv=cgts-yow3-lx) as bld_srv_ssh:
+            # do something
+        # ssh session will be closed automatically
+
+    Args:
+        bld_srv (str|dict): build server ip, name or dictionary (choose from consts.build_serve.BUILD_SERVERS)
+        user (str): svc-cgcsauto if unspecified
+        password (str): password for svc-cgcsauto user if unspecified
+        prompt (str|None): expected prompt. such as: svc-cgcsauto@yow-cgts4-lx.wrs.com$
+
+    Yields (SSHClient): ssh client for given build server and user
+
+    """
+    # Get build_server dict from bld_srv param.
+    if isinstance(bld_srv, str):
+        for bs in BUILD_SERVERS:
+            if bs['name'] in bld_srv or bs['ip'] == bld_srv:
+                bld_srv = bs
+                break
+        else:
+            raise exceptions.BuildServerError("Requested build server - {} is not found. Choose server ip or "
+                                              "server name from: {}".format(bld_srv, BUILD_SERVERS))
+    elif bld_srv not in BUILD_SERVERS:
+        raise exceptions.BuildServerError("Unknown build server: {}. Choose from: {}".format(bld_srv, BUILD_SERVERS))
+
+    prompt = prompt if prompt else Prompt.BUILD_SERVER_PROMPT_BASE.format(user, bld_srv['name'])
+    bld_server_conn = SSHClient(bld_srv['ip'], user=user, password=password, initial_prompt=prompt)
+    bld_server_conn.connect()
+
+    try:
+        yield bld_server_conn
+    finally:
+        bld_server_conn.close()

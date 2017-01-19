@@ -1,12 +1,14 @@
 import getpass
 import os
-from consts.filepaths import BuildServerPath
+from consts.filepaths import BuildServerPath, WRSROOT_HOME
 
 
 class ProjVar:
     # BUILD_ID,
     __var_dict = {'BUILD_ID': None,
-                  'LOG_DIR': None}
+                  'BUILD_SERVER': None,
+                  'LOG_DIR': None,
+                  'SOURCE_ADMIN': False}
                   # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}
 
     @classmethod
@@ -30,7 +32,6 @@ class ProjVar:
             'REPORT_ALL': report_all,
             'REPORT_TAG': report_tag,
             'OPENSTACK_CLI': openstack_cli,
-            'SOURCE_ADMIN': False
         })
 
     @classmethod
@@ -158,8 +159,8 @@ class UpgradeVars:
             'UPGRADE_LICENSE': upgrade_license_path,
 
             #User/password to build server
-            "USERNAME": getpass.getuser(),
-            "PASSWORD": getpass.getpass(),
+            #"USERNAME": getpass.getuser(),
+            #"PASSWORD": getpass.getpass(),
         }
 
     @classmethod
@@ -193,3 +194,50 @@ class UpgradeVars:
     @classmethod
     def get_upgrade_vars(cls):
         return cls.__var_dict
+
+
+class PatchingVars:
+    __var_dict = {
+        'DEF_PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
+        'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_4.0_Test_Patch_Build/',
+        'DEF_PATCH_IN_LAB_BASE_DIR': os.path.join(WRSROOT_HOME, 'patch-files'),
+        'DEF_PATCH_DIR': 'latest',
+        'USERNAME': 'svc-cgcsauto',  # getpass.getuser()
+        'PASSWORD': ')OKM0okm',  # getpass.getpass()
+    }
+
+    @classmethod
+    def get_patching_var(cls, var_name):
+        var_name = var_name.upper()
+
+        if var_name not in cls.__var_dict:
+            raise ValueError("Invalid var_name. Valid vars: {}".format(var_name))
+
+        return cls.__var_dict[var_name]
+
+    @classmethod
+    def set_patching_var(cls, **kwargs):
+        for k, v in kwargs.items():
+            cls.__var_dict[k.upper()] = v
+
+        patch_dir = cls.__var_dict.get('PATCH_DIR')
+
+        if not patch_dir:
+            patch_dir = os.path.join(cls.__var_dict['DEF_PATCH_BUILD_BASE_DIR'], cls.__var_dict['DEF_PATCH_DIR'])
+        # elif not os.path.abspath(patch_dir):
+        elif not patch_dir.startswith('/'):
+            patch_dir = os.path.join(cls.__var_dict['DEF_PATCH_BUILD_BASE_DIR'], patch_dir)
+
+        cls.__var_dict['PATCH_DIR'] = patch_dir
+
+        build_server = cls.__var_dict.get('PATCH_BUILD_SERVER')
+
+        if not build_server:
+            build_server = cls.__var_dict['DEF_PATCH_BUILD_SERVER']
+
+        cls.__var_dict['PATCH_BUILD_SERVER'] = build_server
+
+        patch_dir_in_lab = cls.__var_dict.get('PATCH_DIR_IN_LAB')
+
+        if not patch_dir_in_lab:
+            cls.__var_dict['PATCH_DIR_IN_LAB'] = cls.__var_dict['DEF_PATCH_IN_LAB_BASE_DIR']

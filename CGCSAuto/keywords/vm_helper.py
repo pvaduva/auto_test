@@ -5,7 +5,7 @@ from contextlib import contextmanager
 
 from pexpect import TIMEOUT as ExpectTimeout
 
-from utils import exceptions, cli, table_parser
+from utils import exceptions, cli, table_parser, multi_thread
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
 from utils.tis_log import LOG
 
@@ -91,8 +91,8 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            vm_host=None, avail_zone='nova', fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False,
-            guest_os='', poll=True):
+            block_device_mapping=None,  vm_host=None, avail_zone='nova', file=None, config_drive=False,
+            fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True):
     """
 
     Args:
@@ -108,6 +108,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         user_data (str|list):
         vm_host (str): which host to place the vm
         block_device:
+        block_device_mapping (str):  Block device mapping in the format '<dev-name>=<id>:<type>:<size(GB)>:<delete-on-
+                                terminate>'.
         auth_info (dict):
         con_ssh (SSHClient):
         nics (list): [{'net-id': <net_id1>, 'vif-model': <vif1>}, {'net-id': <net_id2>, 'vif-model': <vif2>}, ...]
@@ -115,6 +117,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                 virtio, avp, e1000, pci-passthrough, pci-sriov, rtl8139, ne2k_pci, pcnet
 
         hint (dict): key/value pair(s) sent to scheduler for custom use. such as group=<server_group_id>
+        file (str): <dst-path=src-path> To store files from local <src-path> to <dst-path> on the new server.
+        config_drive (bool): To enable config drive.
         fail_ok (bool):
         reuse_vol (bool): whether or not to reuse the existing volume
 
@@ -235,6 +239,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--block-device': block_device,
                           '--hint': hint,
                           '--availability-zone': host_zone,
+                          '--file': file,
+                          '--config-drive': str(config_drive) if config_drive else None,
+
                           }
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
@@ -1079,7 +1086,7 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
 @contextmanager
 def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
                           timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, vm_ip=None, use_fip=False,
-                          retry=True, retry_timeout=120):
+                          retry=True, retry_timeout=120, close_ssh=True):
     """
     ssh to a vm from natbox.
 
@@ -1122,7 +1129,8 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
     try:
         yield vm_ssh
     finally:
-        vm_ssh.close()
+        if close_ssh:
+            vm_ssh.close()
 
 
 def get_vm_pid(instance_name, host_ssh):
@@ -2387,3 +2395,61 @@ def wait_for_process(process, vm_id=None, vm_ssh=None, disappear=False, timeout=
         return common.wait_for_process(ssh_client=vm_ssh, process=process, disappear=disappear, timeout=timeout,
                                        check_interval=check_interval, fail_ok=fail_ok)
 
+
+def boost_cpu_usage(vm_id, cpu_num=1, con_ssh=None):
+    """
+    Boost cpu usage on given number of cpu cores on specified vm using dd cmd
+
+    Args:
+        vm_id (str):
+        cpu_num (int): number of times to run dd cmd. Each dd will normally be executed on different processor
+        con_ssh:
+
+    Returns (VMSSHClient): vm_ssh where the dd commands were sent.
+        To terminate the dd to release the cpu resources, use: vm_ssh.exec_cmd('killall dd')
+    """
+    LOG.info("Boosting cpu usage for vm {} using 'dd'".format(vm_id))
+    dd_cmd = 'dd if=/dev/zero of=/dev/null &'
+
+    with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh, close_ssh=False) as vm_ssh:
+        for i in range(cpu_num):
+            vm_ssh.send(cmd=dd_cmd)
+
+    return vm_ssh
+
+
+def boost_cpu_usage_new_thread(vm_id, cpu_num=1, timeout=1200):
+    """
+    Boost cpu usage on given number of cpu cores on specified vm using dd cmd on a new thread
+
+    Args:
+        vm_id (str):
+        cpu_num (int): number of times to run dd cmd. Each dd will normally be executed on different processor
+        timeout (int): max time to wait before killing the thread. Thread should be ended from test function.
+
+    Returns (tuple): (<vm_ssh>, <thread for this function>)
+
+    Examples:
+        LOG.tc_step("Boost VM cpu usage")
+        thread_timeout = 600
+        vm_ssh, vm_thread = vm_helper.boost_cpu_usage_new_thread(vm_id=vm_id, cpu_num=vcpus, timeout=thread_timeout)
+
+        LOG.tc_step("Check vm current vcpus in nova show is updated")
+        check_helper.wait_for_vm_vcpus_update(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu, timeout=120)
+
+        # End vm thread explicitly after vcpus are changed to expected value. If test failed, then the thread will be
+        # ended after the thread_timeout reaches.
+        vm_thread.end_thread()
+        vm_thread.wait_for_thread_end(timeout=3)
+
+    """
+    LOG.info("Creating new thread to spike cpu_usage on {} vm cores for vm {}".format(cpu_num, vm_id))
+    thread = multi_thread.MThread(boost_cpu_usage, vm_id, cpu_num)
+    thread.start_thread(timeout=timeout)
+    vm_ssh = thread.get_output(wait=True)
+
+    def _kill_dd(vm_ssh_):
+        vm_ssh_.exec_cmd('killall dd')
+
+    thread.set_end_func(_kill_dd, vm_ssh)
+    return vm_ssh, thread

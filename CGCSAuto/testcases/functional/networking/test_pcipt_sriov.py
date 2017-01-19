@@ -24,7 +24,7 @@ def vif_model_check(request):
     # pci_nets = network_helper.get_pci_nets(vif=interface, rtn_val='name')
     primary_tenant = Tenant.get_primary()
     primary_tenant_name = common.get_tenant_name(primary_tenant)
-    other_tenant = Tenant.TENANT_2 if primary_tenant_name == 'tenant1' else Tenant.TENANT_1
+    other_tenant = Tenant.TENANT2 if primary_tenant_name == 'tenant1' else Tenant.TENANT1
 
     tenant_net = "{}-net"
 

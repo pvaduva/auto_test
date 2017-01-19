@@ -15,7 +15,7 @@ def snat_setups(request):
 
     primary_tenant = Tenant.get_primary()
     primary_tenant_name = common.get_tenant_name(primary_tenant)
-    other_tenant = Tenant.TENANT_2 if primary_tenant_name == 'tenant1' else Tenant.TENANT_1
+    other_tenant = Tenant.TENANT2 if primary_tenant_name == 'tenant1' else Tenant.TENANT1
 
     for auth_info in [primary_tenant, other_tenant]:
         tenant_router = network_helper.get_tenant_router(auth_info=auth_info)

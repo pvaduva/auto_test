@@ -4,7 +4,7 @@ import datetime
 from consts.build_server import DEFAULT_BUILD_SERVER
 from consts.filepaths import BuildServerPath
 
-from keywords import install_helper
+from keywords import host_helper
 
 
 def wait_for_new_host_and_guest_load(build_server=DEFAULT_BUILD_SERVER,
@@ -51,10 +51,11 @@ def __wait_for_new_load(build_server, build_dir, trigger_window, timeout):
     trigger_window = float(trigger_window)
     timeout = float(timeout)
     minutes = int(trigger_window * 60)
+    hours, minutes = divmod(minutes, 60)
 
-    with install_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
+    with host_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
 
-        window_time = datetime.timedelta(minutes=minutes)
+        window_time = datetime.timedelta(hours=hours, minutes=minutes)
         end_time = time.time() + int(timeout * 3600)
         while time.time() < end_time:
             latest_bld_time = get_modify_time(bld_srv_ssh, build_dir)
@@ -88,7 +89,7 @@ def get_modify_time(ssh_client, file_path):
 
 
 def __get_latest_build_dir(build_server, build_dir):
-    with install_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
+    with host_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
         output = bld_srv_ssh.exec_cmd('ls -l {} | grep --color="never" "latest_build"'.format(build_dir))[1]
         build_dir_ = output.split(sep=r'/')[-1]
         # print("Latest build dir: {}".format(build_dir_))

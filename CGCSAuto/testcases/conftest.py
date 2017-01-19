@@ -28,13 +28,13 @@ def setup_test_session():
     setups.copy_files_to_con1()
 
     global natbox_ssh
-    natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'))
+    natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'), con_ssh=con_ssh)
     ProjVar.set_var(natbox_ssh=natbox_ssh)
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
     # set build id to be used to upload/write test results
-    build_id = setups.get_build_id(con_ssh)
-    ProjVar.set_var(BUILD_ID=build_id)
+    build_id, build_host = setups.get_build_info(con_ssh)
+    ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_host)
 
 
 @pytest.fixture(scope='function', autouse=True)

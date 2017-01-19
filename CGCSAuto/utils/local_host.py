@@ -2,6 +2,7 @@ import socket
 import getpass
 import os
 import subprocess
+import re
 from utils.tis_log import LOG
 
 SSH_DIR = "~/.ssh"
@@ -13,6 +14,13 @@ REMOVE_HOSTS_SSH_KEY_CMD = "ssh-keygen -f {} -R {}"
 # VLM commands and options
 VLM = "/folk/vlm/commandline/vlmTool"
 VLM_RESERVE = 'reserve'
+VLM_UNRESERVE = 'unreserve'
+VLM_TURNON = 'turnOn'
+VLM_TURNOFF = 'turnOff'
+VLM_FINDMINE = 'findMine'
+
+VLM_CMDS = [VLM_RESERVE, VLM_UNRESERVE, VLM_TURNON, VLM_TURNOFF, VLM_FINDMINE]
+
 
 def get_host_name():
     return socket.gethostname()
@@ -80,3 +88,40 @@ def reserve_vlm_console(barcode, note=None):
         msg = "Barcode {} reserved: {}".format(barcode, reserved_barcodes)
         LOG.info(msg)
         return 0, msg
+
+
+def vlm_findmine():
+    cmd = [VLM, VLM_FINDMINE]
+    output = exec_cmd(cmd)[1]
+    if re.search("\d+", output):
+        reserved_targets = output.split()
+        msg = "Target(s) reserved by user: {}".format(str(reserved_targets))
+    else:
+       msg = "User has no reserved target(s)"
+       reserved_targets = []
+       LOG.info(msg)
+
+    return reserved_targets
+
+
+def vlm_exec_cmd(action, barcode):
+    if action not in VLM_CMDS:
+        msg = '"{}" is an invalid action.'.format(action)
+        msg += " Valid actions: {}".format(str(VLM_CMDS))
+        LOG.info(msg)
+        return 1, msg
+
+    elif barcode not in vlm_findmine():
+        #reserve barcode
+        if reserve_vlm_console(barcode)[0] != 0:
+            msg = "Failed to {} target {}. Target is not reserved by user".format(action, barcode)
+            LOG.info(msg)
+            return 1, msg
+    else:
+        cmd = [VLM, action, "-t", barcode]
+        output = exec_cmd(cmd)[1]
+        if output != "1":
+            msg = 'Failed to execute "{}" on target'.format(barcode)
+            LOG.info(msg)
+            return 1, msg
+    return 0, None

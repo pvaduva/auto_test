@@ -390,7 +390,7 @@ def _get_values(table_, header1, value1, header2, strict=False, regex=False):
     return value2
 
 
-def get_values(table_, target_header, strict=True, regex=False, merge_lines=False, **kwargs):
+def get_values(table_, target_header, strict=True, regex=False, merge_lines=False, exclude=False, **kwargs):
     """
     Return a list of cell(s) that matches the given criteria. Criteria were given via kwargs.
     Args:
@@ -463,6 +463,10 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
 
     target_column = get_column(table_, target_header)
     target_values = []
+    if exclude:
+        total_row_indexes = list(range(len(target_column)))
+        target_row_indexes = list((set(total_row_indexes) - set(target_row_indexes)))
+
     for i in target_row_indexes:
         target_value = target_column[i]
 
@@ -682,3 +686,110 @@ def compare_tables(table_one, table_two):
             return 4, "The number of elements under header '{}' different in Table one and Table two".format(key)
 
     return 0, "Both Table contain same headers and values"
+
+
+__sm_delimeter_line = re.compile('^-.*[\-]{3,}$')
+__sm_category_line = re.compile('^-([A-Z].*[a-z])[\-]{3,}$')
+__sm_item_line = re.compile('([a-z-]+)[\t\s$]')
+
+
+def sm_dump_table(output_lines):
+    """
+    get sm dump table as dictionary
+    Args:
+        output_lines (output): output of sudo sm-dump command from a controller
+
+    Returns (dict): table with following headers.
+            {'headers': ["category", "name", "desired-state", "actual-state"];
+             'values': [
+                ['Service_Groups', 'oam-services', 'active', 'active'],
+                ['Service_Groups', 'controller-services', 'active', 'active']
+                ...
+                ['Services', 'oam-ip', 'enabled-active', 'enabled-active']
+                ...
+                ['Services', 'drbd-cinder, 'enabled-active', 'enabled-active']
+                ...
+            ]}
+    """
+    headers = ['category', 'name', 'desired-state', 'actual-state']
+    table_ = {'headers': headers, 'values': []}
+
+    if not isinstance(output_lines, list):
+        output_lines = output_lines.split('\n')
+
+    if not output_lines[-1]:
+        # skip last line if empty (just newline at the end)
+        output_lines = output_lines[:-1]
+
+    category = ''
+    for line in output_lines:
+        if __sm_delimeter_line.match(line):
+            potential_category = __sm_category_line.findall(line)
+            if potential_category:
+                category = potential_category[0]
+            LOG.debug("skipping delimiter line: {}".format(line))
+            continue
+        elif not line.strip():
+            LOG.debug('skipping empty table line')
+            continue
+
+        row = [category]
+        row_contents = list(__sm_item_line.findall(line))
+        if not 3 == len(row_contents):
+            raise ValueError("Expecting 3 columns per item line. Actual line: {}".format(line))
+
+        row += row_contents
+        table_['values'].append(row)
+
+    return table_
+
+
+def row_dict_table(table_, key_header, unique_key=True):
+    """
+    convert original table to a dictionary with a given column to be the keys.
+
+    Args:
+        table_ (dict): original table which in the format of {'headers': [<headers>], 'values': [<rows>]}
+        key_header (str): chosen keys for the table
+        unique_key (bool): if key_header is unique for each row, such as UUID, then value for each key will be dict
+            instead of list of dict
+
+    Returns (dict): dictionary with value of the key_header as key, and the complete row as the value.
+        The value itself is a list, number of items in the list depends on how many rows has the same value for
+        given key_header.
+
+    Examples: system host-list on 2+2 system
+        row_dict_table(table_, 'hostname') will return following table:
+            {
+            'controller-0': [{'id': 1, 'hostname': 'controller-0', 'personality': 'controller', ...}]
+            'controller-1': [{'id': 2, 'hostname': 'controller-1', 'personality': 'controller', ...}]
+            'compute-0': ...
+            'compute-1': ...
+            }
+
+        row_dict_table(table_, 'personality') will return following table:
+            {
+            'controller': [{'id': 1, 'hostname': 'controller-0', 'personality': 'controller', ...},
+                           {'id': 2, 'hostname': 'controller-1', 'personality': 'controller', ...}]
+            'compute': [{'id': 3, 'hostname': 'compute-0', 'personality': 'compute', ...},
+                        {'id': 4, 'hostname': 'compute-1', 'personality': 'compute', ...}]
+            }
+    """
+    keys = get_column(table_, key_header)
+    all_headers = table_['headers']
+
+    rtn_dict = {}
+    for header_val in keys:
+        tmp_table = filter_table(table_, **{key_header: header_val})
+        applicable_rows = get_all_rows(tmp_table)
+        values = []
+        for row_ in applicable_rows:
+            row_dict = dict(zip(all_headers, row_))
+            values.append(row_dict)
+
+        if unique_key:
+            values = values[0]
+        rtn_dict[header_val] = values
+
+    LOG.debug("Converted table: {}".format(rtn_dict))
+    return rtn_dict
