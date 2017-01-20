@@ -138,6 +138,10 @@ def parse_args():
                          help="Burn boot image into USB before install. Valid"
                          " only with --small-footprint option")
 
+    # Skip setup of network feed
+    lab_grp.add_argument('--skip-feed', dest='skip_feed',
+                         action='store_true',
+                         help="Skip setup of network feed")
 
     # Add a flag to identify a wrl linux install
     lab_grp.add_argument('--host-os', dest='host_os',
@@ -1564,6 +1568,7 @@ def main():
     run_lab_setup = args.run_lab_setup
     small_footprint = args.small_footprint
     burn_usb = args.burn_usb
+    skip_feed = args.skip_feed
 
     host_os = args.host_os
 
@@ -1637,16 +1642,12 @@ def main():
     logutils.print_name_value("Guest build directory", guest_bld_dir)
     logutils.print_name_value("Patch directory paths", patch_dir_paths)
     logutils.print_name_value("Output directory", install_output_dir)
-
     logutils.print_name_value("Log level", log_level)
-
     logutils.print_name_value("Host OS", host_os)
-
     logutils.print_name_value("Stop", stop)
-
     logutils.print_name_value("Override", override)
-
     logutils.print_name_value("Banner", banner)
+    logutils.print_name_value("Skip feed", skip_feed)
 
     email_info = {}
     email_info['email_server'] = EMAIL_SERVER
@@ -1751,18 +1752,19 @@ def main():
     if storage_nodes is not None:
         storage_dict = create_node_dict(storage_nodes, STORAGE)
 
-    executed = False
-    # Lab-install Step 0 -  boot controller from tuxlab or usb or cumulus
-    msg = 'Set_up_network_feed'
-    lab_install_step = install_step(msg, 0, ['regular', 'storage', 'cpe'])
-    if do_next_install_step(lab_type, lab_install_step):
-    #if not executed:
-        if str(boot_device_dict.get('controller-0')) != "USB" \
-                and not tis_on_tis:
-            set_network_boot_feed(controller0.barcode, tuxlab_server,
-                                  bld_server_conn, load_path, host_os,
-                                  install_output_dir)
-            set_install_step_complete(lab_install_step)
+    if not skip_feed:
+        executed = False
+        # Lab-install Step 0 -  boot controller from tuxlab or usb or cumulus
+        msg = 'Set_up_network_feed'
+        lab_install_step = install_step(msg, 0, ['regular', 'storage', 'cpe'])
+        if do_next_install_step(lab_type, lab_install_step):
+        #if not executed:
+            if str(boot_device_dict.get('controller-0')) != "USB" \
+                    and not tis_on_tis:
+                set_network_boot_feed(controller0.barcode, tuxlab_server,
+                                    bld_server_conn, load_path, host_os,
+                                    install_output_dir)
+                set_install_step_complete(lab_install_step)
 
     nodes = list(controller_dict.values()) + list(compute_dict.values()) + list(storage_dict.values())
 
