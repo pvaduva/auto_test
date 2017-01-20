@@ -200,8 +200,9 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
     target_host = target_hosts[0]
 
     image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
-    flavor_dedicated_id = ''
-    flavor_shared_id = ''
+    pre_test_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
+    vm_dedicated_id = ''
+    vm_shared_id = ''
 
     collection = ['dedicated', 'shared']
     for x in collection:
@@ -230,35 +231,22 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
         else:
             source_id = image_id
 
+        pre_boot_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
+        LOG.tc_step("Booting cpu_pol_{}".format(x))
+        vm_id = vm_helper.boot_vm(name='cpu_pol_{}'.format(x), flavor=flavor_id, source=boot_source,
+                                  source_id=source_id, vm_host=target_host)[1]
+        ResourceCleanup.add('vm', vm_id)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, cpu_pol=x, vm_host=target_host,
+                                          prev_total_cpus=pre_boot_cpus[target_host])
         if x == 'dedicated':
-            flavor_dedicated_id = flavor_id
-            source_dedicated_id = source_id
+            vm_dedicated_id = vm_id
         else:
-            flavor_shared_id = flavor_id
-            source_shared_id = source_id
-
-    prev_boot_dedicated_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
-    LOG.tc_step("Booting cpu_pol_dedicated")
-    vm_dedicated_id = vm_helper.boot_vm(name='cpu_pol_dedicated', flavor=flavor_dedicated_id, source=boot_source,
-                                        source_id=source_dedicated_id, vm_host=target_host)[1]
-    ResourceCleanup.add('vm', vm_dedicated_id)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_dedicated_id)
-    check_helper.check_topology_of_vm(vm_dedicated_id, vcpus=vcpus_dedicated, cpu_pol='dedicated',
-                                      vm_host=target_host, prev_total_cpus=prev_boot_dedicated_cpus[target_host])
-
-    prev_boot_shared_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
-    LOG.tc_step("Booting cpu_pol_shared")
-    vm_shared_id = vm_helper.boot_vm(name='cpu_pol_shared', flavor=flavor_shared_id, source=boot_source,
-                                     source_id=source_shared_id, vm_host=target_host)[1]
-    ResourceCleanup.add('vm', vm_shared_id)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_shared_id)
-    check_helper.check_topology_of_vm(vm_shared_id, vcpus=vcpus_shared, cpu_pol='shared', vm_host=target_host,
-                                      prev_total_cpus=prev_boot_shared_cpus[target_host])
+            vm_shared_id = vm_id
 
     LOG.tc_step("Removing cpu_pol_dedicated")
     vm_helper.delete_vms(vms=vm_dedicated_id)
     LOG.tc_step("Removing cpu_pol_shared")
     vm_helper.delete_vms(vms=vm_shared_id)
     post_delete_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
-    assert post_delete_cpus == prev_boot_dedicated_cpus, "vcpu count after deletion does not equal vcpu count before " \
-                                                         "test"
+    assert post_delete_cpus == pre_test_cpus, "vcpu count after test does not equal vcpu count before test"
