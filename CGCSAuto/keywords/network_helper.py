@@ -2066,3 +2066,307 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
 
     LOG.warning("No networks found for {} interfaces with at least {} hosts".format(pci_type, min_hosts))
     return []
+
+
+def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, outside_port=None, protocol='tcp', tenant=None,
+                                description=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+
+    Args:
+        router_id (str): The router_id of the tenant router the portforwarding rule is created
+        inside_addr(str): private ip address
+        inside_port (str):  private protocol port number
+        outside_port(str): The public layer4 protocol port number
+        protocol(str): the protocol  tcp|udp|udp-lite|sctp|dccp
+        tenant(str): The owner Tenant id.
+        description(str): User specified text description. The default is "portforwarding"
+        fail_ok:
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+        0, <portforwarding rule id>, <success msg>    - Portforwarding rule created successfully
+        1, '', <std_err>              - Portforwarding rule create cli rejected
+        2, '', <std_err>  - Portforwarding rule create failed; one or more values required are not specified.
+
+
+    """
+    # Process args
+    if tenant is None:
+        tenant = Tenant.get_primary()['tenant']
+
+    if description is None:
+        description = '"portforwarding"'
+
+    tenant_id = keystone_helper.get_tenant_ids(tenant, con_ssh=con_ssh)[0]
+
+    mgmt_ips_for_vms = get_mgmt_ips_for_vms()
+
+    if inside_addr not in mgmt_ips_for_vms:
+        msg = "The inside_addr {} must be one of the  vm mgmt internal addresses: {}.".format(inside_addr, mgmt_ips_for_vms)
+        return 1,  msg
+
+    args_dict = {
+        '--tenant-id': tenant_id if auth_info == Tenant.ADMIN else None,
+        '--inside_addr': inside_addr,
+        '--inside-port': inside_port,
+        '--outside-port': outside_port,
+        '--protocol': protocol,
+        '--description': description,
+    }
+    args = router_id
+
+    for key, value in args_dict.items():
+        if value is None:
+            msg = 'A value must be specified for {}'.format(key)
+            if fail_ok:
+                return 1, '', msg
+            raise exceptions.NeutronError(msg)
+        else:
+            args = "{} {} {}".format(key, value, args)
+
+    LOG.info("Creating port forwarding with args: {}".format(args))
+    # send portforwarding-create cli
+    code, output = cli.neutron('portforwarding-create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                               rtn_list=True)
+
+    # process result
+    if code == 1:
+        msg = 'Fail to creat port forwarding rules: {}'.format(output)
+        if fail_ok:
+            return 1, '', msg
+        raise exceptions.NeutronError(msg)
+
+    table_ = table_parser.table(output)
+    portforwarding_id = table_parser.get_value_two_col_table(table_, 'id')
+
+    expt_values = {
+        'router_id': router_id,
+        'tenant_id': tenant_id
+    }
+
+    for field, expt_val in expt_values.items():
+        if table_parser.get_value_two_col_table(table_, field) != expt_val:
+            msg = "{} is not set to {} for portforwarding {}".format(field, expt_val, router_id)
+            if fail_ok:
+                return 2, portforwarding_id, msg
+            raise exceptions.NeutronError(msg)
+
+    succ_msg = "Portforwarding {} is created successfully.".format(portforwarding_id)
+    LOG.info(succ_msg)
+    return 0, portforwarding_id, succ_msg
+
+
+def create_port_forwarding_rule_for_vm(vm_id, inside_addr=None, inside_port=None, outside_port=None, protocol='tcp',
+                                description=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+
+    Args:
+        vm_id (str): The id of vm the portforwarding rule is created for
+        inside_addr(str): private ip address; default is mgmt address of vm.
+        inside_port (str):  private protocol port number; default is 80 ( web port)
+        outside_port(str): The public layer4 protocol port number; default is 8080
+        protocol(str): the protocol  tcp|udp|udp-lite|sctp|dccp; default is tcp
+        description(str): User specified text description. The default is "portforwarding"
+        fail_ok:
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+        0, <portforwarding rule id>, <success msg>    - Portforwarding rule created successfully
+        1, '', <std_err>              - Portforwarding rule create cli rejected
+        2, '', <std_err>  - Portforwarding rule create failed; one or more values required are not specified.
+
+
+    """
+    # Process args
+    router_id = get_tenant_router()
+
+    if inside_addr is None:
+        inside_addr = get_mgmt_ips_for_vms(vm_id)[0]
+    if inside_port is None:
+        inside_port = "80"
+
+    if outside_port is None:
+        outside_port = "8080"
+
+    return create_port_forwarding_rule(router_id, inside_addr=inside_addr, inside_port=inside_port,
+                                       outside_port=outside_port, protocol=protocol,
+                                       description=description, fail_ok=fail_ok, auth_info=auth_info,
+                                       con_ssh=con_ssh)
+
+
+def update_portforwarding_rule(portforwarding_id, inside_addr=None, inside_port=None, outside_port=None,
+                               protocol=None, description=None, fail_ok=False,
+                               auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+
+    Args:
+        portforwarding_id (str): Id or name of portfowarding rule to update
+        inside_addr (str): Private ip address
+        inside_port (str): Private layer4 protocol port
+        outside_port (str): Public layer4 protocol port
+        protocol (str): protocol name tcp|udp|udp-lite|sctp|dccp
+        description (str): User specified text description
+        fail_ok:
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+        0,  <command ouput>    - Portforwarding rule updated successfully
+
+
+    """
+
+    if portforwarding_id is None  or not isinstance(portforwarding_id, str):
+        raise ValueError("Expecting string value for portforwarding_id. Get {}".format(type(portforwarding_id)))
+
+    args = ''
+
+    args_dict = {
+        '--inside_addr': inside_addr,
+        '--inside_port': inside_port,
+        '--outside_port': outside_port,
+        '--protocol': protocol,
+        '--description': description,
+    }
+
+    for key, value in args_dict.items():
+        if value is not None:
+            args += ' {} {}'.format(key, value)
+
+    if not args:
+        raise ValueError("At least of the args need to be specified.")
+
+    LOG.info("Updating router {}: {}".format(portforwarding_id, args))
+
+    args = '{} {}'.format(portforwarding_id, args.strip())
+    return cli.neutron('portforwarding-update', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True,
+                       force_neutron=True)
+
+
+def delete_portforwarding_rules(pf_ids, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+    """
+    Deletes list of portforwarding rules
+
+    Args:
+        pf_ids(list): list of portforwarding rules to be deleted.
+        auth_info:
+        con_ssh:
+        fail_ok:
+
+    Returns (tuple):
+        0,  <command output>    - Portforwarding rules delete successful
+
+    """
+    if pf_ids is None or len(pf_ids) == 0:
+        return 0, None
+
+    for pf_id in pf_ids:
+        rc, output = delete_portforwarding_rule(pf_id, auth_info=auth_info, con_ssh=con_ssh, fail_ok=fail_ok)
+        if rc != 0:
+            return rc, output
+    return 0, None
+
+
+def delete_portforwarding_rule(portforwarding_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+    """
+    Deletes a single portforwarding rule
+    Args:
+        portforwarding_id (str): Id or name of portforwarding rule to delete.
+        auth_info:
+        con_ssh:
+        fail_ok:
+
+    Returns (tuple):
+        0,  <command output>    - Portforwarding rules delete successful
+        1, <err_msg> - Portforwarding rules delete cli rejected
+        2, <err_msg> - Portforwarding rules delete fail
+
+    """
+
+    LOG.info("Deleting port-forwarding {}...".format(portforwarding_id))
+    code, output = cli.neutron('portforwarding-delete', portforwarding_id, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                               rtn_list=True)
+    if code != 0:
+        msg = "CLI rejected. Fail to delete Port-forwarding {}; {}".format(portforwarding_id, output)
+        LOG.warn(msg)
+        if fail_ok:
+            return code, msg
+        else:
+            raise exceptions.NeutronError(msg)
+
+    portforwardings = get_portforwarding_rules(auth_info=auth_info, con_ssh=con_ssh)
+    if portforwarding_id in portforwardings:
+        msg = "Port-forwarding {} is still showing in neutron portforwarding-list".format(portforwarding_id)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, msg
+
+    succ_msg = "Port-forwarding {} is successfully deleted.".format(portforwarding_id)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def get_portforwarding_rules(router_id=None, inside_addr=None, inside_port=None, outside_port=None,
+                             protocol=None,  strict=True, auth_info=None, con_ssh=None):
+    """
+    Get porforwarding id(s) based on given criteria.
+    Args:
+        router_id (str): portforwarding router id
+        inside_addr (str): portforwarding  inside_addr
+        inside_port (str): portforwarding  inside_port
+        outside_port (str): portforwarding   outside_port"
+        protocol (str):  portforwarding  protocol
+        tenant (str): Tenant name
+        strict (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (list): list of porforwarding id(s)
+
+    """
+
+    param_dict = {
+        'router_id': router_id,
+        'inside_addr': inside_addr,
+        'inside_port': inside_port,
+        'outside_port': outside_port,
+        'protocol': protocol,
+    }
+
+    final_params = {}
+    for key, val in param_dict.items():
+        if val is not None:
+            final_params[key] = str(val)
+
+    table_ = table_parser.table(cli.neutron('portforwarding-list', ssh_client=con_ssh, auth_info=auth_info),
+                                combine_multiline_entry=True)
+    if not table_parser.get_all_rows(table_):
+        return []
+
+    if router_id is not None:
+        table_ = table_parser.filter_table(table_, strict=strict, router_id=router_id)
+
+    return table_parser.get_values(table_, 'id', **final_params)
+
+
+def get_portforwarding_rule_info(portforwarding_id, field='inside_addr', strict=True, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Get value of specified field for given portforwarding rule
+
+    Args:
+        portforwarding_id (str): Id or name of portforwarding rule
+        field (str): the name of the field attribute
+        strict (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (str): value of specified field for given portforwarding rule
+
+    """
+
+    table_ = table_parser.table(cli.neutron('portforwarding-show', portforwarding_id, ssh_client=con_ssh, auth_info=auth_info),
+                                combine_multiline_entry=True)
+    return table_parser.get_value_two_col_table(table_, field, strict)
+

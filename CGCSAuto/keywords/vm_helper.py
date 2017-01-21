@@ -1085,8 +1085,8 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
 
 @contextmanager
 def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
-                          timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, vm_ip=None, use_fip=False,
-                          retry=True, retry_timeout=120, close_ssh=True):
+                          timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, vm_ip=None,
+                          vm_ext_port=None, use_fip=False,  retry=True, retry_timeout=120, close_ssh=True):
     """
     ssh to a vm from natbox.
 
