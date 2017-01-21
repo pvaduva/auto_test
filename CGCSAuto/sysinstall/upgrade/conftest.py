@@ -15,6 +15,9 @@ from consts.cgcs import Prompt
 # Import test fixtures that are applicable to upgrade test
 from testfixtures.pre_checks_and_configs import *
 
+# Import test fixtures that are applicable to upgrade test
+from testfixtures.pre_checks_and_configs import *
+
 natbox_ssh = None
 con_ssh = None
 SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.00']]
