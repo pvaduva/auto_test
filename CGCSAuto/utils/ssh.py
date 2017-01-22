@@ -841,8 +841,8 @@ class SSHFromSSH(SSHClient):
 
 class VMSSHClient(SSHFromSSH):
 
-    def __init__(self, vm_ip, vm_name, vm_img_name='cgcs-guest', user=None, password=None, natbox_client=None,
-                 prompt=None, timeout=20, retry=True, retry_timeout=120):
+    def __init__(self, vm_ip, vm_name, vm_img_name='cgcs-guest', user=None, password=None, vm_ext_port=None,
+                 natbox_client=None, prompt=None, timeout=20, retry=True, retry_timeout=120):
         """
 
         Args:
@@ -894,7 +894,13 @@ class VMSSHClient(SSHFromSSH):
             ssh_options = " -i {}{}".format(ProjVar.get_var('KEYFILE_PATH'), _SSH_OPTS_UBUNTU_VM)
         else:
             ssh_options = _SSH_OPTS
-        self.ssh_cmd = 'ssh {} {}@{}'.format(ssh_options, self.user, self.host)
+
+        # Check if connecting to vm through port forwarding rule
+        if vm_ext_port:
+            self.ssh_cmd = 'ssh {} -p {} {}@{}'.format(ssh_options, vm_ext_port, self.user, self.host)
+        else:
+            self.ssh_cmd = 'ssh {} {}@{}'.format(ssh_options, self.user, self.host)
+
         self.connect(use_password=password, retry=retry, retry_timeout=retry_timeout)
         self.exec_cmd("TMOUT=0")
 

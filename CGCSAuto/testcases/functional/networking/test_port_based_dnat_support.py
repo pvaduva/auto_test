@@ -167,7 +167,7 @@ def test_external_access_to_vm_tcp_protocol(_vms, router_info, delete_pfs, delet
         LOG.info("Result rc= {}; Output = {}".format(rc, output))
 
     for t in vm_threads:
-        t.wait_for_thread_end()
+        t.wait_for_thread_end(fail_ok=True)
 
     outputs = []
     for t in vm_threads:
@@ -335,7 +335,7 @@ def test_external_access_to_vm_udp_protocol(_vms, router_info):
         LOG.info("Result rc= {}; Output = {}".format(rc, output))
 
     for t in vm_threads:
-        t.wait_for_thread_end()
+        t.wait_for_thread_end(fail_ok=True)
 
     outputs = []
     for t in vm_threads:
@@ -401,9 +401,9 @@ def test_external_access_to_vm_udp_protocol(_vms, router_info):
 
 
 def check_ssh_to_vm_and_wait_for_packets(vm_id, vm_ip, vm_ext_port, expect_output, protocol='tcp'):
-
+    ssh_nat = NATBoxClient.set_natbox_client()
     with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name='ubuntu_14', username='ubuntu',
-                                         password='ubuntu', vm_ip=vm_ip, vm_ext_port=vm_ext_port, retry=False) as vm_ssh:
+                                         password='ubuntu', natbox_client=ssh_nat, vm_ip=vm_ip, vm_ext_port=vm_ext_port, retry=False) as vm_ssh:
         if protocol == 'udp':
             cmd = "nc -luw 1 80"
         else:

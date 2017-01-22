@@ -197,7 +197,7 @@ def upgrade_setup(pre_check_upgrade):
     bld_server_attr['server_ip'] = bld_server['ip']
     #bld_server_attr['prompt'] = r'.*yow-cgts[1234]-lx.*$ '
     bld_server_attr['prompt'] = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', bld_server['name'])
-   # '.*yow\-cgts[34]\-lx ?~\]?\$ '
+    # '.*yow\-cgts[34]\-lx ?~\]?\$ '
     bld_server_conn = SSHClient(bld_server_attr['name'], user=SvcCgcsAuto.USER,
                                 password=SvcCgcsAuto.PASSWORD, initial_prompt=bld_server_attr['prompt'])
     bld_server_conn.connect()

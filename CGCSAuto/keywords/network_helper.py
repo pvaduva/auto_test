@@ -1452,6 +1452,12 @@ def get_router_ext_gateway_subnet(router_id, auth_info=None, con_ssh=None):
         return ext_gateway_info['external_fixed_ips'][0]['subnet_id']
 
 
+def get_router_ext_gateway_subnet_ip_address(router_id, auth_info=None, con_ssh=None):
+    ext_gateway_info = get_router_ext_gateway_info(router_id, auth_info=auth_info, con_ssh=con_ssh)
+    if ext_gateway_info is not None:
+        return ext_gateway_info['external_fixed_ips'][0]['ip_address']
+
+
 def update_router_ext_gateway_snat(router_id=None, ext_net_id=None, enable_snat=False, fail_ok=False, con_ssh=None,
                                    auth_info=Tenant.ADMIN):
     """

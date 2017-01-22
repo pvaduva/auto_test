@@ -1100,6 +1100,8 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         natbox_client (NATBoxClient):
         con_ssh (SSHClient): ssh connection to TiS active controller
         vm_ip (str): ssh to this ip from NatBox if given
+        vm_ext_port (str): port forwarding rule external port. If given this port will be used. vm_ip must be external
+        router ip address.
         use_fip (bool): Whether to ssh to floating ip if a vm has one associated. Not applicable if vm_ip is given.
         retry (bool): whether or not to retry if fails to connect
         retry_timeout (int): max time to retry
@@ -1123,7 +1125,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
     if not natbox_client:
         natbox_client = NATBoxClient.get_natbox_client()
 
-    vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_name=vm_name, vm_img_name=vm_image_name,
+    vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_ext_port=vm_ext_port, vm_name=vm_name, vm_img_name=vm_image_name,
                          user=username, password=password, prompt=prompt, timeout=timeout, retry=retry,
                          retry_timeout=retry_timeout)
     try:
