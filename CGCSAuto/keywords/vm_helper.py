@@ -2455,3 +2455,21 @@ def boost_cpu_usage_new_thread(vm_id, cpu_num=1, timeout=1200):
 
     thread.set_end_func(_kill_dd, vm_ssh)
     return vm_ssh, thread
+
+def get_vm_ssh(vm_id, image_name="cgcs-guest", con_ssh=None):
+    """
+    Get the ssh handle for the given VM
+
+    Args:
+        vm_id (str):
+        image_name (str): image used by the vm, this helps to find the userid/password for ssh
+        con_ssh:
+
+    Returns (VMSSHClient): vm_ssh .
+
+    """
+    LOG.info("Boosting cpu usage for vm {} using 'dd'".format(vm_id))
+
+
+    with ssh_to_vm_from_natbox(vm_id, image_name, con_ssh=con_ssh, close_ssh=False) as vm_ssh:
+        return vm_ssh
