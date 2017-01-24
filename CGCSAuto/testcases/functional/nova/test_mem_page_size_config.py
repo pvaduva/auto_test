@@ -4,12 +4,12 @@
 
 import re
 
-from pytest import fixture, mark
+from pytest import fixture, mark, skip
 
 from utils import table_parser, cli
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, ImageMetadata, NovaCLIOutput
-from keywords import nova_helper, vm_helper, glance_helper, host_helper, system_helper, cinder_helper, check_helper
+from keywords import nova_helper, vm_helper, glance_helper, host_helper, system_helper, cinder_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
@@ -23,31 +23,74 @@ def flavor_2g(add_1g_and_4k_pages):
     return flavor
 
 
-def _modify(host):
-    system_helper.set_host_1g_pages(host=host, proc_id=0, hugepage_num=2)
-    system_helper.set_host_4k_pages(host=host, proc_id=1, smallpage_num=2048*2*1024/4)
-
-
-def _revert(host):
-    # Assume 1g page number is 0 by default
-    system_helper.set_host_1g_pages(host, proc_id=0, hugepage_num=0)
-
-
 @fixture(scope='module', autouse=True)
-def add_1g_and_4k_pages(config_host_module):
-    host = host_helper.get_nova_host_with_min_or_max_vms(rtn_max=False)
+def add_1g_and_4k_pages(config_host_module, add_host_to_zone):
+    storage_backing, hosts = add_host_to_zone
+    headers = ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'mem_avail(MiB)']
+    mem_host_0_proc_0 = system_helper.get_host_mem_values(hosts[0], headers, 0)
+    mem_host_0_proc_1 = system_helper.get_host_mem_values(hosts[0], headers, 1)
+    mem_host_1_proc_0 = system_helper.get_host_mem_values(hosts[1], headers, 0)
+    mem_host_1_proc_1 = system_helper.get_host_mem_values(hosts[1], headers, 1)
+    host0_proc0_mod = 'true'
+    host1_proc0_mod = 'true'
+    if int(mem_host_0_proc_0[0]) < 524228 and int(mem_host_0_proc_0[2]) < 2:
+        host0_proc0_mod = 'false'
+    if int(mem_host_1_proc_0[0]) < 524228 and int(mem_host_1_proc_0[2]) < 2:
+        host1_proc0_mod = 'false'
+    LOG.tc_step("Calculation for 2m pages, using 0GB of 1GB pages and 1GB of 4k pages")
+    host0_proc0_2m = int((((int(mem_host_0_proc_0[3]) * 1024) - 1048576) / 2048))
+    LOG.tc_step("Calculation for 2m pages, using 2GB of 1GB pages and 1GB of 4k pages")
+    host0_proc1_2m = (((int(mem_host_0_proc_1[3]) * 1024) - 3145728) / 2048)
+    LOG.tc_step("Calculation for 2m pages, using 0GB of 1GB pages and 1GB of 4k pages")
+    host1_proc0_2m = (((int(mem_host_1_proc_0[3]) * 1024) - 1048576) / 2048)
+    LOG.tc_step("Calculation for 2m pages, using 0GB of 1GB pages and 2GB of 4k pages")
+    host1_proc1_2m = (((int(mem_host_1_proc_1[3]) * 1024) - 2097152) / 2048)
 
-    config_host_module(host=host, modify_func=_modify, revert_func=_revert)
-    host_helper.wait_for_hosts_in_nova_compute(host)
+    def _modify(host):
+        if host == hosts[0]:
+            if host0_proc0_mod == 'true':
+                cli.system("host-memory-modify -2M {} -1G {} {} {}".format(host0_proc0_2m, 0, hosts[0], 0))
+            cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(host0_proc1_2m), 2, hosts[0], 1))
+        elif host == hosts[1]:
+            if host1_proc0_mod == 'true':
+                cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(host1_proc0_2m), 0, hosts[1], 0))
+            cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(host1_proc1_2m), 0, hosts[1], 1))
 
-    storage_backing = host_helper.get_local_storage_backing(host)
-    LOG.info("Host's storage backing: {}".format(storage_backing))
-    if 'image' in storage_backing:
-        storage_backing = 'local_image'
-    elif 'lvm' in storage_backing:
-        storage_backing = 'local_lvm'
+    def _revert(host):
+        if host == hosts[0]:
+            if host0_proc0_mod == 'true':
+                cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_0_proc_0[1]),
+                                                                           int(mem_host_0_proc_0[2]), hosts[0], 0))
+            cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_0_proc_1[1]),
+                                                                       int(mem_host_0_proc_1[2]), hosts[0], 1))
+        elif host == hosts[1]:
+            if host1_proc0_mod == 'true':
+                cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_1_proc_0[1]),
+                                                                           int(mem_host_1_proc_0[2]), hosts[1], 0))
+            cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_1_proc_1[1]),
+                                                                       int(mem_host_1_proc_1[2]), hosts[1], 1))
 
-    return host, storage_backing
+    config_host_module(host=hosts[0], modify_func=_modify, revert_func=_revert)
+    config_host_module(host=hosts[1], modify_func=_modify, revert_func=_revert)
+
+    return hosts, storage_backing
+
+
+@fixture(scope='module')
+def add_host_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
+    storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
+
+    if len(target_hosts) < 2:
+        skip("Less than two up hosts have same storage backing")
+
+    hosts_to_add = [target_hosts[0], target_hosts[1]]
+    nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=hosts_to_add)
+
+    def remove_host_from_zone():
+        nova_helper.remove_hosts_from_aggregate(aggregate='cgcsauto', check_first=False)
+    request.addfinalizer(remove_host_from_zone)
+
+    return storage_backing, hosts_to_add
 
 
 testdata = [None, 'any', 'large', 'small', '2048', '1048576']
@@ -143,11 +186,13 @@ def volume_():
 @mark.usefixtures('add_admin_role_module')
 @mark.parametrize('mem_page_size', [
     mark.domain_sanity('1048576'),
+    mark.p2('1048576'),
     mark.p1('large'),
+    mark.p2('small'),
 ])
 def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_, add_1g_and_4k_pages):
     """
-    Test memory used by vm is taken from the expected memory pool
+    Test memory used by vm is taken from the expected memory pool and the vm was scheduled on the correct host/processor
 
     Args:
         flavor_2g (str): flavor id of a flavor with ram set to 2G
@@ -155,6 +200,22 @@ def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_, add_1g_and_4k_pages):
         volume_ (str): id of the volume to boot vm from
 
     Setup:
+        - Create host aggregate
+        - Add two hypervisors to the host aggregate
+        - Host-0 configuration:
+            - Processor-0:
+                - Not enough 1g pages to boot vm that requires 2g
+                - Not enough 4k pages to boot vm that requires 2g
+            - Processor-1:
+                - Sufficient 1g pages to boot vm that requires 2g
+                - Not enough 4k pages to boot vm that requires 2g
+        - Host-1 configuration:
+            - Processor-0:
+                - Not enough 1g pages to boot vm that requires 2g
+                - Not enough 4k pages to boot vm that requires 2g
+            - Processor-1:
+                - Not enough 1g pages to boot vm that requires 2g
+                - Sufficient 4k pages to boot vm that requires 2g
         - Configure a compute to have 4 1G hugepages (module)
         - Create a flavor with 2G RAM (module)
         - Create a volume with default values (module)
@@ -164,19 +225,20 @@ def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_, add_1g_and_4k_pages):
         - Boot a vm with above flavor and a basic volume
         - Calculate the available/used memory change on the vm host
         - Verify the memory is taken from 1G hugepage memory pool
+        - Verify the vm was booted on a supporting host
 
     Teardown:
         - Delete created vm
         - Delete created volume and flavor (module)
         - Re-Configure the compute to have 0 hugepages (module)
-
+        - Revert host mem pages back to original
     """
     host_configured, storage_backing = add_1g_and_4k_pages
     LOG.tc_step("Set memory page size extra spec in flavor")
     nova_helper.set_flavor_extra_specs(flavor_2g, **{FlavorSpec.CPU_POLICY: 'dedicated',
                                                      FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
 
-    host_helper.wait_for_hosts_in_nova_compute(host_configured)
+    host_helper.wait_for_hypervisors_up(host_configured)
     pre_computes_tab = system_helper.get_vm_topology_tables('computes')[0]
 
     LOG.tc_step("Boot a vm with mem page size spec - {}".format(mem_page_size))
@@ -187,8 +249,13 @@ def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_, add_1g_and_4k_pages):
     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
     assert 0 == code, "VM is not successfully booted."
 
-    vm_host = nova_helper.get_vm_host(vm_id)
-    assert host_configured == vm_host, "VM is not created on the configured host {}".format(vm_host)
+    vm_host, vm_node = vm_helper.get_vm_host_and_numa_nodes(vm_id)
+    if mem_page_size == '1048576':
+        assert host_configured[0] == vm_host, "VM is not created on the configured host {}".format(host_configured[0])
+        assert vm_node == [1], "VM (huge) did not boot on the correct processor"
+    else:
+        assert host_configured[1] == vm_host, "VM is not created on the configured host {}".format(host_configured[1])
+        assert vm_node == [1], "VM (small) did not boot on the correct processor"
 
     LOG.tc_step("Calculate memory change on vm host - {}".format(vm_host))
 
@@ -205,96 +272,21 @@ def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_, add_1g_and_4k_pages):
     LOG.info("{}: Pre used mem: {}, post used mem:{}; Pre avail 1g mem: {}, post avail 1g mem: {}".
              format(vm_host, pre_used_mems, post_used_mems, pre_avail_mems, post_avail_mems))
 
-    LOG.tc_step("Verify memory is taken from 1G hugepage pool")
-    assert sum(pre_used_mems) + 2048 == sum(post_used_mems), "Used memory is not increase by 2048MiB"
-    assert sum(pre_avail_mems) - 2048 == sum(post_avail_mems), ("Available memory in {} page pool is not decreased "
-                                                                "by 2048MiB").format(mem_page_size)
+    if (mem_page_size == '1048576') or (mem_page_size == 'large'):
+        LOG.tc_step("Verify memory is taken from 1G hugepage pool")
+        assert sum(pre_used_mems) + 2048 == sum(post_used_mems), "Used memory is not increase by 2048MiB"
+        assert sum(pre_avail_mems) - 2048 == sum(post_avail_mems), ("Available memory in {} page pool is not decreased "
+                                                                    "by 2048MiB").format(mem_page_size)
 
     LOG.tc_step("Ensure vm is pingable from NatBox")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
+    host, node = vm_helper.get_vm_host_and_numa_nodes(vm_id)
 
-@mark.usefixtures('add_admin_role_module')
-@mark.parametrize(('vcpus', 'memory'), [
-    mark.p2((8, 2048)),
-])
-def test_scheduling_vm_mem_page_size(vcpus, memory):
-    """
-    Test vm with huge_mem_page gets booted on supporting host
-
-    Args:
-        vcpus: Amount of vcpu(s) to use.
-        memory: Amount of RAM to use.
-
-    Test Setups:
-        - Create host aggregate
-        - Add two hypervisors to the host aggregate
-        - Host-0 configuration:
-            - Processor-0:
-                - Not enough 1g pages to boot vm that requires 1g pages
-                - Not enough 4k pages to boot vm that requires 1g pages
-            - Processor-1:
-                - Sufficient 1g pages to boot vm that requires 1g pages
-                - Not enough 4k pages to boot vm that requires 1g pages
-        - Host-1 configuration:
-            - Processor-0:
-                - Not enough 1g pages to boot vm that requires 1g pages
-                - Not enough 4k pages to boot vm that requires 1g pages
-            - Processor-1:
-                - sufficient 4k pages to boot vm that requires 1g pages
-                - Not enough 1g pages to boot vm that requires 1g pages
-        - Create flavor, flavor_huge, with extra-specs; MEM_PAGE_SIZE: 1048576
-        - Create flavor, flavor_small, with extra-specs; MEM_PAGE_SIZE: small
-
-    Test Steps:
-        - Boot two vm's, one with flavor_huge, the other with flavor_small
-        - Wait until both vm's are pingable from natbox
-        - Check vm with flavor_huge is booted on Host-0, Processor-1
-        - Check vm with flavor_small is booted on Host-1, Processor-1
-
-    Test Teardown
-        - Delete host aggregate\
-        - Delete created volumes and flavors
-    """
-    LOG.tc_step("Create aggregate test_scheduling")
-    nova_helper.create_aggregate(name='test_scheduling')
-    LOG.tc_step("Get list of 'up' and 'enabled' hypervisors")
-    target_hosts = host_helper.get_hypervisors(state='up', status='enabled')
-    assert len(target_hosts) >= 2, "Not 2 or more hypervisors. Cannot properly test."
-    LOG.tc_step("Add the first two found hypervisors to test_scheduling aggregate")
-    nova_helper.add_hosts_to_aggregate(aggregate='test_scheduling', hosts=target_hosts[0:2])
-    image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
-
-    LOG.tc_step("Set all 1g pages")
-    # Put into a loop later, logic is complicated
-    system_helper.set_host_1g_pages(host=target_hosts[0], proc_id=0, hugepage_num=0)
-    system_helper.set_host_1g_pages(host=target_hosts[0], proc_id=1, hugepage_num=2)
-    system_helper.set_host_1g_pages(host=target_hosts[1], proc_id=0, hugepage_num=0)
-    system_helper.set_host_1g_pages(host=target_hosts[1], proc_id=1, hugepage_num=0)
-
-    LOG.tc_step("Set all 4k pages")
-    system_helper.set_host_4k_pages(host=target_hosts[0], proc_id=0, smallpage_num=0)
-    system_helper.set_host_4k_pages(host=target_hosts[0], proc_id=1, smallpage_num=0)
-    system_helper.set_host_4k_pages(host=target_hosts[1], proc_id=0, smallpage_num=0)
-    system_helper.set_host_4k_pages(host=target_hosts[1], proc_id=1, smallpage_num=1024)
-
-    collection = ['huge', 'small']
-    for x in collection:
-
-        if x == 'huge':
-            mem_page_size = 1048576
-        else:
-            mem_page_size = 'small'
-
-        LOG.tc_step("Create flavor_{}".format(x))
-        flavor_id = nova_helper.create_flavor(name='flavor_{}'.format(x), vcpus=vcpus, ram=memory)[1]
-        ResourceCleanup.add('flavor', flavor_id)
-        LOG.tc_step("Set extra specs for MEM_PAGE_SIZE: {}".format(x))
-        nova_helper.set_flavor_extra_specs(flavor_id, {FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
-
-        LOG.tc_step("Boot vm mem_page_{}".format(x))
-        vm_id = vm_helper.boot_vm(name='mem_page_{}'.format(x), flavor=flavor_id, source='image',
-                                  source_id=image_id, avail_zone='test_scheduling')[1]
-        ResourceCleanup.add('vm', vm_id)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-
+    LOG.tc_step("Verify vm is booted on the correct host and processor")
+    if mem_page_size == '1048576':
+        assert host == host_configured[0], "VM (huge) did not boot on the correct host"
+        assert node == [1], "VM (huge) did not boot on the correct processor"
+    elif mem_page_size == 'small':
+        assert host == host_configured[1], "VM (small) did not boot on the correct host"
+        assert node == [1], "VM (small) did not boot on the correct processor"
