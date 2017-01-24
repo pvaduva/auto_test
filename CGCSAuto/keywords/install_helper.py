@@ -2,7 +2,7 @@ import os
 from consts.proj_vars import ProjVar, InstallVars
 from consts.auth import Host, SvcCgcsAuto
 from consts.cgcs import HostAvailabilityState, Prompt
-from utils import cli, table_parser, exceptions
+from utils import exceptions
 from utils.tis_log import LOG
 from keywords import system_helper, host_helper
 from utils.ssh import SSHClient
@@ -14,10 +14,9 @@ from consts.timeout import HostTimeout
 from contextlib import contextmanager
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 
-
-
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
 PUBLIC_SSH_KEY = local_host.get_ssh_key()
+
 
 def get_current_system_version():
     return system_helper.get_system_software_version()
@@ -96,8 +95,16 @@ def open_vlm_console_thread(hostname):
 
 
 def bring_node_console_up(node, boot_device, install_output_dir, close_telnet_conn=True):
-    ''' Initiate the boot and installation operation.
-    '''
+    """
+    Initiate the boot and installation operation.
+    Args:
+        node:
+        boot_device:
+        install_output_dir:
+        close_telnet_conn:
+
+    Returns:
+    """
 
     if len(boot_device) == 0:
         LOG.error("Cannot bring vlm console for {} without valid mgmt boot device: {}".format(node.name, boot_device))
@@ -109,8 +116,7 @@ def bring_node_console_up(node, boot_device, install_output_dir, close_telnet_co
                                              negotiate=node.telnet_negotiate,
                                              port_login=True if node.telnet_login_prompt else False,
                                              vt100query=node.telnet_vt100query,
-                                             log_path=install_output_dir + "/"\
-                                               + node.name + ".telnet.log")
+                                             log_path=install_output_dir + "/" + node.name + ".telnet.log")
 
     node.telnet_conn.install(node, boot_device, upgrade=True)
     if close_telnet_conn:
@@ -133,6 +139,7 @@ def wipe_disk_hosts(hosts):
 
     if len(hosts) < 1:
         err_msg = "The hosts list referred is empty: {}".format(hosts)
+        LOG.info(err_msg)
         return
     threads = []
     nodes = []
@@ -164,18 +171,26 @@ def wipe_disk_hosts(hosts):
 
 
 def wipe_disk(node, install_output_dir, close_telnet_conn=True):
-    ''' Perform a wipedisk operation on the lab before booting a new load into
+    """
+    Perform a wipedisk operation on the lab before booting a new load into
         it.
-    '''
+    Args:
+        node:
+        install_output_dir:
+        close_telnet_conn:
+
+    Returns:
+
+    """
 
     if node.telnet_conn is None:
-        node.telnet_conn = telnetlib.connect(node.telnet_ip, \
-                                            int(node.telnet_port), \
-                                            negotiate=node.telnet_negotiate,\
-                                            vt100query=node.telnet_vt100query,\
-                                            log_path=install_output_dir + "/"\
-                                            + node.name + ".telnet.log", \
-                                            debug=False)
+        node.telnet_conn = telnetlib.connect(node.telnet_ip,
+                                             int(node.telnet_port),
+                                             negotiate=node.telnet_negotiate,
+                                             vt100query=node.telnet_vt100query,
+                                             log_path=install_output_dir + "/"
+                                             + node.name + ".telnet.log",
+                                             debug=False)
 
     # Check that the node is accessible for wipedisk to run.
     # If we cannot successfully ping the interface of the node, then it is
@@ -204,7 +219,6 @@ def wipe_disk(node, install_output_dir, close_telnet_conn=True):
         node.telnet_conn.close()
 
 
-
 def power_off_host(hosts):
 
     if isinstance(hosts, str):
@@ -231,6 +245,7 @@ def power_off_host(hosts):
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
         LOG.info("Node {} is turned off".format(node.name))
+
 
 def power_on_host(hosts):
 
@@ -262,6 +277,7 @@ def power_on_host(hosts):
 
     wait_for_hosts_state(hosts)
 
+
 def wait_for_hosts_state(hosts, state=HostAvailabilityState.ONLINE):
 
     if len(hosts) > 0:
@@ -274,6 +290,7 @@ def lock_hosts(hosts):
         hosts = [hosts]
     for host in hosts:
         host_helper.lock_host(host)
+
 
 @contextmanager
 def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
