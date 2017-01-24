@@ -221,6 +221,22 @@ def get_net_name_from_id(net_id, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'name', id=net_id)[0]
 
 
+def get_net_id_from_name(net_name, con_ssh=None, auth_info=None):
+    """
+    Get network id from full name
+
+    Args:
+        net_name (str):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (str): id of a network
+
+    """
+    table_ = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_values(table_, 'id', strict=True, name=net_name)[0]
+
+
 def get_ext_networks(con_ssh=None, auth_info=None):
     """
     Get ids of external networks
@@ -2375,4 +2391,77 @@ def get_portforwarding_rule_info(portforwarding_id, field='inside_addr', strict=
     table_ = table_parser.table(cli.neutron('portforwarding-show', portforwarding_id, ssh_client=con_ssh, auth_info=auth_info),
                                 combine_multiline_entry=True)
     return table_parser.get_value_two_col_table(table_, field, strict)
+
+
+def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, device_owner=None,
+                admin_state_down=None, mac_addr=None, vnic_type=None, security_group=None, no_security_groups=None,
+                extra_dhcp_opts=None, qos_pol=None, allowed_addr_pairs=None, no_allowed_addr_pairs=None, dns_name=None,
+                fail_ok=False, auth_info=None, con_ssh=None):
+    LOG.info("Creating port on network {}".format(net_id))
+    if not net_id:
+        raise ValueError("network id is required")
+    tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant, con_ssh=con_ssh)[0] if tenant else None
+
+    args = ''
+    args_dict = {
+        '--admin-state-down': admin_state_down,
+        '--no-security-groups': no_security_groups,
+        '--no-allowed-address-pairs': no_allowed_addr_pairs,
+    }
+
+    for key, val in args_dict.items():
+        if val:
+            args += ' {}'.format(key)
+
+    kwargs_dict = {
+        '--name': name,
+        '--tenant-id': tenant_id,
+        '--device-id': device_id,
+        '--device-owner': device_owner,
+        '--mac-address': mac_addr,
+        '--vnic-type': vnic_type,
+        # '--binding-profile':
+        '--security-group': security_group,
+        '--qos-policy': qos_pol,
+
+        '--dns-name': dns_name
+    }
+
+    for key, val in kwargs_dict.items():
+        if val is not None:
+            args += ' {} {}'.format(key, val)
+
+    repeatable_dict = {
+        '--extra-dhcp-opt': extra_dhcp_opts,
+        '--fixed-ip': fixed_ips,
+        '--allowed-address-pair': allowed_addr_pairs
+    }
+
+    for key, vals in repeatable_dict.items():
+        if vals:
+            if isinstance(vals, str):
+                vals = [vals]
+            for val in vals:
+                args += ' {} {}'.format(key, val)
+
+    args += ' {}'.format(net_id)
+
+    code, output = cli.neutron('port-create', args, ssh_client=None, fail_ok=fail_ok, rtn_list=True,
+                               auth_info=auth_info)
+
+    if code == 1:
+        return code, output
+
+    port_tab = table_parser.table(output)
+    port_net_id = table_parser.get_value_two_col_table(port_tab, 'network_id')
+    port_id = table_parser.get_value_two_col_table(port_tab, 'id')
+    if not net_id == port_net_id:
+        err_msg = "Network ID for created port is not as specified. Expt:{}; Actual: {}".format(net_id, port_net_id)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, port_id
+
+    succ_msg = "Port {} is successfully created on network {}".format(port_id, net_id)
+    LOG.info(succ_msg)
+    return 0, port_id
 

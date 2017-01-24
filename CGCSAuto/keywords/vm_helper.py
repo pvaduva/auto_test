@@ -2456,6 +2456,7 @@ def boost_cpu_usage_new_thread(vm_id, cpu_num=1, timeout=1200):
     thread.set_end_func(_kill_dd, vm_ssh)
     return vm_ssh, thread
 
+
 def get_vm_ssh(vm_id, image_name="cgcs-guest", con_ssh=None):
     """
     Get the ssh handle for the given VM
@@ -2473,3 +2474,100 @@ def get_vm_ssh(vm_id, image_name="cgcs-guest", con_ssh=None):
 
     with ssh_to_vm_from_natbox(vm_id, image_name, con_ssh=con_ssh, close_ssh=False) as vm_ssh:
         return vm_ssh
+
+
+def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=None, fail_ok=False, auth_info=None,
+                     con_ssh=None):
+    LOG.info("Attaching interface to VM {}".format(vm_id))
+    if not vm_id:
+        raise ValueError('vm_id is not supplied')
+
+    args = ''
+    args_dict = {
+        '--port-id': port_id,
+        '--net-id': net_id,
+        '--fixed-ip': fixed_ip,
+        '--wrs-if:vif_model': vif_model,
+    }
+
+    for key, val in args_dict.items():
+        if val is not None:
+            args += '{} {}'.format(key, val)
+
+    args += ' {}'.format(vm_id)
+
+    prev_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, auth_info=auth_info)
+    code, output = cli.nova('interface-attach', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
+                            auth_info=auth_info)
+
+    if code == 1:
+        return code, output
+
+    LOG.info("Post interface attach checks started...")
+    post_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, auth_info=auth_info)
+    last_nic = post_nics[-1]
+    last_port = last_nic['port_id']
+
+    err_msgs = []
+    if len(post_nics) - len(prev_nics) != 1:
+        err_msg = "NICs for vm {} is not incremented by 1".format(vm_id)
+        err_msgs.append(err_msg)
+
+    if net_id:
+        net_name = network_helper.get_net_name_from_id(net_id, con_ssh=con_ssh, auth_info=auth_info)
+        if not net_name == last_nic['network']:
+            err_msg = "Network is not as specified for VM's last nic. Expt: {}. Actual: {}".\
+                format(net_name, last_nic['network'])
+            err_msgs.append(err_msg)
+
+        if fixed_ip:
+            net_ips = nova_helper.get_vm_nova_show_value(vm_id, field=net_name, strict=False, con_ssh=con_ssh,
+                                                         auth_info=auth_info)
+            if fixed_ip not in net_ips.split(sep=', '):
+                err_msg = "specified fixed ip {} is not found in nova show {}".format(fixed_ip, vm_id)
+                err_msgs.append(err_msg)
+
+    elif port_id:
+        if not port_id == last_port:
+            err_msg = "port_id is not as specified for VM's last nic. Expt: {}. Actual: {}".format(port_id, last_port)
+            err_msgs.append(err_msg)
+
+    if vif_model:
+        if not vif_model == last_nic['vif_model']:
+            err_msg = "vif_model is not as specified for VM's last nic. Expt: {}. Actual:{}".\
+                format(vif_model, last_nic['vif_model'])
+            err_msgs.append(err_msg)
+
+    if err_msgs:
+        err_msgs_str = "Post interface attach check failed:\n{}".format('\n'.join(err_msgs))
+        if fail_ok:
+            LOG.warning(err_msgs_str)
+            return 2, last_port
+        raise exceptions.NovaError(err_msgs_str)
+
+    succ_msg = "Port {} successfully attached to VM {}".format(last_port, vm_id)
+    LOG.info(succ_msg)
+    return 0, last_port
+
+
+def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None):
+
+    LOG.info("Detaching port {} from vm {}".format(port_id, vm_id))
+    args = '{} {}'.format(vm_id, port_id)
+    code, output = cli.nova('interface-attach', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
+                            auth_info=auth_info)
+
+    if code == 1:
+        return code, output
+
+    post_nics = nova_helper.get_vm_interfaces_info(vm_id, auth_info=auth_info, con_ssh=con_ssh)
+    for nic in post_nics:
+        if port_id == nic['port_id']:
+            err_msg = "Port {} is not detached from VM {}".format(port_id, vm_id)
+            if fail_ok:
+                return 2, err_msg
+
+    succ_msg = "Port {} is successfully detached from VM {}".format(port_id, vm_id)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
