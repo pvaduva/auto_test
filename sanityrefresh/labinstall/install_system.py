@@ -1138,7 +1138,7 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
     bld_server_conn.rsync(os.path.join(CENTOS_GUEST, "latest_tis-centos-guest.img"),
                           WRSROOT_USERNAME, controller0.host_ip, \
                           WRSROOT_IMAGES_DIR + "/",\
-                          pre_opts=pre_opts)
+                          pre_opts=pre_opts, allow_fail=True)
 
     if small_footprint:
         bld_server_conn.rsync(SFP_LICENSE_FILEPATH, WRSROOT_USERNAME,
