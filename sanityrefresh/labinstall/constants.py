@@ -28,6 +28,7 @@ BULK_CFG_FILENAME = "hosts_bulk_add.xml"
 LAB_SETUP_SCRIPT = "lab_setup.sh"
 LAB_SETUP_CFG_FILENAME = "lab_setup.conf"
 CUSTOM_LAB_SETTINGS_FILENAME = "settings.ini"
+CENTOS_GUEST = DEFAULT_WKSPCE + "/CGCS_4.0_Centos_Guest_Build"
 
 LIC_FILENAME = "license.lic"
 LICENSE_FILEPATH = "-L /folk/cgts/lab/TiS17-full.lic"
@@ -100,6 +101,8 @@ MAX_BOOT_MENU_LINES = 15
 
 NIC_INTERFACE = "eth0"
 NIC_INTERFACE_CENTOS = "enp10s0f0"
+HOST_ROUTING_PREFIX = "/24"
+HOST_GATEWAY="128.224.150.1"
 
 # BIOS options
 UP = '\x1b' + '[A'

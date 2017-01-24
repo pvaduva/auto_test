@@ -45,7 +45,6 @@ Global definitions
 ----------------------------------------------------------------------------"""
 
 LOGGER_NAME = os.path.splitext(__name__)[0]
-#log = logutils.getLogger(LOGGER_NAME)
 log = None
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 PUBLIC_SSH_KEY = None
@@ -108,7 +107,6 @@ def parse_args():
     lab_grp.add_argument('--run-lab-setup', dest='run_lab_setup',
                          action='store_true', help="Run lab setup")
 
-    #TODO: Have an if for this and say it is not supported yet
     lab_grp.add_argument('--small-footprint', dest='small_footprint',
                          action='store_true', help="Run installation"
                          " as small footprint. Not applicable"
@@ -126,24 +124,18 @@ def parse_args():
                          dest='cumulus_password', help="Tenant's login "
                          "password to Cumulus Server.")
 
-    # This option is valid only for small footprint option (--small-feetprint)
-    #  that are bootable from USB.
-    #
-    # Burn boot image into USB if controller-0 is accessible, otherwise
-    # the lab is booted from the existing USB image,
-    # if one is plugged-in.
-    #
     lab_grp.add_argument('--burn-usb', dest='burn_usb',
                          action='store_true',
-                         help="Burn boot image into USB before install. Valid"
-                         " only with --small-footprint option")
+                         help="Burn boot image into USB before install")
 
-    # Skip setup of network feed
+    lab_grp.add_argument('--boot-usb', dest='boot_usb',
+                         action='store_true',
+                         help="Boot USB only but don't burn it")
+
     lab_grp.add_argument('--skip-feed', dest='skip_feed',
                          action='store_true',
                          help="Skip setup of network feed")
 
-    # Add a flag to identify a wrl linux install
     lab_grp.add_argument('--host-os', dest='host_os',
                          choices=HOST_OS, default=DEFAULT_HOST_OS,
                          help="Centos or wrlinux based install")
@@ -243,7 +235,6 @@ def parse_args():
                            help="Show this help message and exit")
 
     args = parser.parse_args()
-    #if (not args.tis_on_tis or not args.continue_install) and args.controller is None:
     if args.controller is None and not args.tis_on_tis and not args.continue_install:
         parser.error('--controller is required')
     if args.tis_on_tis and args.cumulus_userid is None:
@@ -514,7 +505,7 @@ def burn_usb_load_image(node, bld_server_conn, load_path):
 
     logutils.print_step("Burning USB with load image from {}".format(load_path))
 
-    # Check  if node (controller-0) is accessible.
+    # Check if node (controller-0) is accessible.
     cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, node.host_ip)
     if (bld_server_conn.exec_cmd(cmd, timeout=PING_TIMEOUT +
                                  TIMEOUT_BUFFER)[0] != 0):
@@ -551,7 +542,7 @@ def burn_usb_load_image(node, bld_server_conn, load_path):
 
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S dd if=" + BOOT_IMAGE_ISO_TMP_PATH + " of=/dev/sdc bs=1M oflag=direct; sync"
     if node.telnet_conn.exec_cmd(cmd, timeout=RSYNC_TIMEOUT)[0] != 0:
-        msg = 'Failed to burn Boot image iso file \"{}\"  onto USB'.format(
+        msg = 'Failed to burn Boot image iso file \"{}\" onto USB'.format(
             BOOT_IMAGE_ISO_PATH)
         log.error(msg)
         wr_exit()._exit(1, msg)
@@ -1020,7 +1011,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
         if controller0.telnet_conn is None:
             controller0.telnet_conn = open_telnet_session(controller0, install_output_dir)
 
-        if burn_usb and small_footprint:
+        if burn_usb:
             burn_usb_load_image(controller0, bld_server_conn, load_path)
 
         # Boot up controller0
@@ -1041,14 +1032,12 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
             log.error(msg)
             wr_exit()._exit(1, msg)
 
-    # Configure networking interfaces
 
-    if small_footprint and burn_usb:
-
+    if burn_usb:
         # Setup network access on the running controller0
-        nic_interface = NIC_INTERFACE_CENTOS if host_os == DEFAULT_HOST_OS else NIC_INTERFACE
+        nic_interface = controller0.nic if host_os == DEFAULT_HOST_OS else NIC_INTERFACE
         cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip addr add " + controller0.host_ip + \
-              controller0.host_routing_prefix + " dev {}".format(nic_interface)
+              HOST_ROUTING_PREFIX + " dev {}".format(nic_interface)
         if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
             log.error("Warning: Failed to add IP address: " + controller0.host_ip)
 
@@ -1058,9 +1047,9 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
 
         time.sleep(2)
 
-        cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S route add default gw " + controller0.host_gateway
+        cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S route add default gw " + HOST_GATEWAY
         if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
-            log.error("Warning: Failed to add default gateway: " + controller0.host_gateway)
+            log.error("Warning: Failed to add default gateway: " + HOST_GATEWAY)
 
         # Ping the outside network to ensure the above network setup worked as expected
         # Sometimes the network may take upto a minute to setup. Adding a delay of 60 seconds
@@ -1142,6 +1131,11 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
                           WRSROOT_HOME_DIR, pre_opts=pre_opts)
 
     bld_server_conn.rsync(os.path.join(guest_load_path, "cgcs-guest.img"),
+                          WRSROOT_USERNAME, controller0.host_ip, \
+                          WRSROOT_IMAGES_DIR + "/",\
+                          pre_opts=pre_opts)
+    
+    bld_server_conn.rsync(os.path.join(CENTOS_GUEST, "latest_tis-centos-guest.img"),
                           WRSROOT_USERNAME, controller0.host_ip, \
                           WRSROOT_IMAGES_DIR + "/",\
                           pre_opts=pre_opts)
@@ -1568,26 +1562,17 @@ def main():
     run_lab_setup = args.run_lab_setup
     small_footprint = args.small_footprint
     burn_usb = args.burn_usb
+    boot_usb = args.boot_usb
     skip_feed = args.skip_feed
-
     host_os = args.host_os
-
     stop = args.stop
-
     override = args.override
-
     banner = args.banner
-
     bld_server = args.bld_server
-
     bld_server_wkspce = args.bld_server_wkspce
-
     tis_blds_dir = args.tis_blds_dir
-
     tis_bld_dir = args.tis_bld_dir
-
     guest_bld_dir = args.guest_bld_dir
-
     patch_dir_paths = args.patch_dir_paths
 
     install_timestr = time.strftime("%Y%m%d-%H%M%S")
@@ -1648,6 +1633,8 @@ def main():
     logutils.print_name_value("Override", override)
     logutils.print_name_value("Banner", banner)
     logutils.print_name_value("Skip feed", skip_feed)
+    logutils.print_name_value("Boot USB", boot_usb)
+    logutils.print_name_value("Burn USB", burn_usb)
 
     email_info = {}
     email_info['email_server'] = EMAIL_SERVER
