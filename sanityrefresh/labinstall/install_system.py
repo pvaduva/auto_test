@@ -1708,9 +1708,11 @@ def main():
     if tis_on_tis:
 
         guest_load_path = "{}/{}".format(DEFAULT_WKSPCE, guest_bld_dir)
-        tis_on_tis_info = {'userid': args.cumulus_userid,
-                            'password': cumulus_password,
-                            'server': CUMULUS_SERVER_IP,
+        tis_on_tis_info = {'cumulus_userid': args.cumulus_userid,
+                            'cumulus_password': cumulus_password,
+                            'userid': USERNAME,
+                            'password': PASSWORD,
+                            'server': CUMULUS_SERVER,
                             'log': log, 'bld_server_conn': bld_server_conn,
                             'load_path': load_path,
                             'guest_load_path': guest_load_path,

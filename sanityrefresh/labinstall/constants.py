@@ -49,15 +49,18 @@ BANNER_DEST = '/opt/banner'
 BANNER_SRC = WRSROOT_HOME_DIR + '/banner'
 
 # Cumulus TiS on TiS setup
-CUMULUS_SERVER_IP="128.224.151.50"
+#CUMULUS_SERVER_IP="128.224.151.50"
+CUMULUS_SERVER="cumulus.wrs.com"
 BOOT_IMAGE_ISO = "bootimage.iso"
+TIS_IMAGE = "tis.img"
 BOOT_IMAGE_ISO_SIZE = 5
 BOOT_IMAGE_ISO_PATH = "export/" + BOOT_IMAGE_ISO
+BLD_TIS_IMAGE_PATH = "export/" + TIS_IMAGE
 BOOT_IMAGE_ISO_TMP_PATH = "/tmp/" + BOOT_IMAGE_ISO
 CUMULUS_CLEANUP_SCRIPT = "cumulus_cleanup.sh"
 CUMULUS_SETUP_SCRIPT = "cumulus_setup.sh"
 CUMULUS_SETUP_CFG_FILENAME = "cumulus_setup.conf"
-CUMULUS_TMP_TIS_IMAGE_PATH = "/opt/backups/public"
+CUMULUS_TMP_TIS_IMAGE_PATH = "/localdisk/designer"
 
 # .ini section and option names
 CFG_PROVISION_SECTION_NAME = "provision"
