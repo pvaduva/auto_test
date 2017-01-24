@@ -153,7 +153,7 @@ class SSHClient(pxssh.pxssh):
         rc = self.exec_cmd(RETURN_CODE_CMD, expect_pattern=RETURN_CODE_REGEX)
         return remove_markers(rc)
 
-    def rsync(self, source, dest_user, dest_server, dest, extra_opts=None, pre_opts=None):
+    def rsync(self, source, dest_user, dest_server, dest, extra_opts=None, pre_opts=None, allow_fail=False):
         if extra_opts:
             extra_opts_str = " ".join(extra_opts) + " "
         else:
@@ -168,7 +168,8 @@ class SSHClient(pxssh.pxssh):
         if self.exec_cmd(cmd, RSYNC_TIMEOUT, show_output=False)[0] != 0:
             msg = "Rsync failed"
             log.error(msg)
-            wr_exit()._exit(1, msg)
+            if not allow_fail:
+                wr_exit()._exit(1, msg)
 
     def collect_logs(self):
         cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S collect all"
