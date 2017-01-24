@@ -6,10 +6,10 @@ import re
 
 from pytest import fixture, mark
 
-from utils import table_parser
+from utils import table_parser, cli
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, ImageMetadata, NovaCLIOutput
-from keywords import nova_helper, vm_helper, glance_helper, host_helper, system_helper, cinder_helper
+from keywords import nova_helper, vm_helper, glance_helper, host_helper, system_helper, cinder_helper, check_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
@@ -212,3 +212,89 @@ def test_vm_mem_pool_1g(flavor_2g, mem_page_size, volume_, add_1g_and_4k_pages):
 
     LOG.tc_step("Ensure vm is pingable from NatBox")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
+
+@mark.usefixtures('add_admin_role_module')
+@mark.parametrize(('vcpus', 'memory'), [
+    mark.p2((8, 2048)),
+])
+def test_scheduling_vm_mem_page_size(vcpus, memory):
+    """
+    Test vm with huge_mem_page gets booted on supporting host
+
+    Args:
+        vcpus: Amount of vcpu(s) to use.
+        memory: Amount of RAM to use.
+
+    Test Setups:
+        - Create host aggregate
+        - Add two hypervisors to the host aggregate
+        - Host-0 configuration:
+            - Processor-0:
+                - Not enough 1g pages to boot vm that requires 1g pages
+                - Not enough 4k pages to boot vm that requires 1g pages
+            - Processor-1:
+                - Sufficient 1g pages to boot vm that requires 1g pages
+                - Not enough 4k pages to boot vm that requires 1g pages
+        - Host-1 configuration:
+            - Processor-0:
+                - Not enough 1g pages to boot vm that requires 1g pages
+                - Not enough 4k pages to boot vm that requires 1g pages
+            - Processor-1:
+                - sufficient 4k pages to boot vm that requires 1g pages
+                - Not enough 1g pages to boot vm that requires 1g pages
+        - Create flavor, flavor_huge, with extra-specs; MEM_PAGE_SIZE: 1048576
+        - Create flavor, flavor_small, with extra-specs; MEM_PAGE_SIZE: small
+
+    Test Steps:
+        - Boot two vm's, one with flavor_huge, the other with flavor_small
+        - Wait until both vm's are pingable from natbox
+        - Check vm with flavor_huge is booted on Host-0, Processor-1
+        - Check vm with flavor_small is booted on Host-1, Processor-1
+
+    Test Teardown
+        - Delete host aggregate\
+        - Delete created volumes and flavors
+    """
+    LOG.tc_step("Create aggregate test_scheduling")
+    nova_helper.create_aggregate(name='test_scheduling')
+    LOG.tc_step("Get list of 'up' and 'enabled' hypervisors")
+    target_hosts = host_helper.get_hypervisors(state='up', status='enabled')
+    assert len(target_hosts) >= 2, "Not 2 or more hypervisors. Cannot properly test."
+    LOG.tc_step("Add the first two found hypervisors to test_scheduling aggregate")
+    nova_helper.add_hosts_to_aggregate(aggregate='test_scheduling', hosts=target_hosts[0:2])
+    image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
+
+    LOG.tc_step("Set all 1g pages")
+    # Put into a loop later, logic is complicated
+    system_helper.set_host_1g_pages(host=target_hosts[0], proc_id=0, hugepage_num=0)
+    system_helper.set_host_1g_pages(host=target_hosts[0], proc_id=1, hugepage_num=2)
+    system_helper.set_host_1g_pages(host=target_hosts[1], proc_id=0, hugepage_num=0)
+    system_helper.set_host_1g_pages(host=target_hosts[1], proc_id=1, hugepage_num=0)
+
+    LOG.tc_step("Set all 4k pages")
+    system_helper.set_host_4k_pages(host=target_hosts[0], proc_id=0, smallpage_num=0)
+    system_helper.set_host_4k_pages(host=target_hosts[0], proc_id=1, smallpage_num=0)
+    system_helper.set_host_4k_pages(host=target_hosts[1], proc_id=0, smallpage_num=0)
+    system_helper.set_host_4k_pages(host=target_hosts[1], proc_id=1, smallpage_num=1024)
+
+    collection = ['huge', 'small']
+    for x in collection:
+
+        if x == 'huge':
+            mem_page_size = 1048576
+        else:
+            mem_page_size = 'small'
+
+        LOG.tc_step("Create flavor_{}".format(x))
+        flavor_id = nova_helper.create_flavor(name='flavor_{}'.format(x), vcpus=vcpus, ram=memory)[1]
+        ResourceCleanup.add('flavor', flavor_id)
+        LOG.tc_step("Set extra specs for MEM_PAGE_SIZE: {}".format(x))
+        nova_helper.set_flavor_extra_specs(flavor_id, {FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
+
+        LOG.tc_step("Boot vm mem_page_{}".format(x))
+        vm_id = vm_helper.boot_vm(name='mem_page_{}'.format(x), flavor=flavor_id, source='image',
+                                  source_id=image_id, avail_zone='test_scheduling')[1]
+        ResourceCleanup.add('vm', vm_id)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
