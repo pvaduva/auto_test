@@ -2637,3 +2637,35 @@ def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, pas
         yield bld_server_conn
     finally:
         bld_server_conn.close()
+
+def get_host_co_processor_pci_list(hostname):
+    host_pci_info = []
+    with ssh_to_host(hostname) as host_ssh:
+        LOG.info("Getting the Co-processor pci list for host {}".format(hostname))
+        cmd = " lspci -nnm | grep Co-processor | awk ' !/Virtual/'"
+        rc, output = host_ssh.exec_cmd(cmd)
+        if rc == 0:
+            for pci_line in output.splitlines():
+                pci_attributes = pci_line.splict('"')
+                while ' ' in pci_attributes:
+                    pci_attributes.remove(' ')
+                while '' in pci_attributes:
+                    pci_attributes.remove('')
+
+                pci_address = "0000:{}".format(pci_attributes[0])
+                pci_name = "pci_{}".format(pci_address.replace('.', '_'))
+                vendor_name = pci_address[2].split(' [')[0]
+                vendor_id = (pci_address[2].split(' [')[1]).replace(']', '')
+                device_name = pci_address[3].split(' [')[0]
+                device_id = pci_address[3].split(' [')[1].replace(']', '')
+                pci_info = {'pci_address': pci_address,
+                            'pci_name': pci_name,
+                            'vendor_name': vendor_name,
+                            'vendor_id': vendor_id,
+                            'device_id': device_id
+                           }
+
+                host_pci_info.append(pci_info)
+
+    return host_pci_info
+
