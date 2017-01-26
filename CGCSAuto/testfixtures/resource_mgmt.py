@@ -93,7 +93,8 @@ class ResourceCleanup:
         'router_interfaces': [],
         'subnets': [],
         'floating_ips': [],
-        'heat_stacks': []
+        'heat_stacks': [],
+        'ports': [],
     }
     __resources_to_cleanup = {
         'function': deepcopy(__resources_dict),
@@ -120,6 +121,7 @@ class ResourceCleanup:
         subnets = resources['subnets']
         floating_ips = resources['floating_ips']
         heat_stacks = resources['heat_stacks']
+        ports = resources['ports']
         
         err_msgs = []
         if vms_with_vols:
@@ -177,6 +179,13 @@ class ResourceCleanup:
                 if code > 0:
                     err_msgs.append(msg)
 
+        if ports:
+            LOG.fixture_step("({}) Attempt to delete following ports: {}".format(scope, ports))
+            for port in ports:
+                code, msg = network_helper.delete_port(port, auth_info=Tenant.ADMIN, fail_ok=True)
+                if code > 0:
+                    err_msgs.append(msg)
+
         if routers:
             LOG.fixture_step("{}) Attempt to delete following routers: {}".format(scope, routers))
             for router in routers:
@@ -228,7 +237,7 @@ class ResourceCleanup:
         resource_type = resource_type.lower()
         valid_scopes = ['function', 'class', 'module']
         valid_types = ['vm', 'volume', 'volume_type', 'qos', 'flavor', 'image', 'server_group', 'router',
-                       'subnet', 'floating_ip', 'heat_stack']
+                       'subnet', 'floating_ip', 'heat_stack', 'port']
         
         if scope not in valid_scopes:
             raise ValueError("'scope' param value has to be one of the: {}".format(valid_scopes))

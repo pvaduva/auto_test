@@ -2415,7 +2415,7 @@ def boost_cpu_usage(vm_id, cpu_num=1, con_ssh=None):
 
     with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh, close_ssh=False) as vm_ssh:
         for i in range(cpu_num):
-            vm_ssh.send(cmd=dd_cmd)
+            vm_ssh.exec_cmd(cmd=dd_cmd)
 
     return vm_ssh
 
@@ -2478,6 +2478,25 @@ def get_vm_ssh(vm_id, image_name="cgcs-guest", con_ssh=None):
 
 def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=None, fail_ok=False, auth_info=None,
                      con_ssh=None):
+    """
+    Attach interface to a vm via port_id OR net_id
+    Args:
+        vm_id (str):
+        port_id (str): port to attach to vm
+        net_id (str): port from given net to attach to vm
+        fixed_ip (str): fixed ip for attached interface. Only works when attaching interface via net_id
+        vif_model (str): vif model for the interface
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<return_code>, <attached_port_id>)
+        (0, <port_id_attached>)
+        (1, <std_err>)  - cli rejected
+        (2, "Post interface attach check failed: <reasons>")     - net_id/port_id, vif_model, or fixed_ip do not match
+                                                                    with given value
+
+    """
     LOG.info("Attaching interface to VM {}".format(vm_id))
     if not vm_id:
         raise ValueError('vm_id is not supplied')
@@ -2492,7 +2511,7 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
 
     for key, val in args_dict.items():
         if val is not None:
-            args += '{} {}'.format(key, val)
+            args += ' {} {}'.format(key, val)
 
     args += ' {}'.format(vm_id)
 
@@ -2503,7 +2522,7 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
     if code == 1:
         return code, output
 
-    LOG.info("Post interface attach checks started...")
+    LOG.info("Post interface-attach checks started...")
     post_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, auth_info=auth_info)
     last_nic = post_nics[-1]
     last_port = last_nic['port_id']
@@ -2551,10 +2570,25 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
 
 
 def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None):
+    """
+    Detach a port from vm
+    Args:
+        vm_id (str):
+        port_id (str): existing port that is attached to given vm
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<return_code>, <msg>)
+        (0, Port <port_id> is successfully detached from VM <vm_id>)
+        (1, <stderr>)   - cli rejected
+        (2, "Port <port_id> is not detached from VM <vm_id>")   - detached port is still shown in nova show
+
+    """
 
     LOG.info("Detaching port {} from vm {}".format(port_id, vm_id))
     args = '{} {}'.format(vm_id, port_id)
-    code, output = cli.nova('interface-attach', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
+    code, output = cli.nova('interface-detach', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
                             auth_info=auth_info)
 
     if code == 1:

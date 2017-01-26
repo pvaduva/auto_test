@@ -2394,9 +2394,42 @@ def get_portforwarding_rule_info(portforwarding_id, field='inside_addr', strict=
 
 
 def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, device_owner=None,
-                admin_state_down=None, mac_addr=None, vnic_type=None, security_group=None, no_security_groups=None,
+                admin_state_down=None, mac_addr=None, vnic_type=None, security_groups=None, no_security_groups=None,
                 extra_dhcp_opts=None, qos_pol=None, allowed_addr_pairs=None, no_allowed_addr_pairs=None, dns_name=None,
                 fail_ok=False, auth_info=None, con_ssh=None):
+    """
+    Create a port on given network
+
+    Args:
+        net_id (str): network id to create port for
+        name (str): name of the new port
+        tenant (str): tenant name. such as tenant1, tenant2
+        fixed_ips (str|list): e.g., ["subnet_id=SUBNET_1,ip_address=IP_ADDR_1",
+                                    "subnet_id=SUBNET_2,ip_address=IP_ADDR_2]
+        device_id (str): device id of this port
+        device_owner (str): Device owner of this port
+        admin_state_down (bool): Set admin state up to false
+        mac_addr (str):  MAC address of this port
+        vnic_type: one of the: <direct | direct-physical | macvtap | normal | baremetal>
+        security_groups (str|list): Security group(s) associated with the port
+        no_security_groups (bool): Associate no security groups with the port
+        extra_dhcp_opts (str|list): Extra dhcp options to be assigned to this port:
+                e.g., "opt_name=<dhcp_option_name>,opt_value=<value>,ip_version={4,6}"
+        qos_pol (str):  Attach QoS policy ID or name to the resource
+        allowed_addr_pairs (str|list):  Allowed address pair associated with the port.
+                e.g., "ip_address=IP_ADDR[,mac_address=MAC_ADDR]"
+        no_allowed_addr_pairs (bool): Associate no allowed address pairs with the port
+        dns_name (str):  Assign DNS name to the port (requires DNS integration extension)
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<rtn_code>, <err_msg|port_id>)
+        (0, <port_id>)  - port created successfully
+        (1, <std_err>)  - CLI rejected
+        (2, "Network ID for created port is not as specified.")     - post create check fail
+
+    """
     LOG.info("Creating port on network {}".format(net_id))
     if not net_id:
         raise ValueError("network id is required")
@@ -2421,9 +2454,7 @@ def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, 
         '--mac-address': mac_addr,
         '--vnic-type': vnic_type,
         # '--binding-profile':
-        '--security-group': security_group,
         '--qos-policy': qos_pol,
-
         '--dns-name': dns_name
     }
 
@@ -2434,7 +2465,8 @@ def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, 
     repeatable_dict = {
         '--extra-dhcp-opt': extra_dhcp_opts,
         '--fixed-ip': fixed_ips,
-        '--allowed-address-pair': allowed_addr_pairs
+        '--allowed-address-pair': allowed_addr_pairs,
+        '--security-group': security_groups,
     }
 
     for key, vals in repeatable_dict.items():
@@ -2446,7 +2478,7 @@ def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, 
 
     args += ' {}'.format(net_id)
 
-    code, output = cli.neutron('port-create', args, ssh_client=None, fail_ok=fail_ok, rtn_list=True,
+    code, output = cli.neutron('port-create', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
                                auth_info=auth_info)
 
     if code == 1:
@@ -2465,3 +2497,82 @@ def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, 
     LOG.info(succ_msg)
     return 0, port_id
 
+
+def delete_port(port_id, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Delete given port
+    Args:
+        port_id (str):
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<rtn_code>, <msg>)
+        (0, "Port <port_id> is successfully deleted")
+        (1, <std_err>)  - delete port cli rejected
+        (2, "Port <port_id> still exists after deleting")   - post deletion check failed
+
+    """
+    LOG.info("Deleting port: {}".format(port_id))
+    if not port_id:
+        msg = "No port specified"
+        LOG.warning(msg)
+        return -1, msg
+
+    code, output = cli.neutron('port-delete', port_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
+                               auth_info=auth_info, )
+
+    if code == 1:
+        return 1, output
+
+    existing_ports = get_ports(rtn_val='id')
+    if port_id in existing_ports:
+        err_msg = "Port {} still exists after deleting".format(port_id)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        raise exceptions.NeutronError(err_msg)
+
+    succ_msg = "Port {} is successfully deleted".format(port_id)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def get_ports(rtn_val='id', port_id=None, port_name=None, port_mac=None, ip_addr=None, subnet_id=None, strict=False,
+              auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Get a list of ports with given arguments
+    Args:
+        rtn_val (str): any valid header of neutron port-list table. 'id', 'name', 'mac_address', or 'fixed_ips'
+        port_id (str): id of the port
+        port_name (str): name of the port
+        port_mac (str): mac address of the port
+        ip_addr (str): ip of the port
+        subnet_id (str): subnet of the port
+        strict (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.neutron('port-list', ssh_client=con_ssh, auth_info=auth_info))
+    fixed_ips = ''
+    if subnet_id:
+        fixed_ips += subnet_id
+    if ip_addr:
+        fixed_ips += ".*{}".format(ip_addr)
+
+    args_dict = {
+        'id': port_id,
+        'fixed_ips': fixed_ips,
+        'name': port_name,
+        'mac_address': port_mac,
+    }
+    kwargs = {}
+    for key, value in args_dict.items():
+        if value:
+            kwargs[key] = value
+
+    ports = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=True, **kwargs)
+    return ports

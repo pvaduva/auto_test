@@ -1384,6 +1384,8 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, auth_info=Tena
 
     table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))
     all_nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
+    if isinstance(all_nics, str):
+        all_nics = [all_nics]
     all_nics = [eval(nic_) for nic_ in all_nics]
 
     nics_to_rtn = list(all_nics)
