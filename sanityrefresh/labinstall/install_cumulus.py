@@ -243,7 +243,7 @@ class Cumulus_TiS(object):
 
         floatingip = self.floating_ips[0]
 
-        time.sleep(300)
+        time.sleep(180)
 
         controller0_ssh_conn = SSHClient(log_path=self.output_dir + "/controller-0.ssh.log")
         controller0_ip = self.get_floating_ip("EXTERNALOAMC0")
