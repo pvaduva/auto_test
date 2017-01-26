@@ -2142,7 +2142,7 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
 
                         if '.' + net_seg_id in output_pre:
                             LOG.info("Modify existing interface to {} in /etc/network/interfaces".format(vlan_name))
-                            vm_ssh.exec_cmd(r"sed -i -e 's/eth[0-9]+\(.{}\)/{}\1/g' /etc/network/interfaces".
+                            vm_ssh.exec_cmd(r"sed -i -e 's/eth[0-9]\+\(.{}\)/{}\1/g' /etc/network/interfaces".
                                             format(net_seg_id, eth_name), fail_ok=False)
                         else:
                             LOG.info("Append new interface {} to /etc/network/interfaces".format(vlan_name))
