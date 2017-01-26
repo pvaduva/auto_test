@@ -1797,6 +1797,176 @@ def get_vm_host_and_numa_nodes(vm_id, con_ssh=None):
     return host, actual_node_vals
 
 
+def parse_cpu_list(list_in_str, prefix=''):
+    results = []
+    found = re.search(r'[,]?\s*{}\s*(\d+(\d|\-|,)*)'.format(prefix), list_in_str, re.IGNORECASE)
+    if found:
+        for cpus in found.group(1).split(','):
+            if not cpus:
+                continue
+            if '-' in cpus:
+                b, e = cpus.split('-')[0:2]
+                results += list(range(int(b), int(e) + 1))
+            else:
+                results.append(int(cpus))
+    return results
+
+
+def _parse_cpu_siblings(siblings_str):
+    results = []
+
+    found = re.search(r'[,]?\s*siblings:\s*((\{\d+\,\d+\})(,(\{\d+\,\d+\}))*)', siblings_str, re.IGNORECASE)
+
+    if found:
+        for cpus in found.group(1).split('},'):
+            if not cpus:
+                continue
+            n1, n2 = cpus[1:].split(',')
+            results.append((n1, n2))
+
+    return results
+
+
+def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None):
+    """
+    Get information for all PCI devices using tool nova-pci-interrupts.
+
+    Args:
+        vm_id (str):
+        con_ssh:
+
+    Returns (pci_info, vm_topology): details of the PCI device and VM topology
+        Examples:
+            vm_topology:
+            {
+                "memory":1024,
+                "numa_node":1,
+                "pcpus":[35,15,10,30,16],
+                "siblings":[],
+                "vcpus":[0,1,2,3,4]
+            }
+
+            pci_info:
+            {
+                "memory":1024, "numa_node":1, "pcpus":[35, 15, 10, 30, 16], "siblings":[],"vcpus":[0,1,2,3,4]}
+
+                pci_info:
+                    {"0000:83:03.7":{
+                        "cpulist":[10,15,16,30,35],
+                        "irq":"69",
+                        "msi_irqs":"69",
+                        "nic":"83:03.7 Co-processor: Intel Corporation DH895XCC Series QAT Virtual Function",
+                        "numa_node":"1",
+                        "product":"0443",
+                        "vendor":"8086"
+                    },
+            }
+
+
+    """
+    hypervisor = hypervisor or get_vm_host_and_numa_nodes(vm_id=vm_id, con_ssh=con_ssh)[0]
+
+    with host_helper.ssh_to_host(hypervisor, con_ssh=con_ssh) as compute_ssh:
+        code, details = compute_ssh.exec_sudo_cmd('nova-pci-interrupts')
+
+    pci_infos = {}
+    vm_topology = {}
+    stage = 0
+    prev_pci_addr = None
+    for line in details.splitlines():
+        if stage == 0:
+            begin =  re.match(r'^\s*\|\s*{}\s*\|\s*([^\|]+)\s*\|\s*([^\|]+)\|\s*'.format(vm_id), line)
+            if begin:
+                topology_str = begin.group(1)
+                numa_node = re.search(r'node:\s*(\d+)', topology_str, re.IGNORECASE)
+                if numa_node:
+                    vm_topology['numa_node'] = numa_node.group(1)
+
+                memory = re.search(r'[,]?\s*(\d+)(MB|GB)', topology_str, re.IGNORECASE)
+                if memory:
+                    memory_size = int(memory.group(1))
+                    memory_size *= 1024 if memory.group(2).upper() == 'GB' else 1
+                    vm_topology['memory'] = memory_size
+
+                vm_topology['vcpus'] = parse_cpu_list(topology_str, 'vcpus:')
+                vm_topology['pcpus'] = parse_cpu_list(topology_str, 'pcpus:')
+                vm_topology['siblings'] = _parse_cpu_siblings(topology_str)
+
+                pci_info = re.search(
+                    '\|\s*node:(\d+)\,\s*addr:(\d{4}:\d{2}:\d{2}\.\d),\s*type:([^\,]+),\s*vendor:([^\,]+),\s*product:([^\|]+)\s*\|', line)
+
+                if pci_info:
+                    pci_numa_node, pci_addr, pci_type, vendor, product = pci_info.groups()
+                    pci_infos[pci_addr] = {
+                        'node': pci_numa_node, 'addr': pci_addr, 'type': pci_type, 'vendor': vendor, 'product': product}
+                stage = 1
+                continue
+
+        elif stage == 1:
+            pci_info = re.match(
+                '^\s*\|\s*\|\s*\|\s*node:(\d+)\,\s*addr:(\d{4}:\d{2}:\d{2}\.\d),\s*type:([^\,]+),\s*vendor:([^\,]+),\s*product:([^\|]+)\s*\|', line)
+
+            if pci_info:
+                pci_numa_node, pci_addr, pci_type, vendor, product = pci_info.groups()
+                pci_infos[pci_addr] = {
+                    'node': pci_numa_node, 'addr': pci_addr, 'type': pci_type, 'vendor': vendor, 'product': product}
+                continue
+            else:
+                stage = 2
+
+        if stage == 2:
+            all_pcis = re.search('INFO Found: pci_addrs:((\s*(\d{4}:\d{2}:\d{2}\.\d))+)', line)
+            if all_pcis:
+                # this list contains all pci-addrs for all the VMs on the host, so we have to remove those for other VMs
+                # pci_infos['pci_addr_list'] = all_pcis.group(1).split()
+                # for v in pci_infos['pci_addr_list']:
+                #     pci_infos[v] = {}
+                pci_infos['pci_addr_list'] = list(pci_infos.keys())
+                stage = 3
+                continue
+
+        if stage == 3:
+            pci_raw = re.match(r'.*INFO addr:\s*(\d{4}:\d{2}:\d{2}\.\d)\s*(.*)', line)
+            if pci_raw:
+                pci_addr = str(pci_raw.group(1))
+                prev_pci_addr = pci_addr
+
+                if pci_addr not in pci_infos:
+                    LOG.warn('UNKNOWN pci_addr:{}, \nraw line:\n{}'.format(pci_addr, line))
+                else:
+                    pci_info, nic_info = pci_raw.group(2).split(';')
+                    pci = re.findall('([^: ]+):([^ :]+)', pci_info)
+                    pci_infos[pci_addr].update({k.strip(): v.strip() for k, v in dict(pci).items()})
+                    pci_infos[pci_addr].update(
+                        {pci[-1][0].strip(): pci_info.split(':')[-1].strip(), 'nic': nic_info.strip()})
+                continue
+
+            irq_cpulist = re.search('irq:(\d+) \s*cpulist:(.*)$', line)
+            if irq_cpulist:
+                irq = irq_cpulist.group(1)
+                cpulist = parse_cpu_list(irq_cpulist.group(2))
+                # LOG.info('pci_addr:{}\ncpulist:{}\n'.format(prev_pci_addr or '', cpulist))
+
+                if prev_pci_addr is not None and prev_pci_addr in pci_infos:
+                    if irq != pci_infos[prev_pci_addr]['irq'] and irq not in pci_infos[prev_pci_addr]['msi_irqs']:
+                        LOG.warn('Mismatched irq, expecting:{}, actual:{}, \nline:\n{}\n'.format(
+                            pci_infos[prev_pci_addr]['irq'], irq, line))
+                        pci_infos[prev_pci_addr]['irq'] = irq
+                    # simply update the cpulist with the assumption all cpulists are same
+                    pci_infos[prev_pci_addr]['cpulist'] = sorted(set(cpulist))
+                else:
+                    LOG.warn('UNKOWN PCI addr:{} to vm:{}'.format(prev_pci_addr, vm_id))
+
+    # make sure to exclude irrelated PCI info
+    for pci_addr in list(pci_infos.keys()):
+        if pci_addr == 'pci_addr_list':
+            continue
+        if pci_addr not in pci_infos['pci_addr_list']:
+            pci_infos.pop(pci_addr)
+
+    return pci_infos, vm_topology
+
+
 def get_instance_topology(vm_id, con_ssh=None, source='vm-topology'):
     """
     Get instance_topology from 'vm-topology -s servers'
