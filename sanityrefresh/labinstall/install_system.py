@@ -1657,6 +1657,9 @@ def main():
 
     guest_load_path = "{}/{}".format(bld_server_wkspce, guest_bld_dir)
 
+    if tis_on_tis:
+        guest_load_path = "{}/{}".format(DEFAULT_WKSPCE, guest_bld_dir)
+
     load_path = get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
                                   tis_bld_dir)
     if os.path.isdir(lab_cfg_location):
