@@ -28,7 +28,7 @@ def base_vm():
     ('port_id', 'rtl8139'),
     ('port_id', 'ne2k_pci')
 ])
-def test_if_attach_detach(base_vm, if_attach_arg, vif_model):
+def test_interface_attach_detach(base_vm, if_attach_arg, vif_model):
     """
     Sample test case for interface attach/detach
     Args:
