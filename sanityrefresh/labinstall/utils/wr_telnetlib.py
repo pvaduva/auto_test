@@ -902,7 +902,7 @@ class Telnet:
     #TODO: The timeouts in this function need to be tested to see if they
     #      should be increased/decreased
     #TODO: If script returns zero, should check return code, otherwise remove it
-    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos'):
+    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', usb=False):
         if "wildcat" in node.host_name:
             index = 0
             bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[index]
@@ -922,13 +922,22 @@ class Telnet:
                 msg = "Failed to determine boot device for: " + node.name
                 log.error(msg)
                 #wr_exit()._exit(1, msg)
-            log.info("Boot device is: " + str(boot_device_regex))
+            if usb:
+                log.info("Boot device is: USB")
+            else:
+                log.info("Boot device is: " + str(boot_device_regex))
 
             self.get_read_until("Please select boot device", 60)
 
             count = 0
             down_press_count = 0
             while count < MAX_SEARCH_ATTEMPTS:
+
+                if usb:
+                    log.info("Pressing ENTER key") 
+                    self.write(str.encode("\r\r"))
+                    break
+
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
                 #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
                 regex = re.compile(b"\[\d+;22(.*?)\x1b")
@@ -961,10 +970,26 @@ class Telnet:
                 return 1
                 #wr_exit()._exit(1, msg)
 
-            log.info("Waiting for ESC to exit")
+            #log.info("Waiting for ESC to exit")
             if node.name == CONTROLLER0:
-                if boot_device_regex == 'USB':
+                if usb:
                     self.get_read_until("Select kernel options and boot kernel", 120)
+                    self.write(str.encode("\r\r"))
+                    if small_footprint:
+                        log.info("Selecting Serial Controller+Compute Node Install")
+                        time.sleep(1)
+                        self.write(str.encode(DOWN))
+                        self.write(str.encode(DOWN))
+                        if host_os == 'wrlinux':
+                           self.write(str.encode(DOWN))
+                        time.sleep(1)
+                        log.info("Pressing ENTER key")
+                        self.write(str.encode("\r\r"))
+                    else:
+                        time.sleep(1)
+                        log.info("Selecting Serial Controller Node Install")
+                        log.info("Pressing ENTER key")
+                        self.write(str.encode("\r\r"))
                 else:
                     self.get_read_until("Kickstart Boot Menu", 240)
                     # New pxeboot cfg menu
@@ -1025,7 +1050,10 @@ class Telnet:
                 msg = "Failed to determine boot device for: " + node.name
                 log.error(msg)
                 wr_exit()._exit(1, msg)
-            log.info("Boot device is: " + str(boot_device_regex))
+            if usb:
+                log.info("Boot device is: USB")
+            else:
+                log.info("Boot device is: " + str(boot_device_regex))
 
             self.get_read_until("Boot Menu", 200)
             log.info("Pressing BIOS key " + bios_key_hr)
@@ -1036,6 +1064,12 @@ class Telnet:
             count = 0
             down_press_count = 0
             while count < MAX_SEARCH_ATTEMPTS:
+
+                if usb:
+                    log.info("Pressing ENTER key") 
+                    self.write(str.encode("\r\r"))
+                    break
+
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
                 #regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)\s+(.*?)\|")
                 regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*?)\|")
@@ -1069,8 +1103,9 @@ class Telnet:
 
             if node.name == CONTROLLER0:
                 # booting device = USB tested only for Ironpass-31_32
-                if boot_device_regex == 'USB':
+                if usb:
                     self.get_read_until("Select kernel options and boot kernel", 120)
+                    self.write(str.encode("\r\r"))
                     if small_footprint:
                         log.info("Selecting Serial Controller+Compute Node Install")
                         time.sleep(1)
@@ -1145,7 +1180,10 @@ class Telnet:
                 msg = "Failed to determine boot device for: " + node.name
                 log.error(msg)
                 wr_exit()._exit(1, msg)
-            log.info("Boot device is: " + str(boot_device_regex))
+            if usb:
+                log.info("Boot device is: USB")
+            else:
+                log.info("Boot device is: " + str(boot_device_regex))
             # Read until we are prompted for the boot type
             self.get_read_until("PXE")
             log.info("Pressing BIOS key " + bios_key_hr)

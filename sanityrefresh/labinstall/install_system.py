@@ -126,11 +126,11 @@ def parse_args():
 
     lab_grp.add_argument('--burn-usb', dest='burn_usb',
                          action='store_true',
-                         help="Burn boot image into USB before install")
+                         help="Burn boot image into USB before installing from USB")
 
     lab_grp.add_argument('--boot-usb', dest='boot_usb',
                          action='store_true',
-                         help="Boot USB only but don't burn it")
+                         help="Boot using the existing load on the USB")
 
     lab_grp.add_argument('--skip-feed', dest='skip_feed',
                          action='store_true',
@@ -506,20 +506,30 @@ def burn_usb_load_image(node, bld_server_conn, load_path):
     logutils.print_step("Burning USB with load image from {}".format(load_path))
 
     # Check if node (controller-0) is accessible.
-    cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, node.host_ip)
-    if (bld_server_conn.exec_cmd(cmd, timeout=PING_TIMEOUT +
-                                 TIMEOUT_BUFFER)[0] != 0):
-        log.info("Node not responding. Skipping USB burning. Installing with existing USB image")
-        return
+    time.sleep(10)
+    cmd = "ping -c 4 {}".format(node.host_ip)
+    rc, output = bld_server_conn.exec_cmd(cmd, timeout=PING_TIMEOUT + TIMEOUT_BUFFER)
+    #if (bld_server_conn.exec_cmd(cmd, timeout=PING_TIMEOUT +
+    #                             TIMEOUT_BUFFER)[0] != 0):
+    if rc != 0:
+        msg = "Node not responding reliably.  Skipping USB burning."
+        wr_exit()._exit(1, msg)
     else:
         node.telnet_conn.login()
+    log.info(output)
+    # Do not remove! - messes up next line (NEED TO FIX)
+    cmd = "ls"
+    rc, output = node.telnet_conn.exec_cmd(cmd)
 
     # check if a USB is plugged in
     cmd = "ls -lrtd /dev/disk/by-id/usb*"
-    if node.telnet_conn.exec_cmd(cmd)[0] != 0:
+    rc, output = node.telnet_conn.exec_cmd(cmd)
+    if rc != 0:
         msg = "No USB found in lab node. Please plug in a usb to {}.".format(node.host_ip)
         log.info(msg)
         wr_exit()._exit(1, msg)
+    usb_device = (output.splitlines()[0])[-3:]
+    log.info(usb_device)
 
     cmd = "test -f " + load_path + "/" + BOOT_IMAGE_ISO_PATH
     if bld_server_conn.exec_cmd(cmd)[0] != 0:
@@ -540,7 +550,10 @@ def burn_usb_load_image(node, bld_server_conn, load_path):
         log.info(msg)
         wr_exit()._exit(1, msg)
 
-    cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S dd if=" + BOOT_IMAGE_ISO_TMP_PATH + " of=/dev/sdc bs=1M oflag=direct; sync"
+    #cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S dd if=" + BOOT_IMAGE_ISO_TMP_PATH + " of=/dev/sdc bs=1M oflag=direct; sync"
+    cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync".format(WRSROOT_PASSWORD, 
+                                                                                  BOOT_IMAGE_ISO_TMP_PATH, 
+                                                                                  usb_device)
     if node.telnet_conn.exec_cmd(cmd, timeout=RSYNC_TIMEOUT)[0] != 0:
         msg = 'Failed to burn Boot image iso file \"{}\" onto USB'.format(
             BOOT_IMAGE_ISO_PATH)
@@ -694,7 +707,7 @@ def get_system_name(bld_server_conn, lab_cfg_path):
     return ((system_name.split('=')[1])[5:]).replace('"', '')
 
 
-def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True):
+def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True, usb=False):
     ''' Initiate the boot and installation operation.
     '''
 
@@ -707,9 +720,13 @@ def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_di
                                              log_path=install_output_dir + "/"\
                                                + node.name + ".telnet.log")
 
+    # if USB, the node was already on for the file transfer to occur
+    if usb:
+        vlm_exec_cmd(VLM_TURNOFF, node.barcode)
+
     vlm_exec_cmd(VLM_TURNON, node.barcode)
     logutils.print_step("Installing {}...".format(node.name))
-    rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os)
+    rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os, usb)
 
     if close_telnet_conn:
         node.telnet_conn.close()
@@ -1002,7 +1019,8 @@ def open_telnet_session(_controller0, install_output_dir):
 
 
 def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths,
-                      host_os, boot_device_dict, small_footprint, burn_usb, tis_on_tis):
+                      host_os, boot_device_dict, small_footprint, burn_usb,
+                      tis_on_tis, boot_usb):
 
     global controller0
     #global cumulus
@@ -1014,8 +1032,13 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
         if burn_usb:
             burn_usb_load_image(controller0, bld_server_conn, load_path)
 
+        if burn_usb or boot_usb:
+            usb = True
+        else:
+            usb = False
+
         # Boot up controller0
-        rc = bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False)
+        rc = bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False, usb=usb)
         if rc != 0:
             msg = "Unable to bring up controller-0"
             wr_exit()._exit(1, msg)
@@ -1033,9 +1056,9 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
             wr_exit()._exit(1, msg)
 
 
-    if burn_usb:
+    if burn_usb or boot_usb:
         # Setup network access on the running controller0
-        nic_interface = controller0.nic if host_os == DEFAULT_HOST_OS else NIC_INTERFACE
+        nic_interface = controller0.host_nic if host_os == DEFAULT_HOST_OS else NIC_INTERFACE
         cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip addr add " + controller0.host_ip + \
               HOST_ROUTING_PREFIX + " dev {}".format(nic_interface)
         if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
@@ -1578,6 +1601,10 @@ def main():
     install_timestr = time.strftime("%Y%m%d-%H%M%S")
     continue_install = args.continue_install
 
+    # Don't bother setting up the feed if we want to boot from USB
+    if burn_usb or boot_usb:
+        skip_feed = True
+
     if args.output_dir:
         output_dir = args.output_dir
 
@@ -1607,7 +1634,6 @@ def main():
     if tis_on_tis:
         logutils.print_name_value("TiS-on-TiS", tis_on_tis)
 
-    logutils.print_name_value("Logs location", 'http://128.224.150.21/install_logs/')
     logutils.print_name_value("Lab config location", lab_cfg_location)
 
     if not tis_on_tis:
@@ -1754,6 +1780,8 @@ def main():
                                     bld_server_conn, load_path, host_os,
                                     install_output_dir)
                 set_install_step_complete(lab_install_step)
+    else:
+        log.info('Skipping setup of network feed')
 
     nodes = list(controller_dict.values()) + list(compute_dict.values()) + list(storage_dict.values())
 
@@ -1765,11 +1793,14 @@ def main():
         vlm_unreserve(barcodes)
         vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
-
         # Power down all the nodes via VLM (note: this can also be done via board management control)
         if not continue_install:
             for barcode in barcodes:
-                vlm_exec_cmd(VLM_TURNOFF, barcode)
+                if burn_usb and (barcode == controller0.barcode):
+                    log.info('Skipping power down of controller0 node')
+                    vlm_exec_cmd(VLM_TURNON, barcode)
+                else:
+                    vlm_exec_cmd(VLM_TURNOFF, barcode)
 
         # Run the wipedisk utility if the nodes are accessible
         for node in nodes:
@@ -1792,7 +1823,7 @@ def main():
     #if not executed:
     if do_next_install_step(lab_type, lab_install_step):
         bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths, host_os,
-                          boot_device_dict, small_footprint, burn_usb, tis_on_tis)
+                          boot_device_dict, small_footprint, burn_usb, tis_on_tis, boot_usb)
         set_install_step_complete(lab_install_step)
 
     if stop == "1":

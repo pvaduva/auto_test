@@ -1,8 +1,5 @@
 #!/usr/bin/env python3.4
 
-#TODO: This file should be under some directory like utils/ and not at
-#      the same level as install_system.py
-
 # Directory and file paths/names
 HOST_OS = ["centos", "wrlinux"]
 DEFAULT_HOST_OS = "centos"
@@ -104,7 +101,7 @@ MAX_BOOT_MENU_LINES = 15
 
 NIC_INTERFACE = "eth0"
 NIC_INTERFACE_CENTOS = "enp10s0f0"
-HOST_ROUTING_PREFIX = "/24"
+HOST_ROUTING_PREFIX = "/23"
 HOST_GATEWAY="128.224.150.1"
 
 # BIOS options
