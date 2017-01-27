@@ -33,17 +33,29 @@ def wait_for_con_drbd_sync_complete():
 
 
 @fixture(scope='session')
-def change_admin_password_session(request):
+def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     prev_pswd = Tenant.ADMIN['password']
     post_pswd = "'!{}9'".format(prev_pswd)
 
     LOG.fixture_step('(Session) Changing admin password to {}'.format(post_pswd))
     keystone_helper.update_user('admin', password=post_pswd)
 
+    def _lock_unlock_controllers():
+        active, standby = system_helper.get_active_standby_controllers()
+        if standby:
+            LOG.fixture_step("(Session) Locking unlocking controllers to complete action")
+            host_helper.lock_host(standby)
+            host_helper.unlock_host(standby)
+
+            host_helper.lock_host(active, swact=True)
+            host_helper.unlock_host(active)
+
     def revert_pswd():
         LOG.fixture_step("(Session) Reverting admin password to {}".format(prev_pswd))
         keystone_helper.update_user('admin', password=prev_pswd)
-
+        _lock_unlock_controllers()
     request.addfinalizer(revert_pswd)
+
+    _lock_unlock_controllers()
 
     return post_pswd
