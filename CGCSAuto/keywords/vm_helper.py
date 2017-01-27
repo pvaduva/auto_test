@@ -1918,9 +1918,6 @@ def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None):
             all_pcis = re.search('INFO Found: pci_addrs:((\s*(\d{4}:\d{2}:\d{2}\.\d))+)', line)
             if all_pcis:
                 # this list contains all pci-addrs for all the VMs on the host, so we have to remove those for other VMs
-                # pci_infos['pci_addr_list'] = all_pcis.group(1).split()
-                # for v in pci_infos['pci_addr_list']:
-                #     pci_infos[v] = {}
                 pci_infos['pci_addr_list'] = list(pci_infos.keys())
                 stage = 3
                 continue
@@ -1935,7 +1932,7 @@ def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None):
                     LOG.warn('UNKNOWN pci_addr:{}, \nraw line:\n{}'.format(pci_addr, line))
                 else:
                     pci_info, nic_info = pci_raw.group(2).split(';')
-                    pci = re.findall('([^: ]+):([^ :]+)', pci_info)
+                    pci = re.findall('([^: ]+):([^ :]*)', pci_info)
                     pci_infos[pci_addr].update({k.strip(): v.strip() for k, v in dict(pci).items()})
                     pci_infos[pci_addr].update(
                         {pci[-1][0].strip(): pci_info.split(':')[-1].strip(), 'nic': nic_info.strip()})
