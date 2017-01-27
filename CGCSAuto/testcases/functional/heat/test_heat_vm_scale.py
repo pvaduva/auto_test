@@ -6,7 +6,7 @@ from pytest import mark
 
 from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec
 from consts.filepaths import WRSROOT_HOME
-from keywords import nova_helper, vm_helper, heat_helper, network_helper
+from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper
 from setup_consts import P1
 from testfixtures.resource_mgmt import ResourceCleanup
 from utils import cli
@@ -164,8 +164,6 @@ def ssh_vm_and_send_cmd(vm_name=None, vm_image_name=None, cmd=None, con_ssh=None
 @mark.usefixtures('check_alarms')
 @mark.parametrize('action', [
         P1('scale_up_reject_scale_down'),
-        # P1(('scale_up_evacuate_scale_down')),
-        # P1(('scale_up_swact_scale_down')),
     ])
 # can add test fixture to configure hosts to be certain storage backing
 def test_heat_vm_scale(action):
@@ -284,17 +282,18 @@ def test_heat_vm_scale(action):
     assert 0 == return_code, "Expected return code {}. Actual return code: {}; details: {}".format(0, return_code, msg)
     # can check vm is deleted
 
+##This test is not working due to CGTS-5254
+## add evacuation call
 @mark.usefixtures('check_alarms')
 @mark.parametrize('action', [
-        P1('swact_scale_up_down'),
-        # P2(('scale_up_evacuate_scale_down')),
-        # P1(('scale_up_swact_scale_down')),
-        # P2(('scale_up_cold_migrate_scale_down')),
-        # P2(('scale_up_live_migrate_scale_down')),
+        mark.p1('swact_scale_up_down'),
+        mark.p2('evacuate_scale_up_down'),
+        mark.p2('cold_migrate_scale_up_down'),
+        mark.p2('live_migrate_scale_up_down'),
     ])
 # can add test fixture to configure hosts to be certain storage backing
 
-def _test_heat_vm_swact_scale_up_down(action):
+def _test_heat_vm__action_scale_up_down(action):
 
     """
     Test VM auto scaling with swact:
@@ -319,6 +318,7 @@ def _test_heat_vm_swact_scale_up_down(action):
         - Delete Heat stack and verify resource deletion
     """
     # create the heat stack
+    vm_image_name = "cgcs-guest"
     LOG.tc_step("Creating heat stack for auto scaling Vms")
     return_code, msg = launch_vm_scaling_stack()
 
@@ -339,41 +339,36 @@ def _test_heat_vm_swact_scale_up_down(action):
         return 1, "Error:vm is not pingable from NAT Box"
 
     # swact here
-    LOG.tc_step ("swact to standby controller before scale up/down")
+    if action=="swact_scale_up_down":
+        LOG.tc_step ("swact to standby controller before scale up/down")
+        hostname = system_helper.get_active_controller_name()
+        exit_code, output = host_helper.swact_host(hostname=hostname, swact_start_timeout=1, fail_ok=False)
+        assert 0 == exit_code, "{} is not recognized as active controller".format(hostname)
+        host_helper.wait_for_hypervisors_up(hostname)
+        host_helper.wait_for_webservice_up(hostname)
+    elif action == "evacuate_scale_up_down":
+        LOG.tc_step("evacuate vm before scale up/down")
+        #evacuate the vm
+    elif action == "cold_migrate_scale_up_down":
+        LOG.tc_step("cold migrate vm before scale up/down")
+        vm_helper.perform_action_on_vm(vm_id=vm_id, action="cold_migrate")
+    elif action == "live_migrate_scale_up_down":
+        LOG.tc_step("live migrate vm before scale up/down")
+        vm_helper.perform_action_on_vm(vm_id=vm_id, action="live_migrate")
 
-    LOG.tc_step ("Boosting cpu usage with dd to trigger scale up")
-    results = vm_helper.boost_cpu_usage_new_thread(vm_id=vm_id,timeout=3600)
-    vm_dd_ssh= results[0]
-    vm_dd_thread = results[1]
+    # scale up now
+    LOG.tc_step("Scaling up Vms")
+    dd_cmd = 'dd if=/dev/zero of=/dev/null &'
+    vm_ssh_1 = ssh_vm_and_send_cmd(vm_name=vm_name, vm_image_name=vm_image_name, cmd=dd_cmd)
 
-    LOG.tc_step ("Verifying the VM is scaling to 3 Vms")
+    LOG.tc_step("Verifying the VM is scaling to 3 Vms")
     if not wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=3):
         assert "Failed to scale up, expected to see 3 vms in total"
 
-    # scale up now
-    #LOG.tc_step("Scaling up Vms")
-    #results = heat_helper.scale_up_vms(vm_name=vm_name, expected_count=3)
-    #vm_ssh_1 = results[0]
-    #scale_up_result = results[1]
-    #if not scale_up_result or vm_ssh_1:
-    #    assert "Failed to scale up, expected to see 3 vms in total"
 
-    # Get the VM ids with stack_name
-    vm_ids_after_scale = nova_helper.get_vms(strict=False,name=stack_name)
-
-
-    if not vm_ids_after_scale:
-        assert "Couldn't find the vm id for {}".format(stack_name)
-
-
-    ###Killl dd first
-    #LOG.tc_step("Killing dd in Vm")
-
-    #thread_1 = multi_thread.MThread(vm_helper.get_vm_ssh, vm_id, vm_image_name)
-    #thread_1.start_thread(timeout=1200)
-    #vm_ssh_2 = thread_1.get_output(wait=True)
-    #vm_ssh_2.exec_cmd("killall dd")
-    vm_dd_thread.end_thread()
+     ###Killl dd first
+    LOG.tc_step("Killing dd in Vm")
+    vm_ssh_1.exec_cmd("killall dd")
 
     LOG.tc_step("Scaling down Vms")
     # wait for vm to be deleted
