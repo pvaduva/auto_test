@@ -1,5 +1,6 @@
 import os
 import time
+import re
 
 from pytest import mark
 
@@ -11,6 +12,44 @@ from testfixtures.resource_mgmt import ResourceCleanup
 from utils import cli
 from utils.tis_log import LOG
 from utils import multi_thread
+from utils.ssh import SSHClient, ControllerClient,VMSSHClient
+
+
+def check_heat_engine_log():
+    """
+    This will check heat engine logs for scale dowm reject msg
+
+    Test Steps:
+        - Check heat-engine.log for log entries about scale down reject
+        - If there were none found, wait 30 seconds for them to be generated then check for the logs again, it will
+          timeout after 5 min if not found
+
+    """
+    ssh = ControllerClient.get_active_controller()
+    searching_for = ["WRS vote rejecting stop for",
+                     "reason=Action rejected by instance: file /tmp/vote_no_to_stop exists"]
+    found = []
+    # time out to exit the while loop if log entry is not found with in 5 min
+    timeout= time.time()+300
+
+    while time.time() < timeout:
+        LOG.info("Checking the logs for scale down reject entries.")
+        code, out = ssh.exec_cmd('tail -n 300 /var/log/heat/heat-engine.log | grep -i reject')
+        logs = out.split('\n')
+        for line in logs:
+            for i in range(0, len(searching_for)):
+               LOG.info("Searching for logs containing: {}".format(searching_for[i]))
+               if searching_for[i] not in found and line.find(searching_for[i]):
+                  found.append(searching_for[i])
+                  LOG.info("Found {}".format(line))
+                  if len(found) == len(searching_for):
+                      return 0
+
+        time.sleep(30)
+
+    LOG.info("FAIL: expecting to find {} in the logs. Found {}.".format(searching_for, found))
+    return 1
+
 
 def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
     """
@@ -43,11 +82,14 @@ def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
 
     cmd_list.append("-P FLAVOR=%s " % flavor_id)
 
+    # get the key pair and append it to the heat params
     key_pair = vm_helper.get_any_keypair()
     cmd_list.append("-P KEYPAIR=%s " % key_pair)
+
     image = 'cgcs-guest'
     cmd_list.append("-P IMAGE=%s " % image)
 
+    # get the network and append it to the heat params
     net_id = network_helper.get_mgmt_net_id()
     network = network_helper.get_net_name_from_id(net_id=net_id)
     cmd_list.append("-P NETWORK=%s " % network)
@@ -64,6 +106,7 @@ def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
     if exitcode == 1:
         LOG.warning("Create heat stack request rejected.")
         return [1, output]
+
     LOG.info("Stack {} created sucessfully.".format(stack_name))
 
     # add the heat stack name for deleteion on failure
@@ -78,24 +121,46 @@ def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
     return 0, stack_name
 
 
-def wait_for_vm_to_scale(vm_name=None, expected_count=0, time_out=120, check_interval=3, con_ssh=None, auth_info=None):
+def wait_for_scale_up_down_vm(vm_name=None, expected_count=0, time_out=900, check_interval=5, con_ssh=None,
+                               auth_info=None):
+    if vm_name is None:
+        vm_name = "NestedAutoScale_vm"
 
+    time_out=900
+    # wait for scale up to happen
+    LOG.info("Expected count of Vm is {}".format(expected_count))
     end_time = time.time() + time_out
     while time.time() < end_time:
-        vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
-        if len(vm_id) is expected_count:
+        vm_ids = nova_helper.get_vms(strict=False, name=vm_name)
+        LOG.info("length of vmid is {}".format(len(vm_ids)))
+        if len(vm_ids) is expected_count:
             return True
 
         time.sleep(check_interval)
 
-    msg = "Heat stack {} did not go to state {} within timeout".format(vm_name, expected_count)
+    msg = "Heat stack {} did not go to vm count {} within timeout".format(vm_name, expected_count)
     LOG.warning(msg)
     return False
 
+def ssh_vm_and_send_cmd(vm_name=None, vm_image_name=None, cmd=None, con_ssh=None, auth_info=None):
+    """
+    Returns:
+
+    """
+    # create a trigger for auto scale by login to vm and issue dd cmd
+    vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
+
+    LOG.info("Sending cmd {} for vm {} using".format(cmd,vm_id))
+    dd_cmd = 'dd if=/dev/zero of=/dev/null &'
+
+    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id,vm_image_name=vm_image_name, con_ssh=con_ssh, close_ssh=False) as vm_ssh:
+        vm_ssh.exec_cmd(cmd=cmd)
+
+    return vm_ssh
 
 # Overall skipif condition for the whole test function (multiple test iterations)
 # This should be a relatively static condition.i.e., independent with test params values
-# @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
+#@mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
 @mark.parametrize('action', [
         P1('scale_up_reject_scale_down'),
@@ -103,27 +168,37 @@ def wait_for_vm_to_scale(vm_name=None, expected_count=0, time_out=120, check_int
         # P1(('scale_up_swact_scale_down')),
     ])
 # can add test fixture to configure hosts to be certain storage backing
-# FIXME test func args are unused. Deselected before fixing
-def _test_heat_vm_scale(action):
+def test_heat_vm_scale(action):
+
     """
-    Basic Heat template testing:
-        various Heat templates.
+    Test VM auto scaling :
+        Create heat stack for auto scaleing using NestedAutoScale.yaml , scale up/down/reject.
 
     Args:
-        template_name (str): e.g, OS_Cinder_Volume.
+        none
 
     =====
     Prerequisites (skip test if not met):
         - at least two hypervisors hosts on the system
 
     Test Steps:
-        - Create a heat stack with the given template
+        - Create a heat stack for auto scaling vm (NestedAutoScale)
         - Verify heat stack is created sucessfully
         - Verify heat resources are created
+        - trigger auto scale by boosting cpu usage in the vm (using dd)
+        - verify it scale up to the max number of vms (3)
+        - place a /tmp/vote_no_to_stop in one of the vm
+        - trigger scale down by killing dd in the vm
+        - verify the vm scale down to (2) and the vm with the vote_no_stop is rejecting the scale down
+        - check the log entries for the scale down reject msg
+        - remove the vote_no_to_stop file in the vm
+        - verify the vm scale down to (1)
         - Delete Heat stack and verify resource deletion
-
     """
     # create the heat stack
+
+    vm_image_name = "cgcs-guest"
+
     LOG.tc_step("Creating heat stack for auto scaling Vms")
     return_code, msg = launch_vm_scaling_stack()
 
@@ -145,10 +220,11 @@ def _test_heat_vm_scale(action):
 
     # scale up now
     LOG.tc_step("Scaling up Vms")
-    results = heat_helper.scale_up_vms(vm_name=vm_name, expected_count=3)
-    vm_ssh_1 = results[0]
-    scale_up_result = results[1]
-    if not scale_up_result or vm_ssh_1:
+    dd_cmd = 'dd if=/dev/zero of=/dev/null &'
+    vm_ssh_1 = ssh_vm_and_send_cmd(vm_name=vm_name,vm_image_name=vm_image_name,cmd=dd_cmd)
+
+    LOG.tc_step ("Verifying the VM is scaling to 3 Vms")
+    if not wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=3):
         assert "Failed to scale up, expected to see 3 vms in total"
 
     # Get the VM ids with stack_name
@@ -170,40 +246,137 @@ def _test_heat_vm_scale(action):
 
     # login to vm and put a file
     LOG.tc_step("Creating /tmp/vote_no_to_stop in vm %s", vm_id_to_stop_scale)
-    vm_image_name = "cgcs-guest"
-    thread = multi_thread.MThread(vm_helper.get_vm_ssh, vm_id_to_stop_scale,vm_image_name)
-    thread.start_thread(timeout=1200)
-    vm_ssh = thread.get_output(wait=True)
-    vm_ssh.exec_cmd("touch /tmp/vote_no_to_stop")
+    vm_name_1 = nova_helper.get_vm_name_from_id(vm_id_to_stop_scale)
+    cmd = "touch /tmp/vote_no_to_stop"
+    thread1 = multi_thread.MThread(ssh_vm_and_send_cmd, vm_name_1,vm_image_name,cmd)
+    thread1.start_thread(timeout=1200)
+    out = thread1.get_output(wait=True)
+    thread1.end_thread()
+    thread1.wait_for_thread_end(timeout=3)
 
     ###Killl dd first
     LOG.tc_step("Killing dd in Vm")
-
-    thread_1 = multi_thread.MThread(vm_helper.get_vm_ssh, vm_id, vm_image_name)
-    thread_1.start_thread(timeout=1200)
-    vm_ssh_2 = thread_1.get_output(wait=True)
-    vm_ssh_2.exec_cmd("killall dd")
+    vm_ssh_1.exec_cmd('killall dd')
 
     LOG.tc_step("Scaling down Vms")
-    if not heat_helper.scale_down_vms(vm_name=vm_name, expected_count=2):
+    if not wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=2):
         assert "Scale down failed, expect to see 2 vms"
 
-    LOG.tc_step("Waiting for 30 sec and checking Vm count")
-    # wait for 30 sec and check again to make sure that the vm is not delered
-    time.sleep(30)
-    if not heat_helper.scale_down_vms(vm_name=vm_name, expected_count=2):
-        assert "Scale down failed, expect to see 2 vms"
+    LOG.tc_step("Checking the heat-engine.log for scale down reject msg")
+    if not check_heat_engine_log():
+        assert "Coud not find the log entries in heat-engine.log for scale down reject"
 
     # remove the tmp file in the vm
     LOG.tc_step("removing /tmp/vote_no_to_stop in vm")
-    #with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id_to_stop_scale) as vm_ssh:
-    thread_2 = multi_thread.MThread(vm_helper.get_vm_ssh, vm_id_to_stop_scale, vm_image_name)
-    thread_2.start_thread(timeout=1200)
-    vm_ssh_3 = thread_1.get_output(wait=True)
-    vm_ssh_3.exec_cmd("rm /tmp/vote_no_to_stop")
+    cmd = "rm /tmp/vote_no_to_stop"
+    thread_3 = multi_thread.MThread(ssh_vm_and_send_cmd, vm_name_1, vm_image_name, cmd)
+    thread_3.start_thread(timeout=1200)
+    out_2 = thread_3.get_output(wait=True)
 
     # wait for vm to be deleted
     LOG.tc_step("Checking that the Vm is removed now")
+    if not wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=1):
+        assert "Scale down failed, expect to see 1 vm"
+
+    # delete heat stack
+    LOG.tc_step("Deleting heat stack{}".format(stack_name))
+    return_code, msg = heat_helper.delete_stack(stack_name=stack_name)
+    assert 0 == return_code, "Expected return code {}. Actual return code: {}; details: {}".format(0, return_code, msg)
+    # can check vm is deleted
+
+@mark.usefixtures('check_alarms')
+@mark.parametrize('action', [
+        P1('swact_scale_up_down'),
+        # P2(('scale_up_evacuate_scale_down')),
+        # P1(('scale_up_swact_scale_down')),
+        # P2(('scale_up_cold_migrate_scale_down')),
+        # P2(('scale_up_live_migrate_scale_down')),
+    ])
+# can add test fixture to configure hosts to be certain storage backing
+
+def _test_heat_vm_swact_scale_up_down(action):
+
+    """
+    Test VM auto scaling with swact:
+        Create heat stack for auto scaleing using NestedAutoScale.yaml ,  swact and perform vm scale up and down.
+
+    Args:
+        none
+
+    =====
+    Prerequisites (skip test if not met):
+        - at least two hypervisors hosts on the system
+
+    Test Steps:
+        - Create a heat stack for auto scaling vm ()
+        - Verify heat stack is created sucessfully
+        - Verify heat resources are created
+        - swact to standby controller
+        - trigger auto scale by boosting cpu usage in the vm (using dd)
+        - verify it scale up to the max number of vms (3)
+        - trigger scale down by killing dd in the vm
+        - verify the vm scale down to min number (1)
+        - Delete Heat stack and verify resource deletion
+    """
+    # create the heat stack
+    LOG.tc_step("Creating heat stack for auto scaling Vms")
+    return_code, msg = launch_vm_scaling_stack()
+
+    assert 0 == return_code, "Expected return code {}. Actual return code: {}; details: {}".format(0, return_code, msg)
+
+    stack_name = msg
+    # verify VM is created
+    LOG.tc_step("Verifying first VM is created via heat stack for auto scaling")
+    vm_name = stack_name
+    LOG.info("Verifying server creation via heat")
+    vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
+    if not vm_id:
+        return 1, "Error:vm was not created by stack"
+
+    LOG.info("Found VM %s", vm_id)
+
+    if not vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id):
+        return 1, "Error:vm is not pingable from NAT Box"
+
+    # swact here
+    LOG.tc_step ("swact to standby controller before scale up/down")
+
+    LOG.tc_step ("Boosting cpu usage with dd to trigger scale up")
+    results = vm_helper.boost_cpu_usage_new_thread(vm_id=vm_id,timeout=3600)
+    vm_dd_ssh= results[0]
+    vm_dd_thread = results[1]
+
+    LOG.tc_step ("Verifying the VM is scaling to 3 Vms")
+    if not wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=3):
+        assert "Failed to scale up, expected to see 3 vms in total"
+
+    # scale up now
+    #LOG.tc_step("Scaling up Vms")
+    #results = heat_helper.scale_up_vms(vm_name=vm_name, expected_count=3)
+    #vm_ssh_1 = results[0]
+    #scale_up_result = results[1]
+    #if not scale_up_result or vm_ssh_1:
+    #    assert "Failed to scale up, expected to see 3 vms in total"
+
+    # Get the VM ids with stack_name
+    vm_ids_after_scale = nova_helper.get_vms(strict=False,name=stack_name)
+
+
+    if not vm_ids_after_scale:
+        assert "Couldn't find the vm id for {}".format(stack_name)
+
+
+    ###Killl dd first
+    #LOG.tc_step("Killing dd in Vm")
+
+    #thread_1 = multi_thread.MThread(vm_helper.get_vm_ssh, vm_id, vm_image_name)
+    #thread_1.start_thread(timeout=1200)
+    #vm_ssh_2 = thread_1.get_output(wait=True)
+    #vm_ssh_2.exec_cmd("killall dd")
+    vm_dd_thread.end_thread()
+
+    LOG.tc_step("Scaling down Vms")
+    # wait for vm to be deleted
     if not heat_helper.scale_down_vms(vm_name=vm_name, expected_count=1):
         assert "Scale down failed, expect to see 1 vm"
 

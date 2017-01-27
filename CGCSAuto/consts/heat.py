@@ -25,6 +25,9 @@ class Heat:
     WR_Neutron_QoSPolicy = {'params':None,'verify':['neutron_qos'],'heat_user':'admin'}
     OS_Heat_AutoScalingGroup = {'params':['NETWORK', 'IMAGE', 'FLAVOR'],'verify':['vm'], 'heat_user':'tenant',
                       'vm_name':'nova_server'}
+    NestedAutoScale = {'params': ['NETWORK', 'IMAGE', 'FLAVOR'], 'verify': ['vm'], 'heat_user': 'tenant',
+                                'vm_name': 'nova_server'}
+
 
 
 
