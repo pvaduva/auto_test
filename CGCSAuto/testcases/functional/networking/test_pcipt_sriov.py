@@ -245,6 +245,8 @@ class TestVmPCIOperations:
 
     def check_numa_affinity(self, msg_prefx=''):
 
+        LOG.tc_step('Check PCI numa on VM afer {}'.format(msg_prefx))
+
         numa_affinity = getattr(self, 'pci_numa_affinity', 'strict')
 
         if numa_affinity is None:
@@ -315,7 +317,7 @@ class TestVmPCIOperations:
 
         LOG.debug('OK, after {}: CPU list for all IRQ are consistent'.format(msg_prefx))
 
-        LOG.info('OK, check_numa_affinity passed')
+        LOG.info('OK, after {}: check_numa_affinity passed'.format(msg_prefx))
 
         return True
 
@@ -546,88 +548,3 @@ class TestVmPCIOperations:
 
         LOG.tc_step("Check vm still pingable over mgmt, and {} nets after evacuation".format(net_type))
         vm_helper.ping_vms_from_vm(from_vm=base_vm, to_vms=vm_id, net_types=['mgmt', net_type], vlan_zero_only=True)
-
-
-    def test_stub(self):
-        import json
-        # vm_id = 'b0b32a68-c7f3-4490-946a-313a13b85671'  # 12 PCI alias + 0 PF
-        # vm_id = 'ed5e0368-5978-4edc-ae05-3fd359e577c3' # 3 devices: 1 PF + 2 VF
-        vm_id = 'e2be3690-a92d-4a60-a2d1-dca13786da16'
-
-        pci_info, vm_topology = vm_helper.get_vm_pcis_irqs_from_hypervisor(vm_id)
-
-        with open('vm_toplogy.xml', 'w') as f:
-            json.dump(vm_topology, f, sort_keys=True, indent=4, separators=(',', ':'))
-
-        with open('pci_info.xml', 'w') as f:
-            json.dump(pci_info, f, sort_keys=True, indent=4, separators=(',', ':'))
-
-        self.pci_numa_affinity = 'strct'
-
-        msg_prefx = 'test_stub'
-        self.vm_id = vm_id
-        self.vif_model = None
-        # self.vif_model = 'pci-passthrough'
-        self.vif_model = 'pci-sriov'
-        # self.pci_alias = 12
-        self.pci_alias = None
-        self.pci_irq_affinity_mask = None
-        vm_pci_infos = pci_info
-
-        pci_addr_list = pci_info.pop('pci_addr_list')
-        LOG.info('after {}: pci addr list for VM:\nVM ID={}\nPCI-ADDR-LIST:{}\n'.format(
-            msg_prefx, self.vm_id, pci_addr_list))
-
-        # pci_numa_affinity pci_irq_affinity_mask', 'pci_alias'
-        if self.pci_numa_affinity == 'strict' \
-            or self.pci_irq_affinity_mask is not None or self.pci_alias is not None:
-
-            numa_nodes_for_pcis = sorted(list(set([v['numa_node'] for v in vm_pci_infos.values()])))
-            if len(numa_nodes_for_pcis) > 1:
-                LOG.warn('after {}: PCIs on multiple Numa Nodes:'.format(numa_nodes_for_pcis))
-
-            assert numa_nodes_for_pcis[0] == vm_topology['numa_node'],\
-                'after {}: 1st Numa Nodes for PCIs differ from those of CPU, PCIs:{}, CPUs:{}'.format(
-                    msg_prefx, numa_nodes_for_pcis[0], vm_topology['numa_node'])
-
-            LOG.info('OK, after {}: numa node for PCI is the same as numa node for CPU'.format(msg_prefx))
-
-        # 'pci-passthrough', 'pci-sriov'
-        if self.vif_model =='pci-passthrough':
-            assert 'PF' in [v['type'] for v in vm_pci_infos.values()], \
-                '{}: No PF/PCI-passthrough device found while having NIC of type:{}'.format(msg_prefx, self.vif_model)
-            LOG.info('OK, after {}: PCI of type:{} is created'.format(msg_prefx, self.vif_model))
-
-        if self.vif_model =='pci-sriov':
-            assert 'VF' in [v['type'] for v in vm_pci_infos.values()], \
-                '{}: No VF/PCI-sriov device found while having NIC of type:{}'.format(msg_prefx, self.vif_model)
-            LOG.info('OK, after {}: PCI of type:{} is created'.format(msg_prefx, self.vif_model))
-
-        expected_num_pci_alias = 0
-        if self.pci_alias is not None:
-            expected_num_pci_alias += int(self.pci_alias)
-            if expected_num_pci_alias < 1:
-                LOG.error('{}: zero or less number of PCI Alias specified in extra-specs:{}'.format(
-                    msg_prefx, expected_num_pci_alias))
-
-        expected_num_pci_alias += 1 if self.vif_model in ['pci-sriov'] else 0
-
-        if expected_num_pci_alias > 0:
-            cnt_vf = len([v['type'] for v in vm_pci_infos.values() if v['type'] == 'VF'])
-            assert cnt_vf == expected_num_pci_alias, \
-                '{}: Missmatched Number of PCI Alias, expected:{}, actual:{}'.format(
-                    msg_prefx, expected_num_pci_alias, cnt_vf)
-            LOG.info('OK, after {}: correct number of PCI alias/devices are created'.format(msg_prefx, cnt_vf))
-
-        if self.pci_irq_affinity_mask is not None:
-            indices_to_pcpus = vm_helper.parse_cpu_list(self.pci_irq_affinity_mask)
-            sorted_vm_pcpus = sorted(set(vm_topology['pcpus']))
-
-            pcpus_of_irq = sorted([sorted_vm_pcpus[i] for i in indices_to_pcpus])
-
-            for pci_info in vm_pci_infos.values():
-                assert pcpus_of_irq == sorted(pci_info['cpulist']), \
-                    '{}: CPU list of IRQ:{} is not matching mask:{}'.format(
-                        msg_prefx, pci_info['irq'], pcpus_of_irq)
-
-        LOG.info('OK, after {}: CPU list for all IRQ are consistent'.format(msg_prefx))
