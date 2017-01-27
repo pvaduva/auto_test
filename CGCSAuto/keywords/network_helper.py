@@ -1,7 +1,9 @@
+
 import ipaddress
 import math
 import re
 import time
+from collections import Counter
 
 from consts.auth import Tenant
 from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE
@@ -2039,7 +2041,8 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
     for pnets in hosts_and_pnets.values():
         all_pci_pnets = all_pci_pnets + pnets
 
-    all_pci_pnets = list(set(all_pci_pnets))
+    # all_pci_pnets = list(set(all_pci_pnets))
+    all_pci_pnets = list(all_pci_pnets)
 
     LOG.info("All pnets: {}".format(all_pci_pnets))
 
@@ -2058,10 +2061,6 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
             pnet_id = get_providernets(name=pci_net, rtn_val='id', strict=True, con_ssh=con_ssh, auth_info=auth_info)[0]
             nets_on_pnet = get_networks_on_providernet(providernet_id=pnet_id, rtn_val='name', con_ssh=con_ssh,
                                                        auth_info=auth_info, vlan_id=vlan_id)
-            other_nets = get_networks_on_providernet(providernet_id=pnet_id, rtn_val='name', con_ssh=con_ssh,
-                                                     auth_info=auth_info, vlan_id=vlan_id, exclude=True)
-            nets_on_pnet = list(set(nets_on_pnet) & set(other_nets))
-
             for net in nets_on_pnet:
                 if net_name:
                     if strict:
@@ -2082,8 +2081,10 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
 
     for nets in (specified_nets, internal_nets, tenant_nets, mgmt_nets):
         if nets:
-            LOG.info("Preferred networks for {} interfaces with at least {} hosts: {}".format(pci_type, min_hosts,
-                                                                                              nets))
+            nets_counts = Counter(nets)
+            nets = sorted(nets_counts.keys(), key=nets_counts.get, reverse=True)
+            LOG.info("Preferred networks for {} interfaces with at least {} hosts: {}".format(
+                pci_type, min_hosts, nets))
             return nets
 
     LOG.warning("No networks found for {} interfaces with at least {} hosts".format(pci_type, min_hosts))
