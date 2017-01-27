@@ -1,19 +1,20 @@
-import os
 from pytest import fixture, mark, skip
 
+import keywords.system_helper
 from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
-from setup_consts import P1
-
-from consts.heat import Heat
+from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper, cinder_helper, glance_helper,\
+    host_helper, common
+from setup_consts import P1, P2, P3
+import time
+from consts.heat import Heat, HeatUpdate
 from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HEAT_PATH
+import os
 from consts.auth import Tenant
 from testfixtures.resource_mgmt import ResourceCleanup
 
-from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper, cinder_helper, glance_helper,\
-    host_helper, common
 
 
 def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, auth_info=None):
@@ -139,6 +140,68 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
     return 1
 
 
+def update_stack(stack_name, template_name=None, ssh_client=None, fail_ok=False, auth_info=Tenant.ADMIN):
+    """
+        Update heat stack and verify stack is updated as expected
+        Args:
+            stack_name (str): stack to be updated
+            template_name (str): template to be used to create heat stack.
+            ssh_client (SSHClient): If None, active controller ssh will be used.
+            auth_info (dict): Tenant dict. If None, primary tenant will be used.
+            fail_ok (bool): Whether to throw exception if update command fails to send
+
+        Returns (tuple): (rtn_code (int), message (str))
+
+    """
+
+    t_name, yaml = template_name.split('.')
+    to_verify = getattr(Heat, t_name)['verify']
+    update_params = getattr(HeatUpdate, t_name)['params']
+    update_vals = getattr(HeatUpdate, t_name)['new_vals']
+
+    template_path = os.path.join(WRSROOT_HOME, HEAT_PATH, template_name)
+    cmd_list = [" -f %s " % template_path]
+
+    for i in range(len(update_params)):
+        cmd_list.append("-P %s=%s " % (update_params[i], update_vals[i]))
+
+    #The -x parameter keeps the existing values of parameters not in update_params
+    cmd_list.append(" -x %s" % stack_name)
+    params_str = ''.join(cmd_list)
+    LOG.info("Executing command: heat %s stack-update", params_str);
+    exitcode, output = cli.heat('stack-update', params_str, ssh_client=ssh_client, fail_ok=fail_ok,
+                                auth_info=auth_info, rtn_list=True)
+
+    # See how long it takes to apply the update
+    start_time = time.time()
+
+    if exitcode == 1:
+        LOG.warning("Update heat stack request rejected.")
+        return [1, output]
+    LOG.info("Stack {} updated sucessfully.".format(stack_name))
+
+    LOG.tc_step("Verifying Heat Stack Status for UPDATE_COMPLETE for updated stack %s",stack_name)
+
+    if not heat_helper.wait_for_heat_state(stack_name=stack_name,state='UPDATE_COMPLETE',auth_info=auth_info):
+        return [1, 'stack did not go to state UPDATE_COMPLETE']
+    LOG.info("Stack {} is in expected UPDATE_COMPLETE state.".format(stack_name))
+    end_time = time.time();
+
+    LOG.info("Update took %d seconds", (end_time - start_time))
+
+    for item in to_verify:
+        LOG.tc_step("Verifying Heat updated resources %s for stack %s", item, stack_name)
+        verify_result = verify_heat_resource(to_verify=item, template_name=t_name,stack_name=stack_name,
+                                             auth_info=auth_info)
+        if verify_result is not 0:
+            LOG.warning("Verify resouces %s updated by heat stack Failed.", item)
+            return [1, "Heat resource verification failed"]
+
+    LOG.info("Stack {} resources are updated as expected.".format(stack_name))
+
+    return [0, 'stack_status']
+
+
 def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, delete_after_swact=False):
     """
         Create/Delete heat stack and verify the resource are created/deleted as expeted
@@ -205,6 +268,14 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
             return [1, "Heat resource verification failed"]
 
     LOG.info("Stack {} resources are created as expected.".format(stack_name))
+
+    if hasattr(HeatUpdate, t_name):
+        LOG.tc_step("Updating stack %s", stack_name)
+        update_code, update_msg = update_stack(stack_name, template_name, ssh_client=con_ssh, auth_info=auth_info,
+                                    fail_ok=fail_ok)
+        if update_code == 1:
+            return [1, 'stack did no go to state UPDATE_COMPLETE']
+        LOG.info("Stack {} is in expected UPDATE_COMPLETE state".format(stack_name)) 
 
     if delete_after_swact:
         swact_result = host_helper.swact_host()
