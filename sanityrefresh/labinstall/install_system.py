@@ -1458,7 +1458,7 @@ def boot_other_lab_hosts(nodes, boot_device_dict, host_os, install_output_dir,
         cumulus.launch_computes()
         compute_count = cumulus.get_number_of_computes()
 
-        time.sleep(120)
+        time.sleep(60)
         cmd = "source /etc/nova/openrc; system host-list | awk \'/None/ { print $2 }\'"
         rc, ids = controller0.ssh_conn.exec_cmd(cmd)
         if rc is 0:
@@ -1682,6 +1682,9 @@ def main():
                             password=PASSWORD)
 
     guest_load_path = "{}/{}".format(bld_server_wkspce, guest_bld_dir)
+
+    if tis_on_tis:
+        guest_load_path = "{}/{}".format(DEFAULT_WKSPCE, guest_bld_dir)
 
     load_path = get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
                                   tis_bld_dir)
