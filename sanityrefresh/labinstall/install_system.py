@@ -115,14 +115,14 @@ def parse_args():
     lab_grp.add_argument('--tis-on-tis', dest='tis_on_tis', action='store_true',
                          help=" Run installation for Cumulus TiS on TiS. ")
 
-    lab_grp.add_argument('--cumulus-userid', dest='cumulus_userid',
-                         help="Tenant's linux login userid in Cumulus "
-                         "Server. This is mandatory if --tis-on-tis is "
-                         "specified.")
+    # lab_grp.add_argument('--cumulus-userid', dest='cumulus_userid',
+    #                      help="Tenant's linux login userid in Cumulus "
+    #                      "Server. This is mandatory if --tis-on-tis is "
+    #                      "specified.")
 
-    lab_grp.add_argument('--cumulus-password', metavar='CUMULUS_PASSWORD',
-                         dest='cumulus_password', help="Tenant's login "
-                         "password to Cumulus Server.")
+    # lab_grp.add_argument('--cumulus-password', metavar='CUMULUS_PASSWORD',
+    #                      dest='cumulus_password', help="Tenant's login "
+    #                      "password to Cumulus Server.")
 
     lab_grp.add_argument('--burn-usb', dest='burn_usb',
                          action='store_true',
@@ -237,8 +237,8 @@ def parse_args():
     args = parser.parse_args()
     if args.controller is None and not args.tis_on_tis and not args.continue_install:
         parser.error('--controller is required')
-    if args.tis_on_tis and args.cumulus_userid is None:
-        parser.error('--cumulus-userid is required if --tis-on-tis used.')
+    # if args.tis_on_tis and args.cumulus_userid is None:
+    #     parser.error('--cumulus-userid is required if --tis-on-tis used.')
     return args
 
 def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
@@ -1558,8 +1558,8 @@ def main():
     tis_on_tis = args.tis_on_tis
     if tis_on_tis:
         print("\nRunning Tis-on-TiS lab install ...")
-        cumulus_password = args.cumulus_password or \
-                           getpass.getpass("CUMULUS_PASSWORD: ")
+        # cumulus_password = args.cumulus_password or \
+        #                    getpass.getpass("CUMULUS_PASSWORD: ")
 
         lab_cfg_location = args.lab_config_location
     else:
@@ -1737,8 +1737,8 @@ def main():
     if tis_on_tis:
 
         guest_load_path = "{}/{}".format(DEFAULT_WKSPCE, guest_bld_dir)
-        tis_on_tis_info = {'cumulus_userid': args.cumulus_userid,
-                            'cumulus_password': cumulus_password,
+        tis_on_tis_info = {'cumulus_userid': USERNAME,
+                            'cumulus_password': PASSWORD,
                             'userid': USERNAME,
                             'password': PASSWORD,
                             'server': CUMULUS_SERVER,
