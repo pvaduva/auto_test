@@ -37,11 +37,6 @@ def test_admin_password(scenario):
 
     if scenario == "change_pswd_swact":
         host_helper.swact_host()
-        #hostname = system_helper.get_active_controller_name()
-        #exit_code, output = host_helper.swact_host(hostname=hostname, swact_start_timeout=1, fail_ok=False)
-        #assert 0 == exit_code, "{} is not recognized as active controller".format(hostname)
-        #host_helper.wait_for_hypervisors_up(hostname)
-        #host_helper.wait_for_webservice_up(hostname)
     else:
         LOG.tc_step("Unlock host {}".format(host))
         res = host_helper.unlock_host(host)
