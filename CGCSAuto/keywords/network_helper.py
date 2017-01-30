@@ -1,4 +1,3 @@
-
 import ipaddress
 import math
 import re
@@ -1713,7 +1712,8 @@ def get_networks_on_providernet(providernet_id, rtn_val='id', con_ssh=None, auth
     networks = table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, exclude=exclude, **kwargs)
 
     LOG.info("Networks on providernet {} with args - '{}': {}".format(providernet_id, kwargs, networks))
-    return list(set(networks))
+    #return list(set(networks))
+    return list(networks)
 
 
 def get_pci_nets(vif='sriov', rtn_val='name', vlan_id=0, con_ssh=None, auth_info=Tenant.ADMIN):
@@ -2041,8 +2041,7 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
     for pnets in hosts_and_pnets.values():
         all_pci_pnets = all_pci_pnets + pnets
 
-    # all_pci_pnets = list(set(all_pci_pnets))
-    all_pci_pnets = list(all_pci_pnets)
+    all_pci_pnets = list(set(all_pci_pnets))
 
     LOG.info("All pnets: {}".format(all_pci_pnets))
 
@@ -2061,6 +2060,12 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
             pnet_id = get_providernets(name=pci_net, rtn_val='id', strict=True, con_ssh=con_ssh, auth_info=auth_info)[0]
             nets_on_pnet = get_networks_on_providernet(providernet_id=pnet_id, rtn_val='name', con_ssh=con_ssh,
                                                        auth_info=auth_info, vlan_id=vlan_id)
+
+            other_nets = get_networks_on_providernet(providernet_id=pnet_id, rtn_val='name', con_ssh=con_ssh,
+                                                     auth_info=auth_info, vlan_id=vlan_id, exclude=True)
+
+            nets_on_pnet = nets_on_pnet + other_nets
+
             for net in nets_on_pnet:
                 if net_name:
                     if strict:
