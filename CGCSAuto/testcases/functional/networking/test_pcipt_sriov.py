@@ -386,10 +386,24 @@ class TestVmPCIOperations:
 
             self.flavor_id = flavor_id
 
+    def is_pci_device_supported(self, pci_alias, nova_pci_devices=None):
+        if nova_pci_devices is None:
+            nova_pci_deivces = network_helper.get_pci_devices_info()
+
+        self.nova_pci_deivces = nova_pci_deivces
+        if not self.nova_pci_deivces:
+            skip('No PCI devices existing! Note, currently "Coleto Creek PCIe Co-processor(0443/8086) is supported"')
+        requested_vfs = int(pci_alias)
+        min_vfs = min([int(v['pci_vfs_configured']) - int(v['pci_vfs_used'])
+                       for v in nova_pci_deivces.values()])
+        if min_vfs < requested_vfs:
+            skip('Not enough PCI alias devices exit, only {} supported'.format(min_vfs))
+
     @mark.parametrize(('pci_numa_affinity', 'pci_irq_affinity_mask', 'pci_alias'), [
         mark.p1((None, None, None)),
         mark.p1(('strict', None, None)),
         mark.p2(('strict', '1,3', None)),
+        mark.p1(('strict', None, '3')),
         mark.p2(('strict', '1,3', '3')),
         mark.p4(('prefer', None, None)),
     ])
@@ -424,6 +438,10 @@ class TestVmPCIOperations:
         self.pci_numa_affinity = pci_numa_affinity
         self.pci_alias = pci_alias
         self.pci_irq_affinity_mask = pci_irq_affinity_mask
+
+        if pci_alias is not None:
+            LOG.info('Check if PCI-Alias devices existing')
+            self.is_pci_device_supported(pci_alias)
 
         self.vif_model, self.base_vm, self.base_flavor_id, self.nics_to_test, self.seg_id, self.net_type, self.pnet_id \
             = vif_model_check
