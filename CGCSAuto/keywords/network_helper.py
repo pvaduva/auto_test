@@ -1609,6 +1609,76 @@ def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=Fal
     return 0, succ_msg
 
 
+def get_pci_devices_info(con_ssh=None, auth_info=None):
+    """
+    Get PCI devices with nova device-list/show.
+
+    As in load "2017-01-17_22-01-49", the known supported devices are:
+        Coleto Creek PCIe Co-processor  Device Id: 0443 Vendor Id:8086
+
+    Args:
+        con_ssh:
+        auth_info:
+
+    Returns:
+        dict contains:
+            Device Id: {Device Name, Vendor Id, Host, pci_pfs_configured,
+                    pci_pfs_used, pci_vfs_configured, pci_vfs_used}
+
+    """
+    table = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
+    LOG.info('output of nova device-list:{}'.format(table))
+
+    try:
+        # names = table_parser.get_column(table, 'Device Name')
+        devices = table_parser.get_column(table, 'Device Id')
+        # pci_pfs = table_parser.get_column(table, 'pci_pfs_configured')
+        # pci_pfs_used = table_parser.get_column(table, 'pci_pfs_used')
+        # pci_vfs = table_parser.get_column(table, 'pci_vfs_configured')
+        # pci_vfs_used = table_parser.get_column(table, 'pci_vfs_used')
+        # for id, name, pfs, pfs_used, vfs, vfs_used in zip(
+        #         device_ids, names, pci_pfs, pci_pfs_used, pci_vfs, pci_vfs_used):
+        #     nova_pci_devices[id] = {'name': name, 'pfs': pfs, 'pfs_used': pfs_used, 'vfs': vfs, 'vfs_used': vfs_used}
+
+    except Exception as e:
+        LOG.error('CLI output format error: CLI nova device-list changed its format. error message:{}'.format(e))
+        raise
+
+    LOG.info('device IDs from device-list:{}'.format(devices))
+
+    nova_pci_devices = {}
+    for id in devices:
+        table = table_parser.table(cli.nova('device-show {}'.format(id)))
+        LOG.debug('output from nova device-show for device-id:{}\n{}'.format(id, table))
+
+        try:
+            names = table_parser.get_column(table, 'Device Name')
+            device_ids = table_parser.get_column(table, 'Device Id')
+            vendor_ids = table_parser.get_column(table, 'Vendor Id')
+            hosts = table_parser.get_column(table, 'Host')
+            pci_pfs = table_parser.get_column(table, 'pci_pfs_configured')
+            pci_pfs_used = table_parser.get_column(table, 'pci_pfs_used')
+            pci_vfs = table_parser.get_column(table, 'pci_vfs_configured')
+            pci_vfs_used = table_parser.get_column(table, 'pci_vfs_used')
+
+            for name, device_id, vendor_id, host, pci_pf, pci_pf_used, pci_vfs, pci_vfs_used in zip(
+                names, device_ids, vendor_ids, hosts, pci_pfs, pci_pfs_used, pci_vfs, pci_vfs_used):
+                nova_pci_devices[host] = {device_id: {'vendor_id': vendor_id,
+                                                      'pci_pfs_configured': pci_pfs,
+                                                      'pci_pfs_used': pci_pfs_used,
+                                                      'pci_vfs_configured': pci_vfs,
+                                                      'pci_vfs_used': pci_pfs_used,
+                                                      }}
+        except Exception as e:
+            LOG.error('CLI output format error: CLI nova device-show {} changed its format. error message:{}'.format(
+                id, e))
+            raise
+
+    LOG.debug('nova_pci_deivces:{}'.format(nova_pci_devices))
+
+    return nova_pci_devices
+
+
 def get_pci_interface_info(interface='pthru', filepath=None, con_ssh=None):
     """
     Get pci interface override info from lab_setup.conf
