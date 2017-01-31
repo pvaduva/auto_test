@@ -1,17 +1,17 @@
+import os
+import time
 from pytest import fixture, mark, skip
 
-import keywords.system_helper
 from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
 from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper, cinder_helper, glance_helper,\
-    host_helper, common
+    host_helper, common, system_helper
 from setup_consts import P1, P2, P3
-import time
+
 from consts.heat import Heat, HeatUpdate
 from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HEAT_PATH
-import os
 from consts.auth import Tenant
 from testfixtures.resource_mgmt import ResourceCleanup
 
@@ -274,8 +274,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
         update_code, update_msg = update_stack(stack_name, template_name, ssh_client=con_ssh, auth_info=auth_info,
                                     fail_ok=fail_ok)
         if update_code == 1:
-            return [1, 'stack did no go to state UPDATE_COMPLETE']
-        LOG.info("Stack {} is in expected UPDATE_COMPLETE state".format(stack_name)) 
+            return [1, update_msg] 
 
     if delete_after_swact:
         swact_result = host_helper.swact_host()
