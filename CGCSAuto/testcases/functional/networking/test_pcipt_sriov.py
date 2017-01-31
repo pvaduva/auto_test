@@ -33,7 +33,6 @@ def vif_model_check(request):
     host_num = 1
     pci_net = None
     pci_nets_with_min_two_hosts = network_helper.get_pci_nets_with_min_hosts(min_hosts=2, pci_type=vif_model)
-    # pci_nets_with_min_two_hosts = get_pci_host_nets()
 
     # todo: for now skip any net that has only 1 vlan_id/segmentation_id as a workaround
     # for the issue that booting VM on that kind of net will fail
@@ -336,7 +335,6 @@ class TestVmPCIOperations:
 
     def create_vm_with_pci_nic(self):
         res, vm_id, err, vol_id = vm_helper.boot_vm(name=self.vif_model, flavor=self.flavor_id, nics=self.nics_to_test)
-        # todo, keep the vm for now for debugging
         if vm_id:
             ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
             pass
@@ -368,7 +366,6 @@ class TestVmPCIOperations:
         flavor_id = nova_helper.create_flavor(name='dedicated_pci_extras',  vcpus=self.vcpus, ram=self.ram)[1]
 
         if flavor_id:
-            #  for now keep the flavor for debugging
             ResourceCleanup.add('flavor', flavor_id)
             pass
 
