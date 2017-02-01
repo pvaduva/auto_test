@@ -120,7 +120,7 @@ def test_ceph_osd_process_kill():
         LOG.info('Old pid is {} and new pid is {}'.format(osd_pid, osd_pid2))
 
         LOG.tc_step('Check events list for OSD failure')
-        entity_instance = 'host={}.process=ceph (osd.{})'.format(osd_host, osd_id)
+        entity_instance = 'host={}.process=ceph (osd.{}, )'.format(osd_host, osd_id)
 
         events = system_helper.wait_for_events(10, num=5, strict=False, fail_ok=True,
                                                **{'Entity Instance ID': entity_instance,
@@ -138,7 +138,8 @@ def test_ceph_osd_process_kill():
     # for it.
 
     LOG.tc_step('Check the OSD failure event clears')
-    entity_instance = 'host={}.process=ceph (osd.{})'.format(osd_host, osd_id)
+    entity_instance = 'host={}.process=ceph (osd.{}, )'.format(osd_host, osd_id)
+
     system_helper.wait_for_events(45, strict=False, fail_ok=False,
                                   **{'Entity Instance ID': entity_instance,
                                      'Event Log ID': EventLogID.STORAGE_DEGRADE,
@@ -239,7 +240,8 @@ def test_ceph_mon_process_kill(monitor):
     # Note, we cannot check alarms since the alarms clears too quickly.  Check
     # events instead.
         LOG.info('Check events list for ceph monitor failure')
-        entity_instance = 'host={}.process=ceph (mon.{})'.format(monitor, monitor)
+
+        entity_instance = 'host={}.process=ceph (mon.{}, )'.format(monitor, monitor)
         events = system_helper.wait_for_events(10, num=5, strict=False, fail_ok=True,
                                                **{'Entity Instance ID': entity_instance,
                                                   'Event Log ID': EventLogID.STORAGE_DEGRADE,
@@ -264,7 +266,7 @@ def test_ceph_mon_process_kill(monitor):
     time.sleep(20)
 
     LOG.tc_step('Check events list for ceph monitor clear')
-    entity_instance = 'host={}.process=ceph (mon.{})'.format(monitor,
+    entity_instance = 'host={}.process=ceph (mon.{}, )'.format(monitor,
                                                              monitor)
     system_helper.wait_for_events(45, strict=False, fail_ok=False,
                                   **{'Entity Instance ID': entity_instance,

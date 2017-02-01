@@ -34,13 +34,16 @@ def create_storage_profile(request):
 
     profile_name = 'storage_test_profile'
     host_name = 'storage-0'
-    positional_arg = profile_name + ' ' + host_name
-    cli.system('storprofile-add', positional_arg)
-
+    system_helper.create_storage_profile(host_name, profile_name=profile_name)
     storage_profile = {
         'profile_name': profile_name,
         'host_name': host_name
     }
+
+    def teardown():
+        system_helper.delete_storage_profile(profile_name)
+
+    request.addfinalizer(teardown)
 
     return storage_profile
 
@@ -58,7 +61,7 @@ def test_storage_profile_on_compute(create_storage_profile):
                                   auth_info=Tenant.ADMIN, rtn_list=True)
     host_helper.unlock_host(host_name)
 
-    assert exitcode == 1 and "Can not apply this profile to host" in output
+    assert exitcode == 1 and "Failed to create storage function" in output
     #verify rejected message
     #Can not apply this profile to host
     #echo $? is 1

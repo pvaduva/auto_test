@@ -749,7 +749,7 @@ def create_volume_type(name=None, public=None, rtn_val='ID', fail_ok=False, auth
     if name is None:
         name = 'vol_type_auto'
 
-    args = common.get_unique_name(name, get_volume_types())
+    args = common.get_unique_name(name, get_volume_types(rtn_val='Name'))
 
     if public is not None:
         args = '--is-public {} {}'.format(public, args)
