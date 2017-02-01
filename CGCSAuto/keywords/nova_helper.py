@@ -324,7 +324,7 @@ def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok
     extra_specs_args = ''
     for key, value in extra_specs.items():
         extra_specs_args += " {}={}".format(key, value)
-    exit_code, output = cli.nova('flavor-key', '{} set {}'.format(flavor, extra_specs_args),
+    exit_code, output = cli.nova('flavor-key', '{} set {}'.format(flavor, extra_specs_args.strip()),
                                  ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
 
     if exit_code == 1:
@@ -1360,7 +1360,8 @@ def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=Tru
     return int(info_str) if rtn_int else info_str
 
 
-def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, mac_addr=None, pci_addr=None,
+                           auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Get vm interface info for given nic from nova show
     Args:
@@ -1392,18 +1393,22 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, auth_info=Tena
     if not nics_to_rtn:
         LOG.warning("No nics attached to vm {}".format(vm_id))
         return []
-    elif vif_model or nic_names:
+    elif vif_model or nic_names or mac_addr or pci_addr:
         for item in all_nics:
-            if vif_model:
-                if vif_model != list(item.values())[0]['vif_model']:
-                    nics_to_rtn.remove(item)
+            nic_info = list(item.values())[0]
+            if (vif_model and vif_model != nic_info['vif_model']) or \
+                    (mac_addr and mac_addr != nic_info['mac_address']) or \
+                    (pci_addr and pci_addr != nic_info['vif_pci_address']):
+                nics_to_rtn.remove(item)
+
             if nic_names:
                 for nic_name in nic_names:
                     if nic_name not in item:
                         nics_to_rtn.remove(item)
+            LOG.debug("nics_to_rtn: {}".format(nics_to_rtn))
 
         if not nics_to_rtn:
-            LOG.warning("Cannot find nic info for given nic_names {} and/or vif_model {}".format(nic_names, vif_model))
+            LOG.warning("Cannot find nic info with given criteria")
             return []
 
     nics_to_rtn = [list(nic_.values())[0] for nic_ in nics_to_rtn]

@@ -102,3 +102,14 @@ class NetworkingErr:
     IP_VERSION_NOT_MATCH = "Network and gateway IP versions must match"
     GATEWAY_IP_IN_SUBNET = "Gateway address must not be within destination subnet"
     NETWORK_IP_EQUAL_TO_GATEWAY = "Network and gateway IP addresses must be different"
+
+
+class PciAddrErr:
+    NONE_ZERO_DOMAIN = 'Only domain 0000 is supported'
+    LARGER_THAN_MAX_BUS = 'PCI bus maximum value is 8'
+    NONE_ZERO_FUNCTION = 'Only function 0 is supported'
+    RESERVED_SLOTS_BUS0 = 'Slots 0,1 are reserved for PCI bus 0'
+    RESERVED_SLOT_ANY_BUS = 'Slots 0 is reserved for any PCI bus'
+    LARGER_THAN_MAX_SLOT = 'PCI slot maximum value is 31'
+    BAD_FORMAT = 'Bad PCI address format'
+    WRONG_BUS_VAL = 'Wrong bus value for PCI address'

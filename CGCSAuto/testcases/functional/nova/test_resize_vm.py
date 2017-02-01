@@ -4,6 +4,13 @@ from utils.tis_log import LOG
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
+
+def id_gen(val):
+    if isinstance(val, tuple) or isinstance(val, list):
+        val = '_'.join([str(val_) for val_ in val])
+    return val
+
+
 @fixture(scope='module')
 def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
     hosts = host_helper.get_hosts_per_storage_backing()
@@ -22,7 +29,8 @@ def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
     request.addfinalizer(remove_hosts_from_zone)
     return avail_hosts
 
-@mark.parametrize(('storage_backing', 'origin_flavor', 'dest_flavor', 'boot_source'),[
+
+@mark.parametrize(('storage_backing', 'origin_flavor', 'dest_flavor', 'boot_source'), [
     ('remote',      (1, 0, 0), (2, 1, 1), 'image'), 
     ('remote',      (1, 1, 1), (2, 2, 2), 'image'), 
     ('remote',      (1, 1, 1), (1, 1, 0), 'image'), 
@@ -41,8 +49,7 @@ def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
     ('local_image', (1, 0, 0), (2, 1, 1), 'volume'),
     ('local_image', (1, 1, 1), (2, 2, 2), 'volume'),
     ('local_image', (1, 1, 1), (1, 1, 0), 'volume'),
-    ])
-
+    ], ids=id_gen)
 def test_resize_vm_positive(add_hosts_to_zone, storage_backing, origin_flavor, dest_flavor, boot_source):
     """
     Test resizing disks of a vm
@@ -88,7 +95,7 @@ def test_resize_vm_positive(add_hosts_to_zone, storage_backing, origin_flavor, d
     LOG.tc_step('Resize vm to dest flavor and confirm')
     vm_info = vm_helper.resize_vm(vm_id, dest_flavor_id, revert=False, fail_ok=False)
     LOG.info(vm_info[1])
-    #TODO: Check that root Cinder volume does not resize, for appropriate cases
+    # TODO: Check that root Cinder volume does not resize, for appropriate cases
 
 
 @mark.parametrize(('storage_backing', 'origin_flavor', 'dest_flavor', 'boot_source'),[
@@ -102,10 +109,9 @@ def test_resize_vm_positive(add_hosts_to_zone, storage_backing, origin_flavor, d
     ('local_lvm',   (1, 1, 1), (0, 0, 0), 'volume'), 
     ('local_image', (1, 0, 0), (0, 0, 0), 'image'),  
     ('local_image', (1, 1, 1), (0, 0, 0), 'image'),  
-    ('local_image', (1, 0, 0), (0, 0, 0), 'volume'), #Currently fails. This might be a bug.
+    ('local_image', (1, 0, 0), (0, 0, 0), 'volume'),    # Currently fails. This might be a bug.
     ('local_image', (1, 1, 1), (0, 0, 0), 'volume'), 
-    ])
-
+    ], ids=id_gen)
 def test_resize_vm_negative(add_hosts_to_zone, storage_backing, origin_flavor, dest_flavor, boot_source):
     """
     Test resizing disks of a vm
@@ -129,8 +135,8 @@ def test_resize_vm_negative(add_hosts_to_zone, storage_backing, origin_flavor, d
         - Delete created VM
         - Delete created volume or image
         - Delete created flavors
-        - Remove hosts from cgcsautozone
-        - Delete cgcsautozone
+        - Remove hosts from cgcsauto zone
+        - Delete cgcsauto zone
         
     """
     vm_host = add_hosts_to_zone[storage_backing]
@@ -144,15 +150,11 @@ def test_resize_vm_negative(add_hosts_to_zone, storage_backing, origin_flavor, d
     dest_flavor_id = _create_flavor(dest_flavor, storage_backing)
     vm_id = _boot_vm_to_test(boot_source, vm_host, origin_flavor_id)    
 
-    LOG.tc_step('Resize vm to dest flavor with revert')
-    vm_info = vm_helper.resize_vm(vm_id, dest_flavor_id, revert=True, fail_ok=True)
-    LOG.info(vm_info[1])
-    assert vm_helper.get_vm_flavor(vm_id) == origin_flavor_id, 'VM did not keep origin flavor on revert'
-    
-    LOG.tc_step('Resize vm to dest flavor and confirm')
-    vm_info = vm_helper.resize_vm(vm_id, dest_flavor_id, revert=False, fail_ok=True)
-    assert vm_info[0] == 1, vm_info[1]
-    LOG.info(vm_info[1])
+    LOG.tc_step('Resize vm to dest flavor')
+    code, output = vm_helper.resize_vm(vm_id, dest_flavor_id, fail_ok=True)
+
+    assert nova_helper.get_vm_flavor(vm_id) == origin_flavor_id, 'VM did not keep origin flavor'
+    assert 1 == code, "Resize VM CLI is not rejected"
 
 
 def _create_flavor(flavor_info, storage_backing):
@@ -164,6 +166,7 @@ def _create_flavor(flavor_info, storage_backing):
                                           storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', flavor_id)
     return flavor_id
+
 
 def _boot_vm_to_test(boot_source, vm_host, flavor_id):
     

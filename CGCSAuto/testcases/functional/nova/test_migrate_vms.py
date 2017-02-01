@@ -334,11 +334,11 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu14_image):
 
 
 @mark.p2
-@mark.usefixtures('ubuntu14_image',
-                  'centos6_image', 'centos7_image',
-                  'opensuse11_image', 'opensuse12_image',
-                  # 'opensuse13_image',
-                  'rhel6_image', 'rhel7_image')
+# @mark.usefixtures('ubuntu14_image',
+#                   'centos6_image', 'centos7_image',
+#                   'opensuse11_image', 'opensuse12_image',
+#                   # 'opensuse13_image',
+#                   'rhel6_image', 'rhel7_image')
 @mark.parametrize(('guest_os', 'vcpus', 'cpu_pol', 'boot_source'), [
     ('ubuntu_14', 1, 'shared', 'volume'),
     ('ubuntu_14', 2, 'dedicated', 'image'),
@@ -354,6 +354,10 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu14_image):
     ('rhel_7', 1, 'dedicated', 'volume'),
 ])
 def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
+    LOG.tc_step("Get/Create {} image".format(guest_os))
+    img_id = glance_helper.get_guest_image(guest_os)
+    ResourceCleanup.add('image', img_id)
+
     LOG.tc_step("Create a flavor with 1 vcpu")
     flavor_id = nova_helper.create_flavor(name='migrate', vcpus=vcpus, guest_os=guest_os)[1]
     ResourceCleanup.add('flavor', flavor_id)
@@ -363,7 +367,7 @@ def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
         LOG.tc_step("Add following extra specs: {}".format(specs))
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
 
-    source_id = None
+    source_id = img_id
     if boot_source == 'volume':
         LOG.tc_step("Create a volume from {} image".format(guest_os))
         code, vol_id = cinder_helper.create_volume(name=guest_os, guest_image=guest_os, fail_ok=True)

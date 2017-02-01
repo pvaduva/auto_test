@@ -4,7 +4,7 @@ from utils.tis_log import LOG
 from consts.cgcs import VMStatus
 from consts.reasons import SkipReason
 
-from keywords import vm_helper, host_helper, nova_helper, cinder_helper, keystone_helper
+from keywords import vm_helper, host_helper, nova_helper, cinder_helper, keystone_helper, glance_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -111,11 +111,11 @@ class TestVariousGuests:
 
     @mark.trylast
     @mark.features('guest_os')
-    @mark.usefixtures('ubuntu14_image',
-                      'centos6_image', 'centos7_image',
-                      'opensuse11_image', 'opensuse12_image',
-                      # 'opensuse13_image',
-                      'rhel6_image', 'rhel7_image')
+    # @mark.usefixtures('ubuntu14_image',
+    #                   'centos6_image', 'centos7_image',
+    #                   'opensuse11_image', 'opensuse12_image',
+    #                   # 'opensuse13_image',
+    #                   'rhel6_image', 'rhel7_image')
     @mark.parametrize('guest_os', [
         'ubuntu_14',
         'centos_6', 'centos_7',
@@ -128,8 +128,14 @@ class TestVariousGuests:
             if not cinder_helper.is_volumes_pool_sufficient(min_size=30):
                 skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
 
+        LOG.tc_step("Get/Create {} image".format(guest_os))
+        img_id = glance_helper.get_guest_image(guest_os)
+        ResourceCleanup.add('image', img_id)
+
+        source_id = img_id if boot_source == 'image' else None
         LOG.tc_step("Boot a {} VM from {}".format(guest_os, boot_source))
-        vm_id = vm_helper.boot_vm(name="{}_{}".format(guest_os, boot_source), source=boot_source, guest_os=guest_os)[1]
+        vm_id = vm_helper.boot_vm(name="{}_{}".format(guest_os, boot_source), source=boot_source, source_id=source_id,
+                                  guest_os=guest_os)[1]
         ResourceCleanup.add('vm', vm_id)
 
         LOG.tc_step("Wait for VM pingable from NATBox")

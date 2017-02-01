@@ -94,7 +94,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             block_device_mapping=None,  vm_host=None, avail_zone='nova', file=None, config_drive=False,
             fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True):
     """
-
+    Boot a vm with given parameters
     Args:
         name (str):
         flavor (str):
@@ -107,12 +107,16 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         ephemeral (int):
         user_data (str|list):
         vm_host (str): which host to place the vm
+        avail_zone (str): availability zone for vm host, Possible values: 'nova', 'cgcsauto', etc
         block_device:
         block_device_mapping (str):  Block device mapping in the format '<dev-name>=<id>:<type>:<size(GB)>:<delete-on-
                                 terminate>'.
         auth_info (dict):
         con_ssh (SSHClient):
-        nics (list): [{'net-id': <net_id1>, 'vif-model': <vif1>}, {'net-id': <net_id2>, 'vif-model': <vif2>}, ...]
+        nics (list): nics to be created for the vm
+            each nic: <net-id=net-uuid,net-name=network-name,v4-fixed-ip=ip-addr,v6-fixed-ip=ip-addr,
+                        port-id=port-uuid,vif-model=model>,vif-pci-address=pci-address>
+            Examples: [{'net-id': <net_id1>, 'vif-model': <vif1>}, {'net-id': <net_id2>, 'vif-model': <vif2>}, ...]
             Notes: valid vif-models:
                 virtio, avp, e1000, pci-passthrough, pci-sriov, rtl8139, ne2k_pci, pcnet
 
@@ -121,6 +125,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         config_drive (bool): To enable config drive.
         fail_ok (bool):
         reuse_vol (bool): whether or not to reuse the existing volume
+        guest_os (str): Valid values: 'cgcs-guest', 'ubuntu_14', 'centos_6', 'centos_7', etc
+        poll (bool):
 
     Returns (tuple): (rtn_code(int), new_vm_id_if_any(str), message(str), new_vol_id_if_any(str))
         (0, vm_id, 'VM is booted successfully', <new_vol_id>)   # vm is created successfully and in Active state.

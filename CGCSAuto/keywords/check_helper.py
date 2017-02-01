@@ -9,7 +9,7 @@ import time
 
 from utils.tis_log import LOG
 from consts.cgcs import MELLANOX_DEVICE
-from keywords import host_helper, system_helper, vm_helper, nova_helper, common
+from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common
 
 
 def check_host_vswitch_port_engine_map(host, con_ssh=None):
@@ -414,3 +414,56 @@ def check_vm_numa_nodes(vm_id, on_vswitch_nodes=True):
                                                               "vSwitch numa nodes: {}" .format(vm_id, vm_numa_nodes,
                                                                                                vswitch_procs)
 
+
+def check_vm_pci_addr(vm_id, vm_nics):
+    """
+    Check vm pci addresses are as configured via nova show and from vm
+    Args:
+        vm_id (str):
+        vm_nics (list): nics passed to nova boot cli
+
+    Returns:
+
+    """
+    nova_show_nics = _check_vm_pci_addr_via_nova_show(vm_id, vm_nics)
+    _check_vm_pci_addr_on_vm(vm_id, nova_show_nics)
+
+
+def _check_vm_pci_addr_via_nova_show(vm_id, vm_nics):
+    """
+    Check vm pci address via nova show
+    Args:
+        vm_id (str):
+        vm_nics (list): nics passed to nova boot cli
+
+    Returns (list): nova show nics
+
+    """
+    LOG.info("Check vm pci address in nova show is as configured in nova boot")
+    nova_show_nics = nova_helper.get_vm_interfaces_info(vm_id)
+    for i in range(len(vm_nics)):
+        boot_vm_nic = vm_nics[i]
+        nova_show_nic = nova_show_nics[i]
+        expt_pci_addr = boot_vm_nic.get('vif-pci-address', '')
+        actual_pci_addr = nova_show_nic.get('vif_pci_address', '')
+        assert expt_pci_addr == actual_pci_addr, "Assigned pci address {} is not in nova show nic: {}".\
+            format(expt_pci_addr, actual_pci_addr)
+
+    return nova_show_nics
+
+
+def _check_vm_pci_addr_on_vm(vm_id, nova_show_nics=None):
+    LOG.info("Check vm PCI address is as configured from vm via /sys/class/net/<eth>/device/uevent")
+    if not nova_show_nics:
+        nova_show_nics = nova_helper.get_vm_interfaces_info(vm_id)
+
+    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        for nic_ in nova_show_nics:
+            pci_addr = nic_.get('vif_pci_address')
+            if pci_addr:
+                mac_addr = nic_['mac_address']
+                eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
+                code, output = vm_ssh.exec_cmd('cat /sys/class/net/{}/device/uevent | grep PCI_SLOT_NAME'.
+                                               format(eth_name), fail_ok=False)
+                assert pci_addr in output, "Assigned pci address does not match pci info for vm {}. Assigned: {}; " \
+                                           "Actual: {}".format(eth_name, pci_addr, output)

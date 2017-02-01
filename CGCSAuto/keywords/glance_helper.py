@@ -1,5 +1,6 @@
 import random
 import time
+import re
 
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
@@ -389,3 +390,28 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, con_ssh
 
     LOG.info("{} image downloaded successfully and saved to {}".format(img_os, dest_path))
     return dest_path
+
+
+def get_guest_image(guest_os, rm_image=True):
+    """
+    Get or create a glance image with given guest OS
+    Args:
+        guest_os (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11
+        rm_image (bool): whether or not to rm image from /home/wrsroot/images after creating glance image
+
+    Returns (str): image_id
+
+    """
+    LOG.info("Get or create a glance image with {} guest OS".format(guest_os))
+    img_id = get_image_id_from_name(guest_os, strict=True)
+
+    if not img_id:
+        image_path = _scp_guest_image(img_os=guest_os)
+        img_id = create_image(name=guest_os, source_image_file=image_path, disk_format='qcow2',
+                              container_format='bare')[1]
+
+        if rm_image and re.search('rhel|opensuse|centos_6|ubuntu_12', guest_os):
+            con_ssh = ControllerClient.get_active_controller()
+            con_ssh.exec_cmd('rm {}'.format(image_path), fail_ok=True, get_exit_code=False)
+
+    return img_id
