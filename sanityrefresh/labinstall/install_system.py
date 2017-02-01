@@ -115,15 +115,6 @@ def parse_args():
     lab_grp.add_argument('--tis-on-tis', dest='tis_on_tis', action='store_true',
                          help=" Run installation for Cumulus TiS on TiS. ")
 
-    # lab_grp.add_argument('--cumulus-userid', dest='cumulus_userid',
-    #                      help="Tenant's linux login userid in Cumulus "
-    #                      "Server. This is mandatory if --tis-on-tis is "
-    #                      "specified.")
-
-    # lab_grp.add_argument('--cumulus-password', metavar='CUMULUS_PASSWORD',
-    #                      dest='cumulus_password', help="Tenant's login "
-    #                      "password to Cumulus Server.")
-
     lab_grp.add_argument('--burn-usb', dest='burn_usb',
                          action='store_true',
                          help="Burn boot image into USB before installing from USB")
@@ -131,6 +122,12 @@ def parse_args():
     lab_grp.add_argument('--boot-usb', dest='boot_usb',
                          action='store_true',
                          help="Boot using the existing load on the USB")
+
+    lab_grp.add_argument('--iso-path', dest='iso_path', default='',
+                         help='Full path to ISO') 
+
+    lab_grp.add_argument('--iso-host', dest='iso_host', default='',
+                         help='Host where ISO resides')
 
     lab_grp.add_argument('--skip-feed', dest='skip_feed',
                          action='store_true',
@@ -499,23 +496,26 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
 
     tuxlab_conn.logout()
 
-def burn_usb_load_image(node, bld_server_conn, load_path):
+def burn_usb_load_image(install_output_dir, node, bld_server_conn, load_path, iso_path=None, iso_host=None):
     ''' Burn usb with given load image.
     '''
 
-    logutils.print_step("Burning USB with load image from {}".format(load_path))
+    if iso_host:
+        logutils.print_step("Burn USB with load image from {} on host {}".format(iso_path, iso_host))
+    else:
+        logutils.print_step("Burning USB with load image from {}".format(load_path))
 
     # Check if node (controller-0) is accessible.
     time.sleep(10)
     cmd = "ping -c 4 {}".format(node.host_ip)
     rc, output = bld_server_conn.exec_cmd(cmd, timeout=PING_TIMEOUT + TIMEOUT_BUFFER)
-    #if (bld_server_conn.exec_cmd(cmd, timeout=PING_TIMEOUT +
-    #                             TIMEOUT_BUFFER)[0] != 0):
+
     if rc != 0:
         msg = "Node not responding reliably.  Skipping USB burning."
         wr_exit()._exit(1, msg)
     else:
         node.telnet_conn.login()
+
     log.info(output)
     # Do not remove! - messes up next line (NEED TO FIX)
     cmd = "ls"
@@ -529,34 +529,33 @@ def burn_usb_load_image(node, bld_server_conn, load_path):
         log.info(msg)
         wr_exit()._exit(1, msg)
     usb_device = (output.splitlines()[0])[-3:]
-    log.info(usb_device)
 
-    cmd = "test -f " + load_path + "/" + BOOT_IMAGE_ISO_PATH
-    if bld_server_conn.exec_cmd(cmd)[0] != 0:
-        msg = 'Boot image iso file \"{}\" not found in {}'.format(
-            load_path, BOOT_IMAGE_ISO_PATH)
-        log.error(msg)
-        wr_exit()._exit(1, msg)
-
-    bld_server_conn.sendline("cd " + load_path)
-    bld_server_conn.find_prompt()
+    # Check if the ISO is available
     pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
-    bld_server_conn.rsync(BOOT_IMAGE_ISO_PATH, WRSROOT_USERNAME, node.host_ip,
-                          BOOT_IMAGE_ISO_TMP_PATH, pre_opts=pre_opts)
+    if not iso_host: 
+        iso_path = load_path + "/" + BOOT_IMAGE_ISO_PATH
+        cmd = "test -f " + iso_path
+        if bld_server_conn.exec_cmd(cmd)[0] != 0:
+            msg = 'Boot image iso file not found at {}'.format(iso_path)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+        bld_server_conn.rsync(iso_path, WRSROOT_USERNAME, node.host_ip, BOOT_IMAGE_ISO_TMP_PATH, pre_opts=pre_opts)
+    else:
+        iso_host_conn = SSHClient(log_path=install_output_dir + "/" + iso_host + ".ssh.log")
+        iso_host_conn.connect(hostname=iso_host, username=USERNAME, password=PASSWORD)
+        cmd = "test -f " + iso_path
+        if iso_host_conn.exec_cmd(cmd)[0] != 0:
+            msg = 'Boot image iso file not found at {}'.format(iso_path)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+        iso_host_conn.rsync(iso_path, WRSROOT_USERNAME, node.host_ip, BOOT_IMAGE_ISO_TMP_PATH, pre_opts=pre_opts)
 
-    cmd = "test -f " + BOOT_IMAGE_ISO_TMP_PATH
-    if node.telnet_conn.exec_cmd(cmd)[0] != 0:
-        msg = "Boot image not found in {} : {}".format(node.host_ip, BOOT_IMAGE_ISO_TMP_PATH)
-        log.info(msg)
-        wr_exit()._exit(1, msg)
-
-    #cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S dd if=" + BOOT_IMAGE_ISO_TMP_PATH + " of=/dev/sdc bs=1M oflag=direct; sync"
+    # Write the ISO to USB
     cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync".format(WRSROOT_PASSWORD, 
                                                                                   BOOT_IMAGE_ISO_TMP_PATH, 
                                                                                   usb_device)
     if node.telnet_conn.exec_cmd(cmd, timeout=RSYNC_TIMEOUT)[0] != 0:
-        msg = 'Failed to burn Boot image iso file \"{}\" onto USB'.format(
-            BOOT_IMAGE_ISO_PATH)
+        msg = 'Failed to burn boot image iso file \"{}\" onto USB'.format(iso_path)
         log.error(msg)
         wr_exit()._exit(1, msg)
 
@@ -1020,7 +1019,7 @@ def open_telnet_session(_controller0, install_output_dir):
 
 def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths,
                       host_os, boot_device_dict, small_footprint, burn_usb,
-                      tis_on_tis, boot_usb):
+                      tis_on_tis, boot_usb, iso_path, iso_host):
 
     global controller0
     #global cumulus
@@ -1030,7 +1029,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
             controller0.telnet_conn = open_telnet_session(controller0, install_output_dir)
 
         if burn_usb:
-            burn_usb_load_image(controller0, bld_server_conn, load_path)
+            burn_usb_load_image(install_output_dir, controller0, bld_server_conn, load_path, iso_path, iso_host)
 
         if burn_usb or boot_usb:
             usb = True
@@ -1586,6 +1585,8 @@ def main():
     small_footprint = args.small_footprint
     burn_usb = args.burn_usb
     boot_usb = args.boot_usb
+    iso_host = args.iso_host
+    iso_path = args.iso_path
     skip_feed = args.skip_feed
     host_os = args.host_os
     stop = args.stop
@@ -1600,6 +1601,13 @@ def main():
 
     install_timestr = time.strftime("%Y%m%d-%H%M%S")
     continue_install = args.continue_install
+
+    if iso_host and iso_path:
+        burn_usb = True
+    elif (iso_host and not iso_path) or (iso_path and not iso_host):
+        msg = "Both iso-host and iso-path must be specified"
+        log.info(msg)
+        wr_exit()._exit(1, msg)
 
     # Don't bother setting up the feed if we want to boot from USB
     if burn_usb or boot_usb:
@@ -1661,6 +1669,8 @@ def main():
     logutils.print_name_value("Skip feed", skip_feed)
     logutils.print_name_value("Boot USB", boot_usb)
     logutils.print_name_value("Burn USB", burn_usb)
+    logutils.print_name_value("ISO Host", iso_host)
+    logutils.print_name_value("ISO Path", iso_path)
 
     email_info = {}
     email_info['email_server'] = EMAIL_SERVER
@@ -1800,7 +1810,7 @@ def main():
         if not continue_install:
             for barcode in barcodes:
                 if burn_usb and (barcode == controller0.barcode):
-                    log.info('Skipping power down of controller0 node')
+                    log.info('Skip power down of controller0 and power on instead')
                     vlm_exec_cmd(VLM_TURNON, barcode)
                 else:
                     vlm_exec_cmd(VLM_TURNOFF, barcode)
@@ -1826,7 +1836,7 @@ def main():
     #if not executed:
     if do_next_install_step(lab_type, lab_install_step):
         bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths, host_os,
-                          boot_device_dict, small_footprint, burn_usb, tis_on_tis, boot_usb)
+                          boot_device_dict, small_footprint, burn_usb, tis_on_tis, boot_usb, iso_path, iso_host)
         set_install_step_complete(lab_install_step)
 
     if stop == "1":
