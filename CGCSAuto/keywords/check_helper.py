@@ -453,7 +453,7 @@ def _check_vm_pci_addr_via_nova_show(vm_id, vm_nics):
 
 
 def _check_vm_pci_addr_on_vm(vm_id, nova_show_nics=None):
-    LOG.info("Check vm PCI address is as configured from vm via /sys/class/net/<eth>/device/uevent")
+    LOG.info("Check vm PCI address is as configured from vm via ethtool")
     if not nova_show_nics:
         nova_show_nics = nova_helper.get_vm_interfaces_info(vm_id)
 
@@ -463,7 +463,7 @@ def _check_vm_pci_addr_on_vm(vm_id, nova_show_nics=None):
             if pci_addr:
                 mac_addr = nic_['mac_address']
                 eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
-                code, output = vm_ssh.exec_cmd('cat /sys/class/net/{}/device/uevent | grep PCI_SLOT_NAME'.
+                code, output = vm_ssh.exec_cmd('ethtool -i {} | grep bus-info'.
                                                format(eth_name), fail_ok=False)
                 assert pci_addr in output, "Assigned pci address does not match pci info for vm {}. Assigned: {}; " \
                                            "Actual: {}".format(eth_name, pci_addr, output)
