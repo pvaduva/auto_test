@@ -3,6 +3,8 @@
 # Directory and file paths/names
 HOST_OS = ["centos", "wrlinux"]
 DEFAULT_HOST_OS = "centos"
+INSTALL_MODE = ["legacy", "uefi"]
+DEFAULT_INSTALL_MODE = "legacy"
 DEFAULT_REL = "latest_dev_stream"
 DEFAULT_BLD = "latest_build"
 DEFAULT_WKSPCE = "/localdisk/loadbuild/jenkins"

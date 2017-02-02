@@ -918,6 +918,7 @@ class Telnet:
             self.write(str.encode(bios_key))
 
             boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
+            log.info("wildcat boot_device_regex: {}".format(boot_device_regex))
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 log.error(msg)
@@ -940,17 +941,22 @@ class Telnet:
 
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
                 #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
-                regex = re.compile(b"\[\d+;22(.*?)\x1b")
+                # Construct regex to work with wildcatpass machines
+                # in legacy and uefi mode
+                regex = re.compile(b"\[\d+(;22H|;15H|;11H)(.*?)\x1b")
+
+                log.info("wildcat: compiled regex is: {}".format(regex))
 
                 try:
                     index, match = self.expect([regex], BOOT_MENU_TIMEOUT)[:2]
+                    log.info("wildcat: index: {} match: {} ".format(index, match))
                 except EOFError:
                     msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
                     log.exception(msg)
                     wr_exit()._exit(1, msg)
                 if index == 0:
-                    match = match.group(1).decode('utf-8','ignore')
-                    log.info("Matched: " + match)
+                    match = match.group(2).decode('utf-8','ignore')
+                    log.info("wildcat: Matched: " + match)
                     if re.search(boot_device_regex, match, re.IGNORECASE):
                         log.info("Found boot device {}".format(boot_device_regex))
                         time.sleep(1)
@@ -990,6 +996,14 @@ class Telnet:
                         log.info("Selecting Serial Controller Node Install")
                         log.info("Pressing ENTER key")
                         self.write(str.encode("\r\r"))
+                # If we are performing a UEFI install then we need to use
+                # different logic to select the install option
+                elif "UEFI" in boot_device_regex:
+                    log.info("wildcat boot_device_regex, selecting UEFI boot option 2: {}".format(boot_device_regex))
+                    self.get_read_until("UEFI CentOS Serial Controller Install", BOOT_MENU_TIMEOUT)
+                    self.write(str.encode(DOWN))
+                    log.info("Pressing ENTER key")
+                    self.write(str.encode("\r\r"))
                 else:
                     self.get_read_until("Kickstart Boot Menu", 240)
                     # New pxeboot cfg menu

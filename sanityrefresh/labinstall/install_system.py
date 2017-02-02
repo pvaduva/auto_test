@@ -137,6 +137,11 @@ def parse_args():
                          choices=HOST_OS, default=DEFAULT_HOST_OS,
                          help="Centos or wrlinux based install")
 
+    lab_grp.add_argument('--install-mode', dest='install_mode',
+                         choices=INSTALL_MODE, default=DEFAULT_INSTALL_MODE,
+                         help="Select install mode, either legacy or uefi")
+
+
     lab_grp.add_argument('--stop', dest='stop', default='99',
                          help="Integer value that represents when to stop the install\n"
                          "0 - Stop after setting up network feed\n"
