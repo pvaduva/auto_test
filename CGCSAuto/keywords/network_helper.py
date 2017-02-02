@@ -823,8 +823,8 @@ def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=Networks.DATA_NET_NAME, ip_pattern=Networks.DATA_IP, vms=vms, con_ssh=con_ssh,
-                                auth_info=auth_info, rtn_dict=rtn_dict)
+    return _get_net_ips_for_vms(netname_pattern=Networks.DATA_NET_NAME, ip_pattern=Networks.DATA_IP, vms=vms,
+                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict)
 
 
 def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False):
@@ -925,6 +925,19 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
         return all_ips_dict
     else:
         return all_ips
+
+
+def get_net_type_from_name(net_name):
+    if re.search(Networks.INTERNAL_NET_NAME, net_name):
+        net_type = 'internal'
+    elif re.search(Networks.DATA_NET_NAME, net_name):
+        net_type = 'data'
+    elif re.search(Networks.MGMT_NET_NAME, net_name):
+        net_type = 'mgmt'
+    else:
+        raise ValueError("Unknown net_type for net_name - {}".format(net_name))
+
+    return net_type
 
 
 def get_routers(name=None, distributed=None, ha=None, gateway_ip=None, strict=True, auth_info=None, con_ssh=None):
@@ -1739,14 +1752,12 @@ def get_providernet_for_interface(interface='pthru', rtn_val='id', filepath=None
     Returns (str):  id of the provider net for SRIOV interface. Returns empty string if not found.
 
     """
-    sriov_if_override = get_pci_interface_info(interface=interface, filepath=filepath, con_ssh=con_ssh)
+    pci_if_override = get_pci_interface_info(interface=interface, filepath=filepath, con_ssh=con_ssh)
 
-    if 'No such file or directory' in sriov_if_override:
+    if 'No such file or directory' in pci_if_override:
         raise ValueError("File '{}' cannot be found".format(filepath))
 
-    provider_net_name = re.findall('\{DATAMTU\}\|(.*)\|', sriov_if_override)
-    if not provider_net_name:
-        provider_net_name = re.findall('\{DATAMTU\}\|(.*)\"', sriov_if_override)
+    provider_net_name = re.findall('\{DATAMTU\}\|(.*)[ |\"]', pci_if_override)
 
     if not provider_net_name:
         return ''
