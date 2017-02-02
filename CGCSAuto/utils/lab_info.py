@@ -61,10 +61,12 @@ def __get_lab_ssh(labname, log_dir=None):
 
     """
     lab = __get_lab_dict(labname)
+
     # Doesn't have to save logs
     # if log_dir is None:
     #     log_dir = temp_dir = "/tmp/CGCSAUTO/"
     ProjVar.set_var(log_dir=log_dir)
+    ProjVar.set_var(source_admin=True)
     con_ssh = SSHClient(lab['floating ip'], 'wrsroot', 'Li69nux*', CONTROLLER_PROMPT)
     con_ssh.connect()
     # if 'auth_url' in lab:
@@ -193,7 +195,7 @@ def get_lab_info(labname=None, log_dir=None):
     Get build id (e.g., 2016-11-14_22-01-28), system type (e.g., 2+4+2)
     Args:
         labname (str): such as WCP_76-77, PV0, IP_1-4
-        log_dir (str): log directory. logs will be saved to /tmp/AUTOMATION_LOGS/<LAB> if unset
+        log_dir (str): log directory. logs will not be saved if unset
 
     Returns (tuple):
 

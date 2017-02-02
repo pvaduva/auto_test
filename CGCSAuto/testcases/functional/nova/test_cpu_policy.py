@@ -198,6 +198,13 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
     LOG.tc_step("Getting host list")
     target_hosts = host_helper.get_hypervisors(state='up', status='enabled')
     target_host = target_hosts[0]
+    storage_backing = host_helper.get_local_storage_backing(host=target_host)
+    if 'image' in storage_backing:
+        storage_backing = 'local_image'
+    elif 'lvm' in storage_backing:
+        storage_backing = 'local_lvm'
+    elif 'remote' in storage_backing:
+        storage_backing = 'remote'
 
     image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
     pre_test_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
@@ -211,7 +218,8 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
         else:
             vcpus = vcpus_shared
         LOG.tc_step("Create {} flavor with {} vcpus".format(x, vcpus))
-        flavor_id = nova_helper.create_flavor(name=x, vcpus=vcpus)[1]
+        flavor_id = nova_helper.create_flavor(name=x, vcpus=vcpus, storage_backing=storage_backing,
+                                              check_storage_backing=False)[1]
         ResourceCleanup.add('flavor', flavor_id)
 
         if pol_source == 'flavor':

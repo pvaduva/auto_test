@@ -2452,6 +2452,7 @@ def downgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=Non
     LOG.info("Downgrading host {} complete ...".format(host))
     return 0, None
 
+
 def get_sm_dump_table(controller, con_ssh=None):
     """
 
