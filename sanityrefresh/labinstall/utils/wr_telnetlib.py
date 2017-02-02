@@ -1057,7 +1057,11 @@ class Telnet:
 
             self.get_read_until("Boot Menu", 200)
             log.info("Pressing BIOS key " + bios_key_hr)
-            self.write(str.encode(bios_key))
+
+            # Ugly hack for machines that don't cooperate
+            for i in range(0, 5):
+                self.write(str.encode(bios_key))
+                time.sleep(1)
 
             self.get_read_until("Please select boot device", 200)
 
