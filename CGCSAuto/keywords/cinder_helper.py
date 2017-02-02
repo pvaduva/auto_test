@@ -987,7 +987,7 @@ def get_qos_association(qos_spec_id, con_ssh=None):
     return table_
 
 
-def is_volumes_pool_sufficient(min_size=30):
+def is_volumes_pool_sufficient(min_size=40):
     """
 
     Args:

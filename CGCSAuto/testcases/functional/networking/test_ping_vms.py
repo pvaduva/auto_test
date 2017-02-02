@@ -75,6 +75,7 @@ def test_ping_between_two_vms(guest_os, ubuntu14_image):
     vm_helper.ping_vms_from_vm(to_vms=vms[1], from_vm=vms[0], net_types=['mgmt', 'data', 'internal'])
 
 
+# Remove following test from regression due to ping is tested in other guest os test cases.
 @mark.p2
 @mark.features('guest_os')
 @mark.usefixtures('centos7_image',
@@ -91,7 +92,7 @@ def test_ping_between_two_vms(guest_os, ubuntu14_image):
     'opensuse_11',
     'rhel_7',
 ])
-def test_ping_vm_basic(guest_os):
+def _test_ping_vm_basic(guest_os):
     """
     Args:
     guest_os (str): guest os to test

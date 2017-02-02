@@ -22,7 +22,7 @@ def id_gen(val):
 ], ids=id_gen)
 def test_nova_actions(guest_os, cpu_pol, actions):
     if guest_os == 'opensuse_12':
-        if not cinder_helper.is_volumes_pool_sufficient(min_size=30):
+        if not cinder_helper.is_volumes_pool_sufficient(min_size=40):
             skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
 
     LOG.tc_step("Create a flavor with 1 vcpu")
@@ -63,12 +63,12 @@ class TestVariousGuests:
 
     @mark.p2
     @mark.features('guest_os')
-    @mark.usefixtures('ubuntu14_image',
-                      'centos6_image', 'centos7_image',
-                      'opensuse11_image', 'opensuse12_image',
-                      # 'opensuse13_image',
-                      'rhel6_image', 'rhel7_image'
-    )
+    # @mark.usefixtures('ubuntu14_image',
+    #                   'centos6_image', 'centos7_image',
+    #                   'opensuse11_image', 'opensuse12_image',
+    #                   # 'opensuse13_image',
+    #                   'rhel6_image', 'rhel7_image'
+    # )
     @mark.parametrize(('guest_os', 'cpu_pol', 'boot_source', 'actions'), [
         ('ubuntu_14', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('centos_6', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
@@ -103,8 +103,12 @@ class TestVariousGuests:
 
         """
         if guest_os == 'opensuse_12' and boot_source == 'volume':
-            if not cinder_helper.is_volumes_pool_sufficient(min_size=30):
+            if not cinder_helper.is_volumes_pool_sufficient(min_size=40):
                 skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
+
+        LOG.tc_step("Get/Create {} glance image".format(guest_os))
+        image_id = glance_helper.get_guest_image(guest_os=guest_os)
+        ResourceCleanup.add('image', image_id, scope='module')
 
         LOG.tc_step("Create a flavor with 2 vcpus")
         flavor_id = nova_helper.create_flavor(name=cpu_pol, vcpus=2, guest_os=guest_os)[1]
@@ -115,10 +119,11 @@ class TestVariousGuests:
             LOG.tc_step("Add following extra specs: {}".format(specs))
             nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
 
-        source_id = None
+        source_id = image_id
         if boot_source == 'volume':
             LOG.tc_step("Create a volume from {} image".format(guest_os))
-            code, vol_id = cinder_helper.create_volume(name='vol-' + guest_os, guest_image=guest_os, fail_ok=True)
+            code, vol_id = cinder_helper.create_volume(name='vol-' + guest_os, image_id=image_id, guest_image=guest_os,
+                                                       fail_ok=True)
             ResourceCleanup.add('volume', vol_id)
 
             assert 0 == code, "Issue occurred when creating volume"
