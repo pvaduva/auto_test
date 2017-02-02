@@ -142,8 +142,10 @@ def test_pci_resource_usage(vif_model_check):
         res, vm_id, err, vol_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, nics=nics_to_test, fail_ok=True)
         if vm_id:
             ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+            pass
         if vol_id:
             ResourceCleanup.add('volume', vol_id)
+            pass
         assert 0 == res, "VM is not booted successfully. Error: {}".format(err)
 
         vms_under_test.append(vm_id)
@@ -258,6 +260,9 @@ class TestVmPCIOperations:
 
         vm_pci_infos, vm_topology = vm_helper.get_vm_pcis_irqs_from_hypervisor(self.vm_id)
 
+        assert len(vm_pci_infos) > 0 and len(vm_topology), \
+            'Empty output from nova-pci-interrupts'
+
         pci_addr_list = vm_pci_infos.pop('pci_addr_list')
         LOG.debug('after {}: pci addr list for VM:\nVM ID={}\nPCI-ADDR-LIST:{}\n'.format(
             msg_prefx, self.vm_id, pci_addr_list))
@@ -305,14 +310,14 @@ class TestVmPCIOperations:
 
         if self.pci_irq_affinity_mask is not None:
             indices_to_pcpus = vm_helper.parse_cpu_list(self.pci_irq_affinity_mask)
-            sorted_vm_pcpus = sorted(set(vm_topology['pcpus']))
+            vm_pcpus = vm_topology['pcpus']
 
-            pcpus_of_irq = sorted([sorted_vm_pcpus[i] for i in indices_to_pcpus])
+            expected_pcpus_for_irqs = sorted([vm_pcpus[i] for i in indices_to_pcpus])
 
             for pci_info in vm_pci_infos.values():
-                assert pcpus_of_irq == sorted(pci_info['cpulist']), \
-                    '{}: CPU list of IRQ:{} is not matching mask:{}'.format(
-                        msg_prefx, pci_info['irq'], pcpus_of_irq)
+                assert expected_pcpus_for_irqs == sorted(pci_info['cpulist']), \
+                    '{}: CPU list of IRQ:{} is not matching expected mask:{}'.format(
+                        msg_prefx, pci_info['irq'], expected_pcpus_for_irqs)
 
         LOG.debug('OK, after {}: CPU list for all IRQ are consistent'.format(msg_prefx))
 
@@ -367,7 +372,6 @@ class TestVmPCIOperations:
 
         if flavor_id:
             ResourceCleanup.add('flavor', flavor_id)
-            pass
 
             LOG.tc_step('Set extra-specs to the flavor {}'.format(flavor_id))
             extra_specs = {
@@ -528,8 +532,10 @@ class TestVmPCIOperations:
         res, vm_id, err, vol_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, nics=nics_to_test)
         if vm_id:
             ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+            pass
         if vol_id:
             ResourceCleanup.add('volume', vol_id)
+            pass
         assert 0 == res, "VM is not booted successfully. Error: {}".format(err)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
