@@ -37,13 +37,13 @@ def add_1g_and_4k_pages(config_host_module, add_host_to_zone):
         host0_proc0_mod = 'false'
     if int(mem_host_1_proc_0[0]) < 524228 and int(mem_host_1_proc_0[2]) < 2:
         host1_proc0_mod = 'false'
-    LOG.tc_step("Calculation for 2m pages, using 0GB of 1GB pages and 1GB of 4k pages")
+    LOG.fixture_step("Calculation for 2m pages, using 0GB of 1GB pages and 1GB of 4k pages")
     host0_proc0_2m = int((((int(mem_host_0_proc_0[3]) * 1024) - 1048576) / 2048))
-    LOG.tc_step("Calculation for 2m pages, using 2GB of 1GB pages and 1GB of 4k pages")
+    LOG.fixture_step("Calculation for 2m pages, using 2GB of 1GB pages and 1GB of 4k pages")
     host0_proc1_2m = (((int(mem_host_0_proc_1[3]) * 1024) - 3145728) / 2048)
-    LOG.tc_step("Calculation for 2m pages, using 0GB of 1GB pages and 1GB of 4k pages")
+    LOG.fixture_step("Calculation for 2m pages, using 0GB of 1GB pages and 1GB of 4k pages")
     host1_proc0_2m = (((int(mem_host_1_proc_0[3]) * 1024) - 1048576) / 2048)
-    LOG.tc_step("Calculation for 2m pages, using 0GB of 1GB pages and 2GB of 4k pages")
+    LOG.fixture_step("Calculation for 2m pages, using 0GB of 1GB pages and 2GB of 4k pages")
     host1_proc1_2m = (((int(mem_host_1_proc_1[3]) * 1024) - 2097152) / 2048)
 
     def _modify(host):
