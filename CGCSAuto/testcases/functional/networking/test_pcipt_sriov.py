@@ -1,4 +1,5 @@
 import re
+import time
 from pytest import fixture, mark, skip
 
 from utils import cli
@@ -316,9 +317,9 @@ class TestVmPCIOperations:
 
         return self.numa_node
 
-    def check_numa_affinity(self, msg_prefx=''):
+    def check_numa_affinity(self, msg_prefx='', retries=3, retry_interval=3):
 
-        LOG.tc_step('Check PCI numa on VM afer {}'.format(msg_prefx))
+        LOG.tc_step('Check PCIPT/SRIOV numa/irq-cpu-affinity/alias on VM afer {}'.format(msg_prefx))
 
         numa_affinity = getattr(self, 'pci_numa_affinity', 'strict')
 
@@ -381,17 +382,34 @@ class TestVmPCIOperations:
             LOG.debug('OK, after {}: correct number of PCI alias/devices are created'.format(msg_prefx, cnt_vf))
 
         if self.pci_irq_affinity_mask is not None:
-            indices_to_pcpus = vm_helper.parse_cpu_list(self.pci_irq_affinity_mask)
-            vm_pcpus = vm_topology['pcpus']
+            count = 0
+            cpus_matched = False
 
-            expected_pcpus_for_irqs = sorted([vm_pcpus[i] for i in indices_to_pcpus])
+            while not cpus_matched and count < retries:
+                count += 1
 
-            for pci_info in vm_pci_infos.values():
-                assert expected_pcpus_for_irqs == sorted(pci_info['cpulist']), \
-                    '{}: CPU list of IRQ:{} is not matching expected mask:{}'.format(
-                        msg_prefx, pci_info['irq'], expected_pcpus_for_irqs)
+                time.sleep(retry_interval)
 
-        LOG.debug('OK, after {}: CPU list for all IRQ are consistent'.format(msg_prefx))
+                indices_to_pcpus = vm_helper.parse_cpu_list(self.pci_irq_affinity_mask)
+                vm_pcpus = vm_topology['pcpus']
+                expected_pcpus_for_irqs = sorted([vm_pcpus[i] for i in indices_to_pcpus])
+
+                cpus_matched = True
+                for pci_info in vm_pci_infos.values():
+                    if expected_pcpus_for_irqs != sorted(pci_info['cpulist']):
+                        LOG.warn(
+                            'Mismatched CPU list after {}: expected/affin-mask cpu list:{}, actual:{}, '
+                            'pci_info:{}'.format(msg_prefx, expected_pcpus_for_irqs, pci_info['cpulist'], pci_info))
+                        LOG.warn('retries:{}'.format(count))
+                        cpus_matched = False
+                        break
+
+                vm_pci_infos, vm_topology = vm_helper.get_vm_pcis_irqs_from_hypervisor(self.vm_id)
+
+            assert cpus_matched, \
+                '{}: CPU list is not matching expected mask after tried {} times'.format(msg_prefx, count)
+
+            LOG.info('after {}: pci_irq_affinity_mask checking passed after retries:{}\n'.format(msg_prefx, count))
 
         LOG.info('OK, after {}: check_numa_affinity passed'.format(msg_prefx))
 

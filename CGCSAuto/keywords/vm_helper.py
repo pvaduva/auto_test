@@ -1833,7 +1833,7 @@ def _parse_cpu_siblings(siblings_str):
     return results
 
 
-def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None, retries=3, retry_interval=3):
+def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None, retries=3, retry_interval=45):
     """
     Get information for all PCI devices using tool nova-pci-interrupts.
 
@@ -1877,7 +1877,9 @@ def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None, retri
     while try_count < retries and not details:
         with host_helper.ssh_to_host(hypervisor, con_ssh=con_ssh) as compute_ssh:
             code, details = compute_ssh.exec_sudo_cmd('nova-pci-interrupts')
+
         try_count += 1
+        time.sleep(retry_interval)
 
     pci_infos = {}
     vm_topology = {}
