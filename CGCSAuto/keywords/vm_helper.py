@@ -1833,7 +1833,7 @@ def _parse_cpu_siblings(siblings_str):
     return results
 
 
-def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None):
+def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None, retries=3, retry_interval=3):
     """
     Get information for all PCI devices using tool nova-pci-interrupts.
 
@@ -1872,8 +1872,12 @@ def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None):
     """
     hypervisor = hypervisor or get_vm_host_and_numa_nodes(vm_id=vm_id, con_ssh=con_ssh)[0]
 
-    with host_helper.ssh_to_host(hypervisor, con_ssh=con_ssh) as compute_ssh:
-        code, details = compute_ssh.exec_sudo_cmd('nova-pci-interrupts')
+    details = ''
+    try_count = 0
+    while try_count < retries and not details:
+        with host_helper.ssh_to_host(hypervisor, con_ssh=con_ssh) as compute_ssh:
+            code, details = compute_ssh.exec_sudo_cmd('nova-pci-interrupts')
+        try_count += 1
 
     pci_infos = {}
     vm_topology = {}
@@ -1899,7 +1903,7 @@ def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None):
                 vm_topology['siblings'] = _parse_cpu_siblings(topology_str)
 
                 pci_info = re.search(
-                    '\|\s*node:(\d+)\,\s*addr:(\d{4}:\d{2}:\d{2}\.\d),\s*type:([^\,]+),\s*vendor:([^\,]+),\s*product:([^\|]+)\s*\|', line)
+                    '\|\s*node:(\d+)\,\s*addr:(\w{4}:\w{2}:\w{2}\.\w),\s*type:([^\,]+),\s*vendor:([^\,]+),\s*product:([^\|]+)\s*\|', line)
 
                 if pci_info:
                     pci_numa_node, pci_addr, pci_type, vendor, product = pci_info.groups()
@@ -1910,7 +1914,7 @@ def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None):
 
         elif stage == 1:
             pci_info = re.match(
-                '^\s*\|\s*\|\s*\|\s*node:(\d+)\,\s*addr:(\d{4}:\d{2}:\d{2}\.\d),\s*type:([^\,]+),\s*vendor:([^\,]+),\s*product:([^\|]+)\s*\|', line)
+                '\|\s*node:(\d+)\,\s*addr:(\w{4}:\w{2}:\w{2}\.\w),\s*type:([^\,]+),\s*vendor:([^\,]+),\s*product:([^\|]+)\s*\|', line)
 
             if pci_info:
                 pci_numa_node, pci_addr, pci_type, vendor, product = pci_info.groups()
@@ -1921,7 +1925,7 @@ def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None):
                 stage = 2
 
         if stage == 2:
-            all_pcis = re.search('INFO Found: pci_addrs:((\s*(\d{4}:\d{2}:\d{2}\.\d))+)', line)
+            all_pcis = re.search('INFO Found: pci_addrs:((\s*(\w{4}:\w{2}:\w{2}\.\w))+)', line)
             if all_pcis:
                 # this list contains all pci-addrs for all the VMs on the host, so we have to remove those for other VMs
                 pci_infos['pci_addr_list'] = list(pci_infos.keys())
@@ -1929,7 +1933,7 @@ def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None):
                 continue
 
         if stage == 3:
-            pci_raw = re.match(r'.*INFO addr:\s*(\d{4}:\d{2}:\d{2}\.\d)\s*(.*)', line)
+            pci_raw = re.match(r'.*INFO addr:\s*(\w{4}:\w{2}:\w{2}\.\w)\s*(.*)', line)
             if pci_raw:
                 pci_addr = str(pci_raw.group(1))
                 prev_pci_addr = pci_addr
