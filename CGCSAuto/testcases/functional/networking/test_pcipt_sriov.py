@@ -176,7 +176,7 @@ def test_evacuate_pci_vm(vif_model_check):
     vm_helper.ping_vms_from_vm(from_vm=base_vm, to_vms=vm_id, net_types=['mgmt', net_type], vlan_zero_only=True)
 
 
-@mark.p3
+@mark.nightly
 def test_pci_resource_usage(vif_model_check):
     """
     Create a vm under test with specified vifs for tenant network
@@ -495,8 +495,8 @@ class TestVmPCIOperations:
         mark.p1(('strict', None, None)),
         mark.p2(('strict', '1,3', None)),
         mark.p1(('strict', None, '3')),
-        mark.p2(('strict', '1,3', '3')),
-        mark.p4(('prefer', None, None)),
+        mark.nightly(('strict', '1,3', '3')),
+        mark.p3(('prefer', None, None)),
     ])
     def test_pci_vm_nova_actions(self, pci_numa_affinity, pci_irq_affinity_mask, pci_alias, vif_model_check):
         """

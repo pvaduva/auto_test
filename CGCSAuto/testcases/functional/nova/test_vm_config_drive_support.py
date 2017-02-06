@@ -1,5 +1,5 @@
 
-from pytest import fixture, skip
+from pytest import fixture, skip, mark
 
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
@@ -18,6 +18,7 @@ def hosts_per_stor_backing():
     return hosts_per_backing
 
 
+@mark.nightly
 def test_cold_migrate_vm_with_config_drive(hosts_per_stor_backing):
     """
     Skip Condition:

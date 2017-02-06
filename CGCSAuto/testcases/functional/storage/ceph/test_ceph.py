@@ -22,6 +22,7 @@ RESTARTS_BEFORE_ASSERT = 5      # number of process restarts until error asserti
 
 # Runtime: 208 seconds - pass on wildcat-7-12 and PV0
 # CGTS-4513 Loss of replication group alarm not always seen
+@mark.nightly
 @mark.usefixtures('ceph_precheck')
 def test_ceph_osd_process_kill():
     """
@@ -157,7 +158,10 @@ def test_ceph_osd_process_kill():
 # Runtime: 572.98 seconds - pass on PV0
 # CGTS-4520 - All ceph monitors observed to be down in alarm-list when 1
 # monitor killed
-@mark.parametrize('monitor', ['controller-0', 'controller-1', 'storage-0'])
+@mark.parametrize('monitor', [
+    mark.nightly('controller-0'),
+    'controller-1',
+    'storage-0'])
 @mark.usefixtures('ceph_precheck')
 def test_ceph_mon_process_kill(monitor):
     """

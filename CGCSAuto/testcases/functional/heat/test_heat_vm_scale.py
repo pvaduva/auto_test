@@ -158,12 +158,13 @@ def ssh_vm_and_send_cmd(vm_name=None, vm_image_name=None, cmd=None, con_ssh=None
 
     return vm_ssh
 
+
 # Overall skipif condition for the whole test function (multiple test iterations)
 # This should be a relatively static condition.i.e., independent with test params values
 #@mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
 @mark.parametrize('action', [
-        P1('scale_up_reject_scale_down'),
+        mark.nightly('scale_up_reject_scale_down'),
     ])
 # can add test fixture to configure hosts to be certain storage backing
 def test_heat_vm_scale(action):

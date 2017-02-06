@@ -103,6 +103,7 @@ def test_upload_dir_log(get_patch_name):
         - Check the log files for the expected logs
 
     """
+
     patch_name = get_patch_name
     con_ssh = ControllerClient.get_active_controller()
     LOG.tc_step("Uploading patches from directory")

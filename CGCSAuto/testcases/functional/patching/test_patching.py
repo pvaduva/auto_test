@@ -17,7 +17,6 @@ from utils import table_parser, cli
 from utils.ssh import SSHClient
 from utils.tis_log import LOG
 
-PUBLIC_SSH_KEY = local_host.get_ssh_key()
 PATCH_ALARM_ID = '900.001'
 PATCH_ALARM_REASON = 'Patching operation in progress'
 
@@ -135,6 +134,7 @@ def remove_patch(patch_id, con_ssh=None):
 
 
 def connect_to_build_server(server=None, username='', password='', prompt=''):
+    PUBLIC_SSH_KEY = local_host.get_ssh_key()
     server = server or PatchingVars.get_patching_var('build_server')
     LOG.info('patch_server={}'.format(server))
 

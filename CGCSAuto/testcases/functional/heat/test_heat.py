@@ -16,7 +16,6 @@ from consts.auth import Tenant
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-
 def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, auth_info=None):
     """
         Verify the heat resource creation/deletion for given resources
@@ -307,28 +306,28 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 # @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
 @mark.parametrize(('template_name'), [
-        mark.sanity(('WR_Neutron_ProviderNetRange.yaml')),
-        P1(('WR_Neutron_ProviderNet.yaml')),
-        P1(('OS_Cinder_Volume.yaml')),
-        P1(('OS_Glance_Image.yaml')),
-        P1(('OS_Ceilometer_Alarm.yaml')),
-        P1(('OS_Neutron_Port.yaml')),
-        P1(('OS_Neutron_Net.yaml')),
-        P1(('OS_Neutron_Subnet.yaml')),
-        P1(('OS_Nova_Flavor.yaml')),
-        P1(('OS_Neutron_FloatingIP.yaml')),
-        P1(('OS_Neutron_Router.yaml')),
-        P1(('OS_Neutron_RouterGateway.yaml')),
-        P1(('OS_Neutron_RouterInterface.yaml')),
-        P1(('OS_Neutron_SecurityGroup.yaml')),
-        P1(('OS_Nova_ServerGroup.yaml')),
-        P1(('OS_Nova_KeyPair.yaml')),
-        P1(('WR_Neutron_QoSPolicy.yaml')),
-        P1(('OS_Heat_Stack.yaml')),
-        P1(('OS_Cinder_VolumeAttachment.yaml')),
-        P1(('OS_Nova_Server.yaml')),
-        P1(('OS_Heat_AccessPolicy.yaml')),
-        P1(('OS_Heat_AutoScalingGroup.yaml')),
+    mark.sanity(('WR_Neutron_ProviderNetRange.yaml')),
+    mark.nightly(('WR_Neutron_ProviderNet.yaml')),
+    mark.nightly(('OS_Cinder_Volume.yaml')),
+    mark.nightly(('OS_Glance_Image.yaml')),
+    mark.nightly(('OS_Ceilometer_Alarm.yaml')),
+    mark.nightly(('OS_Neutron_Port.yaml')),
+    mark.nightly(('OS_Neutron_Net.yaml')),
+    mark.nightly(('OS_Neutron_Subnet.yaml')),
+    mark.nightly(('OS_Nova_Flavor.yaml')),
+    mark.nightly(('OS_Neutron_FloatingIP.yaml')),
+    mark.nightly(('OS_Neutron_Router.yaml')),
+    mark.nightly(('OS_Neutron_RouterGateway.yaml')),
+    mark.nightly(('OS_Neutron_RouterInterface.yaml')),
+    mark.nightly(('OS_Neutron_SecurityGroup.yaml')),
+    mark.nightly(('OS_Nova_ServerGroup.yaml')),
+    mark.nightly(('OS_Nova_KeyPair.yaml')),
+    mark.nightly(('WR_Neutron_QoSPolicy.yaml')),
+    mark.nightly(('OS_Heat_Stack.yaml')),
+    mark.nightly(('OS_Cinder_VolumeAttachment.yaml')),
+    mark.nightly(('OS_Nova_Server.yaml')),
+    mark.nightly(('OS_Heat_AccessPolicy.yaml')),
+    mark.nightly(('OS_Heat_AutoScalingGroup.yaml')),
     ])
 # can add test fixture to configure hosts to be certain storage backing
 def test_heat_template(template_name):
@@ -363,10 +362,9 @@ def test_heat_template(template_name):
 # This should be a relatively static condition.i.e., independent with test params values
 # @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
-@mark.parametrize(
-    ('template_name'), [
-        P1(('OS_Cinder_Volume.yaml')),
-    ])
+@mark.parametrize('template_name', [
+    mark.nightly('OS_Cinder_Volume.yaml'),
+])
 # can add test fixture to configure hosts to be certain storage backing
 def test_delete_heat_after_swact(template_name):
     """

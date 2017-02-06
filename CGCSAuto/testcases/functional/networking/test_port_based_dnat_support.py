@@ -99,6 +99,7 @@ def _vms(ubuntu14_image):
 
     return vms
 
+
 def test_port_forwarding_rule_create_for_vm(_vms, delete_pfs):
 
     for vm_id, i in zip(_vms, range(len(_vms))):
@@ -115,7 +116,7 @@ def test_port_forwarding_rule_create_for_vm(_vms, delete_pfs):
     LOG.info("rc {}; pf_id {} msg {}".format(rc, pf_id, msg))
 
 
-def test_external_access_to_vm_tcp_protocol(_vms, router_info, delete_pfs, delete_scp_files_from_nat):
+def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from_nat):
     """
 
     Args:
@@ -283,7 +284,7 @@ def test_external_access_to_vm_tcp_protocol(_vms, router_info, delete_pfs, delet
     LOG.info(" Updating port-forwarding rule to new external port {} is successful".format(pf_external_port))
 
 
-def test_external_access_to_vm_udp_protocol(_vms, router_info):
+def test_dnat_ubuntu_vm_udp(_vms, router_info):
     """
 
     Args:

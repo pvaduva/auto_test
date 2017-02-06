@@ -35,6 +35,7 @@ def get_host_ip():
 def get_user():
     return getpass.getuser()
 
+
 def exec_cmd(cmd, show_output=True):
     rc = 0
     LOG.info(" ".join(cmd))
@@ -48,6 +49,7 @@ def exec_cmd(cmd, show_output=True):
         LOG.info("Output:\n" + output)
     LOG.info("Return code: " + str(rc))
     return (rc, output)
+
 
 def get_ssh_key():
     ssh_key_fpath = os.path.expanduser(SSH_KEY_FPATH)

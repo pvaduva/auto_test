@@ -259,11 +259,10 @@ def test_0_node_unset_numa_nodes_reject(flavor_0_node):
 # Test vm NUMA node(s) configs #
 ################################
 
-@mark.p2
 @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'numa_node1'), [
-    (2, 1, 0, None),
-    (2, 2, 1, 0),
-    (1, 1, 1, None),
+    mark.p2((2, 1, 0, None)),
+    mark.nightly((2, 2, 1, 0)),
+    mark.p2((1, 1, 1, None)),
 ])
 # @mark.usefixtures('delete_resources_func')    # This fixture is auto-used by nova test cases
 def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):

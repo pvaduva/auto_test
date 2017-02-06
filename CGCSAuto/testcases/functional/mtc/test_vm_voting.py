@@ -190,10 +190,10 @@ def _perform_action(vm_id, action, expt_fail):
 
 
 @mark.parametrize('action', [
-    'migrate',
-    'suspend',
-    'reboot',
-    mark.domain_sanity('stop'),
+    mark.nightly('migrate'),
+    mark.nightly('suspend'),
+    mark.nightly('reboot'),
+    mark.priorities('domain_sanity', 'nightly')('stop'),
 ])
 def test_vm_voting(action, vm_):
     """
@@ -236,6 +236,7 @@ def test_vm_voting(action, vm_):
     _perform_action(vm_id, action, expt_fail=False)
 
 
+@mark.nightly
 def test_vm_voting_no_hb_migrate():
     """
     Test that a vm voting without heartbeat does not reject actions

@@ -94,12 +94,11 @@ class TestMutiPortsBasic:
         
         return base_vm, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id
 
-    @mark.p2
     @mark.parametrize('vifs', [
-        (('avp', '00:02'), ('avp', '00:1f')),
-        (('virtio', '01:01'), ('virtio', None)),
-        (('e1000', '04:09'), ('virtio', '08:1f')),
-        (('avp', None), ('virtio', None)),
+        mark.p2((('avp', '00:02'), ('avp', '00:1f'))),
+        mark.p2((('virtio', '01:01'), ('virtio', None))),
+        mark.nightly((('e1000', '04:09'), ('virtio', '08:1f'))),
+        mark.p2((('avp', None), ('virtio', None))),
     ], ids=id_params)
     def test_multiports_on_same_network_vm_actions(self, vifs, base_setup):
         """

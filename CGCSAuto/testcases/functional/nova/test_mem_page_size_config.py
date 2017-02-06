@@ -200,11 +200,11 @@ def test_boot_vm_mem_page_size(flavor_2g, flavor_mem_page_size, image_mempage, i
 
 @mark.usefixtures('add_admin_role_module')
 @mark.parametrize('mem_page_size', [
-    mark.domain_sanity('1048576'),
-    mark.p1('large'),
-    mark.p2('small'),
+    mark.priorities('domain_sanity', 'nightly')('1048576'),
+    mark.p2('large'),
+    mark.nightly('small'),
 ])
-def test_vm_mem_pool_1g(flavor_2g, mem_page_size):
+def test_schedule_vm_mempage_config(flavor_2g, mem_page_size):
     """
     Test memory used by vm is taken from the expected memory pool and the vm was scheduled on the correct host/processor
 

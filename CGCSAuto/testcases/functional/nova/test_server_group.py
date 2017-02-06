@@ -18,9 +18,9 @@ def check_system():
 
 
 @mark.parametrize(('srv_grp_msging_flavor', 'policy', 'group_size', 'best_effort', 'vms_num'), [
-    mark.domain_sanity((None, 'affinity', 4, None, 2)),
+    mark.priorities('nightly', 'domain_sanity')((None, 'affinity', 4, None, 2)),
     mark.domain_sanity((None, 'anti_affinity', 3, True, 3)),
-    mark.p2(('srv_grp_msg_true', 'anti_affinity', 2, None, 2)),
+    mark.nightly(('srv_grp_msg_true', 'anti_affinity', 2, None, 2)),
 ])
 def test_boot_vms_server_group(srv_grp_msging_flavor, policy, group_size, best_effort, vms_num):
     """

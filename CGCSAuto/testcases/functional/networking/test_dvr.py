@@ -77,12 +77,11 @@ def test_dvr_update_router(router_info):
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
 
-@mark.p3
 @mark.parametrize(('vms_num', 'srv_grp_policy'), [
-    (2, 'affinity'),
-    (2, 'anti-affinity'),
-    (3, 'affinity'),
-    (3, 'anti-affinity'),
+    mark.p2((2, 'affinity')),
+    mark.nightly((2, 'anti-affinity')),
+    mark.p2((3, 'affinity')),
+    mark.p2((3, 'anti-affinity')),
 ])
 def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, router_info):
     """
