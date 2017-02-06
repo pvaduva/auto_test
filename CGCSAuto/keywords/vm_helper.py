@@ -91,7 +91,7 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            block_device_mapping=None,  vm_host=None, avail_zone='nova', file=None, config_drive=False,
+            block_device_mapping=None,  vm_host=None, avail_zone=None, file=None, config_drive=False,
             fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True):
     """
     Boot a vm with given parameters
@@ -221,7 +221,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if hint:
         hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
 
-    host_zone = '{}:{}'.format(avail_zone, vm_host) if vm_host else None
+    host_str = ':{}'.format(vm_host) if vm_host else ''
+    host_zone = '{}{}'.format(avail_zone, host_str) if avail_zone else None
 
     if user_data is None and guest_os and 'cgcs-guest' not in guest_os:
         # create userdata cloud init file to run right after vm initialization to get ip on interfaces other than eth0.
