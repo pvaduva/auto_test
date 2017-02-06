@@ -63,7 +63,7 @@ def _vms(ubuntu14_image):
 
     image_id = ubuntu14_image
     guest_os = 'ubuntu_14'
-    size = 9
+    size = 5
 
     LOG.fixture_step("Create a favor with {}G root disk and dedicated cpu policy".format(size))
     flavor_id = nova_helper.create_flavor(name='dedicated-{}g'.format(size), root_disk=size)[1]
@@ -87,13 +87,13 @@ def _vms(ubuntu14_image):
                 {'net-id': tenant_net_ids[i], 'vif-model': vm_vif_models[vm]},
                 {'net-id': internal_net_id, 'vif-model': vm_vif_models[vm]}]
 
-        LOG.fixture_step("Create a {}G volume from {} image".format(size, image_id))
-        vol_id = cinder_helper.create_volume(name='vol-{}'.format(vm), image_id=image_id, size=size)[1]
-        ResourceCleanup.add('volume', vol_id)
+        # LOG.fixture_step("Create a {}G volume from {} image".format(size, image_id))
+        # vol_id = cinder_helper.create_volume(name='vol-{}'.format(vm), image_id=image_id, size=size)[1]
+        # ResourceCleanup.add('volume', vol_id)
 
         LOG.fixture_step("Boot a ubuntu14 vm with {} nics from above flavor and volume".format(vm_vif_models[vm]))
-        vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=flavor_id, source='volume',
-                                  source_id=vol_id, nics=nics, guest_os=guest_os)[1]
+        vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=flavor_id, source='image',
+                                  source_id=image_id, nics=nics, guest_os=guest_os)[1]
         ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
         vms.append(vm_id)
 
