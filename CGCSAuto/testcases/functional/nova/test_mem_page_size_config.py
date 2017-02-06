@@ -71,27 +71,53 @@ def add_1g_and_4k_pages(config_host_module, add_hosts_to_zone):
                 cli.system("host-memory-modify -2M {} -1G {} {} {}".format(host1_proc1_2m, 0, hosts[1], 1))
 
     def _revert(host):
+        header = ['mem_avail(MiB)']
+
         if host == hosts[0]:
             if host0_proc0_mod:
-                cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_0_proc_0[1]),
-                                                                           int(mem_host_0_proc_0[2]), hosts[0], 0))
+                host_0_proc_0_2g = ((int(system_helper.get_host_mem_values(hosts[0], header, 0)[0]) -
+                                    (mem_host_0_proc_0[2] * 1024)) / 2) - 150
+                if host_0_proc_0_2g < mem_host_0_proc_0[1]:
+                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(host_0_proc_0_2g),
+                                                                               mem_host_0_proc_0[2], hosts[0], 0))
+                else:
+                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_0_proc_0[1]),
+                                                                               mem_host_0_proc_0[2], hosts[0], 0))
+
             if host0_proc1_mod:
-                cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_0_proc_1[1]),
-                                                                           int(mem_host_0_proc_1[2]), hosts[0], 1))
+                host_0_proc_1_2g = ((int(system_helper.get_host_mem_values(hosts[0], header, 1)[0]) -
+                                    (mem_host_0_proc_1[2] * 1024)) / 2) - 150
+                if host_0_proc_1_2g < mem_host_0_proc_1[1]:
+                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(host_0_proc_1_2g),
+                                                                               mem_host_0_proc_1[2], hosts[0], 1))
+                else:
+                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_0_proc_1[1]),
+                                                                               mem_host_0_proc_1[2], hosts[0], 1))
         elif host == hosts[1]:
             if host1_proc0_mod:
-                cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_1_proc_0[1]),
-                                                                           int(mem_host_1_proc_0[2]), hosts[1], 0))
+                host_1_proc_0_2g = ((int(system_helper.get_host_mem_values(hosts[1], header, 0)[0]) -
+                                    (mem_host_1_proc_0[2] * 1024)) / 2) - 150
+                if host_1_proc_0_2g < mem_host_1_proc_0[1]:
+                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(host_1_proc_0_2g),
+                                                                               mem_host_1_proc_0[2], hosts[1], 0))
+                else:
+                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_1_proc_0[1]),
+                                                                               mem_host_1_proc_0[2], hosts[1], 0))
             if host1_proc1_mod:
-                cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_1_proc_1[1]),
-                                                                           int(mem_host_1_proc_1[2]), hosts[1], 1))
+                host_1_proc_1_2g = ((int(system_helper.get_host_mem_values(hosts[1], header, 1)[0]) -
+                                    (mem_host_1_proc_1[2] * 1024)) / 2) - 150
+                if host_1_proc_1_2g < mem_host_1_proc_1[1]:
+                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(host_1_proc_1_2g),
+                                                                               mem_host_1_proc_1[2], hosts[1], 1))
+                else:
+                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_1_proc_1[1]),
+                                                                               mem_host_1_proc_1[2], hosts[1], 1))
 
     if host0_proc0_mod or host0_proc1_mod:
         config_host_module(host=hosts[0], modify_func=_modify, revert_func=_revert)
 
     if host1_proc1_mod or host1_proc0_mod:
         config_host_module(host=hosts[1], modify_func=_modify, revert_func=_revert)
-
 
     return hosts, storage_backing
 
@@ -288,21 +314,10 @@ def test_schedule_vm_mempage_config(flavor_2g, mem_page_size):
     LOG.info("{}: Pre used mem: {}, post used mem:{}; Pre available: {}, post avail mem: {}".
              format(vm_host, pre_used_mems, post_used_mems, pre_avail_mems, post_avail_mems))
 
-    if (mem_page_size == '1048576') or (mem_page_size == 'large'):
-        LOG.tc_step("Verify memory is taken from 1G hugepage pool")
-        assert sum(pre_used_mems) + 2048 == sum(post_used_mems), "Used memory is not increase by 2048MiB"
-        assert sum(pre_avail_mems) - 2048 == sum(post_avail_mems), ("Available memory in {} page pool is not decreased "
-                                                                    "by 2048MiB").format(mem_page_size)
+    LOG.tc_step("Verify memory is taken from {} pool".format(mem_table_header))
+    assert sum(pre_used_mems) + 2048 == sum(post_used_mems), "Used memory is not increase by 2048MiB"
+    assert sum(pre_avail_mems) - 2048 == sum(post_avail_mems), ("Available memory in {} page pool is not decreased "
+                                                                "by 2048MiB").format(mem_page_size)
 
     LOG.tc_step("Ensure vm is pingable from NatBox")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-
-    host, node = vm_helper.get_vm_host_and_numa_nodes(vm_id)
-
-    LOG.tc_step("Verify vm is booted on the correct host and processor")
-    if mem_page_size == '1048576':
-        assert host == hosts_configured[0], "VM (huge) did not boot on the correct host"
-        assert node == [1], "VM (huge) did not boot on the correct processor"
-    elif mem_page_size == 'small':
-        assert host == hosts_configured[1], "VM (small) did not boot on the correct host"
-        assert node == [1], "VM (small) did not boot on the correct processor"
