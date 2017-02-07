@@ -22,7 +22,7 @@ def test_lldp_neighbor_remote_port():
     for host_name in all_hosts:
 
         LOG.tc_step("Parsing host-lldp-neighbor-list for remote_ports on the " + host_name + " host")
-        host = table_parser.table(cli.system('host-lldp-neighbor-list ' + host_name))
+        host = table_parser.table(cli.system('host-lldp-neighbor-list', '--nowrap {}'.format(host_name)))
         host_remote_ports = table_parser.get_column(host, 'remote_port')
 
         for remote_port in host_remote_ports:

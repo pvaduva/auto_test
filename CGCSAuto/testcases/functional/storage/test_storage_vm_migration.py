@@ -688,18 +688,18 @@ def test_4911_other_stress_tests(action, backing, image, size):
                 vol_2 = cinder_helper.create_volume(name='live_vm_1G', image_id=image, size=1)[1]
 
                 vm_1 = vm_helper.boot_vm(name='live_migrate_1g', source='volume', source_id=vol_1,
-                                         flavor=flav_id, vm_host=vm_host, guest_os=image)[1]
+                                         flavor=flav_id, avail_zone='nova', vm_host=vm_host, guest_os=image)[1]
                 vm_2 = vm_helper.boot_vm(name='live_migrate_1g', source='volume', source_id=vol_2,
-                                         flavor=flav_id, vm_host=vm_host, guest_os=image)[1]
+                                         flavor=flav_id, avail_zone='nova', vm_host=vm_host, guest_os=image)[1]
             else:
                 LOG.info("Boot two vms from 20g and 40g volume respectively")
                 vol_1 = cinder_helper.create_volume(name='live_vm_20G', image_id=image, size=20)[1]
                 vol_2 = cinder_helper.create_volume(name='live_vm_40G', image_id=image, size=40)[1]
 
                 vm_1 = vm_helper.boot_vm(name='live_migrate_20g', source='volume', source_id=vol_1,
-                                         flavor=flav_id, vm_host=vm_host, guest_os=image)[1]
+                                         flavor=flav_id, avail_zone='nova', vm_host=vm_host, guest_os=image)[1]
                 vm_2 = vm_helper.boot_vm(name='live_migrate_40g', source='volume', source_id=vol_2,
-                                         flavor=flav_id, vm_host=vm_host, guest_os=image)[1]
+                                         flavor=flav_id, avail_zone='nova', vm_host=vm_host, guest_os=image)[1]
 
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_1)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_2)

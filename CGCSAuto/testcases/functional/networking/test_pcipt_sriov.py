@@ -429,6 +429,7 @@ class TestVmPCIOperations:
         self.CHECKERS[step](self)
 
     def create_vm_with_pci_nic(self):
+
         res, vm_id, err, vol_id = vm_helper.boot_vm(name=self.vif_model, flavor=self.flavor_id, nics=self.nics_to_test)
         if vm_id:
             ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
@@ -541,9 +542,17 @@ class TestVmPCIOperations:
         self.create_flavor_for_pci()
 
         LOG.tc_step("Boot a vm with {} vif model on internal net".format(self.vif_model))
+        resource_param = 'pci_vfs_used' if 'sriov' in self.vif_model else 'pci_pfs_used'
+
+        LOG.tc_step("Get resource usage for {} interface before booting VM(s)".format(self.vif_model))
+        pre_resource_value = nova_helper.get_provider_net_info(self.pnet_id, field=resource_param)
+
         self.create_vm_with_pci_nic()
 
         self.wait_check_vm_states(step='boot')
+
+        post_resource_value = nova_helper.get_provider_net_info(self.pnet_id, field=resource_param)
+        assert pre_resource_value + 1 == post_resource_value, "{} usage is not incremented by 1".format(resource_param)
 
         LOG.tc_step('Pause/Unpause {} vm'.format(self.vif_model))
         vm_helper.pause_vm(self.vm_id)
@@ -587,3 +596,4 @@ class TestVmPCIOperations:
         self.wait_check_vm_states(step='set-error-state-recover')
         vm_helper.ping_vms_from_vm(
             from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
+

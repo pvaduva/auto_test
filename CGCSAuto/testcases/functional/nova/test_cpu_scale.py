@@ -1,3 +1,5 @@
+import time
+
 from pytest import mark, fixture
 
 from utils.tis_log import LOG
@@ -79,6 +81,18 @@ def ht_and_nonht_hosts():
     mark.nightly((5, 'prefer', 3, None)),
 ])
 def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, ht_and_nonht_hosts):
+    """
+    Test nova actions after scaling vcpus, and ensure vm topology persists
+    Args:
+        vcpus (int): number of vcpus
+        cpu_thread_pol (str|None):
+        min_vcpus (int):
+        numa_0 (int|None):
+        ht_and_nonht_hosts (tuple): HT and non-HT hosts on the system
+
+    Returns:
+
+    """
     ht_hosts, non_ht_hosts = ht_and_nonht_hosts
 
     LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
@@ -103,7 +117,8 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
     LOG.tc_step("Wait for vm pingable from NatBox and guest_agent process running on VM")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-    # Workaround due to CGTS-5755
+    time.sleep(10)
+    # # Workaround due to CGTS-5755
     # if min_vcpus:
     #     vm_helper.wait_for_process(process='guest_agent', vm_id=vm_id, disappear=False, timeout=120, fail_ok=False)
 

@@ -212,6 +212,7 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
     vm_shared_id = ''
 
     collection = ['dedicated', 'shared']
+    vm_ids = []
     for x in collection:
         if x == 'dedicated':
             vcpus = vcpus_dedicated
@@ -242,19 +243,17 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
         pre_boot_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
         LOG.tc_step("Booting cpu_pol_{}".format(x))
         vm_id = vm_helper.boot_vm(name='cpu_pol_{}'.format(x), flavor=flavor_id, source=boot_source,
-                                  source_id=source_id, vm_host=target_host)[1]
+                                  source_id=source_id, avail_zone='nova', vm_host=target_host)[1]
         ResourceCleanup.add('vm', vm_id)
+
+        vm_ids.append(vm_id)
+
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, cpu_pol=x, vm_host=target_host,
                                           prev_total_cpus=pre_boot_cpus[target_host])
-        if x == 'dedicated':
-            vm_dedicated_id = vm_id
-        else:
-            vm_shared_id = vm_id
 
-    LOG.tc_step("Removing cpu_pol_dedicated")
-    vm_helper.delete_vms(vms=vm_dedicated_id)
-    LOG.tc_step("Removing cpu_pol_shared")
-    vm_helper.delete_vms(vms=vm_shared_id)
+    LOG.tc_step("Deleting both dedicated and shared vms")
+    vm_helper.delete_vms(vms=vm_ids)
+
     post_delete_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
     assert post_delete_cpus == pre_test_cpus, "vcpu count after test does not equal vcpu count before test"
