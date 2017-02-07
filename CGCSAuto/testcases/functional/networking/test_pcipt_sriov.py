@@ -8,7 +8,7 @@ from utils.tis_log import LOG
 
 from consts.auth import Tenant
 from consts.cgcs import FlavorSpec, VMStatus
-from keywords import vm_helper, nova_helper, network_helper, host_helper, common, system_helper, check_helper
+from keywords import vm_helper, nova_helper, network_helper, host_helper, common, check_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -110,8 +110,6 @@ def test_evacuate_pci_vm(vif_model_check):
     Test evacuate vm with multiple ports on same network
 
     Args:
-        vifs (tuple): vif models to test. Used when booting vm with tenant network nics info
-        net_setups_ (tuple): flavor, networks to use and base vm info
 
     Setups:
         - create a flavor with dedicated cpu policy (module)
@@ -176,13 +174,10 @@ def test_evacuate_pci_vm(vif_model_check):
     vm_helper.ping_vms_from_vm(from_vm=base_vm, to_vms=vm_id, net_types=['mgmt', net_type], vlan_zero_only=True)
 
 
-@mark.nightly
+@mark.p3
 def test_pci_resource_usage(vif_model_check):
     """
     Create a vm under test with specified vifs for tenant network
-    Args:
-        request: pytest param
-        net_setups_ (tuple): base vm, flavor, management net, tenant net, interal net to use
 
     Returns (str): id of vm under test
 
@@ -494,9 +489,9 @@ class TestVmPCIOperations:
     @mark.parametrize(('pci_numa_affinity', 'pci_irq_affinity_mask', 'pci_alias'), [
         mark.p1((None, None, None)),
         mark.p1(('strict', None, None)),
-        mark.p2(('strict', '1,3', None)),
+        mark.nightly(('strict', '1,3', None)),
         mark.p1(('strict', None, '3')),
-        mark.nightly(('strict', '1,3', '3')),
+        mark.p2(('strict', '1,3', '3')),
         mark.p3(('prefer', None, None)),
     ])
     def test_pci_vm_nova_actions(self, pci_numa_affinity, pci_irq_affinity_mask, pci_alias, vif_model_check):
@@ -551,6 +546,7 @@ class TestVmPCIOperations:
 
         self.wait_check_vm_states(step='boot')
 
+        LOG.tc_step("Check {} usage is incremented by 1".format(resource_param))
         post_resource_value = nova_helper.get_provider_net_info(self.pnet_id, field=resource_param)
         assert pre_resource_value + 1 == post_resource_value, "{} usage is not incremented by 1".format(resource_param)
 
