@@ -1361,12 +1361,17 @@ def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=Tru
 
 
 def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, mac_addr=None, pci_addr=None,
-                           auth_info=Tenant.ADMIN, con_ssh=None):
+                           net_id=None, net_name=None, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Get vm interface info for given nic from nova show
     Args:
         vm_id (str): id of the vm to get interface info for
-        nic (str): such as nic1 or nic2 ...
+        nic_names (str|list): nic name such as nic1, nic2, etc
+        vif_model (str): such as virtio, pci-sriov
+        mac_addr (str):
+        pci_addr (str):
+        net_id (str): network id to filter out the vm nic
+        net_name (str): network name. This is only used if net_id is None.
         auth_info (dict):
         con_ssh (SSHClient):
 
@@ -1383,6 +1388,10 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, mac_addr=None,
             if "nic" not in nic:
                 raise ValueError("Invalid nic(s) provided: {}. Should be in the form of: e.g., nic4".format(nic_names))
 
+    if net_id:
+        nets_tab = table_parser.table(cli.neutron('net-list', auth_info=auth_info, ssh_client=con_ssh))
+        net_name = table_parser.get_values(nets_tab, 'name', id=net_id)[0]
+
     table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))
     all_nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
     if isinstance(all_nics, str):
@@ -1393,12 +1402,13 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, mac_addr=None,
     if not nics_to_rtn:
         LOG.warning("No nics attached to vm {}".format(vm_id))
         return []
-    elif vif_model or nic_names or mac_addr or pci_addr:
+    elif vif_model or nic_names or mac_addr or pci_addr or net_name:
         for item in all_nics:
             nic_info = list(item.values())[0]
             if (vif_model and vif_model != nic_info['vif_model']) or \
                     (mac_addr and mac_addr != nic_info['mac_address']) or \
-                    (pci_addr and pci_addr != nic_info['vif_pci_address']):
+                    (pci_addr and pci_addr != nic_info['vif_pci_address']) or \
+                    (net_name and net_name != nic_info['network']):
                 nics_to_rtn.remove(item)
 
             if nic_names:
