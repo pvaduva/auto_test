@@ -14,7 +14,7 @@ def id_params(val):
     if not isinstance(val, str):
         new_val = []
         for val_1 in val:
-            if not isinstance(val_1, str):
+            if isinstance(val_1, (tuple, list)):
                 val_1 = '_'.join([str(val_2).lower() for val_2 in val_1])
             new_val.append(val_1)
     else:
@@ -25,9 +25,13 @@ def id_params(val):
 
 def _append_nics_for_net(vifs, net_id, nics):
     for vif in vifs:
-        vif_, pci_addr = vif
+        if isinstance(vif, str):
+            vif_model = vif
+            pci_addr = None
+        else:
+            vif_model, pci_addr = vif
 
-        vif_ = vif_.split(sep='_x')
+        vif_ = vif_model.split(sep='_x')
         vif_model = vif_[0]
         iter_ = int(vif_[1]) if len(vif_) > 1 else 1
         for i in range(iter_):
@@ -272,7 +276,7 @@ class TestMutiPortsPCI:
         mark.p2(['virtio_x7', 'avp_x5', 'pci-passthrough']),
         mark.p2(['virtio_x7', 'avp_x5', 'pci-sriov']),
         mark.p3((['pci-sriov', 'pci-passthrough'])),
-        mark.domain_sanity((['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov'])),
+        mark.domain_sanity(([('avp', '00:02'), ('virtio', '02:01'), ('e1000', '08:01'), ('pci-passthrough', '05:1f'), ('pci-sriov', '08:02')])),
         mark.p3((['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov'])),
     ], ids=id_params)
     def test_multiports_on_same_network_pci_vm_actions(self, base_setup_pci, vifs):
@@ -311,6 +315,8 @@ class TestMutiPortsPCI:
 
         pcipt_included = False
         for vif in vifs:
+            if not isinstance(vif, str):
+                vif = vif[0]
             if 'pci-passthrough' in vif:
                 pcipt_included = True
                 break
@@ -320,12 +326,7 @@ class TestMutiPortsPCI:
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'avp'}]
-        for vif in vifs:
-            vif_ = vif.split(sep='_x')
-            vif_type = vif_[0]
-            iter_ = int(vif_[1]) if len(vif_) > 1 else 1
-            for i in range(iter_):
-                nics.append({'net-id': internal_net_id, 'vif-model': vif_type})
+        nics = _append_nics_for_net(vifs, net_id=internal_net_id, nics=nics)
 
         LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
         vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor, reuse_vol=False)[1]
@@ -341,6 +342,9 @@ class TestMutiPortsPCI:
 
         LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal (vlan 0 only) networks")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
+
+        LOG.tc_step("Verify vm pci address")
+        check_helper.check_vm_pci_addr(vm_under_test, nics)
 
         for vm_actions in [['auto_recover'], ['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
 
@@ -364,6 +368,9 @@ class TestMutiPortsPCI:
                         "after {}".format(vm_actions))
             vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'internal'],
                                        vlan_zero_only=True)
+
+            LOG.tc_step("Verify vm pci address after {}".format(vm_actions))
+            check_helper.check_vm_pci_addr(vm_under_test, nics)
 
     # @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
     @mark.parametrize('vifs', [

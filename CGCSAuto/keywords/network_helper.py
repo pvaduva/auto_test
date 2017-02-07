@@ -1774,11 +1774,13 @@ def get_networks_on_providernet(providernet_id, rtn_val='id', con_ssh=None, auth
     """
 
     Args:
-        providernet_id:
+        providernet_id(str):
+        rtn_val(str): 'id' or 'name'
         con_ssh (SSHClient):
-        auth_info:
+        auth_info (dict):
         strict (bool)
         regex (bool)
+        exclude (bool): whether to return networks that are NOT on given providernet
         **kwargs: extra key/value pair to filter out the results
 
     Returns:

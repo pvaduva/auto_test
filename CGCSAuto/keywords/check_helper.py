@@ -4,12 +4,14 @@
 # LOG.tc_step is used log the info
 # Should be called by test function directly
 ###############################################################
-
+import re
 import time
 
 from utils.tis_log import LOG
 from consts.cgcs import MELLANOX_DEVICE
 from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common
+
+SEP = '\n------------------------------------ '
 
 
 def check_host_vswitch_port_engine_map(host, con_ssh=None):
@@ -23,13 +25,12 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
     device_types = system_helper.get_host_ports_info(host, 'device type', if_name=data_ports, strict=True)
     extra_mt_ports = 0
     for device_type in device_types:
-        if MELLANOX_DEVICE in device_type:
+        if re.search(MELLANOX_DEVICE, device_type):
             extra_mt_ports += 1
 
     if extra_mt_ports > 0:
-        LOG.info("\n---------------------------------------- "
-                 "Mellanox devices are used on {} data interfaces. Perform loose check on port-engine map.".
-                    format(host))
+        LOG.info("{}Mellanox devices are used on {} data interfaces. Perform loose check on port-engine map.".
+                 format(SEP, host))
         # check actual mapping has x more items than expected mapping. x is the number of MT pci device
         assert len(expt_vswitch_map) + extra_mt_ports == len(actual_vswitch_map)
 
@@ -41,9 +42,8 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
                 'Expected engines: {}; Actual engines: {}'.format(host, port, engines, actual_vswitch_map[port])
 
     else:
-        LOG.info("\n---------------------------------------- "
-                 "No Mellanox device used on {} data interfaces. Perform strict check on port-engine map.".
-                    format(host))
+        LOG.info("{}No Mellanox device used on {} data interfaces. Perform strict check on port-engine map.".
+                 format(SEP, host))
 
         assert expt_vswitch_map == actual_vswitch_map, "vSwitch mapping unexpected. Expect: {}; Actual: {}".format(
                 expt_vswitch_map, actual_vswitch_map)
@@ -96,8 +96,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
         else:
             expt_increase = vcpus / 16
 
-    LOG.info("\n---------------------------------------- "
-             "Check total vcpus for vm host is increased by {} via nova host-describe".format(expt_increase))
+    LOG.info("{}Check total vcpus for vm host is increased by {} via nova host-describe".format(SEP, expt_increase))
     expt_used_cpus = round(prev_total_cpus + expt_increase, 4)
     end_time = time.time() + 60
     while time.time() < end_time:
@@ -117,15 +116,14 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
             numa_num=numa_num, con_ssh=con_ssh, host_log_core_siblings=log_cores_siblings, is_ht=is_ht_host,
             current_vcpus=current_vcpus)
 
-    LOG.info("\n---------------------------------------- "
-             "Check vm vcpus, pcpus on vm host via nova-compute.log and virsh vcpupin")
+    LOG.info("{}Check vm vcpus, pcpus on vm host via nova-compute.log and virsh vcpupin".format(SEP))
     # Note: floating vm pcpus will not be checked via virsh vcpupin
     _check_vm_topology_on_host(vm_id, vcpus=vcpus, vm_pcpus=pcpus_total, prev_total_cpus=prev_total_cpus,
                                expt_increase=expt_increase, vm_host=vm_host, cpu_pol=cpu_pol, cpu_thr_pol=cpu_thr_pol,
                                host_log_core_siblings=log_cores_siblings)
 
-    LOG.info("\n---------------------------------------- "
-             "Check vm vcpus, siblings on vm via /sys/devices/system/cpu/<cpu>/topology/thread_siblings_list")
+    LOG.info("{}Check vm vcpus, siblings on vm via /sys/devices/system/cpu/<cpu>/topology/thread_siblings_list".
+             format(SEP))
     _check_vm_topology_on_vm(vm_id, vcpus=vcpus, siblings_total=siblings_total, current_vcpus=current_vcpus,
                              prev_siblings=prev_siblings)
 
@@ -303,16 +301,15 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
     instance_name = nova_helper.get_vm_instance_name(vm_id)
     with host_helper.ssh_to_host(vm_host) as host_ssh:
 
-        LOG.info("\n---------------------------------------- "
-                 "Check total allocated vcpus increased by {} from nova-compute.log on host".format(expt_increase))
+        LOG.info("{}Check total allocated vcpus increased by {} from nova-compute.log on host".
+                 format(SEP, expt_increase))
         post_total_log = host_helper.wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=prev_total_cpus,
                                                                                   fail_ok=True)
         expt_total = round(prev_total_cpus + expt_increase, 4)
         assert expt_total == post_total_log, 'vcpus increase in nova-compute.log is not as expected. ' \
                                              'Expected: {}. Actual: {}'.format(expt_total, post_total_log)
 
-        LOG.info("\n---------------------------------------- "
-                 "Check vcpus for vm via sudo virsh vcpupin")
+        LOG.info("{}Check vcpus for vm via sudo virsh vcpupin".format(SEP))
         vcpus_for_vm = host_helper.get_vcpus_for_instance_via_virsh(host_ssh, instance_name=instance_name)
         assert vcpus == len(vcpus_for_vm), 'Actual vm cpus number - {} is not as expected - {} in sudo virsh vcpupin'\
             .format(len(vcpus_for_vm), vcpus)
@@ -326,15 +323,13 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
         else:
             LOG.warning('Skip pcpus check in virsh vcpupin for floating vm')
 
-        LOG.info("\n---------------------------------------- "
-                 "Get cpu affinity list for vm via taskset -pc")
+        LOG.info("{}Get cpu affinity list for vm via taskset -pc".format(SEP))
         affined_cpus = vm_helper.get_affined_cpus_for_vm(vm_id, host_ssh=host_ssh, vm_host=vm_host,
                                                          instance_name=instance_name)
 
         if 'ded' in cpu_pol:
 
-            LOG.info("\n---------------------------------------- "
-                     "Check affined cpus for dedicated vm is the same as its pcpus shown in vm-topology")
+            LOG.info("{}Check affined cpus for dedicated vm is the same as its pcpus shown in vm-topology".format(SEP))
             expt_affined_cpus = vm_pcpus
 
             assert len(affined_cpus) <= len(expt_affined_cpus) + 2
@@ -342,8 +337,7 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
             assert set(expt_affined_cpus) <= set(affined_cpus)
 
         else:
-            LOG.info("\n---------------------------------------- "
-                     "Check affined cpus for floating vm is the same as unpinned cpus on vm host")
+            LOG.info("{}Check affined cpus for floating vm is the same as unpinned cpus on vm host".format(SEP))
             # TODO count all numa nodes for floating vm. Any way to get numa nodes dynamically from vm host?
             cpus_info = host_helper.get_vcpus_info_in_log(host_ssh=host_ssh, rtn_list=True, numa_nodes=[0, 1])
             unpinned_cpus = []
@@ -364,8 +358,7 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
     actual_sib_list = []
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        LOG.info("\n---------------------------------------- "
-                 "Check vm present|online|offline cores from inside vm via /sys/devices/system/cpu/")
+        LOG.info("{}Check vm present|online|offline cores from inside vm via /sys/devices/system/cpu/".format(SEP))
         present_cores, online_cores, offline_cores = vm_helper.get_proc_nums_from_vm(vm_ssh)
         expt_sib_lists = [[[vcpu] for vcpu in range(len(online_cores))]] if not siblings_total else [siblings_total]
         if prev_siblings:
@@ -381,8 +374,7 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
         assert expt_total_cores in [len(present_cores), 512], \
             "Number of present cores: {}. online+offline cores: {}".format(vcpus, expt_total_cores)
 
-        LOG.info("\n---------------------------------------- "
-                 "Check vm /sys/devices/system/cpu/[cpu#]/topology/thread_siblings_list")
+        LOG.info("{}Check vm /sys/devices/system/cpu/[cpu#]/topology/thread_siblings_list".format(SEP))
         for cpu in ['cpu{}'.format(i) for i in range(len(online_cores))]:
             actual_sib_list_for_cpu = vm_ssh.exec_cmd('cat /sys/devices/system/cpu/{}/topology/thread_siblings_list'.
                                                       format(cpu), fail_ok=False)[1]
@@ -467,3 +459,4 @@ def _check_vm_pci_addr_on_vm(vm_id, nova_show_nics=None):
                                                format(eth_name), fail_ok=False)
                 assert pci_addr in output, "Assigned pci address does not match pci info for vm {}. Assigned: {}; " \
                                            "Actual: {}".format(eth_name, pci_addr, output)
+

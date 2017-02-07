@@ -6,7 +6,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 
 def id_gen(val):
-    if isinstance(val, tuple) or isinstance(val, list):
+    if isinstance(val, (tuple, list)):
         val = '_'.join([str(val_) for val_ in val])
     return val
 

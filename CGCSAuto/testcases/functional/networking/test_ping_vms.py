@@ -4,17 +4,46 @@ from pytest import mark
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
 
-from keywords import vm_helper, glance_helper, nova_helper, network_helper, cinder_helper
+from keywords import vm_helper, glance_helper, nova_helper, network_helper, cinder_helper, check_helper
 
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-@mark.cpe_sanity
-@mark.parametrize('guest_os', [
-    mark.sanity('cgcs-guest'),
-    mark.sanity('ubuntu_14'),
-])
-def test_ping_between_two_vms(guest_os, ubuntu14_image):
+def id_gen(val):
+    if not isinstance(val, str):
+        new_val = []
+        for val_1 in val:
+            if not isinstance(val_1, str):
+                val_1 = '_'.join([str(val_2).lower() for val_2 in val_1])
+            new_val.append(val_1)
+        new_val = '_'.join(new_val)
+    else:
+        new_val = val
+
+    return new_val
+
+
+def _append_nics(vifs, net_ids, nics):
+    for i in range(len(vifs)):
+        vif = vifs[i]
+        net_id = net_ids[i]
+        vif_model, pci_addr = vif
+        nic = {'net-id': net_id, 'vif-model': vif_model}
+        if pci_addr is not None:
+            pci_prefix, pci_append = pci_addr.split(':')
+            pci_append_incre = format(int(pci_append, 16) + i, '02x')
+            nic['vif-pci-address'] = ':'.join(['0000', pci_prefix, pci_append_incre]) + '.0'
+        nics.append(nic)
+
+    return nics
+
+
+@mark.parametrize(('guest_os', 'vifs'), [
+    mark.priorities('cpe_sanity', 'sanity')(('cgcs-guest', (('avp', None), ('virtio', '01:04')))),
+    mark.priorities('cpe_sanity', 'sanity')(('ubuntu_14', (('e1000', '00:1f'), ('virtio', None)))),
+    ('ubuntu_14', (('avp', '08:1f'), ('virtio', '00:02')))
+], ids=id_gen)
+def test_ping_between_two_vms(guest_os, vifs, ubuntu14_image):
     """
     Ping between two cgcs-guest/ubuntu vms with virtio and avp vif models
 
@@ -31,6 +60,7 @@ def test_ping_between_two_vms(guest_os, ubuntu14_image):
 
     """
     # determine the disk size and image id based on the guest os under test
+
     if guest_os == 'ubuntu_14':
         image_id = ubuntu14_image
         size = 9
@@ -48,20 +78,20 @@ def test_ping_between_two_vms(guest_os, ubuntu14_image):
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
 
-    vif_models = ['avp', 'virtio'] if guest_os == 'cgcs-guest' else ['virtio', 'virtio']
+    # vif_models = ['avp', 'virtio'] if guest_os == 'cgcs-guest' else ['virtio', 'virtio']
     vms = []
-    for vif_model in vif_models:
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_id, 'vif-model': vif_model},
-                {'net-id': internal_net_id, 'vif-model': vif_model}]
+    vms_nics = []
+    for i in range(2):
+        # compose vm nics
+        nics = _append_nics(vifs, [tenant_net_id, internal_net_id], [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}])
 
         LOG.tc_step("Create a {}G volume from {} image".format(size, guest_os))
         vol_id = cinder_helper.create_volume(name='vol-{}'.format(guest_os), image_id=image_id, size=size)[1]
         ResourceCleanup.add('volume', vol_id)
 
-        LOG.tc_step("Boot a {} vm with {} nics from above flavor and volume".format(guest_os, vif_model))
-        vm_id = vm_helper.boot_vm('{}_{}'.format(guest_os, vif_model), flavor=flavor_id, source='volume',
-                                  source_id=vol_id, nics=nics, guest_os=guest_os)[1]
+        LOG.tc_step("Boot a {} vm with {} vifs from above flavor and volume".format(guest_os, vifs))
+        vm_id = vm_helper.boot_vm('{}_vifs'.format(guest_os), flavor=flavor_id,
+                                  source='volume', source_id=vol_id, nics=nics, guest_os=guest_os)[1]
         ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
         LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
@@ -69,14 +99,19 @@ def test_ping_between_two_vms(guest_os, ubuntu14_image):
 
         # vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['data', 'internal'])
         vms.append(vm_id)
+        vms_nics.append(nics)
 
-    LOG.info("Ping between two vms over management, data, and internal networks")
+    LOG.tc_step("Check vif pci address for both vms")
+    check_helper.check_vm_pci_addr(vms[0], vms_nics[0])
+    check_helper.check_vm_pci_addr(vms[1], vms_nics[1])
+
+    LOG.tc_step("Ping between two vms over management, data, and internal networks")
     vm_helper.ping_vms_from_vm(to_vms=vms[0], from_vm=vms[1], net_types=['mgmt', 'data', 'internal'])
     vm_helper.ping_vms_from_vm(to_vms=vms[1], from_vm=vms[0], net_types=['mgmt', 'data', 'internal'])
 
 
 # Remove following test from regression due to ping is tested in other guest os test cases.
-@mark.p2
+@mark.p3
 @mark.features('guest_os')
 @mark.usefixtures('centos7_image',
                   'centos6_image',

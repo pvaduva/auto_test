@@ -8,7 +8,7 @@ from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
 from utils.tis_log import LOG
 
 from consts.auth import Tenant, SvcCgcsAuto
-from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState, Prompt
+from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState, Prompt, MELLANOX_DEVICE
 from consts.timeout import HostTimeout, CMDTimeout
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 
@@ -2639,6 +2639,7 @@ def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, pas
     finally:
         bld_server_conn.close()
 
+
 def get_host_co_processor_pci_list(hostname):
     host_pci_info = []
     with ssh_to_host(hostname) as host_ssh:
@@ -2670,3 +2671,19 @@ def get_host_co_processor_pci_list(hostname):
 
     return host_pci_info
 
+
+def get_mellanox_ports(host):
+    """
+    Get Mellanox data ports for given host
+
+    Args:
+        host (str): hostname
+
+    Returns (list):
+
+    """
+    data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', rtn_list=True)
+    mt_ports = system_helper.get_host_ports_info(host, 'uuid', if_name=data_ports, strict=False, regex=True,
+                                                 **{'device type': MELLANOX_DEVICE})
+    LOG.info("Mellanox ports: {}".format(mt_ports))
+    return mt_ports

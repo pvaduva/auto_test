@@ -31,13 +31,14 @@ def base_setup():
     return base_vm, mgmt_net_id, tenant_net_id, internal_net_id
 
 
-@mark.sanity
+# Remove following testcase as it has been covered in other tests
+# @mark.sanity
 @mark.parametrize('vif_model', [
     'avp',
     'e1000',
     'virtio'
 ])
-def test_vif_models(vif_model, base_setup):
+def _test_vif_models(vif_model, base_setup):
     """
     boot avp,e100 and virtio instance
     KNI is same as avp

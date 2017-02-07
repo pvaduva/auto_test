@@ -17,7 +17,7 @@ from functools import wraps
 
 
 def id_gen(val):
-    if isinstance(val, list) or isinstance(val, tuple):
+    if isinstance(val, (list, tuple)):
         val = '_'.join([str(val_) for val_ in val])
 
     return val

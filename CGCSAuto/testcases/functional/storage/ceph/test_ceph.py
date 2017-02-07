@@ -93,6 +93,7 @@ def test_ceph_osd_process_kill():
     while time.time() < endtime:
         osd_pid2, msg = storage_helper.get_osd_pid(osd_host, osd_id)
         if osd_pid2 != osd_pid:
+            time.sleep(5)  # Process might still be initializing
             break
         time.sleep(1)
     # yang TODO updated. Better to move to keywords and remove assert altogether
@@ -235,6 +236,7 @@ def test_ceph_mon_process_kill(monitor):
         for i in range(0, PROC_RESTART_TIME):
             mon_pid2, msg = storage_helper.get_mon_pid(monitor)
             if mon_pid2 != mon_pid:
+                time.sleep(5)   # Process might still be initializing
                 break
             time.sleep(1)
         msg = 'Process did not restart in time'
