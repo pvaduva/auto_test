@@ -335,7 +335,7 @@ def test_ceph_reboot_storage_node():
         LOG.tc_step('Reboot {}'.format(host))
         HostsToRecover.add(host, scope='function')
         results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-        host_helper._wait_for_host_states(host, availability='offline')
+        host_helper.wait_for_host_states(host, availability='offline')
         LOG.tc_step("Results: {}".format(results))          # yang TODO log added to keyword, still needed?
 
         time.sleep(1)
@@ -367,7 +367,7 @@ def test_ceph_reboot_storage_node():
             msg = 'OSD ID {} is down as expected'.format(osd_id)
             LOG.info(msg)
 
-        if not host_helper._wait_for_host_states(host, availability='available', fail_ok=False):   # yang TODO use fail_ok flag?
+        if not host_helper.wait_for_host_states(host, availability='available', fail_ok=False):   # yang TODO use fail_ok flag?
             msg = 'Host {} did not come available in the expected time'.format(host)
             raise exceptions.HostPostCheckFailed(msg)
 
