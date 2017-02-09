@@ -281,7 +281,7 @@ def power_on_host(hosts):
 def wait_for_hosts_state(hosts, state=HostAvailabilityState.ONLINE):
 
     if len(hosts) > 0:
-        locked_hosts_in_states = host_helper._wait_for_hosts_states(hosts,  availability=[state])
+        locked_hosts_in_states = host_helper.wait_for_hosts_states(hosts, availability=[state])
         LOG.info("Host(s) {} are online".format(locked_hosts_in_states))
 
 

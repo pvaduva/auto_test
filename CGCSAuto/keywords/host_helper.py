@@ -124,7 +124,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     if hostnames:
         time.sleep(30)
         hostnames = sorted(hostnames)
-        hosts_in_rebooting = _wait_for_hosts_states(
+        hosts_in_rebooting = wait_for_hosts_states(
                 hostnames, timeout=HostTimeout.FAIL_AFTER_REBOOT, check_interval=10, duration=8, con_ssh=con_ssh,
                 availability=[HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED])
 
@@ -149,12 +149,12 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     unlocked_hosts_in_states = True
     locked_hosts_in_states = True
     if len(locked_hosts) > 0:
-        locked_hosts_in_states = _wait_for_hosts_states(locked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,
-                                                        duration=8, con_ssh=con_ssh, availability=['online'])
+        locked_hosts_in_states = wait_for_hosts_states(locked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,
+                                                       duration=8, con_ssh=con_ssh, availability=['online'])
 
     if len(unlocked_hosts) > 0:
-        unlocked_hosts_in_states = _wait_for_hosts_states(unlocked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,
-                                                          con_ssh=con_ssh, availability=['available', 'degraded'])
+        unlocked_hosts_in_states = wait_for_hosts_states(unlocked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,
+                                                         con_ssh=con_ssh, availability=['available', 'degraded'])
 
         if unlocked_hosts_in_states:
             hosts_tab = table_parser.table(cli.system('host-list --nowrap', ssh_client=con_ssh))
@@ -248,8 +248,8 @@ def __hosts_stay_in_states(hosts, duration=10, con_ssh=None, **states):
     return True
 
 
-def _wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, duration=3, con_ssh=None, fail_ok=True,
-                           **states):
+def wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, duration=3, con_ssh=None, fail_ok=True,
+                          **states):
     """
     Wait for hosts to go in specified states
 
@@ -359,24 +359,24 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         return 1, output
 
     # Wait for task complete. If task stucks, fail the test regardless. Perhaps timeout needs to be increased.
-    _wait_for_host_states(host=host, timeout=lock_timeout, task='', fail_ok=False)
+    wait_for_host_states(host=host, timeout=lock_timeout, task='', fail_ok=False)
 
     #  vim_progress_status | Lock of host compute-0 rejected because there are no other hypervisors available.
-    if _wait_for_host_states(host=host, timeout=5, vim_progress_status='ock .* host .* rejected.*',
-                             regex=True, strict=False, fail_ok=True, con_ssh=con_ssh):
+    if wait_for_host_states(host=host, timeout=5, vim_progress_status='ock .* host .* rejected.*',
+                            regex=True, strict=False, fail_ok=True, con_ssh=con_ssh):
         msg = "Lock host {} is rejected. Details in host-show vim_process_status.".format(host)
         if fail_ok:
             return 4, msg
         raise exceptions.HostPostCheckFailed(msg)
 
-    if _wait_for_host_states(host=host, timeout=5, vim_progress_status='Migrate of instance .* from host .* failed.*',
-                             regex=True, strict=False, fail_ok=True, con_ssh=con_ssh):
+    if wait_for_host_states(host=host, timeout=5, vim_progress_status='Migrate of instance .* from host .* failed.*',
+                            regex=True, strict=False, fail_ok=True, con_ssh=con_ssh):
         msg = "Lock host {} failed due to migrate vm failed. Details in host-show vm_process_status.".format(host)
         if fail_ok:
             return 5, msg
         exceptions.HostPostCheckFailed(msg)
 
-    if not _wait_for_host_states(host, timeout=20, administrative=HostAdminState.LOCKED, con_ssh=con_ssh):
+    if not wait_for_host_states(host, timeout=20, administrative=HostAdminState.LOCKED, con_ssh=con_ssh):
         msg = "Host is not in locked state"
         if fail_ok:
             return 2, msg
@@ -384,11 +384,11 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
     LOG.info("{} is {}locked. Waiting for it to go Online...".format(host, extra_msg))
 
-    if _wait_for_host_states(host, timeout=timeout, availability='online'):
+    if wait_for_host_states(host, timeout=timeout, availability='online'):
         # ensure the online status lasts for more than 5 seconds. Sometimes host goes online then offline to reboot..
         time.sleep(5)
-        if _wait_for_host_states(host, timeout=timeout, availability='online'):
-            if _wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, task=''):
+        if wait_for_host_states(host, timeout=timeout, availability='online'):
+            if wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, task=''):
                 LOG.info("Host is successfully locked and in online state.")
                 return 0, "Host is locked and in online state."
             else:
@@ -438,9 +438,9 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
     LOG.info("Unlocking {}...".format(host))
     if get_hostshow_value(host, 'availability') in [HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED]:
         LOG.info("Host is offline or failed, waiting for it to go online, available or degraded first...")
-        _wait_for_host_states(host, availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.ONLINE,
-                                                  HostAvailabilityState.DEGRADED],
-                              fail_ok=False)
+        wait_for_host_states(host, availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.ONLINE,
+                                                 HostAvailabilityState.DEGRADED],
+                             fail_ok=False)
 
     if get_hostshow_value(host, 'administrative', con_ssh=con_ssh) == HostAdminState.UNLOCKED:
         message = "Host already unlocked. Do nothing"
@@ -452,15 +452,15 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
     if exitcode == 1:
         return 1, output
 
-    if not _wait_for_host_states(host, timeout=30, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
-                                 fail_ok=fail_ok):
+    if not wait_for_host_states(host, timeout=30, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
+                                fail_ok=fail_ok):
         return 2, "Host is not in unlocked state"
 
-    if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-                                 availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]):
+    if not wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+                                availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]):
         return 3, "Host state did not change to available or degraded within timeout"
 
-    if not _wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh, task=''):
+    if not wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh, task=''):
         return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
 
     if get_hostshow_value(host, 'availability') == HostAvailabilityState.DEGRADED:
@@ -468,8 +468,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
             LOG.warning("Host is in degraded state after unlocked.")
             return 4, "Host is in degraded state after unlocked."
         else:
-            if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-                                         availability=HostAvailabilityState.AVAILABLE):
+            if not wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+                                        availability=HostAvailabilityState.AVAILABLE):
                 err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
                 LOG.warning(err_msg)
                 return 8, err_msg
@@ -495,9 +495,9 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
 
         if check_subfunc and is_controller and is_compute:
             # wait for subfunction states to be operational enabled and available
-            if not _wait_for_host_states(host, timeout=90, fail_ok=fail_ok, con_ssh=con_ssh,
-                                         subfunction_oper=HostOperationalState.ENABLED,
-                                         subfunction_avail=HostAvailabilityState.AVAILABLE):
+            if not wait_for_host_states(host, timeout=90, fail_ok=fail_ok, con_ssh=con_ssh,
+                                        subfunction_oper=HostOperationalState.ENABLED,
+                                        subfunction_avail=HostAvailabilityState.AVAILABLE):
                 err_msg = "Host subfunctions operational and availability did not change to enabled and available" \
                           " within timeout"
                 LOG.warning(err_msg)
@@ -508,8 +508,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
             LOG.warning("Host is in degraded state after unlocked.")
             return 4, "Host is in degraded state after unlocked."
         else:
-            if not _wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-                                         availability=HostAvailabilityState.AVAILABLE):
+            if not wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+                                        availability=HostAvailabilityState.AVAILABLE):
                 err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
                 LOG.warning(err_msg)
                 return 8, err_msg
@@ -577,11 +577,11 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
         else:
             hosts_to_check.append(host)
 
-    if not _wait_for_hosts_states(hosts_to_check, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh):
+    if not wait_for_hosts_states(hosts_to_check, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh):
         LOG.warning("Some host(s) not in unlocked states after 60 seconds.")
 
-    if not _wait_for_hosts_states(hosts_to_check, timeout=timeout, check_interval=10, con_ssh=con_ssh,
-                                  availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]):
+    if not wait_for_hosts_states(hosts_to_check, timeout=timeout, check_interval=10, con_ssh=con_ssh,
+                                 availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.DEGRADED]):
         LOG.warning("Some host(s) state did not change to available or degraded within timeout")
 
     hosts_tab = table_parser.table(cli.system('host-list --nowrap', ssh_client=con_ssh))
@@ -697,8 +697,8 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=60, fail_ok=False, chec
             time.sleep(check_interval)
 
 
-def _wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, strict=True, regex=False, fail_ok=True,
-                          con_ssh=None, **states):
+def wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, strict=True, regex=False, fail_ok=True,
+                         con_ssh=None, **states):
     if not states:
         raise ValueError("Expected host state(s) has to be specified via keyword argument states")
 
@@ -785,11 +785,11 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
         return 1, msg
 
     if hostname != active_host:
-        _wait_for_host_states(hostname, timeout=swact_start_timeout, fail_ok=False, con_ssh=con_ssh, task='')
+        wait_for_host_states(hostname, timeout=swact_start_timeout, fail_ok=False, con_ssh=con_ssh, task='')
         return 2, "{} is not active controller host, thus swact request failed as expected.".format(hostname)
 
-    rtn = _wait_for_swact_complete(hostname, con_ssh, swact_start_timeout=swact_start_timeout,
-                                   swact_complete_timeout=swact_complete_timeout, fail_ok=fail_ok)
+    rtn = wait_for_swact_complete(hostname, con_ssh, swact_start_timeout=swact_start_timeout,
+                                  swact_complete_timeout=swact_complete_timeout, fail_ok=fail_ok)
     if rtn[0] == 0:
         res = wait_for_webservice_up(system_helper.get_active_controller_name(), fail_ok=fail_ok, con_ssh=con_ssh)[0]
         if not res:
@@ -798,8 +798,8 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
     return rtn
 
 
-def _wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=30, swact_complete_timeout=30,
-                             floating_ssh_timeout=30, fail_ok=True):
+def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=30, swact_complete_timeout=30,
+                            floating_ssh_timeout=30, fail_ok=True):
     """
     Wait for swact to start and complete
     NOTE: This function assumes swact command was run from ssh session using floating ip!!
@@ -2180,8 +2180,8 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
     # sleep for 180 seconds to let host be re-installed with upgrade release
     time.sleep(180)
 
-    if not _wait_for_host_states(host, timeout=timeout, check_interval=60, availability=HostAvailabilityState.ONLINE,
-                                 con_ssh=con_ssh, fail_ok=fail_ok):
+    if not wait_for_host_states(host, timeout=timeout, check_interval=60, availability=HostAvailabilityState.ONLINE,
+                                con_ssh=con_ssh, fail_ok=fail_ok):
         err_msg = "Host {} did not become online  after upgrade".format(host)
         if fail_ok:
             return 3, err_msg
@@ -2424,8 +2424,8 @@ def downgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=Non
     # sleep for 180 seconds to let host be re-installed with previous release
     time.sleep(180)
 
-    if not _wait_for_host_states(host, timeout=timeout, check_interval=60, availability=HostAvailabilityState.ONLINE,
-                                 con_ssh=con_ssh, fail_ok=fail_ok):
+    if not wait_for_host_states(host, timeout=timeout, check_interval=60, availability=HostAvailabilityState.ONLINE,
+                                con_ssh=con_ssh, fail_ok=fail_ok):
         err_msg = "Host {} did not become online  after downgrade".format(host)
         if fail_ok:
             return 2, err_msg

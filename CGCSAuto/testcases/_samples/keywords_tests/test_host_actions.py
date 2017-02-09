@@ -30,8 +30,8 @@ def test_is_active_con():
 def test_swact_host(hostname, timeout, fail_ok):
     LOG.tc_step("wait for previous swact complete")
     host_helper._wait_for_openstack_cli_enable()
-    host_helper._wait_for_host_states('controller-0', timeout=60, fail_ok=False, task='')
-    host_helper._wait_for_host_states('controller-1', timeout=60, fail_ok=False, task='')
+    host_helper.wait_for_host_states('controller-0', timeout=60, fail_ok=False, task='')
+    host_helper.wait_for_host_states('controller-1', timeout=60, fail_ok=False, task='')
 
     LOG.tc_step("swact host")
 
@@ -39,7 +39,7 @@ def test_swact_host(hostname, timeout, fail_ok):
         code, msg = host_helper.swact_host(hostname=hostname, swact_start_timeout=timeout, fail_ok=fail_ok)
         if timeout == 1:
             assert code == 3
-            host_helper._wait_for_swact_complete(hostname, fail_ok=False)
+            host_helper.wait_for_swact_complete(hostname, fail_ok=False)
         else:
             assert code in [-1, 0, 1, 2]
 
@@ -47,7 +47,7 @@ def test_swact_host(hostname, timeout, fail_ok):
         if timeout == 1:
             with raises(exceptions.HostPostCheckFailed):
                 host_helper.swact_host(hostname=hostname, swact_start_timeout=1, fail_ok=False)
-            host_helper._wait_for_swact_complete(hostname, fail_ok=False)
+            host_helper.wait_for_swact_complete(hostname, fail_ok=False)
         else:
             host_helper.swact_host(hostname=hostname, swact_start_timeout=timeout, fail_ok=False)
 
@@ -138,7 +138,7 @@ def test_get_active_con():
 def test_unlock_hosts():
     active = system_helper.get_active_controller_name()
     standby = 'controller-1' if active == 'controller-0' else 'controller-0'
-    host_helper._wait_for_hosts_states([standby, 'compute-1'], availability='available')
+    host_helper.wait_for_hosts_states([standby, 'compute-1'], availability='available')
     LOG.tc_step("Lock hosts.")
     host_helper.lock_host(standby)
     host_helper.lock_host('compute-1')
