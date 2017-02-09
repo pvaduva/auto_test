@@ -1,7 +1,7 @@
 from pytest import fixture, mark
 from utils.tis_log import LOG
 
-from keywords import network_helper, nova_helper, vm_helper
+from keywords import network_helper, nova_helper, vm_helper, glance_helper, cinder_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
@@ -20,17 +20,17 @@ def base_vm():
     return vm_id, mgmt_nic, net_id
 
 
-@mark.parametrize(('if_attach_arg', 'vif_model'), [
-    #('net_id', 'avp'),
-    #('net_id', 'virtio'),
-    #('net_id', 'e1000'),
-    ('net_id', 'rtl8139')
-    #('port_id', 'avp'),
-    #('port_id', 'rtl8139'),
-    #('port_id', 'virtio'),
-    #('port_id', 'e1000')
+@mark.parametrize(('guest_os', 'if_attach_arg', 'vif_model'), [
+    ('cgcs-guest', 'net_id', 'avp'),
+    ('cgcs-guest', 'net_id', 'e1000'),
+    ('cgcs-guest', 'port_id', 'virtio'),
+    #('cgcs-guest', 'net_id', 'rtl8139')
+    ('centos_7', 'net_id', 'e1000'),
+    ##('centos_7', 'net_id', 'avp'),
+    ('centos_7', 'net_id', 'virtio'),
+    ('centos_7', 'port_id', 'rtl8139')
 ])
-def test_interface_attach_detach(base_vm, if_attach_arg, vif_model):
+def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     """
     Sample test case for interface attach/detach
     Args:
@@ -66,8 +66,24 @@ def test_interface_attach_detach(base_vm, if_attach_arg, vif_model):
         ResourceCleanup.add('port', port_id)
         net_id = None
 
+    LOG.tc_step("Get/Create {} glance image".format(guest_os))
+    image_id = glance_helper.get_guest_image(guest_os=guest_os)
+    if guest_os != 'cgcs-guest':
+        ResourceCleanup.add('image', image_id, scope='module')
+
+    LOG.tc_step("Create a flavor with 2 vcpus")
+    flavor_id = nova_helper.create_flavor(vcpus=2, guest_os=guest_os)[1]
+    ResourceCleanup.add('flavor', flavor_id)
+
+    LOG.tc_step("Create a volume from {} image".format(guest_os))
+    code, vol_id = cinder_helper.create_volume(name='vol-' + guest_os, image_id=image_id, guest_image=guest_os,
+                                               fail_ok=True)
+    ResourceCleanup.add('volume', vol_id)
+    assert 0 == code, "Issue occurred when creating volume"
+    source_id = vol_id
+
     LOG.tc_step("Boot a vm with mgmt nic only")
-    vm_under_test = vm_helper.boot_vm(name='if_attach_tenant', nics=[mgmt_nic])[1]
+    vm_under_test = vm_helper.boot_vm(name='if_attach_tenant', nics=[mgmt_nic], source_id=source_id, guest_os=guest_os)[1]
     ResourceCleanup.add('vm', vm_under_test)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
@@ -118,6 +134,8 @@ def _bring_up_attached_interface(vm_id):
         mac_addr = vm_nics[-1]['mac_address']
         eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
         assert eth_name, "Interface with mac {} is not listed in 'ip addr' in vm {}".format(mac_addr, vm_id)
-        vm_ssh.exec_cmd('ip link set dev {} up'.format(eth_name))
-        vm_ssh.exec_cmd('dhclient {}'.format(eth_name))
-        vm_ssh.exec_cmd('ip addr')
+        vm_ssh.exec_sudo_cmd('ip link set dev {} up'.format(eth_name))
+        if guest_os != 'cgcs-guest':
+            vm_ssh.exec_sudo_cmd('dhclient {} -r'.format(eth_name))
+        vm_ssh.exec_sudo_cmd('dhclient {}'.format(eth_name))
+        vm_ssh.exec_sudo_cmd('ip addr')
