@@ -51,6 +51,15 @@ def enable_device_and_unlock_compute(request, hosts_pci_device_list):
 
 @fixture(scope='module')
 def _flavors(request, hosts_pci_device_list):
+    """
+    Creates all flavors required for this test module
+    Args:
+        request:
+        hosts_pci_device_list:
+
+    Returns:
+
+    """
     mark.skipif(not any(hosts_pci_device_list),
                     reason="requires labs with Colecto Creek device")
 
@@ -83,6 +92,15 @@ def _flavors(request, hosts_pci_device_list):
 
 
 def test_ea_host_device_sysinv_commands(hosts_pci_device_list, enable_device_and_unlock_compute):
+    """
+    Verify the system host device cli commands
+    Args:
+        hosts_pci_device_list:
+        enable_device_and_unlock_compute:
+
+    Returns:
+
+    """
 
     mark.skipif(not any(hosts_pci_device_list),
                     reason="requires labs with Colecto Creek device")
@@ -256,27 +274,26 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_list):
         assert vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False),"VM is not pingable."
 
         LOG.tc_step("Attempting cold migrate VM {} ....".format(vm_name))
-        rc, msg = vm_helper.cold_migrate_vm(vm_id=vm_id,  fail_ok=True)
+        rc = vm_helper.cold_migrate_vm(vm_id=vm_id)[0]
         LOG.info("Verifying cold migration succeeded...")
-        assert rc == 0, "VM {} failed to cold migrate: {}".format(vm_name,  msg)
+        assert rc == 0, "VM {} failed to cold migrate".format(vm_name)
 
         LOG.tc_step("Attempting to suspend VM {} ....".format(vm_name))
-        rc, msg = vm_helper.suspend_vm(vm_id,  fail_ok=True)
+        rc = vm_helper.suspend_vm(vm_id)[0]
         LOG.info("Verifying vm suspended...")
-        assert rc == 0, "VM {} failed to suspend: {}".format(vm_name,  msg)
+        assert rc == 0, "VM {} failed to suspend".format(vm_name)
 
         LOG.tc_step("Attempting to resume VM {} ....".format(vm_name))
-        rc, msg = vm_helper.resume_vm(vm_id,  fail_ok=True)
+        rc = vm_helper.resume_vm(vm_id)[0]
         LOG.info("Verifying vm resumed...")
-        assert rc == 0, "VM {} failed to resume: {}".format(vm_name,  msg)
+        assert rc == 0, "VM {} failed to resume".format(vm_name)
 
         LOG.tc_step("Attempting to resize cpu and memory of VM {} ....".format(vm_name))
-        LOG.info("Creating new flavor with 32  cyrpto VFs(PCI alias) bound to Coleto Creek,  memory=1G and vcpu=2")
         resize_flavor_id = "flavor_resize_qat_vf_{}".format(vfs)
         LOG.info("Resizing VM to new flavor {} ...".format(resize_flavor_id))
-        rc, msg = vm_helper.resize_vm(vm_id, resize_flavor_id, fail_ok=True)
+        rc = vm_helper.resize_vm(vm_id, resize_flavor_id)[0]
         LOG.info("Verifying vm resized to flavor {} ...".format(resize_flavor_id))
-        assert rc == 0, "VM {} failed to resize to: {}; details: {}".format(vm_name, resize_flavor_id, msg)
+        assert rc == 0, "VM {} failed to resize to: {}".format(vm_name, resize_flavor_id)
 
 
 def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors, hosts_pci_device_list):
@@ -316,37 +333,37 @@ def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors, hosts_pci_devi
 
     for vm, param in vm_params.items():
 
-        LOG.fixture_step("Boot vm {} with {} flavor and volume".format(vm, param[0]))
+        LOG.tc_step("Boot vm {} with {} flavor".format(vm, param[0]))
         vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=param[0], source='image', nics=param[1])[1]
-
-        LOG.fixture_step("Verify  VM can be pinged from NAT box...")
-        assert vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False),"VM is not pingable."
-        ResourceCleanup.add('vm', vm_id)
+        if vm_id:
+            ResourceCleanup.add('vm', vm_id)
+        LOG.info("Verify  VM can be pinged from NAT box...")
+        assert vm_helper.wait_for_vm_pingable_from_natbox(vm_id), "VM is not pingable."
         vms[vm] = vm_id
 
     for k, v in vms.items():
 
         LOG.tc_step("Attempting cold migrate VM {} ....".format(k))
-        rc, msg = vm_helper.cold_migrate_vm(vm_id=v,  fail_ok=True)
+        rc = vm_helper.cold_migrate_vm(vm_id=v)[0]
         LOG.info("Verifying cold migration succeeded...")
-        assert rc == 0, "VM {} failed to cold migrate: details: {}".format(k,  msg)
+        assert rc == 0, "VM {} failed to cold migrate".format(k)
 
         LOG.tc_step("Attempting to suspend VM {} ....".format(k))
-        rc, msg = vm_helper.suspend_vm(v,  fail_ok=True)
+        rc = vm_helper.suspend_vm(v)[0]
         LOG.info("Verifying vm suspended...")
-        assert rc == 0, "VM {} failed to suspend: {}".format(k,  msg)
+        assert rc == 0, "VM {} failed to suspend.".format(k)
 
         LOG.tc_step("Attempting to resume VM {} ....".format(k))
-        rc, msg = vm_helper.resume_vm(v,  fail_ok=True)
+        rc = vm_helper.resume_vm(v)[0]
         LOG.info("Verifying vm resumed...")
-        assert rc == 0, "VM {} failed to resume: {}".format(k,  msg)
+        assert rc == 0, "VM {} failed to resume".format(k)
 
         LOG.tc_step("Attempting to resize cpu and memory of VM {} ....".format(k))
         resize_flavor = _flavors["flavor_resize_qat_vf_1"] if "no_crypto" not in k else _flavors["flavor_resize_none"]
         LOG.info("Resizing VM to new flavor {} ...".format(resize_flavor))
-        rc, msg = vm_helper.resize_vm(v, resize_flavor, fail_ok=True)
+        rc = vm_helper.resize_vm(v, resize_flavor)[0]
         LOG.info("Verifying vm resized to flavor {} ...".format(resize_flavor))
-        assert rc == 0, "VM {} failed to resize to: {}; details: {}".format(k, resize_flavor,  msg)
+        assert rc == 0, "VM {} failed to resize to: {}".format(k, resize_flavor)
 
 
 def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_list):
@@ -394,10 +411,10 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_list):
     vms = {}
     for i in range(1, number_of_vms + 1):
         vm_name = 'vm_crypto_{}'.format(i)
-        LOG.fixture_step("( Booting  a vm {} using flavor flavor_qat_vf_4 and nics {}".format(vm_name, nics))
+        LOG.tc_step("( Booting  a vm {} using flavor flavor_qat_vf_4 and nics {}".format(vm_name, nics))
         vm_id = vm_helper.boot_vm(name='vm_crypto_{}'.format(i), nics=nics, flavor=flavor_id, source='image')[1]
-        assert vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False),"VM is not pingable."
         ResourceCleanup.add('vm', vm_id)
+        assert vm_helper.wait_for_vm_pingable_from_natbox(vm_id),"VM is not pingable."
         vms[vm_name] = vm_id
 
     for k, v in vms.items():
@@ -407,14 +424,15 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_list):
         # assert rc == 0, "VM {} succeed to cold migrate: {}".format(k,  msg)
         #
         LOG.tc_step("Attempting to suspend VM {} ....".format(k))
-        rc, msg = vm_helper.suspend_vm(v,  fail_ok=True)
+        rc = vm_helper.suspend_vm(v)[0]
         LOG.info("Verifying vm suspended...")
-        assert rc == 0, "VM {} failed to suspend: {}".format(k,  msg)
+        assert rc == 0, "VM {} failed to suspend: {}".format(k)
 
         LOG.tc_step("Attempting to resume VM {} ....".format(k))
-        rc, msg = vm_helper.resume_vm(v,  fail_ok=True)
+        rc = vm_helper.resume_vm(v)[0]
         LOG.info("Verifying vm resumed...")
-        assert rc == 0, "VM {} failed to resume: {}".format(k,  msg)
+        assert rc == 0, "VM {} failed to resume.".format(k)
+        #assert VMStatus.ACTIVE == nova_helper.get_vm_status(v),
 
         vm_host = nova_helper.get_vm_host(v)
         used = network_helper.get_pci_device_used_vfs_value_per_compute(vm_host, vf_device_id)
@@ -422,17 +440,18 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_list):
             LOG.tc_step("Attempting to resize cpu and memory of VM {} ....".format(k))
             flavor_resize_id = _flavors['flavor_resize_qat_vf_4']
             LOG.info("Resizing VM to new flavor {} ...".format(flavor_resize_id))
-            rc, msg = vm_helper.resize_vm(v, flavor_resize_id, fail_ok=True)
+            vm_helper.resize_vm(v, flavor_resize_id)
             LOG.info("Verifying vm resized to flavor {} ...".format(flavor_resize_id))
-            assert rc == 0, "VM {} failed to resize to: {}".format(k,  msg)
+            assert VMStatus.ACTIVE == nova_helper.get_vm_status(v), \
+                "VM {} failed to resize to {}".format(k, flavor_resize_id)
         else:
             LOG.info("Resizing of vm {} skipped; host {} max out vfs; used vfs = {}".format(k, vm_host, used))
 
-    LOG.tc_step("Verifying all vms are still ACTIVE ....")
+    LOG.tc_step("Verify all vms status is ACTIVE....")
     for k, v in vms.items():
-        vm_status = nova_helper.get_vm_nova_show_value(v, 'status', strict=True)
-        assert vm_status == VMStatus.ACTIVE, \
-            "VM {} is not in ACTIVE state. VM status: {}".format(k, vm_status)
+        LOG.info("Verifying VM {} status ....".format(k))
+        assert VMStatus.ACTIVE == nova_helper.get_vm_status(v), "VM {} is not in ACTIVE status".format(k)
+        LOG.info("VM {} status is ACTIVE".format(k))
 
 
 def check_device_list_against_pci_list(pci_list_info, device_table_list):
