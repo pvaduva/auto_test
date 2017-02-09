@@ -2665,3 +2665,66 @@ def get_ports(rtn_val='id', port_id=None, port_name=None, port_mac=None, ip_addr
 
     ports = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=True, **kwargs)
     return ports
+
+
+def get_pci_device_configured_vfs_value(device_id, con_ssh=None, auth_info=None):
+    """
+    Get PCI device configured vfs value for given device id
+
+    Args:
+        device_id (str):  device vf id
+        con_ssh:
+        auth_info:
+
+    Returns:
+        str :
+
+    """
+    _table = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
+    LOG.info('output of nova device-list:{}'.format(_table))
+    #row_index = table_parser._get_row_indexes(_table, field='Device Id', value=device_id)
+    _table = table_parser.filter_table(_table, **{'Device Id': device_id})
+    #_table = table_parser.__filter_table(_table, row_index)
+    return table_parser.get_column(_table, 'pci_vfs_configured')[0]
+
+
+def get_pci_device_used_vfs_value(device_id, con_ssh=None, auth_info=None):
+    """
+    Get PCI device used number of vfs value for given device id
+
+    Args:
+        device_id (str):  device vf id
+        con_ssh:
+        auth_info:
+
+    Returns:
+        str :
+
+    """
+    _table = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
+    LOG.info('output of nova device-list:{}'.format(_table))
+    #row_index = table_parser._get_row_indexes(_table, field='Device Id', value=device_id)
+    #LOG.info('output of nova row index:{}'.format(row_index))
+    _table = table_parser.filter_table(_table, **{'Device Id': device_id})
+    LOG.info('output of nova device-list:{}'.format(_table))
+    return table_parser.get_column(_table, 'pci_vfs_used')[0]
+
+
+def get_pci_device_used_vfs_value_per_compute(host, device_id, con_ssh=None, auth_info=None):
+    """
+    Get PCI device used number of vfs value for given device id
+
+    Args:
+        host (str): compute hostname
+        device_id (str):  device vf id
+        con_ssh:
+        auth_info:
+
+    Returns:
+        str :
+
+    """
+    _table = table_parser.table(cli.nova('device-show {}'.format(device_id)))
+    LOG.debug('output from nova device-show for device-id:{}\n{}'.format(device_id, _table))
+    _table = table_parser.filter_table(_table, Host=host)
+    return table_parser.get_column(_table, 'pci_vfs_used')[0]

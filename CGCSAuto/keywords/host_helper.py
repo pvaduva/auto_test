@@ -2641,6 +2641,7 @@ def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, pas
 
 
 def get_host_co_processor_pci_list(hostname):
+
     host_pci_info = []
     with ssh_to_host(hostname) as host_ssh:
         LOG.info("Getting the Co-processor pci list for host {}".format(hostname))
@@ -2648,26 +2649,39 @@ def get_host_co_processor_pci_list(hostname):
         rc, output = host_ssh.exec_cmd(cmd)
         if rc == 0:
             for pci_line in output.splitlines():
-                pci_attributes = pci_line.splict('"')
+                pci_attributes = pci_line.split('"')
                 while ' ' in pci_attributes:
                     pci_attributes.remove(' ')
                 while '' in pci_attributes:
                     pci_attributes.remove('')
 
-                pci_address = "0000:{}".format(pci_attributes[0])
-                pci_name = "pci_{}".format(pci_address.replace('.', '_'))
-                vendor_name = pci_address[2].split(' [')[0]
-                vendor_id = (pci_address[2].split(' [')[1]).replace(']', '')
-                device_name = pci_address[3].split(' [')[0]
-                device_id = pci_address[3].split(' [')[1].replace(']', '')
+                pci_address = ("0000:{}".format(pci_attributes[0])).strip()
+                pci_name = "pci_{}".format(pci_address.replace('.', '_').replace(':', '_').strip())
+                vendor_name = pci_attributes[2].split(' [')[0]
+                LOG.info("vendor ={} pci_address = {} pci_name= {}".format(vendor_name, pci_address, pci_name))
+                vendor_id = (pci_attributes[2].split(' [')[1]).replace(']', '')
+                device_name = pci_attributes[3].split(' [')[0]
+                device_id = pci_attributes[3].split(' [')[1].replace(']', '')
                 pci_info = {'pci_address': pci_address,
                             'pci_name': pci_name,
                             'vendor_name': vendor_name,
                             'vendor_id': vendor_id,
                             'device_id': device_id
                            }
+                cmd2 = " lspci -nnm | grep Co-processor | grep \"{} Virtual\" | awk 'NR == 1'".format(device_name)
+                rc, vf_line = host_ssh.exec_cmd(cmd2)
+
+                if rc == 0:
+                    vf_line_attr = vf_line.split('"')
+                    while ' ' in vf_line_attr:
+                        vf_line_attr.remove(' ')
+                    while '' in vf_line_attr:
+                        vf_line_attr.remove('')
+                    vf_device_id = vf_line_attr[3].split(' [')[1].replace(']', '')
+                    pci_info['vf_device_id'] = vf_device_id
 
                 host_pci_info.append(pci_info)
+                LOG.info("The Co-processor pci list for host {}: {}".format(hostname, pci_info ))
 
     return host_pci_info
 
@@ -2687,3 +2701,12 @@ def get_mellanox_ports(host):
                                                  **{'device type': MELLANOX_DEVICE})
     LOG.info("Mellanox ports: {}".format(mt_ports))
     return mt_ports
+
+
+def is_host_locked(host,  con_ssh=None):
+        admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
+        if admin_state == 'locked':
+            return True
+        else:
+            return False
+
