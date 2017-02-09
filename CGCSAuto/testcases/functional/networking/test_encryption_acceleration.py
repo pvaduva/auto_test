@@ -82,7 +82,7 @@ def _flavors(request, hosts_pci_device_list):
     return flavors
 
 
-def test_ea_host_device_sysinv_commands(hosts_pci_device_list, unlock_compute):
+def test_ea_host_device_sysinv_commands(hosts_pci_device_list, enable_device_and_unlock_compute):
 
     mark.skipif(not any(hosts_pci_device_list),
                     reason="requires labs with Colecto Creek device")
