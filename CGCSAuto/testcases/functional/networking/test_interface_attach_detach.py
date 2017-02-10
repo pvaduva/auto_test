@@ -97,8 +97,7 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
     tenant_port_id = nova_helper.get_vm_interfaces_info(vm_id=vm_under_test, net_id=tenant_net_id)[0]['port_id']
 
-    #for vm_actions in [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
-    for vm_actions in [['live_migrate']]:
+    for vm_actions in [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
         LOG.tc_step("Attach internal interface to vm via {} with vif_model: {}".format(if_attach_arg, vif_model))
         internal_port = vm_helper.attach_interface(vm_under_test, net_id=internal_net_id, vif_model=vif_model, port_id=internal_port_id)[1]
         if internal_port_id:
