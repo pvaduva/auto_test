@@ -301,6 +301,23 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     return [0, 'stack_status']
 
 
+@fixture(scope='module', autouse=True)
+def revert_quota(request):
+    tenants_quotas = {}
+    quota_tab = table_parser.table(cli.neutron('quota-list', auth_info=Tenant.ADMIN))
+    tenants = table_parser.get_column(quota_tab, 'tenant_id')
+    for tenant_id in set(tenants):
+        network_quota = network_helper.get_quota('network', tenant_id=tenant_id)
+        tenants_quotas[tenant_id] = network_quota
+
+    def revert():
+        LOG.fixture_step("Revert network quotas to original values.")
+        for tenant_id_, network_quota_ in tenants_quotas.items():
+            network_helper.update_quotas(tenant_id=tenant_id_, network=network_quota_)
+    request.addfinalizer(revert)
+
+    return tenants_quotas
+
 # Overall skipif condition for the whole test function (multiple test iterations)
 # This should be a relatively static condition.i.e., independent with test params values
 # @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
@@ -330,13 +347,14 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     mark.nightly(('OS_Heat_AutoScalingGroup.yaml')),
     ])
 # can add test fixture to configure hosts to be certain storage backing
-def test_heat_template(template_name):
+def test_heat_template(template_name, revert_quota):
     """
     Basic Heat template testing:
         various Heat templates.
 
     Args:
         template_name (str): e.g, OS_Cinder_Volume.
+        revert_quota (dict): test fixture to revert network quota.
 
     =====
     Prerequisites (skip test if not met):
@@ -349,6 +367,12 @@ def test_heat_template(template_name):
         - Delete Heat stack and verify resource deletion
 
     """
+    if template_name == 'OS_Neutron_RouterInterface.yaml':
+        LOG.tc_step("Increase network quota by 2 for every tenant")
+        tenants_quotas = revert_quota
+        for tenant_id, network_quota in tenants_quotas.items():
+            network_quota = network_helper.get_quota('network', tenant_id=tenant_id)
+            network_helper.update_quotas(tenant_id=tenant_id, network=network_quota + 2)
 
     # add test step
     return_code, msg = verify_basic_template(template_name)

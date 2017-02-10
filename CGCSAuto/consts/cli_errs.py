@@ -12,6 +12,11 @@ class VCPUSchedulerErr:
     CPU_MODEL_UNAVAIL = "No valid host was found.*Host VCPU model.*required.*"
 
 
+class NumaErr:
+    NUMA_AFFINITY_MISMATCH = " not match requested NUMA: {}"
+    NUMA_NODE_EXCLUDED = "NUMA: {} excluded"
+    UNINITIALIZED = '(NUMATopologyFilter) Uninitialized'
+
 class MinCPUErr:
     VAL_LARGER_THAN_VCPUS = "min_vcpus must be less than or equal to the flavor vcpus value"
     VAL_LESS_THAN_1 = "min_vcpus must be greater than or equal to 1"

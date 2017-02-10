@@ -1569,12 +1569,24 @@ def update_router_distributed(router_id=None, distributed=True, pre_admin_down=T
     return 0, succ_msg
 
 
-def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False, **kwargs):
+def get_quota(quota_name, tenant_name=None, tenant_id=None, con_ssh=None, auth_info=Tenant.ADMIN):
+
+    if not tenant_id:
+        if tenant_name is None:
+            tenant_name = Tenant.get_primary()['tenant']
+        tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)[0]
+    quotas_tab = table_parser.table(cli.neutron('quota-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    return int(table_parser.get_values(quotas_tab, quota_name, **{'tenant_id': tenant_id})[0])
+
+
+def update_quotas(tenant_name=None, tenant_id=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False, **kwargs):
     """
     Update neutron quota(s).
 
     Args:
-        tenant (str):
+        tenant_name (str):
+        tenant_id (str): id of tenant to update quota for. If both id and name are specified, tenant_id will be used.
         con_ssh (SSHClient):
         auth_info (dict):
         fail_ok (bool):
@@ -1588,15 +1600,17 @@ def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=Fal
         - (2, "<quota_name> is not set to <specified_value>")
 
     """
-    if tenant is None:
-        tenant = Tenant.get_primary()['tenant']
-    tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant, con_ssh=con_ssh)[0]
+    if not tenant_id:
+        if tenant_name is None:
+            tenant_name = Tenant.get_primary()['tenant_name']
+        tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)[0]
 
     if not kwargs:
         raise ValueError("Please specify at least one quota=value pair via kwargs.")
 
     args_ = ''
     for key in kwargs:
+        key = key.strip().replace('_', '-')
         args_ += '--{} {} '.format(key, kwargs[key])
 
     args_ += tenant_id
@@ -2665,3 +2679,66 @@ def get_ports(rtn_val='id', port_id=None, port_name=None, port_mac=None, ip_addr
 
     ports = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=True, **kwargs)
     return ports
+
+
+def get_pci_device_configured_vfs_value(device_id, con_ssh=None, auth_info=None):
+    """
+    Get PCI device configured vfs value for given device id
+
+    Args:
+        device_id (str):  device vf id
+        con_ssh:
+        auth_info:
+
+    Returns:
+        str :
+
+    """
+    _table = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
+    LOG.info('output of nova device-list:{}'.format(_table))
+    #row_index = table_parser._get_row_indexes(_table, field='Device Id', value=device_id)
+    _table = table_parser.filter_table(_table, **{'Device Id': device_id})
+    #_table = table_parser.__filter_table(_table, row_index)
+    return table_parser.get_column(_table, 'pci_vfs_configured')[0]
+
+
+def get_pci_device_used_vfs_value(device_id, con_ssh=None, auth_info=None):
+    """
+    Get PCI device used number of vfs value for given device id
+
+    Args:
+        device_id (str):  device vf id
+        con_ssh:
+        auth_info:
+
+    Returns:
+        str :
+
+    """
+    _table = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
+    LOG.info('output of nova device-list:{}'.format(_table))
+    #row_index = table_parser._get_row_indexes(_table, field='Device Id', value=device_id)
+    #LOG.info('output of nova row index:{}'.format(row_index))
+    _table = table_parser.filter_table(_table, **{'Device Id': device_id})
+    LOG.info('output of nova device-list:{}'.format(_table))
+    return table_parser.get_column(_table, 'pci_vfs_used')[0]
+
+
+def get_pci_device_used_vfs_value_per_compute(host, device_id, con_ssh=None, auth_info=None):
+    """
+    Get PCI device used number of vfs value for given device id
+
+    Args:
+        host (str): compute hostname
+        device_id (str):  device vf id
+        con_ssh:
+        auth_info:
+
+    Returns:
+        str :
+
+    """
+    _table = table_parser.table(cli.nova('device-show {}'.format(device_id)))
+    LOG.debug('output from nova device-show for device-id:{}\n{}'.format(device_id, _table))
+    _table = table_parser.filter_table(_table, Host=host)
+    return table_parser.get_column(_table, 'pci_vfs_used')[0]

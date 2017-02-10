@@ -2019,5 +2019,154 @@ def abort_upgrade(con_ssh=None, timeout=60, fail_ok=False):
 
 
 
+def get_host_device_list(host, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get the parsed version of the output from system host-device-list <host>
+    Args:
+        host (str): host's name
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (dict): output of system host-device-list <host> parsed by table_parser
+
+    """
+    output = cli.system('host-device-list', host, ssh_client=con_ssh, auth_info=auth_info)
+    table_ = table_parser.table(output)
+    return table_
 
 
+def get_host_device_values(host, device, fields, con_ssh=None, auth_info=Tenant.ADMIN):
+    args = "{} {}".format(host, device)
+    table_ = table_parser.table(cli.system('host-device-show', args, ssh_client=con_ssh, auth_info=auth_info))
+
+    if isinstance(fields, str):
+        fields = [fields]
+
+    res = []
+    for field in fields:
+        res.append(table_parser.get_value_two_col_table(table_, field))
+
+    return res
+
+
+def get_host_device_pci_name(host, device,  con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Gets host's Co-processor pci device name
+    Args:
+        host (str): The host id or hostname
+        device (str): is the pci device address
+        con_ssh:
+        auth_info:
+
+    Returns: (str)
+        The pci name of the device
+
+    """
+    return get_host_device_values(host, device, 'name', con_ssh=con_ssh, auth_info=auth_info)[0]
+
+
+def get_host_device_pci_status(host, device,  con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Gets host's Co-processor pci device status
+    Args:
+        host (str): The host id or hostname
+        device (str): is the pci device address or name
+        con_ssh:
+        auth_info:
+
+    Returns: (str)
+        The pci device status
+
+    """
+    return get_host_device_values(host, device, 'enabled', con_ssh=con_ssh, auth_info=auth_info)[0]
+
+
+def modify_host_device_pci_name(host, device, name, con_ssh=None, fail_ok=False, check_first=True):
+    """
+    Modify a host device pci name
+    Args:
+        host (str): Required - the host id or hostname
+        device (str): Required - the pci address or pci name
+        name (str): Required - new pci name
+        con_ssh:
+        fail_ok:
+        check_first (bool): Check if the parameter exists first
+
+
+    Returns (tuple): (rtn_code, message)
+
+    """
+    if check_first:
+        val = get_host_device_values(host, device, 'name', con_ssh=con_ssh)
+        if not val:
+            msg = " Host {} does not have device {} listed".format(host, device)
+            LOG.info(msg)
+            return 1, msg
+
+        if val[0] == name:
+            msg = "The device pci name is already set to {}".format(val)
+            return 1, msg
+
+    LOG.info("Modifying device pci name")
+    args =" {} {} --name {}".format(host, device, name)
+
+    res, out = cli.system('host-device-modify', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
+
+    if res == 1:
+        return 1, out
+
+    LOG.info("Verifying the host device new pci name")
+    val = get_host_device_values(host, name, 'name', con_ssh=con_ssh)
+    if not val:
+        msg = 'The host device pci name was not modified to the correct value'
+        if fail_ok:
+            return 2, msg
+        raise exceptions.SysinvError(msg)
+    msg = "Host device pci name modified to {}".format(name)
+    LOG.info(msg)
+    return 0, msg
+
+def modify_host_device_status(host, device, status,  con_ssh=None, fail_ok=False, check_first=True):
+    """
+    Modify a host device pci name
+    Args:
+        host (str): Required - the host id or hostname
+        device (str): Required - the pci address or pci name
+        status (str): Required - new pci status True or False
+        con_ssh:
+        fail_ok:
+        check_first (bool): Check if the parameter exists first
+
+
+    Returns (tuple): (rtn_code, message)
+
+    """
+    if check_first:
+        val = get_host_device_values(host, device, 'enabled', con_ssh=con_ssh)
+        if not val:
+            msg = " Host {} does not have device {} listed".format(host, device)
+            LOG.info(msg)
+            return 1, msg
+
+        if val[0] == status:
+            msg = "The device availability status is already set to {}".format(status)
+            return 1, msg
+
+    LOG.info("Modifying device availability status")
+    args =" {} {} --enabled {}".format(host, device, status)
+
+    res, out = cli.system('host-device-modify', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
+
+    if res == 1:
+        return 1, out
+
+    LOG.info("Verifying the host device enabled status")
+    val = get_host_device_values(host, device, 'enabled', con_ssh=con_ssh)
+    if val[0] != status:
+        msg = 'The host device enabled status was not modified to the correct value'
+        if fail_ok:
+            return 2, msg
+        raise exceptions.SysinvError(msg)
+    msg = "Host device availability status is modified to {}".format(status)
+    LOG.info(msg)
+    return 0, msg

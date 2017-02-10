@@ -16,9 +16,8 @@ from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
 
-
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
-
+from testfixtures.recover_hosts import HostsToRecover
 
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
     """
@@ -2765,3 +2764,41 @@ def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None
     LOG.info(succ_msg)
     return 0, succ_msg
 
+
+def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up=False, fail_ok=False):
+
+    LOG.info("Evacuate following vms from {}: {}".format(host, vms_to_check))
+    host_helper.reboot_hosts(host, wait_for_reboot_finish=wait_for_host_up, con_ssh=con_ssh)
+    HostsToRecover.add(host)
+
+    if not wait_for_host_up:
+        LOG.info("Wait for vms to reach ERROR or REBUILD state with best effort")
+        _wait_for_vms_values(vms_to_check, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120,
+                             con_ssh=con_ssh)
+
+    LOG.tc_step("Check vms are in Active state and moved to other host(s) after host reboot")
+    res, active_vms, inactive_vms = _wait_for_vms_values(vms=vms_to_check, values=VMStatus.ACTIVE, timeout=timeout,
+                                                         con_ssh=con_ssh)
+
+    vms_host_err = []
+    for vm in vms_to_check:
+        if nova_helper.get_vm_host(vm) == host:
+            vms_host_err.append(vm)
+
+    if inactive_vms:
+        err_msg = "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 1, inactive_vms
+        raise exceptions.VMError(err_msg)
+
+    if vms_host_err:
+        err_msg = "Following VMs stayed on the same host {}: {}\nVMs did not reach Active state: {}".\
+            format(host, vms_host_err, inactive_vms)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, vms_host_err
+        raise exceptions.VMError(err_msg)
+
+    LOG.info("All vms are successfully evacuated to other host")
+    return 0, []
