@@ -983,8 +983,10 @@ class Telnet:
                     self.write(str.encode("\r\r"))
                     if small_footprint:
                         log.info("Selecting Serial Controller+Compute Node Install")
-                        time.sleep(1)
+                        time.sleep(3)
+                        log.info("Pressing down key")
                         self.write(str.encode(DOWN))
+                        log.info("Pressing down key")
                         self.write(str.encode(DOWN))
                         if host_os == 'wrlinux':
                            self.write(str.encode(DOWN))
@@ -1083,7 +1085,8 @@ class Telnet:
             down_press_count = 0
             while count < MAX_SEARCH_ATTEMPTS:
 
-                if usb:
+                # IP31-32 must be handled differently due to BIOS
+                if usb and (node.host_name != "yow-cgcs-ironpass-31"):
                     log.info("Pressing ENTER key") 
                     self.write(str.encode("\r\r"))
                     break
