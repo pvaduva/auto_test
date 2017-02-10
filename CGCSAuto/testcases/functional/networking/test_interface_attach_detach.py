@@ -1,34 +1,39 @@
 from pytest import fixture, mark
 from utils.tis_log import LOG
 
+from consts.cgcs import VMStatus
 from keywords import network_helper, nova_helper, vm_helper, glance_helper, cinder_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
 @fixture(scope='module')
 def base_vm():
-    net_name = 'internal0-net1'
-    net_id = network_helper.get_net_id_from_name(net_name)
+    internal_net = 'internal0-net1'
+    internal_net_id = network_helper.get_net_id_from_name(internal_net)
     mgmt_net_id = network_helper.get_mgmt_net_id()
+    tenant_net_id = network_helper.get_tenant_net_id()
+
     mgmt_nic = {'net-id': mgmt_net_id, 'vif-model': 'virtio'}
+    tenant_nic = {'net-id': tenant_net_id, 'vif-model': 'virtio'}
     nics = [mgmt_nic,
-            {'net-id': net_id, 'vif-model': 'virtio'}]
+            {'net-id': internal_net_id, 'vif-model': 'virtio'},
+            {'net-id': tenant_net_id, 'vif-model': 'virtio'}]
 
     vm_id = vm_helper.boot_vm(name='base_vm', nics=nics)[1]
     ResourceCleanup.add('vm', vm_id, scope='module')
 
-    return vm_id, mgmt_nic, net_id
+    return vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id
 
 
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vif_model'), [
-    ('cgcs-guest', 'net_id', 'avp'),
-    ('cgcs-guest', 'net_id', 'e1000'),
-    ('cgcs-guest', 'port_id', 'virtio'),
-    #('cgcs-guest', 'net_id', 'rtl8139')
-    ('centos_7', 'net_id', 'e1000'),
+    ('cgcs-guest', 'net_id', 'avp')
+    #('cgcs-guest', 'net_id', 'e1000'),
+    #('cgcs-guest', 'port_id', 'virtio'),
+    ##('cgcs-guest', 'net_id', 'rtl8139')
+    #('centos_7', 'net_id', 'e1000'),
     ##('centos_7', 'net_id', 'avp'),
-    ('centos_7', 'net_id', 'virtio'),
-    ('centos_7', 'port_id', 'rtl8139')
+    #('centos_7', 'net_id', 'virtio'),
+    #('centos_7', 'port_id', 'rtl8139')
 ])
 def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     """
@@ -43,13 +48,16 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
 
     Test Steps:
         - Create a new port on internal0-net1 if attaching port via port_id
-        - Boot a vm with mgmt nic only
-        - Perform VM action - Cold migrate, live migrate, pause resume, suspend resume
+        - Boot a vm with mgmt & tenant nic
         - Attach an interface to vm with given if_attach_arg and vif_model
         - Bring up the interface from vm
         - ping between base_vm and vm_under_test over internal0-net1
-        - detach the interface
+        - detach the internal interface
         - Verify vm_under_test can no longer ping base_vm over internal0-net1
+        - detach the tenant interface
+        - Attach the tenant interface back to the vm with net_id and vif_model
+        - ping between base_vm and vm_under_test over mgmt & tenant network
+        - Perform VM action - Cold migrate, live migrate, pause resume, suspend resume
         - Repeat attach/detach after performing each vm action
 
     Teardown:
@@ -57,14 +65,14 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
         - Delete base vm, volume    (module)
 
     """
-    base_vm_id, mgmt_nic, net_id = base_vm
+    base_vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id = base_vm
 
-    port_id = None
+    internal_port_id = None
     if if_attach_arg == 'port_id':
         LOG.tc_step("Create a new port")
-        port_id = network_helper.create_port(net_id, 'if_attach_port')[1]
-        ResourceCleanup.add('port', port_id)
-        net_id = None
+        internal_port_id = network_helper.create_port(internal_net_id, 'if_attach_port')[1]
+        ResourceCleanup.add('port', internal_port_id)
+        internal_net_id = None
 
     LOG.tc_step("Get/Create {} glance image".format(guest_os))
     image_id = glance_helper.get_guest_image(guest_os=guest_os)
@@ -83,12 +91,44 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     source_id = vol_id
 
     LOG.tc_step("Boot a vm with mgmt nic only")
-    vm_under_test = vm_helper.boot_vm(name='if_attach_tenant', nics=[mgmt_nic], source_id=source_id, guest_os=guest_os)[1]
+    vm_under_test = vm_helper.boot_vm(name='if_attach_tenant', nics=[mgmt_nic,tenant_nic], source_id=source_id, guest_os=guest_os)[1]
     ResourceCleanup.add('vm', vm_under_test)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
+    tenant_port_id = nova_helper.get_vm_interfaces_info(vm_id=vm_under_test, net_id=tenant_net_id)[0]['port_id']
 
-    for vm_actions in [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
+    #for vm_actions in [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
+    for vm_actions in [['live_migrate']]:
+        LOG.tc_step("Attach internal interface to vm via {} with vif_model: {}".format(if_attach_arg, vif_model))
+        internal_port = vm_helper.attach_interface(vm_under_test, net_id=internal_net_id, vif_model=vif_model, port_id=internal_port_id)[1]
+        if internal_port_id:
+            assert internal_port_id == internal_port, "Specified port_id is different than attached port"
+
+        LOG.tc_step("Bring up attached internal interface from vm")
+        _bring_up_attached_interface(vm_under_test, guest_os=guest_os)
+
+        LOG.tc_step("Verify VM internet0-net1 interface is up")
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, retry=5, net_types='internal')
+
+        LOG.tc_step("Detach internal port {} from VM".format(internal_port))
+        vm_helper.detach_interface(vm_id=vm_under_test, port_id=internal_port)
+
+        res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, retry=0,
+                                         net_types=['internal'])[0]
+        assert not res, "Ping from base_vm to vm via detached interface still works"
+
+        LOG.tc_step("Detach tenant interface {} from VM".format(tenant_port_id))
+        vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id)
+
+        LOG.tc_step("Attach tenant interface back to vm with vif_model: {}".format(vif_model))
+        tenant_port_id = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)[1]
+
+        LOG.tc_step("Bring up attached tenant interface from vm")
+        _bring_up_attached_interface(vm_under_test, guest_os=guest_os)
+
+        LOG.tc_step("Verify VM tenant interface is up")
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, retry=5, net_types=['mgmt','data'])
+
         if vm_actions[0] == 'auto_recover':
             LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from "
                         "base vm over management and data networks")
@@ -103,27 +143,10 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
 
         LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
                     "after {}".format(vm_actions))
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt'])
-
-        LOG.tc_step("Attach interface to vm via {} with vif_model: {}".format(if_attach_arg, vif_model))
-        port = vm_helper.attach_interface(vm_under_test, net_id=net_id, vif_model=vif_model, port_id=port_id)[1]
-        if port_id:
-            assert port_id == port, "Specified port_id is different than attached port"
-
-        LOG.tc_step("Bring up attached interface from vm")
-        _bring_up_attached_interface(vm_under_test)
-
-        LOG.tc_step("Verify VM internet0-net1 interface is up")
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, retry=5, net_types='internal')
-
-        LOG.tc_step("Detach port {} from VM".format(port))
-        vm_helper.detach_interface(vm_id=vm_under_test, port_id=port)
-
-        res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, retry=0, net_types='internal')[0]
-        assert not res, "Ping from base_vm to vm via detached interface still works"
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt', 'data'])
 
 
-def _bring_up_attached_interface(vm_id):
+def _bring_up_attached_interface(vm_id, guest_os):
     """
     ip link set <dev> up, and dhclient <dev> to bring up the interface of last nic for given VM
     Args:
