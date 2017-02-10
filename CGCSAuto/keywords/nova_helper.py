@@ -56,7 +56,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=None,
     flavor_name = common.get_unique_name(name_str=name, existing_names=existing_names, resource_type='flavor')
 
     if root_disk is None:
-        root_disk = GuestImages.IMAGE_FILES[guest_os][1] if (guest_os and guest_os != 'cgcs-guest')  else 1
+        root_disk = GuestImages.IMAGE_FILES[guest_os][1] if (guest_os and guest_os != 'cgcs-guest') else 1
 
     mandatory_args = ' '.join([flavor_name, flavor_id, str(ram), str(root_disk), str(vcpus)])
 
@@ -1138,7 +1138,7 @@ def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN
         force (bool):
         con_ssh (SSHClient):
         auth_info (dict):
-        **kwargs: quota/limit pair(s)
+        **kwargs: quota/limit pair(s). Valid keys: user, instances, cores, ram, floating-ips, metadata-items, key-pairs
 
     Returns (None):
 
@@ -1152,6 +1152,7 @@ def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN
 
     args_ = ''
     for key in kwargs:
+        key = key.strip().replace('_', '-')
         args_ += '--{} {} '.format(key, kwargs[key])
 
     if force:

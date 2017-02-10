@@ -112,20 +112,19 @@ def test_boot_vms_server_group(srv_grp_msging_flavor, policy, group_size, best_e
             vm_helper.pause_vm(vm_id=another_vm)
 
             vm_ssh.send()
-            prev_output = ''
-            for i in range(5):
+            for i in range(10):
                 code = vm_ssh.expect('\r\n\r\n', fail_ok=True)
-                current_output = vm_ssh.cmd_output
                 if code < 0:
+                    assert False, "No more server group notification received. No pause.end notification found."
+
+                current_output = vm_ssh.cmd_output
+                if re.search('{}.*compute.instance.pause.end'.format(another_vm), current_output):
+                    vm_ssh.expect('\r\n\r\n', fail_ok=True)
                     break
-
-                prev_output = current_output
-
-            output = prev_output
-            assert re.search('{}.*compute.instance.pause.end'.format(another_vm), output)
+            else:
+                assert False, "No pause.end notification found in past 10 notifications"
 
         else:
             LOG.tc_step("Ensure server_group_app is not included in VM")
             code, output = vm_ssh.exec_cmd("server_group_app", fail_ok=True)
             assert code > 0
-

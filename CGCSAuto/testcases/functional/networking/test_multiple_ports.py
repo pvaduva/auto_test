@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, VMStatus
 from consts.reasons import SkipReason
 from consts.auth import Tenant
-from keywords import vm_helper, nova_helper, network_helper, host_helper, check_helper, common
+from keywords import vm_helper, nova_helper, network_helper, host_helper, check_helper, glance_helper, common
 from testfixtures.resource_mgmt import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -274,7 +274,7 @@ class TestMutiPortsPCI:
 
     @mark.parametrize('vifs', [
         mark.p2(['virtio_x7', 'avp_x5', 'pci-passthrough']),
-        mark.p2(['virtio_x7', 'avp_x5', 'pci-sriov']),
+        mark.p2([('virtio_x7', '05:03'), ('avp_x5', '00:04'), ('pci-sriov', '05:02')]),
         mark.p3((['pci-sriov', 'pci-passthrough'])),
         mark.domain_sanity(([('avp', '00:02'), ('virtio', '02:01'), ('e1000', '08:01'), ('pci-passthrough', '05:1f'), ('pci-sriov', '08:02')])),
         mark.p3((['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov'])),
@@ -328,8 +328,9 @@ class TestMutiPortsPCI:
                 {'net-id': tenant_net_id, 'vif-model': 'avp'}]
         nics = _append_nics_for_net(vifs, net_id=internal_net_id, nics=nics)
 
+        ubuntu_img = glance_helper.get_guest_image('ubuntu_14')
         LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
-        vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor, reuse_vol=False)[1]
+        vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor, reuse_vol=False, guest_os='ubuntu_14')[1]
         ResourceCleanup.add('vm', vm_under_test, scope='function')
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 

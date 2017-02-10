@@ -1050,7 +1050,7 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
 
 def get_nova_hosts_with_storage_backing(storage_backing, con_ssh=None):
     hosts_with_backing = get_hosts_by_storage_aggregate(storage_backing, con_ssh=con_ssh)
-    up_hosts = get_nova_hosts(con_ssh=con_ssh)
+    up_hosts = get_up_hypervisors(con_ssh=con_ssh)
 
     candidate_hosts = tuple(set(hosts_with_backing) & set(up_hosts))
     return candidate_hosts
@@ -1085,6 +1085,10 @@ def get_nova_host_with_min_or_max_vms(rtn_max=True, hosts=None, con_ssh=None):
         index = vms_nums.index(min(vms_nums))
 
     return hosts_to_check[index]
+
+
+def get_up_hypervisors(con_ssh=None):
+    return get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
 
 
 def get_hypervisors(state=None, status=None, con_ssh=None):
@@ -1192,8 +1196,12 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
 
     proc_args = ''
     for proc, cores in kwargs.items():
-        cores = str(cores)
-        proc_args = ' '.join([proc_args, '-'+proc.lower().strip(), cores])
+        if cores is not None:
+            cores = str(cores)
+            proc_args = ' '.join([proc_args, '-'+proc.lower().strip(), cores])
+
+    if not proc_args:
+        raise ValueError("At least one key-value pair should have non-None value. e.g., p1=2")
 
     subcmd = ' '.join(['host-cpu-modify', '-f', function.lower().strip(), proc_args])
     code, output = cli.system(subcmd, host, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info, timeout=timeout,
@@ -1780,7 +1788,7 @@ def get_total_allocated_vcpus_in_log(host, con_ssh=None):
         return total_allocated_vcpus
 
 
-def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeout=60, fail_ok=False):
+def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, expt_cpus=None, timeout=60, fail_ok=False):
     """
     Wait for total allocated vcpus in nova-compute.log gets updated to a value that is different than given value
 
@@ -1796,17 +1804,22 @@ def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, timeo
     cmd = 'cat /var/log/nova/nova-compute.log | grep -i "total allocated vcpus" | tail -n 3'
 
     end_time = time.time() + timeout
-    if prev_cpus is None:
+    if prev_cpus is None and expt_cpus is None:
         prev_output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
         prev_cpus = __parse_total_cpus(prev_output)
 
     # convert to str
-    prev_cpus = round(prev_cpus, 4)
+    if prev_cpus:
+        prev_cpus = round(prev_cpus, 4)
 
     while time.time() < end_time:
         output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
         allocated_cpus = __parse_total_cpus(output)
-        if allocated_cpus != prev_cpus:
+        if expt_cpus is not None:
+            if allocated_cpus == expt_cpus:
+                return expt_cpus
+
+        elif allocated_cpus != prev_cpus:
             return allocated_cpus
     else:
         msg = "Total allocated vcpus is not updated within timeout in nova-compute.log"

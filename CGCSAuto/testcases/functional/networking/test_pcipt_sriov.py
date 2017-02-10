@@ -475,14 +475,14 @@ class TestVmPCIOperations:
 
     def is_pci_device_supported(self, pci_alias, nova_pci_devices=None):
         if nova_pci_devices is None:
-            nova_pci_deivces = network_helper.get_pci_devices_info()
+            nova_pci_devices = network_helper.get_pci_devices_info()
 
-        self.nova_pci_deivces = nova_pci_deivces
-        if not self.nova_pci_deivces:
+        self.nova_pci_devices = nova_pci_devices
+        if not self.nova_pci_devices:
             skip('No PCI devices existing! Note, currently "Coleto Creek PCIe Co-processor(0443/8086) is supported"')
         requested_vfs = int(pci_alias)
         min_vfs = min([int(v['pci_vfs_configured']) - int(v['pci_vfs_used'])
-                       for v in nova_pci_deivces.values()])
+                       for v in nova_pci_devices.values()])
         if min_vfs < requested_vfs:
             skip('Not enough PCI alias devices exit, only {} supported'.format(min_vfs))
 
