@@ -19,8 +19,8 @@ CENTOS_LAB_REL_PATH = "std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab"
 HEAT_TEMPLATES_PATH = "std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates"
 
 SYSTEM_CFG_FILENAME = "system_config"
-WRL_CFGFILE_LIST = ["system_config", "TiS_config.ini", "TiS_config.ini_wrl"]
-CENTOS_CFGFILE_LIST = ["TiS_config.ini_centos"]
+WRL_CFGFILE_LIST = ["system_config", "TiS_config.ini_wrl", "TiS_config.ini"]
+CENTOS_CFGFILE_LIST = ["TiS_config.ini_centos", "TiS_config.ini"]
 # TODO: Same todo as above, where the bulk add filename might be different
 BULKCFG_LIST = ["hosts_bulk_add.xml", "hosts.xml"]
 BULK_CFG_FILENAME = "hosts_bulk_add.xml"
@@ -216,7 +216,7 @@ EMAIL_ERROR_MSG = "Automated lab install has encountered problem." \
 
 
 # lab type
-LAB_TYPES = ['regular_lab', 'storge_lab', 'cpe_lab', 'tis_on_tis', 'tis_on_tis_storage']
+LAB_TYPES = ['regular_lab', 'storage_lab', 'cpe_lab', 'tis_on_tis', 'tis_on_tis_storage', 'simplex']
 
 # tmp install vars path
 INSTALL_VARS_TMP_PATH = "/tmp"

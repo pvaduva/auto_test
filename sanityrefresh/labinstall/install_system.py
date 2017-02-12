@@ -119,6 +119,10 @@ def parse_args():
                          action='store_true',
                          help="Burn boot image into USB before installing from USB")
 
+    lab_grp.add_argument('--simplex', dest='simplex',
+                         action='store_true',
+                         help="Simplex install")
+
     lab_grp.add_argument('--boot-usb', dest='boot_usb',
                          action='store_true',
                          help="Boot using the existing load on the USB")
@@ -266,7 +270,7 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
 
     return load_path
 
-def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis):
+def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex):
     ''' Verify that the correct configuration file is used in setting up the
         lab.
     '''
@@ -289,6 +293,9 @@ def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis):
         elif file == LAB_SETUP_CFG_FILENAME:
             found_lab_setup_cfg_file = True
 
+    if simplex:
+        found_bulk_cfg_file = True
+
     # Tell the user what files are missing
     msg = ''
     if not found_bulk_cfg_file and not tis_on_tis:
@@ -306,7 +313,7 @@ def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis):
 
     if not (found_bulk_cfg_file and found_system_cfg_file and
             found_lab_settings_file and found_lab_setup_cfg_file):
-        log.error(msg)
+        msg = 'Missing required configuration files'
         wr_exit()._exit(1, msg)
 
     if found_lab_settings_file:
@@ -314,7 +321,7 @@ def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis):
                                 + CUSTOM_LAB_SETTINGS_FILENAME
     return lab_cfg_path, lab_settings_filepath
 
-def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on_tis, host_os, override, guest_load_path, banner):
+def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on_tis, host_os, override, guest_load_path, banner, simplex):
     ''' Get the directory path for the configuration file that is used in
         setting up the lab.
     '''
@@ -357,18 +364,19 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on
         wr_exit()._exit(1, msg)
 
     # Confirm we have a valid host_bulk_add
-    bulkfile_found = False
-    for bulkfile in BULKCFG_LIST:
-        cmd = "test -f " + lab_cfg_path + "/" + bulkfile
-        if bld_server_conn.exec_cmd(cmd)[0] == 0:
-            bulkfile_found = True
-            log.info('Using host bulk add file: {}'.format(bulkfile))
-            break
+    if not simplex:
+        bulkfile_found = False
+        for bulkfile in BULKCFG_LIST:
+            cmd = "test -f " + lab_cfg_path + "/" + bulkfile
+            if bld_server_conn.exec_cmd(cmd)[0] == 0:
+                bulkfile_found = True
+                log.info('Using host bulk add file: {}'.format(bulkfile))
+                break
 
-    if not bulkfile_found and not tis_on_tis:
-        msg = 'No valid host bulk add file found in {}'.format(lab_cfg_path)
-        log.error(msg)
-        wr_exit()._exit(1, msg)
+        if not bulkfile_found and not tis_on_tis:
+            msg = 'No valid host bulk add file found in {}'.format(lab_cfg_path)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
     # Confirm if have a valid banner file (if specified)
     if banner != "no":
@@ -1592,6 +1600,7 @@ def main():
     boot_usb = args.boot_usb
     iso_host = args.iso_host
     iso_path = args.iso_path
+    simplex = args.simplex
     skip_feed = args.skip_feed
     host_os = args.host_os
     stop = args.stop
@@ -1613,6 +1622,10 @@ def main():
         msg = "Both iso-host and iso-path must be specified"
         log.info(msg)
         wr_exit()._exit(1, msg)
+
+    if simplex:
+        small_footprint = True
+        lab_type = 'simplex'
 
     # Don't bother setting up the feed if we want to boot from USB
     if burn_usb or boot_usb:
@@ -1676,6 +1689,7 @@ def main():
     logutils.print_name_value("Burn USB", burn_usb)
     logutils.print_name_value("ISO Host", iso_host)
     logutils.print_name_value("ISO Path", iso_path)
+    logutils.print_name_value("Simplex", simplex)
 
     email_info = {}
     email_info['email_server'] = EMAIL_SERVER
@@ -1704,12 +1718,12 @@ def main():
     load_path = get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
                                   tis_bld_dir)
     if os.path.isdir(lab_cfg_location):
-        lab_cfg_path, lab_settings_filepath = verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis)
+        lab_cfg_path, lab_settings_filepath = verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex)
     else:
         lab_cfg_path, lab_settings_filepath = verify_lab_cfg_location(bld_server_conn,
                                                   lab_cfg_location, load_path,
                                                   tis_on_tis, host_os, override,
-                                                  guest_load_path, banner)
+                                                  guest_load_path, banner, simplex)
 
     if lab_settings_filepath:
         log.info("Lab settings file path: " + lab_settings_filepath)
@@ -1835,7 +1849,7 @@ def main():
 
     # Lab-install Step 1 -  boot controller from tuxlab or usb or cumulus
     msg = 'boot_controller-0'
-    lab_install_step = install_step("boot_controller-0", 1, ['regular', 'storage', 'cpe'])
+    lab_install_step = install_step("boot_controller-0", 1, ['regular', 'storage', 'cpe', 'simplex'])
 
     executed = False
     #if not executed:
@@ -1849,7 +1863,7 @@ def main():
 
     # Lab-install Step 2 -  Download lab configuration files - applicable all lab types
     msg = 'Download_lab_config_files'
-    lab_install_step = install_step(msg, 2, ['regular', 'storage', 'cpe'])
+    lab_install_step = install_step(msg, 2, ['regular', 'storage', 'cpe', 'simplex'])
 
     #establish ssh connection if not connected
     if controller0.ssh_conn is None:
@@ -1868,7 +1882,7 @@ def main():
 
     # Lab-install Step 3 -  Configure Controller - applicable all lab types
     msg = 'Configure_controller'
-    lab_install_step = install_step(msg, 3, ['regular', 'storage', 'cpe'])
+    lab_install_step = install_step(msg, 3, ['regular', 'storage', 'cpe', 'simplex'])
 
     if do_next_install_step(lab_type, lab_install_step):
         configureController(bld_server_conn, host_os, install_output_dir, banner)
@@ -1904,7 +1918,7 @@ def main():
     # Complete controller0 configuration either as a regular host
     # or a small footprint host.
     # Lab-install Step 5 -  Run_lab_setup - applicable cpe labs only
-    lab_install_step = install_step("run_lab_setup", 5, ['cpe'])
+    lab_install_step = install_step("run_lab_setup", 5, ['cpe', 'simplex'])
     if do_next_install_step(lab_type, lab_install_step):
     #if not executed:
         if small_footprint:
@@ -1915,14 +1929,14 @@ def main():
             set_install_step_complete(lab_install_step)
 
      # Lab-install Step 6 -  cpe_compute_config_complete - applicable cpe labs only
-    lab_install_step = install_step("cpe_compute_config_complete", 6, ['cpe'])
+    lab_install_step = install_step("cpe_compute_config_complete", 6, ['cpe', 'simplex'])
     if do_next_install_step(lab_type, lab_install_step):
         if small_footprint:
             run_cpe_compute_config_complete(host_os, install_output_dir)
             set_install_step_complete(lab_install_step)
 
     # Lab-install Step 7 -  Run_lab_setup - applicable cpe labs only
-    lab_install_step = install_step("run_lab_setup", 7, ['cpe'])
+    lab_install_step = install_step("run_lab_setup", 7, ['cpe', 'simplex'])
     if do_next_install_step(lab_type, lab_install_step):
         if small_footprint:
         # Run lab_setup again to setup controller-1 interfaces
@@ -1939,7 +1953,7 @@ def main():
 
     # Heat stack changes
     if host_os != "wrlinux":
-        lab_install_step = install_step("check_heat_resources_file", 8, ['cpe'])
+        lab_install_step = install_step("check_heat_resources_file", 8, ['cpe', 'simplex'])
         if do_next_install_step(lab_type, lab_install_step):
             setupHeat(bld_server_conn)
             set_install_step_complete(lab_install_step)
