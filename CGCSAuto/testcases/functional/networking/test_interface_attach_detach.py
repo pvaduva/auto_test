@@ -26,6 +26,7 @@ def base_vm():
 
 
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vif_model'), [
+<<<<<<< HEAD
     ('cgcs-guest', 'net_id', 'avp')
     #('cgcs-guest', 'net_id', 'e1000'),
     #('cgcs-guest', 'port_id', 'virtio'),
@@ -34,6 +35,16 @@ def base_vm():
     ##('centos_7', 'net_id', 'avp'),
     #('centos_7', 'net_id', 'virtio'),
     #('centos_7', 'port_id', 'rtl8139')
+=======
+    ('cgcs-guest', 'net_id', 'avp'),
+    ('cgcs-guest', 'net_id', 'e1000'),
+    ('cgcs-guest', 'port_id', 'virtio'),
+    # ('cgcs-guest', 'net_id', 'rtl8139')
+    ('centos_7', 'net_id', 'e1000'),
+    # ('centos_7', 'net_id', 'avp'),
+    ('centos_7', 'net_id', 'virtio'),
+    ('centos_7', 'port_id', 'rtl8139')
+>>>>>>> - Added more vswitch numa awareness test cases
 ])
 def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     """
@@ -98,6 +109,7 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     tenant_port_id = nova_helper.get_vm_interfaces_info(vm_id=vm_under_test, net_id=tenant_net_id)[0]['port_id']
 
     for vm_actions in [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
+<<<<<<< HEAD
         LOG.tc_step("Attach internal interface to vm via {} with vif_model: {}".format(if_attach_arg, vif_model))
         internal_port = vm_helper.attach_interface(vm_under_test, net_id=internal_net_id, vif_model=vif_model, port_id=internal_port_id)[1]
         if internal_port_id:
@@ -143,6 +155,31 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
         LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
                     "after {}".format(vm_actions))
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt', 'data'])
+=======
+        LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
+        for action in vm_actions:
+            vm_helper.perform_action_on_vm(vm_under_test, action=action)
+
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
+
+        LOG.tc_step("Attach interface to vm via {} with vif_model: {}".format(if_attach_arg, vif_model))
+        port = vm_helper.attach_interface(vm_under_test, net_id=net_id, vif_model=vif_model, port_id=port_id)[1]
+        if port_id:
+            assert port_id == port, "Specified port_id is different than attached port"
+
+        LOG.tc_step("Bring up attached interface from vm")
+        _bring_up_attached_interface(vm_under_test, guest_os=guest_os)
+
+        LOG.tc_step("Verify VM internet0-net1 interface is up")
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, retry=5, net_types='internal')
+
+        LOG.tc_step("Detach port {} from VM".format(port))
+        vm_helper.detach_interface(vm_id=vm_under_test, port_id=port)
+
+        res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, retry=0,
+                                         net_types='internal')[0]
+        assert not res, "Ping from base_vm to vm via detached interface still works"
+>>>>>>> - Added more vswitch numa awareness test cases
 
 
 def _bring_up_attached_interface(vm_id, guest_os):

@@ -16,6 +16,9 @@ class NumaErr:
     NUMA_AFFINITY_MISMATCH = " not match requested NUMA: {}"
     NUMA_NODE_EXCLUDED = "NUMA: {} excluded"
     UNINITIALIZED = '(NUMATopologyFilter) Uninitialized'
+    FLV_UNDEVISIBLE = 'ERROR (Conflict): flavor vcpus not evenly divisible by the specified hw:numa_nodes value'
+    FLV_CPU_OR_MEM_UNSPECIFIED = 'ERROR (Conflict): CPU and memory allocation must be provided for all NUMA nodes'
+
 
 class MinCPUErr:
     VAL_LARGER_THAN_VCPUS = "min_vcpus must be less than or equal to the flavor vcpus value"

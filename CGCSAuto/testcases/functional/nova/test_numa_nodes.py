@@ -6,6 +6,7 @@ from utils import table_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, InstanceTopology
+from consts.cli_errs import NumaErr
 from keywords import nova_helper, vm_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
@@ -13,6 +14,39 @@ from testfixtures.resource_mgmt import ResourceCleanup
 ########################################
 # Test Set with NUMA node(s) Specified #
 ########################################
+
+@mark.p3
+@mark.parametrize(('vcpus', 'vswitch_affinity', 'numa_nodes', 'numa0', 'numa0_cpus', 'numa0_mem', 'numa1', 'numa1_cpus',
+                   'numa1_mem', 'expt_err'), [
+    (3, 'prefer', 2, 1, None, None, 0, None, None, 'NumaErr.FLV_UNDEVISIBLE'),
+    (4, 'strict', 2, 0, 0, 512, 1, 1, None, 'NumaErr.FLV_CPU_OR_MEM_UNSPECIFIED')
+])
+def test_flavor_setting_numa_negative(vcpus, vswitch_affinity, numa_nodes, numa0, numa0_cpus, numa0_mem,
+                                      numa1, numa1_cpus, numa1_mem, expt_err):
+
+    LOG.tc_step("Create a 1024ram flavor with {} vcpus".format(vcpus))
+    name = 'vswitch_affinity_{}_1G_{}cpu'.format(vswitch_affinity, vcpus)
+    flv_id = nova_helper.create_flavor(name=name, vcpus=vcpus, ram=1024, check_storage_backing=False)[1]
+    ResourceCleanup.add('flavor', flv_id)
+
+    specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_NODES: numa_nodes,
+             FlavorSpec.VSWITCH_NUMA_AFFINITY: vswitch_affinity}
+    tmp_dict = {FlavorSpec.NUMA_0: numa0,
+                FlavorSpec.NUMA0_CPUS: numa0_cpus,
+                FlavorSpec.NUMA0_MEM: numa0_mem,
+                FlavorSpec.NUMA_1: numa1,
+                FlavorSpec.NUMA1_CPUS: numa1_cpus,
+                FlavorSpec.NUMA1_MEM: numa1_mem}
+
+    for key, val in tmp_dict.items():
+        if val is not None:
+            specs[key] = val
+
+    LOG.tc_step("Attempt to set following extra spec to flavor {} and ensure it's rejected: {}".format(flv_id, specs))
+    code, output = nova_helper.set_flavor_extra_specs(flv_id, fail_ok=True, **specs)
+    assert 1 == code, "Invalid extra spec is not rejected. Details: {}".format(output)
+    assert eval(expt_err) in output, "Expected error message is not found"
+
 
 @fixture(scope='module')
 def flavor_2_nodes(request):

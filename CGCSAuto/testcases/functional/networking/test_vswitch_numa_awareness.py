@@ -33,7 +33,6 @@ def compare_cores_to_configure(host, function, p0, p1):
     return p0_to_config is None and p1_to_config is None, p0_to_config, p1_to_config
 
 
-@mark.tryfirst
 @fixture(scope='module', autouse=True)
 def host_to_config(request, add_admin_role_module, add_cgcsauto_zone):
     LOG.info("Looking for a host to reconfigure.")
@@ -60,7 +59,11 @@ def host_to_config(request, add_admin_role_module, add_cgcsauto_zone):
         post_vswitch_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch', core_type='log_core')
         post_pform_dict = host_helper.get_host_cpu_cores_for_function(host, function='platform', core_type='log_core')
         HostsToRecover.add(host, scope='module')
-        if vswitch_proc_core_dict != post_vswitch_dict or pform_proc_core_dict != post_pform_dict:
+
+        LOG.fixture_step('(module) Revert host vswitch/platform cores if more than 2 cores per proc are assigned')
+        if (vswitch_proc_core_dict != post_vswitch_dict or pform_proc_core_dict != post_pform_dict) and \
+                (len(post_vswitch_dict[0]) > 2 or len(post_vswitch_dict[1]) > 2
+                 or len(post_pform_dict[0]) > 2 or len(post_pform_dict[1]) > 2):
             host_helper.lock_host(host, swact=True)
             host_helper.modify_host_cpu(host, 'vswitch', p0=vswitch_original_num_p0, p1=vswitch_original_num_p1)
             host_helper.modify_host_cpu(host, 'platform', p0=platform_ogigin_num_p0, p1=platform_original_num_p1)
@@ -99,7 +102,7 @@ class TestVSwitchCPUReconfig:
         ((1, 2), (2, 2), None, None),
         ((1, 0), (1, 0), False, False),     # Standard lab only
         ((2, 0), (1, 0), False, True),      # CPE only
-        ((2, 0), (2, 0), None, True),       # CPE only
+        # ((2, 0), (2, 0), None, True),       # CPE only    # remove - covered by other test
         ((1, 0), (2, 0), None, False),      # Standard lab only
     ], ids=id_params_cores)
     def test_vswitch_cpu_reconfig_positive(self, host_to_config, flavor_, platform, vswitch, ht_required, cpe_required):
@@ -325,30 +328,35 @@ def _create_flavor(vcpus, storage_backing, vswitch_numa_affinity=None, numa_0=No
     return flv_id
 
 
+@fixture(scope='module')
+def get_hosts(host_to_config):
+    host0, ht_enabled, is_cpe, host1, storage_backing = host_to_config
+    if not host1:
+        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        if len(hosts) < 2:
+            skip("Less than two up hypervisors support same storage backing")
+        else:
+            host0 = hosts[0]
+            host1 = hosts[1]
+
+    LOG.fixture_step("(module) Delete all vms and volumes on the system")
+    vm_helper.delete_vms(stop_first=False)
+
+    LOG.fixture_step("(module) Update cores and instances quota for tenant to ensure vms can boot")
+    nova_helper.update_quotas(cores=200, instances=20)
+
+    hosts_to_conf = [host0, host1]
+    LOG.fixture_step("(module) Add hosts to cgcsauto aggregate: {}".format(hosts_to_conf))
+    nova_helper.add_hosts_to_aggregate('cgcsauto', hosts_to_conf)
+
+    return host0, host1, storage_backing, ht_enabled
+
+
 class TestNovaSchedulerAVS:
 
     @fixture(scope='class')
-    def _get_hosts(self, host_to_config):
-        host0, ht_enabled, is_cpe, host1, storage_backing = host_to_config
-        if not host1:
-            storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
-            if len(hosts) < 2:
-                skip("Less than two up hypervisors support same storage backing")
-            else:
-                host0 = hosts[0]
-                host1 = hosts[1]
-
-        LOG.fixture_step("(class) Delete all vms and volumes on the system")
-        vm_helper.delete_vms(stop_first=False)
-
-        LOG.fixture_step("(class) Update cores and instances quota for tenant to ensure vms can boot")
-        nova_helper.update_quotas(cores=200, instances=20)
-
-        return host0, host1, storage_backing, ht_enabled
-
-    @fixture(scope='class')
-    def hosts_configured(self, _get_hosts, config_host_class):
-        host0, host1, storage_backing, ht_enabled = _get_hosts
+    def hosts_configured(self, get_hosts, config_host_class):
+        host0, host1, storage_backing, ht_enabled = get_hosts
 
         function = 'vSwitch'
         LOG.fixture_step("(class) Configure hosts to have 0 vSwitch cores on p0 and 2 vSwitch cores on p1: {}")
@@ -389,8 +397,6 @@ class TestNovaSchedulerAVS:
             config_host_class(host_, _mod_host, **hosts_to_config[host_])
 
         final_hosts_configured = [p1_host, p0_host]
-        LOG.fixture_step("(class) Add hosts to cgcsauto aggregate: {}".format(final_hosts_configured))
-        nova_helper.add_hosts_to_aggregate('cgcsauto', final_hosts_configured)
         return final_hosts_configured, storage_backing, ht_enabled
 
     @mark.parametrize(('vswitch_numa_affinity', 'numa_0', 'numa_nodes', 'expt_err'), [
@@ -401,6 +407,28 @@ class TestNovaSchedulerAVS:
         ('strict', None, 2, 'NumaErr.UNINITIALIZED')  # This error message is confusing
     ])
     def test_vswitch_numa_affinity_boot_vm(self, hosts_configured, vswitch_numa_affinity, numa_0, numa_nodes, expt_err):
+        """
+
+        Args:
+            hosts_configured (tuple): fixture to configure two hosts
+            vswitch_numa_affinity (str):
+            numa_0 (int):
+            numa_nodes (int):
+            expt_err (str):
+
+        Setups:
+            - Add admin role to primary tenant
+            - Create cgcsauto aggregate
+            - Delete all vms on the system
+            - Configure a host with vswitch = 0, 2, and antother with vswitch = 2, 0 and add them to cgcsauto zone
+
+        Test Steps:
+            - Create flavor with 2 dedicated vcpus, and specified vswitch numa affinity, numa_0 and numa_nodes
+            - Boot vm with above flavor
+                - Check vm is booted successfully on expected numa node and host
+                - or failed with proper error message in nova show
+
+        """
         hosts_configured, storage_backing, ht_enabled = hosts_configured
         expt_host = hosts_configured[0]
         expt_numa = 1 if numa_0 is None else numa_0
@@ -471,6 +499,39 @@ class TestNovaSchedulerAVS:
         None,
     ])
     def test_vswitch_numa_affinity_sched_vms_two_hosts_avail(self, cal_vm_cores_two_hosts, vswitch_numa_affinity):
+        """
+
+        Args:
+            cal_vm_cores_two_hosts (tuple): fixture to calculate flavor vcpu number
+            vswitch_numa_affinity (str):
+
+        Setups:
+            - Add admin role to primary tenant
+            - Create cgcsauto aggregate
+            - Delete all vms on the system
+            - Select a host with vswitch = 0, 2, and antother with vswitch = 2, 0 and add them to cgcsauto zone
+            - Select the host with less vm cores on vswitch node as target_host
+            - Calculate favor vcpu number so that max 6 vms can be booted vswitch nodes
+
+        Test Steps;
+            - Create a flavor with calculated vcpu number and specified vswitch numa affinity
+            - Boot vms with above flavor until vswitch nodes on both computes are full
+            - Check above vms are booted on vswitch nodes of selected hosts
+            - Attempt to boot one more vm
+                - Check it failed if vswitch numa affinity = strict
+                - Check it booted on non-vswitch node if vswitch numa affinity = prefer
+            - Delete all vms on host_other
+            - Cold migrate vms away from target_host and ensure they are moved to vswitch node of host_other
+            - Live migrate vms from other host, and ensure they are moved to vswitch ndoe of target host
+            - Reboot vms host and ensure vms are evacuated to host_other
+
+        Teardown:
+            - Delete created vms, flavors, volumes
+            - Remove hosts from cgcsauto aggregate
+            - Delete cgcsauto aggregate
+            - Remove admin role from tenanat
+
+        """
         final_host, other_host, hosts_vswitch_numa, flavor_vcpu_num, vms_num, storage_backing = cal_vm_cores_two_hosts
         expt_hosts = [final_host, other_host]
 
@@ -552,7 +613,7 @@ class TestNovaSchedulerAVS:
                 for i in range(vswitch_vm_num):
                     vm_ = final_host_vms[i]
                     code, output = vm_helper.perform_action_on_vm(vm_, action=action, fail_ok=True)
-                    assert 0 == code, "{} vm{} unsuccessful. Details: {}".format(action, i, output)
+                    assert 0 == code, "{}    vm{} unsuccessful. Details: {}".format(action, i, output)
                     vm_host, vm_numa = vm_helper.get_vm_host_and_numa_nodes(vm_)
                     vm_numa = vm_numa[0]
                     assert hosts_vswitch_numa[vm_host] == vm_numa, "VM{} is not {}d to vswitch node".format(i, action)
@@ -591,6 +652,34 @@ class TestNovaSchedulerAVS:
         return initial_host, other_host, flavor_vcpu_num, storage_backing
 
     def test_vswitch_numa_affinity_sched_vms_one_host_avail(self, cal_vm_cores_one_host):
+        """
+        Test vswitch numa affinity strict when numa_0.0 = 1 which limits the vm host to only 1 host
+
+        Args:
+            cal_vm_cores_one_host (tuple): fixture to get host with vswitch node on proc1 and calculate flavor vcpu num
+
+        Setups:
+            - Add admin role to primary tenant
+            - Create cgcsauto aggregate
+            - Delete all vms on the system
+            - Select a target host vswitch = 0, 2, and host_other vswitch = 2, 0 and add them to cgcsauto zone
+
+        Test Steps;
+            - Create a flavor with vswitch_numa_affinity=strict and vcpu_num = int(p1_vm_cores/4)+1 so that max 3
+                vms can be booted on vswitch node
+            - Boot vms with above flavor until vswitch node full
+            - Check above vms are booted on expected host and numa node
+            - Attempt to boot one more vm and ensure it failed
+            - Attempt to live and cold migrate active vms, and ensure they are rejected
+            - Reboot vm host and ensure vm stays on same host and return active after host is back up
+
+        Teardown:
+            - Delete created vms, flavors, volumes
+            - Remove hosts from cgcsauto aggregate
+            - Delete cgcsauto aggregate
+            - Remove admin role from tenanat
+
+        """
         expt_host, other_host, flavor_vcpu_num, storage_backing = cal_vm_cores_one_host
 
         flv_id = _create_flavor(flavor_vcpu_num, storage_backing, 'strict', 1)
@@ -670,11 +759,43 @@ class TestNovaSchedulerAVS:
 
         return target_host, vswitch_proc, vswitch_vm_cores_num, nonvswitch_vm_cores_num, pre_flavor, huge_flavor
 
-    @mark.parametrize('resize_revert', [
-        mark.p2(False),
-        mark.p2(True)
-    ], ids=['confirm', 'revert'])
-    def test_numa_affinity_resize_insufficient_cores_on_vswitch_node(self, get_target_host_and_flavors, resize_revert):
+    @mark.parametrize(('vswitch_numa_affinity', 'resize_revert'), [
+        mark.p2(('strict', 'confirm')),
+        mark.p2(('prefer', 'confirm')),
+        mark.p2(('prefer', 'revert'))
+    ])
+    def test_vswitch_affinity_resize_insufficient_cores_on_vswitch_node(self, get_target_host_and_flavors,
+                                                                        vswitch_numa_affinity, resize_revert):
+        """
+        Test vswitch numa affinity when attempt to resize with insufficient cores on vswitch node
+        Args:
+            get_target_host_and_flavors (tuple): fixture to get target_host and flavor with large vcpu number
+            vswitch_numa_affinity (str):
+            resize_revert (str):
+
+        Setups:
+            - Add admin role to primary tenant
+            - Create cgcsauto aggregate
+            - Delete all vms on the system
+            - Select target host with vswitch = 2, 0 and add it to cgcsauto aggregate
+            - Create a flavor with 2 vcpus and vswitch affinity
+            - Create another flavor with many vcpus = vswitch ndoe vm cores - 1
+
+        Test Steps;
+            - Boot a vm with dedicated 2 vcpu flavor in cgcsauto zone
+            - Check vm is booted on cgcsauto host
+            - Set vswitch numa affinity as specified on huge vcpu flavor
+            - Attempt to resize to huge flavor
+            - Check resize only succeeds if vswitch numa affinity = prefer
+
+        Teardown:
+            - Delete created vms, flavors, volumes
+            - Remove hosts from cgcsauto aggregate
+            - Delete cgcsauto aggregate
+            - Remove admin role from tenanat
+
+        """
+        resize_revert = True if resize_revert == 'confirm' else False
         target_host, vswitch_proc, vswitch_vm_cores_num, nonvswitch_vm_cores_num, pre_flavor, huge_flavor = \
             get_target_host_and_flavors
 
@@ -688,16 +809,224 @@ class TestNovaSchedulerAVS:
         assert vswitch_proc == pre_numa_nodes[0], "VM {} is not booted on vswitch numa node {}".\
             format(vm_id, vswitch_proc)
 
-        LOG.tc_step("Resize {}vm to above huge flavor".format('and revert ' if resize_revert else ''))
-        vm_helper.resize_vm(vm_id, flavor_id=huge_flavor, revert=resize_revert)
+        nova_helper.set_flavor_extra_specs(huge_flavor, **{FlavorSpec.VSWITCH_NUMA_AFFINITY: vswitch_numa_affinity})
+        LOG.tc_step("Resize {}vm to above huge flavor with vswitch numa affinity {}".
+                    format('and revert ' if resize_revert else '', vswitch_numa_affinity))
+
+        code, output = vm_helper.resize_vm(vm_id, flavor_id=huge_flavor, revert=resize_revert, fail_ok=True)
 
         LOG.tc_step("Check vm is on same host")
         post_vm_host, post_numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
         assert target_host == post_vm_host, "VM is no longer on same host"
 
-        if resize_revert:
-            LOG.tc_step("Resize reverted - check vm remains on vswitch numa node on {}".format(target_host))
-            assert vswitch_proc == post_numa_nodes[0], "VM is moved to non-vSwitch numa node after revert"
+        if vswitch_numa_affinity == 'strict':
+            LOG.tc_step("Check vm resize request is rejected with AVS strict due to insufficient cores on vSwitch node")
+            assert 1 == code, "Resize with strict AVS policy is not rejected. Details: {}".format(output)
+            assert vswitch_proc == post_numa_nodes[0], "VM is moved to non-vSwitch numa node even if resize is rejected"
         else:
-            LOG.tc_step("Resized to huge flavor - check vm is resized to non-vswitch numa node on same host")
-            assert vswitch_proc != post_numa_nodes[0], "VM did not move to non-vSwitch numa node"
+            LOG.tc_step("Check resize succeeded with AVS perfer")
+            assert 0 == code, "Resize with prefer AVS policy is not successful. Details: {}".format(output)
+            if resize_revert:
+                LOG.tc_step("Resize reverted - check vm remains on vswitch numa node on {}".format(target_host))
+                assert vswitch_proc == post_numa_nodes[0], "VM is moved to non-vSwitch numa node after revert"
+            else:
+                LOG.tc_step("Resized to huge flavor - check vm is resized to non-vswitch numa node on same host")
+                assert vswitch_proc != post_numa_nodes[0], "VM did not move to non-vSwitch numa node"
+
+
+class TestSpanNumaNodes:
+    @fixture(scope='class')
+    def span_numa_hosts(self, get_hosts, config_host_class):
+        host0, host1, storage_backing, ht_enabled = get_hosts
+
+        function = 'vSwitch'
+        LOG.fixture_step("(class) Configure hosts to have 0 vSwitch cores on p0 and 2 vSwitch cores on p1: {}")
+
+        def _mod_host(host_, p0, p1):
+            host_helper.modify_host_cpu(host_, function, p0=p0, p1=p1)
+
+        is_match, p0_to_conf, p1_to_conf = compare_cores_to_configure(host0, function, p0=2, p1=0)
+        if is_match:
+            host_span = host1
+            host_other = host0
+        else:
+            host_span = host0
+            host_other = host1
+
+        is_match_span, p0_to_conf_span, p1_to_conf_span = compare_cores_to_configure(host_span, function, p0=2, p1=2)
+        if not is_match_span:
+            config_host_class(host_span, _mod_host, **{'p0': p0_to_conf_span, 'p1': p1_to_conf_span})
+
+        return host_span, host_other, storage_backing, ht_enabled
+
+    @staticmethod
+    def create_flavor_span_numa(vcpus, vswitch_affinity, storage_backing, numa0, numa0_cpus, numa0_mem, numa1, numa1_cpus, numa1_mem):
+
+        LOG.tc_step("Create a 1024ram flavor with specified vcpus")
+        name = 'vswitch_affinity_{}_1G_{}cpu'.format(vswitch_affinity, vcpus)
+        flv_id = nova_helper.create_flavor(name=name, vcpus=vcpus, ram=1024, storage_backing=storage_backing,
+                                           check_storage_backing=False)[1]
+        ResourceCleanup.add('flavor', flv_id)
+
+        specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_NODES: 2,
+                 FlavorSpec.VSWITCH_NUMA_AFFINITY: vswitch_affinity}
+        tmp_dict = {FlavorSpec.NUMA_0: numa0,
+                    FlavorSpec.NUMA0_CPUS: numa0_cpus,
+                    FlavorSpec.NUMA0_MEM: numa0_mem,
+                    FlavorSpec.NUMA_1: numa1,
+                    FlavorSpec.NUMA1_CPUS: numa1_cpus,
+                    FlavorSpec.NUMA1_MEM: numa1_mem}
+
+        for key, val in tmp_dict.items():
+            if val is not None:
+                specs[key] = val
+
+        LOG.tc_step("Add following extra spec to flavor {}: {}".format(flv_id, specs))
+        nova_helper.set_flavor_extra_specs(flv_id, **specs)
+
+        return flv_id
+
+    @fixture(scope='class')
+    def base_flavor_span_numa(self, span_numa_hosts):
+        host_span, host_other, storage_backing, ht_enabled = span_numa_hosts
+        LOG.fixture_step("(class) Create a 1024ram flavor with specified vcpus")
+        flv_id = nova_helper.create_flavor(name='vswitch_affinity_strict_2vcpu', vcpus=4, ram=1024,
+                                           storage_backing=storage_backing, check_storage_backing=False)[1]
+        ResourceCleanup.add('flavor', flv_id, scope='class')
+
+        specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_NODES: 2,
+                 FlavorSpec.VSWITCH_NUMA_AFFINITY: 'strict',
+                 FlavorSpec.NUMA_0: 1,
+                 FlavorSpec.NUMA_1: 0
+                 }
+
+        LOG.fixture_step("(class) Add following extra spec to flavor {}: {}".format(flv_id, specs))
+        nova_helper.set_flavor_extra_specs(flv_id, **specs)
+
+        return flv_id
+
+    @staticmethod
+    def expt_vcpu_num_on_numa(vcpus, numa0_cpus, numa1_cpus):
+        tmp_dict = {
+            0: numa0_cpus,
+            1: numa1_cpus
+        }
+        default_num = int(vcpus / 2)
+        vcpu_on_numa = {}
+        for key, val in tmp_dict.items():
+            if val is None:
+                num = default_num
+            else:
+                num = len(str(val).split(','))
+            vcpu_on_numa[key] = num
+
+        return vcpu_on_numa
+
+    @mark.parametrize(('vcpus', 'vswitch_affinity', 'numa0', 'numa0_cpus', 'numa0_mem', 'numa1', 'numa1_cpus', 'numa1_mem'),[
+        (3, 'strict', 0, 0, 512, 1, '1,2', 512),
+        (2, 'strict', None, 0, 512, None, 1, 512),
+        (2, 'prefer', None, None, None, None, None, None),
+        # (3, 'prefer', 0, None, None, 1, None, None, 'NumaErr.UNDEVISIBLE')
+    ])
+    def test_vm_actions_switch_span_numa_nodes(self, span_numa_hosts, vcpus, vswitch_affinity, numa0, numa0_cpus,
+                                               numa0_mem, numa1, numa1_cpus, numa1_mem, base_flavor_span_numa):
+        """
+        Test nova actions on 2 numa nodes vm with vswitch numa affinity set
+
+        Args:
+            span_numa_hosts(tuple): fixture to config hosts
+            vcpus (int):
+            vswitch_affinity (str):
+            numa0 (int):
+            numa0_cpus (int|str):
+            numa0_mem (int):
+            numa1 (int):
+            numa1_cpus (int|str):
+            numa1_mem (int):
+            base_flavor_span_numa (str): fixture returns 4 vcpu 2 numa nodes flavor to resize to
+
+        Setups:
+            - Add admin role to primary tenant
+            - Create cgcsauto aggregate
+            - Select two hypervisors with same storage backing and add them to cgcsauto aggregate
+            - Delete all vms on the system
+            - Config host so that 1 host_other vswitch = 2, 0 and host_span vswitch = 2, 2
+
+        Test Steps;
+            - Create flavor with 2 numa nodes and given test func parameters
+            - Boot vm using above flavor in cgcsauto zone
+            - Check vm is booted on host_span and span on both numa nodes
+            - Check vm topology is as specified
+            - Attempt to live and cold migrate vm and ensure it's rejected
+            - Resize revert to 4vcpu and 2numa nodes flavor
+            - Check vm stays on same host and topology stays the same
+            - Resize confirm to 4vcpu and 2numa nodes flavor
+            - Check vm stays on same host and topology updated
+
+        Teardown:
+            - Delete created vms, flavors, volumes
+            - Remove hosts from cgcsauto aggregate
+            - Delete cgcsauto aggregate
+            - Remove admin role from tenanat
+
+        """
+        host_span, host_other, storage_backing, ht_enabled = span_numa_hosts
+
+        flavor = self.create_flavor_span_numa(vcpus, vswitch_affinity, storage_backing, numa0, numa0_cpus, numa0_mem,
+                                              numa1, numa1_cpus, numa1_mem)
+
+        LOG.tc_step("Boot a vm with above flavor")
+        code, vm_id, err, vol = vm_helper.boot_vm('span_numa_{}'.format(vswitch_affinity), flavor=flavor, fail_ok=True,
+                                                  avail_zone='cgcsauto')
+        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+        ResourceCleanup.add('volume', vol)
+
+        expt_numa0 = numa0 if numa0 is not None else 0
+        expt_numa1 = numa1 if numa1 is not None else 1
+        expt_numas = [expt_numa0, expt_numa1]
+
+        LOG.tc_step("Check vm is booted successfully and span on both numa node")
+        assert 0 == code, "Boot vm is not successful. Details: {}".format(err)
+        vm_host, vm_numa = vm_helper.get_vm_host_and_numa_nodes(vm_id)
+        assert host_span == vm_host, "VM {} is not booted on expected host".format(vm_id)
+        assert expt_numas == vm_numa, "VM {} is booted on numa-{} instead of [0,1]".format(vm_id, vm_numa)
+
+        LOG.tc_step("Check vm topology after vm boot")
+        expt_vcpu_on_numa = self.expt_vcpu_num_on_numa(vcpus=vcpus, numa0_cpus=numa0_cpus, numa1_cpus=numa1_cpus)
+        check_helper._check_vm_topology_via_vm_topology(vm_id, vcpus, 'dedicated', cpu_thr_pol=None, numa_num=2,
+                                                        vm_host=vm_host, is_ht=ht_enabled,
+                                                        vcpus_on_numa=expt_vcpu_on_numa)
+
+        for action in ('live_migrate', 'cold_migrate'):
+            code, output = vm_helper.perform_action_on_vm(vm_id, action=action, fail_ok=True)
+            assert 2 == code, "{} is not rejected. Details: {}".format(action, output)
+
+            vm_host, vm_numa = vm_helper.get_vm_host_and_numa_nodes(vm_id)
+            assert host_span == vm_host
+            assert expt_numas == vm_numa
+
+        LOG.tc_step("Check vm topology did not change after migration reject")
+        check_helper._check_vm_topology_via_vm_topology(vm_id, vcpus, 'dedicated', cpu_thr_pol=None, numa_num=2,
+                                                        vm_host=vm_host, is_ht=ht_enabled,
+                                                        vcpus_on_numa=expt_vcpu_on_numa)
+
+        for revert in (True, False):
+            extra_str = 'revert' if revert else 'confirm'
+            expt_vcpu = vcpus if revert else 4
+            expt_numa0_cpus = numa0_cpus if revert else None
+            expt_numa1_cpus = numa1_cpus if revert else None
+            expt_vm_numa = expt_numas if revert else [1, 0]
+
+            LOG.tc_step("Resize {} to a 2-numa 4-vcpu flavor - ensure vm stays on same host and "
+                        "span on two numa nodes".format(extra_str))
+            vm_helper.resize_vm(vm_id, flavor_id=base_flavor_span_numa, revert=revert)
+            vm_host, vm_numa = vm_helper.get_vm_host_and_numa_nodes(vm_id)
+            assert host_span == vm_host, "VM host changed after resize {}".format(extra_str)
+            assert expt_vm_numa == vm_numa, "Unexpected VM numa nodes after resize {}".format(extra_str)
+
+            LOG.tc_step("Check vm topology after resize {}".format(extra_str))
+            post_vcpu_on_numa = self.expt_vcpu_num_on_numa(vcpus=expt_vcpu, numa0_cpus=expt_numa0_cpus,
+                                                           numa1_cpus=expt_numa1_cpus)
+            check_helper._check_vm_topology_via_vm_topology(vm_id, expt_vcpu, 'dedicated', cpu_thr_pol=None, numa_num=2,
+                                                            vm_host=vm_host, is_ht=ht_enabled,
+                                                            vcpus_on_numa=post_vcpu_on_numa)

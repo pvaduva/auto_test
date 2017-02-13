@@ -131,7 +131,8 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
 
 
 def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_num, vm_host,
-                                       host_log_core_siblings=None, is_ht=None, current_vcpus=None, con_ssh=None):
+                                       host_log_core_siblings=None, is_ht=None, current_vcpus=None,
+                                       vcpus_on_numa=None, con_ssh=None):
     """
 
     Args:
@@ -140,6 +141,7 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
         cpu_pol (str|None):
         cpu_thr_pol (str|None):
         numa_num (int|None):
+        vcpus_on_numa (dict): number of vcpus on each numa node. e.g., {0: 1, 1: 2}
 
     Returns (tuple): ([pcpus for vm], [siblings for vm])
         e.g., ([7,8,9,10,18,19], [[0,1,2], [3,4,5]])
@@ -177,16 +179,24 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
     pcpus_total = []
     siblings_total = []
 
-    vcpus_per_numa = int(vcpus / numa_num)
+    if not vcpus_on_numa:
+        vcpus_on_numa = {}
+        vcpus_per_numa_const = int(vcpus / numa_num)
+        for topology_on_numa_node_ in instance_topology:
+            node = topology_on_numa_node_['node']
+            vcpus_on_numa[node] = vcpus_per_numa_const
+
     # numa_nodes = []
     for topology_on_numa_node in instance_topology:  # Cannot be on two numa nodes for dedicated vm unless specified
         # numa_nodes.append(topology_on_numa_node['node'])
         actual_vcpus = topology_on_numa_node['vcpus']
+        node_id = topology_on_numa_node['node']
+        vcpus_per_numa = vcpus_on_numa[node_id]
 
         assert expt_cpu_pol == topology_on_numa_node['pol'], "CPU policy is {} instead of {} in vm-topology".\
             format(topology_on_numa_node['pol'], expt_cpu_pol)
-        assert vcpus_per_numa == len(actual_vcpus), 'vm vcpus number per numa node is {} instead of {}'.format(
-            len(actual_vcpus), vcpus_per_numa)
+        assert vcpus_per_numa == len(actual_vcpus), 'vm vcpus number on numa node {} is {} instead of {}'.\
+            format(node_id, len(actual_vcpus), vcpus_per_numa)
 
         actual_siblings = topology_on_numa_node['siblings']
         actual_topology = topology_on_numa_node['topology']

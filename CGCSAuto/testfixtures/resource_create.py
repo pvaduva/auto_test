@@ -27,11 +27,11 @@ def server_groups():
 # Session fixture to add cgcsauto aggregate with cgcsauto availability zone
 @fixture(scope='session')
 def add_cgcsauto_zone(request):
-    LOG.fixture_step("Add cgcsauto aggregate and cgcsauto availability zone")
+    LOG.fixture_step("(session) Add cgcsauto aggregate and cgcsauto availability zone")
     nova_helper.create_aggregate(name='cgcsauto', avail_zone='cgcsauto', check_first=True)
 
     def remove_aggregate():
-        LOG.fixture_step("Delete cgcsauto aggregate")
+        LOG.fixture_step("(session) Delete cgcsauto aggregate")
         nova_helper.delete_aggregate('cgcsauto')
     request.addfinalizer(remove_aggregate)
 
@@ -56,7 +56,7 @@ def add_admin_role_func(request):
 
 
 def __add_admin_role(scope, request):
-    LOG.fixture_step("{} Add admin role to user under primary tenant".format(scope))
+    LOG.fixture_step("({}) Add admin role to user under primary tenant".format(scope))
     keystone_helper.add_or_remove_role(add_=True, role='admin')
 
     def remove_admin():
