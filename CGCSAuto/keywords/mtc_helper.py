@@ -1,30 +1,32 @@
 import time
 import datetime
 import os.path
+import pexpect
+
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
-from keywords import system_helper, host_helper
+from keywords import system_helper, host_helper, storage_helper
 from consts.timeout import MTCTimeout
 
 KILL_CMD = 'kill -9'
-# KILL_CMD = 'kill'
 
 
 def get_ancestor_process(name, host, cmd='', fail_ok=False, retries=5, retry_interval=3, con_ssh=None):
     """
+    Get the ancestor of the processes with the given name and command-line if any.
 
     Args:
-        name:
-        host:
-        cmd:
-        fail_ok:
-        retries:
-        retry_interval:
-        con_ssh:
+        name:       name of the process
+        host:       host on which to find the process
+        cmd:        executable name
+        fail_ok:    do not throw exception when errors
+        retries:        times to try before return
+        retry_interval: wait before next re-try
+        con_ssh:        ssh connection/client to the active controller
 
     Returns:
-        pid (str),          process id
-        ppid (str),         parent process id
+        pid (str),          process id, -1 if there is any error
+        ppid (str),         parent process id, -1 if there is any error
         cmdline (str)       command line of the process
     """
     retries = retries if retries > 1 else 3
@@ -60,10 +62,15 @@ def get_ancestor_process(name, host, cmd='', fail_ok=False, retries=5, retry_int
         proc_attr = line.strip().split()
         if not proc_attr:
             continue
-        ppid = proc_attr[0]
-        pid = proc_attr[1]
-        cmdline = ' '.join(proc_attr[2:])
-        LOG.info('ppid={}, pid={}\ncmdline={}'.format(ppid, pid, cmdline))
+        try:
+            ppid = proc_attr[0]
+            pid = proc_attr[1]
+            cmdline = ' '.join(proc_attr[2:])
+            LOG.info('ppid={}, pid={}\ncmdline={}'.format(ppid, pid, cmdline))
+        except IndexError:
+            LOG.warn('Failed to execute ps -p ?! cmd={}, line={}, output={}'.format(
+                cmd, line, output.strip()))
+            continue
 
         if cmd and cmd not in cmdline:
             continue
@@ -97,13 +104,21 @@ def get_ancestor_process(name, host, cmd='', fail_ok=False, retries=5, retry_int
 
 
 def verify_process_with_pid_file(pid, pid_file, con_ssh=None):
+    """
+    Check if the given PID matching the PID in the specified pid_file
+
+    Args:
+        pid:        process id
+        pid_file:   the file containing the process id
+        con_ssh:    ssh connnection/client to the host on which the process resides
+
+    Returns:
+
+    """
     con_ssh = con_ssh or ControllerClient.get_active_controller()
 
     code, output = con_ssh.exec_sudo_cmd('cat {} | head -n1'.format(pid_file), fail_ok=False)
     LOG.info('code={}, output={}'.format(code, output))
-
-    # assert 0 != code or output.strip() == pid, \
-    #     'Mismatched PID, expected:<{}>, from pid_file:<{}>, pid_file={}'.format(pid, output.strip(), pid_file)
 
     if output != pid:
         LOG.info('Mismatched PID, expected:<{}>, from pid_file:<{}>, pid_file={}'.format(
@@ -114,77 +129,104 @@ def verify_process_with_pid_file(pid, pid_file, con_ssh=None):
     return output == pid
 
 
-def get_process_from_sm(name, con_ssh=None, retries=6, interval=5, pid_file=''):
+def get_process_from_sm(name, con_ssh=None, pid_file='', expecting_status='enabled-active'):
+    """
+    Get the information for the process from SM, including PID, Name, Current Status and Pid-File
+
+    Args:
+        name:               name of the process
+        con_ssh:            ssh connection/client to the active-controller
+        pid_file:           known pid-file path/name to compare with
+        expecting_status:   expected status of the process
+
+    Returns:
+        pid (str):          process id
+        proc_name (str):    process name
+        actual_status (str):    actual/current status of the process
+        sm_pid_file (str):      pid-file in records of SM
+    """
     con_ssh = con_ssh or ControllerClient.get_active_controller()
 
     cmd = 'sm-dump --impact --pid --pid_file | /usr/bin/grep "{}"'.format(name)
-    for i in range(1, retries+1):
 
-        code, output = con_ssh.exec_sudo_cmd(cmd, fail_ok=True)
+    code, output = con_ssh.exec_sudo_cmd(cmd, fail_ok=True)
 
-        if 0 != code or not output:
-            LOG.warn('Cannot find the process:{} in SM with error code:\n{}\noutput:{}'.format(
-                name, code, con_ssh.exec_sudo_cmd('sm-dump --impact --pid --pid_file')))
-            continue
+    if 0 != code or not output:
+        LOG.warn('Cannot find the process:{} in SM with error code:\n{}\noutput:{}'.format(
+            name, code, con_ssh.exec_sudo_cmd('sm-dump --impact --pid --pid_file')))
+        return -1, '', ''
 
-        for line in output.splitlines():
-            results_array = line.strip().split()
-            LOG.info('results_array={}'.format(results_array))
+    pid, proc_name, sm_pid_file, actual_status = -1, '', '', ''
 
-            try:
-                proc_name = results_array[0]
-                if proc_name != name:
-                    continue
+    for line in output.splitlines():
+        results_array = line.strip().split()
+        LOG.info('results_array={}'.format(results_array))
 
-                expect_status = results_array[1]
-                actual_status = results_array[2]
-                if expect_status != actual_status:
-                    LOG.warn('service:{} is not in expected status yet. expected:{}, actual:{}. Retry'.format(
-                        proc_name, expect_status, actual_status))
-                    break
+        try:
+            proc_name = results_array[0]
+            if proc_name != name:
+                continue
 
-                severity = results_array[3]
-
-                pid = results_array[4]
-                if results_array[5] != pid_file:
-                    LOG.warn('pid_file not matching with that from SM-dump, pid_file={}, from sm-dump={}'.format(
-                        pid_file, results_array[5]))
-                pid_file = results_array[5]
-
-                # others = results_array[6:]
-
-                LOG.info('proc_name={}'.format(proc_name))
-                LOG.info('expect_status={}'.format(expect_status))
-                LOG.info('actual_status={}'.format(actual_status))
-                LOG.info('severity={}'.format(severity))
-                LOG.info('pid={}'.format(pid))
-                LOG.info('pid_file={}'.format(pid_file))
-                # LOG.info('others={}'.format(others))
-
-                if pid_file:
-                    if not verify_process_with_pid_file(pid, pid_file, con_ssh=con_ssh):
-                        LOG.warn('pid of service mismatch that from pid-file, pid:{}, pid-file:{}, proc-name:{}'.format(
-                            pid, pid_file, proc_name))
-
-                        # break
-
-                return pid, proc_name, pid_file
-
-            except IndexError as e:
-                LOG.warn('lacking information from sm-dump, line:{}, error:{}'.format(line, e))
+            expect_status = results_array[1]
+            actual_status = results_array[2]
+            if expect_status != actual_status:
+                LOG.warn('service:{} is not in expected status yet. expected:{}, actual:{}. Retry'.format(
+                    proc_name, expect_status, actual_status))
                 break
 
-        LOG.info('attempt:{:02d} to find pid from sm for pocess:{}'.format(i, name))
+            if actual_status != expecting_status:
+                LOG.warn('service:{} is not in expected status yet. expected:{}, actual:{}. Retry'.format(
+                    proc_name, expecting_status, actual_status))
+                break
 
-        time.sleep(interval)
+            pid = results_array[4]
+            if results_array[5] != sm_pid_file:
+                LOG.warn('pid_file not matching with that from SM-dump, pid_file={}, sm-dump-pid_file={}'.format(
+                    sm_pid_file, results_array[5]))
+            sm_pid_file = results_array[5]
 
-    return -1, '', ''
+            if pid_file and sm_pid_file != pid_file:
+                LOG.warn('pid_file differs from input pid_file, pid_file={}, sm-dump-pid_file={}'.format(
+                    pid_file, sm_pid_file))
+
+            if sm_pid_file:
+                if not verify_process_with_pid_file(pid, sm_pid_file, con_ssh=con_ssh):
+                    LOG.warn('pid of service mismatch that from pid-file, pid:{}, pid-file:{}, proc-name:{}'.format(
+                        pid, sm_pid_file, proc_name))
+
+            return pid, proc_name, actual_status, sm_pid_file
+
+        except IndexError as e:
+            LOG.warn('lacking information from sm-dump, line:{}, error:{}'.format(line, e))
+
+    if -1 != pid:
+        existing, msg = storage_helper.check_pid_exists(pid, host_ssh=con_ssh)
+        if not existing:
+            LOG.warn('Process not existing, name={}, pid={}, msg={}'.format(name, pid, msg))
+            return -1, '', ''
+
+    return pid, proc_name, actual_status, sm_pid_file
 
 
 def is_controller_swacted(prev_active,
                           swact_start_timeout=MTCTimeout.KILL_PROCESS_SWACT_NOT_START,
                           swact_complete_timeout=MTCTimeout.KILL_PROCESS_SWACT_COMPLETE,
                           con_ssh=None):
+    """
+    Wait and check if the active-controller on the system was 'swacted' with give time period
+
+    Args:
+        prev_active:            previous active controller
+        swact_start_timeout:    check within this time frame if the swacting started
+        swact_complete_timeout: check if the swacting (if any) completed in this time period
+        con_ssh:                ssh connection/client to the current active-controller
+
+    Returns:
+
+    """
+    LOG.info('Check if the controllers started to swact within:{}, and completing swacting within:{}'.format(
+        swact_start_timeout, swact_complete_timeout))
+
     code, msg = host_helper.wait_for_swact_complete(
         prev_active, con_ssh=con_ssh, fail_ok=True,
         swact_start_timeout=swact_start_timeout, swact_complete_timeout=swact_complete_timeout)
@@ -218,6 +260,24 @@ def check_host_status(host, target_status, expecting=True, con_ssh=None):
 
 
 def check_impact(impact, host='', expecting_impact=False, con_ssh=None, **kwargs):
+    """
+    Check if the expected IMPACT happens (or NOT) on the specified host
+
+    Args:
+        impact (str):   system behavior to check, including:
+                            swact   ---  the active controller swacting
+                            enabled-degraded    ---     the host changed to 'enalbed-degraded' status
+                            disabled-failed     ---     the host changed to 'disabled-failed' status
+                            ...
+        host (str):     the host to check
+        expecting_impact (bool):    if the IMPACT should happen
+        con_ssh:                    ssh connection/client to the active controller
+        **kwargs:
+
+    Returns:
+        boolean -   whether the IMPACT happens as expected
+
+    """
     LOG.info('impact={}, host={}, expecting_impact={}'.format(impact, host, expecting_impact))
 
     if impact == 'swact':
@@ -228,9 +288,9 @@ def check_impact(impact, host='', expecting_impact=False, con_ssh=None, **kwargs
 
         if expecting_impact:
             return is_controller_swacted(
-                prev_active, con_ssh=con_ssh, swact_start_timeout=40, swact_complete_timeout=80)
+                prev_active, con_ssh=con_ssh, swact_start_timeout=20, swact_complete_timeout=80)
         else:
-            return not is_controller_swacted(prev_active, con_ssh=con_ssh, swact_start_timeout=10)
+            return not is_controller_swacted(prev_active, con_ssh=con_ssh, swact_start_timeout=20)
 
     elif impact in ['enabled-degraded', 'disabled-failed']:
         return check_host_status(host, impact, expecting=expecting_impact, con_ssh=con_ssh)
@@ -240,50 +300,108 @@ def check_impact(impact, host='', expecting_impact=False, con_ssh=None, **kwargs
         return False
 
 
-def get_process_info(name, cmd='', pid_file='', host='', check_sm=True, con_ssh=None):
+def get_process_info(name, cmd='', pid_file='', host='', sm_process=True, con_ssh=None):
+    """
+    Get the information of the process with the specified name
 
+    Args:
+        name (str):     name of the process
+        cmd (str):      path of the executable
+        pid_file (str): path of the file containing the process id
+        host (str):     host on which the process resides
+        sm_process (bool):  if it is a SM service/process
+        con_ssh:        ssh connection/client to the active controller
+
+    Returns:
+
+    """
     active_controller = system_helper.get_active_controller_name()
     if not host:
         host = active_controller
 
-    if host == active_controller and check_sm:
-        pid, proc_name, pid_file = get_process_from_sm(name, con_ssh=con_ssh, pid_file=pid_file)
+    if sm_process:
+        if host != active_controller:
+            LOG.warn('Trying to get SM process from non-active controller?')
+        pid, name, status, pid_file = get_process_from_sm(name, con_ssh=con_ssh, pid_file=pid_file)
+        if status != 'enabled-active':
+            LOG.warn('SM process is in status:{}, not "enabled-active"'.format(status))
+            if 'disabl' in status:
+                LOG.warn('Wrong controller? Or controller already swacted, wait and try on the other controller')
+                time.sleep(10)
+                return get_process_from_sm(name, pid_file=pid_file)
 
-        if -1 != pid:
-            return pid, proc_name, pid_file
+            return -1, name, status, pid_file
+        else:
+            return pid, name, status, pid_file
 
-        LOG.info('Cannot find the process:{} in SM, try with ps'.format(name))
+    else:
+        LOG.info('Try to find the process:{} using "ps"'.format(name))
 
-    pid = get_ancestor_process(name, host, cmd=cmd, con_ssh=con_ssh)[0]
-    if -1 == pid:
-        return -1, '', ''
-    return pid, name, ''
+        pid = get_ancestor_process(name, host, cmd=cmd, con_ssh=con_ssh)[0]
+        if -1 == pid:
+            return -1, '', '', ''
+
+        return pid, name, '', ''
+
+
+def is_process_running(pid, host, con_ssh=None, retries=10, interval=3):
+    """
+    Check if the process with the PID is existing
+
+    Args:
+        pid (str):      process id
+        host (str):     host the process resides
+        con_ssh:        ssh connection/client to the host
+        retries (int):  times to re-try if no process found before return failure
+        interval (int): time to wait before next re-try
+
+    Returns:
+        boolean     - true if the process existing, false otherwise
+        msg (str)   - the details of the process or error messages
+    """
+    cmd = 'ps -p {}'.format(pid)
+    for _ in range(retries):
+        with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
+            code, output = con.exec_sudo_cmd(cmd, fail_ok=True)
+            if 0 != code:
+                LOG.warn('Process:{} DOES NOT exist, error:{}'.format(pid, output))
+            else:
+                return True, output
+            time.sleep(interval)
+
+    return False, ''
 
 
 def kill_controller_process_verify_impact(
         name, cmd='', pid_file='', retries=2, impact='swact', interval=20,
-        kill_retries=10, on_active_controller=True, con_ssh=None):
+        action_timeout=90, total_retries=30, on_active_controller=True, con_ssh=None):
     """
-    Kill the process with the specified name.
-        -- First, using the information from SM (output of sm-dump) to find the process: name, pid, pid_file (if any)
-        -- If not found, using ps/pkill ...
+    Kill the process with the specified name and verify the system behaviors as expected
 
     Args:
-        name:
-        cmd:
-        pid_file:
-        retries:
-        impact:
-        interval:
-        kill_retries (int):     number of retries to kill the same pid
-        on_active_controller:
-        con_ssh:
+        name (str):             name of the process
+        cmd (str):              executable of the process
+        pid_file (str):         file containing process id
+        retries (int):          times of killing actions upon which the IMPACT will be triggered
+        impact (str):           system behavior including:
+                                    swact   -- active controller is swacted
+                                    enabled-degraded    -- the status of the service will change to
+                                    disabled-failed     -- the status of the service will change to
+                                    ...
+        interval (int):         least time to wait between kills
+        action_timeout (int):   kills and impact should happen within this time frame
+        total_retries (int):    total number of retries for whole kill and wait actions
+        on_active_controller (boolean):
+        con_ssh:                ssh connection/client to the active controller
 
-    Returns:
-        0   suceess
-        -1  failure because of impact NOT happening after killing the process up to threshold times
-        -2  failure because of impact happening before killing threshold times
-
+    Returns: (pid, host)
+        pid:
+            >0  suceess, the final PID of the process
+            -1  failure because of impact NOT happening after killing the process up to threshold times
+            -2  failure because of impact happening before killing threshold times
+            -3  failure after try total_retries times
+        host:
+            the host tested on
     """
     active_controller, standby_controller = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
 
@@ -297,85 +415,95 @@ def kill_controller_process_verify_impact(
 
     LOG.info('on host: {}'.format(host))
 
-    if retries < 1:
-        LOG.warn('to kill the process {} time? times must greater than 0'.format(retries))
+    if total_retries < 1 or retries < 1:
+        LOG.error('retries/total-retries < 1? retires:{}, total retries:{}'.format(retries, total_retries))
         return None
 
-    count = 0
-    exec_times = []
-    killed_pids = []
+    for i in range(1, total_retries+1):
+        LOG.info('kill-n-wait iteration:{:02d}'.format(i))
 
-    # TODO
-    # while True:
-    for _ in range(30):
-        count += 1
+        exec_times = []
+        killed_pids = []
 
-        pid, proc_name = get_process_info(name, cmd=cmd, host=host, pid_file=pid_file, con_ssh=con_ssh)[0:2]
+        timeout = time.time() + action_timeout
 
-        if killed_pids and killed_pids[-1] == pid:
-            LOG.warn('Old PID and new PID are the same?! prev-pid={}, new-pid={}'.format(killed_pids[-1], pid))
-            # TODO
-            time.sleep(1)
-            continue
+        count = 0
+        while time.time() < timeout:
+            count += 1
 
-        last_killed_pid = killed_pids[-1] if killed_pids else None
-        # last_kill_time = exec_times[-1] if exec_times else None
+            try:
+                pid, proc_name = get_process_info(name, cmd=cmd, host=host, pid_file=pid_file, con_ssh=con_ssh)[0:2]
 
-        killed_pids.append(pid)
-        exec_times.append(datetime.datetime.utcnow())
+            except pexpect.exceptions.EOF:
+                LOG.warn('Failed to get process id for {} on host:{}'.format(name, host))
+                time.sleep(interval / 3)
+                continue
 
-        LOG.info('iteration{:02d}: before kill CLI, proc_name={}, pid={}, last_killed_pid={}'.format(
-            count, proc_name, pid, last_killed_pid))
-        LOG.info('\tactive-controller={}, standby-controller={}'.format(active_controller, standby_controller))
+            if -1 == pid:
+                LOG.error('Failed to get PID for process with name:{}, cmd:{}, wait and retries'.format(name, cmd))
+                time.sleep(interval / 3)
+                continue
 
-        kill_cmd = '{} {}'.format(KILL_CMD, pid)
-        # TODO need to make the loop number configurable
-        for _ in range(kill_retries):
+            if killed_pids and pid in killed_pids:
+                LOG.warn('No new process re-created, prev-pid={}, cur-pid={}'.format(killed_pids[-1], pid))
+                time.sleep(interval / 3)
+                continue
+
+            last_killed_pid = killed_pids[-1] if killed_pids else None
+            killed_pids.append(pid)
+            last_kill_time = exec_times[-1] if exec_times else None
+            exec_times.append(datetime.datetime.utcnow())
+
+            LOG.info('iteration{:02d}: before kill CLI, proc_name={}, pid={}, last_killed_pid={}, '
+                     'last_kill_time={}'.format(count, proc_name, pid, last_killed_pid, last_kill_time))
+
+            LOG.info('\tactive-controller={}, standby-controller={}'.format(
+                active_controller, standby_controller))
+
+            kill_cmd = '{} {}'.format(KILL_CMD, pid)
+
             with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
                 code, output = con.exec_sudo_cmd(kill_cmd, fail_ok=True)
                 if 0 != code:
-                    LOG.warn('Failed to kill pid:{}, cmd={}, output=<{}>'.format(pid, kill_cmd, output))
-                    time.sleep(0.5)
-                else:
-                    LOG.info('OK to kill pid:{} on host:{}, cmd={}, output=<{}>'.format(pid, host, kill_cmd, output))
-                    break
+                    LOG.warn('iteration{:02d}: Failed to kill pid:{}, cmd={}, output=<{}>, not event existing?'.format(
+                        count, pid, kill_cmd, output))
+                    time.sleep(interval / 3)
+                    continue
 
-        LOG.info('iteration{:02d}: after CLI:{}, code={}, output={}'.format(count, kill_cmd, code, output))
+            LOG.info('iteration{:02d}: OK to kill pid:{} on host:{}, cmd={}, output=<{}>'.format(
+                count, pid, host, kill_cmd, output))
 
-        if count < retries:
-            if 0 != code:
-                LOG.info('iteration{:02d}: failed to kill process:{}, already IMPACTed?, '
-                         'after CLI:{}, code={}, output={}'.format(count, pid, kill_cmd, code, output))
+            if count < retries:
+                # IMPACT should not happen yet
+                if not check_impact(impact, active_controller=active_controller,
+                                    expecting_impact=False, host=host, con_ssh=con_ssh):
+                    LOG.error('Impact:{} observed unexpectedly, it should happen only after killing {} times, '
+                              'actual killed times:{}'.format(impact, retries, count))
+                    return -2, host
+                LOG.info('iteration{:02d}: OK, NO impact as expected, impact={}'.format(count, impact))
 
-            # IMPACT should not happen yet
-            if not check_impact(
-                    impact, active_controller=active_controller, expecting_impact=False, host=host, con_ssh=con_ssh):
-                LOG.error('Impact:{} observed unexpectedly, it should happen only after killing {} times, '
-                          'actual killed times:{}'.format(impact, retries, count))
-                return -2
+            else:
+                no_standby_controller = standby_controller is None
+                expecting_impact = True if not no_standby_controller else False
+                if not check_impact(
+                        impact, active_controller=active_controller,
+                        expecting_impact=expecting_impact, host=host, con_ssh=con_ssh):
+                    LOG.error('No impact after killing process {} {} times, while {}'.format(
+                        proc_name, count, ('expecting impact' if expecting_impact else 'not expecting impact')))
 
-            LOG.info('iteration{:02d}: OK, NO impact as expected, impact={}'.format(count, impact))
+                    return -1, host
 
-        else:
-            no_standby_controller = standby_controller is None
-            expecting_impact = True if not no_standby_controller else False
-            if not check_impact(
-                    impact, active_controller=active_controller,
-                    expecting_impact=expecting_impact, host=host, con_ssh=con_ssh):
-                LOG.error('No impact after killing process {} {} times, while {}'.format(
-                    proc_name, count, ('expecting impact' if expecting_impact else 'not expecting impact')))
+                LOG.info('OK, final iteration{:02d}: OK, IMPACT happened (if applicable) as expected, impact={}'.format(
+                    count, impact))
 
-                return -1
+                active_controller, standby_controller = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
 
-            LOG.info('final: iteration{:02d}: OK, IMPACT happened (if applicable) as expected, impact={}'.format(
-                count, impact))
-            break
+                LOG.info('OK, after impact:{} (tried:{} times), now active-controller={}, standby-controller={}'.format(
+                    impact, count, active_controller, standby_controller))
 
-        time.sleep(interval)
+                pid, proc_name = get_process_info(name, cmd=cmd, host=host, pid_file=pid_file, con_ssh=con_ssh)[0:2]
+                return pid, active_controller
 
-    active_controller, standby_controller = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
+            time.sleep(interval)
 
-    LOG.info('OK, after impact:{} (tried:{} times), now active-controller={}, standby-controller={}'.format(
-        impact, count, active_controller, standby_controller))
-
-    return 0
+    return -3, host
