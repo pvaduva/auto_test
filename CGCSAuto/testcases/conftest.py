@@ -10,6 +10,7 @@ from consts.auth import CliAuth, Tenant
 from consts.proj_vars import ProjVar
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
+from utils import lab_info
 
 natbox_ssh = None
 con_ssh = None
@@ -25,7 +26,9 @@ def setup_test_session():
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     setups.set_env_vars(con_ssh)
 
-    setups.copy_files_to_con1()
+    lab_info = ProjVar.get_var("LAB")
+    if 'controller-1 ip' in lab_info:
+        setups.copy_files_to_con1()
 
     global natbox_ssh
     natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'), con_ssh=con_ssh)
