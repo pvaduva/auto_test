@@ -213,6 +213,7 @@ class EventLogID:
     HOST_LOCK = '200.001'
     NETWORK_AGENT_NOT_RESPOND = '300.003'
     CON_DRBD_SYNC = '400.001'
+    SERVICE_GROUP_STATE_CHANGE = '400.001'
 
 
 class NetworkingVmMapping:
