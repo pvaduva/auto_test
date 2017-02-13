@@ -1974,17 +1974,17 @@ def main():
 
     # Wait for all nodes to be online to allow lab_setup to set
     # interfaces properly
-    time.sleep(10)
-    wait_state(nodes, AVAILABILITY, ONLINE)
+    if not simplex:
+        time.sleep(10)
+        wait_state(nodes, AVAILABILITY, ONLINE)
 
     if stop == "5":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
 
-    log.info("Beginning lab setup procedure for {} lab".format(lab_type))
-
     # Lab-install Step 9 -  run_lab_setup - applicable all labs
     lab_install_step = install_step("run_lab_setup", 10, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
+        log.info("Beginning lab setup procedure for {} lab".format(lab_type))
 
         if run_labsetup()[0] != 0:
             msg = "lab_setup failed in {} lab configuration.".format(lab_type)
