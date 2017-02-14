@@ -194,7 +194,7 @@ def get_osds(host=None, con_ssh=None):
         """
 
         table_ = table_parser.table(cli.system('host-stor-list', host, ssh_client=con_ssh))
-        osd_list = osd_list + table_parser.get_values(table_, 'osdid')
+        osd_list = osd_list + table_parser.get_values(table_, 'osdid', function='osd')
 
         return osd_list
 
