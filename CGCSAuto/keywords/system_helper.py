@@ -51,6 +51,14 @@ def _get_info_non_cli(cmd, con_ssh=None):
     return output
 
 
+def is_two_node_cpe(con_ssh=None):
+    return is_small_footprint(controller_ssh=con_ssh) and len(get_controllers(con_ssh=con_ssh)) == 2
+
+
+def is_simplex(con_ssh=None):
+    return is_small_footprint(controller_ssh=con_ssh) and len(get_controllers(con_ssh=con_ssh)) == 1
+
+
 def is_small_footprint(controller_ssh=None, controller='controller-0'):
     table_ = table_parser.table(cli.system('host-show', controller, ssh_client=controller_ssh))
     subfunc = table_parser.get_value_two_col_table(table_, 'subfunctions')

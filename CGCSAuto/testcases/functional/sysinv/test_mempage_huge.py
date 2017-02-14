@@ -28,10 +28,10 @@ def test_modify_memory_when_unlocked_negative():
 
     """
 
-    if system_helper.is_small_footprint():
+    if system_helper.is_two_node_cpe():
         hostname = system_helper.get_standby_controller_name()
     else:
-        hostname = random.choice(host_helper.get_hosts(personality='compute', administrative='unlocked'))
+        hostname = host_helper.get_up_hypervisors()[0]
 
     LOG.tc_step("Attempt to the modify memory of unlocked host")
     args = "-2M 4 {} 1".format(hostname)
@@ -44,9 +44,8 @@ def test_modify_memory_when_unlocked_negative():
 @fixture(scope='module')
 def host_to_modify(request):
     hypervisors = host_helper.get_hypervisors()
-    len(hypervisors) < 2
 
-    if system_helper.is_small_footprint():
+    if system_helper.is_two_node_cpe():
         hostname = system_helper.get_standby_controller_name()
     else:
         hostname = hypervisors[0]

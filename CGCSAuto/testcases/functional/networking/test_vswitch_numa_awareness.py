@@ -154,10 +154,6 @@ class TestVSwitchCPUReconfig:
                 if j is not None:
                     vswitch_args['p'+str(j)] = vswitch[j]
 
-            if is_cpe and system_helper.get_active_controller_name() == host:
-                LOG.tc_step("{} is active controller, swact first".format(host))
-                host_helper.swact_host(host)
-
             LOG.tc_step("Lock and modify cpu for {}".format(host))
             host_helper.lock_host(host, swact=True)
             if platform is not None:

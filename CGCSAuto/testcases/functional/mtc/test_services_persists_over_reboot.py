@@ -40,7 +40,7 @@ def test_system_persist_over_host_reboot(host_type):
         time.sleep(10)
     elif host_type == 'compute':
         host = host_helper.get_nova_hosts()[-1]
-        if system_helper.is_small_footprint():
+        if system_helper.is_two_node_cpe():
             host = system_helper.get_standby_controller_name()
     elif host_type == 'storage':
         # Make a better function for this

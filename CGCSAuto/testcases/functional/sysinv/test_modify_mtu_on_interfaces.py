@@ -153,7 +153,7 @@ def test_modify_mtu_data_interface(mtu_range):
     if len(hypervisors) < 2:
         skip("Less than two hypervisors available.")
 
-    if system_helper.is_small_footprint():
+    if system_helper.is_two_node_cpe():
         standby = system_helper.get_standby_controller_name()
         if not standby:
             skip("Standby controller unavailable on CPE system. Unable to lock host")

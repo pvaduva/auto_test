@@ -342,7 +342,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
             return -1, "Host already locked. Do nothing."
 
     if swact:
-        if is_active_controller(host):
+        if is_active_controller(host) and len(system_helper.get_controllers()) > 1:
             LOG.info("{} is active controller, swact first before attempt to lock.")
             swact_host(host, con_ssh=con_ssh)
 
