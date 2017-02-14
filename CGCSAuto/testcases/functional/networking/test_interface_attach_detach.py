@@ -26,14 +26,14 @@ def base_vm():
 
 
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vif_model'), [
-    ('cgcs-guest', 'net_id', 'avp'),
-    ('cgcs-guest', 'net_id', 'e1000'),
-    ('cgcs-guest', 'port_id', 'virtio'),
-    # ('cgcs-guest', 'net_id', 'rtl8139')
-    ('centos_7', 'net_id', 'e1000'),
-    # ('centos_7', 'net_id', 'avp'),
-    ('centos_7', 'net_id', 'virtio'),
-    ('centos_7', 'port_id', 'rtl8139')
+    ('cgcs-guest', 'net_id', 'avp')
+    #('cgcs-guest', 'net_id', 'e1000'),
+    #('cgcs-guest', 'port_id', 'virtio'),
+    ## ('cgcs-guest', 'net_id', 'rtl8139')
+    #('centos_7', 'net_id', 'e1000'),
+    ## ('centos_7', 'net_id', 'avp'),
+    #('centos_7', 'net_id', 'virtio'),
+    #('centos_7', 'port_id', 'rtl8139')
 ])
 def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     """
@@ -98,8 +98,8 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
     tenant_port_id = nova_helper.get_vm_interfaces_info(vm_id=vm_under_test, net_id=tenant_net_id)[0]['port_id']
 
-    for vm_actions in [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
-
+    #for vm_actions in [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
+    for vm_actions in [['cold_migrate']]:
         LOG.tc_step("Attach internal interface to vm via {} with vif_model: {}".format(if_attach_arg, vif_model))
         internal_port = vm_helper.attach_interface(vm_under_test, net_id=internal_net_id, vif_model=vif_model,
                                                    port_id=internal_port_id)[1]
@@ -131,6 +131,25 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
         LOG.tc_step("Verify VM tenant interface is up")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, retry=5, net_types=['mgmt','data'])
 
+        LOG.tc_step("atttach maximum number of vnics to the VM")
+        vnics_attached=len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
+        LOG.info("current nic no {}", vnics_attached)
+        max_vnics=16
+        new_vnics=0
+        for nic in range(vnics_attached, max_vnics):
+            vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)
+            ++new_vnics
+
+        vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
+        LOG.info("vnics attached to VM {}", vnics_attached)
+        assert vnics_attached == max_vnics, ("vnics attached is not equal to max number.")
+
+        LOG.tc_step("Bring up all the attached tenant interface from vm")
+        _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics)
+
+        res = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)[1]
+        assert not res, ("vnics attach exceed maximum limit")
+
         if vm_actions[0] == 'auto_recover':
             LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from "
                         "base vm over management and data networks")
@@ -148,7 +167,7 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt', 'data'])
 
 
-def _bring_up_attached_interface(vm_id, guest_os):
+def _bring_up_attached_interface(vm_id, guest_os, num=1):
     """
     ip link set <dev> up, and dhclient <dev> to bring up the interface of last nic for given VM
     Args:
@@ -156,11 +175,14 @@ def _bring_up_attached_interface(vm_id, guest_os):
     """
     vm_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        mac_addr = vm_nics[-1]['mac_address']
-        eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
-        assert eth_name, "Interface with mac {} is not listed in 'ip addr' in vm {}".format(mac_addr, vm_id)
-        vm_ssh.exec_sudo_cmd('ip link set dev {} up'.format(eth_name))
-        if guest_os != 'cgcs-guest':
-            vm_ssh.exec_sudo_cmd('dhclient {} -r'.format(eth_name))
-        vm_ssh.exec_sudo_cmd('dhclient {}'.format(eth_name))
+        vnics_to_check = vm_nics[-num:]
+        for vnic in vnics_to_check:
+            mac_addr = vnic['mac_address']
+            eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
+            assert eth_name, "Interface with mac {} is not listed in 'ip addr' in vm {}".format(mac_addr, vm_id)
+            vm_ssh.exec_sudo_cmd('ip link set dev {} up'.format(eth_name))
+            if guest_os != 'cgcs-guest':
+                vm_ssh.exec_sudo_cmd('dhclient {} -r'.format(eth_name))
+            vm_ssh.exec_sudo_cmd('dhclient {}'.format(eth_name))
+
         vm_ssh.exec_sudo_cmd('ip addr')
