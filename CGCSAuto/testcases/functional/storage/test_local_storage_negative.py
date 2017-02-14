@@ -12,17 +12,17 @@ from testfixtures.recover_hosts import HostsToRecover
 from utils import cli
 
 
-#creating a storage profile on storage-0 node
-#check storage is succesfully create
+# creating a storage profile on storage-0 node
+# check storage is succesfully create
 
 # apply that profile to compute-0
-#verify rejected message
-#Can not apply this profile to host
-#echo $? is 1
+# verify rejected message
+# Can not apply this profile to host
+# echo $? is 1
 
 
-#this test will run only if there is a storage node
-#need to add skipif
+# this test will run only if there is a storage node
+
 def storage_node_not_exist():
     return len(system_helper.get_storage_nodes()) == 0
 
@@ -52,9 +52,18 @@ def create_storage_profile(request):
 
 
 @mark.p3
-def test_storage_profile_on_compute(create_storage_profile):
-    # apply that profile to compute-0
-    host_name = 'compute-0'
+@mark.parametrize('personality', [
+    'compute',
+    'controller'
+])
+def test_apply_storage_profile_negative(create_storage_profile, personality):
+
+    if personality == 'controller':
+        host_name = system_helper.get_standby_controller_name()
+        assert host_name, "No standby controller available on system"
+    else:
+        host_name = host_helper.get_up_hypervisors()[0]
+
     profile_name = create_storage_profile['profile_name']
     origin_disk_num = create_storage_profile['disk_num']
     disks_num = len(local_storage_helper.get_host_disks_values(host_name, 'device_node'))
@@ -64,31 +73,10 @@ def test_storage_profile_on_compute(create_storage_profile):
     positional_arg = host_name + ' ' + profile_name
 
     HostsToRecover.add(host_name)
-    host_helper.lock_host(host_name)
+    host_helper.lock_host(host_name, swact=True)
     exitcode, output = cli.system('host-apply-storprofile', positional_arg, fail_ok=True,
                                   auth_info=Tenant.ADMIN, rtn_list=True)
     host_helper.unlock_host(host_name)
 
     assert exitcode == 1 and expt_err in output
-
-
-@mark.p3
-def test_storage_profile_on_controller(create_storage_profile):
-    # need to check is it true that you can not lock active controller
-    #apply that profile to the standby controller
-    #verify rejected message
-
-    host_name = system_helper.get_standby_controller_name()
-    assert host_name, "No standby controller on system"
-
-    profile_name = create_storage_profile['profile_name']
-    positional_arg = host_name + ' ' + profile_name
-
-    HostsToRecover.add(host_name)
-    host_helper.lock_host(host_name)
-    exitcode, output = cli.system('host-apply-storprofile', positional_arg, fail_ok=True,
-                                  auth_info=Tenant.ADMIN, rtn_list=True)
-    host_helper.unlock_host(host_name)
-
-    assert exitcode == 1
 
