@@ -1090,7 +1090,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
         # Sometimes the network may take upto a minute to setup. Adding a delay of 60 seconds
         # before ping
         #TODO: Change to ping at 15 seconds interval for upto 4 times
-        time.sleep(60)
+        time.sleep(120)
         cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, DNS_SERVER)
         if controller0.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT + TIMEOUT_BUFFER)[0] != 0:
             msg = "Failed to ping outside network"
