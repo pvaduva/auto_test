@@ -430,15 +430,17 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
     Returns (list): a list of matching values for target header
 
     """
-    if not kwargs:
+    new_kwargs = {}
+    for k, v in kwargs.items():
+        if v is not None:
+            new_kwargs[k] = v
+
+    if not new_kwargs:
         LOG.debug("kwargs unspecified, returning the whole target column as list.")
         return get_column(table_, target_header)
 
     row_indexes = []
-    for header, values in kwargs.items():
-        if values is None:
-            continue
-
+    for header, values in new_kwargs.items():
         if isinstance(values, tuple):
             values = list(tuple)
         elif not isinstance(values, list):

@@ -3,6 +3,7 @@ from time import sleep
 
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
+from consts.reasons import SkipReason
 from consts.cgcs import EventLogID, FlavorSpec
 from consts.timeout import EventLogTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
@@ -30,7 +31,8 @@ def heartbeat_flavors():
     ResourceCleanup.add(resource_type='flavor', resource_id=flavor_id, scope='module')
     flav_ids['False'] = flavor_id
 
-    return flav_ids
+    is_simplex = system_helper.is_simplex()
+    return flav_ids, is_simplex
 
 
 def _perform_action_on_hb_vm(vm_id, action):
@@ -63,9 +65,9 @@ def _perform_action_on_hb_vm(vm_id, action):
 
     elif action == 'reboot':
         vm_host = nova_helper.get_vm_host(vm_id)
-        if vm_host == system_helper.get_active_controller_name():
-            LOG.tc_step("Vm is on active controller. Swacting...")
-            host_helper.swact_host()
+        # if vm_host == system_helper.get_active_controller_name():
+        #     LOG.tc_step("Vm is on active controller. Swacting...")
+        #     host_helper.swact_host()
 
         LOG.tc_step("Rebooting {}".format(vm_host))
         HostsToRecover.add(vm_host, scope='function')
@@ -73,13 +75,10 @@ def _perform_action_on_hb_vm(vm_id, action):
 
     elif action == 'lock':
         vm_host = nova_helper.get_vm_host(vm_id)
-        if vm_host == system_helper.get_active_controller_name():
-            LOG.tc_step("Vm is on active controller. Swacting...")
-            host_helper.swact_host()
 
         LOG.tc_step("Locking {}".format(vm_host))
         HostsToRecover.add(vm_host, scope='function')
-        host_helper.lock_host(vm_host)
+        host_helper.lock_host(vm_host, swact=True)
 
     elif action == 'vim_restart':
         LOG.tc_step("Killing nfv-vim process")
@@ -122,6 +121,11 @@ def test_hb_vm_with_action(hb_enabled, action, heartbeat_flavors):
         - Delete vm and volume
 
     """
+    heartbeat_flavors, is_simplex = heartbeat_flavors
+
+    if is_simplex and action in ['swact', 'lock', 'migrate']:
+        skip(SkipReason.SIMPLEX_SYSTEM)
+
     LOG.tc_step("Booting vm. heartbeat enabled: {}".format(hb_enabled))
     vm_id = vm_helper.boot_vm('hb_guest', flavor=heartbeat_flavors[hb_enabled])[1]
     ResourceCleanup.add(resource_type='vm', resource_id=vm_id, scope='function')
