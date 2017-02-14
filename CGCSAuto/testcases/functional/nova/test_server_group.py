@@ -10,20 +10,32 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 
 @fixture(scope='module', autouse=True)
-def check_system():
+def check_system(add_cgcsauto_zone, add_admin_role_module):
     hosts = host_helper.get_hypervisors(state='up', status='enabled')
 
     is_simplex = system_helper.is_simplex()
-    if len(hosts) < 2 and not is_simplex:
+    if is_simplex:
+        hosts_to_add = hosts
+    elif len(hosts) >= 2:
+        hosts_to_add = hosts[:2]
+    else:
         skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+        hosts_to_add = []
 
-    return is_simplex
+    LOG.fixture_step("Add hosts to cgcsauto aggregate: {}".format(hosts_to_add))
+    nova_helper.add_hosts_to_aggregate('cgcsauto', hosts_to_add)
+
+    def remove_():
+        LOG.fixture_step("Remove hosts from cgcsauto aggregate: {}".format(hosts_to_add))
+        nova_helper.remove_hosts_from_aggregate('cgcsauto', hosts_to_add)
+
+    return is_simplex, hosts_to_add
 
 
 @mark.parametrize(('srv_grp_msging_flavor', 'policy', 'group_size', 'best_effort', 'vms_num'), [
     mark.priorities('nightly', 'domain_sanity')((None, 'affinity', 4, None, 2)),
     mark.domain_sanity((None, 'anti_affinity', 3, True, 3)),
-    mark.nightly(('srv_grp_msg_true', 'anti_affinity', 2, None, 2)),
+    mark.nightly(('srv_grp_msg_true', 'anti_affinity', 4, None, 3)),    # negative res for last vm
 ])
 def test_boot_vms_server_group(srv_grp_msging_flavor, policy, group_size, best_effort, vms_num, check_system):
     """
@@ -49,7 +61,7 @@ def test_boot_vms_server_group(srv_grp_msging_flavor, policy, group_size, best_e
         - Delete created server group
 
     """
-    is_simplex = check_system
+    is_simplex, cgcsauto_hosts = check_system
     if is_simplex and policy == 'anti_affinity' and not best_effort:
         skip("Skip anti_affinity strict for simplex system")
 
@@ -75,12 +87,22 @@ def test_boot_vms_server_group(srv_grp_msging_flavor, policy, group_size, best_e
     LOG.tc_step("Add server group metadata: {}".format(metadata))
     nova_helper.set_server_group_metadata(srv_grp_id, **metadata)
 
-    LOG.tc_step("Boot {} vm(s) with above flavor in above server group.".format(vms_num))
     vm_hosts = []
     members = []
+    failed_num = 0
+    if policy == 'anti_affinity' and not best_effort and vms_num > 2:
+        failed_num = vms_num - 2
+        vms_num = 2
+
+    LOG.tc_step("Boot {} vm(s) with flavor {} in server group {} and ensure they are successfully booted.".
+                format(flavor_id, srv_grp_id, vms_num))
+
     for i in range(vms_num):
-        vm_id = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id})[1]
-        ResourceCleanup.add(resource_type='vm', resource_id=vm_id)
+        code, vm_id, err, vol = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
+                                                  avail_zone='cgcsauto', fail_ok=True)
+        ResourceCleanup.add(resource_type='vm', resource_id=vm_id, del_vm_vols=False)
+        ResourceCleanup.add('volume', vol)
+        assert 0 == code, "VM is not booted successfully. Details: {}".format(err)
 
         LOG.tc_step("Check vm {} is in server group {}".format(vm_id, srv_grp_id))
         members = eval(nova_helper.get_server_groups_info(srv_grp_id, header='Members')[0])
@@ -88,8 +110,15 @@ def test_boot_vms_server_group(srv_grp_msging_flavor, policy, group_size, best_e
 
         vm_hosts.append(nova_helper.get_vm_host(vm_id))
 
+    for i in range(failed_num):
+        LOG.tc_step("Boot vm{} in server group {} that's expected to fail".format(i, srv_grp_id))
+        code, vm_id, err, vol = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
+                                                  avail_zone='cgcsauto', fail_ok=True)
+        nova_helper.get_vm_nova_show_value(vm_id, 'fault')
+        assert 1 == code, "Boot vm is not rejected"
+
     unique_vm_hosts = list(set(vm_hosts))
-    if policy == 'affinity':
+    if policy == 'affinity' or is_simplex:
         assert 1 == len(unique_vm_hosts)
 
     else:
