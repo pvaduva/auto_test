@@ -1126,22 +1126,22 @@ class Telnet:
                 # booting device = USB tested only for Ironpass-31_32
                 if usb:
                     self.get_read_until("Select kernel options and boot kernel", 120)
-                    self.write(str.encode("\r\r"))
                     if small_footprint:
                         log.info("Selecting Serial Controller+Compute Node Install")
                         time.sleep(1)
+                        log.info("Pressing DOWN key")
                         self.write(str.encode(DOWN))
+                        log.info("Pressing DOWN key")
                         self.write(str.encode(DOWN))
                         if host_os == 'wrlinux':
                            self.write(str.encode(DOWN))
                         time.sleep(1)
                         log.info("Pressing ENTER key")
-                        self.write(str.encode("\r\r"))
                     else:
                         time.sleep(1)
                         log.info("Selecting Serial Controller Node Install")
                         log.info("Pressing ENTER key")
-                        self.write(str.encode("\r\r"))
+                    self.write(str.encode("\r\r"))
                 else:
                     self.get_read_until("Kickstart Boot Menu", 60)
                     log.info("Searching Kickstart boot device menu for ...")
