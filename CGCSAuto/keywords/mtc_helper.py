@@ -3,10 +3,13 @@ import datetime
 import os.path
 import pexpect
 
+from consts.auth import Tenant
+from utils import cli, table_parser
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 from keywords import system_helper, host_helper, storage_helper
 from consts.timeout import MTCTimeout
+from consts.cgcs import EventLogID
 
 KILL_CMD = 'kill -9'
 
@@ -235,7 +238,61 @@ def is_controller_swacted(prev_active,
     return 0 == code
 
 
-def check_host_status(host, target_status, expecting=True, con_ssh=None):
+def search_event(event_id='', type_id='', instance_id='', severity='', start='', end='', limit=30,
+                 con_ssh=None, auth_info=Tenant.ADMIN, strict=False, regex=False, exclude=False, **kwargs):
+
+    base_cmd = 'event-list --nowrap --nopaging --include_suppress --uuid'
+    criteria = []
+
+    if event_id:
+        criteria.append('event_log_id="{}"'.format(event_id))
+
+    if type_id:
+        criteria.append('entity_type_id="{}"'.format(type_id))
+
+    if instance_id:
+        criteria.append('entity_instance_id="{}"'.format(instance_id))
+
+    if severity:
+        criteria.append('severity="{}"'.format(severity))
+
+    if start:
+        criteria.append('start="{}"'.format(start))
+
+    if end:
+        criteria.append('end="{}"'.format(end))
+
+    limit = '-l {}'.format((limit)) if limit >= 1 else ''
+    query = '-q {}'.format(';'.join(criteria)) if criteria else ''
+    cmd = '{} {} {}'.format(base_cmd, limit, query)
+
+    LOG.info('search event: cmd={}'.format(cmd))
+    table = table_parser.table(cli.system(cmd, ssh_client=con_ssh, auth_info=auth_info))
+
+    matched = table
+    if kwargs:
+        matched = table_parser.filter_table(table, strict=strict, regex=regex, exclude=exclude, **kwargs)
+
+    return matched
+
+
+def check_host_status_events(service, host, target_status, expecting=True,
+                             last_events=None, retries=15, interval=3, con_ssh=None):
+    reason_format = r'Service group (\w+) state change from (\w+) to (\w+) on host {}(; (\w+)\((\w+), (\w+)\)'.format(
+        host)
+
+    events = system_helper.wait_for_events(10, num=5, strict=False, fail_ok=True,
+                                           **{'Event Log ID': EventLogID.SERVICE_GROUP_STATE_CHANGE,
+                                              'State': 'set'})
+    reason_text = 'Storage Alarm Condition: HEALTH_WARN'
+    system_helper.wait_for_events(30, strict=False, fail_ok=False,
+                                  **{'Reason Text': reason_text,
+                                     'Event Log ID':
+                                     EventLogID.STORAGE_ALARM_COND,
+                                     'State': 'set'})
+
+
+def check_host_status(service, host, target_status, expecting=True, last_events=None, con_ssh=None):
     LOG.info('check for host:{} expecting status:{}'.format(host, target_status))
     try:
         operational, availability = target_status.split('-')
@@ -244,22 +301,12 @@ def check_host_status(host, target_status, expecting=True, con_ssh=None):
         raise
 
     if expecting:
-        return host_helper.wait_for_hosts_states(
-            host, timeout=MTCTimeout.KILL_PROCESS_HOST_CHANGE_STATUS, check_interval=0, duration=1,
-            con_ssh=con_ssh, fail_ok=True, **{'operational': operational, 'availability': availability})
-        # return host_helper.wait_for_host_states(
-        #     host, timeout=MTCTimeout.KILL_PROCESS_HOST_CHANGE_STATUS, check_interval=1,
-        #     fail_ok=True, **{'operational': operational, 'availability': availability}, con_ssh=con_ssh)
+        return check_host_status_events(service, host, (operational, availability), expecting=True, con_ssh=con_ssh)
     else:
-        return not host_helper.wait_for_hosts_states(
-            host, timeout=MTCTimeout.KILL_PROCESS_HOST_KEEP_STATUS, check_interval=3, duration=3,
-            con_ssh=con_ssh, fail_ok=True, **{'operational': operational, 'availability': availability})
-        # return not host_helper.wait_for_host_states(
-        #     host, timeout=MTCTimeout.KILL_PROCESS_HOST_KEEP_STATUS, check_interval=1,
-        #     fail_ok=True, **{'operational': operational, 'availability': availability})
+        return check_host_status_events(service, host, (operational, availability), expecting=False, con_ssh=con_ssh)
 
 
-def check_impact(impact, host='', expecting_impact=False, con_ssh=None, **kwargs):
+def check_impact(impact, service_name, host='', last_events=None, expecting_impact=False, con_ssh=None, **kwargs):
     """
     Check if the expected IMPACT happens (or NOT) on the specified host
 
@@ -293,8 +340,8 @@ def check_impact(impact, host='', expecting_impact=False, con_ssh=None, **kwargs
             return not is_controller_swacted(prev_active, con_ssh=con_ssh, swact_start_timeout=20)
 
     elif impact in ['enabled-degraded', 'disabled-failed']:
-        return check_host_status(host, impact, expecting=expecting_impact, con_ssh=con_ssh)
-
+        return check_host_status(service_name, host, target_status=impact,
+                                 expecting=expecting_impact, last_events=last_events, con_ssh=con_ssh)
     else:
         LOG.warn('impact-checker for impact:{} not implemented yet, kwargs:{}'.format(impact, kwargs))
         return False
@@ -372,6 +419,11 @@ def is_process_running(pid, host, con_ssh=None, retries=10, interval=3):
     return False, ''
 
 
+def _get_last_events_timestamps(limit=1):
+    latest_events = search_event(limit=limit)
+    LOG.info('latest_events:{}'.format(latest_events))
+
+
 def kill_controller_process_verify_impact(
         name, cmd='', pid_file='', retries=2, impact='swact', interval=20,
         action_timeout=90, total_retries=30, on_active_controller=True, con_ssh=None):
@@ -419,6 +471,7 @@ def kill_controller_process_verify_impact(
         LOG.error('retries/total-retries < 1? retires:{}, total retries:{}'.format(retries, total_retries))
         return None
 
+
     for i in range(1, total_retries+1):
         LOG.info('kill-n-wait iteration:{:02d}'.format(i))
 
@@ -454,6 +507,8 @@ def kill_controller_process_verify_impact(
             last_kill_time = exec_times[-1] if exec_times else None
             exec_times.append(datetime.datetime.utcnow())
 
+            latest_events = _get_last_events_timestamps(limit=10)
+
             LOG.info('iteration{:02d}: before kill CLI, proc_name={}, pid={}, last_killed_pid={}, '
                      'last_kill_time={}'.format(count, proc_name, pid, last_killed_pid, last_kill_time))
 
@@ -473,9 +528,10 @@ def kill_controller_process_verify_impact(
             LOG.info('iteration{:02d}: OK to kill pid:{} on host:{}, cmd={}, output=<{}>'.format(
                 count, pid, host, kill_cmd, output))
 
+
             if count < retries:
                 # IMPACT should not happen yet
-                if not check_impact(impact, active_controller=active_controller,
+                if not check_impact(impact, proc_name, last_events=latest_events, active_controller=active_controller,
                                     expecting_impact=False, host=host, con_ssh=con_ssh):
                     LOG.error('Impact:{} observed unexpectedly, it should happen only after killing {} times, '
                               'actual killed times:{}'.format(impact, retries, count))
@@ -486,7 +542,7 @@ def kill_controller_process_verify_impact(
                 no_standby_controller = standby_controller is None
                 expecting_impact = True if not no_standby_controller else False
                 if not check_impact(
-                        impact, active_controller=active_controller,
+                        impact, proc_name, last_events=latest_events, active_controller=active_controller,
                         expecting_impact=expecting_impact, host=host, con_ssh=con_ssh):
                     LOG.error('No impact after killing process {} {} times, while {}'.format(
                         proc_name, count, ('expecting impact' if expecting_impact else 'not expecting impact')))

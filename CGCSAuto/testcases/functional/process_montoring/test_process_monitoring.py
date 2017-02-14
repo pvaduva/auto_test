@@ -1,25 +1,37 @@
 
 import os.path
 import time
+import datetime
+import threading
 
+from pytest import mark, fixture
+
+from consts.cgcs import EventLogID
 from utils.tis_log import LOG
-from pytest import mark
-from utils.ssh import ControllerClient
+from utils.ssh import SSHClient, ControllerClient
+from consts.proj_vars import ProjVar
 from keywords import mtc_helper
-from keywords import system_helper
 
+
+_tested_procs = []
+_final_processes_status = {}
 
 DEF_RETRIES = 2
 DEF_DEBOUNCE = 20
-#DEF_INTERVAL = 20
+# DEF_INTERVAL = 20
 DEF_INTERVAL = 10
+SM_PROC_TIMEOUT = 90
+KILL_WAIT_RETRIES = 30
+
 DEF_PROCESS_RESTART_CMD = r'/etc/init.d/{} restart'
 DEF_PROCESS_PID_FILE_PATH = r'/var/run/{}.pid'
 
-INTERVAL_BETWEEN_SWACT = 300 + 200
+INTERVAL_BETWEEN_SWACT = 300 + 10
+# INTERVAL_BETWEEN_SWACT = 3
 IMPACTS = ['swact', 'log', 'enabled-degraded', 'disabled-failed', 'alarm', 'warn']
 
 SKIP_PROCESS_LIST = ['postgres']
+
 PROCESSES = {
     'sm': {'cmd': 'sm', 'impact': 'disabled-failed', 'severity': 'critical'},
     'rmond': {'cmd': 'rmon', 'impact': 'enabled-degraded', 'severity': 'major', 'interval': 10},
@@ -227,7 +239,7 @@ PROCESSES = {
 
 class MonitoredProcess:
 
-    def __init__(self, name, cmd=None, impact=None, severity='major', node_type='all', **kwargs):
+    def __init__(self, name, cmd=None, impact=None, severity='major', node_type='all', sm_process=True, **kwargs):
         self.name = name
 
         self.cmd = cmd
@@ -240,6 +252,7 @@ class MonitoredProcess:
         self.retries = kwargs.get('retries', DEF_RETRIES)
         self.debounce = kwargs.get('debounce', DEF_DEBOUNCE)
         self.interval = kwargs.get('interval', DEF_INTERVAL)
+        self.sm_process = sm_process
 
         self.prev_stats = None
         self.con_ssh = ControllerClient.get_active_controller()
@@ -283,16 +296,20 @@ class MonitoredProcess:
 
         elif node_type in ['controller', 'active']:
             LOG.info('for node-type:{}, kill on controller'.format(node_type))
-            code = mtc_helper.kill_controller_process_verify_impact(
+            pid, host = mtc_helper.kill_controller_process_verify_impact(
                 self.name,
                 cmd=self.cmd,
                 impact=self.impact,
                 retries=self.retries,
-                # TODO
+                action_timeout=SM_PROC_TIMEOUT,
+                total_retries=KILL_WAIT_RETRIES,
                 interval=self.interval,
                 on_active_controller=(node_type == 'active'),
                 con_ssh=self.con_ssh)
-            assert 0 == code, \
+            self.pid = int(pid)
+            self.host = host
+            code = 0
+            assert self.pid > 1, \
                 'Fail in killing process:{} and expecting impact: {}'.format(self.name, self.impact)
 
         elif node_type in ['compute']:
@@ -313,9 +330,11 @@ class MonitoredProcess:
 
 @mark.parametrize(('process_name'), [
     # mark.p1(('postgres')),
-    # mark.p1(('rabbitmq-server')), # rabbit in sm-dump list
-    mark.p1(('rabbit')),
-    # mark.p1(('sysinv-api')),
+    # mark.p1(('rabbitmq-server')), # rabbit in SM
+    # TODO CGTS-6336
+    # TODO CGTS-6391
+    # mark.p1(('rabbit')),
+    # mark.p1(('sysinv-api')),  # sysinv-inv in SM
     mark.p1(('sysinv-inv')),
     mark.p1(('sysinv-conductor')),
     mark.p1(('mtc-agent')),
@@ -323,9 +342,11 @@ class MonitoredProcess:
     mark.p1(('hw-mon')),
     mark.p1(('dnsmasq')),
     mark.p1(('fm-mgr')),
-    mark.p1(('keystone')),
+    # TODO CGTS-6396
+    # mark.p1(('keystone')),
     mark.p1(('glance-registry')),
-    mark.p1(('glance-api')),
+    # TODO CGTS-6398
+    # mark.p1(('glance-api')),
     mark.p1(('neutron-server')),
     mark.p1(('nova-api')),
     mark.p1(('nova-scheduler')),
@@ -424,6 +445,8 @@ def test_process_monitoring(process_name, con_ssh=None):
     tested, passed, failed, skipped = 0, 0, 0, 0
 
     skipped_procs = []
+
+    _tested_procs[:] = []
     for proc in procs_to_test:
         tested += 1
         LOG.tc_step('kill process:{}'.format(proc.name))
@@ -435,7 +458,7 @@ def test_process_monitoring(process_name, con_ssh=None):
             skipped += 1
 
         else:
-            if prev_impact == 'stact' and proc.impact == 'swact':
+            if prev_impact == 'swact' and proc.impact == 'swact':
                 LOG.info('sleep {} seconds because both previous and current IMPACT are swact')
                 time.sleep(INTERVAL_BETWEEN_SWACT)
 
@@ -447,9 +470,107 @@ def test_process_monitoring(process_name, con_ssh=None):
                 result = 'FAIL'
                 failed += 1
 
+        proc.passed = True
+        _tested_procs.append(proc)
+
         LOG.info('{}\t{:02d}\tprocess:{} done'.format(result, tested, proc.name))
 
     LOG.info('\nPASS\t{:03d}\nFAIL\t{:03d}\nSKIP\t{:03d}\nTOTAL\t{:03d}'.format(
         passed, failed, skipped, tested))
 
-    time.sleep(INTERVAL_BETWEEN_SWACT)
+
+def _monitor_process(process, total_time, interval=5):
+    name = getattr(process, 'name', None)
+    cmd = getattr(process, 'cmd', None)
+    pid = getattr(process, 'pid', None)
+    host = getattr(process, 'host', None)
+    sm_process = getattr(process, 'sm_process', False)
+
+    global _final_processes_status
+    _final_processes_status[name] = True
+
+    con_ssh = SSHClient(ProjVar.get_var('lab')['floating ip'])
+    con_ssh.connect(use_current=False)
+    ControllerClient.set_active_controller(con_ssh)
+
+    stop_time = time.time() + total_time
+
+    while time.time() < stop_time:
+        cur_pid, proc_name = mtc_helper.get_process_info(
+            name, cmd=cmd, host=host, sm_process=sm_process, con_ssh=con_ssh)[0:2]
+
+        cur_pid = int(cur_pid)
+        _final_processes_status[name] = (pid == cur_pid)
+
+        assert pid == cur_pid, \
+            'Got new PID for process:{}, no new process should be created after impact. pid={}, new-pid={}'.format(
+                name, pid, cur_pid)
+        LOG.info('OK, PID not changed:{} for process:{}'.format(pid, name))
+
+        running, msg = mtc_helper.is_process_running(cur_pid, host, con_ssh=con_ssh)
+        _final_processes_status[name] = running
+
+        assert running, 'Process died: pid:{} at {}, msg:{}'.format(
+            pid, datetime.datetime.utcnow().isoformat(), msg)
+
+        LOG.info('OK, process:{} is running, name:{}'.format(pid, name))
+        time.sleep(interval)
+
+    _final_processes_status[name] = True
+
+
+def monitor_process(process, total_time):
+    LOG.info('monitoring process:{} for {} seconds'.format(process, total_time))
+
+    name = getattr(process, 'name', None)
+    pid = getattr(process, 'pid', None)
+
+    if name is not None and pid is not None:
+        thread = threading.Thread(
+            target=_monitor_process,
+            args=(process, total_time),
+            name='Monitor-{}-{}'.format(name, pid))
+        thread.setDaemon(True)
+    else:
+        LOG.info('Process Name and PID are None, proc={}'.format(process))
+        thread = None
+
+    return thread
+
+
+@fixture(scope='function', autouse=True)
+def wait_and_monitor_tested_processes(request):
+    def _wait_and_monitor_tested_processes():
+
+        total_time = INTERVAL_BETWEEN_SWACT + 60
+        pre_wait = INTERVAL_BETWEEN_SWACT / 5
+
+        LOG.info('Wait for {} seconds after potential swact'.format(pre_wait))
+        time.sleep(pre_wait)
+
+        if not _tested_procs:
+            LOG.info('No processes completed the whole procedure? Wait for system recovered in {} seconds'.format(
+                total_time))
+            time.sleep(total_time)
+        else:
+            monitors = []
+            for proc in _tested_procs:
+                monitor = monitor_process(proc, total_time - pre_wait)
+                if monitor is not None:
+                    monitors.append(monitor)
+            if not monitors:
+                LOG.info('No processes monitored?')
+
+            _ = [proc.start() for proc in monitors]
+            time.sleep(total_time - pre_wait + len(monitors) * 1)
+
+        for name, passed in _final_processes_status.items():
+            LOG.info('monitoring process:{} {}'.format(name, 'PASS' if passed else 'FAIL'))
+            assert passed, 'Final process:{} failed'.format(name)
+
+    request.addfinalizer(_wait_and_monitor_tested_processes)
+
+
+def test_func():
+    events = mtc_helper.search_event(EventLogID.SERVICE_GROUP_STATE_CHANGE, severity='crititcal', State='set')
+    LOG.info('events={}'.format(events))
