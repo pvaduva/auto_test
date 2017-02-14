@@ -139,7 +139,8 @@ def __parse_testcase_record(record_line):
 
     domain = re.findall('[/\t](.*)/test_.*.py', full_name)
     domain = domain[0].upper() if domain else 'UNKNOWN'
-    test_name = full_name.split(sep='::')[-1].strip()
+    splited_fullname = full_name.split(sep='::', maxsplit=1)
+    test_name = splited_fullname[-1].strip()
 
     # Prepare to upload
     # Covert result to uppercase, such as PASS, FAIL, SKIP

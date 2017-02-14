@@ -436,10 +436,13 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
 
     row_indexes = []
     for header, values in kwargs.items():
-        if not isinstance(values, list):
-            values = [values]
-        elif isinstance(values, tuple):
+        if values is None:
+            continue
+
+        if isinstance(values, tuple):
             values = list(tuple)
+        elif not isinstance(values, list):
+            values = [values]
 
         kwarg_row_indexes = []
         for value in values:

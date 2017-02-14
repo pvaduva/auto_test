@@ -26,9 +26,7 @@ def setup_test_session():
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     setups.set_env_vars(con_ssh)
 
-    lab_info = ProjVar.get_var("LAB")
-    if 'controller-1 ip' in lab_info:
-        setups.copy_files_to_con1()
+    setups.copy_files_to_con1()
 
     global natbox_ssh
     natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'), con_ssh=con_ssh)

@@ -1,17 +1,18 @@
 import re
 import time
-from pytest import fixture, mark
+from pytest import fixture, mark, skip
 from utils import table_parser
 from utils.tis_log import LOG
 from utils import cli
 from consts.timeout import EventLogTimeout
 from consts.cgcs import FlavorSpec, VMStatus, EventLogID
+from consts.reasons import SkipReason
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
 @fixture(scope='module')
-def flavor_():
+def hb_flavor():
     flavor_id = nova_helper.create_flavor(name='heartbeat')[1]
     ResourceCleanup.add('flavor', flavor_id, scope='module')
 
@@ -21,14 +22,11 @@ def flavor_():
     return flavor_id
 
 
-@fixture(scope='function')
-def vm_(flavor_):
+def boot_vm_(flavor):
 
     vm_name = 'vm_with_hb'
-    flavor_id = flavor_
-    LOG.fixture_step("Boot a vm with heartbeat enabled")
-
-    vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id)[1]
+    LOG.tc_step("Boot a vm with heartbeat enabled")
+    vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor)[1]
     ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='function')
 
     event = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
@@ -195,7 +193,7 @@ def _perform_action(vm_id, action, expt_fail):
     mark.nightly('reboot'),
     mark.priorities('domain_sanity', 'nightly')('stop'),
 ])
-def test_vm_voting(action, vm_):
+def test_vm_voting(action, hb_flavor):
     """
     Tests that vms with heartbeat can vote to reject certain actions
     Args:
@@ -215,16 +213,24 @@ def test_vm_voting(action, vm_):
         - Delete created vm
 
     """
-    vm_id = vm_
+    if action == 'migrate':
+        if len(host_helper.get_hypervisors()) < 2:
+            skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+
+    vm_id = boot_vm_(hb_flavor)
 
     LOG.tc_step("Verify vm heartbeat is on by checking the heartbeat process")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        LOG.tc_step("Wait for guest_agent process to be up")
+        vm_helper.wait_for_process('guest_agent', vm_ssh=vm_ssh, timeout=30, fail_ok=False, disappear=False)
+
         exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat | grep -v grep")
         assert (output is not None)
 
         LOG.tc_step("Set the voting criteria")
         cmd = 'touch /tmp/vote_no_to_{}'.format(action)
         vm_ssh.exec_cmd(cmd)
+        time.sleep(5)
 
     _perform_action(vm_id, action, expt_fail=True)
 
@@ -232,6 +238,7 @@ def test_vm_voting(action, vm_):
     cmd = "rm /tmp/vote_no_to_{}".format(action)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         vm_ssh.exec_cmd(cmd)
+        time.sleep(5)
 
     _perform_action(vm_id, action, expt_fail=False)
 
@@ -247,13 +254,20 @@ def test_vm_voting_no_hb_migrate():
         - Verify that migrating the vm is not rejected
 
     """
+    if len(host_helper.get_hypervisors()) < 2:
+        skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+
     vm_name = 'vm_no_hb_migrate'
     vm_id = vm_helper.boot_vm(name=vm_name)[1]
     ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='function')
-    time.sleep(30)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    time.sleep(5)
 
     cmd = 'touch /tmp/vote_no_to_migrate'
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        LOG.tc_step("Wait for guest_agent process to be up")
+        vm_helper.wait_for_process('guest_agent', vm_ssh=vm_ssh, timeout=60, fail_ok=False, disappear=False)
+
         LOG.tc_step("Set the no migrate voting criteria")
         vm_ssh.exec_cmd(cmd)
 

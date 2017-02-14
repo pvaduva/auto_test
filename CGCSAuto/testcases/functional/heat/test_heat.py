@@ -13,6 +13,7 @@ from consts.heat import Heat, HeatUpdate
 from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HEAT_PATH
 from consts.auth import Tenant
+from consts.reasons import SkipReason
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
@@ -217,7 +218,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 
     """
 
-    fail_ok = 0
+    fail_ok = False
 
     t_name, yaml = template_name.split('.')
     params = getattr(Heat, t_name)['params']
@@ -271,7 +272,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     if hasattr(HeatUpdate, t_name):
         LOG.tc_step("Updating stack %s", stack_name)
         update_code, update_msg = update_stack(stack_name, template_name, ssh_client=con_ssh, auth_info=auth_info,
-                                    fail_ok=fail_ok)
+                                               fail_ok=fail_ok)
         if update_code == 1:
             return [1, update_msg] 
 
@@ -405,12 +406,12 @@ def test_delete_heat_after_swact(template_name):
         - Create a heat stack with the given template
         - Verify heat stack is created sucessfully
         - Verify heat resources are created
-        - Sawct controllers
+        - Swact controllers
         - Delete Heat stack and verify resource deletion
 
     """
-
-
+    if len(system_helper.get_controllers()) < 2:
+        skip(SkipReason.LESS_THAN_TWO_CONTROLLERS)
 
     # add test step
     return_code, msg = verify_basic_template(template_name, delete_after_swact=True)

@@ -11,7 +11,6 @@ from keywords import network_helper, vm_helper, nova_helper, cinder_helper, syst
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-
 @fixture(scope='module')
 def hosts_pci_device_list():
     """

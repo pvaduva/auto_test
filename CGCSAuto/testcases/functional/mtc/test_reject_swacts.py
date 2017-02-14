@@ -3,8 +3,14 @@ import time
 from pytest import fixture, skip, mark
 from utils.tis_log import LOG
 from keywords import host_helper, system_helper
-from consts import timeout
+from consts.reasons import SkipReason
 from testfixtures.recover_hosts import HostsToRecover
+
+
+@fixture(scope='module', autouse=True)
+def skip_simplex():
+    if len(system_helper.get_controllers()) < 2:
+        skip(SkipReason.LESS_THAN_TWO_CONTROLLERS)
 
 
 def test_swact_standby_controller_negative():
@@ -106,7 +112,6 @@ def test_swact_no_standby_negative(lock_controller):
                                   "Previous: {} Current: {}".format(active, curr_active)
 
 
-@mark.skipif(system_helper.is_small_footprint(), reason="Small footprint lab. No compute nodes.")
 def test_swact_compute_negative():
     """
     TC610_5
@@ -116,10 +121,10 @@ def test_swact_compute_negative():
         - Attempt to swact from a compute
 
     """
-    if system_helper.is_small_footprint():
-        skip("Skip for CPE system.")
+    computes = system_helper.get_hostnames(personality='compute')
+    if not computes:
+        skip("No compute host in system")
 
-    computes = system_helper.get_computes()
     for compute in computes:
         LOG.tc_step("Attempting to swact from {}".format(compute))
         code, out = host_helper.swact_host(compute, fail_ok=True)

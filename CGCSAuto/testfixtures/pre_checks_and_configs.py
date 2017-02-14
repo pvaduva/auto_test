@@ -1,14 +1,18 @@
 import time
-from pytest import fixture
+from pytest import fixture, skip
 
 from utils.tis_log import LOG
 from consts.auth import Tenant
+from consts.reasons import SkipReason
 from consts.cgcs import EventLogID, HostAvailabilityState
 from keywords import system_helper, host_helper, keystone_helper
 
 
 @fixture(scope='session')
 def wait_for_con_drbd_sync_complete():
+    if len(system_helper.get_controllers()) < 2:
+        LOG.info("Less than two controllers on system. Do not wait for drbd sync")
+        return False
 
     host = 'controller-1'
     LOG.fixture_step("Waiting for controller-1 drbd sync alarm gone if present")
@@ -30,10 +34,12 @@ def wait_for_con_drbd_sync_complete():
 
     LOG.fixture_step("Wait for {} drbd-cinder in sm-dump to reach desired state".format(host))
     host_helper.wait_for_sm_dump_desired_states(host, 'drbd-', strict=False, timeout=30, fail_ok=False)
+    return True
 
 
 @fixture(scope='session')
 def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
+    more_than_one_controllers = wait_for_con_drbd_sync_complete
     prev_pswd = Tenant.ADMIN['password']
     post_pswd = "'!{}9'".format(prev_pswd)
 
@@ -41,14 +47,17 @@ def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     keystone_helper.update_user('admin', password=post_pswd)
 
     def _lock_unlock_controllers():
-        active, standby = system_helper.get_active_standby_controllers()
-        if standby:
-            LOG.fixture_step("(Session) Locking unlocking controllers to complete action")
-            host_helper.lock_host(standby)
-            host_helper.unlock_host(standby)
+        if more_than_one_controllers:
+            active, standby = system_helper.get_active_standby_controllers()
+            if standby:
+                LOG.fixture_step("(Session) Locking unlocking controllers to complete action")
+                host_helper.lock_host(standby)
+                host_helper.unlock_host(standby)
 
-            host_helper.lock_host(active, swact=True)
-            host_helper.unlock_host(active)
+                host_helper.lock_host(active, swact=True)
+                host_helper.unlock_host(active)
+            else:
+                LOG.warning("Standby controller unavailable. Skip lock unlock controllers post admin password change.")
 
     def revert_pswd():
         LOG.fixture_step("(Session) Reverting admin password to {}".format(prev_pswd))

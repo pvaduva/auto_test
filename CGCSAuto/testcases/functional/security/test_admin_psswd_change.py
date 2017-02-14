@@ -1,7 +1,9 @@
-from pytest import mark, fixture
+from pytest import mark, fixture, skip
+
 from keywords import host_helper, system_helper, keystone_helper
 from utils.tis_log import LOG
 from consts.auth import Tenant
+from consts.reasons import SkipReason
 
 
 @fixture()
@@ -15,12 +17,16 @@ def _revert_admin_pw(request):
     request.add(_revert)
 
 
+@fixture(scope='module')
+def less_than_two_cons():
+    return len(system_helper.get_controllers()) < 2
+
 @mark.usefixtures('check_alarms')
 @mark.parametrize(('scenario'), [
     # mark.p1(('lock_standby_change_pswd')),
     mark.p1(('change_pswd_swact')),
 ])
-def test_admin_password(scenario):
+def test_admin_password(scenario, less_than_two_cons):
     """
     Test the admin password change
 
@@ -30,8 +36,12 @@ def test_admin_password(scenario):
         - check alarams
 
     """
+    if 'swact' in scenario and less_than_two_cons:
+        skip(SkipReason.LESS_THAN_TWO_CONTROLLERS)
 
     host = system_helper.get_standby_controller_name()
+    assert host, "No standby controller on system"
+
     if scenario == "lock_standby_change_pswd":
         # lock the standby
         LOG.tc_step("Attempting to lock {}".format(host))

@@ -64,14 +64,11 @@ def is_small_footprint(controller_ssh=None, controller='controller-0'):
 
 
 def get_storage_nodes(con_ssh=None):
-    nodes = _get_nodes(con_ssh)
-
-    return nodes['storages']
+    return get_hostnames(personality='storage', con_ssh=con_ssh)
 
 
 def get_controllers(con_ssh=None):
-    nodes = _get_nodes(con_ssh)
-    return nodes['controllers']
+    return get_hostnames(personality='controller', con_ssh=con_ssh)
 
 
 def get_computes(con_ssh=None):
@@ -79,9 +76,33 @@ def get_computes(con_ssh=None):
     return nodes['computes']
 
 
-def get_hostnames(con_ssh=None):
+def get_hostnames(personality=None, administrative=None, operational=None, availability=None, name=None,
+                  strict=True, exclude=False, con_ssh=None):
+    """
+    Get hostnames with given criteria
+    Args:
+        personality (str):
+        administrative (str):
+        operational (str):
+        availability (str):
+        name (str):
+        strict (bool):
+        exclude (bool):
+        con_ssh (dict):
+
+    Returns (list): hostnames
+
+    """
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
-    return table_parser.get_column(table_, 'hostname')
+    filters = {'hostname': name,
+               'personality': personality,
+               'administrative': administrative,
+               'operational': operational,
+               'availability': availability}
+    hostnames = table_parser.get_values(table_, 'hostname', strict=strict, exclude=exclude, **filters)
+    LOG.info("Filtered hostnames: {}".format(hostnames))
+
+    return hostnames
 
 
 def _get_nodes(con_ssh=None):

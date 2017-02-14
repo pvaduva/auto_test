@@ -2,16 +2,16 @@
 # TC451 TiS_Mapping_AutomatedTests_v2.xlsx
 ###
 
-from pytest import mark
+from pytest import mark, skip
 
 from utils.tis_log import LOG
+from consts.reasons import SkipReason
 from keywords import host_helper, system_helper
 
 
 @mark.sanity
 @mark.cpe_sanity
-@mark.usefixtures('wait_for_con_drbd_sync_complete')
-def test_swact_controllers():
+def test_swact_controllers(wait_for_con_drbd_sync_complete):
     """
     Verify swact active controller
 
@@ -20,6 +20,9 @@ def test_swact_controllers():
         - Verify standby controller and active controller are swapped
 
     """
+    if not wait_for_con_drbd_sync_complete:
+        skip(SkipReason.LESS_THAN_TWO_CONTROLLERS)
+
     LOG.tc_step('retrieve active and available controllers')
     pre_active_controller = system_helper.get_active_controller_name()
     pre_standby_controller = system_helper.get_standby_controller_name()

@@ -12,8 +12,12 @@ from consts.filepaths import PrivKeyPath
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
 
-from keywords import vm_helper, host_helper, nova_helper
+from keywords import vm_helper, host_helper, nova_helper, system_helper
 from keywords.common import scp_to_local
+
+
+def less_than_two_controllers():
+    return len(system_helper.get_controllers()) < 2
 
 
 def setup_tis_ssh(lab):
@@ -247,6 +251,9 @@ def get_build_info(con_ssh):
 
 
 def copy_files_to_con1():
+    if less_than_two_controllers():
+        LOG.info("Less than two controllers on system. Skip copying file to controller-1.")
+        return
 
     LOG.info("rsync test files from controller-0 to controller-1 if not already done")
 
