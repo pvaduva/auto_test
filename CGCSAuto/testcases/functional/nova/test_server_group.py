@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, ServerGroupMetadata
 from consts.reasons import SkipReason
-from keywords import nova_helper, vm_helper, host_helper
+from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
@@ -13,8 +13,11 @@ from testfixtures.resource_mgmt import ResourceCleanup
 def check_system():
     hosts = host_helper.get_hypervisors(state='up', status='enabled')
 
-    if len(hosts) < 2:
+    is_simplex = system_helper.is_simplex()
+    if len(hosts) < 2 and not is_simplex:
         skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+
+    return is_simplex
 
 
 @mark.parametrize(('srv_grp_msging_flavor', 'policy', 'group_size', 'best_effort', 'vms_num'), [
@@ -22,7 +25,7 @@ def check_system():
     mark.domain_sanity((None, 'anti_affinity', 3, True, 3)),
     mark.nightly(('srv_grp_msg_true', 'anti_affinity', 2, None, 2)),
 ])
-def test_boot_vms_server_group(srv_grp_msging_flavor, policy, group_size, best_effort, vms_num):
+def test_boot_vms_server_group(srv_grp_msging_flavor, policy, group_size, best_effort, vms_num, check_system):
     """
     Test boot vm with specified server group
 
@@ -46,6 +49,9 @@ def test_boot_vms_server_group(srv_grp_msging_flavor, policy, group_size, best_e
         - Delete created server group
 
     """
+    is_simplex = check_system
+    if is_simplex and policy == 'anti_affinity' and not best_effort:
+        skip("Skip anti_affinity strict for simplex system")
 
     LOG.tc_step("Create a flavor with server group messaging set to {}".format(srv_grp_msging_flavor))
     flavor_id = nova_helper.create_flavor('srv_grp')[1]
