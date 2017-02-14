@@ -78,6 +78,24 @@ def get_host_disk_sizes(host=None, con_ssh=None):
     return disk_sizes
 
 
+def get_host_disks_values(host, rtn_val='size_mib', dev_type=None, serial_id=None, dev_num=None, dev_node=None,
+                          size_mib=None, strict=True, con_ssh=None):
+    assert host
+    filters = {'device_node': dev_node,
+               'device_num': dev_num,
+               'device_type': dev_type,
+               'size_mib': size_mib,
+               'serial_id': serial_id
+               }
+    table_ = table_parser.table(cli.system('host-disk-list {}'.format(host), ssh_client=con_ssh))
+    vals = table_parser.get_values(table_, rtn_val, strict=strict, **filters)
+    if rtn_val in ['size_mib', 'dev_num']:
+        vals = [int(val) for val in vals]
+
+    LOG.info("{} disk {} filtered: {}".format(host, rtn_val, vals))
+    return vals
+
+
 def get_host_disk_size(host=None, disk=None, con_ssh=None):
     if not host or not disk:
         return 0
