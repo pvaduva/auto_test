@@ -221,11 +221,10 @@ def test_vm_voting(action, hb_flavor):
 
     LOG.tc_step("Verify vm heartbeat is on by checking the heartbeat process")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        LOG.tc_step("Wait for guest_agent process to be up")
-        vm_helper.wait_for_process('guest_agent', vm_ssh=vm_ssh, timeout=30, fail_ok=False, disappear=False)
+        LOG.tc_step("Wait for guest heartbeat process to run continuously for more than 10 seconds")
 
-        exitcode, output = vm_ssh.exec_cmd("ps -ef | grep heartbeat | grep -v grep")
-        assert (output is not None)
+        vm_helper.wait_for_process('heartbeat', vm_ssh=vm_ssh, timeout=60, time_to_stay=10, check_interval=1,
+                                   fail_ok=False)
 
         LOG.tc_step("Set the voting criteria")
         cmd = 'touch /tmp/vote_no_to_{}'.format(action)
@@ -265,8 +264,9 @@ def test_vm_voting_no_hb_migrate():
 
     cmd = 'touch /tmp/vote_no_to_migrate'
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        LOG.tc_step("Wait for guest_agent process to be up")
-        vm_helper.wait_for_process('guest_agent', vm_ssh=vm_ssh, timeout=60, fail_ok=False, disappear=False)
+        LOG.tc_step("Wait for guest heartbeat process to be up for more than 10 seconds")
+        vm_helper.wait_for_process('heartbeat', vm_ssh=vm_ssh, timeout=60, time_to_stay=10, check_interval=1,
+                                   fail_ok=False)
 
         LOG.tc_step("Set the no migrate voting criteria")
         vm_ssh.exec_cmd(cmd)

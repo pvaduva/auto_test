@@ -2546,8 +2546,8 @@ def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, a
     return 0, success_msg
 
 
-def wait_for_process(process, vm_id=None, vm_ssh=None, disappear=False, timeout=120, check_interval=3, fail_ok=True,
-                     con_ssh=None):
+def wait_for_process(process, vm_id=None, vm_ssh=None, disappear=False, timeout=120, time_to_stay=1, check_interval=3,
+                     fail_ok=True, con_ssh=None):
     """
     Wait for given process to appear or disappear on a VM
 
@@ -2557,6 +2557,7 @@ def wait_for_process(process, vm_id=None, vm_ssh=None, disappear=False, timeout=
         vm_ssh (VMSSHClient): when vm_ssh is given, vm_id param will be ignored
         disappear (bool):
         timeout (int): max seconds to wait
+        time_to_stay (int): time for result to persist
         check_interval (int):
         fail_ok (bool): whether to raise exception upon wait fail
         con_ssh (SSHClient): active controller ssh.
@@ -2570,11 +2571,12 @@ def wait_for_process(process, vm_id=None, vm_ssh=None, disappear=False, timeout=
     if not vm_ssh:
         with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh) as vm_ssh:
             return common.wait_for_process(ssh_client=vm_ssh, process=process, disappear=disappear,
-                                           timeout=timeout, check_interval=check_interval, fail_ok=fail_ok)
+                                           timeout=timeout, time_to_stay=time_to_stay, check_interval=check_interval,
+                                           fail_ok=fail_ok)
 
     else:
         return common.wait_for_process(ssh_client=vm_ssh, process=process, disappear=disappear, timeout=timeout,
-                                       check_interval=check_interval, fail_ok=fail_ok)
+                                       check_interval=check_interval, time_to_stay=time_to_stay, fail_ok=fail_ok)
 
 
 def boost_cpu_usage(vm_id, cpu_num=1, con_ssh=None):

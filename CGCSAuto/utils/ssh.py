@@ -601,7 +601,8 @@ class SSHClient:
             return False
 
     def wait_for_cmd_output_persists(self, cmd, content, timeout=60, time_to_stay=10, strict=False, regex=False,
-                                     expt_timeout=10, check_interval=1, exclude=False, non_zero_rtn_ok=False):
+                                     expt_timeout=10, check_interval=1, exclude=False, non_zero_rtn_ok=False,
+                                     sudo=False, fail_ok=True):
         """
         Wait for given content to be included/excluded in cmd output for more than <time_to_stay> seconds.
 
@@ -616,6 +617,8 @@ class SSHClient:
             check_interval (int): how long to wait to execute the cmd again in seconds.
             exclude (bool): whether to wait for content be consistently included or excluded from cmd output
             non_zero_rtn_ok (bool): whether it's okay for cmd to have none-zero return code. Raise exception if False.
+            sudo (bool): whether to run cmd using sudo
+            fail_ok (bool): whether to raise exception when False
 
         Returns (bool): True if content appears in cmd output within max wait time.
 
@@ -625,7 +628,10 @@ class SSHClient:
 
             stay_end_time = time.time() + time_to_stay
             while time.time() < stay_end_time:
-                code, output = self.exec_cmd(cmd, expect_timeout=expt_timeout)
+                if sudo:
+                    code, output = self.exec_sudo_cmd(cmd, expect_timeout=expt_timeout)
+                else:
+                    code, output = self.exec_cmd(cmd, expect_timeout=expt_timeout)
                 if not non_zero_rtn_ok and code > 0:
                     raise exceptions.SSHExecCommandFailed("Get non-zero return code for command: {}".format(cmd))
 
@@ -656,7 +662,11 @@ class SSHClient:
                 return True
 
         else:
-            return False
+            if fail_ok:
+                return False
+            extra_str = 'is not excluded' if exclude else 'did not persist'
+            raise exceptions.SSHException("Expected output from {} - '{}' {} for {} seconds within {} seconds".
+                                          format(cmd, content, extra_str, time_to_stay, timeout))
 
     def deploy_ssh_key(self, ssh_key=None):
         if ssh_key:

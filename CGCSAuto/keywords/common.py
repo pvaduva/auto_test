@@ -422,7 +422,8 @@ def wait_for_val_from_func(expt_val, timeout, check_interval, func, *args, **kwa
     return False, current_val
 
 
-def wait_for_process(ssh_client, process, sudo=False, disappear=False, timeout=60, check_interval=3, fail_ok=True):
+def wait_for_process(ssh_client, process, sudo=False, disappear=False, timeout=60, time_to_stay=1, check_interval=1,
+                     fail_ok=True):
     """
     Wait for given process to appear or disappear
 
@@ -431,29 +432,18 @@ def wait_for_process(ssh_client, process, sudo=False, disappear=False, timeout=6
         process (str): unique identification of process, such as pid, or unique proc name
         disappear (bool): whether to wait for proc appear or disappear
         timeout (int): max wait time
+        time_to_stay (int): seconds to persists
         check_interval (int): how often to check
+        fail_ok (bool):
 
     Returns (bool): whether or not process appear/disappear within timeout
 
     """
     cmd = 'ps aux | grep --color=never {} | grep -v grep'.format(process)
-    msg_str = 'disappear' if disappear else 'appear'
+    # msg_str = 'disappear' if disappear else 'appear'
 
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        if not sudo:
-            code, out = ssh_client.exec_cmd(cmd=cmd, fail_ok=True)
-        else:
-            code, out = ssh_client.exec_sudo_cmd(cmd=cmd, fail_ok=True)
+    res = ssh_client.wait_for_cmd_output_persists(cmd, process, timeout=timeout, time_to_stay=time_to_stay,
+                                                  strict=False, regex=False, check_interval=check_interval,
+                                                  exclude=disappear, non_zero_rtn_ok=True, sudo=sudo, fail_ok=fail_ok)
 
-        if (disappear and not out) or (out and not disappear):
-            LOG.info("Process {} {}ed".format(process, msg_str))
-            return True
-
-        time.sleep(check_interval)
-
-    LOG.warning("Process {} did not {} within {} seconds".format(process, msg_str, timeout))
-    if fail_ok:
-        return False
-    else:
-        raise exceptions.TimeoutException("Timed out waiting for process {} to {}".format(process, msg_str))
+    return res
