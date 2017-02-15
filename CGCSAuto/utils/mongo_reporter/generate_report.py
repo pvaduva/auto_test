@@ -5,6 +5,10 @@ import requests
 
 from utils import lab_info, local_host
 
+TEST_SERVER_HTTP_AUTOLOG = 'http://128.224.150.21/auto_logs/'
+# TEST_SERVER_FS_AUTOLOG = 'yow-cgcs-test.*:/sandbox/AUTOMATION_LOGS/'
+TEST_SERVER_FS_AUTOLOG = 'yow-yliu12-vm.*:/home/yliu12/AUTOMATION_LOGS/'
+
 TMP_FILE = '/tmp/cgcs_emailmessage.html'
 # YELLOW = '#FFC200'
 REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
@@ -28,7 +32,7 @@ REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 """
 
 
-def write_report_file(sys_config=None, source='mongo', tags=None, start_date=None, end_date=None):
+def write_report_file(sys_config=None, source='mongo', tags=None, start_date=None, end_date=None, log_dir=None):
     """
 
     Args:
@@ -36,6 +40,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
         tags (str|list):
         start_date (str):
         end_date (str):
+        log_dir (str):
 
     Returns:
 
@@ -51,10 +56,18 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
             end_date = now.strftime("%Y-%m-%d")
 
         lab, build, build_server, overall_status, log_path, summary, testcases_res = \
-            _get_results_from_mongo(tags=tags, start_date=start_date, end_date=end_date)
+            _get_results_from_mongo(tags=tags, start_date=start_date, end_date=end_date, log_dir=log_dir)
 
     else:
+        res_file = 'test_results.log'
+        if not res_file in source and not log_dir:
+            raise ValueError("local automation log path has to be specified via log_dir or source")
+
+        source = source if res_file in source else os.path.join(log_dir, res_file)
+        source = os.path.expanduser(source)
         lab, build, build_server, overall_status, log_path, summary, testcases_res = _get_local_results(source)
+
+    log_path = re.sub(TEST_SERVER_FS_AUTOLOG, TEST_SERVER_HTTP_AUTOLOG, log_path, count=1)
 
     lab = lab.upper()
     if not sys_config:
@@ -105,7 +118,7 @@ def _get_local_results(res_path):
     return lab, build, build_server, overall_status, log_path, summary, testcases_res
 
 
-def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
+def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, log_dir=None):
     if isinstance(tags, str):
         tags = [tags]
 
@@ -175,17 +188,24 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False):
         elif attr[0] == 'build_server':
             build_server = attr[1]
 
-    panorama_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=WASSP&view=list" \
-                   "&dateField=[testExecutionTimeStamp]&programs=active&resultsMode=last" \
-                   "&startDate={}&endDate={}" \
-                   "&releaseName=[MYSQL1:2226]" \
-                   "&tags=__in__[{}]'>Test Results Link</a>".format(start_date, end_date, ','.join(tags))
+    if not log_dir or lab.lower().replace('-', '-') not in str(log_dir):
+        panorama_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=WASSP&view=list" \
+                       "&dateField=[testExecutionTimeStamp]&programs=active&resultsMode=last" \
+                       "&startDate={}&endDate={}" \
+                       "&releaseName=[MYSQL1:2226]" \
+                       "&tags=__in__[{}]'>Test Results Link</a>".format(start_date, end_date, ','.join(tags))
 
-    print("Panorama query url: {}".format(panorama_url))
+        print("Panorama query url: {}".format(panorama_url))
+        log_path = panorama_url
+    else:
+        log_dir = log_dir.replace('test_results.py', '')
+        log_dir = os.path.expanduser(log_dir)
+        hostname = local_host.get_host_name()
+        log_path = "{}:{}".format(hostname, log_dir)
 
     overall_status = _get_overall_status(pass_rate)
 
-    return lab, build, build_server, overall_status, panorama_url, summary, testcases_res
+    return lab, build, build_server, overall_status, log_path, summary, testcases_res
 
 
 def _get_overall_status(pass_rate):
@@ -221,9 +241,9 @@ def send_report(subject, recipients, msg_file=TMP_FILE):
     os.system(cmd)
 
 
-def generate_report(recipients, subject='', source='mongo', tags=None, start_date=None, end_date=None):
+def generate_report(recipients, subject='', source='mongo', tags=None, start_date=None, end_date=None, log_dir=None):
     tmp_file, lab, build, build_server, raw_status = write_report_file(source=source, tags=tags, start_date=start_date,
-                                                                       end_date=end_date)
+                                                                       end_date=end_date, log_dir=log_dir)
     subject = subject.strip()
     subject = "TiS {} Test Report {} [{}] - {}".format(subject, lab, build, raw_status)
     send_report(subject=subject, recipients=recipients)
