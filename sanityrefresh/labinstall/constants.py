@@ -129,7 +129,7 @@ INSTALLATION_RESERVE_NOTE = "AUTO: Lab installation"
 # Servers
 BLD_SERVERS = ["yow-cgts1-lx", "yow-cgts2-lx", "yow-cgts3-lx", "yow-cgts4-lx"]
 DEFAULT_BLD_SERVER = "yow-cgts4-lx"
-TUXLAB_SERVERS = ["yow-tuxlab", "yow-tuxlab2"]
+TUXLAB_SERVERS = ["yow-tuxlab", "yow-tuxlab2", "yow-cgcs-tuxlab", "128.224.150.110"]
 DEFAULT_TUXLAB_SERVER = "yow-tuxlab2"
 DNS_SERVER ="8.8.8.8"
 HOST_EXT = ".wrs.com"

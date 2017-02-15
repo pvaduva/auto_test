@@ -100,6 +100,9 @@ def parse_args():
                          help="Tuxlab server with controller-0 feed directory"
                          "\n(default: %(default)s)")
 
+    lab_grp.add_argument('--iso-install', dest='iso_install' , action="store_true", default=False,
+                         help="iso install flag ")
+
     #TODO: This option is not being referenced in code. Add logic to
     #      exit after config_controller unless this option is specified
     #      or modify this option to be "skip_lab_setup" so that it skips
@@ -571,6 +574,52 @@ def burn_usb_load_image(install_output_dir, node, bld_server_conn, load_path, is
         msg = 'Failed to burn boot image iso file \"{}\" onto USB'.format(iso_path)
         log.error(msg)
         wr_exit()._exit(1, msg)
+
+
+def copy_iso(install_output_dir, tuxlab_server, bld_server_conn, load_path, iso_path=None, iso_host=None, c0_targetId=None):
+    '''
+    This Function is intended to perform the following operation
+    Copy latest_bootimage.iso to yow-cgcs-tuxlab, mounti it and run pxeboot_setup.sh
+    '''
+
+    # Check if node yow-cgcs-tuxlab host is accessible
+    cmd = "ping -c 4 {}".format(tuxlab_server)
+    rc, output = bld_server_conn.exec_cmd(cmd, timeout=PING_TIMEOUT + TIMEOUT_BUFFER)
+
+    if rc != 0:
+        msg = "Unable to ping tuxlab: {}".format(tuxlab_server)
+        wr_exit()._exit(1, msg)
+
+    ISO_TMP_PATH = INSTALL_VARS_TMP_PATH + "/iso/" + c0_targetId + "/" + BOOT_IMAGE_ISO
+
+    # Check if the ISO is available
+    pre_opts = 'sshpass -p "{0}"'.format(PASSWORD)
+    if not iso_host:
+        iso_path = load_path + "/" + BOOT_IMAGE_ISO_PATH
+        cmd = "test -f " + iso_path
+        if bld_server_conn.exec_cmd(cmd)[0] != 0:
+            msg = 'Boot image iso file not found at {}'.format(iso_path)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+            logutils.print_step("Starting copying ISO {} from host {}".format(tuxlab_server, iso_host))
+        bld_server_conn.rsync(iso_path, USERNAME, tuxlab_server, ISO_TMP_PATH, pre_opts=pre_opts)
+    else:
+        iso_host_conn = SSHClient(log_path=install_output_dir + "/" + iso_host + ".ssh.log")
+        iso_host_conn.connect(hostname=iso_host, username=USERNAME, password=PASSWORD)
+        cmd = "test -f " + iso_path
+        if iso_host_conn.exec_cmd(cmd)[0] != 0:
+            msg = 'Boot image iso file not found at {}'.format(iso_path)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+        iso_host_conn.rsync(iso_path, USERNAME, tuxlab_server, ISO_TMP_PATH, pre_opts=pre_opts)
+    # TODO: The following block should be made into a separate function
+    # Now that we have the iso we need to mount it and run pxeboot_setup.sh
+
+    logutils.print_step("Iso copy finished")
+    # wr_exit()._exit(54, "done for now")
+
+
+
 
 def wipe_disk(node, install_output_dir):
     ''' Perform a wipedisk operation on the lab before booting a new load into
@@ -1593,7 +1642,8 @@ def main():
     else:
         storage_nodes = None
 
-    tuxlab_server = args.tuxlab_server + HOST_EXT
+    #tuxlab_server = args.tuxlab_server + HOST_EXT
+    tuxlab_server = args.tuxlab_server
     run_lab_setup = args.run_lab_setup
     small_footprint = args.small_footprint
     burn_usb = args.burn_usb
@@ -1612,6 +1662,7 @@ def main():
     tis_bld_dir = args.tis_bld_dir
     guest_bld_dir = args.guest_bld_dir
     patch_dir_paths = args.patch_dir_paths
+    iso_install = args.iso_install
 
     install_timestr = time.strftime("%Y%m%d-%H%M%S")
     continue_install = args.continue_install
@@ -1670,6 +1721,7 @@ def main():
 
         logutils.print_name_value("Run lab setup", run_lab_setup)
         logutils.print_name_value("Tuxlab server", tuxlab_server)
+        logutils.print_name_value("Is iso_install", iso_install)
         logutils.print_name_value("Small footprint", small_footprint)
 
     logutils.print_name_value("Build server", bld_server)
@@ -1799,7 +1851,12 @@ def main():
     if storage_nodes is not None:
         storage_dict = create_node_dict(storage_nodes, STORAGE)
 
-    if not skip_feed:
+
+    '''
+    If we are doing a regular tuxlab or tuxlab2 install then set the feed
+    If we find the --iso-install flag then skip the feed setup on tuxlab and/or tuxlab2
+    '''
+    if not skip_feed and iso_install is False:
         executed = False
         # Lab-install Step 0 -  boot controller from tuxlab or usb or cumulus
         msg = 'Set_up_network_feed'
@@ -1813,7 +1870,81 @@ def main():
                                     install_output_dir)
                 set_install_step_complete(lab_install_step)
     else:
-        log.info('Skipping setup of network feed')
+        log.info('Skipping setup of network feed on tuxlab: '.format(tuxlab_server))
+
+
+    '''
+    If detect that --iso-install flag was set then it'll be pxeboot install from
+    yow-cgcs-tuxlab setup via pxeboot_setup.sh that is packaged with the TiS ISO image
+    '''
+    if "yow-cgcs-tuxlab" in tuxlab_server and iso_install is True:
+        log.info('Feedpoint will be setup on {}'.format(tuxlab_server))
+        log.info('copying ISO to {}'.format(tuxlab_server))
+
+        # vlm targetID of controller-0
+        c0_targetId = controller_nodes[0]
+
+        # Now we need to mount the iso as root
+        # sudo mount -o loop /tmp/bootimage.iso /media/iso
+        # Check if node yow-cgcs-tuxlab host is accessible
+        tuxlab_conn = SSHClient(log_path=install_output_dir + "/" + tuxlab_server + ".ssh.log")
+        tuxlab_conn.connect(hostname=tuxlab_server, username=USERNAME,
+                            password=PASSWORD)
+        tuxlab_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
+
+        cmd = "mkdir -p /tmp/iso/{}".format(c0_targetId)
+        if tuxlab_conn.exec_cmd(cmd,)[0] != 0:
+            msg = "failed to execute: {}".format(cmd)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+
+
+        copy_iso(install_output_dir, tuxlab_server, bld_server_conn, load_path, iso_path, iso_host, c0_targetId)
+        log.info('Latest bootimage.iso copied')
+
+        cmd = "sudo umount /media/iso/{}; echo if we fail we ignore it".format(c0_targetId)
+        if tuxlab_conn.exec_cmd(cmd,)[0] != 0:
+            msg = "failed to execute: {}".format(cmd)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+
+        cmd = "rm -rf /media/iso/{}; echo 'if we fail we ignore it'".format(c0_targetId)
+        if tuxlab_conn.exec_cmd(cmd,)[0] != 0:
+            msg = "failed to execute: {}".format(cmd)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+
+        cmd = "mkdir -p /media/iso/{}".format(c0_targetId)
+        if tuxlab_conn.exec_cmd(cmd,)[0] != 0:
+            msg = "failed to execute: {}".format(cmd)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+
+        cmd = "sudo mount -o loop /tmp/iso/{}/bootimage.iso /media/iso/{}; echo if we fail we ignore it".format(c0_targetId, c0_targetId)
+        if tuxlab_conn.exec_cmd(cmd,)[0] != 0:
+            msg = "failed to execute: {}".format(cmd)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+
+        cmd = "sudo mount -o remount,exec,dev /media/iso/{}; echo if we fail we ignore it ".format(c0_targetId)
+        if tuxlab_conn.exec_cmd(cmd)[0] != 0:
+            msg = "failed to execute: {}".format(cmd)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+
+        cmd ="rm -rf /export/pxeboot/pxelinux.cfg/{}".format(c0_targetId)
+        if tuxlab_conn.exec_cmd(cmd)[0] != 0:
+            msg = "failed to execute: {}".format(cmd)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+
+        cmd ="/media/iso/{}/pxeboot_setup.sh -u http://128.224.150.110/umalab/{}  -t /export/pxeboot/pxelinux.cfg/{}".format(c0_targetId, c0_targetId, c0_targetId)
+        if tuxlab_conn.exec_cmd(cmd)[0] != 0:
+            msg = "failed to execute: {}".format(cmd)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+
+
 
     nodes = list(controller_dict.values()) + list(compute_dict.values()) + list(storage_dict.values())
 

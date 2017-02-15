@@ -1007,7 +1007,7 @@ class Telnet:
                     log.info("Pressing ENTER key")
                     self.write(str.encode("\r\r"))
                 else:
-                    self.get_read_until("Kickstart Boot Menu", 240)
+                    self.get_read_until("Boot from hard drive", 240)
                     # New pxeboot cfg menu
                     # 0) Boot from hard drive
                     # 1) WRL Serial Controller Install
@@ -1031,7 +1031,7 @@ class Telnet:
                     if hasattr(node, "host_kickstart_menu_selection"):
                         selection_menu_option =  getattr(node, "host_kickstart_menu_selection")
 
-                    log.info("Kickstart boot menu selection = {}".format(selection_menu_option))
+                    log.info("Boot from hard drive selection = {}".format(selection_menu_option))
 
                     self.write_line(selection_menu_option)
 
@@ -1143,9 +1143,9 @@ class Telnet:
                         log.info("Pressing ENTER key")
                     self.write(str.encode("\r\r"))
                 else:
-                    self.get_read_until("Kickstart Boot Menu", 60)
+                    self.get_read_until("Boot from hard drive", 60)
                     log.info("Searching Kickstart boot device menu for ...")
-                    # Some labs like IP-28_30 has kickstart boot menu selection as 0,1,2
+                    # Some labs like IP-28_30 has Boot from hard drive selection as 0,1,2
                     # other have selection of 1,2,3. Need to determine menu options:
                     #selection_menu_option = '2'
                     if hasattr(node, "host_kickstart_menu_selection"):
@@ -1170,7 +1170,7 @@ class Telnet:
                         else:
                             selection_menu_option = '2'
 
-                    log.info("Kickstart boot menu selection = {}".format(selection_menu_option))
+                    log.info("Boot from hard drive selection = {}".format(selection_menu_option))
                     self.write_line(selection_menu_option)
 
         elif bios_type == BIOS_TYPES[1]:
@@ -1187,13 +1187,13 @@ class Telnet:
                 # 2) CentOS Serial Controller Install
                 # 3) WRL Serial CPE Install
                 # 4) CentOS Serial CPE Install
-                self.get_read_until("Kickstart Boot Menu", 30)
+                self.get_read_until("Boot from hard drive", 30)
                 log.info("Enter option for {} Controller Install".format(host_os))
                 if host_os == 'wrlinux':
                     selection_menu_option = '1'
                 else:
                     selection_menu_option = '2'
-                log.info("Kickstart boot menu selection = {}".format(selection_menu_option))
+                log.info("Boot from hard drive selection = {}".format(selection_menu_option))
                 self.write_line(selection_menu_option)
         elif bios_type == BIOS_TYPES[2]:
             boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
@@ -1246,7 +1246,7 @@ class Telnet:
                 #wr_exit()._exit(1, msg)
         
             if node.name == CONTROLLER0:
-                self.get_read_until("Kickstart Boot Menu", 300)
+                self.get_read_until("Boot from hard drive", 300)
                 log.info("Enter install type")
                 # New pxeboot cfg menu
                 # 0) Boot from hard drive
@@ -1267,7 +1267,7 @@ class Telnet:
                     else:
                         selection_menu_option = '2'
 
-                log.info("Kickstart boot menu selection = {}".format(selection_menu_option))
+                log.info("Boot from hard drive selection = {}".format(selection_menu_option))
                 self.write_line(selection_menu_option)
 
         # Not fool-proof.  FIX
