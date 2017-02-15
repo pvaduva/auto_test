@@ -299,6 +299,10 @@ def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex):
     if simplex:
         found_bulk_cfg_file = True
 
+    if tis_on_tis:
+        found_bulk_cfg_file = True
+        found_lab_settings_file = True
+
     # Tell the user what files are missing
     msg = ''
     if not found_bulk_cfg_file and not tis_on_tis:
@@ -319,7 +323,7 @@ def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex):
         msg = 'Missing required configuration files'
         wr_exit()._exit(1, msg)
 
-    if found_lab_settings_file:
+    if found_lab_settings_file and not tis_on_tis:
         lab_settings_filepath = lab_cfg_location + "/"\
                                 + CUSTOM_LAB_SETTINGS_FILENAME
     return lab_cfg_path, lab_settings_filepath

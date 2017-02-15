@@ -120,8 +120,8 @@ class Cumulus_TiS(object):
         # check if floating ips are specified. in cumulus_setup.conf file
 
         if {"EXTERNALOAMFLOAT", "EXTERNALOAMC0", "EXTERNALOAMC1" }  \
-                <= set(self.cumulus_options) and set(self.floating_ips) \
-                <= set(self.cumulus_options.values()):
+                not in set(self.cumulus_options) and set(self.floating_ips) \
+                <= set([self.cumulus_options["EXTERNALOAMFLOAT"], self.cumulus_options["EXTERNALOAMC0"], self.cumulus_options["EXTERNALOAMC1"]]):
             msg = "The {} conf file must be updated with allocated floating " \
                   "ips".format(CUMULUS_SETUP_CFG_FILENAME)
             self.log.error(msg)
