@@ -276,34 +276,79 @@ def search_event(event_id='', type_id='', instance_id='', severity='', start='',
     return matched
 
 
-def check_host_status_events(service, host, target_status, expecting=True,
-                             last_events=None, retries=15, interval=3, con_ssh=None):
-    reason_format = r'Service group (\w+) state change from (\w+) to (\w+) on host {}(; (\w+)\((\w+), (\w+)\)'.format(
-        host)
+def _check_events_for_killed_process(service, host, target_status, expecting=True, severity='major',
+                                     last_events=None, retries=15, interval=3, con_ssh=None):
+    reasons = {'major': ['{} is degraded due to the failure of its {} process. '
+                         'Auto recovery of this major process is in progress.'.format(host, service),
+                        ],
 
-    events = system_helper.wait_for_events(10, num=5, strict=False, fail_ok=True,
-                                           **{'Event Log ID': EventLogID.SERVICE_GROUP_STATE_CHANGE,
-                                              'State': 'set'})
-    reason_text = 'Storage Alarm Condition: HEALTH_WARN'
-    system_helper.wait_for_events(30, strict=False, fail_ok=False,
-                                  **{'Reason Text': reason_text,
-                                     'Event Log ID':
-                                     EventLogID.STORAGE_ALARM_COND,
-                                     'State': 'set'})
+               'minor': ['{} process has failed. Auto recovery of this minor process is in progress'.format(host),
+                         '{} process has failed. Manual recovery is required.'.format(host)
+                        ],
+               'critical': ['{} critical {} process has failed and could not be auto-recovered gracefully. '
+                            'Auto-recovery progression by host reboot is required and in progress.'.format(
+                   host, service)]
+               }
+
+    if severity not in reasons:
+        LOG.error('Unknown severity:{}'.format(severity))
+        return False
+
+    reason_text = reasons[severity]
+    entity_instance_id = 'host={}.process={}'.format(host, service)
+    last_event = last_events['values'][0]
+    start_time = last_event[1]
+
+    search_keys = {'Reason Text': reason_text,
+                   'Entity Instance ID': entity_instance_id,
+                   'Severity': severity,
+                   }
+
+    for round in range(1, retries+1):
+        events_table = search_event(
+            event_id=EventLogID.MTC_MONITORED_PROCESS_FAILURE,
+            start=start_time, limit=100, con_ssh=con_ssh, **search_keys)
+        if events_table:
+            for event  in events_table['values']:
+                state = event[2]
+                LOG.info('found event:{}'.format(event))
+                if state == 'set':
+                    return True
+
+        time.sleep(interval)
+
+    LOG.info('cannot find event within {} seconds with search key={}'.format(retries * interval, search_keys))
+
+    return False
 
 
-def check_host_status(service, host, target_status, expecting=True, last_events=None, con_ssh=None):
+def _check_status_after_killing_process(service, host, target_status, expecting=True, last_events=None, con_ssh=None):
     LOG.info('check for host:{} expecting status:{}'.format(host, target_status))
+
     try:
         operational, availability = target_status.split('-')
     except ValueError as e:
         LOG.error('unknown host status:{}, error:{}'.format(target_status, e))
         raise
 
-    if expecting:
-        return check_host_status_events(service, host, (operational, availability), expecting=True, con_ssh=con_ssh)
+    expected = {'operational': operational, 'availability': availability}
+    total_wait = 120 if expecting else 30
+
+    code, msg = host_helper.wait_for_host_states(host, timeout=total_wait, con_ssh=con_ssh, fail_ok=True, **expected)
+    if expecting and 0 == code:
+        LOG.debug('OK, process:{} in status:{} as expected now '.format(service))
+        return True
+
+    elif not expecting and 0 == code:
+        LOG.error('Unexpected status for process:{}, expected status:{}, message:{}'.format(service, expected, msg))
+        return False
+
     else:
-        return check_host_status_events(service, host, (operational, availability), expecting=False, con_ssh=con_ssh)
+        LOG.warn('host is not expected status:{} for service:{} after {} seconds, code:{}, message:{}'.format(
+            expected, service, code, msg))
+
+        return _check_events_for_killed_process(
+            service, host, expected, expecting=expecting, last_events=last_events, con_ssh=con_ssh)
 
 
 def check_impact(impact, service_name, host='', last_events=None, expecting_impact=False, con_ssh=None, **kwargs):
@@ -340,8 +385,8 @@ def check_impact(impact, service_name, host='', last_events=None, expecting_impa
             return not is_controller_swacted(prev_active, con_ssh=con_ssh, swact_start_timeout=20)
 
     elif impact in ['enabled-degraded', 'disabled-failed']:
-        return check_host_status(service_name, host, target_status=impact,
-                                 expecting=expecting_impact, last_events=last_events, con_ssh=con_ssh)
+        return _check_status_after_killing_process(service_name, host, target_status=impact,
+                                                   expecting=expecting_impact, last_events=last_events, con_ssh=con_ssh)
     else:
         LOG.warn('impact-checker for impact:{} not implemented yet, kwargs:{}'.format(impact, kwargs))
         return False
@@ -478,7 +523,7 @@ def kill_controller_process_verify_impact(
         exec_times = []
         killed_pids = []
 
-        timeout = time.time() + action_timeout
+        timeout = time.time() + action_timeout * (retries/2 if retries > 2 else 1)
 
         count = 0
         while time.time() < timeout:

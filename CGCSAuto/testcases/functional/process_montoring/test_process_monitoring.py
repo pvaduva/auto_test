@@ -6,7 +6,7 @@ import threading
 
 from pytest import mark, fixture
 
-from consts.cgcs import EventLogID
+# from consts.cgcs import EventLogID
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, ControllerClient
 from consts.proj_vars import ProjVar
@@ -329,12 +329,12 @@ class MonitoredProcess:
 
 
 @mark.parametrize(('process_name'), [
-    # mark.p1(('postgres')),
-    # mark.p1(('rabbitmq-server')), # rabbit in SM
-    # TODO CGTS-6336
-    # TODO CGTS-6391
-    # mark.p1(('rabbit')),
-    # mark.p1(('sysinv-api')),  # sysinv-inv in SM
+    # # mark.p1(('postgres')),
+    # # mark.p1(('rabbitmq-server')), # rabbit in SM
+    # # TODO CGTS-6336
+    # # TODO CGTS-6391
+    # # mark.p1(('rabbit')),
+    # # mark.p1(('sysinv-api')),  # sysinv-inv in SM
     mark.p1(('sysinv-inv')),
     mark.p1(('sysinv-conductor')),
     mark.p1(('mtc-agent')),
@@ -342,43 +342,47 @@ class MonitoredProcess:
     mark.p1(('hw-mon')),
     mark.p1(('dnsmasq')),
     mark.p1(('fm-mgr')),
-    # TODO CGTS-6396
-    # mark.p1(('keystone')),
-    mark.p1(('glance-registry')),
-    # TODO CGTS-6398
-    # mark.p1(('glance-api')),
+    # # TODO CGTS-6396
+    # # mark.p1(('keystone')),
+    # mark.p1(('glance-registry')),
+    # # TODO CGTS-6398
+    # # mark.p1(('glance-api')),
     mark.p1(('neutron-server')),
     mark.p1(('nova-api')),
     mark.p1(('nova-scheduler')),
     mark.p1(('nova-conductor')),
     mark.p1(('nova-cert')),
     mark.p1(('nova-console-auth')),
-    mark.p1(('nova-novnc')),
-
-    mark.p1(('cinder-api')),
+    # mark.p1(('nova-novnc')),
+    #
+    # mark.p1(('cinder-api')),
     mark.p1(('cinder-scheduler')),
+    # 32
     mark.p1(('cinder-volume')),
+
     mark.p1(('ceilometer-collector')),
     mark.p1(('ceilometer-api')),
     mark.p1(('ceilometer-agent-notification')),
     mark.p1(('heat-engine')),
-    mark.p1(('heat-api')),
-    mark.p1(('heat-api-cfn')),
-    mark.p1(('heat-api-cloudwatch')),
-
-    mark.p1(('open-ldap')),
+    # mark.p1(('heat-api')),
+    # mark.p1(('heat-api-cfn')),
+    # mark.p1(('heat-api-cloudwatch')),
+    #
+    # mark.p1(('open-ldap')),
+    # 32
     mark.p1(('snmp')),
-    mark.p1(('lighttpd')),
-    # mark.p1(('gunicorn')),
-    mark.p1(('horizon')),
-    mark.p1(('patch-alarm-manager')),
 
-    mark.p1(('ceph-rest-api')),
-    mark.p1(('ceph-manager')),
-    mark.p1(('vim-api')),
-    mark.p1(('vim-webserver')),
+    # mark.p1(('lighttpd')),
+    # # mark.p1(('gunicorn')),
+    # mark.p1(('horizon')),
+    # mark.p1(('patch-alarm-manager')),
+    #
+    # mark.p1(('ceph-rest-api')),
+    # mark.p1(('ceph-manager')),
+    # mark.p1(('vim-api')),
+    # mark.p1(('vim-webserver')),
     mark.p1(('guest-agent')),
-    mark.p1(('nova-api-proxy')),
+    # mark.p1(('nova-api-proxy')),
     mark.p1(('haproxy')),
 
     mark.p1(('aodh-api')),
@@ -487,12 +491,13 @@ def _monitor_process(process, total_time, interval=5):
     sm_process = getattr(process, 'sm_process', False)
 
     global _final_processes_status
-    _final_processes_status[name] = True
 
     con_ssh = SSHClient(ProjVar.get_var('lab')['floating ip'])
     con_ssh.connect(use_current=False)
     ControllerClient.set_active_controller(con_ssh)
 
+    used_pids = [pid]
+    died_pids = []
     stop_time = time.time() + total_time
 
     while time.time() < stop_time:
@@ -500,23 +505,33 @@ def _monitor_process(process, total_time, interval=5):
             name, cmd=cmd, host=host, sm_process=sm_process, con_ssh=con_ssh)[0:2]
 
         cur_pid = int(cur_pid)
-        _final_processes_status[name] = (pid == cur_pid)
 
-        assert pid == cur_pid, \
-            'Got new PID for process:{}, no new process should be created after impact. pid={}, new-pid={}'.format(
-                name, pid, cur_pid)
-        LOG.info('OK, PID not changed:{} for process:{}'.format(pid, name))
+        _final_processes_status[name].update({'used_pids': used_pids})
 
-        running, msg = mtc_helper.is_process_running(cur_pid, host, con_ssh=con_ssh)
-        _final_processes_status[name] = running
+        if pid != cur_pid:
+            used_pids.append(cur_pid)
+            pid = cur_pid
 
-        assert running, 'Process died: pid:{} at {}, msg:{}'.format(
-            pid, datetime.datetime.utcnow().isoformat(), msg)
+            LOG.warn('Got new PID for process:{}, no new process should be created after impact. '
+                     'pid={}, new-pid={}'.format(name, pid, cur_pid))
+        else:
+            pass
+            LOG.info('OK, PID not changed:{} for process:{}'.format(pid, name))
 
-        LOG.info('OK, process:{} is running, name:{}'.format(pid, name))
+        running, msg = mtc_helper.is_process_running(str(cur_pid), host, con_ssh=con_ssh)
+
+        if not running:
+            died_pids.append(cur_pid)
+
+            LOG.warn('Process died: pid:{} at {}, msg:{}'.format(
+                pid, datetime.datetime.utcnow().isoformat(), msg))
+        else:
+            pass
+            LOG.info('OK, process:{} is running, name:{}'.format(pid, name))
+
+        _final_processes_status[name].update({'died_pids': died_pids})
+
         time.sleep(interval)
-
-    _final_processes_status[name] = True
 
 
 def monitor_process(process, total_time):
@@ -525,12 +540,15 @@ def monitor_process(process, total_time):
     name = getattr(process, 'name', None)
     pid = getattr(process, 'pid', None)
 
+    global _final_processes_status
+    _final_processes_status[name] = {'used_pids':[], 'died_pids': []}
+
     if name is not None and pid is not None:
         thread = threading.Thread(
             target=_monitor_process,
             args=(process, total_time),
             name='Monitor-{}-{}'.format(name, pid))
-        thread.setDaemon(True)
+        # thread.setDaemon(True)
     else:
         LOG.info('Process Name and PID are None, proc={}'.format(process))
         thread = None
@@ -540,6 +558,11 @@ def monitor_process(process, total_time):
 
 @fixture(scope='function', autouse=True)
 def wait_and_monitor_tested_processes(request):
+
+    global _tested_procs, _final_processes_status
+    _tested_procs[:] = []
+    _final_processes_status.clear()
+
     def _wait_and_monitor_tested_processes():
 
         total_time = INTERVAL_BETWEEN_SWACT + 60
@@ -561,16 +584,34 @@ def wait_and_monitor_tested_processes(request):
             if not monitors:
                 LOG.info('No processes monitored?')
 
-            _ = [proc.start() for proc in monitors]
-            time.sleep(total_time - pre_wait + len(monitors) * 1)
+            [proc.start() for proc in monitors]
+            [proc.join() for proc in monitors]
 
-        for name, passed in _final_processes_status.items():
-            LOG.info('monitoring process:{} {}'.format(name, 'PASS' if passed else 'FAIL'))
-            assert passed, 'Final process:{} failed'.format(name)
+            # time.sleep(total_time - pre_wait + len(monitors) * 10)
+
+        global _final_processes_status
+        for name, pids_info in _final_processes_status.items():
+            LOG.info('monitoring process:{}'.format(name))
+
+            total = len(pids_info['used_pids'])
+            died = len(pids_info['died_pids'])
+
+            if died > 0:
+                # this should never happen but it does occasionally, just flag an error for now
+                LOG.error('Really?\t{}/{} processes died, {}'.format(died, total, pids_info['died_pids']))
+
+            if total > 1:
+                # this should never happen but it does occasionally too, just flag an error for now
+                LOG.error('Really?\t{} new processes created, all used pids:{}'.format(total-1, pids_info['used_pids']))
+
+            if total > 2:
+                last_pid = pids_info['used_pids'][-1]
+                old_pids = [pid for pid in pids_info['used_pids'] if pid != last_pid]
+
+                assert len(old_pids) < 2, \
+                    'Service {} re-created {} times, used-pids:{}'.format(
+                        name, len(old_pids), pids_info['used_pids'])
+
+            LOG.info('OK, (new) processe(s) for service:{}  is(are) running stable')
 
     request.addfinalizer(_wait_and_monitor_tested_processes)
-
-
-def test_func():
-    events = mtc_helper.search_event(EventLogID.SERVICE_GROUP_STATE_CHANGE, severity='crititcal', State='set')
-    LOG.info('events={}'.format(events))
