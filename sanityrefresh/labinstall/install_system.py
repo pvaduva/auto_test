@@ -1912,7 +1912,7 @@ def main():
             log.error(msg)
             wr_exit()._exit(1, msg)
 
-        cmd = "rm -rf /media/iso/{}; echo 'if we fail we ignore it'".format(c0_targetId)
+        cmd = "sudo rm -rf /media/iso/{}".format(c0_targetId)
         if tuxlab_conn.exec_cmd(cmd,)[0] != 0:
             msg = "failed to execute: {}".format(cmd)
             log.error(msg)
@@ -1924,19 +1924,19 @@ def main():
             log.error(msg)
             wr_exit()._exit(1, msg)
 
-        cmd = "sudo mount -o loop /tmp/iso/{}/bootimage.iso /media/iso/{}; echo if we fail we ignore it".format(c0_targetId, c0_targetId)
+        cmd = "sudo mount -o loop /tmp/iso/{}/bootimage.iso /media/iso/{}".format(c0_targetId, c0_targetId)
         if tuxlab_conn.exec_cmd(cmd,)[0] != 0:
             msg = "failed to execute: {}".format(cmd)
             log.error(msg)
             wr_exit()._exit(1, msg)
 
-        cmd = "sudo mount -o remount,exec,dev /media/iso/{}; echo if we fail we ignore it ".format(c0_targetId)
+        cmd = "sudo mount -o remount,exec,dev /media/iso/{}".format(c0_targetId)
         if tuxlab_conn.exec_cmd(cmd)[0] != 0:
             msg = "failed to execute: {}".format(cmd)
             log.error(msg)
             wr_exit()._exit(1, msg)
 
-        cmd ="rm -rf /export/pxeboot/pxelinux.cfg/{}".format(c0_targetId)
+        cmd ="sudo rm -rf /export/pxeboot/pxelinux.cfg/{}".format(c0_targetId)
         if tuxlab_conn.exec_cmd(cmd)[0] != 0:
             msg = "failed to execute: {}".format(cmd)
             log.error(msg)
@@ -1948,7 +1948,11 @@ def main():
             log.error(msg)
             wr_exit()._exit(1, msg)
 
-
+        cmd = "sudo umount /media/iso/{}".format(c0_targetId)
+        if tuxlab_conn.exec_cmd(cmd,)[0] != 0:
+            msg = "failed to execute: {}".format(cmd)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
     nodes = list(controller_dict.values()) + list(compute_dict.values()) + list(storage_dict.values())
 
