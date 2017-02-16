@@ -357,7 +357,7 @@ class MonitoredProcess:
     #
     # mark.p1(('cinder-api')),
     mark.p1(('cinder-scheduler')),
-    # 32
+    # retries = 32
     mark.p1(('cinder-volume')),
 
     mark.p1(('ceilometer-collector')),
@@ -369,7 +369,7 @@ class MonitoredProcess:
     # mark.p1(('heat-api-cloudwatch')),
     #
     # mark.p1(('open-ldap')),
-    # 32
+    # retries = 32
     mark.p1(('snmp')),
 
     # mark.p1(('lighttpd')),
@@ -415,6 +415,9 @@ def test_process_monitoring(process_name, con_ssh=None):
 
     procs = []
     for name, values in PROCESSES.items():
+        if process_name not in [name, 'all', 'cirtital', 'major', 'minor']:
+            continue
+
         try:
             proc = MonitoredProcess(name, **dict(values))
             procs.append(proc)
