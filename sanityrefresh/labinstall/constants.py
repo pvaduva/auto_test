@@ -219,7 +219,7 @@ EMAIL_ERROR_MSG = "Automated lab install has encountered problem." \
 LAB_TYPES = ['regular_lab', 'storage_lab', 'cpe_lab', 'tis_on_tis', 'tis_on_tis_storage', 'simplex']
 
 # tmp install vars path
-INSTALL_VARS_TMP_PATH = "/tmp"
+INSTALL_VARS_TMP_PATH = "/folk/cgts/temp/"
 INSTALL_VARS_FILE_EXT = "_install_vars.ini"
 INSTALL_EXECUTED_STEPS_FILE_EXT = "_executed_steps.txt"
 
