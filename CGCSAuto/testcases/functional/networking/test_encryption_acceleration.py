@@ -25,12 +25,17 @@ def hosts_pci_device_list():
     LOG.info("Hosts device info: {}".format(hosts_device_info))
     return hosts_device_info
 
+
 @fixture(scope='function')
 def enable_device_and_unlock_compute(request, hosts_pci_device_list):
     """
     """
     def teardown():
+
         compute_hosts = system_helper.get_computes()
+        if not any(hosts_pci_device_list):
+            return
+
         for host in compute_hosts:
             if host_helper.is_host_locked(host):
                 status = system_helper.get_host_device_pci_status(host, hosts_pci_device_list[host][0]['pci_address'])
@@ -59,8 +64,6 @@ def _flavors(request, hosts_pci_device_list):
     Returns:
 
     """
-    mark.skipif(not any(hosts_pci_device_list),
-                    reason="requires labs with Colecto Creek device")
 
     flavor_parms = {'flavor_qat_vf_1': [2, 1024, 2, 1],
                     'flavor_resize_qat_vf_1': [4, 2048, 2, 1],
@@ -90,6 +93,8 @@ def _flavors(request, hosts_pci_device_list):
     return flavors
 
 
+@mark.skipif( not any(hosts_pci_device_list()),
+                    reason="requires labs with Colecto Creek device")
 def test_ea_host_device_sysinv_commands(hosts_pci_device_list, enable_device_and_unlock_compute):
     """
     Verify the system host device cli commands
@@ -100,9 +105,6 @@ def test_ea_host_device_sysinv_commands(hosts_pci_device_list, enable_device_and
     Returns:
 
     """
-
-    mark.skipif(not any(hosts_pci_device_list),
-                    reason="requires labs with Colecto Creek device")
 
     hosts = list(hosts_pci_device_list.keys())
     for host in hosts:
@@ -163,6 +165,8 @@ def test_ea_host_device_sysinv_commands(hosts_pci_device_list, enable_device_and
             .format(host, device_name)
 
 
+@mark.skipif(not any(hosts_pci_device_list()),
+                    reason="requires labs with Colecto Creek device")
 def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_list, enable_device_and_unlock_compute):
     """
     Verify guest can be launched with  one crypto VF, AVP, VIRTIO, and SRIOV interfaces.
@@ -175,9 +179,6 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_list, enable_device_an
     Returns:
 
     """
-
-    mark.skipif(not any(hosts_pci_device_list),
-                    reason="requires labs with Colecto Creek device")
 
     LOG.tc_step("Verifying  launching a VM with single crypto VF.....")
 
@@ -192,7 +193,7 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_list, enable_device_an
 
     flavor_id = _flavors['flavor_qat_vf_1']
     LOG.info("Boot a vm  {} with pci-sriov nics and flavor flavor_qat_vf_1".format(vm_name))
-    vm_id = vm_helper.boot_vm(vm_name, flavor=flavor_id, source='image', nics=nics)[1]
+    vm_id = vm_helper.boot_vm(vm_name, flavor=flavor_id, source='image', nics=nics, fail_ok=True)[1]
     ResourceCleanup.add('vm', vm_id)
 
     LOG.info("VM {} booted successfully and become active with crypto VF".format(vm_name))
@@ -221,6 +222,8 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_list, enable_device_an
     assert vm_host_2 != vm_host, "Possible to launch VM {} on host {} with device disabled".format(vm_name, vm_host)
 
 
+@mark.skipif(not any(hosts_pci_device_list()),
+                    reason="requires labs with Colecto Creek device")
 @mark.parametrize('vfs', [32, 33])
 def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_list):
     """
@@ -236,9 +239,6 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_list):
 
     """
 
-    mark.skipif(not any(hosts_pci_device_list),
-                    reason="requires labs with Colecto Creek device")
-
     LOG.info("Launching a VM with flavor flavor_qat_vf_{}".format(vfs))
     vm_name = 'vm_with_{}_vf_pci_device'.format(vfs)
     mgmt_net_id = network_helper.get_mgmt_net_id()
@@ -247,7 +247,7 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_list):
 
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
             {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': internal_net_id, 'vif-model': 'pci-sriov'}]
+            {'net-id': internal_net_id, 'vif-model': 'avp'}]
 
     if vfs == 33:
         LOG.tc_step("Verifying  VM with over limit crypto VFs={} can not be launched .....".format(vfs))
@@ -288,13 +288,15 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_list):
         assert rc == 0, "VM {} failed to resume".format(vm_name)
 
         LOG.tc_step("Attempting to resize cpu and memory of VM {} ....".format(vm_name))
-        resize_flavor_id = "flavor_resize_qat_vf_{}".format(vfs)
+        resize_flavor_id = _flavors['flavor_resize_qat_vf_{}'.format(vfs)]
         LOG.info("Resizing VM to new flavor {} ...".format(resize_flavor_id))
         rc = vm_helper.resize_vm(vm_id, resize_flavor_id)[0]
         LOG.info("Verifying vm resized to flavor {} ...".format(resize_flavor_id))
         assert rc == 0, "VM {} failed to resize to: {}".format(vm_name, resize_flavor_id)
 
 
+@mark.skipif(not any(hosts_pci_device_list()),
+                    reason="requires labs with Colecto Creek device")
 def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors, hosts_pci_device_list):
     """
     Verify guest with cypto VFs can co-exists with guest without crypto VFs.
@@ -305,8 +307,6 @@ def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors, hosts_pci_devi
     Returns:
 
     """
-    mark.skipif(not any(hosts_pci_device_list),
-                    reason="requires labs with Colecto Creek device")
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_ids = network_helper.get_tenant_net_ids()
     internal_net_id = network_helper.get_internal_net_id()
@@ -333,7 +333,7 @@ def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors, hosts_pci_devi
     for vm, param in vm_params.items():
 
         LOG.tc_step("Boot vm {} with {} flavor".format(vm, param[0]))
-        vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=param[0], source='image', nics=param[1])[1]
+        vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=param[0], source='image', nics=param[1], fail_ok=True)[1]
         if vm_id:
             ResourceCleanup.add('vm', vm_id)
         LOG.info("Verify  VM can be pinged from NAT box...")
@@ -365,6 +365,8 @@ def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors, hosts_pci_devi
         assert rc == 0, "VM {} failed to resize to: {}".format(k, resize_flavor)
 
 
+@mark.skipif(not any(hosts_pci_device_list()),
+                    reason="requires labs with Colecto Creek device")
 def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_list):
     """
     Verify maximum number of guests with Crypto VFs can be launched and
@@ -378,8 +380,6 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_list):
 
     """
 
-    mark.skipif(not any(hosts_pci_device_list),
-                    reason="requires labs with Colecto Creek devices")
     LOG.info("Pci device  {}".format(hosts_pci_device_list))
 
     flavor_id = _flavors['flavor_qat_vf_4']
