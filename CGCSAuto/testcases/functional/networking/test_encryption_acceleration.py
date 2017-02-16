@@ -1,6 +1,6 @@
 
 import time
-from pytest import mark, fixture
+from pytest import mark, fixture, skip
 from utils import cli, table_parser
 from utils import exceptions
 from utils.tis_log import LOG
@@ -11,7 +11,7 @@ from keywords import network_helper, vm_helper, nova_helper, cinder_helper, syst
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-@fixture(scope='module')
+@fixture(scope='module', autouse=True)
 def hosts_pci_device_list():
     """
     """
@@ -23,6 +23,10 @@ def hosts_pci_device_list():
         if len(device_info) > 0:
             hosts_device_info[host] = device_info
     LOG.info("Hosts device info: {}".format(hosts_device_info))
+
+    if not hosts_device_info:
+        skip("co-proccessor PCI device not found")
+
     return hosts_device_info
 
 
@@ -93,8 +97,6 @@ def _flavors(request, hosts_pci_device_list):
     return flavors
 
 
-@mark.skipif( not any(hosts_pci_device_list()),
-                    reason="requires labs with Colecto Creek device")
 def test_ea_host_device_sysinv_commands(hosts_pci_device_list, enable_device_and_unlock_compute):
     """
     Verify the system host device cli commands
@@ -165,8 +167,6 @@ def test_ea_host_device_sysinv_commands(hosts_pci_device_list, enable_device_and
             .format(host, device_name)
 
 
-@mark.skipif(not any(hosts_pci_device_list()),
-                    reason="requires labs with Colecto Creek device")
 def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_list, enable_device_and_unlock_compute):
     """
     Verify guest can be launched with  one crypto VF, AVP, VIRTIO, and SRIOV interfaces.
@@ -222,8 +222,6 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_list, enable_device_an
     assert vm_host_2 != vm_host, "Possible to launch VM {} on host {} with device disabled".format(vm_name, vm_host)
 
 
-@mark.skipif(not any(hosts_pci_device_list()),
-                    reason="requires labs with Colecto Creek device")
 @mark.parametrize('vfs', [32, 33])
 def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_list):
     """
@@ -295,8 +293,6 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_list):
         assert rc == 0, "VM {} failed to resize to: {}".format(vm_name, resize_flavor_id)
 
 
-@mark.skipif(not any(hosts_pci_device_list()),
-                    reason="requires labs with Colecto Creek device")
 def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors, hosts_pci_device_list):
     """
     Verify guest with cypto VFs can co-exists with guest without crypto VFs.
@@ -365,8 +361,6 @@ def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors, hosts_pci_devi
         assert rc == 0, "VM {} failed to resize to: {}".format(k, resize_flavor)
 
 
-@mark.skipif(not any(hosts_pci_device_list()),
-                    reason="requires labs with Colecto Creek device")
 def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_list):
     """
     Verify maximum number of guests with Crypto VFs can be launched and
