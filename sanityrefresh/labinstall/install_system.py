@@ -238,7 +238,7 @@ def parse_args():
     other_grp.add_argument('--log-level', dest='log_level',
                            choices=logutils.LOG_LEVEL_NAMES, default='DEBUG',
                            help="Logging level (default: %(default)s)")
-    other_grp.add_argument('--password', metavar='PASSWORD', dest='password',
+    other_grp.add_argument('--password', metavar='PASSWORD', dest='password', default=None,
                            help="User password")
     other_grp.add_argument('-h', '--help', action='help',
                            help="Show this help message and exit")
@@ -957,6 +957,7 @@ def write_install_vars(args):
     file_path = os.path.join(INSTALL_VARS_TMP_PATH, install_vars_filename)
 
     install_vars = dict((k, str(v)) for k, v, in (vars(args)).items())
+    install_vars['password'] = ''
 
     config['INSTALL_CONFIG'] = install_vars
     if os.path.exists(file_path):
@@ -1615,10 +1616,12 @@ def main():
     global log
     global cumulus
 
-    PASSWORD = args.password or getpass.getpass()
+    if not args.password:
+        PASSWORD = getpass.getpass()
+    else:
+        PASSWORD = args.password
+
     PUBLIC_SSH_KEY = get_ssh_key()
-
-
 
     tis_on_tis = args.tis_on_tis
     if tis_on_tis:
@@ -1864,7 +1867,7 @@ def main():
         executed = False
         # Lab-install Step 0 -  boot controller from tuxlab or usb or cumulus
         msg = 'Set_up_network_feed'
-        lab_install_step = install_step(msg, 0, ['regular', 'storage', 'cpe'])
+        lab_install_step = install_step(msg, 0, ['regular', 'storage', 'cpe', 'simplex'])
         if do_next_install_step(lab_type, lab_install_step):
         #if not executed:
             if str(boot_device_dict.get('controller-0')) != "USB" \
@@ -1991,7 +1994,6 @@ def main():
     lab_install_step = install_step("boot_controller-0", 1, ['regular', 'storage', 'cpe', 'simplex'])
 
     executed = False
-    #if not executed:
     if do_next_install_step(lab_type, lab_install_step):
         bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths, host_os,
                           boot_device_dict, small_footprint, burn_usb, tis_on_tis, boot_usb, iso_path, iso_host)
@@ -2059,7 +2061,6 @@ def main():
     # Lab-install Step 5 -  Run_lab_setup - applicable cpe labs only
     lab_install_step = install_step("run_lab_setup", 5, ['cpe', 'simplex'])
     if do_next_install_step(lab_type, lab_install_step):
-    #if not executed:
         if small_footprint:
             if run_labsetup()[0] != 0:
                 msg = "lab_setup failed in small footprint configuration."
@@ -2188,7 +2189,6 @@ def main():
     if lab_type is 'storage':
         wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os=host_os)
 
-    # for Storage lab  run lab setup
     # Lab-install Step 14 -  run_lab_setup - applicable storage labs
     lab_install_step = install_step("run_lab_setup", 15, ['storage'])
     if do_next_install_step(lab_type, lab_install_step):
@@ -2207,7 +2207,6 @@ def main():
 
         set_install_step_complete(lab_install_step)
 
-    #Unlock computes ( storage or regular)
     # Lab-install Step 15 -  unlock_computes - applicable storage and regular labs
     lab_install_step = install_step("unlock_computes", 16, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
@@ -2215,8 +2214,6 @@ def main():
         wait_state(nodes, OPERATIONAL, ENABLED)
         set_install_step_complete(lab_install_step)
 
-
-    #Run final lab_setup ( storage and regular labs)
     # Lab-install Step 16 -  run_lab_setup - applicable storage and regular labs
     lab_install_step = install_step("run_lab_setup", 17, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
@@ -2241,19 +2238,16 @@ def main():
             if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
                 msg = "Failed to get list of interfaces for node: " + node.name
                 log.error(msg)
-                #wr_exit()._exit(1, msg)
 
     cmd = "source /etc/nova/openrc; system alarm-list"
-    if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
+    rc, output = controller0.ssh_conn.exec_cmd(cmd)
+    if rc != 0:
         log.error("Failed to get alarm list")
-        #wr_exit()._exit(1, msg)
 
     cmd = "cat /etc/build.info"
     rc, installed_load_info = controller0.ssh_conn.exec_cmd(cmd)
-    #if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
     if rc != 0:
         log.error("Failed to get build info")
-        #wr_exit()._exit(1, msg)
 
     wr_exit()._exit(0, "Installer completed.\n" + installed_load_info)
 
