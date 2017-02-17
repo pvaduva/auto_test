@@ -980,7 +980,6 @@ class Telnet:
             if node.name == CONTROLLER0:
                 if usb:
                     self.get_read_until("Select kernel options and boot kernel", 120)
-                    self.write(str.encode("\r\r"))
                     if small_footprint:
                         log.info("Selecting Serial Controller+Compute Node Install")
                         time.sleep(3)
@@ -997,7 +996,7 @@ class Telnet:
                         time.sleep(1)
                         log.info("Selecting Serial Controller Node Install")
                         log.info("Pressing ENTER key")
-                        self.write(str.encode("\r\r"))
+                    self.write(str.encode("\r\r"))
                 # If we are performing a UEFI install then we need to use
                 # different logic to select the install option
                 elif "UEFI" in boot_device_regex:
@@ -1086,10 +1085,18 @@ class Telnet:
             while count < MAX_SEARCH_ATTEMPTS:
 
                 # IP31-32 must be handled differently due to BIOS
-                if usb and (node.host_name != "yow-cgcs-ironpass-31"):
+                # Make this generic!!!!
+                special_hosts = ["yow-cgcs-ironpass-31", "yow-cgcs-ironpass-07"]
+                if usb and node.host_name not in special_hosts: 
                     log.info("Pressing ENTER key") 
                     self.write(str.encode("\r\r"))
                     break
+                else:
+                    log.info("This is a special lab")
+
+                if node.host_name == "yow-cgcs-ironpass-07":
+                    log.info("Looking for Kingston")
+                    boot_device_regex = "Kingston"
 
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
                 #regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)\s+(.*?)\|")
