@@ -284,22 +284,32 @@ def test_schedule_vm_mempage_config(flavor_2g, mem_page_size):
 
     LOG.tc_step("Boot a vm with mem page size spec - {}".format(mem_page_size))
 
+    host_1g, host_4k = hosts_configured
     code, vm_id, msg, vo = vm_helper.boot_vm('mempool_configured', flavor_id, fail_ok=True, avail_zone='cgcsauto')
     ResourceCleanup.add('vm', vm_id)
     assert 0 == code, "VM is not successfully booted."
 
     vm_host, vm_node = vm_helper.get_vm_host_and_numa_nodes(vm_id)
     if mem_page_size == '1048576':
-        assert hosts_configured[0] == vm_host, "VM is not created on the configured host {}".format(hosts_configured[0])
+        assert host_1g == vm_host, "VM is not created on the configured host {}".format(hosts_configured[0])
         assert vm_node == [1], "VM (huge) did not boot on the correct processor"
     elif mem_page_size == 'small':
-        assert hosts_configured[1] == vm_host, "VM is not created on the configured host {}".format(hosts_configured[1])
+        assert host_4k == vm_host, "VM is not created on the configured host {}".format(hosts_configured[1])
         assert vm_node == [1], "VM (small) did not boot on the correct processor"
     else:
         assert vm_host in hosts_configured
 
     LOG.tc_step("Calculate memory change on vm host - {}".format(vm_host))
-    mem_table_header = "A:mem_4K" if mem_page_size == 'small' else 'A:mem_1G'
+
+    instance_topology = vm_helper.get_instance_topology(vm_id)
+    for topology in instance_topology:
+        vm_page_size = topology['pgsize']
+    if mem_page_size == 'small':
+        mem_table_header = 'A:mem_4K'
+    elif mem_page_size == 'large' and vm_page_size == '2M':
+        mem_table_header = 'A:mem_2M'
+    else:
+        mem_table_header = 'A:mem_1G'
 
     pre_computes_tab = table_parser.filter_table(pre_computes_tab, Host=vm_host)
     pre_used_mems = [int(mem) for mem in table_parser.get_column(pre_computes_tab, 'U:memory')[0]]
