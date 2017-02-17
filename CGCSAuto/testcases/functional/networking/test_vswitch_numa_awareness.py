@@ -89,7 +89,7 @@ class TestVSwitchCPUReconfig:
         storage_backing = host_to_config[-1]
         flavor = nova_helper.create_flavor(name='flv_{}'.format(storage_backing), storage_backing=storage_backing,
                                            check_storage_backing=False)[1]
-        ResourceCleanup.add('flavor', flavor)
+        ResourceCleanup.add('flavor', flavor, scope='class')
 
         return flavor
 

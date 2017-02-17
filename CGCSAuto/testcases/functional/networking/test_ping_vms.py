@@ -31,7 +31,7 @@ def _append_nics(vifs, net_ids, nics):
         nic = {'net-id': net_id, 'vif-model': vif_model}
         if pci_addr is not None:
             pci_prefix, pci_append = pci_addr.split(':')
-            pci_append_incre = format(int(pci_append, 16) + i, '02x')
+            pci_append_incre = format(int(pci_append, 16), '02x')
             nic['vif-pci-address'] = ':'.join(['0000', pci_prefix, pci_append_incre]) + '.0'
         nics.append(nic)
 
@@ -41,7 +41,7 @@ def _append_nics(vifs, net_ids, nics):
 @mark.parametrize(('guest_os', 'vifs'), [
     mark.priorities('cpe_sanity', 'sanity')(('cgcs-guest', (('avp', None), ('virtio', '01:04')))),
     mark.priorities('cpe_sanity', 'sanity')(('ubuntu_14', (('e1000', '00:1f'), ('virtio', None)))),
-    ('ubuntu_14', (('avp', '08:1f'), ('virtio', '00:02')))
+    ('ubuntu_14', (('avp', '00:1f'), ('virtio', '00:02')))
 ], ids=id_gen)
 def test_ping_between_two_vms(guest_os, vifs, ubuntu14_image):
     """
