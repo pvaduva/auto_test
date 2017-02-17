@@ -83,6 +83,8 @@ class LiveMigErr:
     BLOCK_MIG_UNSUPPORTED = "is not on local storage: Block migration can not be used with shared storage"
     GENERAL_NO_HOST = "No valid host was found. There are not enough hosts available."
     BLOCK_MIG_UNSUPPORTED_LVM = 'Block live migration is not supported for hosts with LVM backed storage'
+    LVM_PRECHECK_ERROR = 'Live migration can not be used with LVM backed storage except a booted from volume VM ' \
+                         'which does not have a local disk'
 
 
 class NetworkingErr:

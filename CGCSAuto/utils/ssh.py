@@ -552,7 +552,7 @@ class SSHClient:
         self.expect()
 
     def wait_for_cmd_output(self, cmd, content, timeout, strict=False, regex=False, expt_timeout=10,
-                            check_interval=3, disappear=False, non_zero_rtn_ok=False):
+                            check_interval=3, disappear=False, non_zero_rtn_ok=False, blob=None):
         """
         Wait for given content to appear or disappear in cmd output.
 
@@ -572,7 +572,7 @@ class SSHClient:
         """
         end_time = time.time() + timeout
         while time.time() < end_time:
-            code, output = self.exec_cmd(cmd, expect_timeout=expt_timeout)
+            code, output = self.exec_cmd(cmd, expect_timeout=expt_timeout, blob=blob)
             if not non_zero_rtn_ok and code > 0:
                 raise exceptions.SSHExecCommandFailed("Get non-zero return code for command: {}".format(cmd))
 

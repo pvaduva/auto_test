@@ -32,7 +32,7 @@ REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 """
 
 
-def write_report_file(sys_config=None, source='mongo', tags=None, start_date=None, end_date=None, log_dir=None):
+def write_report_file(sys_config=None, source='mongo', tags=None, start_date=None, end_date=None, logs_dir=None):
     """
 
     Args:
@@ -40,7 +40,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
         tags (str|list):
         start_date (str):
         end_date (str):
-        log_dir (str):
+        logs_dir (str):
 
     Returns:
 
@@ -56,14 +56,14 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
             end_date = now.strftime("%Y-%m-%d")
 
         lab, build, build_server, overall_status, log_path, summary, testcases_res = \
-            _get_results_from_mongo(tags=tags, start_date=start_date, end_date=end_date, log_dir=log_dir)
+            _get_results_from_mongo(tags=tags, start_date=start_date, end_date=end_date, logs_dir=logs_dir)
 
     else:
         res_file = 'test_results.log'
-        if not res_file in source and not log_dir:
-            raise ValueError("local automation log path has to be specified via log_dir or source")
+        if not res_file in source and not logs_dir:
+            raise ValueError("local automation log path has to be specified via logs_dir or source")
 
-        source = source if res_file in source else os.path.join(log_dir, res_file)
+        source = source if res_file in source else os.path.join(logs_dir, res_file)
         source = os.path.expanduser(source)
         lab, build, build_server, overall_status, log_path, summary, testcases_res = _get_local_results(source)
 
@@ -118,7 +118,7 @@ def _get_local_results(res_path):
     return lab, build, build_server, overall_status, log_path, summary, testcases_res
 
 
-def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, log_dir=None):
+def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, logs_dir=None):
     if isinstance(tags, str):
         tags = [tags]
 
@@ -188,8 +188,8 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, log_d
         elif attr[0] == 'build_server':
             build_server = attr[1]
 
-    if not log_dir or lab.lower().replace('-', '-') not in str(log_dir):
-        panorama_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=WASSP&view=list" \
+    if not logs_dir or lab.lower().replace('-', '-') not in str(logs_dir):
+        panorama_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=RNT&view=list" \
                        "&dateField=[testExecutionTimeStamp]&programs=active&resultsMode=last" \
                        "&startDate={}&endDate={}" \
                        "&releaseName=[MYSQL1:2226]" \
@@ -198,10 +198,10 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, log_d
         print("Panorama query url: {}".format(panorama_url))
         log_path = panorama_url
     else:
-        log_dir = log_dir.replace('test_results.py', '')
-        log_dir = os.path.expanduser(log_dir)
+        logs_dir = logs_dir.replace('test_results.py', '')
+        logs_dir = os.path.expanduser(logs_dir)
         hostname = local_host.get_host_name()
-        log_path = "{}:{}".format(hostname, log_dir)
+        log_path = "{}:{}".format(hostname, logs_dir)
 
     overall_status = _get_overall_status(pass_rate)
 
@@ -241,9 +241,9 @@ def send_report(subject, recipients, msg_file=TMP_FILE):
     os.system(cmd)
 
 
-def generate_report(recipients, subject='', source='mongo', tags=None, start_date=None, end_date=None, log_dir=None):
+def generate_report(recipients, subject='', source='mongo', tags=None, start_date=None, end_date=None, logs_dir=None):
     tmp_file, lab, build, build_server, raw_status = write_report_file(source=source, tags=tags, start_date=start_date,
-                                                                       end_date=end_date, log_dir=log_dir)
+                                                                       end_date=end_date, logs_dir=logs_dir)
     subject = subject.strip()
     subject = "TiS {} Test Report {} [{}] - {}".format(subject, lab, build, raw_status)
     send_report(subject=subject, recipients=recipients)

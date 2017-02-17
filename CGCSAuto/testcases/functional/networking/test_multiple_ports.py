@@ -413,7 +413,7 @@ class TestMutiPortsPCI:
             nics.append({'net-id': internal_net_id, 'vif-model': vif})
 
         LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
-        vm_under_test = vm_helper.boot_vm(name='multiports_pci_chris', nics=nics, flavor=flavor, reuse_vol=False)[1]
+        vm_under_test = vm_helper.boot_vm(name='multiports_pci_evac', nics=nics, flavor=flavor, reuse_vol=False)[1]
         ResourceCleanup.add('vm', vm_under_test, scope='function')
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 

@@ -860,6 +860,7 @@ class TestSpanNumaNodes:
         if not is_match_span:
             config_host_class(host_span, _mod_host, **{'p0': p0_to_conf_span, 'p1': p1_to_conf_span})
 
+        ht_enabled = system_helper.is_hyperthreading_enabled(host_span)
         return host_span, host_other, storage_backing, ht_enabled
 
     @staticmethod
@@ -1002,11 +1003,17 @@ class TestSpanNumaNodes:
 
         for action in ('live_migrate', 'cold_migrate'):
             code, output = vm_helper.perform_action_on_vm(vm_id, action=action, fail_ok=True)
-            assert 2 == code, "{} is not rejected. Details: {}".format(action, output)
-
             vm_host, vm_numa = vm_helper.get_vm_host_and_numa_nodes(vm_id)
-            assert host_span == vm_host
+
+            if vswitch_affinity == 'strict':
+                assert 2 == code, "{} is not rejected. Details: {}".format(action, output)
+                assert host_span == vm_host
+            else:
+                assert 0 == code, "VM is not {}d successfully even though vswitch affinity is prefer".format(action)
+
             assert expt_numas == vm_numa
+
+        assert host_span == vm_host
 
         LOG.tc_step("Check vm topology did not change after migration reject")
         check_helper._check_vm_topology_via_vm_topology(vm_id, vcpus, 'dedicated', cpu_thr_pol=None, numa_num=2,
