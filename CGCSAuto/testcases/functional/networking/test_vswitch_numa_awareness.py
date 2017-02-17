@@ -846,7 +846,7 @@ class TestSpanNumaNodes:
             if p1 is not None:
                 kwargs['p1'] = p1
 
-            host_helper.modify_host_cpu(host_, function, p0=p0, p1=p1)
+            host_helper.modify_host_cpu(host_, function, **kwargs)
 
         is_match, p0_to_conf, p1_to_conf = compare_cores_to_configure(host0, function, p0=2, p1=0)
         if is_match:
