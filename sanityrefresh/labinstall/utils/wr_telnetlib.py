@@ -1094,7 +1094,7 @@ class Telnet:
                 else:
                     log.info("This is a special lab")
 
-                if node.host_name == "yow-cgcs-ironpass-07":
+                if usb and node.host_name == "yow-cgcs-ironpass-07":
                     log.info("Looking for Kingston")
                     boot_device_regex = "Kingston"
 
