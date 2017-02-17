@@ -548,7 +548,8 @@ class TestNovaSchedulerAVS:
             assert vm_host in expt_hosts, "VM is not booted on cgcsauto hosts"
 
             expt_numa = hosts_vswitch_numa[vm_host]
-            # TODO workaround for prefer which is ignored by host selection
+
+            # CGTS-6389: vswitch engine availability is not considered in host selection for prefer
             if vswitch_numa_affinity != 'strict':
                 if expt_numa != vm_numa:
                     LOG.warning("VM{} - {} is not booted on expected host. Applying workaround.".format(i, vm_id))
@@ -839,6 +840,12 @@ class TestSpanNumaNodes:
         LOG.fixture_step("(class) Configure hosts to have 0 vSwitch cores on p0 and 2 vSwitch cores on p1: {}")
 
         def _mod_host(host_, p0, p1):
+            kwargs = {}
+            if p0 is not None:
+                kwargs['p0'] = p0
+            if p1 is not None:
+                kwargs['p1'] = p1
+
             host_helper.modify_host_cpu(host_, function, p0=p0, p1=p1)
 
         is_match, p0_to_conf, p1_to_conf = compare_cores_to_configure(host0, function, p0=2, p1=0)
@@ -924,8 +931,8 @@ class TestSpanNumaNodes:
         (2, 'prefer', None, None, None, None, None, None),
         # (3, 'prefer', 0, None, None, 1, None, None, 'NumaErr.UNDEVISIBLE')
     ])
-    def test_vm_actions_switch_span_numa_nodes(self, span_numa_hosts, vcpus, vswitch_affinity, numa0, numa0_cpus,
-                                               numa0_mem, numa1, numa1_cpus, numa1_mem, base_flavor_span_numa):
+    def test_vm_actions_vswitch_span_numa_nodes(self, span_numa_hosts, vcpus, vswitch_affinity, numa0, numa0_cpus,
+                                                numa0_mem, numa1, numa1_cpus, numa1_mem, base_flavor_span_numa):
         """
         Test nova actions on 2 numa nodes vm with vswitch numa affinity set
 
