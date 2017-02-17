@@ -6,8 +6,7 @@ import requests
 from utils import lab_info, local_host
 
 TEST_SERVER_HTTP_AUTOLOG = 'http://128.224.150.21/auto_logs/'
-# TEST_SERVER_FS_AUTOLOG = 'yow-cgcs-test.*:/sandbox/AUTOMATION_LOGS/'
-TEST_SERVER_FS_AUTOLOG = 'yow-yliu12-vm.*:/home/yliu12/AUTOMATION_LOGS/'
+TEST_SERVER_FS_AUTOLOG = 'yow-cgcs-test.*:/sandbox/AUTOMATION_LOGS/'
 
 TMP_FILE = '/tmp/cgcs_emailmessage.html'
 # YELLOW = '#FFC200'
