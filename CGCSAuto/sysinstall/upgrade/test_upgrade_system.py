@@ -1,12 +1,15 @@
 from utils.tis_log import LOG
+from utils.ssh import ControllerClient, SSHClient
 from keywords import system_helper, host_helper, install_helper, storage_helper
-
+from consts.filepaths import BuildServerPath
+from consts.proj_vars import  UpgradeVars
 
 def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
 
     lab = upgrade_setup['lab']
     current_version = upgrade_setup['current_version']
     upgrade_version = upgrade_setup['upgrade_version']
+    bld_server = upgrade_setup['build_server']
 
     force = False
     LOG.tc_step("Checking system health for upgrade .....")
@@ -39,6 +42,9 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     LOG.info("Swacted and  controller-1 has become active......")
 
     active_controller = system_helper.get_active_controller_name()
+
+   #TODO: Remove after fixed.
+    workaround(upgrade_version)
 
     # upgrade  controller-0
     LOG.tc_step("Upgrading  controller-0......")
@@ -100,3 +106,33 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     LOG.tc_step("Deleting  {} load... ".format(current_version))
     system_helper.delete_imported_load()
     LOG.tc_step("Delete  previous load version {}".format(current_version))
+
+    LOG.tc_step("Downloading images to upgraded {} lab ".format( upgrade_version))
+    install_helper.download_image(lab, bld_server, BuildServerPath.GUEST_IMAGE_PATHS[upgrade_version])
+
+    load_path = UpgradeVars.get_upgrade_var('TIS_BUILD_DIR')
+    LOG.tc_step("Downloading heat temples to upgraded {} lab ".format( upgrade_version))
+    install_helper.download_heat_templates(lab, bld_server, load_path)
+
+    LOG.tc_step("Downloading lab config scripts to upgraded {} lab ".format( upgrade_version))
+    install_helper.download_lab_config_files(lab, bld_server, load_path)
+
+
+
+def workaround(upgrade_version):
+    active_controller = system_helper.get_active_controller_name()
+    """
+    TODO: Temporary workaround for upgrade 16.10 to 17:00;
+    sudo -u postgres psql -d sysinv -c  "alter table virtual_interfaces owner to 'admin-sysinv'"
+    sudo -u postgres psql -d sysinv -c  "alter table services owner to 'admin-sysinv'"
+
+    """
+    if upgrade_version == "17.00":
+        LOG.info("Executing workaround to change database table owner to admin-sysinv ......")
+        cmd = "-u postgres psql -d sysinv -c  'alter table virtual_interfaces owner to \"admin-sysinv\"'"
+
+        con_ssh = ControllerClient.get_active_controller()
+        con_ssh.exec_sudo_cmd(cmd)
+        cmd = "-u postgres psql -d sysinv -c  'alter table services owner to \"admin-sysinv\"'"
+        con_ssh.exec_sudo_cmd(cmd)
+

@@ -262,6 +262,7 @@ def upgrade_setup(pre_check_upgrade):
                       'output_dir': output_dir,
                       'current_version': current_version,
                       'upgrade_version': upgrade_version,
+                      'build_server': bld_server_obj,
                       }
 
     return _upgrade_setup

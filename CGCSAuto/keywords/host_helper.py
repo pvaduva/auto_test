@@ -2718,8 +2718,6 @@ def get_mellanox_ports(host):
 
 def is_host_locked(host,  con_ssh=None):
         admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
-        if admin_state == 'locked':
-            return True
-        else:
-            return False
+        return admin_state == 'locked'
+
 

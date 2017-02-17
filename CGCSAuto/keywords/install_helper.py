@@ -9,7 +9,7 @@ from utils.ssh import SSHClient
 from utils import telnet as telnetlib
 from utils import local_host
 import threading
-from consts.filepaths import WRSROOT_HOME
+from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.timeout import HostTimeout
 from contextlib import contextmanager
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
@@ -331,3 +331,50 @@ def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, pas
         yield bld_server_conn
     finally:
         bld_server_conn.close()
+
+
+def download_image(lab, server, guest_path):
+
+    cmd = "test -e " + guest_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Image file not found in {}:{}'.format(
+            server.name, guest_path)
+    pre_opts = 'sshpass -p "{0}"'.format(Host.PASSWORD)
+    server.ssh_conn.rsync(guest_path,
+                          lab['controller-0 ip'],
+                          TiSPath.IMAGES, pre_opts=pre_opts)
+
+def download_heat_templates(lab, server, load_path):
+
+    heat_path = load_path  + BuildServerPath.HEAT_TEMPLATES
+
+    cmd = "test -e " + heat_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Heat template path not found in {}:{}'.format(
+            server.name, load_path)
+
+    pre_opts = 'sshpass -p "{0}"'.format(Host.PASSWORD)
+    server.ssh_conn.rsync(heat_path + "/*",
+                          lab['controller-0 ip'],
+                          TiSPath.HEAT, pre_opts=pre_opts)
+
+
+def download_lab_config_files(lab, server, load_path):
+
+    config_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/yow/" + lab['name']
+    script_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/scripts"
+
+    cmd = "test -e " + config_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
+            server.name, config_path)
+
+    cmd = "test -e " + script_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
+            server.name, script_path)
+
+    pre_opts = 'sshpass -p "{0}"'.format(Host.PASSWORD)
+    server.ssh_conn.rsync(config_path + "/*",
+                          lab['controller-0 ip'],
+                          WRSROOT_HOME, pre_opts=pre_opts)
+
+    server.ssh_conn.rsync(script_path + "/*",
+                          lab['controller-0 ip'],
+                          WRSROOT_HOME, pre_opts=pre_opts)
