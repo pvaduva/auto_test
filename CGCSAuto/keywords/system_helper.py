@@ -686,7 +686,7 @@ def set_retention_period(fail_ok=True, check_first=True, con_ssh=None, auth_info
             return -1, msg
 
     code, output = cli.system('pm-modify', 'retention_secs={}'.format(period), auth_info=auth_info, ssh_client=con_ssh,
-                              timeout=SysInvTimeout.RETENTION_PERIOD_MDOIFY, fail_ok=fail_ok, rtn_list=True)
+                              timeout=SysInvTimeout.RETENTION_PERIOD_MODIFY, fail_ok=fail_ok, rtn_list=True)
 
     if code == 1:
         return 1, output

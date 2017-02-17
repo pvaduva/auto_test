@@ -42,7 +42,7 @@ class VolumeTimeout:
 
 class SysInvTimeout:
     RETENTION_PERIOD_SAVED = 30
-    RETENTION_PERIOD_MDOIFY = 60
+    RETENTION_PERIOD_MODIFY = 60
     DNS_SERVERS_SAVED = 30
     DNS_MODIFY = 60
 
