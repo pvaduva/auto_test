@@ -508,7 +508,7 @@ class SSHClient:
                 self.send('exit')
                 self.expect()
 
-    def exec_sudo_cmd(self, cmd, expect_timeout=10, rm_date=True, fail_ok=True, get_exit_code=True):
+    def exec_sudo_cmd(self, cmd, expect_timeout=60, rm_date=True, fail_ok=True, get_exit_code=True):
         """
         Execute a command with sudo.
 

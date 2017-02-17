@@ -106,7 +106,7 @@ def delete_samples():
     """
     LOG.info("Deleting expired ceilometer resources.")
     ssh_client = ControllerClient.get_active_controller()
-    ssh_client.exec_sudo_cmd('/usr/bin/ceilometer-expirer', fail_ok=False)
+    ssh_client.exec_sudo_cmd('/usr/bin/ceilometer-expirer', fail_ok=False, expect_timeout=60)
 
 
 def get_statistics_table(meter, period=None, groupby=None, aggregate=None, query=None, auth_info=Tenant.ADMIN,
