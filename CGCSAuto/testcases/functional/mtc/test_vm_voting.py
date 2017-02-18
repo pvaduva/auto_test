@@ -263,10 +263,9 @@ def test_vm_voting_no_hb_migrate():
 
     cmd = 'touch /tmp/vote_no_to_migrate'
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        LOG.tc_step("Check guest heartbeat process is not enabled")
-        res = vm_helper.wait_for_process('heartbeat', vm_ssh=vm_ssh, timeout=60, time_to_stay=10, check_interval=1,
-                                         fail_ok=True)
-        assert not res, "Guest heartbeat is enabled even though it's not set in flavor"
+        LOG.tc_step("Wait for guest heartbeat process to be up for more than 10 seconds")
+        vm_helper.wait_for_process('heartbeat', vm_ssh=vm_ssh, timeout=60, time_to_stay=10, check_interval=1,
+                                   fail_ok=False)
 
         LOG.tc_step("Set vote_not_to_migrate from guest")
         vm_ssh.exec_cmd(cmd)
