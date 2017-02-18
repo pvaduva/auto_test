@@ -134,6 +134,7 @@ class SSHClient:
                 # set to ignore ssh host fingerprinting
                 self._session.SSH_OPTS = _SSH_OPTS
                 self._session.force_password = self.force_password
+                self._session.maxread = 300000
                 self.logpath = self.__get_logpath()
 
                 if self.logpath:
@@ -154,6 +155,7 @@ class SSHClient:
                     # LOG.debug(self._session)
                     # next 5 lines change ssh window size and flush its buffer
                     self._session.setwinsize(150, 250)
+                    self._session.maxread = 300000
                     self.send()
 
                     end_time = time.time() + 20
@@ -263,7 +265,7 @@ class SSHClient:
 
         LOG.debug("Buffer is flushed by reading out the rest of the output")
 
-    def expect(self, blob_list=None, timeout=60, fail_ok=False, rm_date=False):
+    def expect(self, blob_list=None, timeout=60, fail_ok=False, rm_date=False, searchwindowsize=None):
         """
         Look for match in the output. Stop if 1) match is found, 2) match is not found and prompt is reached, 3) match
         is not found and timeout is reached. For scenario 2 and 3, either throw timeout exception or return False based
@@ -283,6 +285,10 @@ class SSHClient:
             expect(['good', 'bad'], 10, False): to wait for a match start with 'good' or 'bad' with 10seconds timeout
 
         """
+        kwargs = {}
+        if searchwindowsize is not None:
+            kwargs['searchwindowsize'] = searchwindowsize
+
         if blob_list is None:
             blob_list = self.prompt
 
@@ -296,7 +302,7 @@ class SSHClient:
             LOG.debug("Expecting exit code...")
 
         try:
-            index = self._session.expect(blob_list, timeout=timeout)
+            index = self._session.expect(blob_list, timeout=timeout, **kwargs)
         except pexpect.EOF:
             # LOG.warning("No match found for {}!\npexpect exception caught: {}".format(blob_list, e.__str__()))
             # LOG.debug("Before: {}; After:{}".format(self._parse_output(self._session.before),
@@ -344,7 +350,7 @@ class SSHClient:
             self.flush(10)
 
     def exec_cmd(self, cmd, expect_timeout=10, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
-                 fail_ok=True, get_exit_code=True, blob=None, force_end=False):
+                 fail_ok=True, get_exit_code=True, blob=None, force_end=False, searchwindowsize=None):
         """
 
         Args:
@@ -367,7 +373,7 @@ class SSHClient:
             cmd += ' 1> /dev/null'          # discard stdout
         self.send(cmd, reconnect, reconnect_timeout)
         try:
-            self.expect(blob_list=blob, timeout=expect_timeout)
+            self.expect(blob_list=blob, timeout=expect_timeout, searchwindowsize=searchwindowsize)
         except pexpect.TIMEOUT as e:
             self.send_control('c')
             self.flush(timeout=10)

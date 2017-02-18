@@ -26,7 +26,7 @@ def less_than_two_cons():
     # mark.p1(('lock_standby_change_pswd')),
     mark.p1(('change_pswd_swact')),
 ])
-def test_admin_password(scenario, less_than_two_cons):
+def test_admin_password(scenario, less_than_two_cons, _revert_admin_pw):
     """
     Test the admin password change
 

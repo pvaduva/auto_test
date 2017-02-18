@@ -62,7 +62,8 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
             flags = (auth_args + ' ' + flags).strip()
 
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
-    exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout)
+    exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout,
+                                                searchwindowsize=200)
 
     if fail_ok:
         if exit_code in [0, 1]:
