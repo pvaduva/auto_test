@@ -134,7 +134,7 @@ class SSHClient:
                 # set to ignore ssh host fingerprinting
                 self._session.SSH_OPTS = _SSH_OPTS
                 self._session.force_password = self.force_password
-                self._session.maxread = 300000
+                self._session.maxread = 100000
                 self.logpath = self.__get_logpath()
 
                 if self.logpath:
@@ -155,7 +155,7 @@ class SSHClient:
                     # LOG.debug(self._session)
                     # next 5 lines change ssh window size and flush its buffer
                     self._session.setwinsize(150, 250)
-                    self._session.maxread = 300000
+                    # self._session.maxread = 100000
                     self.send()
 
                     end_time = time.time() + 20

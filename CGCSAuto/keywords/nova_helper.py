@@ -1399,6 +1399,10 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, mac_addr=None,
         all_nics = [all_nics]
     all_nics = [eval(nic_) for nic_ in all_nics]
 
+    # Sort the nics from nic1, nic2 ... nicN
+    all_nics = sorted(all_nics, key=lambda nic_: int((list(nic_.keys())[0]).split(sep='nic')[-1]))
+    LOG.debug("All nics: {}".format(all_nics))
+
     nics_to_rtn = list(all_nics)
     if not nics_to_rtn:
         LOG.warning("No nics attached to vm {}".format(vm_id))

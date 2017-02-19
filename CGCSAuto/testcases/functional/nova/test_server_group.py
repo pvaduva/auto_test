@@ -1,7 +1,9 @@
 import re
+import random
 from pytest import mark, skip, fixture
 
 from utils.tis_log import LOG
+from utils.multi_thread import MThread
 
 from consts.cgcs import FlavorSpec, ServerGroupMetadata
 from consts.reasons import SkipReason
@@ -114,6 +116,9 @@ def test_boot_vms_server_group(srv_grp_msging_flavor, policy, group_size, best_e
         LOG.tc_step("Boot vm{} in server group {} that's expected to fail".format(i, srv_grp_id))
         code, vm_id, err, vol = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
                                                   avail_zone='cgcsauto', fail_ok=True)
+        ResourceCleanup.add(resource_type='vm', resource_id=vm_id, del_vm_vols=False)
+        ResourceCleanup.add('volume', vol)
+
         nova_helper.get_vm_nova_show_value(vm_id, 'fault')
         assert 1 == code, "Boot vm is not rejected"
 
@@ -132,34 +137,74 @@ def test_boot_vms_server_group(srv_grp_msging_flavor, policy, group_size, best_e
     vm_helper.wait_for_vm_pingable_from_natbox(vm_to_ssh)
     vm_helper.wait_for_vm_pingable_from_natbox(another_vm)
 
-    LOG.tc_step("Login to a member {} in server group".format(vm_to_ssh))
-    with vm_helper.ssh_to_vm_from_natbox(vm_to_ssh) as vm_ssh:
-        if srv_grp_msg:
+    if srv_grp_msg:
+        LOG.tc_step("Check server group message can be sent/received among group members")
+        check_server_group_messaging_enabled(vms=members)
+    else:
+        LOG.tc_step("Check server group message is not enabled")
+        check_server_group_messaging_disabled(vms=members)
 
-            LOG.tc_step("Ensure server_group_app is included on VM")
-            output = vm_ssh.exec_cmd('server_group_app', blob='\r\n\r\n', get_exit_code=False, fail_ok=False,
-                                     force_end=True)[1]
-            print(output)
-            assert 'got server group status response msg: [' in output
+    # LOG.tc_step("Login to a member {} in server group".format(vm_to_ssh))
+        # with vm_helper.ssh_to_vm_from_natbox(vm_to_ssh) as vm_ssh:
+    #     if srv_grp_msg:
+    #
+    #         LOG.tc_step("Ensure server_group_app is included on VM")
+    #         output = vm_ssh.exec_cmd('server_group_app', blob='\r\n\r\n', get_exit_code=False, fail_ok=False,
+    #                                  force_end=True)[1]
+    #         print(output)
+    #         assert 'got server group status response msg: [' in output
+    #
+    #         LOG.tc_step("Pause another vm in same server group and ensure current vm receive notification")
+    #         vm_ssh.exec_cmd('server_group_app', blob='\r\n\r\n', get_exit_code=False, fail_ok=False)
+    #         vm_helper.pause_vm(vm_id=another_vm)
+    #
+    #         vm_ssh.send()
+    #         for i in range(10):
+    #             code = vm_ssh.expect('\r\n\r\n', fail_ok=True)
+    #             if code < 0:
+    #                 assert False, "No more server group notification received. No pause.end notification found."
+    #
+    #             current_output = vm_ssh.cmd_output
+    #             if re.search('{}.*compute.instance.pause.end'.format(another_vm), current_output):
+    #                 vm_ssh.expect('\r\n\r\n', fail_ok=True)
+    #                 break
+    #         else:
+    #             assert False, "No pause.end notification found in past 10 notifications"
 
-            LOG.tc_step("Pause another vm in same server group and ensure current vm receive notification")
-            vm_ssh.exec_cmd('server_group_app', blob='\r\n\r\n', get_exit_code=False, fail_ok=False)
-            vm_helper.pause_vm(vm_id=another_vm)
+        # else:
+        #     LOG.tc_step("Ensure server_group_app is not included in VM")
+        #     code, output = vm_ssh.exec_cmd("server_group_app", fail_ok=True)
+        #     assert code > 0
 
-            vm_ssh.send()
-            for i in range(10):
-                code = vm_ssh.expect('\r\n\r\n', fail_ok=True)
-                if code < 0:
-                    assert False, "No more server group notification received. No pause.end notification found."
 
-                current_output = vm_ssh.cmd_output
-                if re.search('{}.*compute.instance.pause.end'.format(another_vm), current_output):
-                    vm_ssh.expect('\r\n\r\n', fail_ok=True)
-                    break
-            else:
-                assert False, "No pause.end notification found in past 10 notifications"
+def _wait_for_srv_grp_msg(vm_id, msg, timeout=60):
+    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        vm_ssh.send('server_group_app')
+        vm_ssh.expect(msg, timeout=timeout)
+        vm_ssh.send_control('c')
+        vm_ssh.expect()
 
-        else:
-            LOG.tc_step("Ensure server_group_app is not included in VM")
+
+def check_server_group_messaging_enabled(vms):
+    vm_sender = random.choice(vms)
+    list(vms).remove(vm_sender)
+
+    msg = 'HELLO SRV GRP MEMBERS!'
+    with vm_helper.ssh_to_vm_from_natbox(vm_sender) as sender_ssh:
+        sender_ssh.exec_cmd('server_group_app “{}”'.format(msg))
+
+    vm_threads = []
+    for vm in vms:
+        new_thread = MThread(_wait_for_srv_grp_msg, vm, msg)
+        new_thread.start_thread(timeout=60)
+        vm_threads.append(new_thread)
+
+    for vm_thr in vm_threads:
+        vm_thr.wait_for_thread_end()
+
+
+def check_server_group_messaging_disabled(vms):
+    for vm in vms:
+        with vm_helper.ssh_to_vm_from_natbox(vm) as vm_ssh:
             code, output = vm_ssh.exec_cmd("server_group_app", fail_ok=True)
             assert code > 0
