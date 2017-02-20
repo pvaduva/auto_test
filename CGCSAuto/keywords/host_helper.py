@@ -1194,11 +1194,16 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
     if not kwargs:
         raise ValueError("At least one key-value pair such as p0=1 has to be provided.")
 
+    final_args = {}
     proc_args = ''
     for proc, cores in kwargs.items():
         if cores is not None:
+            final_args[proc] = cores
             cores = str(cores)
             proc_args = ' '.join([proc_args, '-'+proc.lower().strip(), cores])
+
+    if not final_args:
+        raise ValueError("cores values cannot be all None")
 
     if not proc_args:
         raise ValueError("At least one key-value pair should have non-None value. e.g., p1=2")
@@ -1216,7 +1221,7 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
 
     threads = get_host_threads_count(host, con_ssh=con_ssh)
 
-    for proc, num in kwargs.items():
+    for proc, num in final_args.items():
         num = int(num)
         proc_id = re.findall('\d+', proc)[0]
         expt_cores = threads*num

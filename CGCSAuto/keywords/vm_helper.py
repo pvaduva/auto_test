@@ -2164,7 +2164,7 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
                             raise exceptions.VMNetworkError("Failed to add vlan to vm interfaces file")
 
                     LOG.info("Restarting networking service for vm.")
-                    vm_ssh.exec_cmd("/etc/init.d/networking restart", expect_timeout=60)
+                    vm_ssh.exec_cmd("/etc/init.d/networking restart", expect_timeout=180)
                     output_pre_ipaddr = vm_ssh.exec_cmd('ip addr', fail_ok=False)[1]
                     if vlan_name not in output_pre_ipaddr:
                         raise exceptions.VMNetworkError("vlan {} is not found in 'ip addr' after restarting networking "
