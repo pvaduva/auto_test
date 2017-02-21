@@ -141,9 +141,9 @@ PROCESSES = {
     # {'nova-novncproxy': {
     'nova-novnc': {
         # 'cmd': '/usr/bin/python2 /bin/nova-novncproxy', 'impact': 'swact',
-        'cmd': '/usr/bin/python2 /bin/nova-novncproxy', 'impact': 'log',
+        'cmd': '/usr/bin/python2 /bin/nova-novncproxy', 'impact': 'enabled-warning',
         'severity': 'major', 'node_type': 'active'},
-    'cinder-api': {'cmd': '/usr/bin/python2 /bin/cinder-api', 'marjor': 'enabled-degraded',
+    'cinder-api': {'cmd': '/usr/bin/python2 /bin/cinder-api', 'impact': 'enabled-degraded',
                    'severity': 'major', 'node_type': 'active'},
     # {'cinder-schedule': {
     'cinder-scheduler': {
@@ -209,7 +209,7 @@ PROCESSES = {
         'severity': 'major', 'node_type': 'active'},
     # {'nfv-vim-webserver': {
     'vim-webserver': {
-        'cmd': '/usr/bin/python /bin/nfv-vim-webserver', 'impact': 'log',
+        'cmd': '/usr/bin/python /bin/nfv-vim-webserver', 'impact': 'enabled-warning',
         'severity': 'minor', 'node_type': 'active'},
     'guest-agent': {
         'cmd': '/usr/local/bin/guestAgent', 'impact': 'swact',
@@ -239,7 +239,7 @@ PROCESSES = {
 
 class MonitoredProcess:
 
-    def __init__(self, name, cmd=None, impact=None, severity='major', node_type='all', sm_process=True, **kwargs):
+    def __init__(self, name, cmd=None, impact=None, severity='major', node_type='all', process_type='sm', **kwargs):
         self.name = name
 
         self.cmd = cmd
@@ -252,7 +252,7 @@ class MonitoredProcess:
         self.retries = kwargs.get('retries', DEF_RETRIES)
         self.debounce = kwargs.get('debounce', DEF_DEBOUNCE)
         self.interval = kwargs.get('interval', DEF_INTERVAL)
-        self.sm_process = sm_process
+        self.process_type = process_type
 
         self.prev_stats = None
         self.con_ssh = ControllerClient.get_active_controller()
@@ -304,6 +304,7 @@ class MonitoredProcess:
                 action_timeout=SM_PROC_TIMEOUT,
                 total_retries=KILL_WAIT_RETRIES,
                 interval=self.interval,
+                process_type=self.process_type,
                 on_active_controller=(node_type == 'active'),
                 con_ssh=self.con_ssh)
             self.pid = int(pid)
@@ -346,16 +347,19 @@ class MonitoredProcess:
     # # mark.p1(('keystone')),
     # mark.p1(('glance-registry')),
     # # TODO CGTS-6398
-    # # mark.p1(('glance-api')),
+    # major
+    # mark.p1(('glance-api')),
     mark.p1(('neutron-server')),
     mark.p1(('nova-api')),
     mark.p1(('nova-scheduler')),
     mark.p1(('nova-conductor')),
     mark.p1(('nova-cert')),
     mark.p1(('nova-console-auth')),
-    # mark.p1(('nova-novnc')),
+    # minor
+    mark.p1(('nova-novnc')),
     #
-    # mark.p1(('cinder-api')),
+    # major
+    mark.p1(('cinder-api')),
     mark.p1(('cinder-scheduler')),
     # retries = 32
     mark.p1(('cinder-volume')),
@@ -368,7 +372,7 @@ class MonitoredProcess:
     # mark.p1(('heat-api-cfn')),
     # mark.p1(('heat-api-cloudwatch')),
     #
-    # mark.p1(('open-ldap')),
+    mark.p1(('open-ldap')),
     # retries = 32
     mark.p1(('snmp')),
 
@@ -380,7 +384,8 @@ class MonitoredProcess:
     # mark.p1(('ceph-rest-api')),
     # mark.p1(('ceph-manager')),
     # mark.p1(('vim-api')),
-    # mark.p1(('vim-webserver')),
+    # minor
+    mark.p1(('vim-webserver')),
     mark.p1(('guest-agent')),
     # mark.p1(('nova-api-proxy')),
     mark.p1(('haproxy')),
@@ -491,7 +496,7 @@ def _monitor_process(process, total_time, interval=5):
     cmd = getattr(process, 'cmd', None)
     pid = getattr(process, 'pid', None)
     host = getattr(process, 'host', None)
-    sm_process = getattr(process, 'sm_process', False)
+    process_type = getattr(process, 'process_type', 'sm')
 
     global _final_processes_status
 
@@ -505,7 +510,7 @@ def _monitor_process(process, total_time, interval=5):
 
     while time.time() < stop_time:
         cur_pid, proc_name = mtc_helper.get_process_info(
-            name, cmd=cmd, host=host, sm_process=sm_process, con_ssh=con_ssh)[0:2]
+            name, cmd=cmd, host=host, process_type=process_type, con_ssh=con_ssh)[0:2]
 
         cur_pid = int(cur_pid)
 
@@ -571,14 +576,19 @@ def wait_and_monitor_tested_processes(request):
         total_time = INTERVAL_BETWEEN_SWACT + 60
         pre_wait = INTERVAL_BETWEEN_SWACT / 5
 
-        LOG.info('Wait for {} seconds after potential swact'.format(pre_wait))
-        time.sleep(pre_wait)
-
         if not _tested_procs:
             LOG.info('No processes completed the whole procedure? Wait for system recovered in {} seconds'.format(
-                total_time))
-            time.sleep(total_time)
+                total_time/10))
+            time.sleep(total_time/10)
         else:
+            last_impact = getattr(_tested_procs[-1], 'impact', 'swact')
+            if last_impact != 'swact':
+                total_time = INTERVAL_BETWEEN_SWACT / 5
+                pre_wait = INTERVAL_BETWEEN_SWACT / 20
+
+            LOG.info('Wait for {} seconds after potential killing process testing'.format(pre_wait))
+            time.sleep(pre_wait)
+
             monitors = []
             for proc in _tested_procs:
                 monitor = monitor_process(proc, total_time - pre_wait)
@@ -612,7 +622,7 @@ def wait_and_monitor_tested_processes(request):
                 old_pids = [pid for pid in pids_info['used_pids'] if pid != last_pid]
 
                 assert len(old_pids) < 2, \
-                    'Service {} re-created {} times, used-pids:{}'.format(
+                    'Service {} re-created {} times during the monotoring period, used-pids:{}'.format(
                         name, len(old_pids), pids_info['used_pids'])
 
             LOG.info('OK, (new) processe(s) for service:{}  is(are) running stable')
