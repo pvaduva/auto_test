@@ -359,7 +359,10 @@ def download_heat_templates(lab, server, load_path):
 
 def download_lab_config_files(lab, server, load_path):
 
-    config_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/yow/" + lab['name']
+    lab_name = lab['name']
+    if "yow" in lab_name:
+        lab_name = lab_name[4:]
+    config_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/yow/" + lab_name
     script_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/scripts"
 
     cmd = "test -e " + config_path

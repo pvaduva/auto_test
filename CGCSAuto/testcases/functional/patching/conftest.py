@@ -91,7 +91,7 @@ def pytest_configure(config):
 # @pytest.fixture(scope='session', autouse=True)
 # def pre_check_patching():
 #
-#     ProjVar.set_var(SOURCE_ADMIN=True)
+#     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
 #
 #     # check if all nodes are unlocked
 #     assert system_helper.are_hosts_unlocked(con_ssh), \

@@ -81,11 +81,12 @@ def setup_test_session():
     """
     # os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
     ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     con_ssh.set_prompt()
     setups.set_env_vars(con_ssh)
-
     setups.copy_files_to_con1()
+    con_ssh.set_prompt()
 
     global natbox_ssh
     natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'), con_ssh=con_ssh)
@@ -96,8 +97,6 @@ def setup_test_session():
     build_id, build_host = setups.get_build_info(con_ssh)
     ProjVar.set_var(BUILD_ID=build_id)
     ProjVar.set_var(BUILD_HOST=build_host)
-    ProjVar.set_var(SOURCE_ADMIN=True)
-    print('precheck source_admin_value: ' + str(ProjVar.get_var('SOURCE_ADMIN')))
 
 
 @pytest.fixture(scope='function', autouse=True)
@@ -135,8 +134,8 @@ def pytest_runtest_teardown(item):
 def pre_check_upgrade():
     # con_ssh = ControllerClient.get_active_controller()
 
-    ProjVar.set_var(SOURCE_ADMIN=True)
-    print('precheck source_admin_value: ' + str(ProjVar.get_var('SOURCE_ADMIN')))
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    print('precheck source_admin_value: ' + str(ProjVar.get_var('SOURCE_CREDENTIAL')))
 
     # check if all nodes are unlocked
     assert system_helper.are_hosts_unlocked(con_ssh), \

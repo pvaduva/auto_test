@@ -8,7 +8,7 @@ class ProjVar:
     __var_dict = {'BUILD_ID': None,
                   'BUILD_SERVER': None,
                   'LOG_DIR': None,
-                  'SOURCE_ADMIN': False,
+                  'SOURCE_CREDENTIAL': None,
                   }
                   # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}
 
