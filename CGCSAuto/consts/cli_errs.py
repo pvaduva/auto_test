@@ -123,3 +123,9 @@ class PciAddrErr:
     LARGER_THAN_MAX_SLOT = 'PCI slot maximum value is 31'
     BAD_FORMAT = 'Bad PCI address format'
     WRONG_BUS_VAL = 'Wrong bus value for PCI address'
+
+
+class SrvGrpErr:
+    EXCEEDS_GRP_SIZE = 'Action would result in server group {} exceeding the group size of {}'
+    HOST_UNAVAIL_ANTI_AFFINITY = '(ServerGroupAntiAffinityFilter) Anti-affinity server group specified, ' \
+                                 'but this host is already used by that group'

@@ -920,6 +920,11 @@ def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=T
     return table_parser.get_value_two_col_table(table_, field, strict)
 
 
+def get_vm_fault_message(vm_id, con_ssh=None, auth_info=None):
+    table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_value_two_col_table(table_, 'fault', merge_lines=True)
+
+
 def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get value of specified field for given vm(s) as a dictionary.

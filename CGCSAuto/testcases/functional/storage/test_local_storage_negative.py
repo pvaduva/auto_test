@@ -67,9 +67,8 @@ def test_apply_storage_profile_negative(create_storage_profile, personality):
     profile_name = create_storage_profile['profile_name']
     origin_disk_num = create_storage_profile['disk_num']
     disks_num = len(local_storage_helper.get_host_disks_values(host_name, 'device_node'))
-    expt_err = 'profile has more disks than host does' if disks_num < origin_disk_num \
-        else "Failed to create storage function"
-
+    expt_err = 'profile has more disks than host does' if disks_num < origin_disk_num -1 \
+        else "Please check if host's disks match profile criteria"
     positional_arg = host_name + ' ' + profile_name
 
     HostsToRecover.add(host_name)

@@ -187,7 +187,10 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     # Handle mandatory arg - boot source id
     volume_id = image = snapshot_id = None
     if source is None:
-        source = 'volume'
+        if min_count is None and max_count is None:
+            source = 'volume'
+        else:
+            source = 'image'
 
     new_vol = ''
     if source.lower() == 'volume':
@@ -255,41 +258,71 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if poll:
         args_ += ' --poll'
 
+    if not (min_count is None and max_count is None):
+        name_str = name + '-'
+        pre_boot_vms = nova_helper.get_vms(auth_info=auth_info, con_ssh=con_ssh, strict=False, name=name_str)
+
     LOG.info("Booting VM {}...".format(name))
     exitcode, output = cli.nova('boot', positional_args=args_, ssh_client=con_ssh,
                                 fail_ok=fail_ok, rtn_list=True, timeout=VMTimeout.BOOT_VM, auth_info=auth_info)
 
-    table_ = table_parser.table(output)
-    vm_id = table_parser.get_value_two_col_table(table_, 'id')
-
-    if exitcode == 1:
-        if vm_id:
-            return 1, vm_id, output, new_vol       # vm_id = '' if cli is rejected without vm created
-        return 4, '', output, new_vol     # new_vol = '' if no new volume created. Pass this to test for proper teardown
-
-    LOG.info("Post action check...")
-    if poll and "100% complete" not in output:
-        message = "VM building is not 100% complete."
-        if fail_ok:
-            LOG.warning(message)
-            return 2, vm_id, "VM building is not 100% complete.", new_vol
-        else:
-            raise exceptions.VMOperationFailed(message)
-
     tmout = VMTimeout.STATUS_CHANGE
-    if not _wait_for_vm_status(vm_id=vm_id, status=VMStatus.ACTIVE, timeout=tmout, con_ssh=con_ssh,
-                               auth_info=auth_info, fail_ok=True):
-        vm_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
-                                                       auth_info=auth_info)
-        message = "VM {} did not reach ACTIVE state within {}. VM status: {}".format(vm_id, tmout, vm_status)
-        if fail_ok:
-            LOG.warning(message)
-            return 3, vm_id, message, new_vol
-        else:
-            raise exceptions.VMPostCheckFailed(message)
+    if min_count is None and max_count is None:
+        table_ = table_parser.table(output)
+        vm_id = table_parser.get_value_two_col_table(table_, 'id')
 
-    LOG.info("VM {} is booted successfully.".format(vm_id))
-    return 0, vm_id, 'VM is booted successfully', new_vol
+        if exitcode == 1:
+            if vm_id:
+                return 1, vm_id, output, new_vol       # vm_id = '' if cli is rejected without vm created
+            return 4, '', output, new_vol     # new_vol = '' if no new volume created. Pass this to test for proper teardown
+
+        LOG.info("Post action check...")
+        if poll and "100% complete" not in output:
+            message = "VM building is not 100% complete."
+            if fail_ok:
+                LOG.warning(message)
+                return 2, vm_id, "VM building is not 100% complete.", new_vol
+            else:
+                raise exceptions.VMOperationFailed(message)
+
+        if not _wait_for_vm_status(vm_id=vm_id, status=VMStatus.ACTIVE, timeout=tmout, con_ssh=con_ssh,
+                                   auth_info=auth_info, fail_ok=True):
+            vm_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
+                                                           auth_info=auth_info)
+            message = "VM {} did not reach ACTIVE state within {}. VM status: {}".format(vm_id, tmout, vm_status)
+            if fail_ok:
+                LOG.warning(message)
+                return 3, vm_id, message, new_vol
+            else:
+                raise exceptions.VMPostCheckFailed(message)
+
+        LOG.info("VM {} is booted successfully.".format(vm_id))
+        return 0, vm_id, 'VM is booted successfully', new_vol
+
+    else:
+        name_str = name + '-'
+        post_boot_vms = nova_helper.get_vms(auth_info=auth_info, con_ssh=con_ssh, strict=False, name=name_str)
+        # tables_ = table_parser.tables(output)
+        # vm_ids = []
+        # for tab_ in tables_:
+        #     vm_id = table_parser.get_value_two_col_table(tab_, 'id')
+        #     if vm_id:
+        #         vm_ids.append(vm_id)
+
+        vm_ids = list(set(post_boot_vms) - set(pre_boot_vms))
+        if exitcode == 1:
+            return 1, vm_ids, output
+
+        result, vms_in_state, vms_failed_to_reach_state = _wait_for_vms_values(vm_ids,fail_ok=True, timeout=tmout,
+                                                                                con_ssh=con_ssh, auth_info=auth_info)
+        if not result:
+            msg = "VMs failed to reach ACTIVE state: {}".format(vms_failed_to_reach_state)
+            if fail_ok:
+                LOG.warning(msg=msg)
+                return 3, vm_ids, msg
+
+        LOG.info("VMs booted successfully: {}".format(vm_ids))
+        return 0, vm_ids, "VMs are booted successfully"
 
 
 def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None, use_fip=False):
@@ -1070,11 +1103,25 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
 
-        from_vm_ssh.exec_cmd("ip addr")
         res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                        fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry,
+                        fail_ok=True, use_fip=to_fip, net_types=net_types, retry=retry,
                         retry_interval=retry_interval, vlan_zero_only=vlan_zero_only)
-        return res
+        if not res[0]:
+            from_vm_ssh.exec_cmd("ip addr", get_exit_code=False)
+
+    if not res[0] and not fail_ok:
+        try:
+            LOG.debug("ping vms from vm failed - attempt to ssh to to_vms and print ip addr")
+            for vm_ in to_vms:
+                with ssh_to_vm_from_natbox(vm_, retry=False, con_ssh=con_ssh) as to_ssh:
+                    to_ssh.exec_cmd('ip addr', get_exit_code=False)
+        except:
+            pass
+
+        err_msg = "Ping unsuccessful from {} to vms {}: {}".format(from_vm, to_vms, res[1])
+        raise exceptions.VMNetworkError(err_msg)
+
+    return res
 
 
 def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
@@ -1085,6 +1132,7 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
 
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                prompt=prompt, con_ssh=con_ssh, vm_ip=vm_ip, use_fip=use_fip) as from_vm_ssh:
+        from_vm_ssh.exec_cmd('ip addr', get_exit_code=False)
         return network_helper._ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings,
                                            timeout=timeout, fail_ok=fail_ok)[0]
 

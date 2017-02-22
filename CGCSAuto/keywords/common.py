@@ -216,11 +216,11 @@ def _scp_base(cmd, remote_password, logdir=None, timeout=60):
 
         if index == 2:
             local_child.sendline('yes')
-            index = local_child.expect(pexpect.EOF, 'assword:')
+            index = local_child.expect([pexpect.EOF, 'assword:'], timeout=timeout)
 
         if index == 1:
             local_child.sendline(remote_password)
-            local_child.expect(pexpect.EOF)
+            local_child.expect(pexpect.EOF, timeout=timeout)
 
 
 def get_tenant_name(auth_info=None):
