@@ -285,9 +285,6 @@ class SSHClient:
             expect(['good', 'bad'], 10, False): to wait for a match start with 'good' or 'bad' with 10seconds timeout
 
         """
-        kwargs = {}
-        if searchwindowsize is not None:
-            kwargs['searchwindowsize'] = searchwindowsize
 
         if blob_list is None:
             blob_list = self.prompt
@@ -300,6 +297,12 @@ class SSHClient:
             LOG.debug("Expecting: \'{}\'...".format('\', \''.join(str(blob) for blob in blob_list)))
         else:
             LOG.debug("Expecting exit code...")
+
+        kwargs = {}
+        if searchwindowsize is not None:
+            kwargs['searchwindowsize'] = searchwindowsize
+        elif blob_list == self.prompt:
+            kwargs['searchwindowsize'] = 100
 
         try:
             index = self._session.expect(blob_list, timeout=timeout, **kwargs)

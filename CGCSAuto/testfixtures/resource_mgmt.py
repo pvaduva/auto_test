@@ -228,7 +228,7 @@ class ResourceCleanup:
 
         Args:
             resource_type (str): one of these: 'vm', 'volume', 'flavor
-            resource_id (str): id of the resource to add to cleanup list
+            resource_id (str|list): id(s) of the resource to add to cleanup list
             scope (str): when the cleanup should be done. Valid value is one of these: 'function', 'class', 'module'
             del_vm_vols (bool): whether to delete attached volume(s) if given resource is vm.
 
@@ -254,7 +254,11 @@ class ResourceCleanup:
         else:
             key = resource_type + 's'
 
-        cls.__resources_to_cleanup[scope][key].append(resource_id)
+        if not isinstance(resource_id, (list, tuple)):
+            resource_id = [resource_id]
+
+        for res_id in resource_id:
+            cls.__resources_to_cleanup[scope][key].append(res_id)
 
 
 @fixture(scope='module')
