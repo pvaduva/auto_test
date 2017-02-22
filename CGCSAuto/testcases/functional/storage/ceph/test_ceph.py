@@ -17,7 +17,7 @@ from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.resource_mgmt import ResourceCleanup
 
 PROC_RESTART_TIME = 30          # number of seconds between process restarts
-RESTARTS_BEFORE_ASSERT = 5      # number of process restarts until error assertion
+RESTARTS_BEFORE_ASSERT = 3      # number of process restarts until error assertion
 
 
 # Runtime: 208 seconds - pass on wildcat-7-12 and PV0
