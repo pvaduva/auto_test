@@ -43,9 +43,6 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
 
     active_controller = system_helper.get_active_controller_name()
 
-   #TODO: Remove after fixed.
-    workaround(upgrade_version)
-
     # upgrade  controller-0
     LOG.tc_step("Upgrading  controller-0......")
     controller0 = lab['controller-0']
@@ -117,22 +114,4 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     LOG.tc_step("Downloading lab config scripts to upgraded {} lab ".format( upgrade_version))
     install_helper.download_lab_config_files(lab, bld_server, load_path)
 
-
-
-def workaround(upgrade_version):
-    active_controller = system_helper.get_active_controller_name()
-    """
-    TODO: Temporary workaround for upgrade 16.10 to 17:00;
-    sudo -u postgres psql -d sysinv -c  "alter table virtual_interfaces owner to 'admin-sysinv'"
-    sudo -u postgres psql -d sysinv -c  "alter table services owner to 'admin-sysinv'"
-
-    """
-    if upgrade_version == "17.00":
-        LOG.info("Executing workaround to change database table owner to admin-sysinv ......")
-        cmd = "-u postgres psql -d sysinv -c  'alter table virtual_interfaces owner to \"admin-sysinv\"'"
-
-        con_ssh = ControllerClient.get_active_controller()
-        con_ssh.exec_sudo_cmd(cmd)
-        cmd = "-u postgres psql -d sysinv -c  'alter table services owner to \"admin-sysinv\"'"
-        con_ssh.exec_sudo_cmd(cmd)
 
