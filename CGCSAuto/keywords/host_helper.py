@@ -227,7 +227,7 @@ def wait_for_hosts_ready(hosts, con_ssh=None):
         hosts = [hosts]
 
     expt_online_hosts = get_hosts(hosts, administrative=HostAdminState.LOCKED)
-    expt_avail_hosts = get_hosts(hosts, administrative=HostAdminState.LOCKED)
+    expt_avail_hosts = get_hosts(hosts, administrative=HostAdminState.UNLOCKED)
 
     if expt_online_hosts:
         LOG.info("Wait for hosts to be online: {}".format(hosts))
