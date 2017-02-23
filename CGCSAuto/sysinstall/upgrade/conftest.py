@@ -15,8 +15,6 @@ from consts.cgcs import Prompt
 # Import test fixtures that are applicable to upgrade test
 from testfixtures.pre_checks_and_configs import *
 
-# Import test fixtures that are applicable to upgrade test
-from testfixtures.pre_checks_and_configs import *
 
 natbox_ssh = None
 con_ssh = None
@@ -202,7 +200,7 @@ def upgrade_setup(pre_check_upgrade):
     bld_server_conn.connect()
     bld_server_conn.exec_cmd("bash")
     bld_server_conn.set_prompt(bld_server_attr['prompt'])
-    bld_server_conn.deploy_ssh_key(install_helper.PUBLIC_SSH_KEY)
+    bld_server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
     bld_server_attr['ssh_conn'] = bld_server_conn
 
     bld_server_obj = Server(**bld_server_attr)
@@ -328,7 +326,7 @@ def apply_patches(lab, server, patch_dir):
     rc, output = server.ssh_conn.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dir))
     assert rc == 0, "Failed to list patch files in directory path {}.".format(patch_dir)
 
-    #LOG.info("No path found in {} ".format(patch_dir))
+    # LOG.info("No path found in {} ".format(patch_dir))
 
     if output is not None:
         for item in output.splitlines():

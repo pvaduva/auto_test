@@ -213,13 +213,49 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         raise exceptions.HostPostCheckFailed(err_msg)
 
 
+def wait_for_hosts_ready(hosts, con_ssh=None):
+    """
+    Wait for hosts to be in online state is locked, and available and hypervisor/webservice up if unlocked
+    Args:
+        hosts:
+        con_ssh:
+
+    Returns:
+
+    """
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    expt_online_hosts = get_hosts(hosts, administrative=HostAdminState.LOCKED)
+    expt_avail_hosts = get_hosts(hosts, administrative=HostAdminState.LOCKED)
+
+    if expt_online_hosts:
+        LOG.info("Wait for hosts to be online: {}".format(hosts))
+        wait_for_host_states(hosts, availability=HostAvailabilityState.ONLINE, fail_ok=False)
+
+    if expt_avail_hosts:
+        hypervisors = list(set(get_hypervisors()) & set(hosts))
+        controllers = list(set(system_helper.get_controllers()) & set(hosts))
+
+        LOG.info("Wait for hosts to be available: {}".format(hosts))
+        wait_for_host_states(hosts, availability=HostAvailabilityState.AVAILABLE, fail_ok=False)
+
+        if controllers:
+            LOG.info("Wait for webservices up for hosts: {}".format(controllers))
+            wait_for_webservice_up(controllers, fail_ok=False, con_ssh=con_ssh, timeout=90)
+
+        if hypervisors:
+            LOG.info("Wait for hypervisors up for hosts: {}".format(hypervisors))
+            wait_for_hypervisors_up(hypervisors, fail_ok=False, con_ssh=con_ssh, timeout=90)
+
+
 def get_host_show_values_for_hosts(hostnames, fields, merge_lines=False, con_ssh=None):
     if isinstance(fields, str):
         fields = [fields]
 
     states_vals = {}
     for host in hostnames:
-        vals = get_hostshow_values(host, fields, merge_lines=merge_lines)
+        vals = get_hostshow_values(host, fields, merge_lines=merge_lines, con_ssh=con_ssh)
         states_vals[host] = vals
 
     return states_vals
@@ -2724,5 +2760,3 @@ def get_mellanox_ports(host):
 def is_host_locked(host,  con_ssh=None):
         admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
         return admin_state == 'locked'
-
-

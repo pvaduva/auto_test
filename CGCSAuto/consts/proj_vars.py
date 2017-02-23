@@ -69,7 +69,6 @@ class InstallVars:
                          license_path=None,
                          out_put_dir=None):
 
-
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
 
         cls.__var_dict = {

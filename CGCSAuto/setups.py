@@ -461,7 +461,6 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path):
 
     lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
 
-
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume, skip_labsetup=skip_labsetup,
                                  build_server=build_server,
                                  host_build_dir=host_build_dir,

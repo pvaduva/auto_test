@@ -313,6 +313,8 @@ class Labs:
         'floating ip': '128.224.151.94',
         'controller-0 ip': '128.224.151.103',
         'controller-1 ip': '128.224.151.13',
+        'controller_nodes': [23312, 23313],
+        'compute_nodes': [23314, 23315, 23316]
     }
 
     VBOX = {

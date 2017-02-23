@@ -5,6 +5,8 @@ import subprocess
 import re
 from utils.tis_log import LOG
 
+from consts.vlm import VlmAction
+
 SSH_DIR = "~/.ssh"
 SSH_KEY_FPATH = SSH_DIR + "/id_rsa"
 GET_PUBLIC_SSH_KEY_CMD = "ssh-keygen -y -f {}"
@@ -13,13 +15,10 @@ KNOWN_HOSTS_PATH = SSH_DIR + "/known_hosts"
 REMOVE_HOSTS_SSH_KEY_CMD = "ssh-keygen -f {} -R {}"
 # VLM commands and options
 VLM = "/folk/vlm/commandline/vlmTool"
-VLM_RESERVE = 'reserve'
-VLM_UNRESERVE = 'unreserve'
-VLM_TURNON = 'turnOn'
-VLM_TURNOFF = 'turnOff'
-VLM_FINDMINE = 'findMine'
 
-VLM_CMDS = [VLM_RESERVE, VLM_UNRESERVE, VLM_TURNON, VLM_TURNOFF, VLM_FINDMINE]
+
+VLM_CMDS = [VlmAction.VLM_RESERVE, VlmAction.VLM_UNRESERVE, VlmAction.VLM_TURNON, VlmAction.VLM_TURNOFF,
+            VlmAction.VLM_FINDMINE]
 
 
 def get_host_name():
@@ -65,7 +64,7 @@ def get_ssh_key():
 
 
 def reserve_vlm_console(barcode, note=None):
-    action = VLM_RESERVE
+    action = VlmAction.VLM_RESERVE
     cmd = [VLM, action, "-t", str(barcode)]
     reserve_note_params = []
     if note is not None:
@@ -93,7 +92,7 @@ def reserve_vlm_console(barcode, note=None):
 
 
 def vlm_findmine():
-    cmd = [VLM, VLM_FINDMINE]
+    cmd = [VLM, VlmAction.VLM_FINDMINE]
     output = exec_cmd(cmd)[1]
     if re.search("\d+", output):
         reserved_targets = output.split()

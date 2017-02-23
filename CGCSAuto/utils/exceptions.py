@@ -159,3 +159,7 @@ class BuildServerError(TiSError):
 
 class ThreadingError(TiSError):
     message = "Multi threading error."
+
+
+class VLMError(TiSError):
+    message = "VLM Operation Error."
