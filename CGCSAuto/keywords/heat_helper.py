@@ -120,7 +120,7 @@ def delete_stack(stack_name, fail_ok=False, check_first=False, con_ssh=None, aut
             return -1, msg
 
     LOG.info("Deleting Heat Stack %s", stack_name)
-    exitcode, output = cli.heat('stack-delete', stack_name, ssh_client=con_ssh, auth_info=auth_info,
+    exitcode, output = cli.heat('stack-delete -y', stack_name, ssh_client=con_ssh, auth_info=auth_info,
                                 fail_ok=fail_ok, rtn_list=True)
     if exitcode == 1:
         LOG.warning("Delete heat stack request rejected.")
