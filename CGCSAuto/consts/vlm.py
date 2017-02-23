@@ -4,3 +4,4 @@ class VlmAction:
     VLM_TURNON = 'turnOn'
     VLM_TURNOFF = 'turnOff'
     VLM_FINDMINE = 'findMine'
+    VLM_REBOOT = 'reboot'

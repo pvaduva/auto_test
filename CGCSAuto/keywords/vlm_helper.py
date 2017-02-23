@@ -92,7 +92,7 @@ def reserve_hosts(hosts, val='hostname'):
             raise exceptions.VLMError(err_msg)
 
 
-def power_off_host(hosts, reserve=True):
+def power_off_hosts(hosts, reserve=True):
     """
     Power off given hosts
     Args:
@@ -128,6 +128,24 @@ def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconne
         hosts = [hosts]
 
     _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, reserve=reserve)
+
+    if post_check:
+        if con_ssh is None:
+            con_ssh = ControllerClient.get_active_controller()
+
+        if reconnect:
+            con_ssh.connect(retry=True, retry_timeout=reconnect_timeout)
+            host_helper._wait_for_openstack_cli_enable(con_ssh=con_ssh)
+
+        host_helper.wait_for_hosts_ready(hosts, con_ssh=con_ssh)
+
+
+def reboot_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconnect_timeout=HostTimeout.REBOOT,
+                 con_ssh=None):
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_REBOOT, reserve=reserve)
 
     if post_check:
         if con_ssh is None:
