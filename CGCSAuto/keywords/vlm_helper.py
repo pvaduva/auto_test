@@ -150,16 +150,16 @@ def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, reserve=Fal
         barcode = barcodes[i]
 
         if reserve:
-            LOG.info("Reserving {} - {}".format(host, barcode))
+            LOG.info("Reserving {}-{}".format(host, barcode))
             rc, output = local_host.reserve_vlm_console(barcode)
             if rc != 0:
                 err_msg = "Failed to reserve vlm console for {}  barcode {}: {}".format(host, barcode, output)
                 raise exceptions.VLMError(err_msg)
 
-        LOG.info("{} {} - {}".format(action, host, barcode))
+        LOG.info("{} {}-{}".format(action, host, barcode))
         rc, output = local_host.vlm_exec_cmd(action, barcode)
         if rc != 0:
-            err_msg = "Failed to {} node {} - {}: {}".format(action, host, barcode, output)
+            err_msg = "Failed to {} node {}-{}: {}".format(action, host, barcode, output)
             raise exceptions.VLMError(err_msg)
 
-        LOG.info("{} succeeded on {} - {}".format(action, host, barcode))
+        LOG.info("{} succeeded on {}-{}".format(action, host, barcode))
