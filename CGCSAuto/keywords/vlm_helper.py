@@ -92,7 +92,7 @@ def reserve_hosts(hosts, val='hostname'):
             raise exceptions.VLMError(err_msg)
 
 
-def power_off_host(hosts, reserve=False):
+def power_off_host(hosts, reserve=True):
     """
     Power off given hosts
     Args:
@@ -108,7 +108,7 @@ def power_off_host(hosts, reserve=False):
     _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNOFF, reserve=reserve)
 
 
-def power_on_hosts(hosts, reserve=False, post_check=True, reconnect=True, reconnect_timeout=HostTimeout.REBOOT,
+def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconnect_timeout=HostTimeout.REBOOT,
                    con_ssh=None):
     """
 
@@ -140,7 +140,7 @@ def power_on_hosts(hosts, reserve=False, post_check=True, reconnect=True, reconn
         host_helper.wait_for_hosts_ready(hosts, con_ssh=con_ssh)
 
 
-def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, reserve=False):
+def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, reserve=True):
     if isinstance(hosts, str):
         hosts = [hosts]
 
@@ -149,15 +149,15 @@ def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, reserve=Fal
         host = hosts[i]
         barcode = barcodes[i]
 
-        if reserve:
-            LOG.info("Reserving {}-{}".format(host, barcode))
-            rc, output = local_host.reserve_vlm_console(barcode)
-            if rc != 0:
-                err_msg = "Failed to reserve vlm console for {}  barcode {}: {}".format(host, barcode, output)
-                raise exceptions.VLMError(err_msg)
+        # if reserve:
+        #     LOG.info("Reserving {}-{}".format(host, barcode))
+        #     rc, output = local_host.reserve_vlm_console(barcode)
+        #     if rc != 0:
+        #         err_msg = "Failed to reserve vlm console for {}  barcode {}: {}".format(host, barcode, output)
+        #         raise exceptions.VLMError(err_msg)
 
         LOG.info("{} {}-{}".format(action, host, barcode))
-        rc, output = local_host.vlm_exec_cmd(action, barcode)
+        rc, output = local_host.vlm_exec_cmd(action, barcode, reserve=reserve)
         if rc != 0:
             err_msg = "Failed to {} node {}-{}: {}".format(action, host, barcode, output)
             raise exceptions.VLMError(err_msg)
