@@ -37,6 +37,7 @@ def get_user():
 
 def exec_cmd(cmd, show_output=True):
     rc = 0
+    cmd = [str(i) for i in cmd]
     LOG.info(" ".join(cmd))
     try:
         output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, universal_newlines=True)
@@ -104,6 +105,7 @@ def vlm_findmine():
         msg = "User has no reserved target(s)"
         reserved_targets = []
 
+    reserved_targets = [int(barcode) for barcode in reserved_targets]
     LOG.info(msg)
 
     return reserved_targets
@@ -116,7 +118,7 @@ def vlm_exec_cmd(action, barcode, reserve=True):
         LOG.info(msg)
         return 1, msg
 
-    elif barcode not in vlm_findmine():
+    elif int(barcode) not in vlm_findmine():
         if reserve:
             # reserve barcode
             if reserve_vlm_console(barcode)[0] != 0:
