@@ -44,11 +44,13 @@ def exec_cmd(cmd, show_output=True):
         rc = ex.returncode
         output = ex.output
     output = output.rstrip()
-    output = output.decode()
+    if isinstance(output, bytes):
+        output = output.decode()
+    output = output.strip()
     if output and show_output:
         LOG.info("Output:\n" + output)
     LOG.info("Return code: " + str(rc))
-    return (rc, output)
+    return rc, output
 
 
 def get_ssh_key():
@@ -96,7 +98,7 @@ def vlm_findmine():
     cmd = [VLM, VlmAction.VLM_FINDMINE]
     output = exec_cmd(cmd)[1]
     if re.search("\d+", output):
-        reserved_targets = output.split()
+        reserved_targets = output.split(sep=' ')
         msg = "Target(s) reserved by user: {}".format(str(reserved_targets))
     else:
         msg = "User has no reserved target(s)"
