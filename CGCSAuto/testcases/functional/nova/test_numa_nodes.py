@@ -7,7 +7,7 @@ from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, InstanceTopology
 from consts.cli_errs import NumaErr
-from keywords import nova_helper, vm_helper
+from keywords import nova_helper, vm_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
@@ -339,9 +339,10 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
     ResourceCleanup.add('vm', vm_id, scope='function')
 
     LOG.tc_step("Verify cpu info for vm {} via vm-topology.".format(vm_id))
-    con_ssh = ControllerClient.get_active_controller()
-    nova_tab, libvert_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers,libvirt',
-                                                                 expect_timeout=30)[1], combine_multiline_entry=False)
+    # con_ssh = ControllerClient.get_active_controller()
+    nova_tab, libvert_tab = system_helper.get_vm_topology_tables('servers', 'libvirt')
+    # nova_tab, libvert_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers,libvirt',
+    #                                                              expect_timeout=30)[1], combine_multiline_entry=False)
     # Filter out the line for vm under test
     nova_tab = table_parser.filter_table(nova_tab, ID=vm_id)
     libvert_tab = table_parser.filter_table(libvert_tab, uuid=vm_id)
