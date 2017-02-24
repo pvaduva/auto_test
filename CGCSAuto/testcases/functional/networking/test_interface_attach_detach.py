@@ -99,7 +99,7 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     tenant_port_id = nova_helper.get_vm_interfaces_info(vm_id=vm_under_test, net_id=tenant_net_id)[0]['port_id']
 
     #for vm_actions in [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
-    for vm_actions in [['cold_migrate']]:
+    for vm_actions in [['live_migrate']]:
         LOG.tc_step("Attach internal interface to vm via {} with vif_model: {}".format(if_attach_arg, vif_model))
         internal_port = vm_helper.attach_interface(vm_under_test, net_id=internal_net_id, vif_model=vif_model,
                                                    port_id=internal_port_id)[1]
@@ -133,22 +133,22 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
 
         LOG.tc_step("atttach maximum number of vnics to the VM")
         vnics_attached=len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
-        LOG.info("current nic no {}", vnics_attached)
+        LOG.info("current nic no {}".format(vnics_attached))
         max_vnics=16
-        new_vnics=0
+        new_vnics=1
         for nic in range(vnics_attached, max_vnics):
             vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)
-            ++new_vnics
+            new_vnics += 1
 
         vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
-        LOG.info("vnics attached to VM {}", vnics_attached)
+        LOG.info("vnics attached to VM: {}" .format(vnics_attached))
         assert vnics_attached == max_vnics, ("vnics attached is not equal to max number.")
 
-        LOG.tc_step("Bring up all the attached tenant interface from vm")
+        LOG.tc_step("Bring up all the attached new {} tenant interface from vm".format(new_vnics))
         _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics)
 
-        res = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)[1]
-        assert not res, ("vnics attach exceed maximum limit")
+        res = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id, fail_ok=True)[0]
+        assert res == 1, ("vnics attach exceed maximum limit")
 
         if vm_actions[0] == 'auto_recover':
             LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from "
@@ -159,6 +159,9 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
             LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
             for action in vm_actions:
                 vm_helper.perform_action_on_vm(vm_under_test, action=action)
+                if action == 'cold_migrate':
+                    LOG.tc_step("Bring up all the attached tenant interface from vm after {}".format(vm_actions))
+                    _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
 
