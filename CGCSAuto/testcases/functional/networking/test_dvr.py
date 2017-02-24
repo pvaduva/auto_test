@@ -26,13 +26,13 @@ def router_info(request):
     network_helper.update_router_ext_gateway_snat(router_id, enable_snat=False)
     is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN))
 
-    if not is_dvr:
-        network_helper.update_router_distributed(router_id, distributed=True)
-
     def teardown():
         if eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN)) != is_dvr:
-            network_helper.update_router_distributed(router_id, distributed=is_dvr)
+                network_helper.update_router_distributed(router_id, distributed=is_dvr)
     request.addfinalizer(teardown)
+
+    if not is_dvr:
+        network_helper.update_router_distributed(router_id, distributed=True)
 
     return router_id
 
