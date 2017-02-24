@@ -103,15 +103,16 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
 
         LOG.info("Rebooting {}".format(host))
         host_ssh.send('sudo reboot -f')
-        host_ssh.expect('.*[pP]assword:.*')
+        host_ssh.expect(['.*[pP]assword:.*', 'Rebooting'])
         host_ssh.send(password)
         con_ssh.expect(timeout=30)
 
     if reboot_con:
         LOG.info("Rebooting active controller: {}".format(controller))
         con_ssh.send('sudo reboot -f')
-        con_ssh.expect('.*[pP]assword:.*')
-        con_ssh.send(password)
+        index = con_ssh.expect(['.*[pP]assword:.*', 'Rebooting'])
+        if index == 0:
+            con_ssh.send(password)
         time.sleep(20)
         con_ssh.connect(retry=True, retry_timeout=timeout)
         _wait_for_openstack_cli_enable(con_ssh=con_ssh)
