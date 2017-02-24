@@ -1548,14 +1548,17 @@ def update_router_distributed(router_id=None, distributed=True, pre_admin_down=T
         _update_router(admin_state_up=False, router_id=router_id, fail_ok=False, con_ssh=con_ssh,
                        auth_info=Tenant.ADMIN)
 
-    code, output = _update_router(distributed=distributed, router_id=router_id, fail_ok=fail_ok, con_ssh=con_ssh,
-                                  auth_info=auth_info)
+    try:
+        code, output = _update_router(distributed=distributed, router_id=router_id, fail_ok=fail_ok, con_ssh=con_ssh,
+                                      auth_info=auth_info)
+    except exceptions.CLIRejected:
+        raise
+    finally:
+        if post_admin_up:
+            _update_router(admin_state_up=True, router_id=router_id, fail_ok=False, con_ssh=con_ssh, auth_info=auth_info)
 
     if code == 1:
         return 1, output
-
-    if post_admin_up:
-        _update_router(admin_state_up=True, router_id=router_id, fail_ok=False, con_ssh=con_ssh, auth_info=auth_info)
 
     post_distributed_val = get_router_info(router_id, 'distributed', auth_info=Tenant.ADMIN, con_ssh=con_ssh)
     if post_distributed_val.lower() != str(distributed).lower():
