@@ -1,3 +1,4 @@
+import re
 import time
 import datetime
 import os.path
@@ -9,9 +10,33 @@ from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 from keywords import system_helper, host_helper, storage_helper
 from consts.timeout import MTCTimeout
-from consts.cgcs import EventLogID
+
 
 KILL_CMD = 'kill -9'
+PROCESS_TYPES=['sm', 'pm', 'other']
+KILL_PROC_EVENT_FORMAT = {
+    # documented
+    # 401.001	Service group <group> state change from <state> to <state> on host <host_name>
+    #
+    # actual in 2017-02-20_22-01-22
+    # clear | 400.001      | Service group cloud-services degraded; cinder-api(disabled, failed) |\
+    # service_domain=controller.service_group=cloud-services.host=controller-1
+            # log   | 401.001      | Service group cloud-services state change from active-degraded to active on host controller-1
+    # set   | 400.001      | Service group cloud-services degraded; cinder-api(disabled, failed) |\
+    # service_domain=controller.service_group=cloud-services.host=controller-1
+
+    # 'sm': ('401.001',
+    # actual in 2017-02-20_22-01-22
+    # clear	400.001	Service group cloud-services warning; nova-novnc(disabled, failed)
+    # service_domain=controller.service_group=cloud-services.host=controller-0
+
+    'sm': ('400.001',
+           r'Service group ([^\s]+) ([^\s]+);\s*(.*)',
+           r'service_domain=controller\.service_group=([^\.]+)\.host=(.*)'),
+    #
+    'pm': (''),
+}
+AVAILABILITY_MAPPINGS = {'active': 'enabled', 'enabled': 'active'}
 
 
 def get_ancestor_process(name, host, cmd='', fail_ok=False, retries=5, retry_interval=3, con_ssh=None):
@@ -48,7 +73,7 @@ def get_ancestor_process(name, host, cmd='', fail_ok=False, retries=5, retry_int
                 code, output = con0_ssh.exec_cmd(ps_cmd, fail_ok=True)
                 if 0 == code and output.strip():
                     break
-                LOG.warn('Failed to run cli:{} on controller at iteration:{:02d}, '
+                LOG.warn('Failed to run cli:{} on controller at retry:{:02d}, '
                          'wait:{} seconds and try again'.format(cmd, count, retry_interval))
                 time.sleep(retry_interval)
     else:
@@ -93,7 +118,6 @@ def get_ancestor_process(name, host, cmd='', fail_ok=False, retries=5, retry_int
 
     LOG.warn('Multiple ({}) parent processes?, ppids:{}'.format(len(ppids), ppids))
 
-    # ppids = set(ppids)
     if '1' not in ppids:
         LOG.warn('Init is not the grand parent process?, ppids:{}'.format(ppids))
 
@@ -172,10 +196,11 @@ def get_process_from_sm(name, con_ssh=None, pid_file='', expecting_status='enabl
 
             expect_status = results_array[1]
             actual_status = results_array[2]
+
             if expect_status != actual_status:
                 LOG.warn('service:{} is not in expected status yet. expected:{}, actual:{}. Retry'.format(
                     proc_name, expect_status, actual_status))
-                break
+                continue
 
             if actual_status != expecting_status:
                 LOG.warn('service:{} is not in expected status yet. expected:{}, actual:{}. Retry'.format(
@@ -240,9 +265,36 @@ def is_controller_swacted(prev_active,
 
 def search_event(event_id='', type_id='', instance_id='', severity='', start='', end='', limit=30,
                  con_ssh=None, auth_info=Tenant.ADMIN, strict=False, regex=False, exclude=False, **kwargs):
+    """Search for event using system event-list
+
+    Args:
+        event_id:
+        type_id:
+        instance_id:
+        severity:
+        start:
+        end:
+        limit:
+        con_ssh:
+        auth_info:
+        strict:
+        regex:
+        exclude:
+        **kwargs:
+
+    Returns:
+
+    """
 
     base_cmd = 'event-list --nowrap --nopaging --include_suppress --uuid'
     criteria = []
+
+    # move start-time key to the first place due to a known issue of event-list
+    if start:
+        criteria.append('start="{}"'.format(start))
+
+    if end:
+        criteria.append('end="{}"'.format(end))
 
     if event_id:
         criteria.append('event_log_id="{}"'.format(event_id))
@@ -256,74 +308,138 @@ def search_event(event_id='', type_id='', instance_id='', severity='', start='',
     if severity:
         criteria.append('severity="{}"'.format(severity))
 
-    if start:
-        criteria.append('start="{}"'.format(start))
-
-    if end:
-        criteria.append('end="{}"'.format(end))
-
     limit = '-l {}'.format((limit)) if limit >= 1 else ''
     query = '-q {}'.format(';'.join(criteria)) if criteria else ''
     cmd = '{} {} {}'.format(base_cmd, limit, query)
 
-    LOG.info('search event: cmd={}'.format(cmd))
     table = table_parser.table(cli.system(cmd, ssh_client=con_ssh, auth_info=auth_info))
 
     matched = table
     if kwargs:
         matched = table_parser.filter_table(table, strict=strict, regex=regex, exclude=exclude, **kwargs)
 
+    if matched['values']:
+        pass
+    else:
+        LOG.warn('No matched events found')
+        LOG.info('search event: cmd={}'.format(cmd))
+        LOG.info('search event kwargs={}'.format(kwargs))
+
     return matched
 
 
-def _check_events_for_killed_process(service, host, target_status, expecting=True, severity='major',
-                                     last_events=None, retries=15, interval=3, con_ssh=None):
-    reasons = {'major': ['{} is degraded due to the failure of its {} process. '
-                         'Auto recovery of this major process is in progress.'.format(host, service),
-                        ],
+def _check_events_for_killing_process(service, host, target_status, expecting=True, severity='major',
+                                      last_events=None, process_type='sm', retries=15, interval=3, con_ssh=None):
 
-               'minor': ['{} process has failed. Auto recovery of this minor process is in progress'.format(host),
-                         '{} process has failed. Manual recovery is required.'.format(host)
-                        ],
-               'critical': ['{} critical {} process has failed and could not be auto-recovered gracefully. '
-                            'Auto-recovery progression by host reboot is required and in progress.'.format(
-                   host, service)]
-               }
+    if process_type not in KILL_PROC_EVENT_FORMAT:
+        LOG.error('unknown type of process:{}'.format(process_type))
 
-    if severity not in reasons:
-        LOG.error('Unknown severity:{}'.format(severity))
-        return False
+    event_log_id, reason_pattern, entity_id_pattern = KILL_PROC_EVENT_FORMAT[process_type][0:3]
 
-    reason_text = reasons[severity]
-    entity_instance_id = 'host={}.process={}'.format(host, service)
-    last_event = last_events['values'][0]
-    start_time = last_event[1]
+    if last_events is not None:
+        last_event = last_events['values'][0]
+        start_time = last_event[1].replace('-', '').replace('T', ' ').split('.')[0]
+    else:
+        start_time = ''
 
-    search_keys = {'Reason Text': reason_text,
-                   'Entity Instance ID': entity_instance_id,
-                   'Severity': severity,
-                   }
+    search_keys = {
+        'Event Log ID': event_log_id,
+        'Reason Text': reason_pattern,
+        'Entity Instance ID': entity_id_pattern,
+    }
 
-    for round in range(1, retries+1):
+    # expected_operational = target_status.get('operational', None)
+    expected_availability = target_status.get('availability', None)
+
+    matched_events = []
+
+    for retry in range(1, retries+1):
+        matched_events[:] = []
         events_table = search_event(
-            event_id=EventLogID.MTC_MONITORED_PROCESS_FAILURE,
-            start=start_time, limit=100, con_ssh=con_ssh, **search_keys)
-        if events_table:
-            for event  in events_table['values']:
-                state = event[2]
-                LOG.info('found event:{}'.format(event))
-                if state == 'set':
-                    return True
+            event_id=event_log_id,
+            start=start_time, limit=30, con_ssh=con_ssh, regex=True, **search_keys)
+
+        if not events_table or not events_table['values']:
+            LOG.warn('run{:02d}: Empty event table?!\nevens_table:{}\nevent_id={}, start={}\nkeys={}'.format(
+                retry, events_table, event_log_id, start_time, search_keys))
+            continue
+        for event in events_table['values']:
+            try:
+                actual_event_id = event[3].strip()
+                if actual_event_id != event_log_id:
+                    LOG.warn('Irrelevant event? event-list quering broken?!'
+                             ' looking-for-event-id={}, actual-event-id={}, event={}'.format(
+                        event_log_id, actual_event_id, event))
+                    continue
+
+                actual_state = event[2]
+                if actual_state not in ['set', 'clear']:
+                    LOG.info('State not matching, expected-state="log", actual-state={}", event={}'.format(actual_state, event))
+                    continue
+
+                actual_reason = event[4].strip()
+                # ('cloud-services', 'active', 'active-degraded', 'controller-0;', ' glance-api(disabled, failed)')
+                m = re.match(reason_pattern, actual_reason)
+                if not m:
+                    LOG.info('Not matched event:{},\nevent_id={}, start={}, reason_text={}'.format(
+                        event, event_log_id, start_time, reason_pattern))
+                    continue
+
+                actual_group_status = m.group(2)
+                if actual_group_status not in ['active', expected_availability]:
+                    LOG.info('Group status not matching!, expected-status={}, actual-status={}\nevent={}'.format(
+                        expected_availability, actual_group_status, event))
+                    continue
+
+                if 'host={}'.format(host) not in event[5]:
+                    LOG.info('Host not matching, expected-host={}, acutal-host={}, event={}'.format(
+                        host, event[5], event))
+                    continue
+
+                actual_service_name, status = m.group(3).split('(')
+                service_operational, service_availability = status.split(',')
+                matched_events.append(dict(
+                    uuid=event[0],
+                    event=event[1:-1],
+                    service=actual_service_name,
+                    serice_operational=service_operational,
+                    service_availability=service_availability.strip().strip(')'),
+                    group_name=m.group(1),
+                    group_prev_status=m.group(2),
+                    group_status=m.group(3)
+                ))
+
+                if not expecting:
+                    LOG.error('Found set/clear event while it should NOT\nevent:{}'.format(event))
+                    return False, matched_events
+
+                matched_events = list(reversed(matched_events))
+                if len(matched_events) > 1:
+                    if matched_events[-1]['event'][1] == 'clear' and matched_events[-2]['event'][1] == 'set':
+                        LOG.info('OK, found matched events:{}'.format(matched_events))
+                        return True, matched_events
+
+                # LOG.info('Candidate event:{}\nmatched_events{}\n'.format(event, matched_events))
+            except IndexError:
+                LOG.error('CLI system event-list changed its output format?\nsearching keys={}'.format(search_keys))
+                raise
+
+        LOG.warn('No matched event found at try:{}, will sleep {} seconds and retry\nmatched events:\n{}'.format(
+            retries, interval, matched_events))
 
         time.sleep(interval)
+        continue
 
-    LOG.info('cannot find event within {} seconds with search key={}'.format(retries * interval, search_keys))
+    LOG.info('No matched events:\n{}'.format(matched_events))
 
-    return False
+    return False, []
 
 
-def _check_status_after_killing_process(service, host, target_status, expecting=True, last_events=None, con_ssh=None):
-    LOG.info('check for host:{} expecting status:{}'.format(host, target_status))
+def _check_status_after_killing_process(service, host, target_status, expecting=True,
+                                        process_type='sm', last_events=None, con_ssh=None):
+
+    LOG.info('check for process:{} on host:{} expecting status:{}, process_type:{}'.format(
+        service, host, target_status, process_type))
 
     try:
         operational, availability = target_status.split('-')
@@ -332,26 +448,53 @@ def _check_status_after_killing_process(service, host, target_status, expecting=
         raise
 
     expected = {'operational': operational, 'availability': availability}
+
+    if availability == 'warning':
+        LOG.info('impact:{} meaning: operational={}, availabiltiy={}'.format(target_status, operational, availability))
+        return _check_events_for_killing_process(
+            service,
+            host,
+            expected,
+            expecting=expecting,
+            last_events=last_events,
+            process_type=process_type,
+            con_ssh=con_ssh)
+
     total_wait = 120 if expecting else 30
 
-    code, msg = host_helper.wait_for_host_states(host, timeout=total_wait, con_ssh=con_ssh, fail_ok=True, **expected)
-    if expecting and 0 == code:
-        LOG.debug('OK, process:{} in status:{} as expected now '.format(service))
-        return True
+    found = host_helper.wait_for_host_states(host, timeout=total_wait/2  , con_ssh=con_ssh, fail_ok=True, **expected)
 
-    elif not expecting and 0 == code:
-        LOG.error('Unexpected status for process:{}, expected status:{}, message:{}'.format(service, expected, msg))
+    if expecting and found:
+        LOG.debug('OK, process:{} in status:{} as expected.'.format(service, target_status))
+
+        LOG.debug('Next, wait and verify the sytstem recovers')
+        expected = {'operational': 'enabled', 'availability': 'available'}
+        return host_helper.wait_for_host_states(
+            host, timeout=total_wait / 2, con_ssh=con_ssh, fail_ok=True, **expected)
+        # return True
+
+    elif not expecting and found:
+        LOG.error('Unexpected status for process:{}, expected status:{}'.format(service, expected))
         return False
 
+    elif not expecting and not found:
+        LOG.info('OK, IMPACT did not happen which is correct. target_status={}'.format(target_status))
+        return True
+
+    elif expecting and not found:
+        LOG.warn('host is not in expected status:{} for service:{}'.format(expected, service))
+
+        return _check_events_for_killing_process(
+            service, host, expected, expecting=expecting, last_events=last_events,
+            process_type=process_type, con_ssh=con_ssh)
+
     else:
-        LOG.warn('host is not expected status:{} for service:{} after {} seconds, code:{}, message:{}'.format(
-            expected, service, code, msg))
-
-        return _check_events_for_killed_process(
-            service, host, expected, expecting=expecting, last_events=last_events, con_ssh=con_ssh)
+        # should never reach here
+        pass
 
 
-def check_impact(impact, service_name, host='', last_events=None, expecting_impact=False, con_ssh=None, **kwargs):
+def check_impact(impact, service_name, host='', last_events=None,
+                 expecting_impact=False, process_type='sm', con_ssh=None, **kwargs):
     """
     Check if the expected IMPACT happens (or NOT) on the specified host
 
@@ -361,8 +504,11 @@ def check_impact(impact, service_name, host='', last_events=None, expecting_impa
                             enabled-degraded    ---     the host changed to 'enalbed-degraded' status
                             disabled-failed     ---     the host changed to 'disabled-failed' status
                             ...
-        host (str):     the host to check
+        service_name (str): name of the service/process
+        host (str):         the host to check
+        last_events (dict)  the last events before action
         expecting_impact (bool):    if the IMPACT should happen
+        process_type (str):         type of the process: sm, pm, other
         con_ssh:                    ssh connection/client to the active controller
         **kwargs:
 
@@ -384,15 +530,16 @@ def check_impact(impact, service_name, host='', last_events=None, expecting_impa
         else:
             return not is_controller_swacted(prev_active, con_ssh=con_ssh, swact_start_timeout=20)
 
-    elif impact in ['enabled-degraded', 'disabled-failed']:
-        return _check_status_after_killing_process(service_name, host, target_status=impact,
-                                                   expecting=expecting_impact, last_events=last_events, con_ssh=con_ssh)
+    elif impact in ['enabled-degraded', 'enabled-warning']:
+        return _check_status_after_killing_process(
+            service_name, host, target_status=impact, expecting=expecting_impact,
+            process_type=process_type, last_events=last_events, con_ssh=con_ssh)
     else:
         LOG.warn('impact-checker for impact:{} not implemented yet, kwargs:{}'.format(impact, kwargs))
         return False
 
 
-def get_process_info(name, cmd='', pid_file='', host='', sm_process=True, con_ssh=None):
+def get_process_info(name, cmd='', pid_file='', host='', process_type='sm', con_ssh=None):
     """
     Get the information of the process with the specified name
 
@@ -401,7 +548,7 @@ def get_process_info(name, cmd='', pid_file='', host='', sm_process=True, con_ss
         cmd (str):      path of the executable
         pid_file (str): path of the file containing the process id
         host (str):     host on which the process resides
-        sm_process (bool):  if it is a SM service/process
+        process_type (str):  type of service/process, must be one of 'sm', 'pm', 'other'
         con_ssh:        ssh connection/client to the active controller
 
     Returns:
@@ -411,7 +558,7 @@ def get_process_info(name, cmd='', pid_file='', host='', sm_process=True, con_ss
     if not host:
         host = active_controller
 
-    if sm_process:
+    if process_type == 'sm':
         if host != active_controller:
             LOG.warn('Trying to get SM process from non-active controller?')
         pid, name, status, pid_file = get_process_from_sm(name, con_ssh=con_ssh, pid_file=pid_file)
@@ -466,12 +613,13 @@ def is_process_running(pid, host, con_ssh=None, retries=10, interval=3):
 
 def _get_last_events_timestamps(limit=1):
     latest_events = search_event(limit=limit)
-    LOG.info('latest_events:{}'.format(latest_events))
+    # LOG.info('latest_events:{}'.format(latest_events))
+    return latest_events
 
 
 def kill_controller_process_verify_impact(
         name, cmd='', pid_file='', retries=2, impact='swact', interval=20,
-        action_timeout=90, total_retries=30, on_active_controller=True, con_ssh=None):
+        action_timeout=90, total_retries=30, process_type='sm', on_active_controller=True, con_ssh=None):
     """
     Kill the process with the specified name and verify the system behaviors as expected
 
@@ -494,9 +642,9 @@ def kill_controller_process_verify_impact(
     Returns: (pid, host)
         pid:
             >0  suceess, the final PID of the process
-            -1  failure because of impact NOT happening after killing the process up to threshold times
-            -2  failure because of impact happening before killing threshold times
-            -3  failure after try total_retries times
+            -1  fail because of impact NOT happening after killing the process up to threshold times
+            -2  fail because of impact happening before killing threshold times
+            -3  fail after try total_retries times
         host:
             the host tested on
     """
@@ -518,7 +666,7 @@ def kill_controller_process_verify_impact(
 
 
     for i in range(1, total_retries+1):
-        LOG.info('kill-n-wait iteration:{:02d}'.format(i))
+        LOG.info('kill-n-wait retry:{:02d}'.format(i))
 
         exec_times = []
         killed_pids = []
@@ -554,7 +702,7 @@ def kill_controller_process_verify_impact(
 
             latest_events = _get_last_events_timestamps(limit=10)
 
-            LOG.info('iteration{:02d}: before kill CLI, proc_name={}, pid={}, last_killed_pid={}, '
+            LOG.info('retry{:02d}: before kill CLI, proc_name={}, pid={}, last_killed_pid={}, '
                      'last_kill_time={}'.format(count, proc_name, pid, last_killed_pid, last_kill_time))
 
             LOG.info('\tactive-controller={}, standby-controller={}'.format(
@@ -565,36 +713,35 @@ def kill_controller_process_verify_impact(
             with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
                 code, output = con.exec_sudo_cmd(kill_cmd, fail_ok=True)
                 if 0 != code:
-                    LOG.warn('iteration{:02d}: Failed to kill pid:{}, cmd={}, output=<{}>, not event existing?'.format(
+                    LOG.warn('retry{:02d}: Failed to kill pid:{}, cmd={}, output=<{}>, not event existing?'.format(
                         count, pid, kill_cmd, output))
                     time.sleep(interval / 3)
                     continue
 
-            LOG.info('iteration{:02d}: OK to kill pid:{} on host:{}, cmd={}, output=<{}>'.format(
+            LOG.info('retry{:02d}: OK to kill pid:{} on host:{}, cmd={}, output=<{}>'.format(
                 count, pid, host, kill_cmd, output))
-
 
             if count < retries:
                 # IMPACT should not happen yet
                 if not check_impact(impact, proc_name, last_events=latest_events, active_controller=active_controller,
-                                    expecting_impact=False, host=host, con_ssh=con_ssh):
+                                    expecting_impact=False, process_type=process_type, host=host, con_ssh=con_ssh):
                     LOG.error('Impact:{} observed unexpectedly, it should happen only after killing {} times, '
                               'actual killed times:{}'.format(impact, retries, count))
                     return -2, host
-                LOG.info('iteration{:02d}: OK, NO impact as expected, impact={}'.format(count, impact))
+                LOG.info('retry{:02d}: OK, NO impact as expected, impact={}'.format(count, impact))
 
             else:
                 no_standby_controller = standby_controller is None
                 expecting_impact = True if not no_standby_controller else False
                 if not check_impact(
                         impact, proc_name, last_events=latest_events, active_controller=active_controller,
-                        expecting_impact=expecting_impact, host=host, con_ssh=con_ssh):
+                        expecting_impact=expecting_impact, process_type=process_type, host=host, con_ssh=con_ssh):
                     LOG.error('No impact after killing process {} {} times, while {}'.format(
                         proc_name, count, ('expecting impact' if expecting_impact else 'not expecting impact')))
 
                     return -1, host
 
-                LOG.info('OK, final iteration{:02d}: OK, IMPACT happened (if applicable) as expected, impact={}'.format(
+                LOG.info('OK, final retry{:02d}: OK, IMPACT happened (if applicable) as expected, impact={}'.format(
                     count, impact))
 
                 active_controller, standby_controller = system_helper.get_active_standby_controllers(con_ssh=con_ssh)

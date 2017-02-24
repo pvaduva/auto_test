@@ -255,17 +255,23 @@ def test_vm_voting_no_hb_migrate():
     if len(host_helper.get_hypervisors()) < 2:
         skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
 
+    LOG.tc_step("Boot a vm without guest heartbeat")
     vm_name = 'vm_no_hb_migrate'
     vm_id = vm_helper.boot_vm(name=vm_name)[1]
     ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='function')
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-    time.sleep(5)
+
+    LOG.tc_step("Check heartbeat event is NOT logged")
+    events = system_helper.wait_for_events(timeout=120, strict=False, fail_ok=True,
+                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
+                                              EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
+    assert EventLogID.HEARTBEAT_ENABLED not in events, "Heartbeat enable event appeared while hb is disabled in flavor"
 
     cmd = 'touch /tmp/vote_no_to_migrate'
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        LOG.tc_step("Wait for guest heartbeat process to be up for more than 10 seconds")
+        LOG.tc_step("Check guest heartbeat process is not running")
         vm_helper.wait_for_process('heartbeat', vm_ssh=vm_ssh, timeout=60, time_to_stay=10, check_interval=1,
-                                   fail_ok=False)
+                                   fail_ok=False, disappear=True)
 
         LOG.tc_step("Set vote_not_to_migrate from guest")
         vm_ssh.exec_cmd(cmd)

@@ -1,14 +1,13 @@
 ###
-#from us57002_tc2: Pause/Suspend VM
+# from us57002_tc2: Pause/Suspend VM
 ###
 
 
 from pytest import fixture, mark, skip
 from time import sleep
 
-from utils import table_parser
 from utils.tis_log import LOG
-from consts.cgcs import EventLogID, FlavorSpec, VMStatus
+from consts.cgcs import EventLogID, FlavorSpec
 from consts.timeout import EventLogTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.resource_mgmt import ResourceCleanup
@@ -48,17 +47,15 @@ def heartbeat_flavor_vm(request):
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         vm_ssh.exec_cmd(cmd)
 
-
     return vm
 
 
-#TODO execute this when natbox is back up
-@mark.parametrize(('action', 'revert','vm_voting'), [
-    ('pause_vm','unpause_vm','/tmp/vote_no_to_suspend'),
-    ('suspend_vm','resume_vm', '/tmp/vote_no_to_suspend'),
-    ('stop_vms','start_vms', '/tmp/vote_no_to_stop'),
-    ('reboot_vm','','/tmp/vote_no_to_reboot'),
-    ('live_migrate_vm','','/tmp/vote_no_to_migrate'),
+@mark.parametrize(('action', 'revert', 'vm_voting'), [
+    ('pause_vm', 'unpause_vm', '/tmp/vote_no_to_suspend'),
+    ('suspend_vm', 'resume_vm', '/tmp/vote_no_to_suspend'),
+    ('stop_vms', 'start_vms', '/tmp/vote_no_to_stop'),
+    ('reboot_vm', '', '/tmp/vote_no_to_reboot'),
+    ('live_migrate_vm', '', '/tmp/vote_no_to_migrate'),
 ])
 def test_vm_voting_timeout(heartbeat_flavor_vm, action, revert, vm_voting):
     """
@@ -90,8 +87,8 @@ def test_vm_voting_timeout(heartbeat_flavor_vm, action, revert, vm_voting):
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         vm_ssh.exec_cmd(cmd)
 
-    #wait for vm to sync
-    sleep(20)
+    # wait for vm to sync
+    sleep(10)
 
     # confirm the action still work
     cmd_str = "vm_helper.{}(vm_id)".format(action)
@@ -102,7 +99,5 @@ def test_vm_voting_timeout(heartbeat_flavor_vm, action, revert, vm_voting):
         cmd_str = "vm_helper.{}(vm_id)".format(revert)
         eval(cmd_str)
 
-    sleep(20)
-
-    # delete vm automatically
+    sleep(10)
 

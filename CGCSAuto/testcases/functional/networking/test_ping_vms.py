@@ -41,7 +41,6 @@ def _append_nics(vifs, net_ids, nics):
 @mark.parametrize(('guest_os', 'vifs'), [
     mark.priorities('cpe_sanity', 'sanity')(('cgcs-guest', (('avp', None), ('virtio', '01:04')))),
     mark.priorities('cpe_sanity', 'sanity')(('ubuntu_14', (('e1000', '00:1f'), ('virtio', None)))),
-    ('ubuntu_14', (('avp', '00:1f'), ('virtio', '00:02')))
 ], ids=id_gen)
 def test_ping_between_two_vms(guest_os, vifs, ubuntu14_image):
     """

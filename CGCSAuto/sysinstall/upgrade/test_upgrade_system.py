@@ -1,12 +1,15 @@
 from utils.tis_log import LOG
+from utils.ssh import ControllerClient, SSHClient
 from keywords import system_helper, host_helper, install_helper, storage_helper
-
+from consts.filepaths import BuildServerPath
+from consts.proj_vars import  UpgradeVars
 
 def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
 
     lab = upgrade_setup['lab']
     current_version = upgrade_setup['current_version']
     upgrade_version = upgrade_setup['upgrade_version']
+    bld_server = upgrade_setup['build_server']
 
     force = False
     LOG.tc_step("Checking system health for upgrade .....")
@@ -100,3 +103,15 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     LOG.tc_step("Deleting  {} load... ".format(current_version))
     system_helper.delete_imported_load()
     LOG.tc_step("Delete  previous load version {}".format(current_version))
+
+    LOG.tc_step("Downloading images to upgraded {} lab ".format( upgrade_version))
+    install_helper.download_image(lab, bld_server, BuildServerPath.GUEST_IMAGE_PATHS[upgrade_version])
+
+    load_path = UpgradeVars.get_upgrade_var('TIS_BUILD_DIR')
+    LOG.tc_step("Downloading heat temples to upgraded {} lab ".format( upgrade_version))
+    install_helper.download_heat_templates(lab, bld_server, load_path)
+
+    LOG.tc_step("Downloading lab config scripts to upgraded {} lab ".format( upgrade_version))
+    install_helper.download_lab_config_files(lab, bld_server, load_path)
+
+

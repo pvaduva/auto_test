@@ -8,7 +8,7 @@ class ProjVar:
     __var_dict = {'BUILD_ID': None,
                   'BUILD_SERVER': None,
                   'LOG_DIR': None,
-                  'SOURCE_ADMIN': False,
+                  'SOURCE_CREDENTIAL': None,
                   }
                   # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}
 
@@ -68,7 +68,6 @@ class InstallVars:
                          heat_templates=None,
                          license_path=None,
                          out_put_dir=None):
-
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
 

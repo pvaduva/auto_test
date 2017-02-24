@@ -217,7 +217,7 @@ def collect_tis_logs(con_ssh):
     dest_path = ProjVar.get_var('LOG_DIR')
     try:
         LOG.info("Copying log file from lab {} to local {}".format(lab_ip, dest_path))
-        scp_to_local(source_path=logpath, source_ip=lab_ip, dest_path=dest_path)
+        scp_to_local(source_path=logpath, source_ip=lab_ip, dest_path=dest_path, timeout=300)
         LOG.info("{} is successfully copied to local directory: {}".format(logpath, dest_path))
     except Exception as e:
         LOG.warning("Failed to copy log file to localhost.")
@@ -460,7 +460,6 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path):
         lab_to_install.update(create_node_dict(lab_to_install['storage_nodes'], 'storage'))
 
     lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
-
 
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume, skip_labsetup=skip_labsetup,
                                  build_server=build_server,

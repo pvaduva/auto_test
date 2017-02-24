@@ -8,7 +8,7 @@ from utils.tis_log import LOG
 
 from consts.auth import Tenant
 from consts.cgcs import FlavorSpec, VMStatus
-from keywords import vm_helper, nova_helper, network_helper, host_helper, common, check_helper
+from keywords import vm_helper, nova_helper, network_helper, host_helper, common
 from testfixtures.resource_mgmt import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -481,8 +481,14 @@ class TestVmPCIOperations:
         if not self.nova_pci_devices:
             skip('No PCI devices existing! Note, currently "Coleto Creek PCIe Co-processor(0443/8086) is supported"')
         requested_vfs = int(pci_alias)
-        min_vfs = min([int(v['pci_vfs_configured']) - int(v['pci_vfs_used'])
-                       for v in nova_pci_devices.values()])
+
+        free_vfs_num = []
+        for host, dev_info in nova_pci_devices.items():
+            min_vfs_on_host = min([int(v['pci_vfs_configured']) - int(v['pci_vfs_used']) for v in dev_info.values()])
+            free_vfs_num.append((min_vfs_on_host))
+
+        min_vfs = min(free_vfs_num)
+
         if min_vfs < requested_vfs:
             skip('Not enough PCI alias devices exit, only {} supported'.format(min_vfs))
 
@@ -499,8 +505,6 @@ class TestVmPCIOperations:
         Test vm actions on vm with multiple ports with given vif models on the same tenant network
 
         Args:
-            vifs (tuple): vif models to test. Used when booting vm with tenant network nics info
-            net_setups_ (tuple): flavor, networks to use and base vm info
 
         Setups:
             - create a flavor with dedicated cpu policy (module)

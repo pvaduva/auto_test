@@ -360,37 +360,47 @@ class TestNovaSchedulerAVS:
         def _mod_host(host_, p0, p1):
             host_helper.modify_host_cpu(host_, function, p0=p0, p1=p1)
 
-        hosts_configured_ = []
         hosts_to_config = {}
-        p1_host_found = p0_host_found = False
-        p1_host = None
-        p0_host = None
-        for host in [host0, host1]:
-            if not p0_host_found:
-                p0_host = host
-                is_match, p0_to_conf, p1_to_conf = compare_cores_to_configure(host, function, p0=2, p1=0)
-                if is_match:
-                    p0_host_found = True
-                    hosts_configured_.append(host)
-                    continue
+
+        h0p0_is_match, h0p0_p0_to_conf, h0p0_p1_to_conf = compare_cores_to_configure(host0, function, p0=2, p1=0)
+        if h0p0_is_match:
+            p0_host = host0  # No config for host0
+            p1_host = host1
+            h1p1_is_match, h1p1_p0_to_conf, h1p1_p1_to_conf = compare_cores_to_configure(host1, function, p0=2, p1=0)
+            if not h1p1_is_match:   # config host1
+                hosts_to_config[p1_host] = {'p0': h1p1_p0_to_conf, 'p1': h1p1_p1_to_conf}
+
+        else:
+            h1p0_is_match, h1p0_p0_to_conf, h1p0_p1_to_conf = compare_cores_to_configure(host1, function, p0=2, p1=0)
+            if h1p0_is_match:
+                p0_host = host1
+                p1_host = host0
+                h0p1_is_match, h0p1_p0_to_conf, h0p1_p1_to_conf = compare_cores_to_configure(host0, function, p0=0,
+                                                                                             p1=2)
+                if not h0p1_is_match:
+                    hosts_to_config[p1_host] = {'p0': h0p1_p0_to_conf, 'p1': h0p1_p1_to_conf}
+            else:
+                h1p1_is_match, h1p1_p0_to_conf, h1p1_p1_to_conf = compare_cores_to_configure(host1, function, p0=0,
+                                                                                             p1=2)
+                if h1p1_is_match:
+                    p1_host = host1
+                    p0_host = host0
+                    hosts_to_config[p0_host] = {'p0': h0p0_p0_to_conf, 'p1': h0p0_p1_to_conf}
+                    # hosts_to_config[p1_host] = {'p0': h1p1_p0_to_conf, 'p1': h1p1_p1_to_conf}
                 else:
-                    hosts_to_config[p0_host] = {'p0': p0_to_conf, 'p1': p1_to_conf}
+                    # no match for (2,0) for both hosts, and host1 don't match (0,2) either - configure host1 to (2,0)
+                    p0_host = host1
+                    hosts_to_config[p0_host] = {'p0': h1p0_p0_to_conf, 'p1': h1p0_p1_to_conf}
+                    p1_host = host0
+                    h0p1_is_match, h0p1_p0_to_conf, h0p1_p1_to_conf = compare_cores_to_configure(host0, function, p0=0,
+                                                                                                 p1=2)
+                    if not h0p1_is_match:
+                        hosts_to_config[p1_host] = {'p0': h0p1_p0_to_conf, 'p1': h0p1_p1_to_conf}
 
-            if not p1_host_found:
-                is_match, p0_to_conf, p1_to_conf = compare_cores_to_configure(host, function, p0=0, p1=2)
-                if is_match:
-                    p1_host = host
-                    p1_host_found = True
-                    hosts_configured_.append(host)
-                elif host not in hosts_to_config:
-                    p1_host = host
-                    hosts_to_config[p1_host] = {'p0': p0_to_conf, 'p1': p1_to_conf}
+        assert p1_host and p0_host, "Check automation code. Init host should have been assigned"
 
-        assert p1_host, "Check automation code. Init host should have been assigned"
-
-        final_hosts_to_conf = list({host0, host1} - set(hosts_configured_))
-        for host_ in final_hosts_to_conf:
-            config_host_class(host_, _mod_host, **hosts_to_config[host_])
+        for host_, configs in hosts_to_config.items():
+            config_host_class(host_, _mod_host, **configs)
 
         final_hosts_configured = [p1_host, p0_host]
         return final_hosts_configured, storage_backing, ht_enabled
@@ -855,9 +865,14 @@ class TestSpanNumaNodes:
         else:
             host_span = host0
             host_other = host1
+            is_match_other, p0_to_conf_other, p1_to_conf_other = compare_cores_to_configure(host1, function, p0=2, p1=0)
+            if not is_match_other:
+                LOG.fixture_step("Config {} vswitch cores to 2,0".format(host_other))
+                config_host_class(host_span, _mod_host, **{'p0': p0_to_conf_other, 'p1': p1_to_conf_other})
 
         is_match_span, p0_to_conf_span, p1_to_conf_span = compare_cores_to_configure(host_span, function, p0=2, p1=2)
         if not is_match_span:
+            LOG.fixture_step("Config {} vswitch cores to 2,2".format(host_span))
             config_host_class(host_span, _mod_host, **{'p0': p0_to_conf_span, 'p1': p1_to_conf_span})
 
         ht_enabled = system_helper.is_hyperthreading_enabled(host_span)

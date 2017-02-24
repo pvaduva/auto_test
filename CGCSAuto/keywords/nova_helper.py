@@ -920,6 +920,11 @@ def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=T
     return table_parser.get_value_two_col_table(table_, field, strict)
 
 
+def get_vm_fault_message(vm_id, con_ssh=None, auth_info=None):
+    table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_value_two_col_table(table_, 'fault', merge_lines=True)
+
+
 def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get value of specified field for given vm(s) as a dictionary.
@@ -1398,6 +1403,10 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, mac_addr=None,
     if isinstance(all_nics, str):
         all_nics = [all_nics]
     all_nics = [eval(nic_) for nic_ in all_nics]
+
+    # Sort the nics from nic1, nic2 ... nicN
+    all_nics = sorted(all_nics, key=lambda nic_: int((list(nic_.keys())[0]).split(sep='nic')[-1]))
+    LOG.debug("All nics: {}".format(all_nics))
 
     nics_to_rtn = list(all_nics)
     if not nics_to_rtn:

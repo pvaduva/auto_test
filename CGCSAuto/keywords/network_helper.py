@@ -2075,6 +2075,7 @@ def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
 
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
+
 def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
     """
 

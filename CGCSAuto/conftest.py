@@ -242,6 +242,7 @@ def pytest_configure(config):
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
                      report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli)
+    InstallVars.set_install_var(lab=lab)
 
     os.makedirs(log_dir, exist_ok=True)
     config_logger(log_dir)

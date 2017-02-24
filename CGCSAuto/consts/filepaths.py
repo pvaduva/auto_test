@@ -7,6 +7,7 @@ class TiSPath:
     USERDATA = '/home/wrsroot/userdata/'
     IMAGES = '/home/wrsroot/images/'
     INSTALL_STATUS = 'home/wrsroot/autoinstall_status.log'
+    HEAT = '/home/wrsroot/heat/'
 
 
 class VMPath:
@@ -37,7 +38,9 @@ class BuildServerPath:
     DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Guest_Build/latest_tis-centos-guest.img'
     DEFAULT_HOST_BUILD_PATH = '{}/latest_build/'.format(DEFAULT_HOST_BUILDS_DIR)
     DEFAULT_LICENSE_PATH = '/folk/cgts/lab/TiS16-full.lic'
-    HEAT_TEMPLATES = ''
+    HEAT_TEMPLATES = 'std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates'
+    CONFIG_LAB_REL_PATH = 'std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab'
+
     LATEST_HOST_BUILD_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/',
                                '16.10': '/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/',
                                '17.00': '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/latest_build/',
@@ -51,3 +54,10 @@ class BuildServerPath:
                        '16.10': '/folk/cgts/patches-to-verify/16.10',
                        '17.00': None
                       }
+
+    GUEST_IMAGE_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',
+                         '16.10': '/localdisk/loadbuild/jenkins/CGCS_3.0_Guest_Daily_Build/cgcs-guest.img',
+                         '17.00': '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Guest_Build/latest_tis-centos-guest.img'
+                         }
+
+

@@ -15,8 +15,6 @@ from consts.cgcs import Prompt
 # Import test fixtures that are applicable to upgrade test
 from testfixtures.pre_checks_and_configs import *
 
-# Import test fixtures that are applicable to upgrade test
-from testfixtures.pre_checks_and_configs import *
 
 natbox_ssh = None
 con_ssh = None
@@ -81,11 +79,12 @@ def setup_test_session():
     """
     # os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
     ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     con_ssh.set_prompt()
     setups.set_env_vars(con_ssh)
-
     setups.copy_files_to_con1()
+    con_ssh.set_prompt()
 
     global natbox_ssh
     natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'), con_ssh=con_ssh)
@@ -96,8 +95,6 @@ def setup_test_session():
     build_id, build_host = setups.get_build_info(con_ssh)
     ProjVar.set_var(BUILD_ID=build_id)
     ProjVar.set_var(BUILD_HOST=build_host)
-    ProjVar.set_var(SOURCE_ADMIN=True)
-    print('precheck source_admin_value: ' + str(ProjVar.get_var('SOURCE_ADMIN')))
 
 
 @pytest.fixture(scope='function', autouse=True)
@@ -135,8 +132,8 @@ def pytest_runtest_teardown(item):
 def pre_check_upgrade():
     # con_ssh = ControllerClient.get_active_controller()
 
-    ProjVar.set_var(SOURCE_ADMIN=True)
-    print('precheck source_admin_value: ' + str(ProjVar.get_var('SOURCE_ADMIN')))
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    print('precheck source_admin_value: ' + str(ProjVar.get_var('SOURCE_CREDENTIAL')))
 
     # check if all nodes are unlocked
     assert system_helper.are_hosts_unlocked(con_ssh), \
@@ -203,7 +200,7 @@ def upgrade_setup(pre_check_upgrade):
     bld_server_conn.connect()
     bld_server_conn.exec_cmd("bash")
     bld_server_conn.set_prompt(bld_server_attr['prompt'])
-    bld_server_conn.deploy_ssh_key(install_helper.PUBLIC_SSH_KEY)
+    bld_server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
     bld_server_attr['ssh_conn'] = bld_server_conn
 
     bld_server_obj = Server(**bld_server_attr)
@@ -262,6 +259,7 @@ def upgrade_setup(pre_check_upgrade):
                       'output_dir': output_dir,
                       'current_version': current_version,
                       'upgrade_version': upgrade_version,
+                      'build_server': bld_server_obj,
                       }
 
     return _upgrade_setup
@@ -328,7 +326,7 @@ def apply_patches(lab, server, patch_dir):
     rc, output = server.ssh_conn.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dir))
     assert rc == 0, "Failed to list patch files in directory path {}.".format(patch_dir)
 
-    #LOG.info("No path found in {} ".format(patch_dir))
+    # LOG.info("No path found in {} ".format(patch_dir))
 
     if output is not None:
         for item in output.splitlines():

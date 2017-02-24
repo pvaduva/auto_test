@@ -103,15 +103,16 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
 
         LOG.info("Rebooting {}".format(host))
         host_ssh.send('sudo reboot -f')
-        host_ssh.expect('.*[pP]assword:.*')
+        host_ssh.expect(['.*[pP]assword:.*', 'Rebooting'])
         host_ssh.send(password)
         con_ssh.expect(timeout=30)
 
     if reboot_con:
         LOG.info("Rebooting active controller: {}".format(controller))
         con_ssh.send('sudo reboot -f')
-        con_ssh.expect('.*[pP]assword:.*')
-        con_ssh.send(password)
+        index = con_ssh.expect(['.*[pP]assword:.*', 'Rebooting'])
+        if index == 0:
+            con_ssh.send(password)
         time.sleep(20)
         con_ssh.connect(retry=True, retry_timeout=timeout)
         _wait_for_openstack_cli_enable(con_ssh=con_ssh)
@@ -213,13 +214,49 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         raise exceptions.HostPostCheckFailed(err_msg)
 
 
+def wait_for_hosts_ready(hosts, con_ssh=None):
+    """
+    Wait for hosts to be in online state is locked, and available and hypervisor/webservice up if unlocked
+    Args:
+        hosts:
+        con_ssh:
+
+    Returns:
+
+    """
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    expt_online_hosts = get_hosts(hosts, administrative=HostAdminState.LOCKED)
+    expt_avail_hosts = get_hosts(hosts, administrative=HostAdminState.UNLOCKED)
+
+    if expt_online_hosts:
+        LOG.info("Wait for hosts to be online: {}".format(hosts))
+        wait_for_host_states(hosts, availability=HostAvailabilityState.ONLINE, fail_ok=False)
+
+    if expt_avail_hosts:
+        hypervisors = list(set(get_hypervisors()) & set(hosts))
+        controllers = list(set(system_helper.get_controllers()) & set(hosts))
+
+        LOG.info("Wait for hosts to be available: {}".format(hosts))
+        wait_for_host_states(hosts, availability=HostAvailabilityState.AVAILABLE, fail_ok=False)
+
+        if controllers:
+            LOG.info("Wait for webservices up for hosts: {}".format(controllers))
+            wait_for_webservice_up(controllers, fail_ok=False, con_ssh=con_ssh, timeout=90)
+
+        if hypervisors:
+            LOG.info("Wait for hypervisors up for hosts: {}".format(hypervisors))
+            wait_for_hypervisors_up(hypervisors, fail_ok=False, con_ssh=con_ssh, timeout=90)
+
+
 def get_host_show_values_for_hosts(hostnames, fields, merge_lines=False, con_ssh=None):
     if isinstance(fields, str):
         fields = [fields]
 
     states_vals = {}
     for host in hostnames:
-        vals = get_hostshow_values(host, fields, merge_lines=merge_lines)
+        vals = get_hostshow_values(host, fields, merge_lines=merge_lines, con_ssh=con_ssh)
         states_vals[host] = vals
 
     return states_vals
@@ -1194,11 +1231,16 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
     if not kwargs:
         raise ValueError("At least one key-value pair such as p0=1 has to be provided.")
 
+    final_args = {}
     proc_args = ''
     for proc, cores in kwargs.items():
         if cores is not None:
+            final_args[proc] = cores
             cores = str(cores)
             proc_args = ' '.join([proc_args, '-'+proc.lower().strip(), cores])
+
+    if not final_args:
+        raise ValueError("cores values cannot be all None")
 
     if not proc_args:
         raise ValueError("At least one key-value pair should have non-None value. e.g., p1=2")
@@ -1216,7 +1258,7 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
 
     threads = get_host_threads_count(host, con_ssh=con_ssh)
 
-    for proc, num in kwargs.items():
+    for proc, num in final_args.items():
         num = int(num)
         proc_id = re.findall('\d+', proc)[0]
         expt_cores = threads*num
@@ -2718,8 +2760,4 @@ def get_mellanox_ports(host):
 
 def is_host_locked(host,  con_ssh=None):
         admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
-        if admin_state == 'locked':
-            return True
-        else:
-            return False
-
+        return admin_state == 'locked'

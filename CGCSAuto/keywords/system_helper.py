@@ -1624,6 +1624,24 @@ def get_system_health_query_upgrade(con_ssh=None):
         return 0, None
 
 
+def get_system_health_query(con_ssh=None):
+
+    output = (cli.system('health-query', ssh_client=con_ssh)).splitlines()
+    failed = {}
+    ok = {}
+    for line in output:
+        if ":" in line:
+            k, v = line.split(":")
+            if "[OK]" in v.strip():
+                ok[k.strip()] = v.strip()
+            elif "[Fail]" in v.strip():
+                failed[k.strip()] = v.strip()
+    if len(failed) > 0:
+        return 1, failed
+    else:
+        return 0, None
+
+
 def system_upgrade_start(con_ssh=None, force=False, fail_ok=False):
     """
 
@@ -1812,9 +1830,9 @@ def get_system_software_version(con_ssh=None, fail_ok=False):
     return ((sw_line.pop()).split("=")[1]).replace('"', '')
 
 
-def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_admin_=None):
+def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_creden_=None):
     rc, output = cli.system('load-import', load_path, ssh_client=con_ssh,
-                            fail_ok=True, source_admin_=source_admin_)
+                            fail_ok=True, source_creden_=source_creden_)
 
     if rc == 0:
         table_ = table_parser.table(output)
@@ -1827,7 +1845,7 @@ def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_admi
         while time.time() < end_time:
 
             state = get_imported_load_state(id, load_version=soft_ver,
-                                        con_ssh=con_ssh, source_admin_=source_admin_)
+                                        con_ssh=con_ssh, source_creden_=source_creden_)
             LOG.info("Import state {}".format(state))
             if "imported" in state:
                 LOG.info("Importing load {} is completed".format(soft_ver))
@@ -1849,9 +1867,9 @@ def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_admi
             raise exceptions.CLIRejected(err_msg)
 
 
-def get_imported_load_id(load_version=None, con_ssh=None, fail_ok=False, source_admin_=None):
+def get_imported_load_id(load_version=None, con_ssh=None, fail_ok=False, source_creden_=None):
     table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh,
-                                           source_admin_=source_admin_ ))
+                                           source_creden_=source_creden_ ))
     if load_version:
         table_ = table_parser.filter_table(table_, state='imported', software_version=load_version)
     else:
@@ -1860,9 +1878,9 @@ def get_imported_load_id(load_version=None, con_ssh=None, fail_ok=False, source_
     return table_parser.get_values(table_, 'id')[0]
 
 
-def get_imported_load_state(id, load_version=None, con_ssh=None, fail_ok=False, source_admin_=None):
+def get_imported_load_state(id, load_version=None, con_ssh=None, fail_ok=False, source_creden_=None):
     table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh,
-                                           source_admin_=source_admin_ ))
+                                           source_creden_=source_creden_ ))
     if load_version:
         table_ = table_parser.filter_table(table_, id=id, software_version=load_version)
     else:
@@ -1871,27 +1889,27 @@ def get_imported_load_state(id, load_version=None, con_ssh=None, fail_ok=False, 
     return (table_parser.get_values(table_, 'state')).pop()
 
 
-def get_imported_load_version( con_ssh=None, fail_ok=False, source_admin_=None):
+def get_imported_load_version( con_ssh=None, fail_ok=False, source_creden_=None):
     table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh,
-                                           source_admin_=source_admin_))
+                                           source_creden_=source_creden_))
     table_ = table_parser.filter_table(table_, state='imported')
 
     return table_parser.get_values(table_, 'software_version')
 
 
-def get_active_load_id(con_ssh=None, fail_ok=False, source_admin_=None):
+def get_active_load_id(con_ssh=None, fail_ok=False, source_creden_=None):
     table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh,
-                                           source_admin_=source_admin_ ))
+                                           source_creden_=source_creden_ ))
 
     table_ = table_parser.filter_table(table_, state="active")
     return table_parser.get_values(table_, 'id')
 
 
 def get_software_loads(rtn_vals=('id', 'state', 'software_version'), id=None, state=None, software_version=None,
-                strict=False, show_suppress=False, con_ssh=None, auth_info=Tenant.ADMIN, source_admin_=None):
+                strict=False, show_suppress=False, con_ssh=None, auth_info=Tenant.ADMIN, source_creden_=None):
 
     table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh,
-                                           source_admin_=source_admin_ ))
+                                           source_creden_=source_creden_ ))
 
     kwargs_dict = {
         'id': id,
@@ -1920,12 +1938,12 @@ def get_software_loads(rtn_vals=('id', 'state', 'software_version'), id=None, st
 
 
 def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False,
-                         source_admin_=None):
+                         source_creden_=None):
     id = get_imported_load_id(load_version=load_version, con_ssh=con_ssh, fail_ok=fail_ok,
-                     source_admin_=source_admin_)
+                     source_creden_=source_creden_)
 
     rc, output = cli.system('load-delete', id, ssh_client=con_ssh,
-                            fail_ok=True, source_admin_=source_admin_)
+                            fail_ok=True, source_creden_=source_creden_)
 
     if not wait_for_delete_imported_load(id, con_ssh=con_ssh,  fail_ok=True):
         err_msg = "Unable to delete imported load {}".format(id)

@@ -1,21 +1,26 @@
 import os
-from consts.proj_vars import ProjVar, InstallVars
-from consts.auth import Host, SvcCgcsAuto
-from consts.cgcs import HostAvailabilityState, Prompt
-from utils import exceptions
-from utils.tis_log import LOG
-from keywords import system_helper, host_helper
-from utils.ssh import SSHClient
-from utils import telnet as telnetlib
-from utils import local_host
 import threading
-from consts.filepaths import WRSROOT_HOME
-from consts.timeout import HostTimeout
 from contextlib import contextmanager
+
+from consts.auth import Host, SvcCgcsAuto
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
+from consts.timeout import HostTimeout
+from consts.cgcs import HostAvailabilityState, Prompt
+from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
+from consts.proj_vars import InstallVars, ProjVar
+from consts.vlm import VlmAction
+from keywords import system_helper, host_helper
+# from keywords.vlm_helper import bring_node_console_up
+from utils import exceptions, local_host
+from utils import local_host
+from utils.ssh import SSHClient
+from utils.tis_log import LOG
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
-PUBLIC_SSH_KEY = local_host.get_ssh_key()
+
+
+def get_ssh_public_key():
+    return local_host.get_ssh_key()
 
 
 def get_current_system_version():
@@ -124,7 +129,7 @@ def bring_node_console_up(node, boot_device, install_output_dir, close_telnet_co
 
 
 def get_non_controller_system_hosts():
-     
+
     hosts = system_helper.get_hostnames()
     controllers = sorted([h for h in hosts if "controller" in h])
     storages = sorted([h for h in hosts if "storage" in h])
@@ -219,6 +224,7 @@ def wipe_disk(node, install_output_dir, close_telnet_conn=True):
         node.telnet_conn.close()
 
 
+# TODO: To be replaced by function in vlm_helper
 def power_off_host(hosts):
 
     if isinstance(hosts, str):
@@ -238,7 +244,7 @@ def power_off_host(hosts):
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
 
-        rc, output = local_host.vlm_exec_cmd(local_host.VLM_TURNOFF. node.barcode)
+        rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, node.barcode)
         if rc != 0:
             err_msg = "Failed to power off nod {}  barcode {}: {}"\
                 .format(node.name, node.barcode, output)
@@ -246,7 +252,7 @@ def power_off_host(hosts):
             raise exceptions.InvalidStructure(err_msg)
         LOG.info("Node {} is turned off".format(node.name))
 
-
+# TODO: To be replaced by function in vlm_helper
 def power_on_host(hosts):
 
     if isinstance(hosts, str):
@@ -266,7 +272,7 @@ def power_on_host(hosts):
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
 
-        rc, output = local_host.vlm_exec_cmd(local_host.VLM_TURNON. node.barcode)
+        rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNON, node.barcode)
         if rc != 0:
             err_msg = "Failed to power on node {}  barcode {}: {}"\
                 .format(node.name, node.barcode, output)
@@ -277,7 +283,7 @@ def power_on_host(hosts):
 
     wait_for_hosts_state(hosts)
 
-
+# TODO: To be replaced by function in vlm_helper
 def wait_for_hosts_state(hosts, state=HostAvailabilityState.ONLINE):
 
     if len(hosts) > 0:
@@ -331,3 +337,54 @@ def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, pas
         yield bld_server_conn
     finally:
         bld_server_conn.close()
+
+
+def download_image(lab, server, guest_path):
+
+    cmd = "test -e " + guest_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Image file not found in {}:{}'.format(
+            server.name, guest_path)
+    pre_opts = 'sshpass -p "{0}"'.format(Host.PASSWORD)
+    server.ssh_conn.rsync(guest_path,
+                          lab['controller-0 ip'],
+                          TiSPath.IMAGES, pre_opts=pre_opts)
+
+
+def download_heat_templates(lab, server, load_path):
+
+    heat_path = load_path  + BuildServerPath.HEAT_TEMPLATES
+
+    cmd = "test -e " + heat_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Heat template path not found in {}:{}'.format(
+            server.name, load_path)
+
+    pre_opts = 'sshpass -p "{0}"'.format(Host.PASSWORD)
+    server.ssh_conn.rsync(heat_path + "/*",
+                          lab['controller-0 ip'],
+                          TiSPath.HEAT, pre_opts=pre_opts)
+
+
+def download_lab_config_files(lab, server, load_path):
+
+    lab_name = lab['name']
+    if "yow" in lab_name:
+        lab_name = lab_name[4:]
+    config_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/yow/" + lab_name
+    script_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/scripts"
+
+    cmd = "test -e " + config_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
+            server.name, config_path)
+
+    cmd = "test -e " + script_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
+            server.name, script_path)
+
+    pre_opts = 'sshpass -p "{0}"'.format(Host.PASSWORD)
+    server.ssh_conn.rsync(config_path + "/*",
+                          lab['controller-0 ip'],
+                          WRSROOT_HOME, pre_opts=pre_opts)
+
+    server.ssh_conn.rsync(script_path + "/*",
+                          lab['controller-0 ip'],
+                          WRSROOT_HOME, pre_opts=pre_opts)
