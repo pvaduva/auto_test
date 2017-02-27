@@ -1896,7 +1896,7 @@ def main():
                             password=PASSWORD)
         tuxlab_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
 
-        cmd = "mkdir -p /tmp/iso/{}; sudo chmod -R 777 /tmp/iso/".format(c0_targetId)
+        cmd = "sudo rm -rf /tmp/iso/{}; mkdir -p /tmp/iso/{}; sudo chmod -R 777 /tmp/iso/".format(c0_targetId, c0_targetId)
         if tuxlab_conn.exec_cmd(cmd,)[0] != 0:
             msg = "failed to execute: {}".format(cmd)
             log.error(msg)
