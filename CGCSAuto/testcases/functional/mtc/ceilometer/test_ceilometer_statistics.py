@@ -172,9 +172,17 @@ def test_retention_sample():
             'sample-volume': 10, 'timestamp': new_time}
     ceilometer_helper.create_sample(resource_id=res_id, field='timestamp', auth_info=Tenant.ADMIN, **args)
 
-    LOG.info("Waiting {} seconds for retention period change".format(SysInvTimeout.RETENTION_PERIOD_SAVED))
-    time.sleep(SysInvTimeout.RETENTION_PERIOD_SAVED)
+    # pre_samples = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
+    # assert pre_samples, "Created fake_sample is not listed"
+
+    wait_time = SysInvTimeout.RETENTION_PERIOD_SAVED
+
+    LOG.info("Waiting {} seconds for retention period change".format(wait_time))
+    time.sleep(wait_time)
     LOG.tc_step("Ensuring the sample is listed")
+
+    pre_expirer_samples = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
+    assert pre_expirer_samples, "fake_sample is not listed after sleep for {} seconds".format(wait_time)
 
     ceilometer_helper.delete_samples()
     # sample-create uses meter-name for the name of the sample.
@@ -184,9 +192,9 @@ def test_retention_sample():
     assert 1 == len(samples), "FAIL: The sample is not in the list. Number of samples: {}. Expected: 1"\
                               .format(len(samples))
 
-    if 65 - SysInvTimeout.RETENTION_PERIOD_SAVED > 0:
+    if 65 - wait_time > 0:
         LOG.info("Waiting for retention period to end.")
-        time.sleep(65 - SysInvTimeout.RETENTION_PERIOD_SAVED)
+        time.sleep(65 - wait_time)
 
     ceilometer_helper.delete_samples()
 

@@ -755,3 +755,20 @@ def kill_controller_process_verify_impact(
             time.sleep(interval)
 
     return -3, host
+
+
+def wait_for_sm_dump_services_active(timeout=60, fail_ok=False, con_ssh=None):
+    """
+    Wait for all services
+    Args:
+        timeout:
+        fail_ok:
+        con_ssh:
+
+    Returns:
+
+    """
+    active_controller = system_helper.get_active_controller_name(con_ssh=con_ssh)
+    return host_helper.wait_for_sm_dump_desired_states(controller=active_controller, timeout=timeout, fail_ok=fail_ok)
+
+

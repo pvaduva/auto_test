@@ -1217,7 +1217,8 @@ def get_host_ports_info(host, header='name', if_name=None, pci_addr=None, proc=N
 
 
 def get_host_interfaces_info(host, rtn_val='name', net_type=None, if_type=None, uses_ifs=None, used_by_ifs=None,
-                             show_all=False, strict=True, regex=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+                             show_all=False, strict=True, regex=False, con_ssh=None, auth_info=Tenant.ADMIN,
+                             exclude=False, **kwargs):
     """
     Get specified interfaces info for given host via system host-if-list
 
@@ -1256,9 +1257,9 @@ def get_host_interfaces_info(host, rtn_val='name', net_type=None, if_type=None, 
         if value is not None:
             kwargs[key] = value
 
-    info = table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, **kwargs)
+    info = table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, exclude=exclude, **kwargs)
     if rtn_val in ['ports', 'used by i/f', 'uses i/f']:
-        info = eval(info)
+        info = [eval(item) for item in info]
 
     return info
 

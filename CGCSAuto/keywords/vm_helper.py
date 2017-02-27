@@ -2685,6 +2685,85 @@ def boost_cpu_usage_new_thread(vm_id, cpu_num=1, timeout=1200):
     thread.set_end_func(_kill_dd, vm_ssh)
     return vm_ssh, thread
 
+
+def write_in_vm(vm_id, expect_timeout=120, thread_timeout=None, write_interval=5, end_now_flag=False, con_ssh=None):
+    """
+    Continue to write in vm using dd
+
+    Args:
+        vm_id (str):
+        expect_timeout (int):
+        thread_timeout (int):
+        write_interval (int): how frequent to write. Note: 5 seconds seem to be a good interval,
+            1 second interval might have noticeable impact on the performance of pexpect.
+        end_now_flag (bool): whether to use thread.end_now flag to end the thread once thread.end_now is set to True
+        con_ssh (SSHClient): controller ssh client
+
+    Returns (tuple): (vm_ssh, new_thread)
+
+    Examples:
+        Sample test code to check write continues after swact:
+
+        vm_ssh, vm_thread = vm_helper.write_in_vm(vm_id, end_now_flag=True, expect_timeout=40)
+        vm_thread.end_now = False       # Initialize end_now flag
+        vm_thread.end_thread()          # Start to read the dd output
+
+        host_helper.swact_host()
+
+        vm_thread.end_now = True        # set end_now flag to True after swact completes
+        vm_thread.wait_for_thread_end(timeout=20)
+
+        assert vm_thread.res is True, "Writing in vm stopped unexpectedly"
+
+    """
+    write_cmd = "while (true) do date; dd if=/dev/urandom of=output.txt bs=1k count=1 conv=fsync || break; echo ; " \
+                "sleep {}; done 2>&1 | tee trace.txt".format(write_interval)
+
+    def _keep_writing(vm_id_):
+        LOG.info("starting to write to vm using dd...")
+        with ssh_to_vm_from_natbox(vm_id_, con_ssh=con_ssh, close_ssh=False) as vm_ssh_:
+            vm_ssh_.send(cmd=write_cmd)
+
+        LOG.info("Write_in_vm returns while writing continues")
+        return vm_ssh_
+
+    thread = multi_thread.MThread(_keep_writing, vm_id)
+    thread_timeout = expect_timeout + 30 if thread_timeout is None else thread_timeout
+    thread.start_thread(timeout=thread_timeout, keep_alive=True)
+    thread.end_now = False
+    vm_ssh = thread.get_output(wait=True)
+
+    def _end_dd(vm_ssh_):
+        LOG.info("Reading the dd output from vm {}".format(vm_id))
+        thread.res = True
+        try:
+            while True:
+                expt_output = '1024 bytes'
+                index = vm_ssh.expect([expt_output, vm_ssh.prompt], timeout=expect_timeout, fail_ok=True,
+                                      searchwindowsize=100)
+                if index != 0:
+                    LOG.warning("write has stopped or expected output-'{}' is not found".format(expt_output))
+                    thread.res = False
+                    break
+
+                if end_now_flag:
+                    if thread.end_now is True:
+                        LOG.info("End thread now")
+                        break
+
+                LOG.info("Writing in vm continues...")
+                time.sleep(write_interval)
+
+        except:
+            raise
+        finally:
+            vm_ssh_.send_control('c')
+
+    thread.set_end_func(_end_dd, vm_ssh)
+
+    return vm_ssh, thread
+
+
 def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=None, fail_ok=False, auth_info=None,
                      con_ssh=None):
     """
