@@ -922,7 +922,6 @@ class Telnet:
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 log.error(msg)
-                #wr_exit()._exit(1, msg)
             if usb:
                 log.info("Boot device is: USB")
             else:
@@ -934,10 +933,10 @@ class Telnet:
             down_press_count = 0
             while count < MAX_SEARCH_ATTEMPTS:
 
-                if usb:
-                    log.info("Pressing ENTER key") 
-                    self.write(str.encode("\r\r"))
-                    break
+                # GENERIC USB
+                if usb and node.name == CONTROLLER0: 
+                    log.info("Looking for USB device")
+                    boot_device_regex = "USB|Kingston|JetFlash"
 
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
                 #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
@@ -1084,19 +1083,10 @@ class Telnet:
             down_press_count = 0
             while count < MAX_SEARCH_ATTEMPTS:
 
-                # IP31-32 must be handled differently due to BIOS
-                # Make this generic!!!!
-                special_hosts = ["yow-cgcs-ironpass-31", "yow-cgcs-ironpass-07"]
-                if usb and node.host_name not in special_hosts: 
-                    log.info("Pressing ENTER key") 
-                    self.write(str.encode("\r\r"))
-                    break
-                else:
-                    log.info("This is a special lab")
-
-                if usb and node.host_name == "yow-cgcs-ironpass-07":
-                    log.info("Looking for Kingston")
-                    boot_device_regex = "Kingston"
+                # GENERIC USB
+                if usb and node.name == CONTROLLER0: 
+                    log.info("Looking for USB device")
+                    boot_device_regex = "USB|Kingston|JetFlash"
 
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
                 #regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)\s+(.*?)\|")
