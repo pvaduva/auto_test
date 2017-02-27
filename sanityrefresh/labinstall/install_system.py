@@ -1390,6 +1390,11 @@ def bulkAddHosts():
 
 
 def run_labsetup():
+    # Remove later
+    cmd = "chmod 777 " + WRSROOT_HOME_DIR + "/" + LAB_SETUP_SCRIPT
+    controller0.ssh_conn.exec_cmd(cmd)
+    # Remove later
+
     cmd = './lab_setup.sh'
     cmd = WRSROOT_HOME_DIR + "/" + LAB_SETUP_SCRIPT
     return controller0.ssh_conn.exec_cmd(cmd)
