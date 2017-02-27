@@ -53,7 +53,6 @@ def heartbeat_flavor_vm(request):
     return vm
 
 
-
 def test_clean_vm_deletion_after_live_migration(heartbeat_flavor_vm):
     """
     from us63135_tc6: validate_clean_VM_deletion_after_live_migration
@@ -82,7 +81,7 @@ def test_clean_vm_deletion_after_live_migration(heartbeat_flavor_vm):
 
     LOG.tc_step("Live migrate the VM")
     # find the compute node where the vm is located
-    vm_helper.live_migrate_vm(vm_id, block_migrate=True)
+    vm_helper.live_migrate_vm(vm_id)
     # get new vm_host location after live migration
     vm_host = nova_helper.get_vm_host(vm_id)
     vm_helper.delete_vms(vm_id)
