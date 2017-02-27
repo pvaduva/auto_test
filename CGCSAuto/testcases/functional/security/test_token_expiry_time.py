@@ -40,7 +40,7 @@ def test_token_expiry(service_params):
 
 
     """
-    expire_times = [3700, 3600, 7200, 3000, 15500]
+    expire_times = [6000, 3600, 7200, 3000, 15500]
     service, section, name = service_params
 
     expire_time = expire_times.pop(0)
