@@ -71,6 +71,7 @@ CONTROLLER = 'controller'
 COMPUTE = 'compute'
 STORAGE = 'storage'
 CONTROLLER0 = 'controller-0'
+CONTROLLER1 = 'controller-1'
 
 ONLINE = "online"
 OFFLINE = "offline"
