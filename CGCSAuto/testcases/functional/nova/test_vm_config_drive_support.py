@@ -72,7 +72,7 @@ def test_cold_migrate_vm_with_config_drive(hosts_per_stor_backing):
     LOG.tc_step("Locking the compute host ...")
     compute_host = vm_helper.get_vm_host_and_numa_nodes(vm_id)[0]
     HostsToRecover.add(compute_host)
-    code, msg = host_helper.lock_host(compute_host)
+    code, msg = host_helper.lock_host(compute_host, swact=True)
     assert code == 0, "Unable to lock vm host {}: {}".format(compute_host, msg)
 
     LOG.tc_step("Confirming the config drive can be accessed after locking VM host...")

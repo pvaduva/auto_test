@@ -4,7 +4,7 @@ import random
 from pytest import mark, skip, fixture
 
 from utils.tis_log import LOG
-from utils.multi_thread import MThread
+from utils.multi_thread import MThread, Events
 
 from consts.cgcs import FlavorSpec, ServerGroupMetadata, VMStatus
 from consts.reasons import SkipReason
@@ -172,7 +172,7 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
         check_server_group_messaging_disabled(vms=members)
 
 
-def _wait_for_srv_grp_msg(vm_id, msg, timeout=120):
+def _wait_for_srv_grp_msg(vm_id, msg, timeout, event):
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         vm_ssh.send('server_group_app')
         # vm_ssh.expect('\r\n\r\n', timeout=1, searchwindowsize=100)
@@ -185,24 +185,29 @@ def _wait_for_srv_grp_msg(vm_id, msg, timeout=120):
 
             current_output = vm_ssh.cmd_output
             if re.search(msg, current_output):
-                vm_ssh.expect('\r\n\r\n', fail_ok=True)
+                event.set()
+                vm_ssh.send_control('c')
+                vm_ssh.expect(searchwindowsize=100, timeout=5)
                 break
         else:
             assert False, "Expected msg did not appear within timeout"
 
 
-def trigger_srv_grp_msg(vm_id, action):
+def trigger_srv_grp_msg(vm_id, action, timeout=60, event=None):
     if action == 'message':
-        _send_srv_grp_msg(vm_id=vm_id, msg=MSG)
+        _send_srv_grp_msg(vm_id=vm_id, msg=MSG, timeout=timeout, event=event)
     elif action == 'pause':
         vm_helper.pause_vm(vm_id=vm_id)
 
 
-def _send_srv_grp_msg(vm_id, msg):
+def _send_srv_grp_msg(vm_id, msg, timeout, event):
     with vm_helper.ssh_to_vm_from_natbox(vm_id, close_ssh=False) as sender_ssh:
         sender_ssh.send("server_group_app '{}'".format(msg))
         sender_ssh.expect('\r\n\r\n')
-        time.sleep(60)
+        if event is None:
+            time.sleep(timeout)
+        else:
+            event.wait_for_event(timeout=timeout, fail_ok=True)
 
 
 def check_server_group_messaging_enabled(vms, action):
@@ -219,15 +224,18 @@ def check_server_group_messaging_enabled(vms, action):
     else:
         raise ValueError("Unknown action - '{}' provided".format(action))
 
+    res_event = Events("srv group messaging result")
     vm_threads = []
+
     for vm in vms:
-        new_thread = MThread(_wait_for_srv_grp_msg, vm, msg, timeout)
-        new_thread.start_thread(timeout=timeout)
+        new_thread = MThread(_wait_for_srv_grp_msg, vm, msg, timeout, res_event)
+        new_thread.start_thread(timeout=timeout+30)
         vm_threads.append(new_thread)
 
     time.sleep(5)
-    sender_thread = MThread(trigger_srv_grp_msg, vm_sender, action)
-    sender_thread.start_thread(timeout=75)
+    # this 60 seconds timeout is hardcoded for action == 'message' scenario to send the message out
+    sender_thread = MThread(trigger_srv_grp_msg, vm_sender, action, 60, res_event)
+    sender_thread.start_thread(timeout=timeout)
 
     for vm_thr in vm_threads:
         vm_thr.wait_for_thread_end()
