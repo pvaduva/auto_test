@@ -26,14 +26,14 @@ def base_vm():
 
 
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vif_model'), [
-    ('cgcs-guest', 'net_id', 'avp'),
-    ('cgcs-guest', 'net_id', 'e1000'),
-    ('cgcs-guest', 'port_id', 'virtio'),
-    ## ('cgcs-guest', 'net_id', 'rtl8139')
     ('centos_7', 'net_id', 'e1000'),
     ## ('centos_7', 'net_id', 'avp'),
     ('centos_7', 'net_id', 'virtio'),
     ('centos_7', 'port_id', 'rtl8139')
+    #('cgcs-guest', 'net_id', 'e1000'),
+    #('cgcs-guest', 'port_id', 'virtio'),
+    ## ('cgcs-guest', 'net_id', 'rtl8139'),
+    #('cgcs-guest', 'net_id', 'e1000')
 ])
 def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     """
@@ -105,13 +105,13 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
         if internal_port_id:
             assert internal_port_id == internal_port, "Specified port_id is different than attached port"
 
-        LOG.tc_step("Bring up attached internal interface from vm")
+        LOG.tc_step("Bring up attached {} internal interface from vm".format(vif_model))
         _bring_up_attached_interface(vm_under_test, guest_os=guest_os)
 
-        LOG.tc_step("Verify VM internet0-net1 interface is up")
+        LOG.tc_step("Verify VM {} internet0-net1 interface is up".format(vif_model))
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, retry=5, net_types='internal')
 
-        LOG.tc_step("Detach internal port {} from VM".format(internal_port))
+        LOG.tc_step("Detach {} internal port {} from VM".format(vif_model, internal_port))
         vm_helper.detach_interface(vm_id=vm_under_test, port_id=internal_port)
 
         res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, retry=0,
@@ -152,14 +152,15 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
 
 
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vif_model'), [
+    #('centos_7', 'net_id', 'e1000'),
+    ## ('centos_7', 'net_id', 'avp'),
+    # ('centos_7', 'net_id', 'virtio'),
+    #('centos_7', 'port_id', 'rtl8139'),
     ('cgcs-guest', 'net_id', 'avp'),
     ('cgcs-guest', 'net_id', 'e1000'),
-    ('cgcs-guest', 'port_id', 'virtio'),
+    ('cgcs-guest', 'port_id', 'virtio')
     ## ('cgcs-guest', 'net_id', 'rtl8139')
-    ('centos_7', 'net_id', 'e1000'),
-    ## ('centos_7', 'net_id', 'avp'),
-    ('centos_7', 'net_id', 'virtio'),
-    ('centos_7', 'port_id', 'rtl8139')
+
 ])
 def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif_model):
     """
@@ -236,8 +237,8 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
         LOG.info("vnics attached to VM: {}" .format(vnics_attached))
         assert vnics_attached == max_vnics, ("vnics attached is not equal to max number.")
 
-        LOG.tc_step("Bring up all the attached new {} tenant interface from vm".format(new_vnics))
-        _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics)
+        LOG.tc_step("Bring up all the attached new {} {} tenant interface from vm".format(new_vnics, vif_model))
+        _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics-1)
 
         res = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id, fail_ok=True)[0]
         assert res == 1, ("vnics attach exceed maximum limit")
@@ -250,10 +251,11 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
         else:
             LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
             for action in vm_actions:
+                #if action != 'cold_migrate' and guest_os != 'centos_7':
                 vm_helper.perform_action_on_vm(vm_under_test, action=action)
                 if action == 'cold_migrate':
                     LOG.tc_step("Bring up all the attached tenant interface from vm after {}".format(vm_actions))
-                    _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics)
+                    _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics-1)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
 
@@ -261,7 +263,7 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
                     "after {}".format(vm_actions))
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt', 'data'])
 
-        LOG.tc_step("Detach all the interface {}".format(tenant_port_ids))
+        LOG.tc_step("Detach all the {} interface {}".format(vif_model, tenant_port_ids))
         for tenant_port_id in tenant_port_ids:
             vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id)
 
