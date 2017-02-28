@@ -334,7 +334,7 @@ def get_image_properties(image, property_keys, auth_info=Tenant.ADMIN, con_ssh=N
     return results
 
 
-def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, con_ssh=None):
+def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout=None, con_ssh=None):
     """
 
     Args:
@@ -381,7 +381,7 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, con_ssh
         index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=3600)
     if index == 1:
         con_ssh.send(SvcCgcsAuto.PASSWORD)
-        index = con_ssh.expect()
+        index = con_ssh.expect(timeout=timeout)
     if index != 0:
         raise exceptions.SSHException("Failed to scp files")
 

@@ -163,3 +163,8 @@ class ThreadingError(TiSError):
 
 class VLMError(TiSError):
     message = "VLM Operation Error."
+
+
+class SWiftError(TiSError):
+    message = "Swift error."
+

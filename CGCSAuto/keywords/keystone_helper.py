@@ -244,3 +244,58 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
     msg = 'User {} updated successfully'.format(user)
     LOG.info(msg)
     return 0, msg
+
+
+def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_type=None, enabled=None, interface="admin", url=None,
+                  strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Get a list of endpoints with given arguments
+    Args:
+        rtn_val (str): valid header of openstack endpoints list table. 'ID'
+        endpoint_id (str): id of the endpoint
+        service_name (str): Service name of endpoint like novaav3, neutron, keystone. vim, heat, swift, etc
+        service_type(str): Service type
+        enabled (str): True/False
+        interface (str): Interface of endpoints. valid entries: admin, internal, public
+        url (str): url of endpoint
+        strict(bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.openstack('endpoint list', ssh_client=con_ssh, auth_info=auth_info))
+
+    args_dict = {
+        'ID': endpoint_id,
+        'Service Name': service_name,
+        'Service Type': service_type,
+        'Enabled': enabled,
+        'Interface': interface,
+        'URL': url,
+    }
+
+    kwargs = {}
+    for key, value in args_dict.items():
+        if value:
+            kwargs[key] = value
+
+    endpoints = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=True, **kwargs)
+    return endpoints
+
+
+def get_endpoints_value(endpoint_id, target_field, con_ssh=None):
+    """
+    Gets the  endpoint target field value for given  endpoint Id
+    Args:
+        endpoint_id: the endpoint id to get the value of
+        target_field: the target field name to retrieve value of
+        con_ssh:
+
+    Returns: list of endpoint field values
+
+    """
+    args = endpoint_id
+    table_ = table_parser.table(cli.openstack('endpoint show', args,  ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    return table_parser.get_value_two_col_table(table_, target_field)
