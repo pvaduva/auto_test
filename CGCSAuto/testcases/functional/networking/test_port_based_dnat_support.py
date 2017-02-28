@@ -7,7 +7,7 @@ from utils.ssh import NATBoxClient
 from utils.multi_thread import MThread
 from consts.cgcs import FlavorSpec, Prompt
 from keywords import network_helper, vm_helper, nova_helper, cinder_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
@@ -92,9 +92,9 @@ def _vms(ubuntu14_image):
         # ResourceCleanup.add('volume', vol_id)
 
         LOG.fixture_step("Boot a ubuntu14 vm with {} nics from above flavor and volume".format(vm_vif_models[vm]))
-        vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=flavor_id, source='image',
+        vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=flavor_id, source='image', cleanup='function',
                                   source_id=image_id, nics=nics, guest_os=guest_os)[1]
-        ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
+        # ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
         vms.append(vm_id)
 
     return vms

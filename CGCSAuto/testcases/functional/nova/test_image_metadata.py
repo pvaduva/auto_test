@@ -3,7 +3,7 @@ from pytest import fixture, mark
 from utils.tis_log import LOG
 from consts.cgcs import ImageMetadata
 from keywords import nova_helper, glance_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @mark.parametrize(('property_key', 'values', 'disk_format', 'container_format'), [

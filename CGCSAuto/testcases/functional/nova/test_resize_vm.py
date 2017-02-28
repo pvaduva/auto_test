@@ -2,7 +2,7 @@ from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def id_gen(val):

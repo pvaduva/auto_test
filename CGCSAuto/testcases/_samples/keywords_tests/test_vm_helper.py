@@ -4,7 +4,7 @@ from pytest import mark
 from utils.tis_log import LOG
 
 from keywords import vm_helper, network_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def test_boot_vms(ubuntu14_image, opensuse11_image, opensuse12_image, rhel6_image, rhel7_image):

@@ -12,7 +12,7 @@ from utils import table_parser
 from consts.auth import Tenant
 from consts.cgcs import HostAvailabilityState
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -68,8 +68,8 @@ def launch_instance_on_compute(network_name=None,
     vm_ids = []
     for name in instance_names:
 
-        vm_id = vm_helper.boot_vm(name=instance_names[name], flavor=flavor_id, guest_os=image_name)[1]
-        ResourceCleanup.add('vm', vm_id)
+        vm_id = vm_helper.boot_vm(name=instance_names[name], flavor=flavor_id, guest_os=image_name, cleanup='function')[1]
+        # ResourceCleanup.add('vm', vm_id)
         vm_ids.append(vm_id)
 
     LOG.tc_step('Verify instances are running')

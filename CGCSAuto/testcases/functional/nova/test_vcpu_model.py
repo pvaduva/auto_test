@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
 from consts.cli_errs import VCPUSchedulerErr
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module', autouse=True)

@@ -14,7 +14,7 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper, \
     storage_helper, glance_helper, cinder_helper
 from consts.cgcs import EventLogID, GuestImages
 from testfixtures.recover_hosts import HostsToRecover
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 PROC_RESTART_TIME = 30          # number of seconds between process restarts
 RESTARTS_BEFORE_ASSERT = 3      # number of process restarts until error assertion

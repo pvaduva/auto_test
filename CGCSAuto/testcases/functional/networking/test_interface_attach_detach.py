@@ -3,7 +3,7 @@ from utils.tis_log import LOG
 
 from consts.cgcs import VMStatus
 from keywords import network_helper, nova_helper, vm_helper, glance_helper, cinder_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')

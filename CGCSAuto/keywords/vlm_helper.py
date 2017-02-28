@@ -247,3 +247,4 @@ def power_off_hosts_simultaneously(hosts=None):
     for node, res in results.items():
         if res[0] != 0:
             raise exceptions.VLMError(res[1])
+

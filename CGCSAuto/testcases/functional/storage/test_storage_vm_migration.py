@@ -6,7 +6,7 @@ from utils import table_parser
 from keywords import host_helper, vm_helper, nova_helper, cinder_helper, glance_helper, system_helper
 from consts.cgcs import VMStatus
 from consts.auth import Tenant
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.verify_fixtures import check_alarms
 from utils.ssh import ControllerClient
 

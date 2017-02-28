@@ -10,7 +10,7 @@ from utils import table_parser
 from utils.tis_log import LOG
 from consts.cgcs import EventLogID, FlavorSpec, VMStatus
 from consts.timeout import EventLogTimeout
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 
 
