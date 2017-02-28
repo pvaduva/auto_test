@@ -162,13 +162,13 @@ class TestDefaultGuest:
         'local_lvm',
         'remote',
     ])
-    def test_evacuate_vms_with_inst_backing(self, storage_backing, add_admin_role):
+    def test_evacuate_vms_with_inst_backing(self, storage_backing, add_admin_role_class):
         """
         Test evacuate vms with various vm storage configs and host instance backing configs
 
         Args:
             storage_backing: storage backing under test
-            add_admin_role (None): test fixture to add admin role to primary tenant
+            add_admin_role_class (None): test fixture to add admin role to primary tenant
 
         Skip conditions:
             - Less than two hosts configured with storage backing under test

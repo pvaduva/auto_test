@@ -123,7 +123,7 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh):
                 if index == 0:
                     con_ssh.send(Host.PASSWORD)
                     con_ssh.expect()
-                    
+
                 con_ssh.exec_sudo_cmd('cp {} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.OPT_PLATFORM), fail_ok=False)
                 con_ssh.exec_cmd('rm {}'.format(PrivKeyPath.WRS_HOME))
             else:
