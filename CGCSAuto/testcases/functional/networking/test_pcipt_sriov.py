@@ -391,15 +391,18 @@ class TestVmPCIOperations:
 
                 cpus_matched = True
                 for pci_info in vm_pci_infos.values():
-                    if expected_pcpus_for_irqs != sorted(pci_info['cpulist']):
+                    if 'cpulist' in pci_info and expected_pcpus_for_irqs != sorted(pci_info['cpulist']):
                         LOG.warn(
                             'Mismatched CPU list after {}: expected/affin-mask cpu list:{}, actual:{}, '
                             'pci_info:{}'.format(msg_prefx, expected_pcpus_for_irqs, pci_info['cpulist'], pci_info))
                         LOG.warn('retries:{}'.format(count))
                         cpus_matched = False
                         break
+                vm_pci_infos.clear()
+                vm_topology.clear()
 
                 vm_pci_infos, vm_topology = vm_helper.get_vm_pcis_irqs_from_hypervisor(self.vm_id)
+                vm_pci_infos.pop('pci_addr_list')
 
             assert cpus_matched, \
                 '{}: CPU list is not matching expected mask after tried {} times'.format(msg_prefx, count)
@@ -596,4 +599,3 @@ class TestVmPCIOperations:
         self.wait_check_vm_states(step='set-error-state-recover')
         vm_helper.ping_vms_from_vm(
             from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
-
