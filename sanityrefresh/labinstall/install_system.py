@@ -963,7 +963,7 @@ def write_install_vars(args):
     #    os.remove(file_path)
 
     with open(file_path, "w") as install_var_file:
-        os.chmod(file_path, 0o666)
+        os.chmod(file_path, 0o777)
         config.write(install_var_file)
         install_var_file.close()
 
@@ -1835,9 +1835,9 @@ def main():
     global controller0
     controller0 = controller_dict[CONTROLLER0]
 
-    #MARIA
-    global controller1
-    controller1 = controller_dict[CONTROLLER1]
+    if not simplex:
+        global controller1
+        controller1 = controller_dict[CONTROLLER1]
 
     if compute_nodes is not None:
         compute_dict = create_node_dict(compute_nodes, COMPUTE)
@@ -1854,7 +1854,7 @@ def main():
         executed = False
         # Lab-install Step 0 -  boot controller from tuxlab or usb or cumulus
         msg = 'Set_up_network_feed'
-        lab_install_step = install_step(msg, 0, ['regular', 'storage', 'cpe'])
+        lab_install_step = install_step(msg, 0, ['regular', 'storage', 'cpe', 'simplex'])
         if do_next_install_step(lab_type, lab_install_step):
         #if not executed:
             if str(boot_device_dict.get('controller-0')) != "USB" \
