@@ -1334,18 +1334,6 @@ def configureController(bld_server_conn, host_os, install_output_dir, banner):
         cmd = "test -f " + cfgpath
         if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
             cfg_found = True
-            # check if HTTPS is enabled and if yes get the certification file
-            cmd = " grep ENABLE_HTTPS " + cfgpath + " | awk \'{print $3}\' "
-            rc, output = controller0.ssh_conn.exec_cmd(cmd)
-            match = re.compile('(^\s*)Y(\s*?)$')
-            if rc == 0 and match.match(output):
-                log.info("Getting certificate file")
-                bld_server_conn.rsync(CERTIFICATE_FILE_PATH,
-                                      WRSROOT_USERNAME, controller0.host_ip,
-                                      os.path.join(WRSROOT_HOME_DIR,
-                                      CERTIFICATE_FILE_NAME),
-                                      pre_opts=pre_opts)
-
             cmd = "export USER=wrsroot"
             if not cumulus:
                 rc, output = controller0.telnet_conn.exec_cmd(cmd)
@@ -1353,7 +1341,6 @@ def configureController(bld_server_conn, host_os, install_output_dir, banner):
                 rc, output = controller0.ssh_conn.exec_cmd(cmd)
             cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
             cmd += " config_controller --config-file " + cfgfile
-            #cmd += " config_controller --default"
             os.environ["TERM"] = "xterm"
             if host_os == "centos" and not cumulus:
                 rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
@@ -1427,7 +1414,6 @@ def run_cpe_compute_config_complete(host_os, install_output_dir):
 
     # Reconnect telnet session
     controller0.telnet_conn.login()
-    #controller0.telnet_conn = cont0_telnet_conn
 
     # Reconnect ssh session
     controller0.ssh_conn.disconnect()
@@ -1849,6 +1835,10 @@ def main():
     global controller0
     controller0 = controller_dict[CONTROLLER0]
 
+    #MARIA
+    global controller1
+    controller1 = controller_dict[CONTROLLER1]
+
     if compute_nodes is not None:
         compute_dict = create_node_dict(compute_nodes, COMPUTE)
 
@@ -1991,7 +1981,7 @@ def main():
     if stop == "0":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
 
-    # Lab-install Step 1 -  boot controller from tuxlab or usb or cumulus
+    # Lab-install -  boot controller from tuxlab or usb or cumulus
     msg = 'boot_controller-0'
     lab_install_step = install_step("boot_controller-0", 1, ['regular', 'storage', 'cpe', 'simplex'])
 
@@ -2005,7 +1995,7 @@ def main():
     if stop == "1":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
 
-    # Lab-install Step 2 -  Download lab configuration files - applicable all lab types
+    # Lab-install -  Download lab configuration files - applicable all lab types
     msg = 'Download_lab_config_files'
     lab_install_step = install_step(msg, 2, ['regular', 'storage', 'cpe', 'simplex'])
 
@@ -2024,7 +2014,7 @@ def main():
     if stop == "2":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
 
-    # Lab-install Step 3 -  Configure Controller - applicable all lab types
+    # Lab-install -  Configure Controller - applicable all lab types
     msg = 'Configure_controller'
     lab_install_step = install_step(msg, 3, ['regular', 'storage', 'cpe', 'simplex'])
 
@@ -2045,7 +2035,7 @@ def main():
     if stop == "3":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
 
-    # Lab-install Step 4 -  Bulk hosts add- applicable all lab types
+    # Lab-install -  Bulk hosts add- applicable all lab types
     msg = 'bulk_hosts_add'
     lab_install_step = install_step("bulk_hosts_add", 4, ['regular', 'storage', 'cpe'])
 
@@ -2057,11 +2047,11 @@ def main():
     if stop == "4":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
 
-    # Lab-install Step 4 -  Bulk hosts add- applicable all lab types
+    # Lab-install -  Bulk hosts add- applicable all lab types
 
     # Complete controller0 configuration either as a regular host
     # or a small footprint host.
-    # Lab-install Step 5 -  Run_lab_setup - applicable cpe labs only
+    # Lab-install -  Run_lab_setup - applicable cpe labs only
     lab_install_step = install_step("run_lab_setup", 5, ['cpe', 'simplex'])
     if do_next_install_step(lab_type, lab_install_step):
     #if not executed:
@@ -2072,14 +2062,14 @@ def main():
                 installer_exit._exit(1, msg)
             set_install_step_complete(lab_install_step)
 
-     # Lab-install Step 6 -  cpe_compute_config_complete - applicable cpe labs only
+     # Lab-install - cpe_compute_config_complete - applicable cpe labs only
     lab_install_step = install_step("cpe_compute_config_complete", 6, ['cpe', 'simplex'])
     if do_next_install_step(lab_type, lab_install_step):
         if small_footprint:
             run_cpe_compute_config_complete(host_os, install_output_dir)
             set_install_step_complete(lab_install_step)
 
-    # Lab-install Step 7 -  Run_lab_setup - applicable cpe labs only
+    # Lab-install -  Run_lab_setup - applicable cpe labs only
     lab_install_step = install_step("run_lab_setup", 7, ['cpe', 'simplex'])
     if do_next_install_step(lab_type, lab_install_step):
         if small_footprint:
@@ -2104,28 +2094,32 @@ def main():
 
     # Bring up other hosts
     tis_on_tis_storage = False
-    # Lab-install Step 8 -  boot_other_lab_hosts - applicable all labs
+    # Lab-install -  boot_other_lab_hosts - applicable all labs
     msg = "boot_other_lab_hosts"
     lab_install_step = install_step(msg, 9, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
 
         boot_other_lab_hosts(nodes, boot_device_dict, host_os, install_output_dir,
                              small_footprint, tis_on_tis)
+        nodes.remove(controller0)
+        if not simplex:
+            time.sleep(10)
+            wait_state(nodes, AVAILABILITY, ONLINE)
         set_install_step_complete(lab_install_step)
 
     # Remove controller-0 from the nodes list since it's up
-    nodes.remove(controller0)
+    #nodes.remove(controller0)
 
     # Wait for all nodes to be online to allow lab_setup to set
     # interfaces properly
-    if not simplex:
-        time.sleep(10)
-        wait_state(nodes, AVAILABILITY, ONLINE)
+    #if not simplex:
+    #    time.sleep(10)
+    #    wait_state(nodes, AVAILABILITY, ONLINE)
 
     if stop == "5":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
 
-    # Lab-install Step 9 -  run_lab_setup - applicable all labs
+    # Lab-install -  run_lab_setup - applicable all labs
     lab_install_step = install_step("run_lab_setup", 10, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
         log.info("Beginning lab setup procedure for {} lab".format(lab_type))
@@ -2137,7 +2131,7 @@ def main():
         set_install_step_complete(lab_install_step)
 
     log.info("Beginning lab setup procedure for {} lab".format(lab_type))
-    # Lab-install Step 10 -  run_lab_setup - applicable regular and storage labs
+    # Lab-install -  run_lab_setup - applicable regular and storage labs
     lab_install_step = install_step("run_lab_setup", 11, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
         if lab_type is "regular" or "storage":
@@ -2151,7 +2145,7 @@ def main():
             set_install_step_complete(lab_install_step)
 
     # Unlock Controller-1
-    # Lab-install Step 11 -  unlock_controller1 - applicable all labs
+    # Lab-install -  unlock_controller1 - applicable all labs
 
     lab_install_step = install_step("unlock_controller1", 12, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
@@ -2169,7 +2163,7 @@ def main():
 
     # For storage lab run lab setup
     executed = False
-    # Lab-install Step 12 -  run_lab_setup - applicable storage labs
+    # Lab-install -  run_lab_setup - applicable storage labs
     lab_install_step = install_step("run_lab_setup", 13, ['storage'])
     if do_next_install_step(lab_type, lab_install_step):
     #if not executed:
@@ -2181,7 +2175,7 @@ def main():
 
         set_install_step_complete(lab_install_step)
 
-    # Lab-install Step 13 -  unlock_storages - applicable storage labs
+    # Lab-install -  unlock_storages - applicable storage labs
     lab_install_step = install_step("unlock_storages", 14, ['storage'])
     if do_next_install_step(lab_type, lab_install_step):
 
@@ -2193,8 +2187,7 @@ def main():
     if lab_type is 'storage':
         wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os=host_os)
 
-    # for Storage lab  run lab setup
-    # Lab-install Step 14 -  run_lab_setup - applicable storage labs
+    # Lab-install -  run_lab_setup - applicable storage labs
     lab_install_step = install_step("run_lab_setup", 15, ['storage'])
     if do_next_install_step(lab_type, lab_install_step):
         #ensure all computes are online first:
@@ -2212,17 +2205,14 @@ def main():
 
         set_install_step_complete(lab_install_step)
 
-    #Unlock computes ( storage or regular)
-    # Lab-install Step 15 -  unlock_computes - applicable storage and regular labs
+    # Lab-install - unlock_computes - applicable storage and regular labs
     lab_install_step = install_step("unlock_computes", 16, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
         unlock_node(nodes, selection_filter="compute")
         wait_state(nodes, OPERATIONAL, ENABLED)
         set_install_step_complete(lab_install_step)
 
-
-    #Run final lab_setup ( storage and regular labs)
-    # Lab-install Step 16 -  run_lab_setup - applicable storage and regular labs
+    # Lab-install - run_lab_setup - applicable storage and regular labs
     lab_install_step = install_step("run_lab_setup", 17, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
         # do run lab setup to add osd
@@ -2240,25 +2230,65 @@ def main():
             setupHeat(bld_server_conn)
             set_install_step_complete(lab_install_step)
 
-    if lab_type is "cpe":
-        for node in nodes:
-            cmd = "source /etc/nova/openrc; system host-if-list {} -a".format(node.name)
-            if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
-                msg = "Failed to get list of interfaces for node: " + node.name
-                log.error(msg)
-                #wr_exit()._exit(1, msg)
+    #Lab-install - swact and then lock/unlock controller-0 to complete setup
+    lab_install_step = install_step("swact_lockunlock", 19, ['regular', 'storage'])
+    if do_next_install_step(lab_type, lab_install_step):
+        if host_os == "centos":
+            cmd = "system alarm-list --nowrap"
+            output = controller0.ssh_conn.exec_cmd(cmd)[1]
+
+            if find_error_msg(output, "250.001"):
+                log.info('Config out-of-date alarm is present')
+
+                cmd = "system host-swact controller-0"
+                rc, output = controller0.ssh_conn.exec_cmd(cmd)
+
+                time.sleep(60)
+                
+                controller0.ssh_conn.disconnect()
+                cont1_ssh_conn = SSHClient(log_path=install_output_dir +\
+                                        "/" + CONTROLLER1 + ".ssh.log")
+                cont1_ssh_conn.connect(hostname=controller0.host_floating_ip,
+                                    username=WRSROOT_USERNAME,
+                                password=WRSROOT_PASSWORD)
+                controller1.ssh_conn = cont1_ssh_conn
+
+                cmd = "source /etc/nova/openrc"
+                if controller1.ssh_conn.exec_cmd(cmd)[0] != 0:
+                    log.error("Failed to source environment")
+
+                cmd = "system host-lock controller-0"
+                rc, output = controller1.ssh_conn.exec_cmd(cmd)
+
+                time.sleep(20)
+
+                cmd = "system host-unlock controller-0"
+                rc, output = controller1.ssh_conn.exec_cmd(cmd)
+
+                # Wait until config out-of-date clears
+                wait_until_alarm_clears(controller1, timeout=600, check_interval=60, alarm_id="250.001", host_os=host_os)
+
+                # Wait until sm-services are up
+                wait_until_alarm_clears(controller1, timeout=600, check_interval=60, alarm_id="400.002", host_os=host_os)
+
+                cmd = "system host-swact controller-1"
+                rc, output = controller1.ssh_conn.exec_cmd(cmd)
+
+                time.sleep(60)
+
+                controller1.ssh_conn.disconnect()
+                controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
+
+                set_install_step_complete(lab_install_step)
 
     cmd = "source /etc/nova/openrc; system alarm-list"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to get alarm list")
-        #wr_exit()._exit(1, msg)
 
     cmd = "cat /etc/build.info"
     rc, installed_load_info = controller0.ssh_conn.exec_cmd(cmd)
-    #if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
     if rc != 0:
         log.error("Failed to get build info")
-        #wr_exit()._exit(1, msg)
 
     wr_exit()._exit(0, "Installer completed.\n" + installed_load_info)
 
