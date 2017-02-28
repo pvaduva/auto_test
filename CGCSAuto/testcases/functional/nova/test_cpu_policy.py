@@ -7,7 +7,7 @@ from consts.cgcs import FlavorSpec, ImageMetadata
 from consts.cli_errs import CPUPolicyErr        # used by eval
 
 from keywords import nova_helper, vm_helper, glance_helper, cinder_helper, check_helper, host_helper, system_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @mark.parametrize(('flv_vcpus', 'flv_pol', 'img_pol', 'boot_source', 'expt_err'), [
@@ -51,9 +51,9 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
 
     LOG.tc_step("Attempt to boot a vm from above {} with above flavor".format(boot_source))
     code, vm_id, msg, ignore = vm_helper.boot_vm(name='cpu_pol', flavor=flavor_id, source=boot_source,
-                                                 source_id=source_id, fail_ok=True)
-    if vm_id:
-        ResourceCleanup.add('vm', vm_id)
+                                                 source_id=source_id, fail_ok=True, cleanup='function')
+    # if vm_id:
+    #     ResourceCleanup.add('vm', vm_id)
 
     # check for negative tests
     if expt_err is not None:

@@ -17,7 +17,7 @@ from consts.timeout import VMTimeout, EventLogTimeout
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
 from consts.auth import Tenant
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 @fixture(scope='module')
 def flavor_(request):
@@ -40,9 +40,9 @@ def vm_(request, flavor_):
     vm_name = 'vm_with_hb'
     flavor_id = flavor_
 
-    vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id)[1]
+    vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, cleanup='module')[1]
     time.sleep(30)
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
+    # ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
 
     events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [

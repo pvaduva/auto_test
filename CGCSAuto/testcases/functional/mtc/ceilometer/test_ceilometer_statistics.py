@@ -176,6 +176,9 @@ def test_retention_sample():
     time.sleep(SysInvTimeout.RETENTION_PERIOD_SAVED)
     LOG.tc_step("Ensuring the sample is listed")
 
+    samples = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
+    assert samples, "fake_sample is not listed"
+
     ceilometer_helper.delete_samples()
     # sample-create uses meter-name for the name of the sample.
     # sample-list uses meter to specify the name to search for.

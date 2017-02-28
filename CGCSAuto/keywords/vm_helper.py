@@ -18,6 +18,8 @@ from consts.timeout import VMTimeout, CMDTimeout
 
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 from testfixtures.recover_hosts import HostsToRecover
+from testfixtures.fixture_resources import ResourceCleanup
+
 
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
     """
@@ -91,7 +93,7 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
             block_device_mapping=None,  vm_host=None, avail_zone=None, file=None, config_drive=False,
-            fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True):
+            fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True, cleanup=None):
     """
     Boot a vm with given parameters
     Args:
@@ -126,6 +128,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         reuse_vol (bool): whether or not to reuse the existing volume
         guest_os (str): Valid values: 'cgcs-guest', 'ubuntu_14', 'centos_6', 'centos_7', etc
         poll (bool):
+        cleanup (str|None): valid values: 'module', 'session', 'function', 'class', vm (and volume) will be deleted as
+            part of teardown
 
     Returns (tuple): (rtn_code(int), new_vm_id_if_any(str), message(str), new_vol_id_if_any(str))
         (0, vm_id, 'VM is booted successfully', <new_vol_id>)   # vm is created successfully and in Active state.
@@ -137,6 +141,10 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         (4, '', <stderr>, <new_vol_id>): create vm cli command failed, vm is not booted
 
     """
+    if cleanup is not None:
+        if cleanup not in ['module', 'session', 'function', 'class']:
+            raise ValueError("Invalid scope provided. Choose from: 'module', 'session', 'function', 'class', None")
+
     LOG.info("Processing boot_vm args...")
     # Handle mandatory arg - name
     tenant = common.get_tenant_name(auth_info=auth_info)
@@ -262,6 +270,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         name_str = name + '-'
         pre_boot_vms = nova_helper.get_vms(auth_info=auth_info, con_ssh=con_ssh, strict=False, name=name_str)
 
+    if cleanup and new_vol:
+        ResourceCleanup.add('volume', new_vol, scope=cleanup)
+
     LOG.info("Booting VM {}...".format(name))
     exitcode, output = cli.nova('boot', positional_args=args_, ssh_client=con_ssh,
                                 fail_ok=fail_ok, rtn_list=True, timeout=VMTimeout.BOOT_VM, auth_info=auth_info)
@@ -270,6 +281,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if min_count is None and max_count is None:
         table_ = table_parser.table(output)
         vm_id = table_parser.get_value_two_col_table(table_, 'id')
+        if cleanup and vm_id:
+            ResourceCleanup.add('vm', vm_id, scope=cleanup, del_vm_vols=False)
 
         if exitcode == 1:
             if vm_id:
@@ -310,6 +323,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         #         vm_ids.append(vm_id)
 
         vm_ids = list(set(post_boot_vms) - set(pre_boot_vms))
+        if cleanup and vm_ids:
+            ResourceCleanup.add('vm', vm_ids, scope=cleanup, del_vm_vols=False)
+
         if exitcode == 1:
             return 1, vm_ids, output
 

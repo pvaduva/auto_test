@@ -5,7 +5,7 @@ from consts.cgcs import FlavorSpec, VMStatus
 from consts.reasons import SkipReason
 
 from keywords import vm_helper, nova_helper, glance_helper, cinder_helper, check_helper, host_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def id_gen(val):

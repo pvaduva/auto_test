@@ -14,7 +14,7 @@ from utils.tis_log import LOG
 from consts.reasons import SkipReason
 from consts.cgcs import QoSSpecs, FlavorSpec
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module', params=['local_image', 'local_lvm'])
@@ -103,8 +103,8 @@ class TestQoS:
         ResourceCleanup.add('volume', volume_id)
 
         LOG.tc_step("Boot vm from above volume that has the disk QoS info")
-        vm_id = vm_helper.boot_vm(name_str, flavor=flavor, source='volume', source_id=volume_id)[1]
-        ResourceCleanup.add('vm', vm_id)
+        vm_id = vm_helper.boot_vm(name_str, flavor=flavor, source='volume', source_id=volume_id, cleanup='function')[1]
+        # ResourceCleanup.add('vm', vm_id)
 
         vm_host = nova_helper.get_vm_host(vm_id)
         assert vm_host in expt_hosts
@@ -181,8 +181,8 @@ class TestFlavor:
         # boot vm must be from image
         # TODO: why has to boot from image?
         boot_source = 'image'
-        vm_id = vm_helper.boot_vm(name_str, flavor=flavor_id, source=boot_source)[1]
-        ResourceCleanup.add('vm', vm_id)
+        vm_id = vm_helper.boot_vm(name_str, flavor=flavor_id, source=boot_source, cleanup='function')[1]
+        # ResourceCleanup.add('vm', vm_id)
 
         vm_host = nova_helper.get_vm_host(vm_id)
         assert vm_host in expt_hosts, "VM host is not on {} host".format(storage_backing)

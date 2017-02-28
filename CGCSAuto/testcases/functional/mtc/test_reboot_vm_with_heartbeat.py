@@ -17,7 +17,7 @@ from consts.timeout import VMTimeout, EventLogTimeout
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
 from consts.auth import Tenant
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 
@@ -49,8 +49,8 @@ def test_vm_reboot_with_heartbeat():
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
     LOG.tc_step("Boot a vm using the flavor with guest heartbeat")
-    vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id)[1]
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
+    vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
     time.sleep(30)
 
     LOG.tc_step("Verify vm heartbeat is on via event logs")

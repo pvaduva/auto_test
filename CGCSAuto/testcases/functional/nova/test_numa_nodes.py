@@ -8,7 +8,7 @@ from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, InstanceTopology
 from consts.cli_errs import NumaErr
 from keywords import nova_helper, vm_helper, system_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 ########################################

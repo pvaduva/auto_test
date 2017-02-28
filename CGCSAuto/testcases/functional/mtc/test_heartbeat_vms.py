@@ -7,7 +7,7 @@ from consts.reasons import SkipReason
 from consts.cgcs import EventLogID, FlavorSpec
 from consts.timeout import EventLogTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -127,8 +127,8 @@ def test_hb_vm_with_action(hb_enabled, action, heartbeat_flavors):
         skip(SkipReason.SIMPLEX_SYSTEM)
 
     LOG.tc_step("Booting vm. heartbeat enabled: {}".format(hb_enabled))
-    vm_id = vm_helper.boot_vm('hb_guest', flavor=heartbeat_flavors[hb_enabled])[1]
-    ResourceCleanup.add(resource_type='vm', resource_id=vm_id, scope='function')
+    vm_id = vm_helper.boot_vm('hb_guest', flavor=heartbeat_flavors[hb_enabled], cleanup='function')[1]
+    # ResourceCleanup.add(resource_type='vm', resource_id=vm_id, scope='function')
     events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                            **{'Entity Instance ID': vm_id, 'Event Log ID': [
                                                EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})

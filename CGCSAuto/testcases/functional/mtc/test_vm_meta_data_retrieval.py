@@ -10,7 +10,7 @@ from consts.timeout import VMTimeout, EventLogTimeout
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
 from consts.auth import Tenant
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @mark.sanity
@@ -38,8 +38,8 @@ def test_vm_meta_data_retrieval():
     sourceid = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
 
     # create VM make sure it's pingable
-    vm_id = vm_helper.boot_vm(source='image', source_id=sourceid)[1]
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
+    vm_id = vm_helper.boot_vm(source='image', source_id=sourceid, cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
     LOG.debug('Query meta-data')

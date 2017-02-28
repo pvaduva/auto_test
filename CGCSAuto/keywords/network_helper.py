@@ -1528,7 +1528,7 @@ def update_router_ext_gateway_snat(router_id=None, ext_net_id=None, enable_snat=
 
 
 def update_router_distributed(router_id=None, distributed=True, pre_admin_down=True, post_admin_up=True,
-                              fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                              post_admin_up_on_failure=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Update router to distributed or centralized
 
@@ -1551,11 +1551,15 @@ def update_router_distributed(router_id=None, distributed=True, pre_admin_down=T
     try:
         code, output = _update_router(distributed=distributed, router_id=router_id, fail_ok=fail_ok, con_ssh=con_ssh,
                                       auth_info=auth_info)
+        if post_admin_up:
+            _update_router(admin_state_up=True, router_id=router_id, fail_ok=False, con_ssh=con_ssh,
+                           auth_info=auth_info)
     except exceptions.CLIRejected:
         raise
     finally:
-        if post_admin_up:
-            _update_router(admin_state_up=True, router_id=router_id, fail_ok=False, con_ssh=con_ssh, auth_info=auth_info)
+        if post_admin_up_on_failure:
+            _update_router(admin_state_up=True, router_id=router_id, fail_ok=False, con_ssh=con_ssh,
+                           auth_info=auth_info)
 
     if code == 1:
         return 1, output

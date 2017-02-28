@@ -6,7 +6,7 @@ from utils.ssh import ControllerClient
 from consts.cgcs import FlavorSpec
 from consts.auth import Tenant
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 

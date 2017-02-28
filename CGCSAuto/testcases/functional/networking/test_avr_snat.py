@@ -5,7 +5,7 @@ from consts.auth import Tenant
 from utils.tis_log import LOG
 from consts.cgcs import VMStatus
 from keywords import vm_helper, nova_helper, host_helper, network_helper, system_helper, common
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -42,8 +42,8 @@ def snat_setups(request):
     request.addfinalizer(disable_snat)
 
     LOG.fixture_step("Boot a VM from volume")
-    vm_id = vm_helper.boot_vm(name='snat', reuse_vol=False)[1]
-    ResourceCleanup.add('vm', vm_id, scope='module')
+    vm_id = vm_helper.boot_vm(name='snat', reuse_vol=False, cleanup='module')[1]
+    # ResourceCleanup.add('vm', vm_id, scope='module')
 
     LOG.fixture_step("Attempt to ping from NatBox and ensure if fails")
     ping_res = vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True, use_fip=False)

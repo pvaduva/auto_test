@@ -6,7 +6,7 @@ from consts.cgcs import FlavorSpec
 
 from keywords import vm_helper, glance_helper, nova_helper, network_helper, cinder_helper, check_helper
 
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def id_gen(val):
@@ -89,9 +89,9 @@ def test_ping_between_two_vms(guest_os, vifs, ubuntu14_image):
         ResourceCleanup.add('volume', vol_id)
 
         LOG.tc_step("Boot a {} vm with {} vifs from above flavor and volume".format(guest_os, vifs))
-        vm_id = vm_helper.boot_vm('{}_vifs'.format(guest_os), flavor=flavor_id,
+        vm_id = vm_helper.boot_vm('{}_vifs'.format(guest_os), flavor=flavor_id, cleanup='function',
                                   source='volume', source_id=vol_id, nics=nics, guest_os=guest_os)[1]
-        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+        # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
         LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
@@ -145,8 +145,8 @@ def _test_ping_vm_basic(guest_os):
         - Delete created vm, volume, flavor
 
     """
-    vm_id = vm_helper.boot_vm(name=guest_os, guest_os=guest_os)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm(name=guest_os, guest_os=guest_os, cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_id)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
     vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['mgmt'])

@@ -8,7 +8,7 @@ from utils.ssh import NATBoxClient
 from utils.multi_thread import MThread
 from consts.cgcs import FlavorSpec, VMStatus
 from keywords import network_helper, vm_helper, nova_helper, cinder_helper, system_helper, host_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module', autouse=True)
@@ -193,8 +193,8 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_list, enable_device_an
 
     flavor_id = _flavors['flavor_qat_vf_1']
     LOG.info("Boot a vm  {} with pci-sriov nics and flavor flavor_qat_vf_1".format(vm_name))
-    vm_id = vm_helper.boot_vm(vm_name, flavor=flavor_id, source='image', nics=nics, fail_ok=True)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm(vm_name, flavor=flavor_id, source='image', nics=nics, cleanup='function', fail_ok=True)[1]
+    # ResourceCleanup.add('vm', vm_id)
 
     LOG.info("VM {} booted successfully and become active with crypto VF".format(vm_name))
 
@@ -216,8 +216,8 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_list, enable_device_an
     vm_name = 'vm_with_pci_device_2'
     flavor_id = _flavors['flavor_qat_vf_1']
     LOG.info("Boot a vm  {} with pci-sriov nics and flavor flavor_qat_vf_1".format(vm_name))
-    vm_id = vm_helper.boot_vm(vm_name, flavor=flavor_id, source='image', nics=nics)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm(vm_name, flavor=flavor_id, source='image', nics=nics, cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_id)
     vm_host_2 = nova_helper.get_vm_host(vm_id)
     assert vm_host_2 != vm_host, "Possible to launch VM {} on host {} with device disabled".format(vm_name, vm_host)
 
@@ -254,9 +254,10 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_list):
 
     LOG.info("Boot a vm {} with pci-sriov nics, and flavor=flavor_qat_vf_{}".format(vm_name, vfs))
     flavor_id = _flavors['flavor_qat_vf_{}'.format(vfs)]
-    rc, vm_id, msg, vol = vm_helper.boot_vm(vm_name, flavor=flavor_id, source='image', nics=nics, fail_ok=True)
-    if vm_id:
-        ResourceCleanup.add('vm', vm_id)
+    rc, vm_id, msg, vol = vm_helper.boot_vm(vm_name, flavor=flavor_id, source='image', nics=nics, cleanup='function',
+                                            fail_ok=True)
+    # if vm_id:
+    #     ResourceCleanup.add('vm', vm_id)
     if vfs == 33:
         assert rc != 0, " Unexpected VM was launched with over limit crypto vfs: {}".format(msg)
     else:
@@ -329,9 +330,10 @@ def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors, hosts_pci_devi
     for vm, param in vm_params.items():
 
         LOG.tc_step("Boot vm {} with {} flavor".format(vm, param[0]))
-        vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=param[0], source='image', nics=param[1], fail_ok=True)[1]
-        if vm_id:
-            ResourceCleanup.add('vm', vm_id)
+        vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=param[0], source='image', nics=param[1], cleanup='function',
+                                  fail_ok=True)[1]
+        # if vm_id:
+        #     ResourceCleanup.add('vm', vm_id)
         LOG.info("Verify  VM can be pinged from NAT box...")
         assert vm_helper.wait_for_vm_pingable_from_natbox(vm_id), "VM is not pingable."
         vms[vm] = vm_id
@@ -405,8 +407,9 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_list):
     for i in range(1, number_of_vms + 1):
         vm_name = 'vm_crypto_{}'.format(i)
         LOG.tc_step("( Booting  a vm {} using flavor flavor_qat_vf_4 and nics {}".format(vm_name, nics))
-        vm_id = vm_helper.boot_vm(name='vm_crypto_{}'.format(i), nics=nics, flavor=flavor_id, source='image')[1]
-        ResourceCleanup.add('vm', vm_id)
+        vm_id = vm_helper.boot_vm(cleanup='function', name='vm_crypto_{}'.format(i), nics=nics, flavor=flavor_id,
+                                  source='image')[1]
+        # ResourceCleanup.add('vm', vm_id)
         assert vm_helper.wait_for_vm_pingable_from_natbox(vm_id),"VM is not pingable."
         vms[vm_name] = vm_id
 

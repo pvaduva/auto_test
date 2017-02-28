@@ -3,7 +3,7 @@ from pytest import mark, fixture
 from utils.tis_log import LOG
 
 from keywords import host_helper, vm_helper, nova_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 # To Avoid:

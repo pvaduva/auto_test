@@ -9,7 +9,7 @@ from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import FlavorSpec, VMStatus
 from keywords import vm_helper, nova_helper, network_helper, host_helper, common
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -83,8 +83,8 @@ def vif_model_check(request):
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
             {'net-id': pci_net_id, 'vif-model': 'virtio'}]
 
-    base_vm = vm_helper.boot_vm(flavor=flavor_id, nics=nics)[1]
-    ResourceCleanup.add('vm', base_vm, scope='module')
+    base_vm = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='module')[1]
+    # ResourceCleanup.add('vm', base_vm, scope='module')
     vm_helper.wait_for_vm_pingable_from_natbox(base_vm)
     vm_helper.ping_vms_from_vm(base_vm, base_vm, net_types=['mgmt', net_type], vlan_zero_only=True)
 
@@ -132,13 +132,13 @@ def test_evacuate_pci_vm(vif_model_check):
     vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_id = vif_model_check
 
     LOG.tc_step("Boot a vm with {} vif model on {} net".format(vif_model, net_type))
-    res, vm_id, err, vol_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, nics=nics_to_test)
-    if vm_id:
-        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-        pass
-    if vol_id:
-        ResourceCleanup.add('volume', vol_id)
-        pass
+    res, vm_id, err, vol_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, cleanup='function', nics=nics_to_test)
+    # if vm_id:
+    #     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+    #     pass
+    # if vol_id:
+    #     ResourceCleanup.add('volume', vol_id)
+    #     pass
     assert 0 == res, "VM is not booted successfully. Error: {}".format(err)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
@@ -207,13 +207,14 @@ def test_pci_resource_usage(vif_model_check):
     vms_under_test = []
     for i in range(vm_limit):
         LOG.tc_step("Boot a vm with {} vif model on {} net".format(vif_model, net_type))
-        res, vm_id, err, vol_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, nics=nics_to_test, fail_ok=True)
-        if vm_id:
-            ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-            pass
-        if vol_id:
-            ResourceCleanup.add('volume', vol_id)
-            pass
+        res, vm_id, err, vol_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, cleanup='function',
+                                                    nics=nics_to_test, fail_ok=True)
+        # if vm_id:
+        #     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+        #     pass
+        # if vol_id:
+        #     ResourceCleanup.add('volume', vol_id)
+        #     pass
         assert 0 == res, "VM is not booted successfully. Error: {}".format(err)
 
         vms_under_test.append(vm_id)
@@ -425,13 +426,14 @@ class TestVmPCIOperations:
 
     def create_vm_with_pci_nic(self):
 
-        res, vm_id, err, vol_id = vm_helper.boot_vm(name=self.vif_model, flavor=self.flavor_id, nics=self.nics_to_test)
-        if vm_id:
-            ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-            pass
-        if vol_id:
-            ResourceCleanup.add('volume', vol_id)
-            pass
+        res, vm_id, err, vol_id = vm_helper.boot_vm(name=self.vif_model, flavor=self.flavor_id, cleanup='function',
+                                                    nics=self.nics_to_test)
+        # if vm_id:
+        #     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+        #     pass
+        # if vol_id:
+        #     ResourceCleanup.add('volume', vol_id)
+        #     pass
 
         assert 0 == res, "VM is not booted successfully. Error: {}".format(err)
 
