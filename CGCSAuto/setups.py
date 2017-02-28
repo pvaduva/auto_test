@@ -6,7 +6,7 @@ from utils import exceptions
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
 from utils.node import create_node_boot_dict, create_node_dict
-from consts.auth import Tenant, CliAuth
+from consts.auth import Tenant, CliAuth, Host
 from consts.cgcs import Prompt
 from consts.filepaths import PrivKeyPath
 from consts.lab import Labs, add_lab_entry, NatBoxes
@@ -111,7 +111,18 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh):
                 con_ssh.expect(Prompt.CONTROLLER_0)
 
             # ssh keys should now exist under wrsroot home dir
-            con_ssh.exec_sudo_cmd('cp {} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.OPT_PLATFORM), fail_ok=False)
+            active_con = system_helper.get_active_controller_name()
+            if active_con != 'controller-0':
+                con_ssh.send(
+                        'scp controller-0:{} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.WRS_HOME))
+                index = con_ssh.expect([Prompt.PASSWORD_PROMPT, Prompt.CONTROLLER_1])
+                if index == 0:
+                    con_ssh.send(Host.PASSWORD)
+                    con_ssh.expect()
+                con_ssh.exec_sudo_cmd('cp {} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.OPT_PLATFORM), fail_ok=False)
+                con_ssh.exec_cmd('rm {}'.format(PrivKeyPath.WRS_HOME))
+            else:
+                con_ssh.exec_sudo_cmd('cp {} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.OPT_PLATFORM), fail_ok=False)
 
         # ssh private key should now exist under /opt/platform dir
         cmd_1 = 'cp {} {}'.format(PrivKeyPath.OPT_PLATFORM, keyfile_name)
