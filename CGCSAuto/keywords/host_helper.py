@@ -2113,7 +2113,21 @@ def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fai
     res = {}
     rtn_code = 0
     for host in hosts:
-        if_names = system_helper.get_host_interfaces_info(host, rtn_val='name', net_type=network_type, con_ssh=con_ssh)
+        table_ = table_parser.table(cli.system('host-if-list', '{} --nowrap'.format(host), ssh_client=con_ssh))
+        table_ = table_parser.filter_table(table_, **{'network type': network_type})
+        uses_if_names = table_parser.get_values(table_, 'name', exclude=True, **{'uses i/f': '[]'})
+        non_uses_if_names = table_parser.get_values(table_, 'name', exclude=False, **{'uses i/f': '[]'})
+        uses_if_first = False
+        if uses_if_names:
+            current_mtu = int(system_helper.get_host_if_show_values(host, interface=uses_if_names[0], fields=['imtu'],
+                                                                    con_ssh=con_ssh)[0])
+            if current_mtu <= mtu_val:
+                uses_if_first = True
+
+        if uses_if_first:
+            if_names = uses_if_names + non_uses_if_names
+        else:
+            if_names = non_uses_if_names + uses_if_names
 
         if lock_unlock:
             lock_host(host, swact=True)
