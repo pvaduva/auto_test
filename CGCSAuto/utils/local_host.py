@@ -118,18 +118,20 @@ def vlm_exec_cmd(action, barcode, reserve=True):
         LOG.info(msg)
         return 1, msg
 
-    elif int(barcode) not in vlm_findmine():
+    else:
         if reserve:
-            # reserve barcode
-            if reserve_vlm_console(barcode)[0] != 0:
-                msg = "Failed to {} target {}. Target is not reserved by user".format(action, barcode)
+            if int(barcode) not in vlm_findmine():
+                # reserve barcode
+                if reserve_vlm_console(barcode)[0] != 0:
+                    msg = "Failed to {} target {}. Target is not reserved by user".format(action, barcode)
+                    LOG.info(msg)
+                    return 1, msg
+        else:
+            cmd = [VLM, action, "-t", barcode]
+            output = exec_cmd(cmd)[1]
+            if output != "1":
+                msg = 'Failed to execute "{}" on target'.format(barcode)
                 LOG.info(msg)
                 return 1, msg
-    else:
-        cmd = [VLM, action, "-t", barcode]
-        output = exec_cmd(cmd)[1]
-        if output != "1":
-            msg = 'Failed to execute "{}" on target'.format(barcode)
-            LOG.info(msg)
-            return 1, msg
+
     return 0, None
