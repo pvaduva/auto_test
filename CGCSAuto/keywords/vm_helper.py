@@ -506,7 +506,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     Returns (tuple): (return_code (int), error_msg_if_migration_rejected (str))
         (0, 'Live migration is successful.'):
             live migration succeeded and post migration checking passed
-        (1, <cli stderr>):
+        (1, <cli stderr>):  # This scenario is changed to host did not change as excepted
             live migration request rejected as expected. e.g., no available destination host,
             or live migrate a vm with block migration
         (2, <cli stderr>): live migration request rejected due to unknown reason.
@@ -514,7 +514,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
             live migration command executed successfully, but VM is in Error state after migration
         (4, 'Post action check failed: VM is not in original state.'):
             live migration command executed successfully, but VM is not in before-migration-state
-        (5, 'Post action check failed: VM host did not change!'):
+        (5, 'Post action check failed: VM host did not change!'):   (this scenario is removed from Newton)
             live migration command executed successfully, but VM is still on the same host after migration
 
     For the first two scenarios, results will be returned regardless of the fail_ok flag.
@@ -552,18 +552,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
                                  auth_info=auth_info)
 
     if exit_code == 1:
-        LOG.warning("Live migration of vm {} failed. Checking if this is expected failure...".format(vm_id))
-        if _is_live_migration_allowed(vm_id, block_migrate=block_migrate) and \
-                (destination_host or get_dest_host_for_live_migrate(vm_id)):
-            if fail_ok:
-                return 2, output
-            else:
-                raise exceptions.VMPostCheckFailed("Unexpected failure of live migration!")
-        else:
-            LOG.debug("System does not allow live migrating vm {} as expected.".format(vm_id))
-            return 1, output
-    elif exit_code > 1:             # this is already handled by CLI module
-        raise exceptions.CLIRejected("Live migration command rejected.")
+        raise exceptions.VMError("This should not happen in Newton with live-migrate async change. Please investigate")
 
     LOG.info("Waiting for VM status change to {} with best effort".format(VMStatus.MIGRATING))
     in_mig_state = _wait_for_vm_status(vm_id, status=VMStatus.MIGRATING, timeout=60)
@@ -596,11 +585,21 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
 
     if before_host == after_host:
-        if fail_ok:
-            return 5, "Post action check failed: VM host did not change!"
+        LOG.warning("Live migration of vm {} failed. Checking if this is expected failure...".format(vm_id))
+        if _is_live_migration_allowed(vm_id, block_migrate=block_migrate) and \
+                (destination_host or get_dest_host_for_live_migrate(vm_id)):
+            if fail_ok:
+                return 2, output
+            else:
+                raise exceptions.VMPostCheckFailed("Unexpected failure of live migration!")
         else:
-            raise exceptions.VMPostCheckFailed("VM did not migrate to other host! VM: {}, Status:{}, Host: {}".
-                                               format(vm_id, before_status, after_host))
+            LOG.debug("System does not allow live migrating vm {} as expected.".format(vm_id))
+            return 1, output
+        # if fail_ok:
+        #     return 5, "Post action check failed: VM host did not change!"
+        # else:
+        #     raise exceptions.VMPostCheckFailed("VM did not migrate to other host! VM: {}, Status:{}, Host: {}".
+        #                                        format(vm_id, before_status, after_host))
 
     LOG.info("VM {} successfully migrated from {} to {}".format(vm_id, before_host, after_host))
     return 0, "Live migration is successful."

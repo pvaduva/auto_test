@@ -121,12 +121,14 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
     # block_mig = True if boot_source == 'image' else False
     code, output = vm_helper.live_migrate_vm(vm_id, block_migrate=block_mig)
     assert 1 == code, "Expect live migration to have expected fail. Actual: {}".format(output)
-    assert 'Unexpected API Error'.lower() not in output.lower(), "'Unexpected API Error' returned."
 
-    # remove extra spaces in error message
-    output = re.sub(r'\s\s+', " ", output)
-    assert eval(expt_err) in output, "Expected error message {} is not in actual error message: {}".\
-        format(eval(expt_err), output)
+    # Remove below code due to live-migration is async in newton
+    # assert 'Unexpected API Error'.lower() not in output.lower(), "'Unexpected API Error' returned."
+    #
+    # # remove extra spaces in error message
+    # output = re.sub(r'\s\s+', " ", output)
+    # assert eval(expt_err) in output, "Expected error message {} is not in actual error message: {}".\
+    #     format(eval(expt_err), output)
 
     post_vm_host = nova_helper.get_vm_host(vm_id)
     assert prev_vm_host == post_vm_host, "VM host changed even though live migration request rejected."
