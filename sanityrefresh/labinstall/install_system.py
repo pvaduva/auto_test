@@ -776,7 +776,7 @@ def get_system_name(bld_server_conn, lab_cfg_path):
     return ((system_name.split('=')[1])[5:]).replace('"', '')
 
 
-def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True, usb=False):
+def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True, usb=False, lowlat=False):
     ''' Initiate the boot and installation operation.
     '''
 
@@ -1738,6 +1738,7 @@ def main():
     logutils.print_name_value("ISO Host", iso_host)
     logutils.print_name_value("ISO Path", iso_path)
     logutils.print_name_value("Simplex", simplex)
+    logutils.print_name_value("Low Lat", lowlat)
 
     email_info = {}
     email_info['email_server'] = EMAIL_SERVER
