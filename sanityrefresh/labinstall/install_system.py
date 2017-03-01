@@ -126,6 +126,10 @@ def parse_args():
                          action='store_true',
                          help="Simplex install")
 
+    lab_grp.add_argument('--lowlat', dest='lowlat',
+                         action='store_true',
+                         help="Low latency option for CPE and Simplex")
+
     lab_grp.add_argument('--boot-usb', dest='boot_usb',
                          action='store_true',
                          help="Boot using the existing load on the USB")
@@ -959,8 +963,8 @@ def write_install_vars(args):
     install_vars = dict((k, str(v)) for k, v, in (vars(args)).items())
 
     config['INSTALL_CONFIG'] = install_vars
-    #if os.path.exists(file_path):
-    #    os.remove(file_path)
+    if os.path.exists(file_path):
+        os.remove(file_path)
 
     with open(file_path, "w") as install_var_file:
         os.chmod(file_path, 0o777)
@@ -1085,7 +1089,7 @@ def open_telnet_session(_controller0, install_output_dir):
 
 def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths,
                       host_os, boot_device_dict, small_footprint, burn_usb,
-                      tis_on_tis, boot_usb, iso_path, iso_host):
+                      tis_on_tis, boot_usb, iso_path, iso_host, lowlat):
 
     global controller0
     #global cumulus
@@ -1103,7 +1107,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
             usb = False
 
         # Boot up controller0
-        rc = bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False, usb=usb)
+        rc = bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False, usb=usb, lowlat=lowlat)
         if rc != 0:
             msg = "Unable to bring up controller-0"
             wr_exit()._exit(1, msg)
@@ -1641,6 +1645,7 @@ def main():
     iso_host = args.iso_host
     iso_path = args.iso_path
     simplex = args.simplex
+    lowlat = args.lowlat
     skip_feed = args.skip_feed
     host_os = args.host_os
     stop = args.stop
@@ -1989,7 +1994,8 @@ def main():
     #if not executed:
     if do_next_install_step(lab_type, lab_install_step):
         bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths, host_os,
-                          boot_device_dict, small_footprint, burn_usb, tis_on_tis, boot_usb, iso_path, iso_host)
+                          boot_device_dict, small_footprint, burn_usb,
+                          tis_on_tis, boot_usb, iso_path, iso_host, lowlat)
         set_install_step_complete(lab_install_step)
 
     if stop == "1":
