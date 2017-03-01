@@ -1117,6 +1117,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
         if cumulus:
             cumulus.tis_install()
             controller0.host_ip = cumulus.get_floating_ip("EXTERNALOAMC0")
+            controller0.host_floating_ip = cumulus.get_floating_ip('EXTERNALOAMFLOAT')
             #Boot up controller0
             cumulus.launch_controller0()
         else:
