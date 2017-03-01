@@ -280,6 +280,7 @@ def __hosts_stay_in_states(hosts, duration=10, con_ssh=None, **states):
     while time.time() < end_time:
         if not __hosts_in_states(hosts=hosts, con_ssh=con_ssh, **states):
             return False
+        time.sleep(1)
 
     return True
 
