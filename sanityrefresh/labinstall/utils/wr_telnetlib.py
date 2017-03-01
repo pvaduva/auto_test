@@ -1202,6 +1202,12 @@ class Telnet:
                 log.info("Boot device is: USB")
             else:
                 log.info("Boot device is: " + str(boot_device_regex))
+
+            # GENERIC USB
+            if usb and node.name == CONTROLLER0: 
+                log.info("Looking for USB device")
+                boot_device_regex = "USB|Kingston|JetFlash"
+
             # Read until we are prompted for the boot type
             self.get_read_until("PXE")
             log.info("Pressing BIOS key " + bios_key_hr)
