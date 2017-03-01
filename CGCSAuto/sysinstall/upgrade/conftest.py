@@ -234,20 +234,14 @@ def upgrade_setup(pre_check_upgrade):
     LOG.info("Target release license installed......")
 
     # Run the load_import command to import the new release iso image build
-    LOG.tc_step("Importing the target release  load iso file".format(upgrade_load_path))
-    output = system_helper.import_load(upgrade_load_path)
-
-    # check if upgrade load software is imported successfully
-    if output[0] == 0:
-        ver = output[2]
-    else:
-        ver = (system_helper.get_imported_load_version()).pop()
-
-    LOG.tc_step("Checking if target release load is imported......")
+    if not system_helper.get_imported_load_version():
+        LOG.tc_step("Importing Target release  load iso file from".format(upgrade_load_path))
+        output = system_helper.import_load(upgrade_load_path)
+    ver = (system_helper.get_imported_load_version()).pop()
+    LOG.info("The target release  load iso file {} imported".format(upgrade_load_path))
     assert upgrade_version in ver, "Import error. Expected " \
                                    "version {} not found in imported load list" \
                                    "{}".format(upgrade_version, ver)
-    LOG.info("The target release  load iso file {} imported".format(upgrade_load_path))
 
     # download and apply patches if patches are available in patch directory
     if patch_dir:
@@ -261,7 +255,6 @@ def upgrade_setup(pre_check_upgrade):
                       'upgrade_version': upgrade_version,
                       'build_server': bld_server_obj,
                       }
-
     return _upgrade_setup
 
 

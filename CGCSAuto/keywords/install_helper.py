@@ -1,4 +1,5 @@
 import os
+import telnetlib
 import threading
 from contextlib import contextmanager
 
@@ -13,8 +14,10 @@ from keywords import system_helper, host_helper
 # from keywords.vlm_helper import bring_node_console_up
 from utils import exceptions, local_host
 from utils import local_host
+from utils import telnet as telnetlib
 from utils.ssh import SSHClient
 from utils.tis_log import LOG
+
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
 
