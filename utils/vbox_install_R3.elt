@@ -49,12 +49,12 @@ Install VirtualBox on Linux or Windows Host
 .	./vbox_install_R3.elt pull_new_image=yes topology=2only rel2=no
 	e.g. for linux with Network Conolidation
 	.	e.g. for linux
-.	./vbox_install_R3.elt pull_new_image=yes topology=2x2x2 rel2=yes con=MI_O str=MI com=MI_D
+.	./vbox_install_R3.elt pull_new_image=yes topology=2x2x2 con=MI_O str=MI com=MI_D
 
 .	e.g. for windows
 .	./vbox_install_R3.elt -r <windows machine IP> pull_new_image=yes topology=2x1 con=MI_O str=MI com=MI_D
 .	e.g for linux
-	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install_R3.elt pull_new_image=yes topology=1x1 rel2=yes con=MI_O str=MI com=MI_D load=GA2 patch=yes https=no
+	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install_R3.elt pull_new_image=yes topology=1x1 con=MI_O str=MI com=MI_D patch=yes https=no
 .
 . 	Supported topology
 . 		2only 	- controller-0 controller-1
@@ -950,8 +950,7 @@ $part=1
 
 >>^J
 >>^I
-#>>^I
-#>>^I
+
 >>^M
 <Starting Anaconda
 >>^C
@@ -965,7 +964,9 @@ $part=1
 >>^M
 ; === protect against blue screen of death
 #>socat UNIX-CONNECT:$serial_pipe - | egrep -i 'restarting system'
->$console_connect | egrep -i 'restarting system'
+>$console_connect | egrep -i 'Restarting system'
+#>$console_connect | egrep -i 'booting'
+
 
 <Restarting system
 >>^C
@@ -1032,9 +1033,6 @@ $part=1
 ; === install tenant files and guest images
 $install_tenant_files=yes
 $directory=R3_files
-? if $load == GA2 ?[
-	$directory=R2_files
-]
 ?if $install_sw !=no? [	
 	# get IP address of host (use netstat -an | grep :22)
 	>netstat -an | grep :22
@@ -1062,8 +1060,8 @@ $directory=R3_files
 ######################## Patching begin ##############################
 	?if $patch == yes ? [
 		@1500
-		; === Copying Patch file for 15.12
-		>wget -r -nH -nd -np -R index.html* --no-parent http://10.10.10.254:8088/files/install/R2_patches/
+		; === Copying Patch file from 16.10
+		>wget -r -nH -nd -np -R index.html* --no-parent http://10.10.10.254:8088/files/install/R3_patches/
 		>mkdir patches
 		>mv *.patch patches/
 		>sudo sw-patch query
@@ -1077,12 +1075,15 @@ $directory=R3_files
 		; === Install Patches
 		>sudo sw-patch install-local
 		<Patch installation is complete
+		; === set up sudo root access (to make it easier later in the interact session)
+		>echo "$pass" | sudo -S id
+		<root
                 >sudo sw-patch query
                 >sudo sw-patch query-hosts
-		; === Reboot the compute
+		; === Reboot the controller
 		>sudo reboot
 		*FORK serial
-		>>^M
+		>>^C
 		; === reconnect to serial
 		>$console_connect
 		<login:
@@ -1101,12 +1102,11 @@ $directory=R3_files
 		>export TMOUT=0
 
 		; === setup first IP interface
-		>sudo /sbin/ip addr add $IP/24 dev eth0
-		>sudo /sbin/ip link set eth0 up
+		>sudo /sbin/ip addr add $IP/24 dev $eth0
+		>sudo /sbin/ip link set $eth0 up
 		>ping $ping_opt  $IP
 		<time=
-		>
-		>
+
 
 		*FORK SSH
 		; === ping controller
@@ -1305,7 +1305,7 @@ $directory=R3_files
 #>>^M
 #<Nameserver
 #>>^M
-<Nameserver
+#<Nameserver
 #>>^M
 >c
 

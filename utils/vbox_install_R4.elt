@@ -46,15 +46,15 @@ Install VirtualBox on Linux or Windows Host
 .		https=yes                       (default no)
 
 .	e.g. for linux
-.	./vbox_install_R3.elt pull_new_image=yes topology=2only rel2=no
+.	./vbox_install_R4.elt pull_new_image=yes topology=2only rel2=no
 	e.g. for linux with Network Conolidation
 	.	e.g. for linux
-.	./vbox_install_R3.elt pull_new_image=yes topology=2x2x2 rel2=yes con=MI_O str=MI com=MI_D
+.	./vbox_install_R4.elt pull_new_image=yes topology=2x2x2 rel2=yes con=MI_O str=MI com=MI_D
 
 .	e.g. for windows
-.	./vbox_install_R3.elt -r <windows machine IP> pull_new_image=yes topology=2x1 con=MI_O str=MI com=MI_D
+.	./vbox_install_R4.elt -r <windows machine IP> pull_new_image=yes topology=2x1 con=MI_O str=MI com=MI_D
 .	e.g for linux
-	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install_R3.elt pull_new_image=yes topology=1x1 rel2=yes con=MI_O str=MI com=MI_D load=GA2 patch=yes https=no
+	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install_R4.elt pull_new_image=yes topology=1x1 rel2=yes con=MI_O str=MI com=MI_D load=GA2 patch=yes https=no
 .
 . 	Supported topology
 . 		2only 	- controller-0 controller-1
@@ -198,6 +198,7 @@ $source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/TS_16.10_Host/la
 ?if $load == GA2 ?[
 	$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_bootimage.iso
 ]
+$source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/latest_bootimage.iso
 
 $boot_image=/home/$USER/VBox/latest_bootimage.iso
 $boot_dir=$boot_image
@@ -292,6 +293,9 @@ $boot_image_win=/drives/c/Users/$USER/VBox/latest_bootimage.iso
 
 ## Patch
 $patch=no
+
+## sdn
+$sdn=no
 
 >date +%F_%T#
 +$DATE=\n(.+)#
@@ -950,8 +954,6 @@ $part=1
 
 >>^J
 >>^I
-#>>^I
-#>>^I
 >>^M
 <Starting Anaconda
 >>^C
@@ -965,7 +967,9 @@ $part=1
 >>^M
 ; === protect against blue screen of death
 #>socat UNIX-CONNECT:$serial_pipe - | egrep -i 'restarting system'
->$console_connect | egrep -i 'restarting system'
+>$console_connect | egrep -i 'Restarting system'
+#>$console_connect | egrep -i 'booting'
+
 
 <Restarting system
 >>^C
@@ -1031,7 +1035,7 @@ $part=1
 
 ; === install tenant files and guest images
 $install_tenant_files=yes
-$directory=R3_files
+$directory=R4_files
 ? if $load == GA2 ?[
 	$directory=R2_files
 ]
@@ -1077,9 +1081,12 @@ $directory=R3_files
 		; === Install Patches
 		>sudo sw-patch install-local
 		<Patch installation is complete
+		; === set up sudo root access (to make it easier later in the interact session)
+		>echo "$pass" | sudo -S id
+		<root
                 >sudo sw-patch query
                 >sudo sw-patch query-hosts
-		; === Reboot the compute
+		; === Reboot the controller
 		>sudo reboot
 		*FORK serial
 		>>^M
@@ -1166,6 +1173,7 @@ $directory=R3_files
 *EXP_INFO
 *FORK $connection
 ; === Configuring Controller Interface with Scenario $controller_consolidation
+>export TMOUT=0
 >time sudo config_controller
 <time correct
 >y
@@ -1189,8 +1197,17 @@ $directory=R3_files
 ]
 <Cinder LVM type
 >>^M
-<Enable SDN Network configuration
->>^M
+
+?if $sdn == yes ? [
+	<Enable SDN Network configuration
+	>>y
+]
+
+?if $sdn == no ? [
+	<Enable SDN Network configuration
+	>>n
+]
+
 <Configure a separate PXEBoot network
 >$pxe_network
 
@@ -1299,23 +1316,7 @@ $directory=R3_files
 <External OAM Network Multicast subnet
 >>^M
 
-; === Domain Name System (DNS):
 
-<Nameserver
-#>>^M
-#<Nameserver
-#>>^M
-<Nameserver
-#>>^M
->c
-
-<NTP server 1
-#>>^M
-#<NTP server 2
-#>>^M
-#<NTP server 3
-#>>^M
->c
 <License File
 >>^M
 ?if $rel3 == yes? [
