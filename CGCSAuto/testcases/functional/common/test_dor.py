@@ -1,6 +1,4 @@
 import time
-import multiprocessing as mp
-from multiprocessing import Process
 
 from utils.tis_log import LOG
 from utils import local_host
@@ -9,33 +7,28 @@ from consts.vlm import VlmAction
 from keywords import system_helper, vlm_helper, host_helper, vm_helper
 from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module
 
-START_POWER_CUT = False
 
+def power_off_and_on(barcode, power_off_event, timeout):
 
-def power_off_and_on(barcode):
-    while True:
-        if START_POWER_CUT:
-            rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode, reserve=False)
-            assert '1' == str(output), "Failed to turn off target"
-            return
+    if power_off_event.wait(timeout=timeout):
+        rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode, reserve=False)
+        assert '1' == str(output), "Failed to turn off target"
+        LOG.info("{} powered off successfully".format(barcode))
+        return
+    else:
+        raise TimeoutError("Timed out waiting for power_off_event to be set")
 
 
 def test_dead_office_recovery(reserve_unreserve_all_hosts_module):
     hosts = system_helper.get_hostnames()
+    hosts_to_check = system_helper.get_hostnames(availability=['available', 'online'])
 
-    barcodes = vlm_helper.get_barcodes_from_hostnames(hosts)
-    new_ps = []
-    for barcode in barcodes:
-        new_p = Process(power_off_and_on, args=barcode)
-        new_ps.append(new_p)
-        new_p.start()
-    global START_POWER_CUT
-    START_POWER_CUT = True
+    LOG.info("Online or Available hosts before power-off: {}".format(hosts_to_check))
+    LOG.tc_step("Powering off hosts in multi-processes to simulate power outage: {}".format(hosts))
+    vlm_helper.power_off_hosts_simultaneously(hosts)
 
-    for p in new_ps:
-        p.join(timeout=300)
-
-    LOG.tc_step("Wait for 30 seconds before powering on")
+    LOG.tc_step("Wait for 30 seconds and power on hosts: {}".format(hosts))
     time.sleep(30)
-
-    vlm_helper.power_on_hosts(hosts, reserve=False, reconnect_timeout=HostTimeout.REBOOT+120)
+    LOG.info("Hosts to check after power-on: {}".format(hosts_to_check))
+    vlm_helper.power_on_hosts(hosts, reserve=False, reconnect_timeout=HostTimeout.REBOOT+120,
+                              hosts_to_check=hosts_to_check)

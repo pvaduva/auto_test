@@ -90,9 +90,9 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
     Get hostnames with given criteria
     Args:
         personality (str):
-        administrative (str):
-        operational (str):
-        availability (str):
+        administrative (str|list):
+        operational (str|list):
+        availability (str|list):
         name (str):
         strict (bool):
         exclude (bool):

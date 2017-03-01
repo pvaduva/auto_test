@@ -1,8 +1,11 @@
+import multiprocessing as mp
+from multiprocessing import Process
+
 from consts.proj_vars import InstallVars
 from consts.vlm import VlmAction
 from consts.timeout import HostTimeout
 
-from keywords import host_helper
+from keywords import host_helper, system_helper
 from utils import exceptions, local_host
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -113,7 +116,7 @@ def power_off_hosts(hosts, reserve=True):
 
 
 def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconnect_timeout=HostTimeout.REBOOT,
-                   con_ssh=None):
+                   hosts_to_check=None, con_ssh=None):
     """
 
     Args:
@@ -122,6 +125,7 @@ def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconne
         post_check (bool): whether to wait for hosts to be ready after power on
         reconnect (bool): whether or reconnect to lab via ssh after power on. Useful when power on controllers
         reconnect_timeout (int): max seconds to wait before reconnect succeeds
+        hosts_to_check (list|str|None): host(s) to perform post check after power-on. when None, hosts_to_check=hosts
         con_ssh (SSHClient):
 
     Returns:
@@ -141,11 +145,16 @@ def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconne
             con_ssh.connect(retry=True, retry_timeout=reconnect_timeout)
             host_helper._wait_for_openstack_cli_enable(con_ssh=con_ssh)
 
-        host_helper.wait_for_hosts_ready(hosts, con_ssh=con_ssh)
+        if not hosts_to_check:
+            hosts_to_check = hosts
+        elif isinstance(hosts_to_check, str):
+            hosts_to_check = [hosts_to_check]
+
+        host_helper.wait_for_hosts_ready(hosts_to_check, con_ssh=con_ssh)
 
 
 def reboot_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconnect_timeout=HostTimeout.REBOOT,
-                 con_ssh=None):
+                 hosts_to_check=None, con_ssh=None):
     if isinstance(hosts, str):
         hosts = [hosts]
 
@@ -159,7 +168,12 @@ def reboot_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconnect
             con_ssh.connect(retry=True, retry_timeout=reconnect_timeout)
             host_helper._wait_for_openstack_cli_enable(con_ssh=con_ssh)
 
-        host_helper.wait_for_hosts_ready(hosts, con_ssh=con_ssh)
+        if not hosts_to_check:
+            hosts_to_check = hosts
+        elif isinstance(hosts_to_check, str):
+            hosts_to_check = [hosts_to_check]
+
+        host_helper.wait_for_hosts_ready(hosts_to_check, con_ssh=con_ssh)
 
 
 def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, reserve=True):
@@ -178,3 +192,41 @@ def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, reserve=Tru
             raise exceptions.VLMError(err_msg)
 
         LOG.info("{} succeeded on {} {}".format(action, host, barcode))
+
+
+def power_off_hosts_simultaneously(hosts=None):
+    """
+    Power off hosts in multi-processes to simulate power outage. This can be used for DOR.
+    Args:
+        hosts (list|None): when None, all hosts on system will be powered off
+
+    Returns:
+
+    """
+    def _power_off(barcode_, power_off_event_, timeout_):
+
+        if power_off_event_.wait(timeout=timeout_):
+            rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode_, reserve=False)
+            assert '1' == str(output), "Failed to turn off target"
+            LOG.info("{} powered off successfully".format(barcode))
+            return
+        else:
+            raise TimeoutError("Timed out waiting for power_off_event to be set")
+
+    if not hosts:
+        hosts = system_helper.get_hostnames()
+
+    barcodes = get_barcodes_from_hostnames(hosts)
+    power_off_event = mp.Event()
+    new_ps = []
+    for barcode in barcodes:
+        new_p = Process(target=_power_off, args=(barcode, power_off_event, 180))
+        new_ps.append(new_p)
+        new_p.start()
+
+    LOG.info("Powering off hosts in multi-processes to simulate power outage: {}".format(hosts))
+    power_off_event.set()
+
+    for p in new_ps:
+        p.join(timeout=300)
+

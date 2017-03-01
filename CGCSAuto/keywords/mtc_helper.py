@@ -8,7 +8,7 @@ from consts.auth import Tenant
 from utils import cli, table_parser
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
-from keywords import system_helper, host_helper, storage_helper
+from keywords import system_helper, host_helper, storage_helper, vlm_helper
 from consts.timeout import MTCTimeout
 
 
@@ -770,5 +770,3 @@ def wait_for_sm_dump_services_active(timeout=60, fail_ok=False, con_ssh=None):
     """
     active_controller = system_helper.get_active_controller_name(con_ssh=con_ssh)
     return host_helper.wait_for_sm_dump_desired_states(controller=active_controller, timeout=timeout, fail_ok=fail_ok)
-
-

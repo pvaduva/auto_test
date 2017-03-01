@@ -214,7 +214,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         raise exceptions.HostPostCheckFailed(err_msg)
 
 
-def wait_for_hosts_ready(hosts, con_ssh=None):
+def wait_for_hosts_ready(hosts, con_ssh=None, fail_ok=False):
     """
     Wait for hosts to be in online state is locked, and available and hypervisor/webservice up if unlocked
     Args:
