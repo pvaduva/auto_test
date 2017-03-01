@@ -57,11 +57,11 @@ def vms_with_upgrade():
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     vm_helper.wait_for_vm_pingable_from_natbox(vm1)
     vm_helper.wait_for_vm_pingable_from_natbox(vm2)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.TENANT2)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.TENANT1)
 
     LOG.fixture_step("Boot vm3 from image with flavor flv_rootdisk and wait for it pingable from NatBox")
     vm3_name = "image_root"
-    vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, auth_info=Tenant.TENANT2)[1]
+    vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, auth_info=Tenant.TENANT1)[1]
     ResourceCleanup.add('vm', vm3, del_vm_vols=True)
 
     LOG.fixture_step("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it "
@@ -85,12 +85,13 @@ def vms_with_upgrade():
     vm_helper.wait_for_vm_pingable_from_natbox(vm5)
 
     vms = [vm1, vm2, vm3, vm4, vm5]
-    vm_helper.ping_vms_from_natbox(vms)
-
+    return vms
 
 def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_query_upgrade):
 
     LOG.info("Boot VM before upgrade ")
+    vms=vms_with_upgrade
+    vm_helper.ping_vms_from_natbox(vms)
     lab = upgrade_setup['lab']
     current_version = upgrade_setup['current_version']
     upgrade_version = upgrade_setup['upgrade_version']
@@ -113,7 +114,8 @@ def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_que
     LOG.tc_step("Upgrading controller-1")
     host_helper.upgrade_host("controller-1", lock=True)
     LOG.info("Host controller-1 is upgraded successfully......")
-    
+
+    vm_helper.ping_vms_from_natbox(vms)
     # unlock upgraded controller-1
     LOG.tc_step("Unlocking controller-1 after upgrade......")
     host_helper.unlock_host("controller-1", available_only=True, check_hypervisor_up=False)
@@ -147,7 +149,7 @@ def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_que
     LOG.tc_step("Unlocking controller-0 after upgrade......")
     host_helper.unlock_host(controller0.name, available_only=True)
     LOG.info("Host {} unlocked after upgrade......".format(controller0.name))
-
+    vm_helper.ping_vms_from_natbox(vms)
     upgrade_hosts = install_helper.get_non_controller_system_hosts()
     LOG.info("Starting upgrade of the other system hosts: {}".format(upgrade_hosts))
 
@@ -163,6 +165,7 @@ def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_que
         host_helper.unlock_host(host, available_only=True)
         LOG.info("Host {} unlocked after upgrade......".format(host))
         LOG.info("Host {} upgrade complete.....".format(host))
+        vm_helper.ping_vms_from_natbox(vms)
 
     # Activate the upgrade
     LOG.tc_step("Activating upgrade....")
