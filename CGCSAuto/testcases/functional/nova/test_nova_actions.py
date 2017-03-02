@@ -13,7 +13,6 @@ def id_gen(val):
         return '-'.join(val)
 
 
-@mark.usefixtures('ubuntu14_image')
 @mark.parametrize(('guest_os', 'cpu_pol', 'actions'), [
     mark.priorities('sanity', 'cpe_sanity')(('ubuntu_14', 'dedicated', ['pause', 'unpause'])),
     mark.sanity(('ubuntu_14', 'shared', ['stop', 'start'])),
@@ -25,6 +24,8 @@ def test_nova_actions(guest_os, cpu_pol, actions):
         if not cinder_helper.is_volumes_pool_sufficient(min_size=40):
             skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
 
+    img_id = glance_helper.get_guest_image(guest_os=guest_os)
+
     LOG.tc_step("Create a flavor with 1 vcpu")
     flavor_id = nova_helper.create_flavor(name=cpu_pol, vcpus=1, root_disk=9)[1]
     ResourceCleanup.add('flavor', flavor_id)
@@ -35,7 +36,7 @@ def test_nova_actions(guest_os, cpu_pol, actions):
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
 
     LOG.tc_step("Create a volume from {} image".format(guest_os))
-    vol_id = cinder_helper.create_volume(name='vol-' + guest_os, guest_image=guest_os)[1]
+    vol_id = cinder_helper.create_volume(name='vol-' + guest_os, guest_image=guest_os, image_id=img_id)[1]
     ResourceCleanup.add('volume', vol_id)
 
     LOG.tc_step("Boot a vm from above flavor and volume")
@@ -63,12 +64,6 @@ class TestVariousGuests:
 
     @mark.p2
     @mark.features('guest_os')
-    # @mark.usefixtures('ubuntu14_image',
-    #                   'centos6_image', 'centos7_image',
-    #                   'opensuse11_image', 'opensuse12_image',
-    #                   # 'opensuse13_image',
-    #                   'rhel6_image', 'rhel7_image'
-    # )
     @mark.parametrize(('guest_os', 'cpu_pol', 'boot_source', 'actions'), [
         ('ubuntu_14', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('centos_6', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
@@ -108,7 +103,8 @@ class TestVariousGuests:
 
         LOG.tc_step("Get/Create {} glance image".format(guest_os))
         image_id = glance_helper.get_guest_image(guest_os=guest_os)
-        ResourceCleanup.add('image', image_id, scope='module')
+        if guest_os != 'ubuntu_14':
+            ResourceCleanup.add('image', image_id, scope='module')
 
         LOG.tc_step("Create a flavor with 2 vcpus")
         flavor_id = nova_helper.create_flavor(name=cpu_pol, vcpus=2, guest_os=guest_os)[1]

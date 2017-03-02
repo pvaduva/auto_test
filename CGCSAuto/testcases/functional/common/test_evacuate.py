@@ -111,11 +111,6 @@ class TestVariousGuests:
 
     @mark.trylast
     @mark.features('guest_os')
-    # @mark.usefixtures('ubuntu14_image',
-    #                   'centos6_image', 'centos7_image',
-    #                   'opensuse11_image', 'opensuse12_image',
-    #                   # 'opensuse13_image',
-    #                   'rhel6_image', 'rhel7_image')
     @mark.parametrize('guest_os', [
         'ubuntu_14',
         'centos_6', 'centos_7',
@@ -130,7 +125,8 @@ class TestVariousGuests:
 
         LOG.tc_step("Get/Create {} image".format(guest_os))
         img_id = glance_helper.get_guest_image(guest_os)
-        ResourceCleanup.add('image', img_id)
+        if guest_os != 'ubuntu_14':
+            ResourceCleanup.add('image', img_id)
 
         source_id = img_id if boot_source == 'image' else None
         LOG.tc_step("Boot a {} VM from {}".format(guest_os, boot_source))
