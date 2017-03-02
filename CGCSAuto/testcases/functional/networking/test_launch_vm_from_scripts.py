@@ -7,7 +7,7 @@ from keywords import vm_helper, nova_helper, network_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-@mark.parametrize('vm_type', ['avp'])
+@mark.parametrize('vm_type', ['avp', 'virtio', 'vswitch'])
 def test_vif_models(vm_type):
     """
     boot avp,e100 and virtio instance
