@@ -233,14 +233,14 @@ def wait_for_hosts_ready(hosts, con_ssh=None, fail_ok=False):
 
     if expt_online_hosts:
         LOG.info("Wait for hosts to be online: {}".format(hosts))
-        wait_for_host_states(hosts, availability=HostAvailabilityState.ONLINE, fail_ok=False)
+        wait_for_hosts_states(hosts, availability=HostAvailabilityState.ONLINE, fail_ok=False)
 
     if expt_avail_hosts:
         hypervisors = list(set(get_hypervisors()) & set(hosts))
         controllers = list(set(system_helper.get_controllers()) & set(hosts))
 
         LOG.info("Wait for hosts to be available: {}".format(hosts))
-        wait_for_host_states(hosts, availability=HostAvailabilityState.AVAILABLE, fail_ok=False)
+        wait_for_hosts_states(hosts, availability=HostAvailabilityState.AVAILABLE, fail_ok=False)
 
         if controllers:
             LOG.info("Wait for webservices up for hosts: {}".format(controllers))
