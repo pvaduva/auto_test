@@ -43,6 +43,7 @@ def router_info(request):
     return router_id
 
 
+@fixture()
 def _bring_up_router(request):
 
     def _router_up():
