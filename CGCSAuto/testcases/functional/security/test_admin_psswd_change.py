@@ -14,7 +14,7 @@ def _revert_admin_pw(request):
         # revert password
         LOG.fixture_step("Reverting admin password to '{}'".format(prev_pswd))
         keystone_helper.update_user('admin', password=prev_pswd)
-    request.add(_revert)
+    request.addfinalizer(_revert)
 
 
 @fixture(scope='module')
