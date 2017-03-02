@@ -1,5 +1,6 @@
 import re
 import time
+import pexpect
 from contextlib import contextmanager
 from xml.etree import ElementTree
 
@@ -719,12 +720,20 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None):
     return rtn
 
 
-def _wait_for_openstack_cli_enable(con_ssh=None, timeout=60, fail_ok=False, check_interval=1):
+def _wait_for_openstack_cli_enable(con_ssh=None, timeout=90, fail_ok=False, check_interval=1, reconnect=False,
+                                   reconnect_timeout=60):
     cli_enable_end_time = time.time() + timeout
     while True:
         try:
             cli.system('show', ssh_client=con_ssh, timeout=timeout)
             return True
+
+        except pexpect.EOF:
+            if reconnect:
+                if con_ssh is None:
+                    con_ssh = ControllerClient.get_active_controller()
+                con_ssh.connect(retry_timeout=reconnect_timeout)
+
         except Exception as e:
             if time.time() > cli_enable_end_time:
                 if fail_ok:

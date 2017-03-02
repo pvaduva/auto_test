@@ -12,7 +12,7 @@ def power_off_and_on(barcode, power_off_event, timeout):
 
     if power_off_event.wait(timeout=timeout):
         rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode, reserve=False)
-        assert '1' == str(output), "Failed to turn off target"
+        assert 0 == rc, "Failed to turn off target"
         LOG.info("{} powered off successfully".format(barcode))
         return
     else:

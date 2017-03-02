@@ -1,5 +1,5 @@
 import multiprocessing as mp
-from multiprocessing import Process
+from multiprocessing import Process, Queue
 
 from consts.proj_vars import InstallVars
 from consts.vlm import VlmAction
@@ -143,7 +143,7 @@ def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconne
 
         if reconnect:
             con_ssh.connect(retry=True, retry_timeout=reconnect_timeout)
-            host_helper._wait_for_openstack_cli_enable(con_ssh=con_ssh)
+            host_helper._wait_for_openstack_cli_enable(con_ssh=con_ssh, timeout=120, reconnect=True)
 
         if not hosts_to_check:
             hosts_to_check = hosts
@@ -203,30 +203,46 @@ def power_off_hosts_simultaneously(hosts=None):
     Returns:
 
     """
-    def _power_off(barcode_, power_off_event_, timeout_):
+    def _power_off(barcode_, power_off_event_, timeout_, output_queue):
 
         if power_off_event_.wait(timeout=timeout_):
             rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode_, reserve=False)
-            assert '1' == str(output), "Failed to turn off target"
-            LOG.info("{} powered off successfully".format(barcode))
-            return
+            rtn = rc, output
+
         else:
-            raise TimeoutError("Timed out waiting for power_off_event to be set")
+            err_msg = "Timed out waiting for power_off_event to be set"
+            LOG.error(err_msg)
+            rtn = 2, err_msg
+
+        if 0 == rtn[0]:
+            LOG.info("{} powered off successfully".format(barcode_))
+        else:
+            LOG.error("Failed to power off {}.".format(barcode_))
+        output_queue.put({barcode_: rtn})
 
     if not hosts:
         hosts = system_helper.get_hostnames()
 
     barcodes = get_barcodes_from_hostnames(hosts)
+    # Use event to send power off signal to all processes
     power_off_event = mp.Event()
     new_ps = []
+    # save results for each process
+    out_q = Queue()
     for barcode in barcodes:
-        new_p = Process(target=_power_off, args=(barcode, power_off_event, 180))
+        new_p = Process(target=_power_off, args=(barcode, power_off_event, 180, out_q))
         new_ps.append(new_p)
         new_p.start()
 
     LOG.info("Powering off hosts in multi-processes to simulate power outage: {}".format(hosts))
+    # send power-off signal
     power_off_event.set()
 
     for p in new_ps:
         p.join(timeout=300)
 
+    # Process results
+    results = out_q.get(timeout=10)
+    for node, res in results:
+        if res[0] != 0:
+            raise exceptions.VLMError(res[1])
