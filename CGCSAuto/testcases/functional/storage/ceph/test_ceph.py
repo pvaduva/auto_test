@@ -247,7 +247,7 @@ def test_ceph_mon_process_kill(monitor):
     # events instead.
         LOG.info('Check events list for ceph monitor failure')
 
-        entity_instance = 'host={}.process=ceph (mon.{}'.format(monitor, monitor)
+        entity_instance = 'host={}.process=ceph (mon.{}, )'.format(monitor, monitor)
         events = system_helper.wait_for_events(5, num=5, strict=False, fail_ok=True,
                                                **{'Entity Instance ID': entity_instance,
                                                   'Event Log ID': EventLogID.STORAGE_DEGRADE,
