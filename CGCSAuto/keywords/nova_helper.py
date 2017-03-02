@@ -1249,7 +1249,7 @@ def get_image_metadata(image, meta_keys, auth_info=Tenant.ADMIN, con_ssh=None):
     results = {}
     for meta_key in meta_keys:
         meta_key = meta_key.strip()
-        value = table_parser.get_value_two_col_table(table_, 'metadata '+meta_key, strict=False)
+        value = table_parser.get_value_two_col_table(table_, meta_key, strict=False)
         if value:
             results[meta_key] = value
 
