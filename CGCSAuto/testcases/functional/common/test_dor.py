@@ -25,10 +25,13 @@ def test_dead_office_recovery(reserve_unreserve_all_hosts_module):
 
     LOG.info("Online or Available hosts before power-off: {}".format(hosts_to_check))
     LOG.tc_step("Powering off hosts in multi-processes to simulate power outage: {}".format(hosts))
-    vlm_helper.power_off_hosts_simultaneously(hosts)
-
-    LOG.tc_step("Wait for 30 seconds and power on hosts: {}".format(hosts))
-    time.sleep(30)
-    LOG.info("Hosts to check after power-on: {}".format(hosts_to_check))
-    vlm_helper.power_on_hosts(hosts, reserve=False, reconnect_timeout=HostTimeout.REBOOT+120,
-                              hosts_to_check=hosts_to_check)
+    try:
+        vlm_helper.power_off_hosts_simultaneously(hosts)
+    except:
+        raise
+    finally:
+        LOG.tc_step("Wait for 30 seconds and power on hosts: {}".format(hosts))
+        time.sleep(30)
+        LOG.info("Hosts to check after power-on: {}".format(hosts_to_check))
+        vlm_helper.power_on_hosts(hosts, reserve=False, reconnect_timeout=HostTimeout.REBOOT+120,
+                                  hosts_to_check=hosts_to_check)
