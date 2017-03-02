@@ -207,12 +207,12 @@ def power_off_hosts_simultaneously(hosts=None):
 
         if power_off_event_.wait(timeout=timeout_):
             rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode_, reserve=False)
-            rtn = rc, output
+            rtn = (rc, output)
 
         else:
             err_msg = "Timed out waiting for power_off_event to be set"
             LOG.error(err_msg)
-            rtn = 2, err_msg
+            rtn = (2, err_msg)
 
         if 0 == rtn[0]:
             LOG.info("{} powered off successfully".format(barcode_))
@@ -243,6 +243,7 @@ def power_off_hosts_simultaneously(hosts=None):
 
     # Process results
     results = out_q.get(timeout=10)
-    for node, res in results:
+    LOG.info("Overall results: {}".format(results))
+    for node, res in results.items():
         if res[0] != 0:
             raise exceptions.VLMError(res[1])
