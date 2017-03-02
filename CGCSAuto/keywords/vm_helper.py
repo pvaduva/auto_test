@@ -441,6 +441,7 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
         vm_limit = host_ssh.exec_cmd("grep --color='never' -r {} lab_setup.conf | cut -d = -f2".
                                      format(VifMapping.VIF_MAP[vm_type]))[1]
 
+    vm_limit = int(vm_limit) if vm_limit else 0
     if num_vms == 'all':
         num_vms = vm_limit
     elif num_vms > vm_limit:

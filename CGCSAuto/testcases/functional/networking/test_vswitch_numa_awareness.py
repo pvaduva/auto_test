@@ -355,7 +355,8 @@ class TestNovaSchedulerAVS:
         host0, host1, storage_backing, ht_enabled = get_hosts
 
         function = 'vSwitch'
-        LOG.fixture_step("(class) Configure hosts to have 0 vSwitch cores on p0 and 2 vSwitch cores on p1: {}")
+        LOG.fixture_step("(class) Configure hosts to have 0 vSwitch cores on p0 and 2 vSwitch cores on p1: {}".
+                         format((host0, host1)))
 
         def _mod_host(host_, p0, p1):
             host_helper.modify_host_cpu(host_, function, p0=p0, p1=p1)
@@ -366,7 +367,7 @@ class TestNovaSchedulerAVS:
         if h0p0_is_match:
             p0_host = host0  # No config for host0
             p1_host = host1
-            h1p1_is_match, h1p1_p0_to_conf, h1p1_p1_to_conf = compare_cores_to_configure(host1, function, p0=2, p1=0)
+            h1p1_is_match, h1p1_p0_to_conf, h1p1_p1_to_conf = compare_cores_to_configure(host1, function, p0=0, p1=2)
             if not h1p1_is_match:   # config host1
                 hosts_to_config[p1_host] = {'p0': h1p1_p0_to_conf, 'p1': h1p1_p1_to_conf}
 
@@ -402,7 +403,13 @@ class TestNovaSchedulerAVS:
         for host_, configs in hosts_to_config.items():
             config_host_class(host_, _mod_host, **configs)
 
+        is_match_p0 = compare_cores_to_configure(p0_host, function, p0=2, p1=0)[0]
+        is_match_p1 = compare_cores_to_configure(p1_host, function, p0=0, p1=2)[0]
+        assert is_match_p0, "{} does not match vswitch core (2, 0)".format(p0_host)
+        assert is_match_p1, "{} does not match vswitch core (0, 2)".format(p1_host)
+
         final_hosts_configured = [p1_host, p0_host]
+
         return final_hosts_configured, storage_backing, ht_enabled
 
     @mark.parametrize(('vswitch_numa_affinity', 'numa_0', 'numa_nodes', 'expt_err'), [
@@ -426,7 +433,7 @@ class TestNovaSchedulerAVS:
             - Add admin role to primary tenant
             - Create cgcsauto aggregate
             - Delete all vms on the system
-            - Configure a host with vswitch = 0, 2, and antother with vswitch = 2, 0 and add them to cgcsauto zone
+            - Configure a host with vswitch = 0, 2, and another with vswitch = 2, 0 and add them to cgcsauto zone
 
         Test Steps:
             - Create flavor with 2 dedicated vcpus, and specified vswitch numa affinity, numa_0 and numa_nodes
