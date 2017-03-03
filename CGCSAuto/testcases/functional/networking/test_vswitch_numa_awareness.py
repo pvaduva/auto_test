@@ -496,7 +496,8 @@ class TestNovaSchedulerAVS:
                 min_vm_cores = vswitch_vm_cores
                 final_host = host
 
-        list(hosts_configured).remove(final_host)
+        hosts_configured = list(hosts_configured)
+        hosts_configured.remove(final_host)
         other_host = hosts_configured[0]
         flavor_vcpu_num = int(total_vswitch_vm_cores / 7) + 1
 
