@@ -687,8 +687,8 @@ class MonitoredProcess:
             return -1
 
         wait_time = 120
-        cmd = 'true; n=0; for((;n<{};)); do pid=$(cat {} 2>/dev/null); if [ "x$pid" = "x" ]; then break; fi;' \
-              'sudo kill -9 $pid &>/dev/null; if [ $? -eq 0 ]; then ((n++)); fi; echo -n " $n" ; ' \
+        cmd = 'true; n=0; for((;n<{};)); do pid=$(cat {} 2>/dev/null); if [ "x$pid" = "x" ]; then usleep 0.05; ' \
+              'continue; fi; sudo kill -9 $pid &>/dev/null; if [ $? -eq 0 ]; then ((n++)); fi; echo -n " $n" ; ' \
               'sleep {}; done; echo'.format(retries, pid_file, interval)
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
 
@@ -698,6 +698,8 @@ class MonitoredProcess:
                 if 0 != code:
                     LOG.warn('Failed to kill process:{} on host:{}, cli:\n{}\noutput:\n{}'.format(
                         name, host, cmd, output))
+                    debounce = int(getattr(self, 'debounce', '20'))
+                    time.sleep(debounce)
                     continue
                 break
 
@@ -723,12 +725,16 @@ class MonitoredProcess:
                 LOG.info('host:{} reached status:{} after been killed {} times on host {}'.format(
                     host, expected, retries, host))
 
-            if impact in ('disabled-failed'):
-                LOG.error('host:{} did not reach:{} in {} seconds'.format(host, expected, wait_time))
-                LOG.info('try to wait another {} seconds'.format(wait_time))
+            quorum = getattr(self, 'quorum', None)
+            if quorum == '1':
+                LOG.warn('Killing quorum process:{}, the impacted node should reboot'.format(name))
 
-                assert host_helper.wait_for_host_states(host, timeout=wait_time, con_ssh=con_ssh,
-                                                        fail_ok=False, **expected)
+            if impact in ('disabled-failed') or quorum == '1':
+                expected = {'operational': 'Disabled', 'availability': 'Failed'}
+                LOG.info('wait host getting into status:{}'.format(expected))
+                assert host_helper.wait_for_host_states(
+                    host, timeout=wait_time, con_ssh=con_ssh, fail_ok=False, **expected)
+
             elif impact in ('enabled-degraded'):
                 code, events = self.wait_for_pmon_process_events(
                     name, host, expected, process_type=process_type, severity=severity,
