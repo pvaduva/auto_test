@@ -14,7 +14,7 @@ from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HEAT_PATH
 from consts.auth import Tenant
 from consts.reasons import SkipReason
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, auth_info=None):

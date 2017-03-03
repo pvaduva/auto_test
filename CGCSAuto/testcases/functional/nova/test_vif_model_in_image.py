@@ -7,7 +7,7 @@ from consts.auth import Tenant
 from consts.cgcs import ImageMetadata
 from keywords import vm_helper, glance_helper, cinder_helper, network_helper
 
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @mark.p3

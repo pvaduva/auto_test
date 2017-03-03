@@ -11,13 +11,15 @@ from utils.tis_log import LOG
 
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
-    VMNetworkStr, EventLogID
+    VMNetworkStr, EventLogID, GuestImages
 from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
 
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
 from testfixtures.recover_hosts import HostsToRecover
+from testfixtures.fixture_resources import ResourceCleanup
+
 
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
     """
@@ -91,7 +93,7 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
             block_device_mapping=None,  vm_host=None, avail_zone=None, file=None, config_drive=False,
-            fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True):
+            fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True, cleanup=None):
     """
     Boot a vm with given parameters
     Args:
@@ -126,6 +128,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         reuse_vol (bool): whether or not to reuse the existing volume
         guest_os (str): Valid values: 'cgcs-guest', 'ubuntu_14', 'centos_6', 'centos_7', etc
         poll (bool):
+        cleanup (str|None): valid values: 'module', 'session', 'function', 'class', vm (and volume) will be deleted as
+            part of teardown
 
     Returns (tuple): (rtn_code(int), new_vm_id_if_any(str), message(str), new_vol_id_if_any(str))
         (0, vm_id, 'VM is booted successfully', <new_vol_id>)   # vm is created successfully and in Active state.
@@ -137,6 +141,10 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         (4, '', <stderr>, <new_vol_id>): create vm cli command failed, vm is not booted
 
     """
+    if cleanup is not None:
+        if cleanup not in ['module', 'session', 'function', 'class']:
+            raise ValueError("Invalid scope provided. Choose from: 'module', 'session', 'function', 'class', None")
+
     LOG.info("Processing boot_vm args...")
     # Handle mandatory arg - name
     tenant = common.get_tenant_name(auth_info=auth_info)
@@ -208,8 +216,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                                                                   guest_image=guest_os, rtn_exist=False)[1]
 
     elif source.lower() == 'image':
-        img_name = guest_os if guest_os else 'cgcs-guest'
-        image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=True)
+        img_name = guest_os if guest_os else GuestImages.DEFAULT_GUEST
+        image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=True, fail_ok=False)
 
     elif source.lower() == 'snapshot':
         if not snapshot_id:
@@ -226,7 +234,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     host_str = ':{}'.format(vm_host) if vm_host else ''
     host_zone = '{}{}'.format(avail_zone, host_str) if avail_zone else None
 
-    if user_data is None and guest_os and 'cgcs-guest' not in guest_os:
+    if user_data is None and guest_os and not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
         # create userdata cloud init file to run right after vm initialization to get ip on interfaces other than eth0.
         user_data = _create_cloud_init_if_conf(guest_os, nics_num=len(nics))
 
@@ -262,6 +270,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         name_str = name + '-'
         pre_boot_vms = nova_helper.get_vms(auth_info=auth_info, con_ssh=con_ssh, strict=False, name=name_str)
 
+    if cleanup and new_vol:
+        ResourceCleanup.add('volume', new_vol, scope=cleanup)
+
     LOG.info("Booting VM {}...".format(name))
     exitcode, output = cli.nova('boot', positional_args=args_, ssh_client=con_ssh,
                                 fail_ok=fail_ok, rtn_list=True, timeout=VMTimeout.BOOT_VM, auth_info=auth_info)
@@ -270,6 +281,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if min_count is None and max_count is None:
         table_ = table_parser.table(output)
         vm_id = table_parser.get_value_two_col_table(table_, 'id')
+        if cleanup and vm_id:
+            ResourceCleanup.add('vm', vm_id, scope=cleanup, del_vm_vols=False)
 
         if exitcode == 1:
             if vm_id:
@@ -310,6 +323,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         #         vm_ids.append(vm_id)
 
         vm_ids = list(set(post_boot_vms) - set(pre_boot_vms))
+        if cleanup and vm_ids:
+            ResourceCleanup.add('vm', vm_ids, scope=cleanup, del_vm_vols=False)
+
         if exitcode == 1:
             return 1, vm_ids, output
 
@@ -490,7 +506,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     Returns (tuple): (return_code (int), error_msg_if_migration_rejected (str))
         (0, 'Live migration is successful.'):
             live migration succeeded and post migration checking passed
-        (1, <cli stderr>):
+        (1, <cli stderr>):  # This scenario is changed to host did not change as excepted
             live migration request rejected as expected. e.g., no available destination host,
             or live migrate a vm with block migration
         (2, <cli stderr>): live migration request rejected due to unknown reason.
@@ -498,8 +514,9 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
             live migration command executed successfully, but VM is in Error state after migration
         (4, 'Post action check failed: VM is not in original state.'):
             live migration command executed successfully, but VM is not in before-migration-state
-        (5, 'Post action check failed: VM host did not change!'):
+        (5, 'Post action check failed: VM host did not change!'):   (this scenario is removed from Newton)
             live migration command executed successfully, but VM is still on the same host after migration
+        (6, <cli_stderr>) This happens when vote_note_to_migrate is set for vm
 
     For the first two scenarios, results will be returned regardless of the fail_ok flag.
     For scenarios other than the first two, returns are only applicable if fail_ok=True
@@ -536,18 +553,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
                                  auth_info=auth_info)
 
     if exit_code == 1:
-        LOG.warning("Live migration of vm {} failed. Checking if this is expected failure...".format(vm_id))
-        if _is_live_migration_allowed(vm_id, block_migrate=block_migrate) and \
-                (destination_host or get_dest_host_for_live_migrate(vm_id)):
-            if fail_ok:
-                return 2, output
-            else:
-                raise exceptions.VMPostCheckFailed("Unexpected failure of live migration!")
-        else:
-            LOG.debug("System does not allow live migrating vm {} as expected.".format(vm_id))
-            return 1, output
-    elif exit_code > 1:             # this is already handled by CLI module
-        raise exceptions.CLIRejected("Live migration command rejected.")
+        return 6, output
 
     LOG.info("Waiting for VM status change to {} with best effort".format(VMStatus.MIGRATING))
     in_mig_state = _wait_for_vm_status(vm_id, status=VMStatus.MIGRATING, timeout=60)
@@ -580,11 +586,21 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
 
     if before_host == after_host:
-        if fail_ok:
-            return 5, "Post action check failed: VM host did not change!"
+        LOG.warning("Live migration of vm {} failed. Checking if this is expected failure...".format(vm_id))
+        if _is_live_migration_allowed(vm_id, block_migrate=block_migrate) and \
+                (destination_host or get_dest_host_for_live_migrate(vm_id)):
+            if fail_ok:
+                return 2, output
+            else:
+                raise exceptions.VMPostCheckFailed("Unexpected failure of live migration!")
         else:
-            raise exceptions.VMPostCheckFailed("VM did not migrate to other host! VM: {}, Status:{}, Host: {}".
-                                               format(vm_id, before_status, after_host))
+            LOG.debug("System does not allow live migrating vm {} as expected.".format(vm_id))
+            return 1, output
+        # if fail_ok:
+        #     return 5, "Post action check failed: VM host did not change!"
+        # else:
+        #     raise exceptions.VMPostCheckFailed("VM did not migrate to other host! VM: {}, Status:{}, Host: {}".
+        #                                        format(vm_id, before_status, after_host))
 
     LOG.info("VM {} successfully migrated from {} to {}".format(vm_id, before_host, after_host))
     return 0, "Live migration is successful."
@@ -1752,7 +1768,7 @@ def rebuild_vm(vm_id, image_id=None, new_name=None, preserve_ephemeral=None, fai
                auth_info=Tenant.ADMIN, **metadata):
 
     if image_id is None:
-        image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
+        image_id = glance_helper.get_image_id_from_name(GuestImages.DEFAULT_GUEST, strict=True)
 
     args = '{} {}'.format(vm_id, image_id)
 
@@ -2492,7 +2508,8 @@ def _get_cloud_config_add_user(con_ssh=None):
     return file_path
 
 
-def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN, vm_image_name='cgcs-guest'):
+def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN,
+                             vm_image_name=None):
     """
     Cold migrate modifed for CGTS-4911
     Args:
@@ -2731,6 +2748,7 @@ def write_in_vm(vm_id, expect_timeout=120, thread_timeout=None, write_interval=5
     thread = multi_thread.MThread(_keep_writing, vm_id)
     thread_timeout = expect_timeout + 30 if thread_timeout is None else thread_timeout
     thread.start_thread(timeout=thread_timeout, keep_alive=True)
+    thread.wait_for_thread_end(timeout=thread_timeout)
     thread.end_now = False
     vm_ssh = thread.get_output(wait=True)
 
@@ -2932,3 +2950,51 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
 
     LOG.info("All vms are successfully evacuated to other host")
     return 0, []
+
+
+def boot_vms_various_types(storage_backing=None, target_host=None, scope='function'):
+    LOG.info("Create a flavor without ephemeral or swap disks")
+    flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing)[1]
+    ResourceCleanup.add('flavor', flavor_1, scope=scope)
+
+    LOG.info("Create another flavor with ephemeral and swap disks")
+    flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=1, storage_backing=storage_backing)[1]
+    ResourceCleanup.add('flavor', flavor_2, scope=scope)
+
+    LOG.info("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
+    vm1_name = "vol_root"
+    vm1 = boot_vm(vm1_name, flavor=flavor_1, source='volume', avail_zone='nova', vm_host=target_host, cleanup=scope)[1]
+
+    wait_for_vm_pingable_from_natbox(vm1)
+
+    LOG.info("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
+    vm2_name = "vol_ephemswap"
+    vm2 = boot_vm(vm2_name, flavor=flavor_2, source='volume', avail_zone='nova', vm_host=target_host, cleanup=scope)[1]
+
+    wait_for_vm_pingable_from_natbox(vm2)
+
+    LOG.info("Boot vm3 from image with flavor flv_rootdisk and wait for it pingable from NatBox")
+    vm3_name = "image_root"
+    vm3 = boot_vm(vm3_name, flavor=flavor_1, source='image', avail_zone='nova', vm_host=target_host, cleanup=scope)[1]
+
+    wait_for_vm_pingable_from_natbox(vm3)
+
+    LOG.info("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it "
+                "pingable from NatBox")
+    vm4_name = 'image_root_attachvol'
+    vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone='nova', vm_host=target_host, cleanup=scope)[1]
+
+    vol = cinder_helper.create_volume(bootable=False)[1]
+    ResourceCleanup.add('volume', vol, scope='class')
+    attach_vol_to_vm(vm4, vol_id=vol)
+
+    wait_for_vm_pingable_from_natbox(vm4)
+
+    LOG.info("Boot vm5 from image with flavor flv_localdisk and wait for it pingable from NatBox")
+    vm5_name = 'image_ephemswap'
+    vm5 = boot_vm(vm5_name, flavor_2, source='image', avail_zone='nova', vm_host=target_host, cleanup=scope)[1]
+
+    wait_for_vm_pingable_from_natbox(vm5)
+
+    vms = [vm1, vm2, vm3, vm4, vm5]
+    return vms

@@ -1,7 +1,7 @@
 from pytest import fixture, mark
 
 from keywords import vm_helper, nova_helper, host_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')

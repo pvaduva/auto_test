@@ -10,7 +10,7 @@ from consts.cgcs import FlavorSpec, ServerGroupMetadata, VMStatus
 from consts.reasons import SkipReason
 from consts.cli_errs import SrvGrpErr
 from keywords import nova_helper, vm_helper, system_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 MSG = 'HELLO SRV GRP MEMBERS!'
@@ -139,9 +139,9 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
     for i in range(failed_num):
         LOG.tc_step("Boot vm{} in server group {} that's expected to fail".format(i, srv_grp_id))
         code, vm_id, err, vol = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
-                                                  avail_zone='cgcsauto', fail_ok=True)
-        ResourceCleanup.add(resource_type='vm', resource_id=vm_id, del_vm_vols=False)
-        ResourceCleanup.add('volume', vol)
+                                                  avail_zone='cgcsauto', fail_ok=True, cleanup='function')
+        # ResourceCleanup.add(resource_type='vm', resource_id=vm_id, del_vm_vols=False)
+        # ResourceCleanup.add('volume', vol)
 
         nova_helper.get_vm_nova_show_value(vm_id, 'fault')
         assert 1 == code, "Boot vm is not rejected"
@@ -298,8 +298,9 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
 
     LOG.tc_step("Boot vms with {} server group policy and min/max count".format(policy))
     code, vms, msg = vm_helper.boot_vm(name='srv_grp_parallel', flavor=flavor_id, hint={'group': srv_grp_id},
-                                       avail_zone='cgcsauto', fail_ok=True, min_count=min_count, max_count=max_count)
-    ResourceCleanup.add('vm', vms)
+                                       avail_zone='cgcsauto', fail_ok=True, min_count=min_count, max_count=max_count,
+                                       cleanup='function')
+    # ResourceCleanup.add('vm', vms)
 
     if max_count is None:
         max_count = min_count

@@ -1,4 +1,5 @@
 import time
+from pytest import mark
 
 from utils.tis_log import LOG
 from utils import local_host
@@ -19,7 +20,11 @@ def power_off_and_on(barcode, power_off_event, timeout):
         raise TimeoutError("Timed out waiting for power_off_event to be set")
 
 
+@mark.usefixtures('check_alarms')
 def test_dead_office_recovery(reserve_unreserve_all_hosts_module):
+    LOG.tc_step("Boot 5 vms with various boot_source, disks, etc")
+    vms = vm_helper.boot_vms_various_types()
+
     hosts = system_helper.get_hostnames()
     hosts_to_check = system_helper.get_hostnames(availability=['available', 'online'])
 
@@ -35,3 +40,8 @@ def test_dead_office_recovery(reserve_unreserve_all_hosts_module):
         LOG.info("Hosts to check after power-on: {}".format(hosts_to_check))
         vlm_helper.power_on_hosts(hosts, reserve=False, reconnect_timeout=HostTimeout.REBOOT+120,
                                   hosts_to_check=hosts_to_check)
+
+    LOG.tc_step("Check vms are recovered after dead office recovery")
+    vm_helper._wait_for_vms_values(vms, fail_ok=False, timeout=600)
+    for vm in vms:
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)

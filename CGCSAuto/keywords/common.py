@@ -390,11 +390,19 @@ def get_timedelta_for_isotimes(time1, time2):
     Returns:
 
     """
-    time1 = time1.split(sep='.')[0]
-    time1_datetime = datetime.strptime(time1, "%Y-%m-%dT%H:%M:%S")
+    def _parse_time(time_):
+        time_ = time_.strip().split(sep='.')[0].split(sep='+')[0]
+        if 'T' in time_:
+            pattern = "%Y-%m-%dT%H:%M:%S"
+        elif ' ' in time_:
+            pattern = "%Y-%m-%d %H:%M:%S"
+        else:
+            raise ValueError("Unknown format for time1: {}".format(time_))
+        time_datetime = datetime.strptime(time_, pattern)
+        return time_datetime
 
-    time2 = time2.split(sep='.')[0]
-    time2_datetime = datetime.strptime(time2, "%Y-%m-%dT%H:%M:%S")
+    time1_datetime = _parse_time(time_=time1)
+    time2_datetime = _parse_time(time_=time2)
 
     return time2_datetime - time1_datetime
 

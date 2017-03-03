@@ -21,6 +21,7 @@ def _revert_admin_pw(request):
 def less_than_two_cons():
     return len(system_helper.get_controllers()) < 2
 
+
 @mark.usefixtures('check_alarms')
 @mark.parametrize(('scenario'), [
     # mark.p1(('lock_standby_change_pswd')),

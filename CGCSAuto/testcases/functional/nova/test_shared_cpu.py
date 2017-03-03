@@ -5,7 +5,7 @@ from consts.cgcs import FlavorSpec
 from consts.cli_errs import SharedCPUErr, ResizeVMErr
 
 from keywords import nova_helper, vm_helper, host_helper, system_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @mark.p3

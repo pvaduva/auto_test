@@ -239,7 +239,7 @@ class SSHClient:
         if cmd_for_exitcode:
             LOG.debug("Sending \'{}\'".format(cmd))
         else:
-            LOG.debug("Sending command: \'{}\'".format(cmd))
+            LOG.debug("Sending: \'{}\'".format(cmd))
         try:
             rtn = self._session.sendline(cmd)
         # TODO: use specific exception to catch unexpected disconnection with remote host such as swact
@@ -252,7 +252,7 @@ class SSHClient:
                 self.connect(retry_timeout=reconnect_timeout)
                 rtn = self._session.sendline(cmd)
 
-        LOG.debug("Command sent successfully")
+        # LOG.debug("Command sent successfully")
         self.cmd_sent = cmd
 
         return str(rtn)
@@ -297,8 +297,8 @@ class SSHClient:
         exit_cmd = (self.cmd_sent == EXIT_CODE_CMD)
         if not exit_cmd:
             LOG.debug("Expecting: \'{}\'...".format('\', \''.join(str(blob) for blob in blob_list)))
-        else:
-            LOG.debug("Expecting exit code...")
+        # else:
+            # LOG.debug("Expecting exit code...")
 
         kwargs = {}
         if searchwindowsize is not None:

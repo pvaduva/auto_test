@@ -8,7 +8,7 @@ import time
 import re
 import sys
 from pytest import fixture, mark, skip, raises, fail
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from utils.tis_log import LOG
 from utils import cli, exceptions, table_parser
 from utils.ssh import ControllerClient
@@ -62,7 +62,6 @@ def test_092_vm_instance_recovery_kill_process_on_compute_node():
     6. ping <private_ip> (from controller-0)
     """
 
-
     vm_image = 'cgcs-guest'
     vol_size = 8
 
@@ -75,8 +74,8 @@ def test_092_vm_instance_recovery_kill_process_on_compute_node():
 
     # Create ubuntu instances
     LOG.tc_step("Create vm instances")
-    vm_id = vm_helper.boot_vm(name=vm_image, source='volume', source_id=vol_id)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm(name=vm_image, source='volume', source_id=vol_id, cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_id)
 
     LOG.tc_step("Check that VM responds on pings")
     ping_results, res_dict = vm_helper.ping_vms_from_natbox(vm_id)

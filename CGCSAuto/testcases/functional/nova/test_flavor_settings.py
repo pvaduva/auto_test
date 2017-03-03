@@ -2,7 +2,7 @@ from pytest import fixture, mark
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
 from keywords import nova_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module', autouse=True)

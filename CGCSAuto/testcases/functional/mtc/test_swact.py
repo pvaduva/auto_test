@@ -77,4 +77,3 @@ def test_swact_20_times():
 
     post_standby = system_helper.get_standby_controller_name()
     assert post_standby, "System does not have standby controller after last swact"
-

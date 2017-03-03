@@ -56,7 +56,9 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=None,
     flavor_name = common.get_unique_name(name_str=name, existing_names=existing_names, resource_type='flavor')
 
     if root_disk is None:
-        root_disk = GuestImages.IMAGE_FILES[guest_os][1] if (guest_os and guest_os != 'cgcs-guest') else 1
+        if not guest_os:
+            guest_os = GuestImages.DEFAULT_GUEST
+        root_disk = GuestImages.IMAGE_FILES[guest_os][1]
 
     mandatory_args = ' '.join([flavor_name, flavor_id, str(ram), str(root_disk), str(vcpus)])
 
@@ -284,13 +286,9 @@ def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     Returns (str): id of the basic flavor
 
     """
-    size = 1
-    if guest_os and 'cgcs-guest' not in guest_os:
-        # if 'ubuntu' in guest_os:
-        #     size = 9
-        # elif 'centos' in guest_os:
-        #     size = 9
-        size = GuestImages.IMAGE_FILES[guest_os][1]
+    if not guest_os:
+        guest_os = GuestImages.DEFAULT_GUEST
+    size = GuestImages.IMAGE_FILES[guest_os][1]
 
     default_flavor_name = 'flavor-default-size{}'.format(size)
     flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)
@@ -1249,7 +1247,7 @@ def get_image_metadata(image, meta_keys, auth_info=Tenant.ADMIN, con_ssh=None):
     results = {}
     for meta_key in meta_keys:
         meta_key = meta_key.strip()
-        value = table_parser.get_value_two_col_table(table_, 'metadata '+meta_key, strict=False)
+        value = table_parser.get_value_two_col_table(table_, meta_key, strict=False)
         if value:
             results[meta_key] = value
 

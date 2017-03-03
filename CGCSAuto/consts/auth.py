@@ -101,6 +101,10 @@ class Host:
 
 class Guest:
     CREDS = {
+        'tis-centos-guest': {
+            'user': 'root',
+            'password': 'root'
+        },
 
         'cgcs-guest': {
             'user': 'root',
@@ -112,7 +116,7 @@ class Guest:
             'password': None
         },
 
-        'centos': {
+        'centos_': {
             'user': 'centos',
             'password': None
         },

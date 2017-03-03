@@ -80,7 +80,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         table_ = table_parser.filter_table(table_, **criteria)
 
     if name is None and not criteria:
-        LOG.warning("No criteria specified, return {}s for all volumes for specific tenant".format(rtn_val))
+        LOG.debug("No criteria specified, return {}s for all volumes for specific tenant".format(rtn_val))
 
     return table_parser.get_column(table_, rtn_val)
 
@@ -169,14 +169,10 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
         elif source_vol_id:
             source_arg = '--source-volid ' + source_vol_id
         else:
-            guest_image = guest_image if guest_image else 'cgcs-guest'
+            guest_image = guest_image if guest_image else GuestImages.DEFAULT_GUEST
             image_id = image_id if image_id is not None else glance_helper.get_image_id_from_name(guest_image,
                                                                                                   strict=True)
-            if size is None:
-                if 'cgcs-guest' in guest_image:
-                    size = 1
-                else:
-                    size = GuestImages.IMAGE_FILES[guest_image][1]
+            size = GuestImages.IMAGE_FILES[guest_image][1]
 
             source_arg = '--image-id ' + image_id
 
