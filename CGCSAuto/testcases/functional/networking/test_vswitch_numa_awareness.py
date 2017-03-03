@@ -432,7 +432,7 @@ class TestNovaSchedulerAVS:
             - Add admin role to primary tenant
             - Create cgcsauto aggregate
             - Delete all vms on the system
-            - Configure a host with vswitch = 0, 2, and antother with vswitch = 2, 0 and add them to cgcsauto zone
+            - Configure a host with vswitch = 0, 2, and another with vswitch = 2, 0 and add them to cgcsauto zone
 
         Test Steps:
             - Create flavor with 2 dedicated vcpus, and specified vswitch numa affinity, numa_0 and numa_nodes
@@ -495,7 +495,8 @@ class TestNovaSchedulerAVS:
                 min_vm_cores = vswitch_vm_cores
                 final_host = host
 
-        list(hosts_configured).remove(final_host)
+        hosts_configured = list(hosts_configured)
+        hosts_configured.remove(final_host)
         other_host = hosts_configured[0]
         flavor_vcpu_num = int(total_vswitch_vm_cores / 7) + 1
 
