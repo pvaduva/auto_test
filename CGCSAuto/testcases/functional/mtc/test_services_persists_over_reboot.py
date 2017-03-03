@@ -6,6 +6,7 @@ from utils import table_parser, cli
 from utils.tis_log import LOG
 
 from keywords import host_helper, system_helper
+from testfixtures.recover_hosts import HostsToRecover
 
 
 @mark.parametrize('host_type', [
@@ -53,6 +54,7 @@ def test_system_persist_over_host_reboot(host_type):
         raise ValueError("Unknown host type specified. Valid options: controller, compute, storage")
 
     LOG.tc_step("Reboot a {} node: {}".format(host_type, host))
+    HostsToRecover.add(host)
     host_helper.reboot_hosts(host)
 
     # sleep 30 seconds for services to settle

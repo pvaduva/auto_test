@@ -96,10 +96,8 @@ class TestQoS:
 
         cinder_helper.associate_qos_to_volume_type(qos_id, volume_type_id)
 
-        img_id = glance_helper.get_image_id_from_name('cgcs-guest')
-
         LOG.tc_step("Create volume with above volume type")
-        volume_id = cinder_helper.create_volume(name_str, vol_type=volume_type_id, image_id=img_id)[1]
+        volume_id = cinder_helper.create_volume(name_str, vol_type=volume_type_id)[1]
         ResourceCleanup.add('volume', volume_id)
 
         LOG.tc_step("Boot vm from above volume that has the disk QoS info")

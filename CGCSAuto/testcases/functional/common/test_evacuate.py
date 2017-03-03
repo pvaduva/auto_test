@@ -202,17 +202,17 @@ class TestDefaultGuest:
         LOG.tc_step("Create a flavor without ephemeral or swap disks")
         flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing,
                                              check_storage_backing=False)[1]
-        ResourceCleanup.add('flavor', flavor_1, scope='module')
+        ResourceCleanup.add('flavor', flavor_1, scope='class')
 
         LOG.tc_step("Create another flavor with ephemeral and swap disks")
         flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=1, storage_backing=storage_backing,
                                              check_storage_backing=False)[1]
-        ResourceCleanup.add('flavor', flavor_2, scope='module')
+        ResourceCleanup.add('flavor', flavor_2, scope='class')
 
         LOG.tc_step("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
         vm1_name = "vol_root"
         vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, source='volume', avail_zone='nova', vm_host=target_host,
-                                cleanup='module')[1]
+                                cleanup='class')[1]
         # ResourceCleanup.add('vm', vm1, scope='module')
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm1)
@@ -220,7 +220,8 @@ class TestDefaultGuest:
         LOG.tc_step("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
         vm2_name = "vol_ephemswap"
         vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, source='volume', avail_zone='nova', vm_host=target_host,
-                                cleanup='module')[1]
+                                cleanup='class')[1]
+
         # ResourceCleanup.add('vm', vm2, scope='module')
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm2)
@@ -228,7 +229,8 @@ class TestDefaultGuest:
         LOG.tc_step("Boot vm3 from image with flavor flv_rootdisk and wait for it pingable from NatBox")
         vm3_name = "image_root"
         vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, source='image', avail_zone='nova', vm_host=target_host,
-                                cleanup='module')[1]
+                                cleanup='class')[1]
+
         # ResourceCleanup.add('vm', vm3, scope='module', del_vm_vols=False)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm3)
@@ -237,11 +239,11 @@ class TestDefaultGuest:
                     "pingable from NatBox")
         vm4_name = 'image_root_attachvol'
         vm4 = vm_helper.boot_vm(vm4_name, flavor_1, source='image', avail_zone='nova', vm_host=target_host,
-                                cleanup='module')[1]
+                                cleanup='class')[1]
         # ResourceCleanup.add('vm', vm4, scope='module', del_vm_vols=True)
 
         vol = cinder_helper.create_volume(bootable=False)[1]
-        ResourceCleanup.add('volume', vol)
+        ResourceCleanup.add('volume', vol, scope='class')
         vm_helper.attach_vol_to_vm(vm4, vol_id=vol)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm4)
@@ -249,7 +251,7 @@ class TestDefaultGuest:
         LOG.tc_step("Boot vm5 from image with flavor flv_localdisk and wait for it pingable from NatBox")
         vm5_name = 'image_ephemswap'
         vm5 = vm_helper.boot_vm(vm5_name, flavor_2, source='image', avail_zone='nova', vm_host=target_host,
-                                cleanup='module')[1]
+                                cleanup='class')[1]
         # ResourceCleanup.add('vm', vm5, scope='module', del_vm_vols=True)
         vm_helper.wait_for_vm_pingable_from_natbox(vm5)
 

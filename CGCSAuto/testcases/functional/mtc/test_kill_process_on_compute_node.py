@@ -62,7 +62,6 @@ def test_092_vm_instance_recovery_kill_process_on_compute_node():
     6. ping <private_ip> (from controller-0)
     """
 
-
     vm_image = 'cgcs-guest'
     vol_size = 8
 

@@ -1,7 +1,8 @@
+import re
 from pytest import fixture, mark
 from utils.tis_log import LOG
 
-from consts.cgcs import VMStatus
+from consts.cgcs import VMStatus, GuestImages
 from keywords import network_helper, nova_helper, vm_helper, glance_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -76,7 +77,7 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
 
     LOG.tc_step("Get/Create {} glance image".format(guest_os))
     image_id = glance_helper.get_guest_image(guest_os=guest_os)
-    if guest_os != 'cgcs-guest':
+    if not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
         ResourceCleanup.add('image', image_id, scope='module')
 
     LOG.tc_step("Create a flavor with 2 vcpus")
@@ -201,7 +202,7 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
 
     LOG.tc_step("Get/Create {} glance image".format(guest_os))
     image_id = glance_helper.get_guest_image(guest_os=guest_os)
-    if guest_os != 'cgcs-guest':
+    if not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
         ResourceCleanup.add('image', image_id, scope='module')
 
     LOG.tc_step("Create a flavor with 2 vcpus")
@@ -286,7 +287,7 @@ def _bring_up_attached_interface(vm_id, guest_os, num=1):
             eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
             assert eth_name, "Interface with mac {} is not listed in 'ip addr' in vm {}".format(mac_addr, vm_id)
             vm_ssh.exec_sudo_cmd('ip link set dev {} up'.format(eth_name))
-            if guest_os != 'cgcs-guest':
+            if not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
                 vm_ssh.exec_sudo_cmd('dhclient {} -r'.format(eth_name))
             vm_ssh.exec_sudo_cmd('dhclient {}'.format(eth_name))
 

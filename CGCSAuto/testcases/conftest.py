@@ -12,6 +12,8 @@ from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
 from utils import lab_info
 
+from testfixtures.resource_create import tis_centos_image
+
 natbox_ssh = None
 con_ssh = None
 

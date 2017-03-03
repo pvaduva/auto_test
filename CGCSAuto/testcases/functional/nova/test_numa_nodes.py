@@ -340,22 +340,22 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
 
     LOG.tc_step("Verify cpu info for vm {} via vm-topology.".format(vm_id))
     # con_ssh = ControllerClient.get_active_controller()
-    nova_tab, libvert_tab = system_helper.get_vm_topology_tables('servers', 'libvirt')
-    # nova_tab, libvert_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers,libvirt',
+    nova_tab, libvirt_tab = system_helper.get_vm_topology_tables('servers', 'libvirt')
+    # nova_tab, libvirt_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers,libvirt',
     #                                                              expect_timeout=30)[1], combine_multiline_entry=False)
     # Filter out the line for vm under test
     nova_tab = table_parser.filter_table(nova_tab, ID=vm_id)
-    libvert_tab = table_parser.filter_table(libvert_tab, uuid=vm_id)
+    libvirt_tab = table_parser.filter_table(libvirt_tab, uuid=vm_id)
 
     instance_topology = table_parser.get_column(nova_tab, 'instance_topology')[0]
-    cpulist = table_parser.get_column(libvert_tab, 'cpulist')[0]
+    cpulist = table_parser.get_column(libvirt_tab, 'cpulist')[0]
     if '-' in cpulist:
         cpulist = cpulist.split(sep='-')
         cpulist_len = int(cpulist[1]) - int(cpulist[0]) + 1
     else:
         cpulist_len = len(cpulist.split(sep=','))
-    vcpus_libvert = int(table_parser.get_column(libvert_tab, 'vcpus')[0])
-    nodelist = table_parser.get_column(libvert_tab, 'nodelist')[0]
+    vcpus_libvirt = int(table_parser.get_column(libvirt_tab, 'vcpus')[0])
+    nodelist = table_parser.get_column(libvirt_tab, 'nodelist')[0]
 
     if isinstance(instance_topology, str):
         instance_topology = [instance_topology]
@@ -374,8 +374,8 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
     assert expected_node_vals == actual_node_vals, \
         "Individual NUMA node value(s) for vm {} is different than numa_node setting in flavor".format(vm_id)
 
-    assert vcpus == vcpus_libvert, \
-        "Number of vcpus for vm {} in libvert view is different than what's set in flavor.".format(vm_id)
+    assert vcpus == vcpus_libvirt, \
+        "Number of vcpus for vm {} in libvirt view is different than what's set in flavor.".format(vm_id)
 
     assert vcpus == cpulist_len, \
         "Number of entries in cpulist for vm {} in libvirt view is different than number of vcpus set in flavor".format(
@@ -388,4 +388,4 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
         nodelist_len = 1 if nodelist else 0
 
     assert numa_nodes == nodelist_len, \
-        "nodelist for vm {} in libvert view does not match number of numa nodes set in flavor".format(vm_id)
+        "nodelist for vm {} in libvirt view does not match number of numa nodes set in flavor".format(vm_id)
