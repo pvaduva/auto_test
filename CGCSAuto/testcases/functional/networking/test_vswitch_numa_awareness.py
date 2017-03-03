@@ -496,7 +496,8 @@ class TestNovaSchedulerAVS:
                 min_vm_cores = vswitch_vm_cores
                 final_host = host
 
-        list(hosts_configured).remove(final_host)
+        hosts_configured = list(hosts_configured)
+        hosts_configured.remove(final_host)
         other_host = hosts_configured[0]
         flavor_vcpu_num = int(total_vswitch_vm_cores / 7) + 1
 
@@ -809,7 +810,7 @@ class TestNovaSchedulerAVS:
             - Remove admin role from tenanat
 
         """
-        resize_revert = True if resize_revert == 'confirm' else False
+        resize_revert = False if resize_revert == 'confirm' else True
         target_host, vswitch_proc, vswitch_vm_cores_num, nonvswitch_vm_cores_num, pre_flavor, huge_flavor = \
             get_target_host_and_flavors
 

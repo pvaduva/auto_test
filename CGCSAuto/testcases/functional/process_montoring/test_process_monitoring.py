@@ -3,14 +3,16 @@ import os.path
 import time
 import datetime
 import threading
+import random
+import re
 
-from pytest import mark, fixture
+from pytest import mark, fixture, skip
 
 # from consts.cgcs import EventLogID
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, ControllerClient
 from consts.proj_vars import ProjVar
-from keywords import mtc_helper
+from keywords import mtc_helper, system_helper, host_helper
 
 
 _tested_procs = []
@@ -27,168 +29,279 @@ DEF_PROCESS_RESTART_CMD = r'/etc/init.d/{} restart'
 DEF_PROCESS_PID_FILE_PATH = r'/var/run/{}.pid'
 
 INTERVAL_BETWEEN_SWACT = 300 + 10
-# INTERVAL_BETWEEN_SWACT = 3
-IMPACTS = ['swact', 'log', 'enabled-degraded', 'disabled-failed', 'alarm', 'warn']
 
-SKIP_PROCESS_LIST = ['postgres']
+SKIP_PROCESS_LIST = ('postgres')
 
 PROCESSES = {
-    'sm': {'cmd': 'sm', 'impact': 'disabled-failed', 'severity': 'critical'},
-    'rmond': {'cmd': 'rmon', 'impact': 'enabled-degraded', 'severity': 'major', 'interval': 10},
-    'fsmond': {'cmd': 'fsmon', 'impact': 'enabled-degraded', 'severity': 'major', 'interval': 5},
-    'hbsClient': {'cmd': 'hbsClient', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 3, 'interval': 1},
-    'mtcClient': {'cmd': 'mtcClient', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 3, 'interval': 1},
-    'mtcalarmd': {'cmd': 'mtcalarmd', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 3, 'interval': 1},
-    'sm-api': {'cmd': 'sm-api', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20, 'interval': 5},
-    'sm-watchdog': {'cmd': 'sm-watchdog', 'impact': 'enabled-degraded', 
-                    'severity': 'major', 'debounce': 20, 'interval': 5},
+    'sm': {
+        'cmd': 'sm', 'impact': 'disabled-failed', 'severity': 'critical', 'process_type': 'pmon',
+        'node_type': 'controller'},
+
+    'rmond': {
+        'cmd': 'rmon', 'impact': 'enabled-degraded', 'severity': 'major',
+        'interval': 10, 'process_type': 'pmon', 'conf_file': '/etc/pmon.d/rmon.conf'},
+
+    'fsmond': {
+        'cmd': 'fsmon', 'impact': 'enabled-degraded', 'severity': 'major',
+        'interval': 5, 'process_type': 'pmon', 'conf_file': '/etc/pmon.d/fsmon.conf'},
+
+    'hbsClient': {
+        'cmd': 'hbsClient', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 3,
+        'interval': 1, 'process_type': 'pmon'},
+
+    'mtcClient': {
+        'cmd': 'mtcClient', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 3,
+        'interval': 1, 'process_type': 'pmon'},
+
+    'mtcalarmd': {
+        'cmd': 'mtcalarmd', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 3,
+        'interval': 1, 'process_type': 'pmon'},
+
+    'sm-api': {'cmd': 'sm-api', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
+               'interval': 5, 'process_type': 'pmon'},
+
+    'sm-watchdog': {
+        'cmd': 'sm-watchdog', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
+        'interval': 5, 'process_type': 'pmon'},
+
     'sysinv-agent': {
-        'cmd': 'sysinv-agent', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20, 'interval': 5},
-    'sw-patch-controller-daemon': {'cmd': 'sw-patch-controller-daemon', 'impact': 'enabled-degraded',
-                                   'severity': 'major', 'debounce': 20, 'interval': 5},
+        'cmd': 'sysinv-agent', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
+        'interval': 5, 'process_type': 'pmon'},
+
+    'sw-patch-controller-daemon': {
+        'cmd': 'sw-patch-controller-daemon', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
+        'interval': 5, 'process_type': 'pmon'},
 
     'sw-patch-agent': {
-        'cmd': 'sw-patch-agent', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20, 'interval': 5},
-    'acpid': {'cmd': 'acpid', 'impact': 'log', 'severity': 'minor', 'debounce': 20, 'interval': 5, 'retries': 10},
+        'cmd': 'sw-patch-agent', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
+        'interval': 5, 'process_type': 'pmon'},
+
+    'acpid': {
+        'cmd': 'acpid', 'impact': 'log', 'severity': 'minor', 'debounce': 20,
+        'interval': 5, 'retries': 10, 'process_type': 'pmon'},
+
     'ceilometer-polling': {
-        'cmd': '/usr/bin/python2 /usr/bin/ceilometer-polling',
-        'impact': 'log', 'severity': 'minor', 'debounce': 20, 'interval': 10, 'retries': 5},
-    'mtclogd': {'cmd': 'mtclogd', 'impact': 'log', 'severity': 'minor', 'debounce': 3, 'interval': 1, 'retries': 3},
-    'ntpd': {'cmd': 'ntpd', 'impact': 'log', 'severity': 'minor', 'debounce': 0, 'interval': 0, 'retries': 0},
-    'sm-eru': {'cmd': 'sm-eru', 'impact': 'log', 'severity': 'minor', 'debounce': 20, 'interval': 5, 'retries': 3},
-    'sshd': {'cmd': 'sshd', 'impact': 'log', 'severity': 'minor', 'debounce': 20, 'interval': 5, 'retries': 10},
+        'cmd': '/usr/bin/python2 /usr/bin/ceilometer-polling', 'impact': 'log', 'severity': 'minor', 'debounce': 20,
+        'interval': 10, 'retries': 5, 'process_type': 'pmon'},
+
+    'mtclogd': {
+        'cmd': 'mtclogd', 'impact': 'log', 'severity': 'minor', 'debounce': 3,
+        'interval': 1, 'retries': 3, 'process_type': 'pmon'},
+
+    'ntpd': {
+        'cmd': 'ntpd', 'impact': 'log', 'severity': 'minor', 'debounce': 0,
+        'interval': 0, 'retries': 0, 'process_type': 'pmon'},
+
+    'sm-eru': {
+        'cmd': 'sm-eru', 'impact': 'log', 'severity': 'minor', 'debounce': 20,
+        'interval': 5, 'retries': 3, 'process_type': 'pmon'},
+
+    'sshd': {
+        'cmd': 'sshd', 'impact': 'log', 'severity': 'minor', 'debounce': 20,
+        'interval': 5, 'retries': 10, 'process_type': 'pmon'},
 
     # Note: name differs from cmd
-    'syslog-ng': {'cmd': 'syslog', 'impact': 'log', 'severity': 'minor', 'debounce': 20, 'interval': 10, 'retries': 10},
-    'io-monitor-manager': {'cmd': 'io-monitor-manager', 'impact': 'log',
-                           'severity': 'minor', 'debounce': 20, 'interval': 10, 'retries': 5},
-    'logmgmt': {'cmd': 'logmgmt', 'impact': 'log', 'severity': 'minor', 'debounce': 20, 'interval': 5, 'retries': 5},
+    'syslog-ng': {
+        'cmd': 'syslog', 'impact': 'log', 'severity': 'minor', 'debounce': 20,
+        'interval': 10, 'retries': 10, 'process_type': 'pmon'},
+
+    'io-monitor-manager': {
+        'cmd': 'io-monitor-manager', 'impact': 'log', 'severity': 'minor', 'debounce': 20,
+        'interval': 10, 'retries': 5, 'process_type': 'pmon'},
+
+    'logmgmt': {
+        'cmd': 'logmgmt', 'impact': 'log', 'severity': 'minor', 'debounce': 20,
+        'interval': 5, 'retries': 5, 'process_type': 'pmon'},
+
     # compute-only processes
-    'guestServer': {'cmd': 'guestServer', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 10,
-                    'interval': 3, 'retries': 3, 'node_type': 'compute'},
-    'host_agent': {'cmd': 'guestServer', 'impact': 'enabled-degraded',
-                   'severity': 'major', 'debounce': 20, 'interval': 1, 'retries': 3, 'node_type': 'compute'},
-    'libvirtd': {'cmd': 'libvirtd', 'impact': 'disabled-failed',
-                 'severity': 'critical', 'debounce': 20, 'interval': 5, 'retries': 3, 'node_type': 'compute'},
-    'neutron-avr-agent': {'cmd': 'neutron-avr-agent', 'impact': 'enabled-degraded',
-                          'severity': 'major', 'debounce': 20, 'interval': 5, 'retries': 3, 'node_type': 'compute'},
-    'neutron-avs-agent': {'cmd': 'neutron-avs-agent', 'impact': 'disabled-failed',
-                          'severity': 'critical', 'debounce': 20, 'interval': 5, 'retries': 3, 'node_type': 'compute'},
-    'neutron-dhcp-agent': {'cmd': 'neutron-dhcp-agent', 'impact': 'enabled-degraded',
-                           'severity': 'major', 'debounce': 20, 'interval': 5, 'retries': 3, 'node_type': 'compute'},
-    'neutron-metadata-agent': {'cmd': 'neutron-metadata-agent', 'impact': 'enabled-degraded', 'severity': 'major',
-                               'debounce': 20, 'interval': 5, 'retries': 3, 'node_type': 'compute'},
-    'neutron-sriov-nic-agent': {'cmd': 'neutron-sriov-nic-agent', 'impact': 'enabled-degraded', 'severity': 'major',
-                                'debounce': 20, 'interval': 5, 'retries': 3, 'node_type': 'compute'},
+    'guestServer': {
+        'cmd': 'guestServer', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 10,
+        'interval': 3, 'retries': 3, 'node_type': 'compute', 'process_type': 'pmon'},
+
+    'host_agent': {
+        'cmd': 'guestServer', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
+        'interval': 1, 'retries': 3, 'node_type': 'compute', 'process_type': 'pmon'},
+
+    'libvirtd': {
+        'cmd': 'libvirtd', 'impact': 'disabled-failed', 'severity': 'critical', 'debounce': 20,
+        'interval': 5, 'retries': 3, 'node_type': 'compute', 'process_type': 'pmon'},
+
+    'neutron-avr-agent': {
+        'cmd': 'neutron-avr-agent', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
+        'interval': 5, 'retries': 3, 'node_type': 'compute', 'process_type': 'pmon'},
+
+    'neutron-avs-agent': {
+        'cmd': 'neutron-avs-agent', 'impact': 'disabled-failed', 'severity': 'critical', 'debounce': 20,
+        'interval': 5, 'retries': 3, 'node_type': 'compute', 'process_type': 'pmon'},
+
+    'neutron-dhcp-agent': {
+        'cmd': 'neutron-dhcp-agent', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
+        'interval': 5, 'retries': 3, 'node_type': 'compute', 'process_type': 'pmon'},
+
+    'neutron-metadata-agent': {
+        'cmd': 'neutron-metadata-agent', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
+        'interval': 5, 'retries': 3, 'node_type': 'compute', 'process_type': 'pmon'},
+
+    'neutron-sriov-nic-agent': {
+        'cmd': 'neutron-sriov-nic-agent', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
+        'interval': 5, 'retries': 3, 'node_type': 'compute', 'process_type': 'pmon'},
+
     # Note: name differs from cmd
-    'nova-compute': {'cmd': 'nova-startup', 'impact': 'disabled-failed',
-                     'severity': 'critical', 'debounce': 20, 'interval': 5, 'retries': 3, 'node_type': 'compute'},
-    'vswitch': {'cmd': 'vswitch', 'impact': 'disabled-failed',
-                'severity': 'critical', 'debounce': 20, 'interval': 3, 'retries': 0, 'node_type': 'compute'},
+    'nova-compute': {
+        'cmd': 'nova-startup', 'impact': 'disabled-failed', 'severity': 'critical', 'debounce': 20,
+        'interval': 5, 'retries': 3, 'node_type': 'compute', 'process_type': 'pmon'},
+
+    'vswitch': {
+        'cmd': 'vswitch', 'impact': 'disabled-failed', 'severity': 'critical', 'debounce': 20,
+        'interval': 3, 'retries': 0, 'node_type': 'compute', 'process_type': 'pmon'},
 
     # the following are SM managed services
     # active-controller only processes
     # kwargs : dict'node_type': 'active', pid_file:None, 'debounce':None, 'interval':None, 'retries':None},
-    'postgres': {'cmd': '/usr/bin/postgres', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+    'postgres': {
+        'cmd': '/usr/bin/postgres', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+
     # {'rabbitmq-server': {
     # rabbit in sm-dump
-    'rabbit': {'cmd': '/usr/lib/rabbitmq/bin/rabbitmq-server', 'impact': 'swact',
-               'severity': 'critical', 'node_type': 'active'},
+    'rabbit': {
+        'cmd': '/usr/lib/rabbitmq/bin/rabbitmq-server', 'impact': 'swact',
+        'severity': 'critical', 'node_type': 'active'},
+
     # {'sysinv-api': {
     # sysinv-inv in sm-dump
-    'sysinv-inv': {'cmd': '/usr/bin/python /bin/sysinv-api', 'impact': 'swact',
-                   'severity': 'critical', 'node_type': 'active'},
+    'sysinv-inv': {
+        'cmd': '/usr/bin/python /bin/sysinv-api', 'impact': 'swact',
+        'severity': 'critical', 'node_type': 'active'},
+
     'sysinv-conductor': {
         'cmd': '/usr/bin/python /bin/sysinv-conductor', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     # {'mtcAgent': {
-    'mtc-agent': {'cmd': '/usr/local/bin/mtcAgent', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+    'mtc-agent': {
+        'cmd': '/usr/local/bin/mtcAgent', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+
     # {'hbsAgent': {
-    'hbs-agent': {'cmd': '/usr/local/bin/hbsAgent', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+    'hbs-agent': {
+        'cmd': '/usr/local/bin/hbsAgent', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+
     # {'hwmond': {
-    'hw-mon': {'cmd': '/usr/local/bin/hwmond', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
-    'dnsmasq': {'cmd': '/usr/sbin/dnsmasq', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+    'hw-mon': {
+        'cmd': '/usr/local/bin/hwmond', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+
+    'dnsmasq': {
+        'cmd': '/usr/sbin/dnsmasq', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+
     # {'fmManager': {
-    'fm-mgr': {'cmd': '/usr/local/bin/fmManager', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+    'fm-mgr': {
+        'cmd': '/usr/local/bin/fmManager', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+
     # {'keystone-all': {
-    'keystone': {'cmd': '/usr/bin/python2 /bin/keystone-all', 'impact': 'swact',
-                 'severity': 'critical', 'node_type': 'active'},
-    'glance-registry': {'cmd': '/usr/bin/python2 /bin/glance-registry', 'impact': 'swact',
-                        'severity': 'critical', 'node_type': 'active'},
+    'keystone': {
+        'cmd': '/usr/bin/python2 /bin/keystone-all', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+
+    'glance-registry': {
+        'cmd': '/usr/bin/python2 /bin/glance-registry', 'impact': 'swact',
+        'severity': 'critical', 'node_type': 'active'},
+
     'glance-api': {
         # 'cmd': '/usr/bin/python2 /bin/glance-api', 'impact': 'swact',
         'cmd': '/usr/bin/python2 /bin/glance-api', 'impact': 'enabled-degraded',
         'severity': 'major', 'node_type': 'active'},
+
     'neutron-server': {
         'cmd': '/usr/bin/python2 /bin/neutron-server', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'nova-api': {
         'cmd': '/usr/bin/python2 /bin/nova-api', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'nova-scheduler': {
         'cmd': '/usr/bin/python2 /bin/nova-scheduler', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'nova-conductor': {
         'cmd': '/usr/bin/python2 /bin/nova-conductor', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'nova-cert': {
         'cmd': '/usr/bin/python2 /bin/nova-cert', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     # {'nova-consoleauth': {
     'nova-console-auth': {
         'cmd': '/usr/bin/python2 /bin/nova-consoleaut', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     # {'nova-novncproxy': {
     'nova-novnc': {
         # 'cmd': '/usr/bin/python2 /bin/nova-novncproxy', 'impact': 'swact',
         'cmd': '/usr/bin/python2 /bin/nova-novncproxy', 'impact': 'enabled-warning',
         'severity': 'major', 'node_type': 'active'},
-    'cinder-api': {'cmd': '/usr/bin/python2 /bin/cinder-api', 'impact': 'enabled-degraded',
-                   'severity': 'major', 'node_type': 'active'},
+
+    'cinder-api': {
+        'cmd': '/usr/bin/python2 /bin/cinder-api', 'impact': 'enabled-degraded',
+        'severity': 'major', 'node_type': 'active'},
+
     # {'cinder-schedule': {
     'cinder-scheduler': {
         'cmd': '/usr/bin/python2 /bin/cinder-scheduler', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     # note: retries for cinder-volume is 32
     'cinder-volume': {
         'cmd': '/usr/bin/python2 /bin/cinder-volume', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active', 'retries': 32},
+
     'ceilometer-collector': {
         'cmd': '/usr/bin/python2 /bin/ceilometer-collector', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'ceilometer-api': {
         'cmd': '/usr/bin/python2 /bin/ceilometer-api', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'ceilometer-agent-notification': {
         'cmd': '/usr/bin/python2 /bin/ceilometer-agent-notification', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'heat-engine': {
         'cmd': '/usr/bin/python2 /bin/heat-engine', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'heat-api': {
         'cmd': '/usr/bin/python2 /bin/heat-api', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'heat-api-cfn': {
         'cmd': '/usr/bin/python2 /bin/heat-api-cfn', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'heat-api-cloudwatch': {
         'cmd': '/usr/bin/python2 /bin/heat-api-cloudwatch', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     # {'slapd': {
-    'open-ldap': {'cmd': '/usr/sbin/slapd', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+    'open-ldap': {
+        'cmd': '/usr/sbin/slapd', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
+
     # {'snmpd': {
     # note: retries for snmp is 32
     'snmp': {
         'cmd': '/usr/sbin/snmpd', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active', 'retries': 32},
+
     'lighttpd': {
         'cmd': '/usr/sbin/lighttpd', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     # non-sm process
     # 'gunicorn': {
     'horizon': {
         'cmd': '/usr/bin/gunicorn', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'patch-alarm-manager': {
         'cmd': 'python /usr/bin/patch-alarm-manager start', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
@@ -199,24 +312,30 @@ PROCESSES = {
     # on active-controller of a storage-lab
     'ceph-rest-api': {
         'cmd': 'python /usr/bin/ceph-rest-api', 'impact': 'swact',
-        'severity': 'critical', 'node_type': 'active'},
+        'severity': 'critical', 'node_type': 'active', 'lab_type': 'storage'},
+
     'ceph-manager': {
         'cmd': 'python /usr/bin/ceph-manager', 'impact': 'swact',
-        'severity': 'critical', 'node_type': 'active'},
+        'severity': 'critical', 'node_type': 'active', 'lab_type': 'storage'},
+
     # {'nfv-vim-api': {
     'vim-api': {
         'cmd': '/usr/bin/python /bin/nfv-vim-api', 'impact': 'enabled-degraded',
         'severity': 'major', 'node_type': 'active'},
+
     # {'nfv-vim-webserver': {
     'vim-webserver': {
         'cmd': '/usr/bin/python /bin/nfv-vim-webserver', 'impact': 'enabled-warning',
         'severity': 'minor', 'node_type': 'active'},
+
     'guest-agent': {
         'cmd': '/usr/local/bin/guestAgent', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'nova-api-proxy': {
         'cmd': '/usr/bin/python /usr/bin/nova-api-proxy', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active', 'retries': 2, 'interval': 10},
+
     'haproxy': {
         'cmd': '/usr/sbin/haproxy', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
@@ -225,12 +344,15 @@ PROCESSES = {
     'aodh-api': {
         'cmd': '/usr/bin/python2 /bin/aodh-api', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'aodh-evaluator': {
         'cmd': '/usr/bin/python2 /bin/aodh-evaluator', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'aodh-listener': {
         'cmd': '/usr/bin/python2 /bin/aodh-listener', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
+
     'aodh-notifier': {
         'cmd': '/usr/bin/python2 /bin/aodh-listener', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
@@ -239,7 +361,7 @@ PROCESSES = {
 
 class MonitoredProcess:
 
-    def __init__(self, name, cmd=None, impact=None, severity='major', node_type='all', process_type='sm', **kwargs):
+    def __init__(self, name, cmd=None, impact=None, severity='major', node_type='all', **kwargs):
         self.name = name
 
         self.cmd = cmd
@@ -249,87 +371,575 @@ class MonitoredProcess:
 
         self.pid_file = kwargs.get('pid_file', None)
 
-        self.retries = kwargs.get('retries', DEF_RETRIES)
+        self.retries = int(kwargs.get('retries', DEF_RETRIES))
         self.debounce = kwargs.get('debounce', DEF_DEBOUNCE)
-        self.interval = kwargs.get('interval', DEF_INTERVAL)
-        self.process_type = process_type
+        self.interval = int(kwargs.get('interval', DEF_INTERVAL))
+        self.process_type = kwargs.get('process_type', 'sm')
+        self.host = kwargs.get('host', 'controller-0')
+
+        self.lab_type = kwargs.get('lab_type', 'any')
+        self.conf_file = kwargs.get('conf_file', None)
 
         self.prev_stats = None
         self.con_ssh = ControllerClient.get_active_controller()
 
-        main_cmd = cmd.split()[0]
+        if cmd:
+            main_cmd = cmd.split()[0]
 
-        if main_cmd == self.cmd and not os.path.abspath(self.cmd):
-            self.cmd = DEF_PROCESS_RESTART_CMD.format(cmd)
+            if main_cmd == self.cmd and not os.path.abspath(self.cmd):
+                self.cmd = DEF_PROCESS_RESTART_CMD.format(cmd)
 
         if self.pid_file is None:
             self.pid_file = DEF_PROCESS_PID_FILE_PATH.format(self.name)
+
         elif not os.path.abspath(self.pid_file):
             self.pid_file = DEF_PROCESS_PID_FILE_PATH.format(os.path.basename(os.path.split(self.pid_file))[0])
 
-    def show(self):
-        for attr in dir(self):
-            if not attr.startswith('_'):
-                LOG.info('{}={}\n'.format(attr, getattr(self, attr)))
+        self.update_process_info()
 
-    def kill_process_on_compute(self, node=None, retries=2, msg='', con_ssh=None):
-        LOG.info('kill process:{} on compute:{} {}, retries={}\n'.format(
-            self.name, node or 'randomly chosen compute', msg, retries))
-        _ = con_ssh
+        self.check_process_settings()
 
-        return 0
+    def check_process_settings(self):
+        pass
 
-    def kill_process_on_storage(self, node=None, msg='', retries=2, con_ssh=None):
-        LOG.info('kill process:{} on storage:{} {}, retries={}\n'.format(
-            self.name, node or 'any storage-node', msg, retries))
-        _ = con_ssh
-        return 0
+    def is_supported_lab(self):
+        lab_type = self.lab_type
+        if lab_type in ('any'):
+            return True
+
+        elif lab_type in ('storage'):
+            return len(system_helper.get_storage_nodes(con_ssh=self.con_ssh)) > 0
+
+        return True
+
+    def update_process_info(self):
+        self.host = self.select_host_to_test_on()[0]
+
+        if self.process_type == 'sm':
+            pid = -1
+            process_info = None
+            for _ in range(3):
+                process_info = tuple(mtc_helper.get_process_from_sm(self.name, con_ssh=self.con_ssh))
+                pid = process_info[0]
+                if pid != -1 and len(process_info) != 5:
+                    break
+
+            if pid != -1 and len(process_info) == 5:
+                self.pid = process_info[0]
+                self.name = process_info[1]
+                if self.severity != process_info[2]:
+                    LOG.warn('Severity differs from sm-dump, expected:{}, from-sm-dump:{} for process:{}'.format(
+                        self.severity, process_info[2], self.name))
+                    LOG.warn('Use Severity from sm-dump instead, severity:{}, process:{}'.format(
+                        process_info[2], self.name))
+                    self.severity = process_info[2]
+
+                self.proc_status = process_info[3]
+                self.sm_pid_file = process_info[4]
+            else:
+                LOG.error('Failed to get process information from sm-dump for process:{}, got:{}'.format(
+                    self.name, process_info))
+
+        elif self.process_type == 'pmon':
+            settings = mtc_helper.get_pmon_process_info(self.name, self.host, self.conf_file, con_ssh=self.con_ssh)
+            if not settings:
+                LOG.warn('Cannot read conf file for process:{} on host:{}, conf-file {} does not exist?'.format(
+                    self.name, self.host, self.con_ssh))
+                skip('Cannot read conf file for process:{} on host:{}, conf-file {} does not exist?'.format(
+                    self.name, self.host, self.con_ssh))
+
+            for attr in ('process', 'severity', 'interval', 'debounce'):
+                if attr in settings and settings[attr] != getattr(self, attr, None):
+                    LOG.warn('{}:{} from conf-file:{} differs from expected:{}'.format(
+                        attr, settings[attr], self.conf_file, getattr(self, attr, None)))
+
+            for k, v in settings.items():
+                setattr(self, k, v)
+
+            if 'restarts' in settings:
+                self.retries = int(settings['restarts'].strip())
+            else:
+                self.retries = getattr(self, 'retries', None)
+                if self.retries is None:
+                    self.retries = 3
+            self.retries += 1
+
+            self.interval = getattr(self, 'interval', None)
+            if self.interval is None:
+                self.interval = 10
+            else:
+                self.interval = int(self.interval)
+
+            if 'pidfile' in settings:
+                self.pid_file = settings['pidfile']
+        else:
+            LOG.error('Process-type:{} is not supported yet'.format(self.process_type))
+
+    def select_host_to_test_on(self):
+        active_controller, standby_controller = system_helper.get_active_standby_controllers()
+        self.active_controller = active_controller
+        self.standby_controller = standby_controller
+
+        if self.node_type == 'active':
+            self.host = active_controller
+            LOG.info('Choose the active-controller:{} to test on, node-type:{}'.format(self.host, self.node_type))
+
+        elif self.node_type == 'controller':
+            self.host = standby_controller
+            LOG.info('Choose the standby-controller:{} to test on, node-type:{}'.format(self.host, self.node_type))
+
+        elif self.node_type in ('compute', 'all'):
+            computes = host_helper.get_hypervisors()
+            self.host = random.choice([h for h in computes if h != active_controller])
+            if not self.host:
+                LOG.error('No hypervisor other than the active-controller?! This is a SIMPLEX system?')
+                self.host = system_helper.get_active_controller_name(con_ssh=self.con_ssh)
+
+            LOG.info('Choose a non-active hypervisor:{} to test on, node-type:{}'.format(self.host, self.node_type))
+
+        else:
+            # should never reach here
+            LOG.info('Unknow node_type:{}'.format(self.node_type))
+            assert False, 'Unknow node-type:{}, fail the test case'.format(self.node_type)
+
+        if not self.host:
+            skip('Cannot find a host to test on?, skip the test')
+
+        return self.host, self.node_type, self.active_controller
+
+    @staticmethod
+    def matched_pmon_event_reason(reason, reason_pattern, host, process, severity):
+        m = re.match(reason_pattern, reason)
+
+        if not m:
+            LOG.warn('Reason text of event not matching.')
+            return {}
+
+        if severity == 'minor':
+            if len(m.groups()) != 3:
+                return {}
+
+            matched_host, matched_process, matched_status = m.groups()
+            if matched_host != host:
+                return {}
+
+            if matched_process != process:
+                return {}
+
+            if matched_status != 'failed':
+                return {}
+
+            return dict(zip(('host', 'service', 'status'), m.groups()))
+
+        elif severity == 'major':
+            if len(m.groups()) != 4:
+                return {}
+
+            matched_host, matched_status, matched_process, matched_severity = m.groups()
+            if matched_host != host:
+                return {}
+
+            if matched_status != 'failed':
+                return {}
+
+            if matched_process != process:
+                return {}
+
+            if matched_severity != severity:
+                return {}
+
+            return dict(zip(('host', 'status', 'service', 'severity'), m.groups()))
+
+        elif severity == 'critical':
+            if len(m.groups()) != 4:
+                return {}
+
+            matched_host, matched_severity, matched_process, matched_status = m.groups()
+
+            if matched_host != host:
+                return {}
+
+            if matched_severity != severity:
+                return {}
+
+            if matched_process != process:
+                return {}
+
+            if matched_status != 'failed':
+                return {}
+
+            return dict(zip(('host', 'severity', 'service', 'status'), m.groups()))
+
+        else:
+            LOG.error('unknown PMON SERVERIY:{}'.format(severity))
+
+        return {}
+
+    def matched_pmon_event(self, process, event, host, process_type, severity, impact=''):
+        event_log_id = mtc_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id']
+        reason_pattern, entity_id_pattern = mtc_helper.KILL_PROC_EVENT_FORMAT[process_type][severity][0:2]
+
+        matched_event = {}
+        try:
+            actual_event_id = event[3].strip()
+            if actual_event_id != event_log_id:
+                return {}
+
+            actual_state = event[2]
+            if actual_state not in ('set', 'clear'):
+                return {}
+
+            actual_severity = event[6].strip()
+            if actual_severity != severity:
+                return {}
+
+            matched = self.matched_pmon_event_reason(event[4].strip(), reason_pattern, host, process, severity)
+            if not matched:
+                return {}
+
+            matched_event.update(dict(
+                uuid=event[0],
+                event=event[1:-1],
+                severity=actual_severity
+            ))
+            matched_event.update(matched)
+
+        except IndexError:
+            LOG.warn('ill-formated event:{}'.format(event))
+            return {}
+
+        return matched_event
+
+    def wait_for_pmon_process_events(self, service, host, target_status, expecting=True, severity='major',
+                               last_events=None, process_type='pmon', timeout=60, interval=3, con_ssh=None):
+
+        if process_type not in mtc_helper.KILL_PROC_EVENT_FORMAT:
+            LOG.error('unknown type of process:{}'.format(process_type))
+
+        event_log_id = mtc_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id']
+        reason_pattern, entity_id_pattern = mtc_helper.KILL_PROC_EVENT_FORMAT[process_type][severity][0:2]
+
+        if last_events and last_events['values']:
+            last_event = last_events['values'][0]
+            start_time = last_event[1].replace('-', '').replace('T', ' ').split('.')[0]
+        else:
+            start_time = ''
+
+        search_keys = {
+            'Event Log ID': event_log_id,
+            'Reason Text': reason_pattern,
+            'Entity Instance ID': entity_id_pattern,
+        }
+
+        # expected_availability = target_status.get('availability', None)
+
+        matched_events = []
+        stop_time = time.time() + timeout
+        retry = 0
+        while time.time() < stop_time:
+            retry += 1
+            if matched_events:
+                matched_events[:] = []
+            events_table = mtc_helper.search_event(
+                event_id=event_log_id,
+                start=start_time, limit=10, con_ssh=con_ssh, regex=True, **search_keys)
+
+            if not events_table or not events_table['values']:
+                LOG.warn('run{:02d} for process:{}: Empty event table?!\nevens_table:{}\nevent_id={}, '
+                         'start={}\nkeys={}, severify={}'.format(
+                    retry, service, events_table, event_log_id, start_time, search_keys, severity))
+                continue
+
+            for event in events_table['values']:
+                matched_event = self.matched_pmon_event(service, event, host, process_type, severity)
+                if not matched_event:
+                    continue
+
+                matched_events.append(matched_event)
+
+                if len(matched_events) > 1:
+                    if matched_events[0]['event'][1] == 'clear' and matched_events[1]['event'][1] == 'set':
+                        LOG.info('OK, found matched events:{}'.format(matched_events))
+                        return 0, tuple(matched_events)
+                        # return True, tuple(matched_events)
+                    else:
+                        LOG.info('State is not "clear",\n{}'.format(event))
+                        LOG.info('matched-events:\n\n{}\n\n'.format(matched_events))
+
+            LOG.warn('No matched event found at try:{}, will sleep {} seconds and retry'
+                     '\nmatched events:\n{}, host={}'.format(retry, interval, matched_events, host))
+
+            time.sleep(interval)
+
+            continue
+
+        LOG.info('No matched events:\n{}'.format(matched_events))
+
+        return -1, ()
+
+    def kill_pmon_process_and_verify_impact(self, name, impact, process_type, host, severity='major',
+                                            pid_file='', retries=2, interval=1, wait_recover=True, con_ssh=None):
+        LOG.info('test PMON process:{}, impact={}, process_type={}'.format(name, impact, process_type))
+        last_events = mtc_helper.search_event(mtc_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id'],
+                                              limit=2, con_ssh=con_ssh)
+        if not pid_file:
+            LOG.error('No pid-file provided')
+            return -1
+
+        wait_time = 120
+        cmd = 'true; n=0; for((;n<{};)); do pid=$(cat {} 2>/dev/null); if [ "x$pid" = "x" ]; then usleep 0.05; ' \
+              'continue; fi; sudo kill -9 $pid &>/dev/null; if [ $? -eq 0 ]; then ((n++)); fi; echo -n " $n" ; ' \
+              'sleep {}; done; echo'.format(retries, pid_file, interval)
+        LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
+
+        for _ in range(2):
+            with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
+                code, output = con.exec_sudo_cmd(cmd, fail_ok=True)
+                if 0 != code:
+                    LOG.warn('Failed to kill process:{} on host:{}, cli:\n{}\noutput:\n{}'.format(
+                        name, host, cmd, output))
+                    debounce = int(getattr(self, 'debounce', '20'))
+                    time.sleep(debounce)
+                    continue
+                break
+
+        if impact in ('log'):
+            expected = {'operational': 'enabled', 'availability': 'available'}
+            code, events = self.wait_for_pmon_process_events(
+                name, host, expected, process_type=process_type, severity=severity,
+                last_events=last_events, expecting=True, con_ssh=con_ssh)
+
+            assert 0 == code, 'Failed to to find events after been killed {} times on host {}'.format(retries, host)
+            LOG.info('Found events after been killed {} times on host {}'.format(retries, host))
+            return code
+
+        elif impact in ('enabled-degraded', 'disabled-failed'):
+            operational, availability = impact.split('-')
+            expected = {'operational': operational, 'availability': availability}
+
+            reached = host_helper.wait_for_host_states(host, timeout=wait_time, con_ssh=con_ssh, fail_ok=True,
+                                                       **expected)
+            if not reached:
+                LOG.warn('host:{} did not reach:{} in {} seconds'.format(host, expected, wait_time))
+            else:
+                LOG.info('host:{} reached status:{} after been killed {} times on host {}'.format(
+                    host, expected, retries, host))
+
+            quorum = getattr(self, 'quorum', None)
+            if quorum == '1':
+                LOG.warn('Killing quorum process:{}, the impacted node should reboot'.format(name))
+
+            if impact in ('disabled-failed') or quorum == '1':
+                expected = {'operational': 'Disabled', 'availability': 'Failed'}
+                LOG.info('wait host getting into status:{}'.format(expected))
+                assert host_helper.wait_for_host_states(
+                    host, timeout=wait_time, con_ssh=con_ssh, fail_ok=False, **expected)
+
+            elif impact in ('enabled-degraded'):
+                code, events = self.wait_for_pmon_process_events(
+                    name, host, expected, process_type=process_type, severity=severity,
+                    last_events=last_events, expecting=True, con_ssh=con_ssh)
+
+                if 0 != code:
+                    LOG.error('No event/alarm raised for process:{}, process_type:{}, host:{}'.format(
+                        name, process_type, host))
+                else:
+                    LOG.info('found events {} after been killed {} times on host {}'.format(events, retries, host))
+
+                if not reached and 0 != code:
+                    LOG.error('host {} did not reach expected status:{} after been killed {} times on host {}, '
+                              'and there is no relevant alarms/events found neither')
+                    return -1
+
+            if wait_recover:
+                wait_time *= 10 if operational == 'disabled' else 2
+                expected = {'operational': 'enabled', 'availability': 'available'}
+                reached = host_helper.wait_for_host_states(host, timeout=wait_time, con_ssh=con_ssh, fail_ok=True,
+                                                       **expected)
+                if not reached:
+                    LOG.error('host {} did not recoverd to enabled-available status from status:{} '
+                              'after been killed {} times'.format(host, expected, retries))
+                    return -1
+
+            return 0
+
+    def kill_pmon_process_and_verify_impact_old(self, name, impact, process_type, host, severity='major',
+                                            pid_file='', retries=2, interval=5, wait_recover=True, con_ssh=None):
+        LOG.info('test PMON process:{}, impact={}, process_type={}'.format(name, impact, process_type))
+
+        last_events = mtc_helper.search_event(mtc_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id'],
+                                              limit=2, con_ssh=con_ssh)
+        wait_time = 120
+
+        kills = 0
+        total = 2
+        for tries in range(1, total + 1):
+            while kills < retries:
+                LOG.warn('retries-{:02d}-{:02d}: Trying to get process ID or kill the process for {}'.format(
+                    tries, kills, name))
+                pid, proc_name = mtc_helper.get_process_info(name, host=host, process_type=process_type,
+                                                             pid_file=pid_file, con_ssh=con_ssh)[0:2]
+                if -1 == pid:
+                    LOG.warn('no process found for process:{}'.format(name))
+                    continue
+
+                cmd = '{} {}'.format(mtc_helper.KILL_CMD, pid)
+                with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
+                    code, output = con.exec_sudo_cmd(cmd, fail_ok=True)
+                    if 0 != code:
+                        LOG.warn('retry{:02d}: Failed to kill pid:{}, cmd={}, output=<{}>, died already?'.format(
+                            kills, pid, cmd, output))
+                        continue
+
+                time.sleep(interval / 3.0)
+
+                kills += 1
+
+            LOG.warn('OK, kill {} times to the process for {}, after tried {:02d}-{:02d} times'.format(
+                kills, name, tries, kills))
+
+            if impact in ('log'):
+                expected = {'operational': 'enabled', 'availability': 'available'}
+                code, events = self.wait_for_pmon_process_events(
+                    name, host, expected, process_type=process_type, severity=severity,
+                    last_events=last_events, expecting=True, con_ssh=con_ssh)
+
+                assert 0 == code, 'Failed to to find events after been killed {} times on host {}'.format(retries, host)
+                LOG.info('Found events after been killed {} times on host {}'.format(retries, host))
+                return code
+
+            elif impact in ('enabled-degraded', 'disabled-failed'):
+                operational, availability = impact.split('-')
+                expected = {'operational': operational, 'availability': availability}
+
+                reached = host_helper.wait_for_host_states(host, timeout=wait_time, con_ssh=con_ssh, fail_ok=True,
+                                                           **expected)
+                if not reached:
+                    LOG.warn('host:{} did not reach:{} in {} seconds'.format(host, expected, wait_time))
+                else:
+                    LOG.info('host:{} reached status:{} after been killed {} times on host {}'.format(
+                        host, expected, retries, host))
+
+                if impact in ('disabled-failed'):
+                    LOG.error('host:{} did not reach:{} in {} seconds'.format(host, expected, wait_time))
+                    LOG.info('try to wait another {} seconds'.format(wait_time))
+
+                    assert host_helper.wait_for_host_states(host, timeout=wait_time, con_ssh=con_ssh,
+                                                            fail_ok=False, **expected)
+                elif impact in ('enabled-degraded'):
+                    code, events = self.wait_for_pmon_process_events(
+                        name, host, expected, process_type=process_type, severity=severity,
+                        last_events=last_events, expecting=True, con_ssh=con_ssh)
+
+                    if 0 != code:
+                        LOG.error('No event/alarm raised for process:{}, process_type:{}, host:{}'.format(
+                            name, process_type, host))
+                    else:
+                        LOG.info('found events {} after been killed {} times on host {}'.format(events, retries, host))
+
+                    if not reached and 0 != code:
+                        LOG.error('host {} did not reach expected status:{} after been killed {} times on host {}, '
+                                  'and there is no relevant alarms/events found neither')
+                        return -1
+
+                if wait_recover:
+                    wait_time *= 10 if operational == 'disabled' else 2
+                    expected = {'operational': 'enabled', 'availability': 'available'}
+                    reached = host_helper.wait_for_host_states(host, timeout=wait_time, con_ssh=con_ssh, fail_ok=True,
+                                                           **expected)
+                    if not reached:
+                        LOG.error('host {} did not recoverd to enabled-available status from status:{} '
+                                  'after been killed {} times'.format(host, expected, retries))
+                        return -1
+
+                return 0
+
+        else:
+            LOG.error('Failed to get process ID or kill the process for {}, tried {} times on host {}'.format(
+                name, total, host))
+            assert False, 'Failed to get process ID or kill the process for {}, tried {} times on host {}'.format(
+                name, total, host)
 
     def kill_process_and_verify_impact(self, con_ssh=None):
 
+        host = self.host
         node_type = self.node_type
+        active_controller = self.active_controller
+        name = self.name
+        cmd = self.cmd
+        impact = self.impact
+        process_type = self.process_type
+        retries = self.retries
+        interval = self.interval
+        pid_file = self.pid_file
+        severity = self.severity
 
-        if node_type in ['all']:
-            # in this case, will randomly chose one compute (or the standby controller in case of CPE)
-            LOG.info('for node-type:{}, kill on compute'.format(node_type))
-            code = self.kill_process_on_compute(msg='for any type of host("all")', con_ssh=con_ssh)
+        on_active_controller = (node_type == 'active' and self.host == active_controller)
 
-        elif node_type in ['controller', 'active']:
-            LOG.info('for node-type:{}, kill on controller'.format(node_type))
-            pid, host = mtc_helper.kill_controller_process_verify_impact(
-                self.name,
-                cmd=self.cmd,
-                impact=self.impact,
-                retries=self.retries,
-                action_timeout=SM_PROC_TIMEOUT,
-                total_retries=KILL_WAIT_RETRIES,
-                interval=self.interval,
-                process_type=self.process_type,
-                on_active_controller=(node_type == 'active'),
-                con_ssh=self.con_ssh)
-            self.pid = int(pid)
-            self.host = host
-            code = 0
-            assert self.pid > 1, \
-                'Fail in killing process:{} and expecting impact: {}'.format(self.name, self.impact)
+        LOG.info('name:{} cmd:{} impact:{} process_type:{} node_type:{}'.format(
+            name, cmd, impact, process_type, node_type))
 
-        elif node_type in ['compute']:
-            LOG.info('for node-type:{}, kill on compute'.format(node_type))
-            code = self.kill_process_on_compute(msg='for compute node', retries=self.retries, con_ssh=con_ssh)
-
-        elif node_type in ['storage']:
-            LOG.info('for node-type:{}, kill on storage'.format(node_type))
-            code = self.kill_process_on_storage(msg='for controller node', retries=self.retries, con_ssh=con_ssh)
+        # if impact == 'log' and process_type == 'pmon':
+        if process_type == 'pmon':
+            code = self.kill_pmon_process_and_verify_impact(name, impact, process_type, host, severity=severity,
+                                                            pid_file=pid_file, retries=retries,
+                                                            interval=interval, con_ssh=con_ssh)
 
         else:
-            LOG.error('unknown node-type:{}, will try to kill the process:{} on a randomly choosen compute'.format(
-                node_type, self.name))
-            code = -1
+            pid, host = mtc_helper.kill_sm_process_and_verify_impact(
+                name, cmd=cmd, pid_file=self.pid_file, impact=impact, host=host,
+                process_type=process_type, retries=retries, interval=interval/3,
+                on_active_controller=on_active_controller)
+
+            code = 0 if pid > 1 else -1
+
+            if self.impact == 'swact':
+                self.prev_active_controller = active_controller
+                self.active_controller = host
+                self.prev_host = host
+                self.host = host
+
+            self.success = (code == 0)
+
+        global _tested_procs
+        _tested_procs.append(self)
 
         return code
 
 
 @mark.parametrize(('process_name'), [
+    mark.p1(('sm')),
+    # TODO CGTS-6451
+    # mark.p1(('rmond')),
+    mark.p1(('fsmond')),
+    mark.p1(('hbsClient')),
+    mark.p1(('mtcClient')),
+    mark.p1(('mtcalarmd')),
+    mark.p1(('sm-api')),
+    mark.p1(('sm-watchdog')),
+    mark.p1(('sysinv-agent')),
+    mark.p1(('sw-patch-controller-daemon')),
+    mark.p1(('sw-patch-agent')),
+    mark.p1(('acpid')),
+    mark.p1(('ceilometer-polling')),
+    mark.p1(('mtclogd')),
+    mark.p1(('ntpd')),
+    mark.p1(('sm-eru')),
+    mark.p1(('sshd')),
+    mark.p1(('syslog-ng')),
+    mark.p1(('io-monitor-manager')),
+    mark.p1(('logmgmt')),
+    mark.p1(('guestServer')),
+    mark.p1(('host_agent')),
+    mark.p1(('libvirtd')),
+    mark.p1(('neutron-avr-agent')),
+    mark.p1(('neutron-avs-agent')),
+    mark.p1(('neutron-dhcp-agent')),
+    mark.p1(('neutron-metadata-agent')),
+    mark.p1(('neutron-sriov-nic-agent')),
+    mark.p1(('nova-compute')),
+    mark.p1(('vswitch')),
+
     # # mark.p1(('postgres')),
     # # mark.p1(('rabbitmq-server')), # rabbit in SM
     # # TODO CGTS-6336
@@ -344,11 +954,11 @@ class MonitoredProcess:
     mark.p1(('dnsmasq')),
     mark.p1(('fm-mgr')),
     # # TODO CGTS-6396
-    # # mark.p1(('keystone')),
+    # mark.p1(('keystone')),
     # mark.p1(('glance-registry')),
     # # TODO CGTS-6398
     # major
-    # mark.p1(('glance-api')),
+    mark.p1(('glance-api')),
     mark.p1(('neutron-server')),
     mark.p1(('nova-api')),
     mark.p1(('nova-scheduler')),
@@ -368,37 +978,41 @@ class MonitoredProcess:
     mark.p1(('ceilometer-api')),
     mark.p1(('ceilometer-agent-notification')),
     mark.p1(('heat-engine')),
+
+    # TODO CGTS-6396
     # mark.p1(('heat-api')),
     # mark.p1(('heat-api-cfn')),
     # mark.p1(('heat-api-cloudwatch')),
     #
-    mark.p1(('open-ldap')),
+
+    # TODO CGTS-6426
+    # mark.p1(('open-ldap')),
     # retries = 32
     mark.p1(('snmp')),
 
+    # TODO CGTS-6426
     # mark.p1(('lighttpd')),
-    # # mark.p1(('gunicorn')),
+
+    # mark.p1(('gunicorn')), changed to horizon
+    # TODO CGTS-6398
     # mark.p1(('horizon')),
     # mark.p1(('patch-alarm-manager')),
     #
-    # mark.p1(('ceph-rest-api')),
-    # mark.p1(('ceph-manager')),
-    # mark.p1(('vim-api')),
+    # requires storage lab
+    mark.p1(('ceph-rest-api')),
+    mark.p1(('ceph-manager')),
+
+    mark.p1(('vim-api')),
     # minor
     mark.p1(('vim-webserver')),
     mark.p1(('guest-agent')),
-    # mark.p1(('nova-api-proxy')),
+    mark.p1(('nova-api-proxy')),
     mark.p1(('haproxy')),
 
     mark.p1(('aodh-api')),
     mark.p1(('aodh-evaluator')),
     mark.p1(('aodh-listener')),
     mark.p1(('aodh-notifier')),
-
-    # mark.p1(('critical')),
-    # mark.p2(('major')),
-    # mark.p3(('minor')),
-    # mark.p4(('all')),
 ])
 def test_process_monitoring(process_name, con_ssh=None):
     """
@@ -406,11 +1020,6 @@ def test_process_monitoring(process_name, con_ssh=None):
 
     Args:
         process_name (str): Name of the process to test. The following specical names are supported:
-            all        --   all processes managed including those managed by PMON/RMON
-            critical   --   all processes with 'critical' severity
-            major      --   all processes with 'major' severity
-            minor      --   all processes with 'minor' severity
-
         con_ssh:
 
     Returns:
@@ -418,77 +1027,26 @@ def test_process_monitoring(process_name, con_ssh=None):
     """
     LOG.tc_step('Start testing SM/PM Prcocess Monitoring')
 
-    procs = []
-    for name, values in PROCESSES.items():
-        if process_name not in [name, 'all', 'cirtital', 'major', 'minor']:
-            continue
+    assert process_name in PROCESSES, \
+        'Unknown process with name:{}'.format(process_name)
 
-        try:
-            proc = MonitoredProcess(name, **dict(values))
-            procs.append(proc)
+    proc = MonitoredProcess(process_name, **PROCESSES[process_name])
 
-        except KeyError as e:
-            LOG.error('unknown process, error={}'.format(e))
-            LOG.error('name={}, values={}'.format(name, values))
-            raise
+    if not proc.is_supported_lab():
+        skip('Not supported lab')
 
-        except Exception as e:
-            LOG.error('unknown error, error={}'.format(e))
-            LOG.error('name={}, values={}'.format(name, values))
-            raise
-
-    if process_name is None or process_name == 'all':
-        procs_to_test = procs
-
-    elif process_name in ['critical', 'major', 'minor']:
-        procs_to_test = [p for p in procs if p.severity == process_name]
-
-    elif process_name in [p.name for p in procs]:
-        procs_to_test = [p for p in procs if p.name == process_name]
+    if proc.name in SKIP_PROCESS_LIST:
+        LOG.info('{} in skip-list, skip testing'.format(proc.name))
+        skip('Process:{} is in skip-list:{}'.format(process_name, SKIP_PROCESS_LIST))
 
     else:
-        LOG.error('unknown process name:{}'.format(process_name))
-        procs_to_test = []
+        code = proc.kill_process_and_verify_impact(con_ssh=con_ssh)
 
-    LOG.tc_step('Kill the proc and monitoring the TIS responds as expected')
-    LOG.info('TOTAL {:02d} processes to test for:{}'.format(len(procs_to_test), process_name))
+        assert 0 == code, \
+            'failed in killing process and verifying impact for process:{}'.format(process_name)
 
-    prev_impact = ''
-    tested, passed, failed, skipped = 0, 0, 0, 0
-
-    skipped_procs = []
-
-    _tested_procs[:] = []
-    for proc in procs_to_test:
-        tested += 1
-        LOG.tc_step('kill process:{}'.format(proc.name))
-
-        if proc.name in SKIP_PROCESS_LIST:
-            LOG.info('{} in skip-list, skip testing'.format(proc.name))
-            skipped_procs.append(proc.name)
-            result = 'SKIP'
-            skipped += 1
-
-        else:
-            if prev_impact == 'swact' and proc.impact == 'swact':
-                LOG.info('sleep {} seconds because both previous and current IMPACT are swact')
-                time.sleep(INTERVAL_BETWEEN_SWACT)
-
-            if 0 == proc.kill_process_and_verify_impact(con_ssh=con_ssh):
-                result = 'PASS'
-                passed += 1
-
-            else:
-                result = 'FAIL'
-                failed += 1
-
-        proc.passed = True
-        _tested_procs.append(proc)
-
-        LOG.info('{}\t{:02d}\tprocess:{} done'.format(result, tested, proc.name))
-
-    LOG.info('\nPASS\t{:03d}\nFAIL\t{:03d}\nSKIP\t{:03d}\nTOTAL\t{:03d}'.format(
-        passed, failed, skipped, tested))
+    LOG.info('OK, testing killing process:{} completed successfully, will continue monitoring the process'.format(
+        process_name))
 
 
 def _monitor_process(process, total_time, interval=5):
@@ -496,6 +1054,7 @@ def _monitor_process(process, total_time, interval=5):
     cmd = getattr(process, 'cmd', None)
     pid = getattr(process, 'pid', None)
     host = getattr(process, 'host', None)
+    pid_file = getattr(process, 'pid_file', None)
     process_type = getattr(process, 'process_type', 'sm')
 
     global _final_processes_status
@@ -504,29 +1063,27 @@ def _monitor_process(process, total_time, interval=5):
     con_ssh.connect(use_current=False)
     ControllerClient.set_active_controller(con_ssh)
 
-    used_pids = [pid]
+    used_pids = []
     died_pids = []
     stop_time = time.time() + total_time
 
     while time.time() < stop_time:
         cur_pid, proc_name = mtc_helper.get_process_info(
-            name, cmd=cmd, host=host, process_type=process_type, con_ssh=con_ssh)[0:2]
-
-        cur_pid = int(cur_pid)
+            name, cmd=cmd, host=host, process_type=process_type, pid_file=pid_file, con_ssh=con_ssh)[0:2]
 
         _final_processes_status[name].update({'used_pids': used_pids})
 
         if pid != cur_pid:
+            LOG.warn('Got new PID for process:{}, no new process should be created after impact. '
+                     'pid={}, new-pid={}'.format(name, pid, cur_pid))
+
             used_pids.append(cur_pid)
             pid = cur_pid
 
-            LOG.warn('Got new PID for process:{}, no new process should be created after impact. '
-                     'pid={}, new-pid={}'.format(name, pid, cur_pid))
         else:
-            pass
             LOG.info('OK, PID not changed:{} for process:{}'.format(pid, name))
 
-        running, msg = mtc_helper.is_process_running(str(cur_pid), host, con_ssh=con_ssh)
+        running, msg = mtc_helper.is_process_running(cur_pid, host, con_ssh=con_ssh)
 
         if not running:
             died_pids.append(cur_pid)
@@ -534,7 +1091,6 @@ def _monitor_process(process, total_time, interval=5):
             LOG.warn('Process died: pid:{} at {}, msg:{}'.format(
                 pid, datetime.datetime.utcnow().isoformat(), msg))
         else:
-            pass
             LOG.info('OK, process:{} is running, name:{}'.format(pid, name))
 
         _final_processes_status[name].update({'died_pids': died_pids})
@@ -549,7 +1105,7 @@ def monitor_process(process, total_time):
     pid = getattr(process, 'pid', None)
 
     global _final_processes_status
-    _final_processes_status[name] = {'used_pids':[], 'died_pids': []}
+    _final_processes_status[name] = {'used_pids': [], 'died_pids': []}
 
     if name is not None and pid is not None:
         thread = threading.Thread(
@@ -558,7 +1114,7 @@ def monitor_process(process, total_time):
             name='Monitor-{}-{}'.format(name, pid))
         # thread.setDaemon(True)
     else:
-        LOG.info('Process Name and PID are None, proc={}'.format(process))
+        LOG.info('Process Name or PID is None, proc={}'.format(process))
         thread = None
 
     return thread
@@ -591,6 +1147,10 @@ def wait_and_monitor_tested_processes(request):
 
             monitors = []
             for proc in _tested_procs:
+                if not getattr(proc, 'success', False):
+                    LOG.info('Process:{} failed, so skip monitoring its process status'.format(proc.name))
+                    continue
+
                 monitor = monitor_process(proc, total_time - pre_wait)
                 if monitor is not None:
                     monitors.append(monitor)
@@ -613,17 +1173,19 @@ def wait_and_monitor_tested_processes(request):
                 # this should never happen but it does occasionally, just flag an error for now
                 LOG.error('Really?\t{}/{} processes died, {}'.format(died, total, pids_info['died_pids']))
 
-            if total > 1:
-                # this should never happen but it does occasionally too, just flag an error for now
-                LOG.error('Really?\t{} new processes created, all used pids:{}'.format(total-1, pids_info['used_pids']))
+            assert total == 1, \
+                'At least 2 new processes created, all used pids:{}'.format(pids_info['used_pids'])
+            # if total > 1:
+            #     # this should never happen but it does occasionally too, just flag an error for now
+            #     LOG.error('Really?\t{} new processes created, all used pids:{}'.format(total-1, pids_info['used_pids']))
 
-            if total > 2:
-                last_pid = pids_info['used_pids'][-1]
-                old_pids = [pid for pid in pids_info['used_pids'] if pid != last_pid]
-
-                assert len(old_pids) < 2, \
-                    'Service {} re-created {} times during the monotoring period, used-pids:{}'.format(
-                        name, len(old_pids), pids_info['used_pids'])
+            # if total > 2:
+            #     last_pid = pids_info['used_pids'][-1]
+            #     old_pids = [pid for pid in pids_info['used_pids'] if pid != last_pid]
+            #
+            #     assert len(old_pids) < 2, \
+            #         'Service {} re-created {} times during the monotoring period, used-pids:{}'.format(
+            #             name, len(old_pids), pids_info['used_pids'])
 
             LOG.info('OK, (new) processe(s) for service:{}  is(are) running stable')
 
