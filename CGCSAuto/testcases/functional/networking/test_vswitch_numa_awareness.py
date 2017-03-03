@@ -810,7 +810,7 @@ class TestNovaSchedulerAVS:
             - Remove admin role from tenanat
 
         """
-        resize_revert = True if resize_revert == 'confirm' else False
+        resize_revert = False if resize_revert == 'confirm' else True
         target_host, vswitch_proc, vswitch_vm_cores_num, nonvswitch_vm_cores_num, pre_flavor, huge_flavor = \
             get_target_host_and_flavors
 
