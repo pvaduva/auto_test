@@ -7,7 +7,8 @@ from keywords import vm_helper, nova_helper, network_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-@mark.parametrize('vm_type', ['avp', 'virtio', 'vswitch'])
+# @mark.parametrize('vm_type', ['avp', 'virtio', 'vswitch'])
+@mark.parametrize('vm_type', ['vswitch'])
 def test_vif_models(vm_type):
     """
     boot avp,e100 and virtio instance
@@ -30,7 +31,7 @@ def test_vif_models(vm_type):
     """
 
     LOG.tc_step("Boot vm to test with vm_type {} from script".format(vm_type))
-    vm_under_test = vm_helper.launch_vms_via_script(vm_type=vm_type)
+    vm_under_test = vm_helper.launch_vms_via_script(vm_type=vm_type)[0]
     ResourceCleanup.add('vm', vm_under_test)
 
     LOG.tc_step("Boot a base vm to test with vm_type {} from script".format(vm_type))
@@ -40,12 +41,7 @@ def test_vif_models(vm_type):
     LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_under_test))
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
-    LOG.info("Ping vm under test from base vm over data network")
-    vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types='data')
-
-    # for vm_actions in [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
-
-    for vm_actions in [['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume'], ['stop', 'start']]:
+    for vm_actions in [['cold_migrate'], ['live_migrate'],  ['pause', 'unpause'], ['suspend', 'resume'], ['stop', 'start']]:
         if vm_actions[0] == 'auto_recover':
             LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from "
                         "base vm over management and data networks")
@@ -56,8 +52,13 @@ def test_vif_models(vm_type):
             for action in vm_actions:
                 vm_helper.perform_action_on_vm(vm_under_test, action=action)
 
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
+        # vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
 
         LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
                     "after {}".format(vm_actions))
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt'])
+
+        # if vm_type != 'vswitch':
+        #     LOG.tc_step("Verify ping from base_vm to vm_under_test over data networks still works after {}"
+        #                 .format(vm_actions))
+        #     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['data'])
