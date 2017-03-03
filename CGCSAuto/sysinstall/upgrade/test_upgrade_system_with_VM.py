@@ -57,11 +57,11 @@ def vms_with_upgrade():
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     vm_helper.wait_for_vm_pingable_from_natbox(vm1)
     vm_helper.wait_for_vm_pingable_from_natbox(vm2)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.TENANT1)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.TENANT2)
 
     LOG.fixture_step("Boot vm3 from image with flavor flv_rootdisk and wait for it pingable from NatBox")
     vm3_name = "image_root"
-    vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, auth_info=Tenant.TENANT1)[1]
+    vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, auth_info=Tenant.TENANT2)[1]
     ResourceCleanup.add('vm', vm3, del_vm_vols=True)
 
     LOG.fixture_step("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it "
