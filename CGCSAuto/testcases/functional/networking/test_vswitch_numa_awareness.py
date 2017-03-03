@@ -953,7 +953,7 @@ class TestSpanNumaNodes:
     @mark.parametrize(('vcpus', 'vswitch_affinity', 'numa0', 'numa0_cpus', 'numa0_mem', 'numa1', 'numa1_cpus', 'numa1_mem'),[
         (3, 'strict', 0, 0, 512, 1, '1,2', 512),
         (2, 'strict', None, 0, 512, None, 1, 512),
-        (2, 'prefer', None, None, None, None, None, None),
+        # (2, 'prefer', None, None, None, None, None, None),
         # (3, 'prefer', 0, None, None, 1, None, None, 'NumaErr.UNDEVISIBLE')
     ])
     def test_vm_actions_vswitch_span_numa_nodes(self, span_numa_hosts, vcpus, vswitch_affinity, numa0, numa0_cpus,

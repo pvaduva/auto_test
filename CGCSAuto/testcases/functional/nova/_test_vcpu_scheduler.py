@@ -1,3 +1,6 @@
+##################################################################
+#  Disable vcpu scheduler tests for newton until feature ready  ##
+
 from pytest import mark
 
 from utils.tis_log import LOG
