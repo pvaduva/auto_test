@@ -344,7 +344,7 @@ def __hosts_in_states(hosts, con_ssh=None, **states):
 
 
 def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTimeout.ONLINE_AFTER_LOCK, con_ssh=None,
-              fail_ok=False, check_first=True, swact=True):
+              fail_ok=False, check_first=True, swact=False):
     """
     lock a host.
 
