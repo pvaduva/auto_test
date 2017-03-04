@@ -349,7 +349,8 @@ class TestMutiPortsPCI:
         LOG.tc_step("Verify vm pci address")
         check_helper.check_vm_pci_addr(vm_under_test, nics)
 
-        for vm_actions in [['auto_recover'], ['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
+        # ['auto_recover'],
+        for vm_actions in [['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
 
             if 'auto_recover' in vm_actions:
                 LOG.tc_step("Set vm to error state and wait for auto recovery complete, "
