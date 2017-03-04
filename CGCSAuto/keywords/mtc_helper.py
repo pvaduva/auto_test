@@ -74,8 +74,9 @@ KILL_PROC_EVENT_FORMAT = {
              ),
         # clear 	200.006 	compute-2 'mtclogd' process has failed. Auto recovery in progress. 	host=compute-2.process=mtclogd 	minor
         # "compute-2 'mtclogd' process has failed. Auto recovery in progress."
+        # set compute-1 'ntpd' process has failed. Manual recovery is required.
         'minor': (
-            r"([^\s]+) '([^\']+)' process has ([^\s]+)\. Auto recovery in progress.",
+            r"([^\s]+) '([^\']+)' process has ([^\s]+)\. [^\s]+ recovery.*",
             r'host=([^\.]+)\.process=([^\s]+)'
         ),
     },
@@ -712,7 +713,7 @@ def check_impact(impact, service_name, host='', last_events=None,
 
 
 def get_pmon_process_id(pid_file, host, con_ssh=None):
-    cmd = 'cat {} 2>/dev/null && echo 2>/dev/null'.format(pid_file)
+    cmd = 'cat {} 2>/dev/null | head -n1 && echo 2>/dev/null'.format(pid_file)
 
     with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
         code, output = con.exec_cmd(cmd)

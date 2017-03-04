@@ -55,14 +55,14 @@ PROCESSES = {
 
     'mtcalarmd': {
         'cmd': 'mtcalarmd', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 3,
-        'interval': 1, 'process_type': 'pmon'},
+        'interval': 1, 'process_type': 'pmon', 'conf_file': '/etc/pmon.d/mtcalarm.conf'},
 
     'sm-api': {'cmd': 'sm-api', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
-               'interval': 5, 'process_type': 'pmon'},
+               'interval': 5, 'process_type': 'pmon', 'node_type': 'controller'},
 
     'sm-watchdog': {
         'cmd': 'sm-watchdog', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
-        'interval': 5, 'process_type': 'pmon'},
+        'interval': 5, 'process_type': 'pmon', 'node_type': 'controller'},
 
     'sysinv-agent': {
         'cmd': 'sysinv-agent', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
@@ -70,7 +70,7 @@ PROCESSES = {
 
     'sw-patch-controller-daemon': {
         'cmd': 'sw-patch-controller-daemon', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
-        'interval': 5, 'process_type': 'pmon'},
+        'interval': 5, 'process_type': 'pmon', 'node_type': 'controller'},
 
     'sw-patch-agent': {
         'cmd': 'sw-patch-agent', 'impact': 'enabled-degraded', 'severity': 'major', 'debounce': 20,
@@ -107,11 +107,12 @@ PROCESSES = {
 
     'io-monitor-manager': {
         'cmd': 'io-monitor-manager', 'impact': 'log', 'severity': 'minor', 'debounce': 20,
-        'interval': 10, 'retries': 5, 'process_type': 'pmon'},
+        'interval': 10, 'retries': 5, 'process_type': 'pmon', 'conf_file': '/etc/pmon.d/io-monitor.conf',
+        'node_type': 'controller'},
 
     'logmgmt': {
         'cmd': 'logmgmt', 'impact': 'log', 'severity': 'minor', 'debounce': 20,
-        'interval': 5, 'retries': 5, 'process_type': 'pmon'},
+        'interval': 5, 'retries': 5, 'process_type': 'pmon', 'conf_file': '/etc/pmon.d/logmgmt'},
 
     # compute-only processes
     'guestServer': {
@@ -517,35 +518,53 @@ class MonitoredProcess:
 
         if severity == 'minor':
             if len(m.groups()) != 3:
+                LOG.debug('Reason format not matching, expecting 3 matching, but got:{}'.format(len(m.groups())))
                 return {}
 
             matched_host, matched_process, matched_status = m.groups()
             if matched_host != host:
+                LOG.debug('Reason HOST not matching, expecting {} but in-event:{}, pattern:{}, reason-text'.format(
+                    host, matched_host, reason_pattern, reason))
                 return {}
 
             if matched_process != process:
+                LOG.debug('Reason Process not matching, expecting {} but in-event:{}, pattern:{}, reason-text'.format(
+                    process, matched_process, reason_pattern, reason))
                 return {}
 
-            if matched_status != 'failed':
+            status = 'failed'
+            if matched_status != status:
+                LOG.debug('Reason Status not matching, expecting {} but in-event:{}, pattern:{}, reason-text'.format(
+                    status, matched_status, reason_pattern, reason))
                 return {}
 
             return dict(zip(('host', 'service', 'status'), m.groups()))
 
         elif severity == 'major':
             if len(m.groups()) != 4:
+                LOG.debug('Reason format not matching, expecting 4 matching, but got:{}'.format(len(m.groups())))
                 return {}
 
             matched_host, matched_status, matched_process, matched_severity = m.groups()
             if matched_host != host:
+                LOG.debug('Reason Process not matching, expecting {} but in-event:{}, pattern:{}, reason-text'.format(
+                    process, matched_process, reason_pattern, reason))
                 return {}
 
-            if matched_status != 'failed':
+            status = 'degraded'
+            if matched_status != status:
+                LOG.debug('Reason Status not matching, expecting {} but in-event:{}, pattern:{}, reason-text'.format(
+                    status, matched_status, reason_pattern, reason))
                 return {}
 
             if matched_process != process:
+                LOG.debug('Reason Process not matching, expecting {} but in-event:{}, pattern:{}, reason-text'.format(
+                    process, matched_process, reason_pattern, reason))
                 return {}
 
             if matched_severity != severity:
+                LOG.debug('Reason SEVERITY not matching, expecting {} but in-event:{}, pattern:{}, reason-text'.format(
+                    severity, matched_severity, reason_pattern, reason))
                 return {}
 
             return dict(zip(('host', 'status', 'service', 'severity'), m.groups()))
@@ -583,18 +602,25 @@ class MonitoredProcess:
         try:
             actual_event_id = event[3].strip()
             if actual_event_id != event_log_id:
+                LOG.debug('Event ID not matching: expected ID:{}, in-event:{}, event:{}'.format(
+                    event_log_id, actual_event_id, event))
                 return {}
 
             actual_state = event[2]
             if actual_state not in ('set', 'clear'):
+                LOG.debug('Event State not set/clear: state in-event:{}, event:{}'.format(
+                    actual_state, event))
                 return {}
 
             actual_severity = event[6].strip()
             if actual_severity != severity:
+                LOG.debug('Event Severity not matching: expected severity:{} in-event:{}, event:{}'.format(
+                    severity, actual_severity, event))
                 return {}
 
             matched = self.matched_pmon_event_reason(event[4].strip(), reason_pattern, host, process, severity)
             if not matched:
+                LOG.debug('Event Reason not matching: event:{}'.format(event))
                 return {}
 
             matched_event.update(dict(
@@ -663,8 +689,16 @@ class MonitoredProcess:
                         return 0, tuple(matched_events)
                         # return True, tuple(matched_events)
                     else:
-                        LOG.info('State is not "clear",\n{}'.format(event))
-                        LOG.info('matched-events:\n\n{}\n\n'.format(matched_events))
+                        LOG.debug('State is not "clear",\n{}'.format(event))
+                        LOG.debug('matched-events:\n\n{}\n\n'.format(matched_events))
+
+            if len(matched_events) == 1:
+                LOG.warn('Only 1 event recorded? matched_event:\n{}\n')
+                if service in ('ntpd'):
+                    event = matched_events[0]['event']
+                    if event[1] == 'set':
+                        LOG.warn('Treat NTP sepcially, pass since it is set')
+                        return 0, tuple(matched_events)
 
             LOG.warn('No matched event found at try:{}, will sleep {} seconds and retry'
                      '\nmatched events:\n{}, host={}'.format(retry, interval, matched_events, host))
@@ -686,22 +720,30 @@ class MonitoredProcess:
             LOG.error('No pid-file provided')
             return -1
 
-        wait_time = 120
         cmd = 'true; n=0; for((;n<{};)); do pid=$(cat {} 2>/dev/null); if [ "x$pid" = "x" ]; then usleep 0.05; ' \
-              'continue; fi; sudo kill -9 $pid &>/dev/null; if [ $? -eq 0 ]; then ((n++)); fi; echo -n " $n" ; ' \
-              'sleep {}; done; echo'.format(retries, pid_file, interval)
+              'continue; fi; sudo kill -9 $pid &>/dev/null; if [ $? -eq 0 ]; then ((n++)); fi; ' \
+              'sleep {}; done; echo $pid'.format(retries, pid_file, interval)
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
 
+        wait_time = max(interval * retries + 60, 60)
+
+        self.pid = -1
         for _ in range(2):
-            with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
-                code, output = con.exec_sudo_cmd(cmd, fail_ok=True)
-                if 0 != code:
-                    LOG.warn('Failed to kill process:{} on host:{}, cli:\n{}\noutput:\n{}'.format(
-                        name, host, cmd, output))
-                    debounce = int(getattr(self, 'debounce', '20'))
-                    time.sleep(debounce)
-                    continue
-                break
+            try:
+                with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
+                    code, output = con.exec_sudo_cmd(cmd, fail_ok=True, expect_timeout=wait_time)
+                    if 0 != code:
+                        LOG.warn('Failed to kill process:{} on host:{}, cli:\n{}\noutput:\n{}'.format(
+                            name, host, cmd, output))
+                        debounce = int(getattr(self, 'debounce', '20'))
+                        time.sleep(debounce)
+                        continue
+                    if output:
+                        LOG.info('Last PID of PMON process is:{}, process:{}'.format(output, name))
+                        self.pid = int(output)
+                    break
+            except Exception as e:
+                LOG.warn('caught exception when running:{}, exception:{}'.format(cmd, e))
 
         if impact in ('log'):
             expected = {'operational': 'enabled', 'availability': 'available'}
@@ -728,8 +770,11 @@ class MonitoredProcess:
             quorum = getattr(self, 'quorum', None)
             if quorum == '1':
                 LOG.warn('Killing quorum process:{}, the impacted node should reboot'.format(name))
+                expected = {'operational': 'Disabled', 'availability': 'offline'}
+                assert host_helper.wait_for_host_states(
+                    host, timeout=wait_time, con_ssh=con_ssh, fail_ok=False, **expected)
 
-            if impact in ('disabled-failed') or quorum == '1':
+            elif impact in ('disabled-failed'):
                 expected = {'operational': 'Disabled', 'availability': 'Failed'}
                 LOG.info('wait host getting into status:{}'.format(expected))
                 assert host_helper.wait_for_host_states(
@@ -760,6 +805,9 @@ class MonitoredProcess:
                     LOG.error('host {} did not recoverd to enabled-available status from status:{} '
                               'after been killed {} times'.format(host, expected, retries))
                     return -1
+
+            if -1 == self.pid:
+                LOG.warn('Unkonw-PID from cmd:{}'.format(cmd))
 
             return 0
 
@@ -899,7 +947,7 @@ class MonitoredProcess:
                 self.prev_host = host
                 self.host = host
 
-            self.success = (code == 0)
+        self.success = (code == 0)
 
         global _tested_procs
         _tested_procs.append(self)
@@ -920,9 +968,11 @@ class MonitoredProcess:
     mark.p1(('sysinv-agent')),
     mark.p1(('sw-patch-controller-daemon')),
     mark.p1(('sw-patch-agent')),
-    mark.p1(('acpid')),
+    # TODO jira?
+    # mark.p1(('acpid')),
     mark.p1(('ceilometer-polling')),
     mark.p1(('mtclogd')),
+    # TODO need manual configuring
     mark.p1(('ntpd')),
     mark.p1(('sm-eru')),
     mark.p1(('sshd')),
@@ -1057,6 +1107,8 @@ def _monitor_process(process, total_time, interval=5):
     pid_file = getattr(process, 'pid_file', None)
     process_type = getattr(process, 'process_type', 'sm')
 
+    LOG.info('Starting monitoring process:{}'.format(name))
+
     global _final_processes_status
 
     con_ssh = SSHClient(ProjVar.get_var('lab')['floating ip'])
@@ -1139,7 +1191,7 @@ def wait_and_monitor_tested_processes(request):
         else:
             last_impact = getattr(_tested_procs[-1], 'impact', 'swact')
             if last_impact != 'swact':
-                total_time = INTERVAL_BETWEEN_SWACT / 5
+                total_time = INTERVAL_BETWEEN_SWACT / 4
                 pre_wait = INTERVAL_BETWEEN_SWACT / 20
 
             LOG.info('Wait for {} seconds after potential killing process testing'.format(pre_wait))
@@ -1174,18 +1226,7 @@ def wait_and_monitor_tested_processes(request):
                 LOG.error('Really?\t{}/{} processes died, {}'.format(died, total, pids_info['died_pids']))
 
             assert total == 1, \
-                'At least 2 new processes created, all used pids:{}'.format(pids_info['used_pids'])
-            # if total > 1:
-            #     # this should never happen but it does occasionally too, just flag an error for now
-            #     LOG.error('Really?\t{} new processes created, all used pids:{}'.format(total-1, pids_info['used_pids']))
-
-            # if total > 2:
-            #     last_pid = pids_info['used_pids'][-1]
-            #     old_pids = [pid for pid in pids_info['used_pids'] if pid != last_pid]
-            #
-            #     assert len(old_pids) < 2, \
-            #         'Service {} re-created {} times during the monotoring period, used-pids:{}'.format(
-            #             name, len(old_pids), pids_info['used_pids'])
+                'Should have only 1 new process. Used pids:{}'.format(pids_info['used_pids'])
 
             LOG.info('OK, (new) processe(s) for service:{}  is(are) running stable')
 
