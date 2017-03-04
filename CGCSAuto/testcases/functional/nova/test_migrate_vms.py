@@ -308,7 +308,7 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol):
     LOG.tc_step("Create a volume from {} image".format(guest_os))
     image_id = glance_helper.get_guest_image(guest_os=guest_os)
 
-    vol_id = cinder_helper.create_volume(image_id=image_id, size=9)[1]
+    vol_id = cinder_helper.create_volume(image_id=image_id, size=9, guest_image=guest_os)[1]
     ResourceCleanup.add('volume', vol_id)
 
     LOG.tc_step("Boot a vm from above flavor and volume")
