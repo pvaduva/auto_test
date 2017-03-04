@@ -592,13 +592,12 @@ class TestVmPCIOperations:
         vm_helper.ping_vms_from_vm(
             from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
 
-        # FIXME: remove temporarily due to port update fail issue
-        # LOG.tc_step('Set vm to error and wait for it to be auto recovered')
-        # vm_helper.set_vm_state(vm_id=self.vm_id, error_state=True, fail_ok=False)
-        # vm_helper.wait_for_vm_values(vm_id=self.vm_id, status=VMStatus.ACTIVE, fail_ok=False, timeout=600)
-        #
-        # LOG.tc_step("Check vm still pingable over mgmt and {} nets after auto recovery".format(self.net_type))
-        #
-        # self.wait_check_vm_states(step='set-error-state-recover')
-        # vm_helper.ping_vms_from_vm(
-        #     from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
+        LOG.tc_step('Set vm to error and wait for it to be auto recovered')
+        vm_helper.set_vm_state(vm_id=self.vm_id, error_state=True, fail_ok=False)
+        vm_helper.wait_for_vm_values(vm_id=self.vm_id, status=VMStatus.ACTIVE, fail_ok=False, timeout=600)
+
+        LOG.tc_step("Check vm still pingable over mgmt and {} nets after auto recovery".format(self.net_type))
+
+        self.wait_check_vm_states(step='set-error-state-recover')
+        vm_helper.ping_vms_from_vm(
+            from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
