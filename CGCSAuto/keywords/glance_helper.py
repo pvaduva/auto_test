@@ -38,12 +38,13 @@ def get_images(images=None, rtn_val='id', auth_info=Tenant.ADMIN, con_ssh=None, 
     return table_parser.get_values(table_, rtn_val, strict=strict, exclude=exclude, **kwargs)
 
 
-def get_image_id_from_name(name=None, strict=False, con_ssh=None, auth_info=None):
+def get_image_id_from_name(name=None, strict=False, fail_ok=True, con_ssh=None, auth_info=None):
     """
 
     Args:
         name (list or str):
         strict:
+        fail_ok (bool): whether to raise exception if no image found with provided name
         con_ssh:
         auth_info (dict:
 
@@ -53,10 +54,17 @@ def get_image_id_from_name(name=None, strict=False, con_ssh=None, auth_info=None
     """
     table_ = table_parser.table(cli.glance('image-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is None:
-        image_id = random.choice(table_parser.get_column(table_, 'ID'))
-    else:
-        image_ids = table_parser.get_values(table_, 'ID', strict=strict, Name=name)
-        image_id = '' if not image_ids else random.choice(image_ids)
+        name = GuestImages.DEFAULT_GUEST
+
+    image_ids = table_parser.get_values(table_, 'ID', strict=strict, Name=name)
+    image_id = '' if not image_ids else image_ids[0]
+
+    if not image_id:
+        msg = "No existing image found with name: {}".format(name)
+        if fail_ok:
+            LOG.warning(msg)
+        else:
+            raise exceptions.CommonError(msg)
 
     return image_id
 
@@ -95,11 +103,12 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     # Use source image url if url is provided. Else use local img file.
 
-    file_path = source_image_file if source_image_file else GuestImages.IMAGE_DIR + '/cgcs-guest.img'
+    default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2]
+    file_path = source_image_file if source_image_file else "{}/{}".format(GuestImages.IMAGE_DIR, default_guest_img)
 
     source_str = file_path
 
-    known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros', 'opensuse', 'rhel']
+    known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'tis-centos-guest']
     name = name if name else 'auto'
     for img_str in known_imgs:
         if img_str in name:
@@ -334,7 +343,7 @@ def get_image_properties(image, property_keys, auth_info=Tenant.ADMIN, con_ssh=N
     return results
 
 
-def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, con_ssh=None):
+def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout=None, con_ssh=None):
     """
 
     Args:
@@ -381,7 +390,7 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, con_ssh
         index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=3600)
     if index == 1:
         con_ssh.send(SvcCgcsAuto.PASSWORD)
-        index = con_ssh.expect()
+        index = con_ssh.expect(timeout=timeout)
     if index != 0:
         raise exceptions.SSHException("Failed to scp files")
 
@@ -410,7 +419,7 @@ def get_guest_image(guest_os, rm_image=True):
         img_id = create_image(name=guest_os, source_image_file=image_path, disk_format='qcow2',
                               container_format='bare')[1]
 
-        if rm_image and re.search('rhel|opensuse|centos_6|ubuntu_12', guest_os):
+        if rm_image and re.search('rhel|opensuse|centos_6|centos_7|ubuntu_12', guest_os):
             con_ssh = ControllerClient.get_active_controller()
             con_ssh.exec_cmd('rm {}'.format(image_path), fail_ok=True, get_exit_code=False)
 

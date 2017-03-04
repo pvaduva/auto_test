@@ -6,7 +6,7 @@ from consts.cgcs import FlavorSpec, VMStatus
 from consts.reasons import SkipReason
 from consts.auth import Tenant
 from keywords import vm_helper, nova_helper, network_helper, host_helper, check_helper, glance_helper, common
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -51,8 +51,8 @@ def _boot_multiports_vm(flavor, mgmt_net_id, vifs, net_id, net_type, base_vm, pc
     nics = _append_nics_for_net(vifs, net_id=net_id, nics=nics)
 
     LOG.tc_step("Boot a test_vm with following nics on same networks as base_vm: {}".format(nics))
-    vm_under_test = vm_helper.boot_vm(name='multiports', nics=nics, flavor=flavor, reuse_vol=False)[1]
-    ResourceCleanup.add('vm', vm_under_test)
+    vm_under_test = vm_helper.boot_vm(name='multiports', nics=nics, flavor=flavor, cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_under_test)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
     LOG.tc_step("Check vm PCI address is as configured")
@@ -90,8 +90,9 @@ class TestMutiPortsBasic:
                 {'net-id': internal_net_id, 'vif-model': 'virtio'}]
 
         LOG.fixture_step("(class) Boot a base vm with following nics: {}".format(nics))
-        base_vm = vm_helper.boot_vm(name='multiports_base', flavor=flavor_id, nics=nics, reuse_vol=False)[1]
-        ResourceCleanup.add('vm', base_vm, scope='class')
+        base_vm = vm_helper.boot_vm(name='multiports_base', flavor=flavor_id, nics=nics, cleanup='class',
+                                    reuse_vol=False)[1]
+        # ResourceCleanup.add('vm', base_vm, scope='class')
 
         vm_helper.wait_for_vm_pingable_from_natbox(base_vm)
         vm_helper.ping_vms_from_vm(base_vm, base_vm, net_types='data')
@@ -254,8 +255,9 @@ class TestMutiPortsPCI:
                 {'net-id': internal_net_id, 'vif-model': 'avp'}, ]
 
         LOG.fixture_step("(class) Boot a base pci vm with following nics: {}".format(nics))
-        base_vm_pci = vm_helper.boot_vm(name='multiports_pci_base', flavor=flavor_id, nics=nics, reuse_vol=False)[1]
-        ResourceCleanup.add('vm', base_vm_pci, scope='class')
+        base_vm_pci = vm_helper.boot_vm(name='multiports_pci_base', flavor=flavor_id, nics=nics, cleanup='class',
+                                        reuse_vol=False)[1]
+        # ResourceCleanup.add('vm', base_vm_pci, scope='class')
 
         LOG.fixture_step("(class) Ping base PCI vm from NatBox over management network.")
         vm_helper.wait_for_vm_pingable_from_natbox(base_vm_pci, fail_ok=False)
@@ -329,8 +331,9 @@ class TestMutiPortsPCI:
         nics = _append_nics_for_net(vifs, net_id=internal_net_id, nics=nics)
 
         LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
-        vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor, reuse_vol=False)[1]
-        ResourceCleanup.add('vm', vm_under_test, scope='function')
+        vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor, cleanup='function',
+                                          reuse_vol=False)[1]
+        # ResourceCleanup.add('vm', vm_under_test, scope='function')
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
         if pcipt_included:
@@ -412,8 +415,9 @@ class TestMutiPortsPCI:
             nics.append({'net-id': internal_net_id, 'vif-model': vif})
 
         LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
-        vm_under_test = vm_helper.boot_vm(name='multiports_pci_evac', nics=nics, flavor=flavor, reuse_vol=False)[1]
-        ResourceCleanup.add('vm', vm_under_test, scope='function')
+        vm_under_test = vm_helper.boot_vm(name='multiports_pci_evac', nics=nics, flavor=flavor, cleanup='function',
+                                          reuse_vol=False)[1]
+        # ResourceCleanup.add('vm', vm_under_test, scope='function')
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
         LOG.tc_step("Add vlan to pci-passthrough interface.")

@@ -12,7 +12,7 @@ from utils import table_parser
 from consts.cgcs import FlavorSpec
 from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 

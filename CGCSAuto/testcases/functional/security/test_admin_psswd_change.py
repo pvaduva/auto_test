@@ -14,12 +14,13 @@ def _revert_admin_pw(request):
         # revert password
         LOG.fixture_step("Reverting admin password to '{}'".format(prev_pswd))
         keystone_helper.update_user('admin', password=prev_pswd)
-    request.add(_revert)
+    request.addfinalizer(_revert)
 
 
 @fixture(scope='module')
 def less_than_two_cons():
     return len(system_helper.get_controllers()) < 2
+
 
 @mark.usefixtures('check_alarms')
 @mark.parametrize(('scenario'), [

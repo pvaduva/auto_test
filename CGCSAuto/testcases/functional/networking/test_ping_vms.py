@@ -6,7 +6,7 @@ from consts.cgcs import FlavorSpec
 
 from keywords import vm_helper, glance_helper, nova_helper, network_helper, cinder_helper, check_helper
 
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def id_gen(val):
@@ -41,8 +41,9 @@ def _append_nics(vifs, net_ids, nics):
 @mark.parametrize(('guest_os', 'vifs'), [
     mark.priorities('cpe_sanity', 'sanity')(('cgcs-guest', (('avp', None), ('virtio', '01:04')))),
     mark.priorities('cpe_sanity', 'sanity')(('ubuntu_14', (('e1000', '00:1f'), ('virtio', None)))),
+    ('tis-centos-guest', (('avp', '00:1e'), ('virtio', '08:09')))
 ], ids=id_gen)
-def test_ping_between_two_vms(guest_os, vifs, ubuntu14_image):
+def test_ping_between_two_vms(guest_os, vifs):
     """
     Ping between two cgcs-guest/ubuntu vms with virtio and avp vif models
 
@@ -60,15 +61,17 @@ def test_ping_between_two_vms(guest_os, vifs, ubuntu14_image):
     """
     # determine the disk size and image id based on the guest os under test
 
-    if guest_os == 'ubuntu_14':
-        image_id = ubuntu14_image
-        size = 9
-    else:
-        image_id = glance_helper.get_image_id_from_name('cgcs-guest')
-        size = 1
+    # if guest_os == 'ubuntu_14':
+    #     image_id = ubuntu14_image
+    #     size = 9
+    # elif guest_os == 'cgcs-guest':
+    #     image_id = glance_helper.get_image_id_from_name('cgcs-guest')
+    #     size = 1
 
-    LOG.tc_step("Create a favor with {}G root disk and dedicated cpu policy".format(size))
-    flavor_id = nova_helper.create_flavor(name='dedicated-{}g'.format(size), root_disk=size)[1]
+    image_id = glance_helper.get_guest_image(guest_os)
+
+    LOG.tc_step("Create a favor dedicated cpu policy")
+    flavor_id = nova_helper.create_flavor(name='dedicated', guest_os=guest_os)[1]
     ResourceCleanup.add('flavor', flavor_id, scope='module')
 
     nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated'})
@@ -84,14 +87,14 @@ def test_ping_between_two_vms(guest_os, vifs, ubuntu14_image):
         # compose vm nics
         nics = _append_nics(vifs, [tenant_net_id, internal_net_id], [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}])
 
-        LOG.tc_step("Create a {}G volume from {} image".format(size, guest_os))
-        vol_id = cinder_helper.create_volume(name='vol-{}'.format(guest_os), image_id=image_id, size=size)[1]
+        LOG.tc_step("Create a volume from {} image".format(guest_os))
+        vol_id = cinder_helper.create_volume(name='vol-{}'.format(guest_os), image_id=image_id, guest_image=guest_os)[1]
         ResourceCleanup.add('volume', vol_id)
 
         LOG.tc_step("Boot a {} vm with {} vifs from above flavor and volume".format(guest_os, vifs))
-        vm_id = vm_helper.boot_vm('{}_vifs'.format(guest_os), flavor=flavor_id,
+        vm_id = vm_helper.boot_vm('{}_vifs'.format(guest_os), flavor=flavor_id, cleanup='function',
                                   source='volume', source_id=vol_id, nics=nics, guest_os=guest_os)[1]
-        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+        # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
         LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
@@ -145,8 +148,8 @@ def _test_ping_vm_basic(guest_os):
         - Delete created vm, volume, flavor
 
     """
-    vm_id = vm_helper.boot_vm(name=guest_os, guest_os=guest_os)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm(name=guest_os, guest_os=guest_os, cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_id)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
     vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['mgmt'])

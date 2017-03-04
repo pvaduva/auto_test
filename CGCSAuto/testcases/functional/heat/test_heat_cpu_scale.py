@@ -7,7 +7,7 @@ from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec
 from consts.filepaths import WRSROOT_HOME
 from keywords import nova_helper, vm_helper, heat_helper, network_helper
 from setup_consts import P1
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from utils import cli
 from utils.tis_log import LOG
 

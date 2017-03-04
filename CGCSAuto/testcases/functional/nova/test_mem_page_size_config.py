@@ -10,7 +10,7 @@ from utils import table_parser, cli
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, ImageMetadata, NovaCLIOutput
 from keywords import nova_helper, vm_helper, glance_helper, host_helper, system_helper, cinder_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')

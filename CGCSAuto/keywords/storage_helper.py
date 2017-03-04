@@ -398,9 +398,10 @@ def find_image_size(con_ssh, image_name='cgcs-guest.img', location='~/images'):
     return image_size
 
 
-def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, object_=None, fail_ok=False, con_ssh=None):
+def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, object_gib=None, object_gateway=False,
+                           lock_unlock=True, fail_ok=False, con_ssh=None):
     """
-    Modify storage backend pool allocation
+    Modify ceph storage backend pool allocation
 
     Args:
         backend (str): storage backend to modify (e.g. ceph)
@@ -412,24 +413,38 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
         con_ssh:
 
     Returns:
-        0, list of new allocation
+        0, dict of new allocation
         1, cli err message
 
     """
 
     args = backend
+
+    backend_info = get_storage_backend_info(backend)
+
     if cinder:
         args += ' cinder_pool_gib=' + cinder
-    if glance:
+    if glance and backend == 'ceph':
         args += ' glance_pool_gib=' + glance
-    if ephemeral:
+    if ephemeral and backend == 'ceph':
         args += ' ephemeral_pool_gib=' + ephemeral
-    if object_:
-        args += ' object_pool_gib=' + object_
+    if object_gateway and backend == 'ceph':
+        args += ' object_gateway=' + str(object_gateway)
+    if object_gib and backend == 'ceph':
+        args += ' object_pool_gib=' + object_gib
 
     code, out = cli.system('storage-backend-modify', args, con_ssh, fail_ok=fail_ok, rtn_list=True)
     # TODO return new values of storage allocation and check they are the right values
-    return code, out
+    if code == 0:
+        backend_info = get_storage_backend_info(backend)
+        return 0, backend_info
+    else:
+        msg = " Fail to modify storage backend allocations: {}".format(out)
+        LOG.warning(msg)
+        if fail_ok:
+            return code, out
+        raise exceptions.CLIRejected(msg)
+
 
 
 def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_interval=5):
@@ -448,3 +463,64 @@ def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_inte
             return False, err_msg
         else:
             raise exceptions.TimeoutException(err_msg)
+
+def get_storage_backend_info(backend, fail_ok=False, con_ssh=None):
+    """
+    Get storage backend pool allocation info
+
+    Args:
+        backend (str): storage backend to get info (e.g. ceph)
+        fail_ok:
+        con_ssh:
+
+    Returns: dict  {'cinder_pool_gib': 202, 'glance_pool_gib': 20, 'ephemeral_pool_gib': 0,
+                    'object_pool_gib': 0, 'ceph_total_space_gib': 222,  'object_gateway': False}
+
+    """
+    valid_backends = ['ceph', 'lvm']
+
+    args = backend
+
+    table_ = table_parser.table(cli.system('storage-backend-show', args, ssh_client=con_ssh, fail_ok=fail_ok))
+
+    backend_info = {}
+
+    if table_:
+
+        backend_info['cinder_pool_gib'] = table_parser.get_value_two_col_table(table_, 'cinder_pool_gib')
+        backend_info['glance_pool_gib'] = table_parser.get_value_two_col_table(table_, 'glance_pool_gib')
+        backend_info['ephemeral_pool_gib'] = table_parser.get_value_two_col_table(table_, 'ephemeral_pool_gib')
+        backend_info['object_pool_gib'] = table_parser.get_value_two_col_table(table_, 'cinder_pool_gib')
+        backend_info['ceph_total_space_gib'] = table_parser.get_value_two_col_table(table_, 'ceph_total_space_gib')
+        backend_info['object_gateway'] = table_parser.get_value_two_col_table(table_, 'object_gateway')
+
+    return backend_info
+
+def get_configured_system_storage_backend(con_ssh=None, fail_ok=False):
+
+
+    backend = []
+    table_ = table_parser.table(cli.system('storage-backend-list', ssh_client=con_ssh, fail_ok=fail_ok))
+    if table_:
+        table_ = table_parser.filter_table(table_, state='configured')
+        backend =  table_parser.get_column(table_, 'backend')
+    return backend
+
+
+def get_storage_backend_state_value(backend, con_ssh=None, fail_ok=False):
+    table_ = table_parser.table(cli.system('storage-backend-list', ssh_client=con_ssh, fail_ok=fail_ok))
+    state = None
+    if table_:
+        table_ = table_parser.filter_table(table_, backend=backend)
+        state =  table_parser.get_column(table_, 'state')[0]
+    return state
+
+
+def get_storage_backend_task_value(backend, con_ssh=None, fail_ok=False):
+    table_ = table_parser.table(cli.system('storage-backend-list', ssh_client=con_ssh, fail_ok=fail_ok))
+    task = None
+    if table_:
+        table_ = table_parser.filter_table(table_, backend=backend)
+        task =  table_parser.get_column(table_, 'task')[0]
+    return task
+

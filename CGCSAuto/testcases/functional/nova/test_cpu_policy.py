@@ -3,11 +3,11 @@ from pytest import mark, fixture, skip
 from utils import table_parser
 from utils.tis_log import LOG
 
-from consts.cgcs import FlavorSpec, ImageMetadata
+from consts.cgcs import FlavorSpec, ImageMetadata, GuestImages
 from consts.cli_errs import CPUPolicyErr        # used by eval
 
 from keywords import nova_helper, vm_helper, glance_helper, cinder_helper, check_helper, host_helper, system_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @mark.parametrize(('flv_vcpus', 'flv_pol', 'img_pol', 'boot_source', 'expt_err'), [
@@ -38,7 +38,7 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
         image_id = glance_helper.create_image(name='cpu_pol_{}'.format(img_pol), **image_meta)[1]
         ResourceCleanup.add('image', image_id)
     else:
-        image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
+        image_id = glance_helper.get_image_id_from_name(GuestImages.DEFAULT_GUEST, strict=True)
 
     if boot_source == 'volume':
         LOG.tc_step("Create a volume from image")
@@ -51,9 +51,9 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
 
     LOG.tc_step("Attempt to boot a vm from above {} with above flavor".format(boot_source))
     code, vm_id, msg, ignore = vm_helper.boot_vm(name='cpu_pol', flavor=flavor_id, source=boot_source,
-                                                 source_id=source_id, fail_ok=True)
-    if vm_id:
-        ResourceCleanup.add('vm', vm_id)
+                                                 source_id=source_id, fail_ok=True, cleanup='function')
+    # if vm_id:
+    #     ResourceCleanup.add('vm', vm_id)
 
     # check for negative tests
     if expt_err is not None:
@@ -89,7 +89,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
     flavor_id = nova_helper.create_flavor(name='cpu_pol', vcpus=flv_vcpus)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
-    image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
+    image_id = glance_helper.get_image_id_from_name(GuestImages.DEFAULT_GUEST, strict=True)
     if cpu_pol is not None:
         if pol_source == 'flavor':
             specs = {FlavorSpec.CPU_POLICY: cpu_pol}
@@ -206,7 +206,7 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
     elif 'remote' in storage_backing:
         storage_backing = 'remote'
 
-    image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
+    image_id = glance_helper.get_image_id_from_name(GuestImages.DEFAULT_GUEST, strict=True)
     pre_test_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
     vm_dedicated_id = ''
     vm_shared_id = ''

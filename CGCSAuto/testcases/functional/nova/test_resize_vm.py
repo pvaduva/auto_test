@@ -2,7 +2,7 @@ from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def id_gen(val):
@@ -43,7 +43,7 @@ def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
     ('local_lvm',   (1, 0, 0), (2, 1, 1), 'volume'),
     ('local_lvm',   (1, 1, 1), (2, 2, 2), 'volume'),
     ('local_lvm',   (1, 1, 1), (1, 1, 0), 'volume'),
-    mark.nigthly(('local_image', (1, 0, 0), (2, 1, 1), 'image')),
+    mark.nightly(('local_image', (1, 0, 0), (2, 1, 1), 'image')),
     ('local_image', (1, 1, 1), (2, 2, 2), 'image'),
     mark.nightly(('local_image', (1, 1, 1), (1, 1, 0), 'image')),
     ('local_image', (1, 0, 0), (2, 1, 1), 'volume'),

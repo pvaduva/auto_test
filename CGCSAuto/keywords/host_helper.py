@@ -1,5 +1,6 @@
 import re
 import time
+import pexpect
 from contextlib import contextmanager
 from xml.etree import ElementTree
 
@@ -214,7 +215,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         raise exceptions.HostPostCheckFailed(err_msg)
 
 
-def wait_for_hosts_ready(hosts, con_ssh=None):
+def wait_for_hosts_ready(hosts, con_ssh=None, fail_ok=False):
     """
     Wait for hosts to be in online state is locked, and available and hypervisor/webservice up if unlocked
     Args:
@@ -232,14 +233,14 @@ def wait_for_hosts_ready(hosts, con_ssh=None):
 
     if expt_online_hosts:
         LOG.info("Wait for hosts to be online: {}".format(hosts))
-        wait_for_host_states(hosts, availability=HostAvailabilityState.ONLINE, fail_ok=False)
+        wait_for_hosts_states(hosts, availability=HostAvailabilityState.ONLINE, fail_ok=False)
 
     if expt_avail_hosts:
         hypervisors = list(set(get_hypervisors()) & set(hosts))
         controllers = list(set(system_helper.get_controllers()) & set(hosts))
 
         LOG.info("Wait for hosts to be available: {}".format(hosts))
-        wait_for_host_states(hosts, availability=HostAvailabilityState.AVAILABLE, fail_ok=False)
+        wait_for_hosts_states(hosts, availability=HostAvailabilityState.AVAILABLE, fail_ok=False)
 
         if controllers:
             LOG.info("Wait for webservices up for hosts: {}".format(controllers))
@@ -281,6 +282,7 @@ def __hosts_stay_in_states(hosts, duration=10, con_ssh=None, **states):
     while time.time() < end_time:
         if not __hosts_in_states(hosts=hosts, con_ssh=con_ssh, **states):
             return False
+        time.sleep(1)
 
     return True
 
@@ -719,12 +721,20 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None):
     return rtn
 
 
-def _wait_for_openstack_cli_enable(con_ssh=None, timeout=60, fail_ok=False, check_interval=1):
+def _wait_for_openstack_cli_enable(con_ssh=None, timeout=90, fail_ok=False, check_interval=1, reconnect=False,
+                                   reconnect_timeout=60):
     cli_enable_end_time = time.time() + timeout
     while True:
         try:
             cli.system('show', ssh_client=con_ssh, timeout=timeout)
             return True
+
+        except pexpect.EOF:
+            if reconnect:
+                if con_ssh is None:
+                    con_ssh = ControllerClient.get_active_controller()
+                con_ssh.connect(retry_timeout=reconnect_timeout)
+
         except Exception as e:
             if time.time() > cli_enable_end_time:
                 if fail_ok:

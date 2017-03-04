@@ -1,11 +1,11 @@
 from pytest import mark, skip
 
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec, VMStatus
+from consts.cgcs import FlavorSpec, VMStatus, GuestImages
 from consts.reasons import SkipReason
 
 from keywords import vm_helper, nova_helper, glance_helper, cinder_helper, check_helper, host_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def id_gen(val):
@@ -13,17 +13,19 @@ def id_gen(val):
         return '-'.join(val)
 
 
-@mark.usefixtures('ubuntu14_image')
 @mark.parametrize(('guest_os', 'cpu_pol', 'actions'), [
-    mark.priorities('sanity', 'cpe_sanity')(('ubuntu_14', 'dedicated', ['pause', 'unpause'])),
+    mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'dedicated', ['pause', 'unpause'])),
     mark.sanity(('ubuntu_14', 'shared', ['stop', 'start'])),
     mark.sanity(('ubuntu_14', 'dedicated', ['auto_recover'])),
-    mark.priorities('sanity', 'cpe_sanity')(('cgcs-guest', 'dedicated', ['suspend', 'resume'])),
+    # mark.priorities('sanity', 'cpe_sanity')(('cgcs-guest', 'dedicated', ['suspend', 'resume'])),
+    mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'dedicated', ['suspend', 'resume'])),
 ], ids=id_gen)
 def test_nova_actions(guest_os, cpu_pol, actions):
     if guest_os == 'opensuse_12':
         if not cinder_helper.is_volumes_pool_sufficient(min_size=40):
             skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
+
+    img_id = glance_helper.get_guest_image(guest_os=guest_os)
 
     LOG.tc_step("Create a flavor with 1 vcpu")
     flavor_id = nova_helper.create_flavor(name=cpu_pol, vcpus=1, root_disk=9)[1]
@@ -35,12 +37,12 @@ def test_nova_actions(guest_os, cpu_pol, actions):
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
 
     LOG.tc_step("Create a volume from {} image".format(guest_os))
-    vol_id = cinder_helper.create_volume(name='vol-' + guest_os, guest_image=guest_os)[1]
+    vol_id = cinder_helper.create_volume(name='vol-' + guest_os, guest_image=guest_os, image_id=img_id)[1]
     ResourceCleanup.add('volume', vol_id)
 
     LOG.tc_step("Boot a vm from above flavor and volume")
-    vm_id = vm_helper.boot_vm('nova_actions', flavor=flavor_id, source='volume', source_id=vol_id)[1]
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+    vm_id = vm_helper.boot_vm('nova_actions', flavor=flavor_id, source='volume', source_id=vol_id, cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
     LOG.tc_step("Wait for VM pingable from NATBOX")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
@@ -63,19 +65,14 @@ class TestVariousGuests:
 
     @mark.p2
     @mark.features('guest_os')
-    # @mark.usefixtures('ubuntu14_image',
-    #                   'centos6_image', 'centos7_image',
-    #                   'opensuse11_image', 'opensuse12_image',
-    #                   # 'opensuse13_image',
-    #                   'rhel6_image', 'rhel7_image'
-    # )
     @mark.parametrize(('guest_os', 'cpu_pol', 'boot_source', 'actions'), [
+        ('cgcs-guest', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('ubuntu_14', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('centos_6', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('centos_7', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         # ('opensuse_13', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('opensuse_11', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
-        ('opensuse_12', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
+        # ('opensuse_12', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('opensuse_12', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('rhel_7', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('rhel_6', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
@@ -108,7 +105,8 @@ class TestVariousGuests:
 
         LOG.tc_step("Get/Create {} glance image".format(guest_os))
         image_id = glance_helper.get_guest_image(guest_os=guest_os)
-        ResourceCleanup.add('image', image_id, scope='module')
+        if guest_os not in GuestImages.GUESTS_NO_RM:
+            ResourceCleanup.add('image', image_id, scope='module')
 
         LOG.tc_step("Create a flavor with 2 vcpus")
         flavor_id = nova_helper.create_flavor(name=cpu_pol, vcpus=2, guest_os=guest_os)[1]

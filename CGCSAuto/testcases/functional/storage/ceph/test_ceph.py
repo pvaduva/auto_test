@@ -14,7 +14,7 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper, \
     storage_helper, glance_helper, cinder_helper
 from consts.cgcs import EventLogID, GuestImages
 from testfixtures.recover_hosts import HostsToRecover
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 PROC_RESTART_TIME = 30          # number of seconds between process restarts
 RESTARTS_BEFORE_ASSERT = 3      # number of process restarts until error assertion
@@ -247,7 +247,7 @@ def test_ceph_mon_process_kill(monitor):
     # events instead.
         LOG.info('Check events list for ceph monitor failure')
 
-        entity_instance = 'host={}.process=ceph (mon.{}'.format(monitor, monitor)
+        entity_instance = 'host={}.process=ceph (mon.{}, )'.format(monitor, monitor)
         events = system_helper.wait_for_events(5, num=5, strict=False, fail_ok=True,
                                                **{'Entity Instance ID': entity_instance,
                                                   'Event Log ID': EventLogID.STORAGE_DEGRADE,

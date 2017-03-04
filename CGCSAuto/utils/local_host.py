@@ -115,23 +115,21 @@ def vlm_exec_cmd(action, barcode, reserve=True):
     if action not in VLM_CMDS:
         msg = '"{}" is an invalid action.'.format(action)
         msg += " Valid actions: {}".format(str(VLM_CMDS))
-        LOG.info(msg)
-        return 1, msg
+        raise ValueError(msg)
 
-    else:
-        if reserve:
-            if int(barcode) not in vlm_findmine():
-                # reserve barcode
-                if reserve_vlm_console(barcode)[0] != 0:
-                    msg = "Failed to {} target {}. Target is not reserved by user".format(action, barcode)
-                    LOG.info(msg)
-                    return 1, msg
-        else:
-            cmd = [VLM, action, "-t", barcode]
-            output = exec_cmd(cmd)[1]
-            if output != "1":
-                msg = 'Failed to execute "{}" on target'.format(barcode)
+    if reserve:
+        if int(barcode) not in vlm_findmine():
+            # reserve barcode
+            if reserve_vlm_console(barcode)[0] != 0:
+                msg = "Failed to {} target {}. Target is not reserved by user".format(action, barcode)
                 LOG.info(msg)
                 return 1, msg
+
+    cmd = [VLM, action, "-t", barcode]
+    output = exec_cmd(cmd)[1]
+    if output != "1":
+        msg = 'Failed to execute "{}" on target {}. Output: {}'.format(action, barcode, output)
+        LOG.error(msg)
+        return 1, msg
 
     return 0, None

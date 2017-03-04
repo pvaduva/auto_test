@@ -7,7 +7,7 @@ from consts.auth import Tenant
 from consts.cgcs import VMStatus, FlavorSpec, NetworkingVmMapping
 from keywords import vm_helper, nova_helper, host_helper, network_helper, cinder_helper, common
 
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
@@ -28,8 +28,8 @@ def base_vm_():
             {'net-id': tenant_net_id, 'vif-model': 'virtio'},
             {'net-id': internal_net_id, 'vif-model': 'virtio'}
     ]
-    base_vm = vm_helper.boot_vm(name='avs_base', flavor=flavor_id, nics=nics, reuse_vol=False)[1]
-    ResourceCleanup.add('vm', base_vm, scope='module')
+    base_vm = vm_helper.boot_vm(name='avs_base', flavor=flavor_id, nics=nics, reuse_vol=False, cleanup='module')[1]
+    # ResourceCleanup.add('vm', base_vm, scope='module')
 
     return base_vm, mgmt_net_id, tenant_net_id, internal_net_id
 
@@ -86,8 +86,9 @@ def test_avp_vms_with_vm_actions(spec_name, spec_val, vm_type, vif_model, base_v
     LOG.tc_step("Boot vm with flavor {} and vif_model {} for tenant-net".format(flavor_id, vif_model))
     volume = cinder_helper.create_volume(rtn_exist=False)[1]
     ResourceCleanup.add('volume', volume)
-    vm_under_test = vm_helper.boot_vm(name='avs-vm', flavor=flavor_id, source='volume', source_id=volume, nics=nics)[1]
-    ResourceCleanup.add('vm', vm_under_test)
+    vm_under_test = vm_helper.boot_vm(cleanup='function', name='avs-vm', flavor=flavor_id, source='volume',
+                                      source_id=volume, nics=nics)[1]
+    # ResourceCleanup.add('vm', vm_under_test)
 
     LOG.tc_step("Ping VM {} from NatBox".format(vm_under_test))
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)

@@ -6,7 +6,7 @@ from utils.ssh import ControllerClient
 from consts.cgcs import FlavorSpec
 from consts.auth import Tenant
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -36,21 +36,21 @@ def test_cold_migrate_vm_with_config_drive(hosts_per_stor_backing):
         - Delete created vm, volume, flavor
 
     """
+    guest_os = 'cgcs-guest'
     if len(hosts_per_stor_backing['local_image']) < 2:
         skip("Less than two hosts have local_image storage backing")
 
-    image_id = glance_helper.get_image_id_from_name(name='cgcs-guest')
-    volume_id = cinder_helper.create_volume(name='vol_inst1', image_id=image_id, size=2)[1]
-    ResourceCleanup.add('volume', volume_id, scope='module')
+    volume_id = cinder_helper.create_volume(name='vol_inst1', guest_image=guest_os)[1]
+    ResourceCleanup.add('volume', volume_id, scope='function')
+
     block_device = 'source=volume,dest=volume,id={},device=vda'.format(volume_id)
     block_device_mapping = 'vda={}:::0'.format(volume_id)
     file = "/home/wrsroot/ip.txt={}".format(get_test_file())
 
-    vm_id = vm_helper.boot_vm(name='tenant2-test6',
-                              key_name='keypair-tenant2', config_drive=True,
-                              block_device=block_device, file=file)[1]
+    vm_id = vm_helper.boot_vm(name='tenant2-test6', key_name='keypair-tenant2', config_drive=True,
+                              block_device=block_device, file=file, cleanup='function', guest_os=guest_os)[1]
 
-    ResourceCleanup.add('vm', vm_id, scope='module')
+    # ResourceCleanup.add('vm', vm_id, scope='module')
     LOG.tc_step("Confirming the config drive is set to True in vm ...")
     assert nova_helper.get_vm_nova_show_value(vm_id, "config_drive") == 'True', "vm config-drive not true"
 
@@ -80,13 +80,20 @@ def test_cold_migrate_vm_with_config_drive(hosts_per_stor_backing):
     assert "test file for tenant2" in config_drive_data, "The config drive data not accessible after lock vm host. " \
                                                          "Output is : {}".format(config_drive_data)
 
-    new_compute_host = vm_helper.get_vm_host_and_numa_nodes(vm_id)[0]
-    LOG.info("The vm host is now: {}".format(new_compute_host))
-    with host_helper.ssh_to_host(new_compute_host) as vm_ssh:
+    new_host = vm_helper.get_vm_host_and_numa_nodes(vm_id)[0]
+    instance_name = nova_helper.get_vm_instance_name(vm_id)
+    LOG.info("The vm host is now: {}".format(new_host))
+    LOG.tc_step("Check vm files exist on new vm host after migrated")
+    with host_helper.ssh_to_host(new_host) as host_ssh:
         cmd = " ls /etc/nova/instances/{}".format(vm_id)
-        cmd_output = vm_ssh.exec_cmd(cmd)[1]
-        assert all(x in cmd_output for x in ['console.log', 'disk.config', 'disk.info', 'libvirt.xml']),\
-            "VM not in host {}".format(new_compute_host)
+        cmd_output = host_ssh.exec_cmd(cmd)[1]
+        # 'libvirt.xml' is removed from /etc/nova/instances in newton
+        assert all(x in cmd_output for x in ['console.log', 'disk.config', 'disk.info']),\
+            "VM not in host {}".format(new_host)
+
+        output = host_ssh.exec_cmd('ls /run/libvirt/qemu')[1]
+        libvirt = "{}.xml".format(instance_name)
+        assert libvirt in output, "{} is not found in /run/libvirt/qemu on {}".format(libvirt, new_host)
 
 
 def get_test_file():
@@ -138,7 +145,7 @@ def get_mount(vm_id, vm_ssh):
     """
 
     Args:
-        vm_id:
+        vm_ssh:
 
     Returns:
 

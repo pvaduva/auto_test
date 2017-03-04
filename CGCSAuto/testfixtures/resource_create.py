@@ -1,6 +1,7 @@
 from pytest import fixture
 
 from utils.tis_log import LOG
+from consts.cgcs import GuestImages
 from keywords import nova_helper, glance_helper, keystone_helper, host_helper
 
 
@@ -110,10 +111,19 @@ def rhel7_image():
     return __create_image('rhel_7', 'session')
 
 
+@fixture(scope='session', autouse=True)
+def tis_centos_image():
+    return __create_image('tis-centos-guest', 'session')
+
+
 def __create_image(img_os, scope):
 
     LOG.fixture_step("({}) Get or create a glance image with {} guest OS".format(scope, img_os))
-    image_path = glance_helper._scp_guest_image(img_os=img_os)
+    img_info = GuestImages.IMAGE_FILES[img_os]
+    if img_info[0] is not None:
+        image_path = glance_helper._scp_guest_image(img_os=img_os)
+    else:
+        image_path = "{}/{}".format(GuestImages.IMAGE_DIR, img_info[2])
 
     img_id = glance_helper.get_image_id_from_name(img_os, strict=True)
     if not img_id:

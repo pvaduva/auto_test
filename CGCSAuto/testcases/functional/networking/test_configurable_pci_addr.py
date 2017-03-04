@@ -1,7 +1,7 @@
 from pytest import mark, skip, fixture
 
 from consts.cli_errs import PciAddrErr  # Don't remove - used in eval()
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from keywords import vm_helper, network_helper
 
 
@@ -39,9 +39,10 @@ def test_boot_vm_with_configurable_pci_addr_negative(unsupported_pci_addr, vif_m
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
             {'net-id': tenant_net_id, 'vif-model': vif_model, 'vif-pci-address': unsupported_pci_addr},
             ]
-    code, vm_id, output, vol_id = vm_helper.boot_vm(name='pci_negative', source='image', nics=nics, fail_ok=True)
-    if vm_id:
-        ResourceCleanup.add('vm', vm_id)
+    code, vm_id, output, vol_id = vm_helper.boot_vm(cleanup='function', name='pci_negative', source='image', nics=nics,
+                                                    fail_ok=True)
+    # if vm_id:
+    #     ResourceCleanup.add('vm', vm_id)
 
     assert code in [1, 4], "Boot VM is not rejected"
     assert eval(expt_err) in output, "Expected error message is not found"

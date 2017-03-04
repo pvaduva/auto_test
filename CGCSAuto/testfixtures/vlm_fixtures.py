@@ -49,12 +49,13 @@ def unreserve_hosts_module(request):
 def __unreserve(scope):
     hosts_to_unreserve = VlmHostsReserved._get_hosts_reserved(scope)
 
-    LOG.fixture_step("({}) Unreserve hosts: {}".format(scope, hosts_to_unreserve))
-    try:
-        vlm_helper.unreserve_hosts(hosts=hosts_to_unreserve)
-    except VLMError as e:
-        LOG.error(e)
-        VlmHostsReserved._reset(scope)
+    if hosts_to_unreserve:
+        LOG.fixture_step("({}) Unreserve hosts: {}".format(scope, hosts_to_unreserve))
+        try:
+            vlm_helper.unreserve_hosts(hosts=hosts_to_unreserve)
+        except VLMError as e:
+            LOG.error(e)
+            VlmHostsReserved._reset(scope)
 
 
 @fixture(scope='module')
@@ -66,7 +67,7 @@ def reserve_unreserve_all_hosts_module():
 
 
 @fixture(scope='session')
-def reserve_unreserve_all_hosts_session():
+def reserve_unreserve_all_hosts_session(unreserve_hosts_session):
     """
     Reserve all hosts in session setup and unreserve hosts in session teardown
     """

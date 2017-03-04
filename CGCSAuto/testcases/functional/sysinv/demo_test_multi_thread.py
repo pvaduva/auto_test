@@ -1,6 +1,6 @@
 from time import sleep, time
 
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from utils.multi_thread import MThread, Events, TiSBarrier, TiSLock
 from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper
