@@ -31,24 +31,24 @@ def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
 
 
 @mark.parametrize(('storage_backing', 'origin_flavor', 'dest_flavor', 'boot_source'), [
-    ('remote',      (1, 0, 0), (2, 1, 1), 'image'), 
-    ('remote',      (1, 1, 1), (2, 2, 2), 'image'), 
-    ('remote',      (1, 1, 1), (1, 1, 0), 'image'), 
-    ('remote',      (1, 0, 0), (2, 1, 1), 'volume'),
-    ('remote',      (1, 1, 1), (2, 2, 2), 'volume'),
-    ('remote',      (1, 1, 1), (1, 1, 0), 'volume'),
-    ('local_lvm',   (1, 0, 0), (2, 1, 1), 'image'), 
-    ('local_lvm',   (1, 1, 1), (2, 2, 2), 'image'), 
-    ('local_lvm',   (1, 1, 1), (1, 1, 0), 'image'), 
-    ('local_lvm',   (1, 0, 0), (2, 1, 1), 'volume'),
-    ('local_lvm',   (1, 1, 1), (2, 2, 2), 'volume'),
-    ('local_lvm',   (1, 1, 1), (1, 1, 0), 'volume'),
-    mark.nightly(('local_image', (1, 0, 0), (2, 1, 1), 'image')),
-    ('local_image', (1, 1, 1), (2, 2, 2), 'image'),
-    mark.nightly(('local_image', (1, 1, 1), (1, 1, 0), 'image')),
-    ('local_image', (1, 0, 0), (2, 1, 1), 'volume'),
-    mark.nightly(('local_image', (1, 1, 1), (2, 2, 2), 'volume')),
-    mark.nightly(('local_image', (1, 1, 1), (1, 1, 0), 'volume')),
+    ('remote',      (4, 0, 0), (5, 1, 1), 'image'),
+    ('remote',      (4, 1, 1), (5, 2, 2), 'image'),
+    ('remote',      (4, 1, 1), (4, 1, 0), 'image'),
+    ('remote',      (4, 0, 0), (5, 1, 1), 'volume'),
+    ('remote',      (4, 1, 1), (5, 2, 2), 'volume'),
+    ('remote',      (4, 1, 1), (4, 1, 0), 'volume'),
+    ('local_lvm',   (4, 0, 0), (5, 1, 1), 'image'),
+    ('local_lvm',   (4, 1, 1), (5, 2, 2), 'image'),
+    ('local_lvm',   (4, 1, 1), (4, 1, 0), 'image'),
+    ('local_lvm',   (4, 0, 0), (5, 1, 1), 'volume'),
+    ('local_lvm',   (4, 1, 1), (5, 2, 2), 'volume'),
+    ('local_lvm',   (4, 1, 1), (4, 1, 0), 'volume'),
+    mark.nightly(('local_image', (4, 0, 0), (5, 1, 1), 'image')),
+    ('local_image', (4, 1, 1), (5, 2, 2), 'image'),
+    mark.nightly(('local_image', (4, 1, 1), (4, 1, 0), 'image')),
+    ('local_image', (4, 0, 0), (5, 1, 1), 'volume'),
+    mark.nightly(('local_image', (4, 1, 1), (5, 2, 2), 'volume')),
+    mark.nightly(('local_image', (4, 1, 1), (4, 1, 0), 'volume')),
     ], ids=id_gen)
 def test_resize_vm_positive(add_hosts_to_zone, storage_backing, origin_flavor, dest_flavor, boot_source):
     """
@@ -169,19 +169,8 @@ def _create_flavor(flavor_info, storage_backing):
 
 
 def _boot_vm_to_test(boot_source, vm_host, flavor_id):
-    
-    LOG.tc_step('Create a new {} to boot from'.format(boot_source))
-    source_id = ''
-    if boot_source == 'volume':
-        source_id = cinder_helper.create_volume()[1]
-        ResourceCleanup.add('volume', source_id)
-    if boot_source == 'image':
-        source_id = glance_helper.create_image()[1]
-        ResourceCleanup.add('image', source_id)
-
     LOG.tc_step('Boot a vm with origin flavor')
-    vm_info = vm_helper.boot_vm(flavor=flavor_id, avail_zone='cgcsauto', vm_host=vm_host, source=boot_source, 
-                                source_id=source_id)
+    vm_info = vm_helper.boot_vm(flavor=flavor_id, avail_zone='cgcsauto', vm_host=vm_host, source=boot_source)
     LOG.info(vm_info[2])
     vm_id = vm_info[1]
     ResourceCleanup.add('vm', vm_id)

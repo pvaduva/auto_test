@@ -11,7 +11,7 @@ from testfixtures.recover_hosts import HostsToRecover
 
 @fixture(scope='module', autouse=True)
 def skip_test_if_less_than_two_hosts():
-    if len(host_helper.get_nova_hosts()) < 2:
+    if len(host_helper.get_up_hypervisors()) < 2:
         skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
 
     LOG.fixture_step("Update instance and volume quota to at least 10 and 20 respectively")
