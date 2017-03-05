@@ -82,7 +82,7 @@ def lock_controller():
 
     if standby:
         HostsToRecover.add(standby)
-        host_helper.lock_host(standby)
+        host_helper.lock_host(standby, swact=False)
 
 
 @mark.domain_sanity

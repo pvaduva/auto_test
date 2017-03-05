@@ -32,27 +32,31 @@ def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
 
 @mark.parametrize(('storage_backing', 'origin_flavor', 'dest_flavor', 'boot_source'), [
     ('remote',      (4, 0, 0), (5, 1, 1), 'image'),
-    ('remote',      (4, 1, 1), (5, 2, 2), 'image'),
+    ('remote',      (5, 1, 1), (4, 2, 2), 'image'),
     ('remote',      (4, 1, 1), (4, 1, 0), 'image'),
-    ('remote',      (4, 0, 0), (5, 1, 1), 'volume'),
-    ('remote',      (4, 1, 1), (5, 2, 2), 'volume'),
-    ('remote',      (4, 1, 1), (4, 1, 0), 'volume'),
+    ('remote',      (4, 0, 0), (1, 1, 1), 'volume'),
+    ('remote',      (4, 1, 1), (8, 2, 2), 'volume'),
+    ('remote',      (4, 1, 1), (0, 1, 0), 'volume'),
     ('local_lvm',   (4, 0, 0), (5, 1, 1), 'image'),
     ('local_lvm',   (4, 1, 1), (5, 2, 2), 'image'),
     ('local_lvm',   (4, 1, 1), (4, 1, 0), 'image'),
-    ('local_lvm',   (4, 0, 0), (5, 1, 1), 'volume'),
+    ('local_lvm',   (4, 0, 0), (2, 1, 1), 'volume'),
     ('local_lvm',   (4, 1, 1), (5, 2, 2), 'volume'),
-    ('local_lvm',   (4, 1, 1), (4, 1, 0), 'volume'),
+    ('local_lvm',   (4, 1, 1), (0, 1, 0), 'volume'),
     mark.nightly(('local_image', (4, 0, 0), (5, 1, 1), 'image')),
     ('local_image', (4, 1, 1), (5, 2, 2), 'image'),
-    mark.nightly(('local_image', (4, 1, 1), (4, 1, 0), 'image')),
+    mark.nightly(('local_image', (5, 1, 1), (5, 1, 0), 'image')),
+    ('local_image', (5, 1, 1), (4, 1, 0), 'image'),
     ('local_image', (4, 0, 0), (5, 1, 1), 'volume'),
-    mark.nightly(('local_image', (4, 1, 1), (5, 2, 2), 'volume')),
-    mark.nightly(('local_image', (4, 1, 1), (4, 1, 0), 'volume')),
+    mark.nightly(('local_image', (4, 1, 1), (0, 2, 2), 'volume')),
+    mark.nightly(('local_image', (4, 1, 1), (1, 1, 0), 'volume')),
     ], ids=id_gen)
 def test_resize_vm_positive(add_hosts_to_zone, storage_backing, origin_flavor, dest_flavor, boot_source):
     """
     Test resizing disks of a vm
+    - Resize root disk is allowed except 0 & boot-from-image
+    - Resize to larger or same ephemeral is allowed
+    - Resize swap to any size is allowed including removing
 
     Args: 
         storage_backing: The host storage backing required
@@ -99,22 +103,24 @@ def test_resize_vm_positive(add_hosts_to_zone, storage_backing, origin_flavor, d
 
 
 @mark.parametrize(('storage_backing', 'origin_flavor', 'dest_flavor', 'boot_source'),[
-    ('remote',      (1, 0, 0), (0, 0, 0), 'image'),  
-    ('remote',      (1, 1, 1), (0, 0, 0), 'image'),  
-    ('remote',      (1, 0, 0), (0, 0, 0), 'volume'), 
-    ('remote',      (1, 1, 1), (0, 0, 0), 'volume'), 
-    ('local_lvm',   (1, 0, 0), (0, 0, 0), 'image'),  
-    ('local_lvm',   (1, 1, 1), (0, 0, 0), 'image'),  
-    ('local_lvm',   (1, 0, 0), (0, 0, 0), 'volume'), 
-    ('local_lvm',   (1, 1, 1), (0, 0, 0), 'volume'), 
-    ('local_image', (1, 0, 0), (0, 0, 0), 'image'),  
-    ('local_image', (1, 1, 1), (0, 0, 0), 'image'),  
-    ('local_image', (1, 0, 0), (0, 0, 0), 'volume'),    # Currently fails. This might be a bug.
-    ('local_image', (1, 1, 1), (0, 0, 0), 'volume'), 
+    ('remote',      (5, 0, 0), (0, 0, 0), 'image'),      # Root disk can be resized, but cannot be 0
+    ('remote',      (5, 2, 1), (5, 1, 1), 'image'),     # check ephemeral disk cannot be smaller than origin
+    # ('remote',      (1, 0, 0), (0, 0, 0), 'volume'),     This should not fail, root disk size from volume not flavor
+    ('remote',      (1, 1, 1), (1, 0, 1), 'volume'),     # check ephemeral disk cannot be smaller than origin
+    ('local_lvm',   (5, 0, 0), (0, 0, 0), 'image'),     # Root disk can be resized, but cannot be 0
+    ('local_lvm',   (5, 2, 1), (5, 1, 1), 'image'),
+    # ('local_lvm',   (1, 0, 0), (0, 0, 0), 'volume'),      root disk size from volume not flavor
+    ('local_lvm',   (1, 2, 1), (1, 1, 1), 'volume'),
+    ('local_image', (5, 0, 0), (0, 0, 0), 'image'),      # Root disk can be resized, but cannot be 0
+    ('local_image', (5, 2, 1), (5, 1, 1), 'image'),
+    # ('local_image', (1, 0, 0), (0, 0, 0), 'volume'),    root disk size from volume not flavor
+    ('local_image', (1, 1, 1), (1, 0, 1), 'volume'),
     ], ids=id_gen)
 def test_resize_vm_negative(add_hosts_to_zone, storage_backing, origin_flavor, dest_flavor, boot_source):
     """
-    Test resizing disks of a vm
+    Test resizing disks of a vm not allowed:
+    - Resize to smaller ephemeral flavor is not allowed
+    - Resize to zero disk flavor is not allowed     (boot from image only)
 
     Args: 
         storage_backing: The host storage backing required
@@ -170,9 +176,7 @@ def _create_flavor(flavor_info, storage_backing):
 
 def _boot_vm_to_test(boot_source, vm_host, flavor_id):
     LOG.tc_step('Boot a vm with origin flavor')
-    vm_info = vm_helper.boot_vm(flavor=flavor_id, avail_zone='cgcsauto', vm_host=vm_host, source=boot_source)
-    LOG.info(vm_info[2])
-    vm_id = vm_info[1]
-    ResourceCleanup.add('vm', vm_id)
-
+    vm_id = vm_helper.boot_vm(flavor=flavor_id, avail_zone='cgcsauto', vm_host=vm_host, source=boot_source,
+                              cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_id)
     return vm_id
