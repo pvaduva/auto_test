@@ -6,7 +6,7 @@ from keywords import system_helper, host_helper, vm_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-def test_swact_20_times():
+def _test_swact_20_times():
     """
     Skip Condition:
         - Less than two controllers on system
@@ -73,7 +73,6 @@ def test_swact_20_times():
 
     LOG.tc_step("Read the dd output for last time and end the thread")
     base_vm_thread.end_now = True
-    base_vm_thread.wait_for_thread_end(timeout=20)
 
     post_standby = system_helper.get_standby_controller_name()
     assert post_standby, "System does not have standby controller after last swact"

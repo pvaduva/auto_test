@@ -46,7 +46,7 @@ def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
     mark.nightly(('local_image', (4, 0, 0), (5, 1, 1), 'image')),
     ('local_image', (4, 1, 1), (5, 2, 2), 'image'),
     mark.nightly(('local_image', (5, 1, 1), (5, 1, 0), 'image')),
-    ('local_image', (5, 1, 1), (4, 1, 0), 'image'),
+    ('local_image', (5, 1, 1), (4, 1, 1), 'image'),
     ('local_image', (4, 0, 0), (5, 1, 1), 'volume'),
     mark.nightly(('local_image', (4, 1, 1), (0, 2, 2), 'volume')),
     mark.nightly(('local_image', (4, 1, 1), (1, 1, 0), 'volume')),
