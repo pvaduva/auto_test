@@ -2274,7 +2274,7 @@ def main():
                 rc, output = controller1.ssh_conn.exec_cmd(cmd)
 
                 # Wait until config out-of-date clears
-                wait_until_alarm_clears(controller1, timeout=600, check_interval=60, alarm_id="250.001", host_os=host_os)
+                wait_until_alarm_clears(controller1, timeout=900, check_interval=60, alarm_id="250.001", host_os=host_os)
 
                 # Wait until sm-services are up
                 wait_until_alarm_clears(controller1, timeout=600, check_interval=60, alarm_id="400.002", host_os=host_os)
