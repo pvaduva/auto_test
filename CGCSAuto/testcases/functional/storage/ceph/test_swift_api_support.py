@@ -32,6 +32,10 @@ def ceph_backend_installed():
     ceph_info = get_ceph_backend_info()
     if not ceph_info:
         skip("No ceph system installed in the lab")
+    rel, msg = storage_helper.is_ceph_healthy()
+    if not rel:
+        skip("Ceph health not OK: {}".format(msg))
+
     return ceph_info
 
 
@@ -67,6 +71,23 @@ def delete_swift_containers(request):
     request.addfinalizer(teardown)
     return None
 
+@fixture(scope='function')
+def pre_swift_check():
+    """
+
+    Args:
+        request:
+
+    Returns:
+
+    """
+    ceph_backend_info = get_ceph_backend_info()
+    if not eval(ceph_backend_info['object_gateway']):
+        return False, "Swift is NOT  enabled"
+    if swift_helper.get_swift_containers(fail_ok=True)[0] != 0:
+            return False, "Swift enabled but NOT properly configured in the system"
+
+    return True, 'Swift enabled and configured'
 
 def get_large_img_file():
     cmd = "df -h ~ | awk ' {print $4}'"
@@ -90,7 +111,7 @@ def get_large_img_file():
 
 
 @mark.parametrize('pool_size', ['default', 'fixed_size'])
-def test_basic_swift_provisioning(pool_size):
+def test_basic_swift_provisioning(pool_size, pre_swift_check):
     """
     Verifies basic swift provisioning works as expected
     Args:
@@ -101,13 +122,18 @@ def test_basic_swift_provisioning(pool_size):
 
     """
     ceph_backend_info = get_ceph_backend_info()
-    mark.skipif(eval(ceph_backend_info['object_gateway']), "Swift is already provisioned")
+
+    if pool_size == 'default' and pre_swift_check[0]:
+        skip (msg = "Swift is already provisioned")
+
     object_pool_gib = None
     if pool_size == 'default':
         if not eval(ceph_backend_info['object_gateway'].strip()):
             LOG.tc_step("Enabling SWIFT object store .....")
 
     else:
+        assert pre_swift_check()[0], pre_swift_check[1]
+
         unallocated_gib = int(ceph_backend_info['ceph_total_space_gib']) - \
                            (int(ceph_backend_info['cinder_pool_gib']) +
                             int(ceph_backend_info['glance_pool_gib']) +
@@ -225,11 +251,10 @@ def test_basic_swift_provisioning(pool_size):
 
 
 @mark.parametrize("tc", ['small', 'large'])
-def test_swift_cli_interaction(tc):
+def test_swift_cli_interaction(tc, pre_swift_check):
 
-    ceph_backend_info = get_ceph_backend_info()
-    mark.skipif(not ceph_backend_info or not eval(ceph_backend_info['object_gateway']),
-                reason="Swift not enabled")
+    if not pre_swift_check[0]:
+        skip(msg=pre_swift_check[1])
 
     if tc == 'large':
         test_objects_info = get_large_img_file()
@@ -335,11 +360,10 @@ def test_swift_cli_interaction(tc):
     LOG.info("{} object file {} is deleted successfully from container {}.".format(tc, upload_object, container))
 
 
-def test_swift_cli_multiple_object_upload():
+def test_swift_cli_multiple_object_upload(pre_swift_check):
 
-    ceph_backend_info = get_ceph_backend_info()
-    mark.skipif(not ceph_backend_info or not eval(ceph_backend_info['object_gateway']),
-                reason="Swift not enabled")
+    if not pre_swift_check[0]:
+        skip(msg=pre_swift_check[1])
 
     LOG.tc_step("Creating Swift container using swift post cli command ...")
     container = "test_container"
@@ -445,7 +469,7 @@ def test_swift_cli_multiple_object_upload():
     LOG.info("Objects {} are deleted successfully".format(object_list))
 
 
-def test_swift_cli_update_metadata():
+def test_swift_cli_update_metadata(pre_swift_check):
     """
     Verifies container and object metadata can be updated as expected
     Args:
@@ -454,9 +478,8 @@ def test_swift_cli_update_metadata():
     Returns:
 
     """
-    ceph_backend_info = get_ceph_backend_info()
-    mark.skipif(not ceph_backend_info or not eval(ceph_backend_info['object_gateway']),
-                reason="Swift not enabled")
+    if not pre_swift_check[0]:
+        skip(msg=pre_swift_check[1])
 
     container_metadata = {
         'X-Container-Meta-Author': 'xxx',
@@ -602,7 +625,7 @@ def test_swift_cli_update_metadata():
 
 
 @mark.parametrize("tc", ['small', 'large'])
-def test_swift_basic_object_copy(tc, ceph_backend_installed):
+def test_swift_basic_object_copy(tc, ceph_backend_installed, pre_swift_check):
     """
     Verifies basic object copy works as expected
     Args:
@@ -612,9 +635,8 @@ def test_swift_basic_object_copy(tc, ceph_backend_installed):
     Returns:
 
     """
-    ceph_backend_info = get_ceph_backend_info()
-    mark.skipif(not ceph_backend_info or not eval(ceph_backend_info['object_gateway']),
-                reason="Swift not enabled")
+    if not pre_swift_check[0]:
+        skip(msg=pre_swift_check[1])
 
     upload_object_info = get_test_obj_file_names()[0] if tc == 'small' else get_large_img_file()[0]
     container = "test_container"
