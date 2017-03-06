@@ -36,7 +36,7 @@ def base_vm():
     ## ('cgcs-guest', 'net_id', 'rtl8139'),
     #('cgcs-guest', 'net_id', 'e1000')
 ])
-def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
+def _test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     """
     Sample test case for interface attach/detach
     Args:
@@ -155,15 +155,15 @@ def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vif_model'), [
     #('centos_7', 'net_id', 'e1000'),
     ## ('centos_7', 'net_id', 'avp'),
-    # ('centos_7', 'net_id', 'virtio'),
-    #('centos_7', 'port_id', 'rtl8139'),
+    ## ('centos_7', 'net_id', 'virtio'),
+    ##('centos_7', 'port_id', 'rtl8139'),
     ('cgcs-guest', 'net_id', 'avp'),
     ('cgcs-guest', 'net_id', 'e1000'),
     ('cgcs-guest', 'port_id', 'virtio')
     ## ('cgcs-guest', 'net_id', 'rtl8139')
 
 ])
-def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif_model):
+def _test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif_model):
     """
     Sample test case for interface attach/detach to maximum vnics
     Args:
