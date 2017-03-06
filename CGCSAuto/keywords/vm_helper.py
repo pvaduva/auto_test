@@ -258,7 +258,6 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--availability-zone': host_zone,
                           '--file': file,
                           '--config-drive': str(config_drive) if config_drive else None,
-
                           }
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
