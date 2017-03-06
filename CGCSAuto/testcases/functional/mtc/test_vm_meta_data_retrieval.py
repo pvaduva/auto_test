@@ -38,11 +38,7 @@ def test_vm_meta_data_retrieval():
     # sourceid = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
 
     # create VM make sure it's pingable
-<<<<<<< HEAD
-    vm_id = vm_helper.boot_vm(source='image', source_id=sourceid, cleanup='function')[1]
-=======
     vm_id = vm_helper.boot_vm(source='image', cleanup='function')[1]
->>>>>>> 81da3c06c483c184b579639f193fed34213f8b25
     # ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 

@@ -11,7 +11,7 @@ from utils import exceptions, local_host
 from utils.tis_log import LOG
 
 from consts.auth import Guest, Host
-from consts.cgcs import Prompt, DATE_OUTPUT
+from consts.cgcs import Prompt, DATE_OUTPUT, GuestImages
 from consts.proj_vars import ProjVar
 from consts.lab import Labs, NatBoxes
 
@@ -862,7 +862,7 @@ class SSHFromSSH(SSHClient):
 
 class VMSSHClient(SSHFromSSH):
 
-    def __init__(self, vm_ip, vm_name, vm_img_name='cgcs-guest', user=None, password=None, vm_ext_port=None,
+    def __init__(self, vm_ip, vm_img_name=Guest, user=None, password=None, vm_ext_port=None,
                  natbox_client=None, prompt=None, timeout=20, retry=True, retry_timeout=120):
         """
 
@@ -891,7 +891,7 @@ class VMSSHClient(SSHFromSSH):
                 password = None
         else:
             for image_name in Guest.CREDS:
-                if image_name.lower() in vm_img_name.lower() or image_name.lower() in vm_name.lower():
+                if image_name.lower() in vm_img_name.lower():
                     vm_creds = Guest.CREDS[image_name]
                     user = vm_creds['user']
                     password = vm_creds['password']

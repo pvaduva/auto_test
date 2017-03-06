@@ -116,7 +116,12 @@ class Guest:
             'password': None
         },
 
-        'centos_': {
+        'centos_6': {
+            'user': 'centos',
+            'password': None
+        },
+
+        'centos_7': {
             'user': 'centos',
             'password': None
         },

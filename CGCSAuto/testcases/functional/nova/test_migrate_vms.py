@@ -22,6 +22,10 @@ def hosts_per_stor_backing():
     mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume', False)),
     mark.domain_sanity(('local_image', 0, 0, 'shared', 2, 'image', True)),
     mark.domain_sanity(('local_image', 1, 1, 'dedicated', 1, 'image', False)),
+    ('local_image', 1, 0, 'dedicated', 2, 'volume', False),       #
+    ('local_image', 0, 1, 'shared', 1, 'volume', False),
+    ('local_image', 0, 0, None, 2, 'image_with_vol', False),
+    ('local_image', 0, 0, 'dedicated', 1, 'image_with_vol', True),
     mark.p1(('local_lvm', 0, 0, None, 1, 'volume', False)),
     mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'volume', False)),
     mark.p1(('remote', 0, 0, None, 2, 'volume', False)),
@@ -65,14 +69,16 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
 
     LOG.tc_step("Ensure vm is pingable from NatBox after live migration")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    # TODO: add disk checking
+    #
 
 
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'vm_type', 'block_mig', 'expt_err'), [
     mark.p1(('local_image', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
-    mark.p1(('local_image', 1, 0, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),
-    mark.p1(('local_image', 0, 1, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),
-    mark.p1(('local_image', 0, 0, 'image_with_vol', False, 'LiveMigErr.GENERAL_NO_HOST')),
-    mark.p1(('local_image', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),
+    # mark.p1(('local_image', 1, 0, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),    newton change
+    # mark.p1(('local_image', 0, 1, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),    newton change
+    # mark.p1(('local_image', 0, 0, 'image_with_vol', False, 'LiveMigErr.GENERAL_NO_HOST')),    newton change
+    # mark.p1(('local_image', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),     newton change
     # mark.p1(('local_image', 0, 0, 'shared', 2, 'image', False, ??)),      obsolete in Mitaka
     # mark.p1(('local_image', 1, 1, 'dedicated', 1, 'image', False, ??)),   obsolete in Mitaka
     mark.p1(('local_lvm', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
@@ -278,8 +284,8 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 
     boot_source = 'volume' if vm_type == 'volume' else 'image'
     LOG.tc_step("Boot a vm from {}".format(boot_source))
-    vm_id = vm_helper.boot_vm('live-mig', flavor=flavor_id, source=boot_source, reuse_vol=False)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm('live-mig', flavor=flavor_id, source=boot_source, reuse_vol=False, cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_id)
 
     if vm_type == 'image_with_vol':
         LOG.tc_step("Attach volume to vm")
@@ -308,7 +314,7 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol):
     LOG.tc_step("Create a volume from {} image".format(guest_os))
     image_id = glance_helper.get_guest_image(guest_os=guest_os)
 
-    vol_id = cinder_helper.create_volume(image_id=image_id, size=9)[1]
+    vol_id = cinder_helper.create_volume(image_id=image_id, size=9, guest_image=guest_os)[1]
     ResourceCleanup.add('volume', vol_id)
 
     LOG.tc_step("Boot a vm from above flavor and volume")

@@ -258,7 +258,6 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--availability-zone': host_zone,
                           '--file': file,
                           '--config-drive': str(config_drive) if config_drive else None,
-
                           }
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
@@ -1196,7 +1195,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
     if not natbox_client:
         natbox_client = NATBoxClient.get_natbox_client()
 
-    vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_ext_port=vm_ext_port, vm_name=vm_name, vm_img_name=vm_image_name,
+    vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_ext_port=vm_ext_port, vm_img_name=vm_image_name,
                          user=username, password=password, prompt=prompt, timeout=timeout, retry=retry,
                          retry_timeout=retry_timeout)
     try:
