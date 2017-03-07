@@ -2747,9 +2747,9 @@ def write_in_vm(vm_id, expect_timeout=120, thread_timeout=None, write_interval=5
     thread = multi_thread.MThread(_keep_writing, vm_id)
     thread_timeout = expect_timeout + 30 if thread_timeout is None else thread_timeout
     thread.start_thread(timeout=thread_timeout, keep_alive=True)
-    thread.wait_for_thread_end(timeout=thread_timeout)
+    # thread.wait_for_thread_end(timeout=thread_timeout)
     thread.end_now = False
-    vm_ssh = thread.get_output(wait=True)
+    vm_ssh = thread.get_output(wait=True, timeout=60)
 
     def _end_dd(vm_ssh_):
         LOG.info("Reading the dd output from vm {}".format(vm_id))

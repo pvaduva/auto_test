@@ -6,7 +6,7 @@ from keywords import system_helper, host_helper, vm_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-def _test_swact_20_times():
+def test_swact_20_times():
     """
     Skip Condition:
         - Less than two controllers on system
@@ -29,6 +29,7 @@ def _test_swact_20_times():
     vm_ssh, base_vm_thread = vm_helper.write_in_vm(vm_base, end_now_flag=True, expect_timeout=40, thread_timeout=60*100)
     base_vm_thread.end_now = False
     base_vm_thread.end_thread()
+    # base_vm_thread.wait_for_thread_end(timeout=base_vm_thread.timeout)
 
     try:
         for i in range(20):
@@ -74,8 +75,9 @@ def _test_swact_20_times():
     except:
         raise
     finally:
-        LOG.tc_step("Read the dd output for last time and end the thread")
+        LOG.tc_step("End the base_vm_thread")
         base_vm_thread.end_now = True
+        base_vm_thread.wait_for_thread_end(timeout=10)
 
     post_standby = system_helper.get_standby_controller_name()
     assert post_standby, "System does not have standby controller after last swact"
