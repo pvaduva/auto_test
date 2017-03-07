@@ -21,6 +21,9 @@ def test_swact_20_times():
     if len(system_helper.get_controllers()) < 2:
         skip("Less than two controllers on system")
 
+    if not system_helper.get_standby_controller_name():
+        assert False, "No standby controller on system"
+
     LOG.tc_step("Boot a vm and ensure it's pingable")
     vm_base = vm_helper.boot_vm(name='pre_swact', source='image')[1]
     ResourceCleanup.add('vm', vm_base)
