@@ -220,6 +220,7 @@ def parse_args():
                          "\n(default: %(default)s)")
     bld_grp.add_argument('--patch-dir-paths', metavar='LIST',
                          dest='patch_dir_paths',
+                         default=None,
                          help=textwrap.dedent('''\
                          Comma-separated list of directory paths accessible by
                          "--build-server" containing patches\n
@@ -1165,7 +1166,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
 
     # Apply patches if patch dir is not none
 
-    if patch_dir_paths is not None:
+    if patch_dir_paths:
         apply_patches(controller0, bld_server_conn, patch_dir_paths)
 
         # Reconnect telnet session
