@@ -6,6 +6,7 @@ from consts.timeout import VMTimeout
 from consts.cgcs import FlavorSpec, VMStatus, EventLogID
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.recover_hosts import HostsToRecover
 
 
 @fixture(scope='module')
@@ -23,11 +24,13 @@ def target_host(request):
 
     nova_hosts = host_helper.get_nova_hosts()
     hosts_to_lock = list(set(nova_hosts) - {target_host})
+    HostsToRecover.add(hosts_to_lock, scope='module')
 
-    def unlock():
-        if hosts_to_lock:
-            host_helper.unlock_hosts(hosts=hosts_to_lock)
-    request.addfinalizer(unlock)
+    #
+    # def unlock():
+    #     if hosts_to_lock:
+    #         host_helper.unlock_hosts(hosts=hosts_to_lock)
+    # request.addfinalizer(unlock)
 
     for host in hosts_to_lock:
         host_helper.lock_host(host, swact=False)
@@ -70,11 +73,11 @@ def test_vm_autorecovery_reboot_host(target_host):
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
         LOG.tc_step("Boot a vm with above flavor")
-        vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
+        vm_id = vm_helper.boot_vm(flavor=flavor_id, cleanup='function')[1]
         vms.append(vm_id)
-        ResourceCleanup.add('vm', vm_id)
 
     LOG.tc_step("Reboot the only nova host")
+    HostsToRecover.add(target_host, scope='function')
     host_helper.reboot_hosts(target_host)
     host_helper.wait_for_hypervisors_up(target_host)
     host_helper.wait_for_hosts_in_nova_compute(target_host)

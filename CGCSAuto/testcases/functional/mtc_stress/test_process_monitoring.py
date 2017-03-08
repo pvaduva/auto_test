@@ -994,7 +994,7 @@ class MonitoredProcess:
     # # mark.p1(('rabbitmq-server')), # rabbit in SM
     # # TODO CGTS-6336
     # # TODO CGTS-6391
-    # # mark.p1(('rabbit')),
+    mark.p1(('rabbit')),
     # # mark.p1(('sysinv-api')),  # sysinv-inv in SM
     mark.p1(('sysinv-inv')),
     mark.p1(('sysinv-conductor')),

@@ -259,7 +259,7 @@ def get_process_from_sm(name, con_ssh=None, pid_file='', expecting_status='enabl
     """
     con_ssh = con_ssh or ControllerClient.get_active_controller()
 
-    cmd = 'sm-dump --impact --pid --pid_file | /usr/bin/grep "{}"'.format(name)
+    cmd = "true; NM={}; sudo sm-dump --impact --pid --pid_file | awk -v pname=$NM '{{ if ($1 == pname) print }}'".format(name)
 
     code, output = con_ssh.exec_sudo_cmd(cmd, fail_ok=True)
 
@@ -276,8 +276,8 @@ def get_process_from_sm(name, con_ssh=None, pid_file='', expecting_status='enabl
         LOG.info('results_array={}'.format(results_array))
 
         if len(results_array) != 6:
-            LOG.error('Invalid format from output of sm-dump?! line={}\ncmd={}'.format(line, cmd))
-            return pid, proc_name, impact, sm_pid_file, actual_status
+            LOG.debug('Invalid format from output of sm-dump?! line={}\ncmd={}'.format(line, cmd))
+            continue
 
         proc_name = results_array[0]
         if proc_name != name:

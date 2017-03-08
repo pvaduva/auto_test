@@ -1893,7 +1893,7 @@ def get_vcpus_for_computes(hosts=None, rtn_val='used_now', con_ssh=None):
 
     """
     if hosts is None:
-        hosts = get_nova_hosts(con_ssh=con_ssh)
+        hosts = get_up_hypervisors(con_ssh=con_ssh)
     elif isinstance(hosts, str):
         hosts = [hosts]
 
@@ -1957,7 +1957,7 @@ def get_logcore_siblings(host, con_ssh=None):
     sibling_ids = siblings_tab['values'][0][1:]
 
     if sibling_ids[0] == '-':
-        LOG.warning("{} has no sibling cores. Hyper-threading needs to be enabled to have sibling cores.")
+        LOG.warning("{} has no sibling cores. Hyper-threading needs to be enabled to have sibling cores.".format(host))
         return [[cpu_id] for cpu_id in cpu_ids]
 
     sibling_ids = [int(sibling_id) for sibling_id in sibling_ids]
