@@ -79,12 +79,12 @@ def setup_test_session():
     """
     # os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
     ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    #ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     con_ssh.set_prompt()
     setups.set_env_vars(con_ssh)
     setups.copy_files_to_con1()
-    con_ssh.set_prompt()
+    #con_ssh.set_prompt()
 
     global natbox_ssh
     natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'), con_ssh=con_ssh)
