@@ -1088,6 +1088,39 @@ def open_telnet_session(_controller0, install_output_dir):
     return cont0_telnet_conn
 
 
+def setupNetworking(host_os):
+    """
+    Setup the network if we have a USB install or after patch installation.
+    """
+    # Setup network access on the running controller0
+    nic_interface = controller0.host_nic if host_os == DEFAULT_HOST_OS else NIC_INTERFACE
+    cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip addr add " + controller0.host_ip + \
+            HOST_ROUTING_PREFIX + " dev {}".format(nic_interface)
+    if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
+        log.error("Warning: Failed to add IP address: " + controller0.host_ip)
+
+    cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip link set dev {} up".format(nic_interface)
+    if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
+        log.error("Warning: Failed to bring up {} interface".format(nic_interface))
+
+    time.sleep(2)
+
+    cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S route add default gw " + HOST_GATEWAY
+    if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
+        log.error("Warning: Failed to add default gateway: " + HOST_GATEWAY)
+
+    # Ping the outside network to ensure the above network setup worked as expected
+    # Sometimes the network may take upto a minute to setup. Adding a delay of 60 seconds
+    # before ping
+    #TODO: Change to ping at 15 seconds interval for upto 4 times
+    time.sleep(120)
+    cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, DNS_SERVER)
+    if controller0.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT + TIMEOUT_BUFFER)[0] != 0:
+        msg = "Failed to ping outside network"
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
+
 def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths,
                       host_os, boot_device_dict, small_footprint, burn_usb,
                       tis_on_tis, boot_usb, iso_path, iso_host, lowlat):
@@ -1128,33 +1161,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
 
 
     if burn_usb or boot_usb:
-        # Setup network access on the running controller0
-        nic_interface = controller0.host_nic if host_os == DEFAULT_HOST_OS else NIC_INTERFACE
-        cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip addr add " + controller0.host_ip + \
-              HOST_ROUTING_PREFIX + " dev {}".format(nic_interface)
-        if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
-            log.error("Warning: Failed to add IP address: " + controller0.host_ip)
-
-        cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S ip link set dev {} up".format(nic_interface)
-        if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
-            log.error("Warning: Failed to bring up {} interface".format(nic_interface))
-
-        time.sleep(2)
-
-        cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S route add default gw " + HOST_GATEWAY
-        if controller0.telnet_conn.exec_cmd(cmd)[0] != 0:
-            log.error("Warning: Failed to add default gateway: " + HOST_GATEWAY)
-
-        # Ping the outside network to ensure the above network setup worked as expected
-        # Sometimes the network may take upto a minute to setup. Adding a delay of 60 seconds
-        # before ping
-        #TODO: Change to ping at 15 seconds interval for upto 4 times
-        time.sleep(120)
-        cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, DNS_SERVER)
-        if controller0.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT + TIMEOUT_BUFFER)[0] != 0:
-            msg = "Failed to ping outside network"
-            log.error(msg)
-            wr_exit()._exit(1, msg)
+        setupNetworking(host_os)
 
     # Open an ssh session
     # Temporary workaround for timing issue where ssh fails
@@ -1172,7 +1179,8 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
         # Reconnect telnet session
         log.info("Found login prompt. Controller0 reboot has completed")
         controller0.telnet_conn.login()
-        #controller0.telnet_conn = cont0_telnet_conn
+
+        setupNetworking(host_os)
 
         # Reconnect ssh session
         controller0.ssh_conn.disconnect()
