@@ -4,7 +4,7 @@ import setups
 from consts import build_server as build_server_consts
 from consts.auth import CliAuth, Tenant, SvcCgcsAuto, Host
 from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
-from keywords import system_helper, install_helper,  patching_helper
+from keywords import install_helper,  patching_helper
 from utils.ssh import ControllerClient, SSHClient
 from utils import table_parser, cli
 from utils.tis_log import LOG
@@ -202,7 +202,6 @@ def upgrade_setup(pre_check_upgrade):
     bld_server_conn.set_prompt(bld_server_attr['prompt'])
     bld_server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
     bld_server_attr['ssh_conn'] = bld_server_conn
-
     bld_server_obj = Server(**bld_server_attr)
 
     # # get upgrade license file for release
@@ -215,16 +214,6 @@ def upgrade_setup(pre_check_upgrade):
     assert controller0_conn.exec_cmd(cmd)[0] == 0, "Upgrade license file not present in Controller-0"
     LOG.info("Upgrade  license {} download complete".format(license_path))
 
-    # get upgrade load iso file
-    LOG.tc_step("Dowloading the {} target release  load iso image file {}:{}".format(
-            upgrade_version, bld_server_obj.name, load_path))
-    install_helper.download_upgrade_load(lab, bld_server_obj, load_path)
-    upgrade_load_path = os.path.join(WRSROOT_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
-
-    cmd = "test -e {}".format(upgrade_load_path)
-    assert controller0_conn.exec_cmd(cmd)[0] == 0, "Upgrade build iso image file {} not present " \
-                                                   "in Controller-0".format(upgrade_load_path)
-    LOG.info("Target release load {} download complete.".format(upgrade_load_path))
 
     # Install the license file for release
     LOG.tc_step("Installing the target release {} license file".format(upgrade_version))
@@ -233,20 +222,26 @@ def upgrade_setup(pre_check_upgrade):
     assert rc == 0, "Unable to install upgrade license file in Controller-0"
     LOG.info("Target release license installed......")
 
+    # Check load already imported if not  get upgrade load iso file
     # Run the load_import command to import the new release iso image build
     if not system_helper.get_imported_load_version():
+        LOG.tc_step("Dowloading the {} target release  load iso image file {}:{}".format(
+        upgrade_version, bld_server_obj.name, load_path))
+        install_helper.download_upgrade_load(lab, bld_server_obj, load_path)
+        upgrade_load_path = os.path.join(WRSROOT_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
+
+        cmd = "test -e {}".format(upgrade_load_path)
+        assert controller0_conn.exec_cmd(cmd)[0] == 0, "Upgrade build iso image file {} not present " \
+                                                   "in Controller-0".format(upgrade_load_path)
+        LOG.info("Target release load {} download complete.".format(upgrade_load_path))
         LOG.tc_step("Importing Target release  load iso file from".format(upgrade_load_path))
         output = system_helper.import_load(upgrade_load_path)
-    ver = (system_helper.get_imported_load_version()).pop()
-    LOG.info("The target release  load iso file {} imported".format(upgrade_load_path))
-    assert upgrade_version in ver, "Import error. Expected " \
-                                   "version {} not found in imported load list" \
-                                   "{}".format(upgrade_version, ver)
 
     # download and apply patches if patches are available in patch directory
-    if patch_dir:
-        LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
-        apply_patches(lab, bld_server_obj, patch_dir)
+        if patch_dir:
+            LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
+            apply_patches(lab,
+                      bld_server_obj, patch_dir)
 
     _upgrade_setup = {'lab': lab,
                       'cpe': cpe,
@@ -255,6 +250,11 @@ def upgrade_setup(pre_check_upgrade):
                       'upgrade_version': upgrade_version,
                       'build_server': bld_server_obj,
                       }
+    ver = (system_helper.get_imported_load_version()).pop()
+    assert upgrade_version in ver, "Import error. Expected " \
+                                   "version {} not found in imported load list" \
+                                   "{}".format(upgrade_version, ver)
+    LOG.info("Imported Target release  load iso {}".format(upgrade_version, ver))
     return _upgrade_setup
 
 
