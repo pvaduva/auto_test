@@ -259,7 +259,7 @@ def get_process_from_sm(name, con_ssh=None, pid_file='', expecting_status='enabl
     """
     con_ssh = con_ssh or ControllerClient.get_active_controller()
 
-    cmd = "true; NM={}; sudo sm-dump --impact --pid --pid_file | awk -v pname=$NM '{{ if ($1 == pname) print }}'".format(name)
+    cmd = "true; NM={}; sudo sm-dump --impact --pid --pid_file | awk -v pname=$NM '{{ if ($1 == pname) print }}'; echo".format(name)
 
     code, output = con_ssh.exec_sudo_cmd(cmd, fail_ok=True)
 
@@ -270,6 +270,8 @@ def get_process_from_sm(name, con_ssh=None, pid_file='', expecting_status='enabl
         return pid, proc_name, impact, sm_pid_file, actual_status
 
     for line in output.splitlines():
+        if not line.strip():
+            continue
         pid, proc_name, impact, sm_pid_file, actual_status = -1, '', '', '', ''
 
         results_array = line.strip().split()
@@ -747,6 +749,8 @@ def get_process_info(name, cmd='', pid_file='', host='', process_type='sm', con_
         host = active_controller
 
     if process_type == 'sm':
+        LOG.debug('to get_process_info for SM process:{} on host:{}'.format(name, host))
+
         if host != active_controller:
             LOG.warn('Already swacted? host:{} is not  the active controller now. Active controller is {}'.format(
                 host, active_controller))
@@ -814,7 +818,7 @@ def _get_last_events_timestamps(limit=1, event_log_id=''):
 
 def kill_sm_process_and_verify_impact(
         name, cmd='', pid_file='', retries=2, impact='swact', host='controller-0', interval=20,
-        action_timeout=90, total_retries=5, process_type='sm', on_active_controller=True, con_ssh=None):
+        action_timeout=90, total_retries=3, process_type='sm', on_active_controller=True, con_ssh=None):
     """
     Kill the process with the specified name and verify the system behaviors as expected
 
@@ -871,6 +875,9 @@ def kill_sm_process_and_verify_impact(
         while time.time() < timeout:
             count += 1
 
+            LOG.debug('retry{:02d}-{:02d}: Failed to get process id for {} on host:{}, swacted unexpectedly?'.format(
+                    i, count, name, host))
+
             try:
                 pid, proc_name = get_process_info(name, cmd=cmd, host=host, process_type=process_type,
                                                    pid_file=pid_file, con_ssh=con_ssh)[0:2]
@@ -878,19 +885,19 @@ def kill_sm_process_and_verify_impact(
             except pexpect.exceptions.EOF:
                 LOG.warn('retry{:02d}-{:02d}: Failed to get process id for {} on host:{}, swacted unexpectedly?'.format(
                     i, count, name, host))
-                time.sleep(interval / 2)
+                time.sleep(interval / 3.0)
                 continue
 
             if -1 == pid:
                 LOG.error('retry{:02d}-{:02d}: Failed to get PID for process with name:{}, cmd:{}, '
                           'wait and retries'.format(i, count, name, cmd))
-                time.sleep(interval / 2)
+                time.sleep(interval / 3.0)
                 continue
 
             if killed_pids and pid in killed_pids:
                 LOG.warn('retry{:02d}-{:02d}: No new process re-created, prev-pid={}, cur-pid={}'.format(
                     i, count, killed_pids[-1], pid))
-                time.sleep(interval / 2)
+                time.sleep(interval / 3.0)
                 continue
 
             last_killed_pid = killed_pids[-1] if killed_pids else None
@@ -911,14 +918,13 @@ def kill_sm_process_and_verify_impact(
 
             with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
                 code, output = con.exec_sudo_cmd(kill_cmd, fail_ok=True)
-                if 0 != code:
-                    LOG.warn('retry{:02d}: Failed to kill pid:{}, cmd={}, output=<{}>, not event existing?'.format(
-                        count, pid, kill_cmd, output))
-                    time.sleep(interval / 3)
-                    continue
-
-            LOG.info('retry{:02d}-{:02d}: OK to kill pid:{} on host:{}, cmd={}, output=<{}>'.format(
-                i, count, pid, host, kill_cmd, output))
+                # if 0 != code:
+                #     LOG.warn('retry{:02d}: Failed to kill pid:{}, cmd={}, output=<{}>, not event existing?'.format(
+                #         count, pid, kill_cmd, output))
+                #     time.sleep(interval / 3.0)
+                # continue
+                assert 0 == code, 'Failed to kill pid:{}, cmd={}, output=<{}>, at run:{}'.format(
+                    pid, kill_cmd, output, count)
 
             if count < retries:
                 # IMPACT should not happen yet
@@ -928,7 +934,11 @@ def kill_sm_process_and_verify_impact(
                     LOG.error('Impact:{} observed unexpectedly, it should happen only after killing {} times, '
                               'actual killed times:{}'.format(impact, retries, count))
                     return -2, host
-                LOG.info('retry{:02d}-{:02d}: OK, NO impact as expected, impact={}'.format(i, count, impact))
+
+                LOG.info('retry{:02d}-{:02d}: OK, NO impact as expected, impact={}, will kill it another time'.format(
+                    i, count, impact))
+
+                time.sleep(max(interval * 1 / 2.0, 5))
 
             else:
                 no_standby_controller = standby_controller is None
@@ -955,7 +965,6 @@ def kill_sm_process_and_verify_impact(
 
                 return pid, active_controller
 
-            time.sleep(max(interval *3 /4, 5))
 
     return -3, host
 

@@ -723,9 +723,12 @@ class MonitoredProcess:
         cmd = 'true; n=0; for((;n<{};)); do pid=$(cat {} 2>/dev/null); if [ "x$pid" = "x" ]; then usleep 0.05; ' \
               'continue; fi; sudo kill -9 $pid &>/dev/null; if [ $? -eq 0 ]; then ((n++)); fi; ' \
               'sleep {}; done; echo $pid'.format(retries, pid_file, interval)
+
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
 
         wait_time = max(interval * retries + 60, 60)
+
+        debounce = int(getattr(self, 'debounce', '20'))
 
         self.pid = -1
         for _ in range(2):
@@ -735,81 +738,83 @@ class MonitoredProcess:
                     if 0 != code:
                         LOG.warn('Failed to kill process:{} on host:{}, cli:\n{}\noutput:\n{}'.format(
                             name, host, cmd, output))
-                        debounce = int(getattr(self, 'debounce', '20'))
                         time.sleep(debounce)
                         continue
                     if output:
                         LOG.info('Last PID of PMON process is:{}, process:{}'.format(output, name))
                         self.pid = int(output)
-                    break
+                    # break
             except Exception as e:
-                LOG.warn('caught exception when running:{}, exception:{}'.format(cmd, e))
+                LOG.warn('caught exception when running:{}, exception:{}, '
+                         'but assuming the process {} was killed'.format(cmd, e, name))
 
-        if impact in ('log'):
-            expected = {'operational': 'enabled', 'availability': 'available'}
-            code, events = self.wait_for_pmon_process_events(
-                name, host, expected, process_type=process_type, severity=severity,
-                last_events=last_events, expecting=True, con_ssh=con_ssh)
-
-            assert 0 == code, 'Failed to to find events after been killed {} times on host {}'.format(retries, host)
-            LOG.info('Found events after been killed {} times on host {}'.format(retries, host))
-            return code
-
-        elif impact in ('enabled-degraded', 'disabled-failed'):
-            operational, availability = impact.split('-')
-            expected = {'operational': operational, 'availability': availability}
-
-            reached = host_helper.wait_for_host_states(host, timeout=wait_time, con_ssh=con_ssh, fail_ok=True,
-                                                       **expected)
-            if not reached:
-                LOG.warn('host:{} did not reach:{} in {} seconds'.format(host, expected, wait_time))
-            else:
-                LOG.info('host:{} reached status:{} after been killed {} times on host {}'.format(
-                    host, expected, retries, host))
-
-            quorum = getattr(self, 'quorum', None)
-            if quorum == '1':
-                LOG.warn('Killing quorum process:{}, the impacted node should reboot'.format(name))
-                expected = {'operational': 'Disabled', 'availability': 'offline'}
-                assert host_helper.wait_for_host_states(
-                    host, timeout=wait_time, con_ssh=con_ssh, fail_ok=False, **expected)
-
-            elif impact in ('disabled-failed'):
-                expected = {'operational': 'Disabled', 'availability': 'Failed'}
-                LOG.info('wait host getting into status:{}'.format(expected))
-                assert host_helper.wait_for_host_states(
-                    host, timeout=wait_time, con_ssh=con_ssh, fail_ok=False, **expected)
-
-            elif impact in ('enabled-degraded'):
+            if impact in ('log'):
+                expected = {'operational': 'enabled', 'availability': 'available'}
                 code, events = self.wait_for_pmon_process_events(
                     name, host, expected, process_type=process_type, severity=severity,
                     last_events=last_events, expecting=True, con_ssh=con_ssh)
 
-                if 0 != code:
-                    LOG.error('No event/alarm raised for process:{}, process_type:{}, host:{}'.format(
-                        name, process_type, host))
-                else:
-                    LOG.info('found events {} after been killed {} times on host {}'.format(events, retries, host))
+                assert 0 == code, 'Failed to to find events after been killed {} times on host {}'.format(retries, host)
+                LOG.info('Found events after been killed {} times on host {}'.format(retries, host))
+                return code
 
-                if not reached and 0 != code:
-                    LOG.error('host {} did not reach expected status:{} after been killed {} times on host {}, '
-                              'and there is no relevant alarms/events found neither')
-                    return -1
+            elif impact in ('enabled-degraded', 'disabled-failed'):
+                operational, availability = impact.split('-')
+                expected = {'operational': operational, 'availability': availability}
 
-            if wait_recover:
-                wait_time *= 10 if operational == 'disabled' else 2
-                expected = {'operational': 'enabled', 'availability': 'available'}
                 reached = host_helper.wait_for_host_states(host, timeout=wait_time, con_ssh=con_ssh, fail_ok=True,
-                                                       **expected)
+                                                           **expected)
                 if not reached:
-                    LOG.error('host {} did not recoverd to enabled-available status from status:{} '
-                              'after been killed {} times'.format(host, expected, retries))
-                    return -1
+                    LOG.warn('host:{} did not reach:{} in {} seconds'.format(host, expected, wait_time))
+                else:
+                    LOG.info('host:{} reached status:{} after been killed {} times on host {}'.format(
+                        host, expected, retries, host))
 
-            if -1 == self.pid:
-                LOG.warn('Unkonw-PID from cmd:{}'.format(cmd))
+                quorum = getattr(self, 'quorum', None)
+                if quorum == '1':
+                    LOG.warn('Killing quorum process:{}, the impacted node should reboot'.format(name))
+                    expected = {'operational': 'Disabled', 'availability': 'offline'}
+                    assert host_helper.wait_for_host_states(
+                        host, timeout=wait_time, con_ssh=con_ssh, fail_ok=False, **expected)
 
-            return 0
+                elif impact in ('disabled-failed'):
+                    expected = {'operational': 'Disabled', 'availability': 'Failed'}
+                    LOG.info('wait host getting into status:{}'.format(expected))
+                    assert host_helper.wait_for_host_states(
+                        host, timeout=wait_time, con_ssh=con_ssh, fail_ok=False, **expected)
+
+                elif impact in ('enabled-degraded'):
+                    code, events = self.wait_for_pmon_process_events(
+                        name, host, expected, process_type=process_type, severity=severity,
+                        last_events=last_events, expecting=True, con_ssh=con_ssh)
+
+                    if 0 != code:
+                        LOG.error('No event/alarm raised for process:{}, process_type:{}, host:{}'.format(
+                            name, process_type, host))
+                    else:
+                        LOG.info('found events {} after been killed {} times on host {}'.format(events, retries, host))
+
+                    if not reached and 0 != code:
+                        LOG.error('host {} did not reach expected status:{} after been killed {} times on host {}, '
+                                  'and there is no relevant alarms/events found neither')
+                        return -1
+
+                if wait_recover:
+                    wait_time *= 10 if operational == 'disabled' else 2
+                    expected = {'operational': 'enabled', 'availability': 'available'}
+                    reached = host_helper.wait_for_host_states(host, timeout=wait_time, con_ssh=con_ssh, fail_ok=True,
+                                                           **expected)
+                    if not reached:
+                        LOG.error('host {} did not recoverd to enabled-available status from status:{} '
+                                  'after been killed {} times'.format(host, expected, retries))
+                        return -1
+
+                if -1 == self.pid:
+                    LOG.warn('Unkonw-PID from cmd:{}'.format(cmd))
+
+                return 0
+
+            time.sleep(debounce)
 
     def kill_pmon_process_and_verify_impact_old(self, name, impact, process_type, host, severity='major',
                                             pid_file='', retries=2, interval=5, wait_recover=True, con_ssh=None):
@@ -1202,6 +1207,8 @@ def wait_and_monitor_tested_processes(request):
                 if not getattr(proc, 'success', False):
                     LOG.info('Process:{} failed, so skip monitoring its process status'.format(proc.name))
                     continue
+
+                LOG.info('Monitoring process:{} for {} seconds'.format(proc.name, total_time - pre_wait))
 
                 monitor = monitor_process(proc, total_time - pre_wait)
                 if monitor is not None:
