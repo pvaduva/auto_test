@@ -1851,7 +1851,8 @@ def main():
     global controller0
     controller0 = controller_dict[CONTROLLER0]
 
-    if not simplex:
+   # Due to simplex labs and unofficial config ip28-30
+    if len(controller_dict) > 1:
         global controller1
         controller1 = controller_dict[CONTROLLER1]
 
@@ -2250,7 +2251,7 @@ def main():
     #Lab-install - swact and then lock/unlock controller-0 to complete setup
     lab_install_step = install_step("swact_lockunlock", 19, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
-        if host_os == "centos":
+        if host_os == "centos" and len(controller_dict) > 1:
             cmd = "system alarm-list --nowrap"
             output = controller0.ssh_conn.exec_cmd(cmd)[1]
 
@@ -2297,6 +2298,10 @@ def main():
                 controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
 
                 set_install_step_complete(lab_install_step)
+
+        # Required due to ip28-30 unsupported config
+        elif host_os == "centos" and len(controller_dict) == 1:
+            log.info("Skipping this step since we only have one controller")
 
     cmd = "source /etc/nova/openrc; system alarm-list"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
