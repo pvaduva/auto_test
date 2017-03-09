@@ -1219,8 +1219,6 @@ def wait_and_monitor_tested_processes(request):
             [proc.start() for proc in monitors]
             [proc.join() for proc in monitors]
 
-            # time.sleep(total_time - pre_wait + len(monitors) * 10)
-
         global _final_processes_status
         for name, pids_info in _final_processes_status.items():
             LOG.info('monitoring process:{}'.format(name))
@@ -1235,6 +1233,7 @@ def wait_and_monitor_tested_processes(request):
             assert total == 1, \
                 'Should have only 1 new process. Used pids:{}'.format(pids_info['used_pids'])
 
-            LOG.info('OK, (new) processe(s) for service:{}  is(are) running stable')
+            LOG.info('OK, the new process for service:{} is running stable, pid:{}'.format(
+                name, pids_info['used_pids'][-1]))
 
     request.addfinalizer(_wait_and_monitor_tested_processes)
