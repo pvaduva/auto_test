@@ -61,6 +61,8 @@ class Cumulus_TiS(object):
         self.lab_cfg_path = None
         self.cumulus_options = None
         self.storage = False
+        self.cumulus_userid = None
+        self.cumulus_password = None
 
         for key in kwargs:
             setattr(self, key, kwargs[key])
@@ -75,20 +77,20 @@ class Cumulus_TiS(object):
 
     def validate(self):
 
-        file_script = "/home/{}/{}".format(self.userid, CUMULUS_SETUP_SCRIPT )
-        file_config = "/home/{}/{}".format(self.userid, CUMULUS_SETUP_CFG_FILENAME )
-        file_cleanup = "/home/{}/{}".format(self.userid, CUMULUS_CLEANUP_SCRIPT )
+        file_script = "/folk/{}/{}".format(self.userid, CUMULUS_SETUP_SCRIPT )
+        file_config = "/folk/{}/{}".format(self.userid, CUMULUS_SETUP_CFG_FILENAME )
+        file_cleanup = "/folk/{}/{}".format(self.userid, CUMULUS_CLEANUP_SCRIPT )
         cmd = "test -f {}; test -f {}; test -f {}".format(file_script, file_config, file_cleanup)
         if self.ssh_conn.exec_cmd(cmd)[0] != 0:
             msg = "cumulus script files missing; Ensure the following files " \
-                  " exist in /home/{}: {} {} {}".\
+                  " exist in /folk/{}: {} {} {}".\
                 format(file_script, file_config, file_cleanup, self.userid)
 
             self.log.info(msg)
             wr_exit()._exit(1, msg)
 
 
-        user_openrc = "/home/{}/openrc.{}".format(self.userid, self.userid)
+        user_openrc = "/folk/{}/openrc.{}".format(self.userid, self.userid)
         if self.ssh_conn.exec_cmd("test -f " + user_openrc)[0] != 0:
             msg = "user openrc file missing."
 
@@ -118,8 +120,8 @@ class Cumulus_TiS(object):
         # check if floating ips are specified. in cumulus_setup.conf file
 
         if {"EXTERNALOAMFLOAT", "EXTERNALOAMC0", "EXTERNALOAMC1" }  \
-                <= set(self.cumulus_options) and set(self.floating_ips) \
-                <= set(self.cumulus_options.values()):
+                not in set(self.cumulus_options) and set(self.floating_ips) \
+                <= set([self.cumulus_options["EXTERNALOAMFLOAT"], self.cumulus_options["EXTERNALOAMC0"], self.cumulus_options["EXTERNALOAMC1"]]):
             msg = "The {} conf file must be updated with allocated floating " \
                   "ips".format(CUMULUS_SETUP_CFG_FILENAME)
             self.log.error(msg)
@@ -138,7 +140,7 @@ class Cumulus_TiS(object):
 
     def tis_install(self):
 
-        CUMULUS_HOME_DIR = "/home/" + str(self.userid)
+        CUMULUS_HOME_DIR = "/folk/" + str(self.userid)
         CUMULUS_USERID = self.userid
         CUMULUS_SERVER = self.server
         CUMULUS_PASSWORD = self.password
@@ -157,7 +159,7 @@ class Cumulus_TiS(object):
                 cumulus_tis_conn.sendline("chmod 755 " + tis_image_path)
                 cumulus_tis_conn.find_prompt()
         else:
-            tis_image_path = "/home/{}".format(CUMULUS_USERID)
+            tis_image_path = "/folk/{}".format(CUMULUS_USERID)
             cmd = "df --output=avail -h {} | sed '1d;s/[^0-9]//g'".format(tis_image_path)
             rc, avail = cumulus_tis_conn.exec_cmd(cmd)
             if rc != 0 and avail < BOOT_IMAGE_ISO_SIZE:
@@ -167,15 +169,15 @@ class Cumulus_TiS(object):
                 log.exception(msg)
                 wr_exit()._exit(1,msg)
 
-        bld_server_image_path = os.path.join(self.load_path, "export/tis.img")
+        bld_server_image_path = os.path.join(self.load_path, BLD_TIS_IMAGE_PATH)
         pre_opts = 'sshpass -p "{0}"'.format(CUMULUS_PASSWORD)
         self.bld_server_conn.rsync(bld_server_image_path,
                                   CUMULUS_USERID, CUMULUS_SERVER,
                                   tis_image_path, pre_opts=pre_opts)
 
         # test if image is downloaded from load server
-        user_openrc = "/home/{}/openrc.{}".format(self.userid, self.userid)
-        cmd = "source {}; test -s {}/tis.img".format(user_openrc, tis_image_path)
+        user_openrc = "/folk/{}/openrc.{}".format(self.userid, self.userid)
+        cmd = "source {}; test -s {}/{}".format(user_openrc, tis_image_path, TIS_IMAGE)
         if cumulus_tis_conn.exec_cmd(cmd)[0] != 0:
                 msg = "Failed to download tis image file from load server: {}".\
                     format(bld_server_image_path)
@@ -203,10 +205,10 @@ class Cumulus_TiS(object):
         # create glance image
         log.info("Creating glance image using name {}-tis".format(CUMULUS_USERID))
         cmd = "source {}; glance image-create --name $USER-tis --container-format bare " \
-              "--disk-format qcow2 --file {}/tis.img".format(user_openrc, tis_image_path)
+              "--disk-format qcow2 --file {}/{}".format(user_openrc, tis_image_path, TIS_IMAGE)
 
         if cumulus_tis_conn.exec_cmd(cmd, 600)[0] != 0:
-            msg = "Failed to create tis image from image file: {}/tis.img".\
+            msg = "Failed to create tis image from image file: {}".\
                     format(bld_server_image_path)
             log.exception(msg)
             wr_exit()._exit(1,msg)
@@ -241,7 +243,7 @@ class Cumulus_TiS(object):
 
         floatingip = self.floating_ips[0]
 
-        time.sleep(300)
+        time.sleep(180)
 
         controller0_ssh_conn = SSHClient(log_path=self.output_dir + "/controller-0.ssh.log")
         controller0_ip = self.get_floating_ip("EXTERNALOAMC0")

@@ -299,7 +299,7 @@ class wr_exit(object):
             if os.path.exists(executed_steps_path):
                 os.remove(executed_steps_path)
             file = open(executed_steps_path, 'w')
-            os.chmod(executed_steps_path, 0o666)
+            os.chmod(executed_steps_path, 0o777)
             if len(self.executed_steps) > 0:
                 for step in self.executed_steps:
                     file.write("{}\n".format(step))

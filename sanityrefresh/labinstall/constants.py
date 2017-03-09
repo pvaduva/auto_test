@@ -1,11 +1,10 @@
 #!/usr/bin/env python3.4
 
-#TODO: This file should be under some directory like utils/ and not at
-#      the same level as install_system.py
-
 # Directory and file paths/names
 HOST_OS = ["centos", "wrlinux"]
 DEFAULT_HOST_OS = "centos"
+INSTALL_MODE = ["legacy", "uefi"]
+DEFAULT_INSTALL_MODE = "legacy"
 DEFAULT_REL = "latest_dev_stream"
 DEFAULT_BLD = "latest_build"
 DEFAULT_WKSPCE = "/localdisk/loadbuild/jenkins"
@@ -20,14 +19,15 @@ CENTOS_LAB_REL_PATH = "std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab"
 HEAT_TEMPLATES_PATH = "std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates"
 
 SYSTEM_CFG_FILENAME = "system_config"
-WRL_CFGFILE_LIST = ["system_config", "TiS_config.ini", "TiS_config.ini_wrl"]
-CENTOS_CFGFILE_LIST = ["TiS_config.ini_centos"]
+WRL_CFGFILE_LIST = ["system_config", "TiS_config.ini_wrl", "TiS_config.ini"]
+CENTOS_CFGFILE_LIST = ["TiS_config.ini_centos", "TiS_config.ini"]
 # TODO: Same todo as above, where the bulk add filename might be different
 BULKCFG_LIST = ["hosts_bulk_add.xml", "hosts.xml"]
 BULK_CFG_FILENAME = "hosts_bulk_add.xml"
 LAB_SETUP_SCRIPT = "lab_setup.sh"
 LAB_SETUP_CFG_FILENAME = "lab_setup.conf"
 CUSTOM_LAB_SETTINGS_FILENAME = "settings.ini"
+CENTOS_GUEST = DEFAULT_WKSPCE + "/CGCS_4.0_Centos_Guest_Build"
 
 LIC_FILENAME = "license.lic"
 LICENSE_FILEPATH = "-L /folk/cgts/lab/TiS17-full.lic"
@@ -48,15 +48,18 @@ BANNER_DEST = '/opt/banner'
 BANNER_SRC = WRSROOT_HOME_DIR + '/banner'
 
 # Cumulus TiS on TiS setup
-CUMULUS_SERVER_IP="128.224.151.50"
+#CUMULUS_SERVER_IP="128.224.151.50"
+CUMULUS_SERVER="cumulus.wrs.com"
 BOOT_IMAGE_ISO = "bootimage.iso"
+TIS_IMAGE = "tis.img"
 BOOT_IMAGE_ISO_SIZE = 5
 BOOT_IMAGE_ISO_PATH = "export/" + BOOT_IMAGE_ISO
+BLD_TIS_IMAGE_PATH = "export/" + TIS_IMAGE
 BOOT_IMAGE_ISO_TMP_PATH = "/tmp/" + BOOT_IMAGE_ISO
 CUMULUS_CLEANUP_SCRIPT = "cumulus_cleanup.sh"
 CUMULUS_SETUP_SCRIPT = "cumulus_setup.sh"
 CUMULUS_SETUP_CFG_FILENAME = "cumulus_setup.conf"
-CUMULUS_TMP_TIS_IMAGE_PATH = "/opt/backups/public"
+CUMULUS_TMP_TIS_IMAGE_PATH = "/localdisk/designer"
 
 # .ini section and option names
 CFG_PROVISION_SECTION_NAME = "provision"
@@ -68,6 +71,7 @@ CONTROLLER = 'controller'
 COMPUTE = 'compute'
 STORAGE = 'storage'
 CONTROLLER0 = 'controller-0'
+CONTROLLER1 = 'controller-1'
 
 ONLINE = "online"
 OFFLINE = "offline"
@@ -100,6 +104,8 @@ MAX_BOOT_MENU_LINES = 15
 
 NIC_INTERFACE = "eth0"
 NIC_INTERFACE_CENTOS = "enp10s0f0"
+HOST_ROUTING_PREFIX = "/23"
+HOST_GATEWAY="128.224.150.1"
 
 # BIOS options
 UP = '\x1b' + '[A'
@@ -124,7 +130,7 @@ INSTALLATION_RESERVE_NOTE = "AUTO: Lab installation"
 # Servers
 BLD_SERVERS = ["yow-cgts1-lx", "yow-cgts2-lx", "yow-cgts3-lx", "yow-cgts4-lx"]
 DEFAULT_BLD_SERVER = "yow-cgts4-lx"
-TUXLAB_SERVERS = ["yow-tuxlab", "yow-tuxlab2"]
+TUXLAB_SERVERS = ["yow-tuxlab", "yow-tuxlab2", "yow-cgcs-tuxlab", "128.224.150.110"]
 DEFAULT_TUXLAB_SERVER = "yow-tuxlab2"
 DNS_SERVER ="8.8.8.8"
 HOST_EXT = ".wrs.com"
@@ -211,10 +217,10 @@ EMAIL_ERROR_MSG = "Automated lab install has encountered problem." \
 
 
 # lab type
-LAB_TYPES = ['regular_lab', 'storge_lab', 'cpe_lab', 'tis_on_tis', 'tis_on_tis_storage']
+LAB_TYPES = ['regular_lab', 'storage_lab', 'cpe_lab', 'tis_on_tis', 'tis_on_tis_storage', 'simplex']
 
 # tmp install vars path
-INSTALL_VARS_TMP_PATH = "/tmp"
+INSTALL_VARS_TMP_PATH = "/folk/cgts/temp/"
 INSTALL_VARS_FILE_EXT = "_install_vars.ini"
 INSTALL_EXECUTED_STEPS_FILE_EXT = "_executed_steps.txt"
 
