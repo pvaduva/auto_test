@@ -71,63 +71,6 @@ def pytest_configure(config):
                                  patch_dir=patch_dir)
 
 
-@pytest.fixture(scope='session', autouse=True)
-def setup_test_session():
-    """
-    Setup primary tenant and Nax Box ssh before the first test gets executed.
-    TIS ssh was already set up at collecting phase.
-    """
-    # os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
-    ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
-    #ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
-    setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
-    con_ssh.set_prompt()
-    setups.set_env_vars(con_ssh)
-    setups.copy_files_to_con1()
-    #con_ssh.set_prompt()
-
-    global natbox_ssh
-    natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'), con_ssh=con_ssh)
-    ProjVar.set_var(natbox_ssh=natbox_ssh)
-    # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
-
-    # set build id to be used to upload/write test results
-    build_id, build_host = setups.get_build_info(con_ssh)
-    ProjVar.set_var(BUILD_ID=build_id)
-    ProjVar.set_var(BUILD_HOST=build_host)
-
-
-@pytest.fixture(scope='function', autouse=True)
-def reconnect_before_test():
-    """
-    Before each test function start, Reconnect to TIS via ssh if disconnection is detected
-    """
-    con_ssh.flush()
-    con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
-    natbox_ssh.flush()
-    natbox_ssh.connect(retry=False)
-
-
-def pytest_collectstart():
-    """
-    Set up the ssh session at collectstart. Because skipif condition is evaluated at the collecting test cases phase.
-    """
-    global con_ssh
-    con_ssh = setups.setup_tis_ssh(ProjVar.get_var("LAB"))
-    ProjVar.set_var(con_ssh=con_ssh)
-    CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
-    Tenant.ADMIN['auth_url'] = CliAuth.get_var('OS_AUTH_URL')
-    Tenant.ADMIN['region'] = CliAuth.get_var('OS_REGION_NAME')
-
-
-def pytest_runtest_teardown(item):
-    # print('')
-    # message = 'Teardown started:'
-    # testcase_log(message, item.nodeid, log_type='tc_teardown')
-    con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
-    con_ssh.flush()
-
-
 @pytest.fixture(scope='session')
 def pre_check_upgrade():
     # con_ssh = ControllerClient.get_active_controller()

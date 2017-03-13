@@ -67,9 +67,13 @@ class InstallVars:
                          lab_setup=None,
                          heat_templates=None,
                          license_path=None,
-                         out_put_dir=None):
+                         out_put_dir=None,
+                         controller0_ceph_mon_device=None,
+                         controller1_ceph_mon_device=None,
+                         ceph_mon_gib=None):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
+
 
         cls.__var_dict = {
             'LAB': lab,
@@ -100,6 +104,9 @@ class InstallVars:
             'HEAT_TEMPLATES': heat_templates if heat_templates else BuildServerPath.HEAT_TEMPLATES,
             'OUT_PUT_DIR': out_put_dir,
             'BUILD_ID': None,
+            'CONTROLLER0_CEPH_MON_DEVICE' : controller0_ceph_mon_device,
+            'CONTROLLER1_CEPH_MON_DEVICE' : controller1_ceph_mon_device,
+            'CEPH_MON_GIB': ceph_mon_gib
         }
 
     @classmethod

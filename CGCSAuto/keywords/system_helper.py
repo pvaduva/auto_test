@@ -2226,3 +2226,8 @@ def modify_host_device_status(host, device, status,  con_ssh=None, fail_ok=False
     msg = "Host device availability status is modified to {}".format(status)
     LOG.info(msg)
     return 0, msg
+
+
+def get_controller_fs_values(con_ssh=None, auth_info=Tenant.ADMIN):
+
+    return table_parser.table(cli.system('controllerfs-show',  ssh_client=con_ssh, auth_info=auth_info))

@@ -420,6 +420,9 @@ class SSHClient:
         cmd_output = cmd_output.strip()
         return exit_code, cmd_output
 
+    def proecess_cmd_result(self, cmd, rm_date=True, get_exit_code=True):
+        return self.__process_exec_result(cmd=cmd, rm_date=rm_date, get_exit_code=get_exit_code)
+
     @staticmethod
     def _parse_output(output):
         if type(output) is bytes:

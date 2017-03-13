@@ -524,3 +524,57 @@ def get_storage_backend_task_value(backend, con_ssh=None, fail_ok=False):
         task =  table_parser.get_column(table_, 'task')[0]
     return task
 
+
+def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ceph_mon_dev_controller_0_uuid=None,
+                        ceph_mon_dev_controller_1_uuid=None, con_ssh=None, fail_ok=False):
+    """
+
+    Args:
+        backend (str): The backend to add. Only ceph is supported
+        ceph_mon_gib(int/str): The ceph-mon-lv size in GiB. The default is 20GiB
+        ceph_mon_dev (str): The disk device that the ceph-mon will be created on. This applies to both controllers. In
+            case of separate device names on controllers use the options  below to specify device name for each
+            controller
+        ceph_mon_dev_controller_0_uuid (str): The uuid of controller-0 disk device that the ceph-mon will be created on
+        ceph_mon_dev_controller_1_uuid (str): The uuid of controller-1 disk device that the ceph-mon will be created on
+        con_ssh:
+        fail_ok:
+
+    Returns:
+
+    """
+
+    if backend is not 'ceph':
+        rc = 1
+        msg = "Invalid backend {} specified. Valid choices are {}".format(backend, ['ceph'])
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.CLIRejected(msg)
+    if isinstance(ceph_mon_gib, int):
+        ceph_mon_gib = str(ceph_mon_gib)
+
+    cmd = 'system storage-backend-add --ceph-mon-gib {}'.format(ceph_mon_gib)
+    if ceph_mon_dev:
+        cmd += ' --ceph-mon-dev {}'.format(ceph_mon_dev if '/dev' in ceph_mon_dev else '/dev/' + ceph_mon_dev.strip())
+    if ceph_mon_dev_controller_0_uuid:
+        cmd += ' --ceph_mon_dev_controller_0_uuid {}'.format(ceph_mon_dev_controller_0_uuid)
+    if ceph_mon_dev_controller_1_uuid:
+        cmd += ' --ceph_mon_dev_controller_1_uuid {}'.format(ceph_mon_dev_controller_1_uuid)
+
+    cmd += " {}".format(backend)
+    controler_ssh = ControllerClient.get_active_controller()
+    controler_ssh.send(cmd)
+    index = controler_ssh.expect([controler_ssh.prompt, '\[yes/N\]'])
+    if index == 1:
+        controler_ssh.send('yes')
+        controler_ssh.expect()
+
+    rc, output = controler_ssh.proecess_cmd_result(cmd)
+    if rc != 0:
+        if fail_ok:
+            return rc, output
+        raise exceptions.CLIRejected("Fail Cli command cmd: {}".format(cmd))
+    else:
+        output = table_parser.table(output)
+        return rc, output

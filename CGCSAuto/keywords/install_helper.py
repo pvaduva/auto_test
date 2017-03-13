@@ -13,9 +13,9 @@ from consts.vlm import VlmAction
 from keywords import system_helper, host_helper
 # from keywords.vlm_helper import bring_node_console_up
 from utils import exceptions, local_host
-from utils import local_host
+from utils import local_host, cli
 from utils import telnet as telnetlib
-from utils.ssh import SSHClient
+from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
 
 
@@ -73,7 +73,7 @@ def get_mgmt_boot_device(node):
     return boot_device
 
 
-def open_vlm_console_thread(hostname):
+def open_vlm_console_thread(hostname, boot_interface=None):
 
     lab = InstallVars.get_install_var("LAB")
     node = lab[hostname]
@@ -83,7 +83,10 @@ def open_vlm_console_thread(hostname):
         raise exceptions.InvalidStructure(err_msg)
 
     output_dir = ProjVar.get_var('LOG_DIR')
-    boot_device = get_mgmt_boot_device(node)
+    boot_device = boot_interface
+    if boot_interface is None:
+        boot_device = get_mgmt_boot_device(node)
+
     LOG.info("Mgmt boot device for {} is {}".format(node.name, boot_device))
 
     LOG.info("Opening a vlm console for {}.....".format(hostname))
@@ -256,7 +259,7 @@ def power_off_host(hosts):
         LOG.info("Node {} is turned off".format(node.name))
 
 # TODO: To be replaced by function in vlm_helper
-def power_on_host(hosts):
+def power_on_host(hosts, wait_for_hosts_state_=True):
 
     if isinstance(hosts, str):
         hosts = [hosts]
@@ -283,8 +286,9 @@ def power_on_host(hosts):
             raise exceptions.InvalidStructure(err_msg)
         LOG.info("Node {} is turned on".format(node.name))
 
+    if wait_for_hosts_state_:
+        wait_for_hosts_state(hosts)
 
-    wait_for_hosts_state(hosts)
 
 # TODO: To be replaced by function in vlm_helper
 def wait_for_hosts_state(hosts, state=HostAvailabilityState.ONLINE):
@@ -391,3 +395,131 @@ def download_lab_config_files(lab, server, load_path):
     server.ssh_conn.rsync(script_path + "/*",
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
+
+
+def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf'):
+
+    lab_name = lab['name']
+    if "yow" in lab_name:
+        lab_name = lab_name[4:]
+
+    config_path = "{}{}/yow/{}/{}".format(load_path, BuildServerPath.CONFIG_LAB_REL_PATH , lab_name, config_file)
+
+    cmd = "test -e " + config_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
+            server.name, config_path)
+
+    pre_opts = 'sshpass -p "{0}"'.format(Host.PASSWORD)
+    server.ssh_conn.rsync(config_path,
+                          lab['floating ip'],
+                          WRSROOT_HOME, pre_opts=pre_opts)
+
+def bulk_add_hosts(lab, hosts_xml_file):
+    controller_ssh = ControllerClient.get_active_controller(lab["short_name"])
+    cmd = "test -f {}/{}".format(WRSROOT_HOME, hosts_xml_file)
+    if controller_ssh.exec_cmd(cmd)[0] == 0:
+        rc, output = cli.system("host-bulk-add", hosts_xml_file, fail_ok=True)
+        if rc != 0 or  "Configuration failed" in output:
+            msg = "system host-bulk-add failed"
+            return rc, None, msg
+        hosts = system_helper.get_hosts_by_personality()
+        return 0, hosts, ''
+
+
+def add_storages(lab, server, load_path, ):
+    lab_name = lab['name']
+    if "yow" in lab_name:
+        lab_name = lab_name[4:]
+
+    if 'storage_nodes' not in lab:
+        return 1, "Lab {} does not have storage nodes.".format(lab_name)
+
+    storage_nodes = lab['storage_nodes']
+
+    download_lab_config_files(lab, server, load_path)
+
+    controller_ssh = ControllerClient.get_active_controller(lab['short_name'])
+    cmd = "test -e {}/hosts_bulk_add.xml".format(WRSROOT_HOME )
+    rc = controller_ssh.exec_cmd(cmd)[0]
+
+    if rc != 0:
+        msg = "The hosts_bulk_add.xml file missing from active controller"
+        return rc, msg
+
+    # check if the hosts_bulk_add.xml contains storages in mujltiple of 2
+    cmd = "grep storage {}/hosts_bulk_add.xml".format(WRSROOT_HOME)
+    rc, output = controller_ssh.exec_cmd(cmd)
+    if rc == 0:
+        output = output.split('\n')
+        count = 0
+        for line in output:
+            if "personality" in line:
+                count += 1
+        if count < 2 or  count % 2 != 0:
+            # invalid host_bulk_add.xml file
+            msg = "Invalid hosts_bulk_add.xml file. Contains {} storages".format(count)
+            return 1, msg
+           # system host-bulk-add to add the storages. ignore the error case
+        rc, hosts, msg = bulk_add_hosts(lab, "hosts_bulk_add.xml")
+        if rc != 0 or hosts is None:
+            return rc, msg
+        if len(hosts[2]) != count:
+            msg = "Unexpected  number of storage nodes: {}; exepcted are {}".format(len(hosts[2]), count)
+            return 1, msg
+    else:
+        msg = "No storages in the hosts_bulk_add.xml or file not found"
+        return rc, msg
+
+    # boot storage nodes
+    boot_interface_dict = lab['boot_device_dict']
+
+    storage_hosts = system_helper.get_storage_nodes()
+    storage_pairs = [storage_hosts[x:x+2] for x in range(0, len(storage_hosts), 2)]
+
+    for pairs in storage_pairs:
+        LOG.tc_step("Powering on storage hosts: {} ...".format(pairs))
+        power_on_host(pairs, wait_for_hosts_state_=False)
+        for host in pairs:
+            open_vlm_console_thread(host, boot_interface=boot_interface_dict)
+        wait_for_hosts_state(pairs)
+
+    LOG.info("Storage hosts installed successfully......")
+
+    # configure storages
+    rc, msg = run_lab_setup(con_ssh=controller_ssh)
+    if rc != 0:
+        return rc, msg
+
+    LOG.info("Unlocking Storage hosts {}.....".format(storage_hosts))
+    host_helper.unlock_hosts(storage_hosts)
+    LOG.info("Storage hosts unlocked ......")
+
+    return 0, "Storage hosts {} installed successfully".format(storage_hosts)
+
+
+def run_lab_setup(con_ssh=None, timeout=3600):
+    if con_ssh is None:
+        cons_ssh = ControllerClient.get_active_controller()
+
+    cmd = "test -e {}/lab_setup.conf".format(WRSROOT_HOME )
+    rc = con_ssh.exec_cmd(cmd)[0]
+
+    if rc != 0:
+        msg = "The lab_setup.conf file missing from active controller"
+        return rc, msg
+
+    cmd = "test -e {}/lab_setup.sh".format(WRSROOT_HOME )
+    rc = con_ssh.exec_cmd(cmd, )[0]
+
+    if rc != 0:
+        msg = "The lab_setup.sh file missing from active controller"
+        return rc, msg
+
+    cmd = "cd; source /etc/nova/openrc; ./lab_setup.sh"
+    rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout)
+    if rc != 0:
+        msg = " lab_setup run failed: {}".format(msg)
+        LOG.warning(msg)
+        return rc, msg
+
+    return 0, "Lab_setup run successfully"

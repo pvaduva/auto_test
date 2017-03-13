@@ -362,7 +362,8 @@ def get_lab_from_cmdline(lab_arg, installconf_path):
     return get_lab_dict(lab_arg)
 
 
-def set_install_params(lab, skip_labsetup, resume, installconf_path):
+def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0_ceph_mon_device,
+                       controller1_ceph_mon_device, ceph_mon_gib):
 
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
@@ -489,4 +490,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path):
                                  heat_templates=heat_templates,
                                  license_path=license_path,
                                  out_put_dir=out_put_dir,
+                                 controller0_ceph_mon_device=controller0_ceph_mon_device,
+                                 controller1_ceph_mon_device=controller1_ceph_mon_device,
+                                 ceph_mon_gib=ceph_mon_gib
                                  )

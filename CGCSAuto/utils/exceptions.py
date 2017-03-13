@@ -22,6 +22,8 @@ class TiSError(Exception):
 class NoMatchFoundError(TiSError):
     message = "No match found."
 
+class TelnetException(TiSError):
+    message = "Telnet Error"
 
 class InvalidStructure(TiSError):
     message = "Invalid cli output table structure."
