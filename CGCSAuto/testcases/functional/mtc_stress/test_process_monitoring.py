@@ -1,4 +1,5 @@
 
+# flake8:
 import os.path
 import time
 import datetime
@@ -374,7 +375,7 @@ class MonitoredProcess:
         self.pid_file = kwargs.get('pid_file', None)
 
         self.retries = int(kwargs.get('retries', DEF_RETRIES))
-        self.debounce = kwargs.get('debounce', DEF_DEBOUNCE)
+        self.debounce = int(kwargs.get('debounce', DEF_DEBOUNCE))
         self.interval = int(kwargs.get('interval', DEF_INTERVAL))
         self.process_type = kwargs.get('process_type', 'sm')
         self.host = kwargs.get('host', 'controller-0')
@@ -443,6 +444,7 @@ class MonitoredProcess:
                     self.name, process_info))
 
         elif self.process_type == 'pmon':
+            self.process = self.name
             settings = mtc_helper.get_pmon_process_info(self.name, self.host, self.conf_file, con_ssh=self.con_ssh)
             if not settings:
                 LOG.warn('Cannot read conf file for process:{} on host:{}, conf-file {} does not exist?'.format(
@@ -529,13 +531,13 @@ class MonitoredProcess:
                 return {}
 
             if matched_process != process:
-                LOG.debug('Reason Process not matching, expecting {} but in-event:{}, pattern:{}, reason-text'.format(
-                    process, matched_process, reason_pattern, reason))
+                LOG.debug('Reason Process not matching, expecting {} but in-event:{}, pattern:{}, '
+                          'reason-text:{}'.format(process, matched_process, reason_pattern, reason))
                 return {}
 
             status = 'failed'
             if matched_status != status:
-                LOG.debug('Reason Status not matching, expecting {} but in-event:{}, pattern:{}, reason-text'.format(
+                LOG.debug('Reason Status not matching, expecting {} but in-event:{}, pattern:{}, reason-text:{}'.format(
                     status, matched_status, reason_pattern, reason))
                 return {}
 
@@ -548,24 +550,24 @@ class MonitoredProcess:
 
             matched_host, matched_status, matched_process, matched_severity = m.groups()
             if matched_host != host:
-                LOG.debug('Reason Process not matching, expecting {} but in-event:{}, pattern:{}, reason-text'.format(
-                    process, matched_process, reason_pattern, reason))
+                LOG.debug('Reason Process not matching, expecting {} but in-event:{}, pattern:{}, '
+                          'reason-text:{}'.format(process, matched_process, reason_pattern, reason))
                 return {}
 
             status = 'degraded'
             if matched_status != status:
-                LOG.debug('Reason Status not matching, expecting {} but in-event:{}, pattern:{}, reason-text'.format(
-                    status, matched_status, reason_pattern, reason))
+                LOG.debug('Reason Status not matching, expecting {} but in-event:{}, pattern:{}, '
+                          'reason-text:{}'.format(status, matched_status, reason_pattern, reason))
                 return {}
 
             if matched_process != process:
-                LOG.debug('Reason Process not matching, expecting {} but in-event:{}, pattern:{}, reason-text'.format(
-                    process, matched_process, reason_pattern, reason))
+                LOG.debug('Reason Process not matching, expecting {} but in-event:{}, pattern:{}, '
+                          'reason-text:{}'.format(process, matched_process, reason_pattern, reason))
                 return {}
 
             if matched_severity != severity:
-                LOG.debug('Reason SEVERITY not matching, expecting {} but in-event:{}, pattern:{}, reason-text'.format(
-                    severity, matched_severity, reason_pattern, reason))
+                LOG.debug('Reason SEVERITY not matching, expecting {} but in-event:{}, pattern:{}, '
+                          'reason-text:{}'.format(severity, matched_severity, reason_pattern, reason))
                 return {}
 
             return dict(zip(('host', 'status', 'service', 'severity'), m.groups()))
@@ -693,7 +695,7 @@ class MonitoredProcess:
                         LOG.debug('matched-events:\n\n{}\n\n'.format(matched_events))
 
             if len(matched_events) == 1:
-                LOG.warn('Only 1 event recorded? matched_event:\n{}\n')
+                LOG.warn('Only 1 event recorded? matched_event:\n{}\n'.format(matched_events[0]))
                 if service in ('ntpd'):
                     event = matched_events[0]['event']
                     if event[1] == 'set':
@@ -750,24 +752,31 @@ class MonitoredProcess:
                          'but assuming the process {} was killed'.format(cmd, e, name))
 
             check_event = False
+            quorum = 0
             expected = {'operational': 'enabled', 'availability': 'available'}
+
+            wait_time_for_host_status = 90
 
             if impact in ('log'):
                 check_event = True
 
             elif impact in ('enabled-degraded', 'disabled-failed'):
                 quorum = getattr(self, 'quorum', None)
-
+                
                 if quorum == '1':
                     LOG.warn('Killing quorum process:{}, the impacted node should reboot'.format(name))
+                    wait_time_for_host_status = HostTimeout.REBOOT
                     expected = {'operational': 'Disabled', 'availability': 'offline'}
 
                 elif impact in ('disabled-failed'):
                     LOG.debug('wait host getting into status:disabled-failed')
+                    wait_time_for_host_status = HostTimeout.REBOOT
                     expected = {'operational': 'Disabled', 'availability': 'Failed'}
                     # check_event = True
 
                 elif impact in ('enabled-degraded'):
+                    wait_time_for_host_status = 90
+
                     expected = {'operational': 'Enabled', 'availability': 'Degraded'}
                     check_event = True
             else:
@@ -775,13 +784,13 @@ class MonitoredProcess:
                 assert False, 'Unknown IMPACT:{}'.format(impact)
 
             reached = host_helper.wait_for_host_states(
-                host, timeout=wait_time, con_ssh=con_ssh, fail_ok=True, **expected)
+                host, timeout=wait_time_for_host_status, con_ssh=con_ssh, fail_ok=True, **expected)
 
             if not reached:
                 LOG.warn('Host:{} failed to get into status:{} after process:{} been killed {} times'.format(
                     host, expected, name, retries))
 
-            code = -1
+            found_event = False
             if check_event:
                 code, events = self.wait_for_pmon_process_events(
                     name, host, expected, process_type=process_type, severity=severity,
@@ -791,15 +800,17 @@ class MonitoredProcess:
                     LOG.error('No event/alarm raised for process:{}, process_type:{}, host:{}'.format(
                         name, process_type, host))
                 else:
+                    found_event = True
                     LOG.info('found events {} after been killed {} times on host {}'.format(events, retries, host))
 
-            if not reached and 0 != code:
+            if not reached and not found_event:
                 LOG.error('host {} did not reach expected status:{} after been killed {} times on host {}, '
-                          'and there is no relevant alarms/events found neither')
+                          'and there is no relevant alarms/events found neither'.format(
+                    host, expected, name, retries))
             else:
                 if wait_recover:
                     operational = impact.split('-')[0]
-                    if operational == 'disabled':
+                    if operational == 'disabled' or quorum == '1':
                         wait_time = HostTimeout.REBOOT
                     else:
                         wait_time += 60
@@ -811,6 +822,17 @@ class MonitoredProcess:
                         LOG.error('host {} did not recoverd to enabled-available status from status:{} '
                                   'after been killed {} times'.format(host, expected, retries))
                         return -1
+
+                if reached and not found_event:
+                    LOG.error('No event/alarm raised for process:{}, process_type:{}, host:{}, '
+                              'although host reached expected status:{}'.format(name, process_type, host, expected))
+                    return -1
+
+                elif not reached and found_event:
+                    LOG.warn('Host failed to reach expected status:{}, although event/alarm raised for process:{}, '
+                             'process_type:{}, host:{}'.format(expected, name, process_type, host))
+                    return -1
+
                 LOG.debug('OK, either host in expected status or events found for process: {}'.format(name))
                 return 0
 
@@ -981,11 +1003,107 @@ def test_process_monitoring(process_name, con_ssh=None):
     """
     Test system behaviors when processes monitored by TiS are killed
 
+    User Stories:
+        US61041 US66951 US18629
+
+    Test Cases:
+        sm
+        rmond
+        fsmond
+        hbsClient
+        mtcClient
+        mtcalarmd
+        sm-api
+        sm-watchdog
+        sysinv-agent
+        sw-patch-controller-daemon
+        sw-patch-agent
+        acpid
+        ceilometer-polling
+        mtclogd
+        ntpd
+        sm-eru
+        sshd
+        syslog-ng
+        io-monitor-manager
+        logmgmt
+        guestServer
+        host_agent
+        libvirtd
+        neutron-avr-agent
+        neutron-avs-agent
+        neutron-dhcp-agent
+        neutron-metadata-agent
+        neutron-sriov-nic-agent
+        nova-compute
+        vswitch
+        postgres
+        rabbitmq-server # rabbit in SM
+        rabbit
+        sysinv-api  # sysinv-inv in SM
+        sysinv-inv
+        sysinv-conductor
+        mtc-agent
+        hbs-agent
+        hw-mon
+        dnsmasq
+        fm-mgr
+        keystone
+        glance-registry
+        glance-api
+        neutron-server
+        nova-api
+        nova-scheduler
+        nova-conductor
+        nova-cert
+        nova-console-auth
+        nova-novnc
+        cinder-api
+        cinder-scheduler
+        cinder-volume
+        ceilometer-collector
+        ceilometer-api
+        ceilometer-agent-notification
+        heat-engine
+        heat-api
+        heat-api-cfn
+        heat-api-cloudwatch
+        open-ldap
+        snmp
+        lighttpd
+        gunicorn changed to horizon
+        horizon
+        patch-alarm-manager
+        ceph-rest-api
+        ceph-manager
+        vim-api
+        vim-webserver
+        guest-agent
+        nova-api-proxy
+        haproxy
+        aodh-api
+        aodh-evaluator
+        aodh-listener
+        aodh-notifier
+
+
     Args:
         process_name (str): Name of the process to test. The following specical names are supported:
         con_ssh:
 
     Returns:
+
+    Test Steps:
+        - get process settings for the specified process name, from pre-defined information, configuration files and
+            running processes on applicable hosts
+        - kill the process up time 'retries' times, verify the system behaviors or the expected IMPACT at:
+            -- each kills (before the process been killed up to 'retries'):  no IMPACT should NOT happen
+            -- after kills 'retries' times: IMPACT should happen
+        - or kill the process consecutively 'retries' times (in case of PMOND process) and verify IMPACT
+        - wait for IMPACTed hosts been recovered
+
+    Teardown:
+        - monitor the process (with the specified name) running for a period (while waiting for the system stabilizes)
 
     """
     LOG.tc_step('Start testing SM/PM Prcocess Monitoring')

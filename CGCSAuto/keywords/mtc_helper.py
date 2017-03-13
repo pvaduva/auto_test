@@ -122,6 +122,8 @@ def get_pmon_process_info(name, host, conf_file=None, con_ssh=None):
     if 'process' in conf_parser.sections():
         settings = {k.strip(): v.split(';')[0].strip() for k, v in conf_parser.items('process')}
 
+    settings['interval'] = int(settings.get('interval', 5))
+    settings['debounce'] = int(settings.get('debounce', 20))
     return settings
 
 
@@ -259,7 +261,8 @@ def get_process_from_sm(name, con_ssh=None, pid_file='', expecting_status='enabl
     """
     con_ssh = con_ssh or ControllerClient.get_active_controller()
 
-    cmd = "true; NM={}; sudo sm-dump --impact --pid --pid_file | awk -v pname=$NM '{{ if ($1 == pname) print }}'; echo".format(name)
+    cmd = "true; NM={}; sudo sm-dump --impact --pid --pid_file | awk -v pname=$NM '{{ if ($1 == pname) print }}'; " \
+          "echo".format(name)
 
     code, output = con_ssh.exec_sudo_cmd(cmd, fail_ok=True)
 
@@ -361,8 +364,7 @@ def is_controller_swacted(prev_active, prev_standby,
 
             if 0 == code:
                 LOG.info('OK, host-swacted, prev-active:{}, pre-standby:{}, code:{}, message:{}'.format(
-                    prev_active, prev_active, code, msg
-                ))
+                    prev_active, prev_active, code, msg))
                 return True
 
             active, standby = system_helper.get_active_standby_controllers()
@@ -547,9 +549,7 @@ def wait_for_sm_process_events(service, host, target_status, expecting=True, sev
                     if matched_events[-1]['event'][1] == 'clear' and matched_events[-2]['event'][1] == 'set':
                         LOG.info('OK, found matched events:{}'.format(matched_events))
                         return 0, tuple(matched_events)
-                        # return True, tuple(matched_events)
 
-                # LOG.info('Candidate event:{}\nmatched_events{}\n'.format(event, matched_events))
             except IndexError:
                 LOG.error('CLI system event-list changed its output format?\nsearching keys={}'.format(search_keys))
                 raise
@@ -918,12 +918,7 @@ def kill_sm_process_and_verify_impact(
 
             with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
                 code, output = con.exec_sudo_cmd(kill_cmd, fail_ok=True)
-                # if 0 != code:
-                #     LOG.warn('retry{:02d}: Failed to kill pid:{}, cmd={}, output=<{}>, not event existing?'.format(
-                #         count, pid, kill_cmd, output))
-                #     time.sleep(interval / 3.0)
-                # continue
-                assert 0 == code, 'Failed to kill pid:{}, cmd={}, output=<{}>, at run:{}'.format(
+                assert 0 == code, 'Failed to kill pid:{}, cmd={}, output=<{}>, at run:{}, already terminated?'.format(
                     pid, kill_cmd, output, count)
 
             if count < retries:
