@@ -74,7 +74,7 @@ def __wait_for_new_load(build_server, build_dir, trigger_window, timeout):
 def get_current_time(ssh_client):
     output = ssh_client.exec_cmd('date', rm_date=False, get_exit_code=False)[1]
     # sample output: Mon Dec 12 08:54:08 EST 2016
-    current_time = datetime.datetime.strptime(output, "%a %b %d %H:%M:%S EST %Y")
+    current_time = datetime.datetime.strptime(output, "%a %b %d %H:%M:%S %Z %Y")
     return current_time
 
 
