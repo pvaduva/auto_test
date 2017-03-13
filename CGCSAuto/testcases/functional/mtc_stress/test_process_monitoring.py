@@ -22,7 +22,6 @@ _final_processes_status = {}
 
 DEF_RETRIES = 2
 DEF_DEBOUNCE = 20
-# DEF_INTERVAL = 20
 DEF_INTERVAL = 10
 SM_PROC_TIMEOUT = 90
 KILL_WAIT_RETRIES = 30
@@ -160,7 +159,6 @@ PROCESSES = {
 
     # the following are SM managed services
     # active-controller only processes
-    # kwargs : dict'node_type': 'active', pid_file:None, 'debounce':None, 'interval':None, 'retries':None},
     'postgres': {
         'cmd': '/usr/bin/postgres', 'impact': 'swact', 'severity': 'critical', 'node_type': 'active'},
 
@@ -208,7 +206,6 @@ PROCESSES = {
         'severity': 'critical', 'node_type': 'active'},
 
     'glance-api': {
-        # 'cmd': '/usr/bin/python2 /bin/glance-api', 'impact': 'swact',
         'cmd': '/usr/bin/python2 /bin/glance-api', 'impact': 'enabled-degraded',
         'severity': 'major', 'node_type': 'active'},
 
@@ -239,7 +236,6 @@ PROCESSES = {
 
     # {'nova-novncproxy': {
     'nova-novnc': {
-        # 'cmd': '/usr/bin/python2 /bin/nova-novncproxy', 'impact': 'swact',
         'cmd': '/usr/bin/python2 /bin/nova-novncproxy', 'impact': 'enabled-warning',
         'severity': 'major', 'node_type': 'active'},
 
@@ -247,12 +243,10 @@ PROCESSES = {
         'cmd': '/usr/bin/python2 /bin/cinder-api', 'impact': 'enabled-degraded',
         'severity': 'major', 'node_type': 'active'},
 
-    # {'cinder-schedule': {
     'cinder-scheduler': {
         'cmd': '/usr/bin/python2 /bin/cinder-scheduler', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
 
-    # note: retries for cinder-volume is 32
     'cinder-volume': {
         'cmd': '/usr/bin/python2 /bin/cinder-volume', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active', 'retries': 32},
@@ -309,9 +303,6 @@ PROCESSES = {
         'cmd': 'python /usr/bin/patch-alarm-manager start', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
 
-    # no such process existing any more on the active-controller?
-    # controller-0:~# ps aux |grep ceph-rest-api
-    # MonitoredProcess'ceph-rest-api', '', 'swact', 'severity': 'critical'},
     # on active-controller of a storage-lab
     'ceph-rest-api': {
         'cmd': 'python /usr/bin/ceph-rest-api', 'impact': 'swact',
@@ -325,6 +316,10 @@ PROCESSES = {
     'vim-api': {
         'cmd': '/usr/bin/python /bin/nfv-vim-api', 'impact': 'enabled-degraded',
         'severity': 'major', 'node_type': 'active'},
+
+    'vim': {
+        'cmd': '/usr/bin/python /bin/nfv-vim', 'impact': 'swact',
+        'severity': 'critical', 'node_type': 'active'},
 
     # {'nfv-vim-webserver': {
     'vim-webserver': {
@@ -343,7 +338,6 @@ PROCESSES = {
         'cmd': '/usr/sbin/haproxy', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
 
-    # no more porcess named 'ceilometer-mem-*'
     'aodh-api': {
         'cmd': '/usr/bin/python2 /bin/aodh-api', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
@@ -988,6 +982,7 @@ class MonitoredProcess:
     mark.p1(('ceph-manager')),
 
     mark.p1(('vim-api')),
+    mark.p1(('vim')),
     # minor
     mark.p1(('vim-webserver')),
     mark.p1(('guest-agent')),
