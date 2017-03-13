@@ -172,6 +172,28 @@ def test_retention_sample():
             'sample-volume': 10, 'timestamp': new_time}
     ceilometer_helper.create_sample(resource_id=res_id, field='timestamp', auth_info=Tenant.ADMIN, **args)
 
+    pre_expirer_samples = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
+    count = 0
+    while count < 5:
+        if not pre_expirer_samples:
+            LOG.tc_step("CREATE SAMPLE FAILED!!!! TRY AGAIN!")
+            # create fake timestamp
+            curr_time = datetime.utcnow()
+            curr_secs = curr_time.timestamp()
+            new_time = datetime.fromtimestamp(curr_secs - 3540)
+            new_time = str(new_time).replace(' ', 'T')
+            args = {'meter-name': 'fake_sample', 'meter-type': 'gauge', 'meter-unit': 'percent',
+                    'sample-volume': 10, 'timestamp': new_time}
+            LOG.info("\nnow: {}\n59 min ago{}".format(curr_time, new_time))
+            ceilometer_helper.create_sample(resource_id=res_id, field='timestamp', auth_info=Tenant.ADMIN, **args)
+            fake_sample = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
+            if fake_sample:
+                break
+            else:
+                count += 1
+        else:
+            break
+
     # pre_samples = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
     # assert pre_samples, "Created fake_sample is not listed"
 
