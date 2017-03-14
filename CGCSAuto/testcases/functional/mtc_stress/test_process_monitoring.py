@@ -11,6 +11,7 @@ from pytest import mark, fixture, skip
 
 from consts.timeout import HostTimeout
 
+from utils import cli, table_parser
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, ControllerClient
 from consts.proj_vars import ProjVar
@@ -1130,6 +1131,9 @@ def test_process_monitoring(process_name, con_ssh=None):
 
     else:
         code = proc.kill_process_and_verify_impact(con_ssh=con_ssh)
+
+        hosts = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
+        LOG.debug('hosts:\n{}'.format(hosts))
 
         assert 0 == code, \
             'failed in killing process and verifying impact for process:{}'.format(process_name)
