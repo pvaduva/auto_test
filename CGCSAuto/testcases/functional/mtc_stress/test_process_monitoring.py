@@ -902,7 +902,7 @@ class MonitoredProcess:
     mark.p1(('ceilometer-polling')),
     mark.p1(('mtclogd')),
     # TODO need manual configuring
-    mark.p1(('ntpd')),
+    # mark.p1(('ntpd')),
     mark.p1(('sm-eru')),
     mark.p1(('sshd')),
     mark.p1(('syslog-ng')),
@@ -933,8 +933,8 @@ class MonitoredProcess:
     mark.p1(('dnsmasq')),
     mark.p1(('fm-mgr')),
     # # TODO CGTS-6396
-    # mark.p1(('keystone')),
-    # mark.p1(('glance-registry')),
+    mark.p1(('keystone')),
+    mark.p1(('glance-registry')),
     # # TODO CGTS-6398
     # major
     mark.p1(('glance-api')),
@@ -959,26 +959,27 @@ class MonitoredProcess:
     mark.p1(('heat-engine')),
 
     # TODO CGTS-6396
-    # mark.p1(('heat-api')),
-    # mark.p1(('heat-api-cfn')),
-    # mark.p1(('heat-api-cloudwatch')),
+    mark.p1(('heat-api')),
+    mark.p1(('heat-api-cfn')),
+    mark.p1(('heat-api-cloudwatch')),
     #
 
     # TODO CGTS-6426
-    # mark.p1(('open-ldap')),
+    # mark.p1(('open-ldap')),, active/active
     # retries = 32
     mark.p1(('snmp')),
 
     # TODO CGTS-6426
-    # mark.p1(('lighttpd')),
+    # mark.p1(('lighttpd')),, active/active
 
     # mark.p1(('gunicorn')), changed to horizon
     # TODO CGTS-6398
+    # mark.p1(('horizon')),, active/active
     # mark.p1(('horizon')),
     # mark.p1(('patch-alarm-manager')),
     #
-    # requires storage lab
-    mark.p1(('ceph-rest-api')),
+    # requires storage lab, active/active
+    # mark.p1(('ceph-rest-api')),
     mark.p1(('ceph-manager')),
 
     mark.p1(('vim-api')),
@@ -1032,7 +1033,7 @@ def test_process_monitoring(process_name, con_ssh=None):
         neutron-sriov-nic-agent
         nova-compute
         vswitch
-        postgres
+        # postgres  SKIP as advised
         rabbitmq-server # rabbit in SM
         rabbit
         sysinv-api  # sysinv-inv in SM
@@ -1099,6 +1100,18 @@ def test_process_monitoring(process_name, con_ssh=None):
 
     Teardown:
         - monitor the process (with the specified name) running for a period (while waiting for the system stabilizes)
+
+
+    Note:
+        Avoid to run test case for now for the following processes:
+
+            open-ldap       CGTS-6426:  in active/active redundancy model, required to be active on both controllers
+            lighttpd        CGTS-6426:  in active/active redundancy model, required to be active on both controllers
+            ceph-rest-api   CGTS-6426:  in active/active redundancy model, required to be active on both controllers
+            horizon         CGTS-6426:  in active/active redundancy model, required to be active on both controllers
+
+            postgres        SKIPPED, ‘killing postgres process may cause data damage which could destabilize the system’
+            patch-alarm-manager    SKIPPED, differently might running on either of the controllers
 
     """
     LOG.tc_step('Start testing SM/PM Prcocess Monitoring')
