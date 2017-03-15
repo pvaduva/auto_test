@@ -55,9 +55,12 @@ def download_upgrade_load(lab, server, load_path):
             server.name, load_path)
     iso_file_path = os.path.join(load_path, "export", UPGRADE_LOAD_ISO_FILE)
     pre_opts = 'sshpass -p "{0}"'.format(Host.PASSWORD)
-    server.ssh_conn.rsync(iso_file_path,
+    #server.ssh_conn.rsync(iso_file_path,
+    #                      lab['controller-0 ip'],
+    #                      WRSROOT_HOME, pre_opts=pre_opts)
+    server.ssh_conn.rsync("-L " + iso_file_path,
                           lab['controller-0 ip'],
-                          WRSROOT_HOME, pre_opts=pre_opts)
+                          os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts)
 
 
 def get_mgmt_boot_device(node):
