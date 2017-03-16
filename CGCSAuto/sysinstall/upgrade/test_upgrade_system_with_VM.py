@@ -29,10 +29,12 @@ def vms_with_upgrade():
             - Boot vm3 from image with flavor flv_rootdisk
             - Boot vm4 from image with flavor flv_rootdisk, and attach a volume to it
             - Boot vm5 from image with flavor flv_localdisk
-        - sudo reboot -f on vms host
+            - start upgrade ....Follows upgrade procedure
+            - Ping NAT during the upgrade before live migration
+            - complete upgrade.
 
     Teardown:
-        - Delete created vms, volumes, flavors
+        -  Not complete ....Delete created vms, volumes, flavors
 
     """
     LOG.fixture_step("Create a flavor without ephemeral or swap disks")
@@ -96,6 +98,8 @@ def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_que
     current_version = upgrade_setup['current_version']
     upgrade_version = upgrade_setup['upgrade_version']
 
+    controller0 = lab['controller-0']
+    host_helper.ensure_host_provisioned(controller0.name)
     force = False
     LOG.tc_step("Checking system health for upgrade .....")
     if check_system_health_query_upgrade[0] == 0:
@@ -131,7 +135,7 @@ def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_que
 
     # upgrade  controller-0
     LOG.tc_step("Upgrading  controller-0......")
-    controller0 = lab['controller-0']
+
 
     LOG.info("Ensure controller-0 is provisioned before upgrade.....")
     host_helper.ensure_host_provisioned(controller0.name)

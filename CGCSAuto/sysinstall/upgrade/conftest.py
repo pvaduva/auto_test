@@ -1,13 +1,11 @@
 import pytest
 import os
-import setups
 from consts import build_server as build_server_consts
-from consts.auth import CliAuth, Tenant, SvcCgcsAuto, Host
+from consts.auth import SvcCgcsAuto, Host
 from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
 from keywords import install_helper,  patching_helper
 from utils.ssh import ControllerClient, SSHClient
 from utils import table_parser, cli
-from utils.tis_log import LOG
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.build_server import Server, get_build_server_info
 from consts.cgcs import Prompt
