@@ -532,6 +532,7 @@ class SSHClient:
             expect_timeout (int): timeout waiting for command to return
             rm_date (bool): whether to remove date info at the end of the output
             fail_ok (bool): whether to raise exception when non-zero exit code is returned
+            strict_passwd_prompt (bool): whether to search output with strict password prompt
 
         Returns (tuple): (exit code (int), command output (str))
 
