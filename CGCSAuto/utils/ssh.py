@@ -522,7 +522,8 @@ class SSHClient:
                 self.send('exit')
                 self.expect()
 
-    def exec_sudo_cmd(self, cmd, expect_timeout=60, rm_date=True, fail_ok=True, get_exit_code=True):
+    def exec_sudo_cmd(self, cmd, expect_timeout=60, rm_date=True, fail_ok=True, get_exit_code=True,
+                      strict_passwd_prompt=False):
         """
         Execute a command with sudo.
 
@@ -538,7 +539,8 @@ class SSHClient:
         cmd = 'sudo ' + cmd
         LOG.info("Executing sudo command: {}".format(cmd))
         self.send(cmd)
-        index = self.expect([self.prompt, PASSWORD_PROMPT], timeout=expect_timeout)
+        prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
+        index = self.expect([self.prompt, prompt], timeout=expect_timeout)
         if index == 1:
             self.send(self.password)
             self.expect(timeout=expect_timeout)

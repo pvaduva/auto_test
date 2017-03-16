@@ -1,15 +1,27 @@
 import time
 import re
 
-from pytest import mark
+from pytest import mark, skip
 
 from consts.cgcs import Prompt
 from keywords import html_helper, host_helper, system_helper
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, ControllerClient
 
+LINUX_ROOT_PASSWORD = 'Li69nux*'
+
 
 def get_ldap_admin_passwd(ssh=None):
+    """
+    Get the LDAP Adminstrator's password
+
+    Args:
+        ssh:
+
+    Returns (str):
+        The password of the LDAP Adminstrator
+
+    """
     if ssh is None:
         ssh = ControllerClient.get_active_controller()
 
@@ -34,7 +46,7 @@ def get_ldap_admin_passwd(ssh=None):
 
 
 def find_ldap_user(user_name, ssh=None, host=None):
-    '''
+    """
     Find the LDAP User with the specified name
 
     Args:
@@ -42,8 +54,9 @@ def find_ldap_user(user_name, ssh=None, host=None):
         ssh:
         host:
 
-    Returns:
-
+    Returns tuple(existing_flag, user_info):
+        existing_flag (boolean)     - True, existing
+                                    - False, cannot find a LDAP User with the specified name
     Notes:
         sample output of ldapuserfinger -u
         dn: uid=ldapuser01,ou=People,dc=cgcs,dc=local
@@ -63,23 +76,28 @@ def find_ldap_user(user_name, ssh=None, host=None):
         loginShell: /usr/local/bin/cgcs_cli
         shadowMax: 90
         shadowWarning: 2
-    '''
+    """
+
+
     if ssh is None:
         if host is None:
             ssh = ControllerClient.get_active_controller()
         else:
             ssh = SSHClient(host=host)
 
-    LOG.info('Checking if LDAP User:{} is existing'.format(user_name))
-    cmd = 'sudo ldapfinger -u {}'.format(user_name)
-    code, output = ssh.exec_sudo_cmd(cmd, fail_ok=True)
+    LOG.info('Checking if LDAP User:{} is already existing'.format(user_name))
 
-    if 0 != code or not output.strip():
+    ssh.flush()
+
+    cmd = 'ldapfinger -u {}'.format(user_name)
+    code, output = ssh.exec_sudo_cmd(cmd, fail_ok=True, strict_passwd_prompt=True)
+
+    if not output.strip():
         LOG.info('No LDAP User:{} existing'.format(user_name))
         return False, {}
     else:
         user_info = {}
-        for line in output.strip():
+        for line in output.strip().splitlines():
             if line.startswith('dn: '):
                 user_info['dn'] = line.split()[1].strip()
             elif line.startswith('cn: '):
@@ -101,16 +119,41 @@ def find_ldap_user(user_name, ssh=None, host=None):
             elif line.startswith('shadowWarning: '):
                 user_info['shadow_warning'] = int(line.split()[1].strip())
             else:
-                pass
+                LOG.debug('Skip line from output of {}:\n<{}>'.format(cmd, line))
+
         if user_info:
             LOG.info('OK, found LDAP user:{}, user_info:{}'.format(user_name, user_info))
             return True, user_info
         else:
+            LOG.info('Cannot find LDAP user:{}, user_info:{}'.format(user_name, user_info))
             return False, {}
 
 
 def create_ldap_user(user_name, shell=2, secondary_group=False, password_expiry_days=90, password_expiry_warn_days=2,
                      fail_on_existing=True, check_if_existing=True, ssh=None, host=None):
+    """
+
+    Args:
+        user_name:
+        shell:
+        secondary_group:
+        password_expiry_days:
+        password_expiry_warn_days:
+        fail_on_existing:
+        check_if_existing:
+        ssh:
+        host:
+
+    Returns tuple(code, user_infor):
+        code (int):
+            0   -- successfully created a LDAP User withe specified name and attributes
+            1   -- a LDAP User already existing with the same name (don't care other attributes for now)
+            -1  -- a LDAP User already existing but fail_on_existing specified
+            -2  -- CLI to create a user succeeded but cannot find the user after
+            -3  -- failed to create a LDAP User (the CLI failed)
+
+    """
+
     if ssh is None:
         if host is None:
             ssh = ControllerClient.get_active_controller()
@@ -121,24 +164,24 @@ def create_ldap_user(user_name, shell=2, secondary_group=False, password_expiry_
         existing, user_info = find_ldap_user(user_name, ssh=ssh, host=host)
         if existing:
             if fail_on_existing:
-                LOG.error('Fail, LDAP User:{} already existing:{}'.format(user_name, user_info))
-                return False, user_info
+                LOG.error('Fail, LDAP User:{} already existing:{}, return -1'.format(user_name, user_info))
+                return -1, user_info
             else:
-                LOG.info('OK, LDAP User:{} already existing:{}'.format(user_name, user_info))
-                return True, user_info
+                LOG.info('OK, LDAP User:{} already existing:{}, return 1'.format(user_name, user_info))
+                return 1, user_info
         else:
             LOG.info('OK, LDAP User:{} not existing'.format(user_name))
 
     cmd_expected = [
         (
             'sudo ldapusersetup',
-            'Enter username to add to LDAP:',
+            ('Enter username to add to LDAP:', ),
             ''
         ),
         (
             '{}'.format(user_name),
             (
-                'Select Login Shell option # [2]:.*',
+                'Select Login Shell option # \[2\]:.*',
                 '\d+.* Bash.*',
                 '\d+.* Lshell'
             ),
@@ -146,7 +189,7 @@ def create_ldap_user(user_name, shell=2, secondary_group=False, password_expiry_
         ),
         (
             '{}'.format(shell),
-            ('Add m-user01 to secondary user group? (yes/NO):', ),
+            ('Add .* to secondary user group\? \(yes/NO\):', ),
             (),
         ),
         (
@@ -167,12 +210,19 @@ def create_ldap_user(user_name, shell=2, secondary_group=False, password_expiry_
             ),
             (),
         ),
+        (
+            '',
+            (Prompt.CONTROLLER_PROMPT, ),
+            (),
+        ),
     ]
 
     created = True
     for cmd, outputs, errors in cmd_expected:
+        LOG.debug('cmd={}\nexpected_outputs=\n{}\nerrors=\n{}'.format(cmd, outputs, errors))
         ssh.send(cmd)
         expected_outputs = list(outputs) + list(errors)
+
         index = ssh.expect(blob_list=expected_outputs, fail_ok=True)
         if len(outputs) <= index:
             LOG.error('Failed in ldapusersetup for user:{}, error:{}'.format(user_name, errors[index - len(outputs)]))
@@ -181,80 +231,158 @@ def create_ldap_user(user_name, shell=2, secondary_group=False, password_expiry_
             break
         expected_outputs[:] = []
 
+    time.sleep(3)
+
     if created:
         existing, user_info = find_ldap_user(user_name, ssh=ssh, host=host)
         if existing:
             LOG.info('OK, successfully created LDAP User:{}, user-info:{}'.format(user_name, user_info))
-            return True, user_info
+            return 0, user_info
         else:
             LOG.error('Failed, cannot find the created LDAP User:{}, user-info:{}'.format(user_name, user_info))
-            return False, user_info
+            return -2, user_info
 
-    return False, {}
+    return -3, {}
+
+
+def rm_ldap_user(user_name, ssh=None, host=None):
+    """
+    Delete the LDAP User with the specified name
+
+    Args:
+        user_name:
+        ssh:
+        host:
+
+    Returns:
+
+    """
+    if ssh is None:
+        if host is None:
+            ssh = ControllerClient.get_active_controller()
+        else:
+            ssh = SSHClient(host=host)
+
+    cmd = 'ldapdeleteuser {}'.format(user_name)
+    code, output = ssh.exec_sudo_cmd(cmd)
+    if 0 != code:
+        LOG.error('Failed to delete the LDAP User:{}, code={}, output={}'.format(user_name, code, output))
+    else:
+        LOG.debug('OK, successfully deleted the LDAP User:{}'.format(user_name))
+
+    return (0 == code, output)
+
 
 
 @mark.parametrize(('user_name'), [
     # mark.p1(('lock_standby_change_pswd')),
     mark.p1(('ldapuser01')),
 ])
-def test_ldap_create_user(user_name):
-    '''
-    Create a LDAP User with the specified name
+def test_ldap_delete_user(user_name):
+    """
+    Delete the LDAP User with the specified name
+
     Args:
         user_name:
 
     Returns:
 
-    '''
-    LOG.tc_step('Attempt to get the LDAP Admin password')
-    password = get_ldap_admin_passwd()
-    LOG.info('OK, got the LDAP Admin password:{}'.format(password))
+    """
+    LOG.tc_step('Make sure the specified LDAP User existing:{}, create it if not'.format(user_name))
+    code, user_info = create_ldap_user(user_name, check_if_existing=True, fail_on_existing=False)
+    if 0 != code and 1 != code:
+        skip('No LDAP User:{} existing to delete'.format(user_name))
+        return
+
+    LOG.tc_step('Delete the LDAP User:{}'.format(user_name))
+    success, output = rm_ldap_user(user_name)
+    assert success, 'Failed to delete the LDAP User, message={}'.format(output)
+
+
+@mark.parametrize(('user_name'), [
+    # mark.p1(('lock_standby_change_pswd')),
+    mark.p1(('ldapuser01')),
+])
+def test_ldap_find_user(user_name):
+    """
+
+    Args:
+        user_name:
+
+    Returns:
+
+    Steps:
+        1   search the existing user using 'ldapfinger -u <user_name>'
+
+    User Stories:   US70961
+    """
+
+    LOG.tc_step('Make sure the LDAP User:{} exists, create one if it is not')
+    code, user_info = create_ldap_user(user_name, fail_on_existing=False, check_if_existing=True)
+    if 0 != code and 1 != code:
+        skip('No LDAP User:{} existing to search for'.format(user_name))
+        return
+
+    LOG.tc_step('Search for LDAP User with name:{}'.format(user_name))
+    existing, user_info = find_ldap_user(user_name)
+
+    assert existing, 'Failed to find user:{}'.format(user_name)
+
+
+@mark.parametrize(('user_name'), [
+    mark.p1(('ldapuser01')),
+])
+def test_ldap_create_user(user_name):
+
+    """
+    Create a LDAP User with the specified name
+
+    Args:
+        user_name:
+
+    Returns:
+
+    Steps:
+        1   create a LDAP User with the specified name
+        2   verify the LDAP User is successfully created and get its details
+
+    Teardown:
+
+            0   -- successfully created a LDAP User withe specified name and attributes
+            1   -- a LDAP User already existing with the same name (don't care other attributes for now)
+            -1  -- a LDAP User already existing but fail_on_existing specified
+            -2  -- CLI to create a user succeeded but cannot find the user after
+            -3  -- failed to create a LDAP User (the CLI failed)
+
+    User Stories:   US70961
+    """
+
+    ssh = ControllerClient.get_active_controller()
+
+    LOG.tc_step('Check if any existing LDAP User with name:{}'.format(user_name))
+    existing, user_info = find_ldap_user(user_name, ssh=ssh)
+    if existing:
+        LOG.warn('LDAP User:{} already existing before attempting to create one!'.format(user_name))
+        deleted, output = rm_ldap_user(user_name)
+        if not deleted:
+            skip('LDAP User:{} already existing and failed to delete!')
+    else:
+        LOG.warn('OK, LDAP User:{} is not existing, continue to create one'.format(user_name))
 
     LOG.tc_step('Creating LDAP User:{}'.format(user_name))
-    created, user_settings = create_ldap_user(user_name)
-    if created:
-        LOG.info('OK, created LDAP for User:{}, user-details:'.format(user_name, user_settings))
+    code, user_settings = create_ldap_user(user_name, ssh=ssh, check_if_existing=True, fail_on_existing=True)
+
+    if 0 == code:
+        LOG.info('OK, created LDAP for User:{}, user-details:\n{}'.format(user_name, user_settings))
     else:
-        assert False, 'Failed to created LDAP User:{}'.format(user_name)
+        if -1 == code:
+            msg = 'Already exists the LDAP User:{}.'.format(user_name)
+        elif -2 == code:
+            msg = 'Failed to find the created LDAP User:{} although creating succeeded.'.format(user_name)
+        elif -3 == code:
+            msg = 'Failed to create the LDAP User:{}.'.format(user_name)
+        else:
+            msg = 'Failed to create the LDAP User:{} for unknown reason.'.format(user_name)
 
-
-@mark.p3
-def _test_sudo_su():
-    """
-    TC5205 Test logs created by sudo su
-
-    Test Steps:
-        - Ssh to a controller and execute 'sudo su'
-        - Check that logs are created by the command
-        - Logout and ssh to the controller again
-        - Attempt to execute 'sudo su' with an incorrect password
-        - Check that there are logs created by the failed command
-
-    """
-    ip = html_helper.get_ip_addr()
-    ssh = SSHClient(host=ip)
-    ssh.connect()
-    searching_for = ['sudo: notice  wrsroot.*PWD=/home/wrsroot ; USER=root ; COMMAND=/usr/bin/su \-',
-                     'su: notice \(to root\) wrsroot on',
-                     #uses su-l:session because login_as_root calls 'sudo su -'
-                     'su: info pam_unix\(su-l:session\): session opened for user root by wrsroot\(uid=0\)']
-    found = []
-
-    LOG.tc_step("Logging in as su")
-    with ssh.login_as_root() as root:
-        code, out = root.exec_cmd('tail /var/log/auth.log')
-        out = out.split('\n')
-        for line in out:
-            for i in range(0, len(searching_for)):
-                LOG.tc_step("Searching for logs containing: {}".format(searching_for[i]))
-                regex = re.compile(searching_for[i])
-                if searching_for[i] not in found and re.search(regex, line):
-                    found.append(searching_for[i])
-                    LOG.info("Found {}".format(line))
-                    break
-
-        assert len(searching_for) == len(found), "FAIL: The sudo su command was not logged. " \
-                                                 "Looking for logs resembling: {} found: {}".format(searching_for,found)
-
-    ssh.close()
-
+        LOG.error(msg)
+        assert False, msg

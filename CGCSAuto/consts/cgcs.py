@@ -120,6 +120,7 @@ class Prompt:
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'
     PASSWORD_PROMPT = '.*assword\:.*'
+    SUDO_PASSWORD_PROMPT = 'Password: '
     BUILD_SERVER_PROMPT_BASE = '{}@{}\:~.*'
     ADD_HOST = '.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
