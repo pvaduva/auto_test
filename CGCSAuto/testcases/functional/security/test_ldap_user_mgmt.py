@@ -1,25 +1,23 @@
 import time
-import re
 
 from pytest import mark, skip
 
 from consts.cgcs import Prompt
-from keywords import html_helper, host_helper, system_helper
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, ControllerClient
 
 LINUX_ROOT_PASSWORD = 'Li69nux*'
 
 
-def get_ldap_admin_passwd(ssh=None):
+def get_ldap_admin_password(ssh=None):
     """
-    Get the LDAP Adminstrator's password
+    Get the LDAP Administrator's password
 
     Args:
         ssh:
 
     Returns (str):
-        The password of the LDAP Adminstrator
+        The password of the LDAP Administrator
 
     """
     if ssh is None:
@@ -78,7 +76,6 @@ def find_ldap_user(user_name, ssh=None, host=None):
         shadowWarning: 2
     """
 
-
     if ssh is None:
         if host is None:
             ssh = ControllerClient.get_active_controller()
@@ -88,7 +85,6 @@ def find_ldap_user(user_name, ssh=None, host=None):
     LOG.info('Checking if LDAP User:{} is already existing'.format(user_name))
 
     ssh.flush()
-
     cmd = 'ldapfinger -u {}'.format(user_name)
     code, output = ssh.exec_sudo_cmd(cmd, fail_ok=True, strict_passwd_prompt=True)
 
@@ -226,7 +222,7 @@ def create_ldap_user(user_name, shell=2, secondary_group=False, password_expiry_
         index = ssh.expect(blob_list=expected_outputs, fail_ok=True)
         if len(outputs) <= index:
             LOG.error('Failed in ldapusersetup for user:{}, error:{}'.format(user_name, errors[index - len(outputs)]))
-            LOG.debug('Failed in ldapusersetup: send={}, acutal={}, expected={}'.format(cmd, errors, outputs))
+            LOG.debug('Failed in ldapusersetup: send={}, actual={}, expected={}'.format(cmd, errors, outputs))
             created = False
             break
         expected_outputs[:] = []
@@ -270,13 +266,11 @@ def rm_ldap_user(user_name, ssh=None, host=None):
     else:
         LOG.debug('OK, successfully deleted the LDAP User:{}'.format(user_name))
 
-    return (0 == code, output)
+    return 0 == code, output
 
 
-
-@mark.parametrize(('user_name'), [
-    # mark.p1(('lock_standby_change_pswd')),
-    mark.p1(('ldapuser01')),
+@mark.parametrize(('user_name', ), [
+    mark.p1(('ldapuser01', )),
 ])
 def test_ldap_delete_user(user_name):
     """
@@ -299,9 +293,8 @@ def test_ldap_delete_user(user_name):
     assert success, 'Failed to delete the LDAP User, message={}'.format(output)
 
 
-@mark.parametrize(('user_name'), [
-    # mark.p1(('lock_standby_change_pswd')),
-    mark.p1(('ldapuser01')),
+@mark.parametrize(('user_name', ), [
+    mark.p1(('ldapuser01', )),
 ])
 def test_ldap_find_user(user_name):
     """
@@ -329,8 +322,37 @@ def test_ldap_find_user(user_name):
     assert existing, 'Failed to find user:{}'.format(user_name)
 
 
-@mark.parametrize(('user_name'), [
-    mark.p1(('ldapuser01')),
+@mark.parametrize(('user_name', ), [
+    mark.p1(('ldapuser01', )),
+])
+def test_ldap_find_user(user_name):
+    """
+
+    Args:
+        user_name:
+
+    Returns:
+
+    Steps:
+        1   search the existing user using 'ldapfinger -u <user_name>'
+
+    User Stories:   US70961
+    """
+
+    LOG.tc_step('Make sure the LDAP User:{} exists, create one if it is not')
+    code, user_info = create_ldap_user(user_name, fail_on_existing=False, check_if_existing=True)
+    if 0 != code and 1 != code:
+        skip('No LDAP User:{} existing to search for'.format(user_name))
+        return
+
+    LOG.tc_step('Search for LDAP User with name:{}'.format(user_name))
+    existing, user_info = find_ldap_user(user_name)
+
+    assert existing, 'Failed to find user:{}'.format(user_name)
+
+
+@mark.parametrize(('user_name', ), [
+    mark.p1(('ldapuser01', )),
 ])
 def test_ldap_create_user(user_name):
 
