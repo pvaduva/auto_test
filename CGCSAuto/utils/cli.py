@@ -62,11 +62,21 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
             ssh_client.set_prompt(prompt=ssh.ADMIN_PROMPT)
     else:
         if auth_info:
-            auth_args = ('--os-username {} --os-password {} --os-project-name {} --os-auth-url {} --os-region-name {} '
-                         '--os-user-domain-name Default --os-project-domain-name Default'.
-                         format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url'],
-                                auth_info['region']))
-            flags = (auth_args + ' ' + flags).strip()
+            if auth_info['tenant'] == 'admin':
+                cmd = "source /etc/nova/openrc; " + cmd
+                ssh_client.set_prompt(prompt=ssh.ADMIN_PROMPT)
+            elif auth_info['tenant'] == 'tenant1':
+                cmd = "source /home/wrsroot/openrc.tenant1; " + cmd
+                ssh_client.set_prompt(prompt=ssh.TENANT1_PROMPT)
+            else:
+                cmd = "source /home/wrsroot/openrc.tenant2; " + cmd
+                ssh_client.set_prompt(prompt=ssh.TENANT2_PROMPT)
+
+                # auth_args = ('--os-username {} --os-password {} --os-project-name {} --os-auth-url {} --os-region-name {} '
+                #             '--os-user-domain-name Default --os-project-domain-name Default'.
+                #             format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url'],
+                #                    auth_info['region']))
+                # flags = (auth_args + ' ' + flags).strip()
 
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
     exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout,

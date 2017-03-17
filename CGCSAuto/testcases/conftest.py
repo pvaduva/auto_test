@@ -10,7 +10,7 @@ from consts.auth import CliAuth, Tenant
 from consts.proj_vars import ProjVar
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
-from utils import lab_info, ssh
+from utils import lab_info
 
 from testfixtures.resource_create import tis_centos_image
 
@@ -26,12 +26,7 @@ def setup_test_session():
     """
     os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
-
-    lab = ProjVar.get_var('LAB')
     setups.set_env_vars(con_ssh)
-    if 'https' in lab and lab['https'] == 'yes':
-        ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
-        con_ssh.set_prompt(prompt=ssh.ADMIN_PROMPT)
 
     setups.copy_files_to_con1()
 
@@ -43,7 +38,7 @@ def setup_test_session():
     # set build id to be used to upload/write test results
     build_id, build_host = setups.get_build_info(con_ssh)
     ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_host)
-    ProjVar.set_var(SOURCE_CREDENTIAL=None)
+
 
 @pytest.fixture(scope='function', autouse=True)
 def reconnect_before_test():
