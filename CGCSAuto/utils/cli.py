@@ -81,6 +81,9 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
     exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout,
                                                 searchwindowsize=200)
+    if source_creden_:
+        ssh_client.set_prompt()
+        ssh_client.exec_cmd("export PS1='\\u@\\h:~\\$ '")
 
     if fail_ok:
         if exit_code in [0, 1]:
@@ -158,6 +161,10 @@ def openstack(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False
 def system(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
            auth_info=Tenant.ADMIN, source_creden_=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
 
+    if not source_creden_:
+        if ProjVar.get_var('HTTPS'):
+            flags += ' --os-endpoint-type internalURL '
+
     return exec_cli('system', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
                     source_creden_=source_creden_, err_only=err_only, timeout=timeout, rtn_list=rtn_list)
@@ -226,6 +233,7 @@ def keystone(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, 
     return exec_cli('keystone', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
                     err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+
 
 def qemu_img(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
           auth_info=Tenant.ADMIN, source_creden_=Tenant.ADMIN, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):

@@ -155,6 +155,7 @@ class Labs:
         'controller-1 ip': '128.224.150.106',
         'system_type': 'CPE',
         'controller_nodes': [22351, 22352],
+        'https' :'yes'
     }
 
     R720_3_7 = {
