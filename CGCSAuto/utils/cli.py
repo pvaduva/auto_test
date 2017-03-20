@@ -66,6 +66,16 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
                          '--os-user-domain-name Default --os-project-domain-name Default'.
                          format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url'],
                                 auth_info['region']))
+
+            # Quick fix to https CGTS-6587
+            lab = ProjVar.get_var('LAB')
+            if 'https' in lab and lab['https'] == 'yes':
+                if cmd == 'openstack':
+                    endpoint_flag = ' --os-interface internal '
+                else:
+                    endpoint_flag = ' --os-endpoint-type internalURL '
+                auth_args += endpoint_flag
+
             flags = (auth_args + ' ' + flags).strip()
 
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
