@@ -68,16 +68,13 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
                                 auth_info['region']))
 
             # Quick fix to https CGTS-6587
-            lab = ProjVar.get_var('LAB')
-            if 'https' in lab and lab['https'] == 'yes':
+            if ProjVar.get_var('HTTPS'):
                 if cmd == 'openstack':
-                    endpoint_flag = ' --os-interface internal '
+                    flags += ' --os-interface internal'
                 else:
-                    endpoint_flag = ' --os-endpoint-type internalURL '
-                auth_args += endpoint_flag
+                    flags += ' --os-endpoint-type internalURL'
 
             flags = (auth_args + ' ' + flags).strip()
-
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
     exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout,
                                                 searchwindowsize=200)
@@ -153,6 +150,7 @@ def openstack(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False
               auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
 
     flags += ' --os-identity-api-version 3'
+
     return exec_cli('openstack', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
                     err_only=err_only, timeout=timeout, rtn_list=rtn_list)
@@ -160,10 +158,6 @@ def openstack(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False
 
 def system(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
            auth_info=Tenant.ADMIN, source_creden_=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
-
-    if not source_creden_:
-        if ProjVar.get_var('HTTPS'):
-            flags += ' --os-endpoint-type internalURL '
 
     return exec_cli('system', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
