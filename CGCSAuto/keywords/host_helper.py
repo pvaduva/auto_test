@@ -43,7 +43,6 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
     original_host = con_ssh.get_hostname()
-
     host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt)
     host_ssh.connect()
     current_host = host_ssh.get_hostname()
@@ -2785,3 +2784,23 @@ def get_mellanox_ports(host):
 def is_host_locked(host,  con_ssh=None):
         admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
         return admin_state == 'locked'
+
+
+def get_host_network_interface_dev_names(host, con_ssh=None):
+
+    dev_names = []
+    with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+
+        cmd = "ifconfig -a | sed 's/[ \t].*//;/^$/d;/^lo/d'"
+        rc, output = host_ssh.exec_sudo_cmd(cmd)
+        if rc == 0:
+            output = output.splitlines()
+            for dev in output:
+                if dev.endswith(':'):
+                    dev = dev[:-1]
+                dev_names.append(dev)
+            LOG.info("Host {} interface device names: {}".format(host, dev_names))
+        else:
+            LOG.warning("Failed to get interface device names for host {}".format(host))
+
+    return dev_names
