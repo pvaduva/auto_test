@@ -167,8 +167,12 @@ def parse_args():
                          help="Use the latest config files")
 
     lab_grp.add_argument('--banner', dest='banner',
-                         choices=['before', 'after', 'no'], default='no',
-                         help='If there are banner files, install before or after config controller')
+                         choices=['before', 'after', 'no'], default='before',
+                         help='Apply banner files before or after config controller')
+
+    lab_grp.add_argument('--branding', dest='branding',
+                         choices=['before', 'no'], default='before',
+                         help='Apply branding files before config controller')
 
     #TODO: Custom directory path is not supported yet. Need to add code
     #      to rsync files from custom directory path on local PC to controller-0
@@ -333,7 +337,7 @@ def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex):
                                 + CUSTOM_LAB_SETTINGS_FILENAME
     return lab_cfg_path, lab_settings_filepath
 
-def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on_tis, host_os, override, guest_load_path, banner, simplex):
+def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on_tis, host_os, override, guest_load_path, simplex):
     ''' Get the directory path for the configuration file that is used in
         setting up the lab.
     '''
@@ -387,16 +391,6 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on
 
         if not bulkfile_found and not tis_on_tis:
             msg = 'No valid host bulk add file found in {}'.format(lab_cfg_path)
-            log.error(msg)
-            wr_exit()._exit(1, msg)
-
-    # Confirm if have a valid banner file (if specified)
-    if banner != "no":
-        cmd = 'test -d ' + lab_cfg_path + "/banner"
-        if bld_server_conn.exec_cmd(cmd)[0] == 0:
-            log.info('Found banner directory in {}'.format(lab_cfg_path))
-        else:
-            msg = 'No valid banner directory found in {}'.format(lab_cfg_path)
             log.error(msg)
             wr_exit()._exit(1, msg)
 
@@ -813,24 +807,48 @@ def apply_banner(node, banner):
     if node.telnet_conn.exec_cmd(cmd)[0] != 0:
         msg = 'Banner files not found for this lab'
         log.error(msg)
-        wr_exit()._exit(1, msg)
+        return 
 
-
-    cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
-    cmd += " mv BANNER_SRC BANNER_DEST"
-    if node.telnet_conn.exec_cmd(cmd)[0] != 0:
-        msg = 'Unable to move banner files from {} to {}'.format(BANNER_SRC, BANNER_DEST)
-        log.error(msg)
-        wr_exit()._exit(1, msg)
-
-    if banner == 'after':
-        cmd = "/usr/sbin/apply_banner_customization"
+    if banner == 'before':
+        cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
+        cmd += " mv {} {}".format(BANNER_SRC, BANNER_DEST)
+        if node.telnet_conn.exec_cmd(cmd)[0] != 0:
+            msg = 'Unable to move banner files from {} to {}'.format(BANNER_SRC, BANNER_DEST)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+    elif banner == 'after':
+        cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
+        cmd += " sudo apply_banner_customization " + BANNER_SRC
         if node.telnet_conn.exec_cmd(cmd)[0] != 0:
             msg = 'Banner application failed'
             log.error(msg)
             wr_exit()._exit(1, msg)
         else:
             log.info('Banner files have been applied')
+    else:
+        log.info('Skipping banner file application')
+
+    return
+
+
+def apply_branding(node):
+    ''' Apply branding files if they exist (before config controller is run)
+    '''
+
+    log.info('Attempting to apply branding files')
+
+    cmd = 'test -d ' + BRANDING_SRC
+    if node.telnet_conn.exec_cmd(cmd)[0] != 0:
+        msg = 'Branding files not found for this lab'
+        log.error(msg)
+        return
+
+    cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
+    cmd += " cp -r {}/* {}".format(BRANDING_SRC, BRANDING_DEST)
+    if node.telnet_conn.exec_cmd(cmd)[0] != 0:
+        msg = 'Unable to move branding files from {} to {}'.format(BRANDING_SRC, BRANDING_DEST)
+        log.error(msg)
+        wr_exit()._exit(1, msg)
 
     return
 
@@ -1180,6 +1198,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
         log.info("Found login prompt. Controller0 reboot has completed")
         controller0.telnet_conn.login()
 
+        # Think we only need this if we burn/boot from USB
         setupNetworking(host_os)
 
         # Reconnect ssh session
@@ -1324,7 +1343,7 @@ def setupHeat(bld_server_conn):
         wr_exit()._exit(1, msg)
 
 
-def configureController(bld_server_conn, host_os, install_output_dir, banner):
+def configureController(bld_server_conn, host_os, install_output_dir, banner, branding):
     # Configure the controller as required
     global controller0
     if not cumulus:
@@ -1335,6 +1354,10 @@ def configureController(bld_server_conn, host_os, install_output_dir, banner):
     # Apply banner if specified by user
     if banner == 'before' and host_os == 'centos':
         apply_banner(controller0, banner)
+
+    # Apply branding if specified by user
+    if branding != 'no' and host_os == 'centos':
+        apply_branding(controller0)
 
     # No consistency in naming of config file naming
     pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
@@ -1661,6 +1684,7 @@ def main():
     stop = args.stop
     override = args.override
     banner = args.banner
+    branding = args.branding
     bld_server = args.bld_server
     bld_server_wkspce = args.bld_server_wkspce
     tis_blds_dir = args.tis_blds_dir
@@ -1741,6 +1765,7 @@ def main():
     logutils.print_name_value("Stop", stop)
     logutils.print_name_value("Override", override)
     logutils.print_name_value("Banner", banner)
+    logutils.print_name_value("Branding", branding)
     logutils.print_name_value("Skip feed", skip_feed)
     logutils.print_name_value("Boot USB", boot_usb)
     logutils.print_name_value("Burn USB", burn_usb)
@@ -1781,7 +1806,7 @@ def main():
         lab_cfg_path, lab_settings_filepath = verify_lab_cfg_location(bld_server_conn,
                                                   lab_cfg_location, load_path,
                                                   tis_on_tis, host_os, override,
-                                                  guest_load_path, banner, simplex)
+                                                  guest_load_path, simplex)
 
     if lab_settings_filepath:
         log.info("Lab settings file path: " + lab_settings_filepath)
@@ -2037,7 +2062,7 @@ def main():
     lab_install_step = install_step(msg, 3, ['regular', 'storage', 'cpe', 'simplex'])
 
     if do_next_install_step(lab_type, lab_install_step):
-        configureController(bld_server_conn, host_os, install_output_dir, banner)
+        configureController(bld_server_conn, host_os, install_output_dir, banner, branding)
         set_install_step_complete(lab_install_step)
 
 

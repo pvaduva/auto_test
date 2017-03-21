@@ -44,10 +44,10 @@ WRSROOT_HEAT_DIR = WRSROOT_HOME_DIR + "/heat"
 JIRA_LOGS_DIR = "/folk/cgts/logs"
 CERTIFICATE_FILE_PATH = "/folk/cgts/lab/server-with-key-with-passwd.pem"
 CERTIFICATE_FILE_NAME = "server-with-key.pem"
-BANNER_DEST = '/opt/banner'
-BANNER_SRC = WRSROOT_HOME_DIR + '/banner'
-BRANDING_DEST = '/opt/branding'
-BRANDING_SRC = WRSROOT_HOME_DIR + '/branding'
+BANNER_DEST = '/opt/'
+BANNER_SRC = WRSROOT_HOME_DIR + '/banner/'
+BRANDING_DEST = '/opt/branding/'
+BRANDING_SRC = WRSROOT_HOME_DIR + '/branding/'
 
 # Cumulus TiS on TiS setup
 #CUMULUS_SERVER_IP="128.224.151.50"
