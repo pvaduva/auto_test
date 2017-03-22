@@ -26,8 +26,8 @@ MELLANOX_DEVICE = 'MT27500|MT27710'
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
     # set default_guest back to tis-centos-guest after US CentOS Guest SDK is closed by Nimalini
-    #DEFAULT_GUEST = 'tis-centos-guest'
-    DEFAULT_GUEST = 'cgcs-guest'
+    DEFAULT_GUEST = 'tis-centos-guest'
+    #DEFAULT_GUEST = 'cgcs-guest'
     TIS_GUEST_PATTERN = 'cgcs-guest|tis-centos-guest'
     GUESTS_NO_RM = ['ubuntu_14', 'tis-centos-guest', 'cgcs-guest']
     # Image files name and size from yow-cgcs-test.wrs.com:/home/svc-cgcsauto/images
