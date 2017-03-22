@@ -18,6 +18,7 @@ REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 
 <b>Overall Status: {}</b>
 <b>Detailed Test Results Location: </b>{}
+<b>Detailed Panorama Results Location: </b>{}
 
 <b>Automated Test Results Summary: </b>
 ------------------------------------------------------
@@ -58,6 +59,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
             _get_results_from_mongo(tags=tags, start_date=start_date, end_date=end_date, logs_dir=logs_dir)
 
     else:
+        # get result from test server's from /sandbox/AUTOMATION_LOGS/<lab>/<date>/test_results.log
         res_file = 'test_results.log'
         if not res_file in source and not logs_dir:
             raise ValueError("local automation log path has to be specified via logs_dir or source")

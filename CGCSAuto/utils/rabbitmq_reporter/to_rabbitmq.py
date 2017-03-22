@@ -70,7 +70,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
     jira = ''
 
     # Parse common test info from test_results.log
-    lab, build, testcases_list, log_dir = __parse_common_info(file_path)
+    lab, build, build_server, testcases_list, log_dir = __parse_common_info(file_path)
 
     logfile = ','.join([os.path.join(log_dir, 'TIS_AUTOMATION.log'), os.path.join(log_dir, 'pytestlog.log')])
     tester_name = tester_name if tester_name else os.environ['USER']
@@ -105,7 +105,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
             testName=test_name,
             tcPassed=0,
             project="XSTUDIO 3.1",
-            attributes=[["board_name", "%s" % lab], ["barcode", "%s" % lab]],
+            attributes=[["board_name", "%s" % lab],["build_server", "%s" % build_server]],
             defects=[],
             tags=[tag],
             userStories=[userStory],
@@ -138,60 +138,6 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
 
 
 def __upload_result(result_json):
-
-    a = {}
-
-    result_json = {"records": [
-                  {
-                    "runStartDate": "2016-11-17T17:45:00",
-                    "userStories": [],
-                    "testResult": "PASS",
-                    "milestone": "",
-                    "tcTotal": 1,
-                    "testExecutionTimeStamp": "2016-11-17T17:45:32",
-                    "id": "582decd2e562904f95913d79",
-                    "execResult": "PASS",
-                    "buildResult": "N/A",
-                    "buildResultDetail": "N/A",
-                    "environmentName": "MYSQL1:4",
-                    "defects": [],
-                    "releaseName": "TITANIUM CLOUD R4",
-                    "bootResult": "PASS",
-                    "testSuiteId": "5491629d98a0a712be964652:5491713a98a0a73ff5ffc0ac",
-                    "testTool":
-                    {
-                         "version": "2.1.2",
-                         "name": "WASSP"
-                    },
-                    "testerName": "helmuth",
-                    "rtcResultDetail": "N/A",
-                    "rtcResult": "N/A",
-                    "environmentId": "MYSQL1:2371::MYSQL1:4",
-                    "testName": "host_test_wil",
-                    "execResultDetail": "PASS",
-                    "tcPassed": 0,
-                    "bootResultDetail": "PASS",
-                    "attributes":
-                        [
-                             ["barcode", "localhost"],
-                             ["board_name", "localHost"],
-                             ["bsp", "none"],
-                             ["config_label", "localhost"],
-                             ["config_name", "none"],
-                             ["hostos", "Ubuntu 14.04.4 LTS-64bit"],
-                             ["project", "WASSP 2.1"],
-                             ["tech", "up"],
-                             ["tool", "none"]
-                        ],
-                    "date_modified": "2016-11-17T17:45:53.045060",
-                    "detailedResult": "exec pass",
-                    "project": "WASSP 2.1",
-                    "tags":[
-                             "201611171100", "helmuth", "hv202gos"
-                    ]
-                    }
-             ]
-        }
 
     try:
         rmqLogger = logging.getLogger('rmqlogger')
@@ -265,10 +211,10 @@ def __parse_common_info(test_results_file):
 
     lab = re.findall('Lab: (.*)\n', other_info)[0].strip().upper()
     build = re.findall('Build ID: (.*)\n', other_info)[0].strip()
-    #build_server = re.findall('Build Server: (.*)\n', other_info)[0].strip()
+    build_server = re.findall('Build Server: (.*)\n', other_info)[0].strip()
     log_dir = test_results_file.replace('test_results.log', '')
 
-    return lab, build, testcases_list, log_dir
+    return lab, build, build_server, testcases_list, log_dir
 
 
 if __name__ == '__main__':
