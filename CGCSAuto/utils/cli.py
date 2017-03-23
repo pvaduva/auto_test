@@ -45,8 +45,8 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
     if auth_info is None:
         auth_info = Tenant.get_primary()
 
-        if 'auth_url' in lab:
-            auth_info._set_url(lab['auth_url'])
+    if 'auth_url' in lab:
+        Tenant._set_url(lab['auth_url'])
 
     positional_args = __convert_args(positional_args)
     flags = __convert_args(flags)
