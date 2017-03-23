@@ -46,7 +46,7 @@ class ProjVar:
         var_name = var_name.upper()
         valid_vars = cls.__var_dict.keys()
         if var_name not in valid_vars:
-            raise ValueError("Invalid var_name. Valid vars: {}".format(valid_vars))
+            raise ValueError("Invalid var_name: {}. Valid vars: {}".format(var_name, valid_vars))
 
         return cls.__var_dict[var_name]
 
