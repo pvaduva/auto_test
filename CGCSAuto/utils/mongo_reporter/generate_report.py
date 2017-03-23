@@ -18,7 +18,6 @@ REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 
 <b>Overall Status: {}</b>
 <b>Detailed Test Results Location: </b>{}
-<b>Detailed Panorama Results Location: </b>{}
 
 <b>Automated Test Results Summary: </b>
 ------------------------------------------------------
