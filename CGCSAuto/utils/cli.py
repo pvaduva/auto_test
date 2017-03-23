@@ -68,7 +68,8 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
                                 auth_info['region']))
 
             # Quick fix to https CGTS-6587
-            if ProjVar.get_var('HTTPS'):
+            lab = ProjVar.get_var('LAB')
+            if 'https' in lab and lab['https'] == 'yes':
                 if cmd == 'openstack':
                     flags += ' --os-interface internal'
                 else:

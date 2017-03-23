@@ -33,7 +33,7 @@ class ProjVar:
             'REPORT_ALL': report_all,
             'REPORT_TAG': report_tag,
             'OPENSTACK_CLI': openstack_cli,
-            'HTTPS': lab['https'] if 'https' in lab else None
+            #'HTTPS': lab['https'] if 'https' in lab else None
         })
 
     @classmethod
