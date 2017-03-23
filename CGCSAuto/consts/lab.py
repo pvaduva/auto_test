@@ -245,6 +245,7 @@ class Labs:
         'short_name': 'wcp_67',
         'name': 'yow-cgcs-wildcat-67',
         'floating ip': '128.224.151.33',
+        'auth_url': 'http://127.168.204.2:5000/v3/',
         'controller-0 ip': '128.224.151.33',
         'controller_nodes': [23286],
         'https': 'yes'
@@ -254,6 +255,7 @@ class Labs:
         'short_name': 'wcp_68',
         'name': 'yow-cgcs-wildcat-68',
         'floating ip': '128.224.151.38',
+        'auth_url': 'http://127.168.204.2:5000/v3/',
         'controller-0 ip': '128.224.151.38',
         'controller_nodes': [23287],
         'https': 'yes'

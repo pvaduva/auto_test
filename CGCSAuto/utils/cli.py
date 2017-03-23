@@ -38,11 +38,15 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
             if fail_ok: return exit_code, command_output
             if not fail_ok: raise exception
     """
+    lab = ProjVar.get_var('LAB')
     if ssh_client is None:
         ssh_client = ControllerClient.get_active_controller()
 
     if auth_info is None:
         auth_info = Tenant.get_primary()
+
+        if 'auth_url' in lab:
+            auth_info._set_url(lab['auth_url'])
 
     positional_args = __convert_args(positional_args)
     flags = __convert_args(flags)
@@ -68,7 +72,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
                                 auth_info['region']))
 
             # Quick fix to https CGTS-6587
-            lab = ProjVar.get_var('LAB')
+
             if 'https' in lab and lab['https'] == 'yes':
                 if cmd == 'openstack':
                     flags += ' --os-interface internal'
