@@ -48,6 +48,7 @@ BANNER_DEST = '/opt/'
 BANNER_SRC = WRSROOT_HOME_DIR + '/banner/'
 BRANDING_DEST = '/opt/branding/'
 BRANDING_SRC = WRSROOT_HOME_DIR + '/branding/'
+SCRIPTS_HOME = WRSROOT_HOME_DIR + '/postinstall/'
 
 # Cumulus TiS on TiS setup
 #CUMULUS_SERVER_IP="128.224.151.50"

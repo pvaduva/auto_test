@@ -115,6 +115,9 @@ def parse_args():
                          " as small footprint. Not applicable"
                          " for tis-on-tis install")
 
+    lab_grp.add_argument('--postinstall', choices=['True', 'False'],
+                          default=True, help="Run post install scripts")
+
     lab_grp.add_argument('--tis-on-tis', dest='tis_on_tis', action='store_true',
                          help=" Run installation for Cumulus TiS on TiS. ")
 
@@ -806,8 +809,8 @@ def apply_banner(node, banner):
     cmd = 'test -d ' + BANNER_SRC
     if node.telnet_conn.exec_cmd(cmd)[0] != 0:
         msg = 'Banner files not found for this lab'
-        log.error(msg)
-        return 
+        log.info(msg)
+        return
 
     if banner == 'before':
         cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
@@ -840,7 +843,7 @@ def apply_branding(node):
     cmd = 'test -d ' + BRANDING_SRC
     if node.telnet_conn.exec_cmd(cmd)[0] != 0:
         msg = 'Branding files not found for this lab'
-        log.error(msg)
+        log.info(msg)
         return
 
     cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
@@ -849,6 +852,41 @@ def apply_branding(node):
         msg = 'Unable to move branding files from {} to {}'.format(BRANDING_SRC, BRANDING_DEST)
         log.error(msg)
         wr_exit()._exit(1, msg)
+
+    return
+
+
+def run_postinstall(node):
+    """
+    Run post install scripts, if they exist.
+    """
+
+    cmd = 'test -d ' + SCRIPTS_HOME
+    if node.ssh_conn.exec_cmd(cmd)[0] != 0:
+        msg = 'Post install scripts not found for this lab'
+        log.info(msg)
+        return
+
+    cmd = 'ls -1 --color=none ' + SCRIPTS_HOME
+    rc, output = node.ssh_conn.exec_cmd(cmd)
+    if rc != 0:
+        msg = "Failed to list scripts in: " + SCRIPTS_HOME 
+        log.error(msg)
+        return
+
+    for item in output.splitlines():
+        msg = 'Attempting to run script {}'.format(item)
+        log.info(msg)
+        cmd = "chmod 755 " + SCRIPTS_HOME + "/" + item 
+        if node.ssh_conn.exec_cmd(cmd)[0] != 0:
+            msg = 'Unable to change file permissions'
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+        cmd = SCRIPTS_HOME + "/" + item + " " + node.host_name
+        if node.ssh_conn.exec_cmd(cmd)[0] != 0:
+            msg = 'Script execution failed'
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
     return
 
@@ -1673,6 +1711,7 @@ def main():
     tuxlab_server = args.tuxlab_server
     run_lab_setup = args.run_lab_setup
     small_footprint = args.small_footprint
+    postinstall = args.postinstall
     burn_usb = args.burn_usb
     boot_usb = args.boot_usb
     iso_host = args.iso_host
@@ -1773,6 +1812,7 @@ def main():
     logutils.print_name_value("ISO Path", iso_path)
     logutils.print_name_value("Simplex", simplex)
     logutils.print_name_value("Low Lat", lowlat)
+    logutils.print_name_value("Run Postinstall Scripts", postinstall)
 
     email_info = {}
     email_info['email_server'] = EMAIL_SERVER
@@ -2065,7 +2105,6 @@ def main():
         configureController(bld_server_conn, host_os, install_output_dir, banner, branding)
         set_install_step_complete(lab_install_step)
 
-
     time.sleep(10)
 
     # Reconnect ssh session
@@ -2149,15 +2188,6 @@ def main():
             time.sleep(10)
             wait_state(nodes, AVAILABILITY, ONLINE)
         set_install_step_complete(lab_install_step)
-
-    # Remove controller-0 from the nodes list since it's up
-    #nodes.remove(controller0)
-
-    # Wait for all nodes to be online to allow lab_setup to set
-    # interfaces properly
-    #if not simplex:
-    #    time.sleep(10)
-    #    wait_state(nodes, AVAILABILITY, ONLINE)
 
     if stop == "5":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
@@ -2327,6 +2357,9 @@ def main():
         # Required due to ip28-30 unsupported config
         elif host_os == "centos" and len(controller_dict) == 1:
             log.info("Skipping this step since we only have one controller")
+
+    if postinstall and host_os == "centos":
+        run_postinstall(controller0)
 
     cmd = "source /etc/nova/openrc; system alarm-list"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
