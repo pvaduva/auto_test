@@ -41,7 +41,7 @@ def get_build_id(labname=None, log_dir=None, con_ssh=None):
         else:
             build_date = re.findall('''BUILD_DATE=\"(.*)\"''', output)
             if build_date and build_date[0]:
-                build_id = build_date[0]
+                build_id = build_date[0].replace(" ", "_")
             else:
                 build_id = ' '
 
