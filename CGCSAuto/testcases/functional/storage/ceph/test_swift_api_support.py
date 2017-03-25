@@ -8,6 +8,7 @@ from utils.tis_log import LOG
 from keywords import glance_helper, vm_helper, host_helper, system_helper, \
     storage_helper, keystone_helper, cinder_helper, network_helper, swift_helper
 from consts.cgcs import GuestImages
+from consts.proj_vars import ProjVar
 from testfixtures.resource_mgmt import ResourceCleanup
 import time
 
@@ -32,6 +33,9 @@ def ceph_backend_installed():
     ceph_info = get_ceph_backend_info()
     if not ceph_info:
         skip("No ceph system installed in the lab")
+    else:
+        if ProjVar.get_var("LAB")['short_name'] == 'pv0':
+            skip("swift not stable yet after upgrade")
     rel, msg = storage_helper.is_ceph_healthy()
     if not rel:
         skip("Ceph health not OK: {}".format(msg))
