@@ -503,7 +503,7 @@ def get_configured_system_storage_backend(con_ssh=None, fail_ok=False):
     table_ = table_parser.table(cli.system('storage-backend-list', ssh_client=con_ssh, fail_ok=fail_ok))
     if table_:
         table_ = table_parser.filter_table(table_, state='configured')
-        backend =  table_parser.get_column(table_, 'backend')
+        backend = table_parser.get_column(table_, 'backend')
     return backend
 
 

@@ -224,6 +224,7 @@ class EventLogID:
     CON_DRBD_SYNC = '400.001'
     SERVICE_GROUP_STATE_CHANGE = '400.001'
     MTC_MONITORED_PROCESS_FAILURE = '200.006'
+    CONFIG_OUT_OF_DATE = '250.001'
 
 
 class NetworkingVmMapping:

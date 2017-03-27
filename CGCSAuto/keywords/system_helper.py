@@ -2230,4 +2230,11 @@ def modify_host_device_status(host, device, status,  con_ssh=None, fail_ok=False
 
 def get_controller_fs_values(con_ssh=None, auth_info=Tenant.ADMIN):
 
-    return table_parser.table(cli.system('controllerfs-show',  ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.system('controllerfs-show',  ssh_client=con_ssh, auth_info=auth_info))
+
+    rows = table_parser.get_all_rows(table_)
+    values = {}
+    for row in rows:
+        values[row[0].strip()] = row[1].strip()
+    return values
+
