@@ -233,7 +233,7 @@ def test_vm_voting(action, hb_flavor):
     _perform_action(vm_id, action, expt_fail=True)
 
     LOG.tc_step("Remove the voting file")
-    cmd = "rm /tmp/vote_no_to_{}".format(action)
+    cmd = "rm -f /tmp/vote_no_to_{}".format(action)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         vm_ssh.exec_cmd(cmd)
         time.sleep(5)
