@@ -399,7 +399,7 @@ class LdapUserManager(object, metaclass=Singleton):
         password_expiry_days = 90 if password_expiry_days is None else password_expiry_days
         password_expiry_warn_days = 2 if password_expiry_warn_days is None else password_expiry_warn_days
         secondary_group = False if secondary_group is None else secondary_group
-        secondary_group_name = False if secondary_group_name is None else secondary_group_name
+        secondary_group_name = '' if secondary_group_name is None else secondary_group_name
 
         code, message = self.validate_user_settings(shell=shell,
                                        sudoer=sudoer,
@@ -474,12 +474,16 @@ class LdapUserManager(object, metaclass=Singleton):
                 )
 
             ]
+        else:
+            cmds_expectings += [
+                (
+                    'NO',
+                    ('Enter days after which user password must be changed \[{}\]:'.format(password_expiry_days), ),
+                    (),
+                ),
+            ]
+
         cmds_expectings += [
-            (
-                '{}'.format('NO' if not secondary_group else 'yes'),
-                ('Enter days after which user password must be changed \[{}\]:'.format(password_expiry_days), ),
-                (),
-            ),
             (
                 '{}'.format(password_expiry_days),
                 ('Enter days before password is to expire that user is warned \[{}\]:'.format(
