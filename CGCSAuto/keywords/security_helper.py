@@ -147,10 +147,13 @@ class LdapUserManager(object, metaclass=Singleton):
             during which change the initial password as a required step.
 
         Args:
-            user_name (str):    the name of the LDAP User
-            host (str):
+            user_name (str):        user name of the LDAP user
+            new_password (str):     password of the LDAP user
+            host (str):             host name to which the user will login
 
-        Returns:
+        Returns (tuple):
+            results (bool):         True if success, otherwise False
+            password (str):         new password of the LDAP user
 
         """
 
@@ -170,7 +173,7 @@ class LdapUserManager(object, metaclass=Singleton):
             (
                 'yes',
                 # ("{}@{}'s password:".format(user_name, hostname_ip),),
-                (".*@{}'s password: ".format(hostname_ip),),
+                (".*@.*'s password: ".format(hostname_ip),),
                 'Failed to get password prompt'
             ),
             (
@@ -297,6 +300,7 @@ class LdapUserManager(object, metaclass=Singleton):
                                password_expiry_warn_days=2
                                ):
         """
+        Validate the settings to be used as attributes of a LDAP User
 
         Args:
             shell (int):
@@ -327,7 +331,7 @@ class LdapUserManager(object, metaclass=Singleton):
             opt_expiry_warn_days = int(password_expiry_warn_days)
             bool(secondary_group)
             str(secondary_group_name)
-        except:
+        except ValueError:
             return -1, 'invalid input: {}, {}, {}'.format(shell, password_expiry_days, password_expiry_warn_days)
 
         if opt_shell not in [1, 2]:
@@ -401,12 +405,10 @@ class LdapUserManager(object, metaclass=Singleton):
         secondary_group = False if secondary_group is None else secondary_group
         secondary_group_name = '' if secondary_group_name is None else secondary_group_name
 
-        code, message = self.validate_user_settings(shell=shell,
-                                       sudoer=sudoer,
-                                       secondary_group=secondary_group,
-                                       secondary_group_name=secondary_group_name,
-                                       password_expiry_days=password_expiry_days,
-                                       password_expiry_warn_days=password_expiry_warn_days)
+        code, message = self.validate_user_settings(shell=shell, sudoer=sudoer, secondary_group=secondary_group,
+                                                    secondary_group_name=secondary_group_name,
+                                                    password_expiry_days=password_expiry_days,
+                                                    password_expiry_warn_days=password_expiry_warn_days)
         if 0 != code:
             return -5, {}
 
@@ -640,7 +642,7 @@ class LdapUserManager(object, metaclass=Singleton):
 
         return logged_in, password, self.ssh_con
 
-    def change_ldap_user_password(self, user_name, password, new_password,
+    def change_ldap_user_password(self, user_name, password, new_password, change_own_password=True,
                                   check_if_existing=True, host=None, disconnect_after=False):
         """
         Modify the password of the specified user to the new one
@@ -674,6 +676,9 @@ class LdapUserManager(object, metaclass=Singleton):
             found, user_info = self.find_ldap_user(user_name)
             if not found:
                 return False
+
+        if not change_own_password:
+            return False
 
         logged_in, password, ssh_con = self.login_as_ldap_user(user_name,
                                                                password=password, host=host, disconnect_after=False)

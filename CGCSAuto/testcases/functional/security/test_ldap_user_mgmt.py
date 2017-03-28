@@ -47,17 +47,19 @@ def _make_sure_user_exist(user_name, shell=2, secondary_group=False, password_ex
     return True, user_info
 
 
-@mark.parametrize(('user_name', 'change_passwd_while_loggin'), [
+@mark.parametrize(('user_name', 'change_own_password'), [
     mark.p1(('ldapuser04', True)),
     # mark.p1(('ldapuser05', False)),
 ])
-def test_ldap_change_password(user_name, change_passwd_while_loggin):
+def test_ldap_change_password(user_name, change_own_password):
     """
     Test changing the password of the specified LDAP User
 
+    User Stories:   US70961
+
     Args:
         user_name:
-        change_passwd_while_loggin:
+        change_own_password:
 
     Returns:
 
@@ -72,13 +74,17 @@ def test_ldap_change_password(user_name, change_passwd_while_loggin):
     new_password = 'N{}!'.format(str(uuid.uuid1()))
     LOG.tc_step('Change password for user:{}, current password:{}, new password:{}'.format(
         user_name, password, new_password))
-    if change_passwd_while_loggin:
-        changed = theLdapUserManager.change_ldap_user_password(user_name, password, new_password, disconnect_after=True)
+    if change_own_password:
+        changed = theLdapUserManager.change_ldap_user_password(
+            user_name, password, new_password, change_own_password=change_own_password, disconnect_after=True)
         assert changed, \
             'Failed to change password for user:{} from old:{} to new password:{}'.format(
                 user_name, password, new_password)
     else:
+        # TODO CGTS-6638
         LOG.info('not implemented yet')
+        skip('Skip rest of the test due to CGTS-6638')
+        return
 
     LOG.info('OK, password of user {} was successfully changed from {} to {}'.format(
         user_name, password, new_password))
@@ -90,6 +96,8 @@ def test_ldap_change_password(user_name, change_passwd_while_loggin):
 ])
 def test_ldap_login_as_user(user_name, pre_store_credential):
     """
+    Test login using the specified LDAP User
+
     User Stories:   US70961
 
     Args:
@@ -128,9 +136,9 @@ def test_ldap_login_as_user(user_name, pre_store_credential):
 ])
 def test_ldap_delete_user(user_name):
     """
-    User Stories:   US70961
-
     Delete the LDAP User with the specified name
+
+    User Stories:   US70961
 
     Args:
         user_name (str):    User name
@@ -145,15 +153,6 @@ def test_ldap_delete_user(user_name):
     if not _make_sure_user_exist(user_name, delete_if_existing=False):
         skip('No LDAP User:{} existing to delete'.format(user_name))
         return
-
-    # global ldap_users_info
-    # password = None
-    # if user_name in ldap_users_info:
-    #     user_info = ldap_users_info[user_name]
-    #     if 'passwords' in user_info and len(user_info['passwords']) > 0:
-    #         password = user_info['passwords'][-1]
-    #
-    # assert password is not None, 'Failed to get the password for existing user:{}'.format(user_name)
 
     LOG.tc_step('Delete the LDAP User:{}'.format(user_name))
     code, output = theLdapUserManager.rm_ldap_user(user_name)
@@ -177,6 +176,8 @@ def test_ldap_delete_user(user_name):
 ])
 def test_ldap_find_user(user_name):
     """
+    Search for the specified LDAP user
+
     User Stories:   US70961
 
     Args:
@@ -200,56 +201,20 @@ def test_ldap_find_user(user_name):
     assert existing, 'Failed to find user:{}'.format(user_name)
 
 
-@mark.parametrize(('user_name', ), [
-    mark.p1(('ldapuser04', )),
-])
-def test_ldap_find_user(user_name):
-    """
-    User Stories:   US70961
-
-    Args:
-        user_name:
-
-    Returns:
-
-    Steps:
-        1   search the existing user using 'ldapfinger -u <user_name>'
-
-    """
-
-    LOG.tc_step('Make sure the LDAP User:{} exists, create one if it is not')
-    if not _make_sure_user_exist(user_name):
-        skip('No LDAP User:{} existing to delete'.format(user_name))
-        return
-
-    LOG.tc_step('Search for LDAP User with name:{}'.format(user_name))
-    existing, user_info = theLdapUserManager.find_ldap_user(user_name)
-
-    assert existing, 'Failed to find user:{}'.format(user_name)
-
-
-# #
-# shell = 2,
-# sudoer = False,
-# secondary_group = False,
-# secondary_group_name = None,
-# password_expiry_days = 90,
-# password_expiry_warn_days = 2,
-# #
-
 @mark.parametrize(('user_name', 'shell', 'sudoer', 'secondary_group', 'expiry_days', 'expiry_warn_days'), [
     mark.p1(('ldap_defaul_user01', None, None, None, None, None)),
     mark.p1(('ldap_bash_user02', 1, None, None, None, None)),
     mark.p1(('ldap_bash_sudoer_user03', 1, True, None, None, None)),
     mark.p1(('ldap_bash_sudoer_2nd_grp_user04', 1, True, True, None, None)),
     mark.p1(('ldap_bash_sudoer_2nd_grp_2days_user05', 1, True, True, 2, None)),
+    mark.p1(('ldap_bash_sudoer_2nd_grp_2days_1day_user06', 1, True, True, 2, 1)),
 ])
 def test_ldap_create_user(user_name, shell, sudoer, secondary_group, expiry_days, expiry_warn_days):
 
     """
-    User Stories:   US70961
-
     Create a LDAP User with the specified name
+
+    User Stories:   US70961
 
     Args:
         user_name:
