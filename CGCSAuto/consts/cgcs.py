@@ -21,6 +21,7 @@ DNS_NAMESERVERS = ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
 HEAT_PATH = 'heat/hot/simple/'
 HEAT_SCENARIO_PATH = 'heat/hot/scenarios/'
 MELLANOX_DEVICE = 'MT27500|MT27710'
+MELLANOX4 = 'MT.*ConnectX-4'
 
 
 class GuestImages:

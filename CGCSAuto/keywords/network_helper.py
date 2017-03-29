@@ -5,9 +5,9 @@ import time
 from collections import Counter
 
 from consts.auth import Tenant
-from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE
+from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4
 from consts.timeout import VMTimeout
-from keywords import common, keystone_helper, host_helper
+from keywords import common, keystone_helper, host_helper, system_helper
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 
@@ -2118,6 +2118,25 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
     return packet_loss_rate, untransmitted_packets
 
 
+def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict=False, con_ssh=None,
+                           auth_info=Tenant.ADMIN):
+    hosts_and_pnets = host_helper.get_hosts_and_pnets_with_pci_devs(pci_type=pci_type, up_hosts_only=True,
+                                                                    con_ssh=con_ssh, auth_info=auth_info)
+    host = hosts_and_pnets.keys()[0]
+    pnet = hosts_and_pnets[host][0]
+    kwargs = {'vlan_id': vlan_id} if vlan_id is not None else {}
+    nets = get_networks_on_providernet(pnet, **kwargs)
+    final_nets = _get_preferred_nets(nets=nets, net_name=net_name, strict=strict)
+    vm_net = final_nets[0]
+    if pci_type == 'pci-passthrough':
+
+        port = system_helper.get_host_interfaces_info(host, rtn_val='ports', net_type=pci_type)[0]
+        host_nic = system_helper.get_host_ports_info(host, header='device type', **{'name': port})
+        if re.match(MELLANOX4, host_nic):
+            vm_net = final_nets[0:1]
+
+    return vm_net
+
 def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only=True, vlan_id=0, net_name=None,
                                 strict=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """
@@ -2199,6 +2218,38 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
 
     LOG.warning("No networks found for {} interfaces with at least {} hosts".format(pci_type, min_hosts))
     return []
+
+
+def _get_preferred_nets(nets, net_name=None, strict=False):
+    specified_nets = []
+    internal_nets = []
+    tenant_nets = []
+    mgmt_nets = []
+
+    for net in nets:
+        if net_name:
+            if strict:
+                if re.match(net_name, net):
+                    specified_nets.append(net)
+            else:
+                if re.search(net_name, net):
+                    specified_nets.append(net)
+        # If net_name unspecified:
+        elif re.search(Networks.INTERNAL_NET_NAME, net):
+            internal_nets.append(net)
+        elif re.search(Networks.DATA_NET_NAME, net):
+            tenant_nets.append(net)
+        elif re.search(Networks.MGMT_NET_NAME, net):
+            mgmt_nets.append(net)
+        else:
+            LOG.warning("Unknown network: {}. Ignore.".format(net))
+
+    for nets_ in (specified_nets, internal_nets, tenant_nets, mgmt_nets):
+        if nets_:
+            nets_counts = Counter(nets_)
+            nets_ = sorted(nets_counts.keys(), key=nets_counts.get, reverse=True)
+            LOG.info("Preferred networks selected: {}".format(nets_))
+            return nets
 
 
 def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, outside_port=None, protocol='tcp', tenant=None,
