@@ -19,6 +19,9 @@ def check_system():
     if len(host_helper.get_nova_hosts()) < 2:
         skip("at least two computes are required")
 
+    if len(nova_helper.get_storage_backing_with_max_hosts()[1]) < 2:
+        skip("at least two hosts with the same storage backing are required")
+
 
 @fixture(scope='function', autouse=True)
 def pre_alarm_():
@@ -141,8 +144,8 @@ def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
     - Terminate VMs
 
     Skip conditions:
-     - less that two computes
-     - no  storage node
+    - less than two computes
+    - no storage node
 
     """
     pre_alarms = pre_alarm_
@@ -298,7 +301,8 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_)
     - Terminate VMs
 
     Skip conditions:
-    - less that two computes
+    - less than two hosts with the same storage backing
+    - less than two computes
     - no storage node
 
     """
@@ -309,6 +313,7 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_)
 
     for vm in vms:
         vm_id = vm['id']
+
         LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm_id))
         vm_state = nova_helper.get_vm_status(vm_id)
 
