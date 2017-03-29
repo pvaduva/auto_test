@@ -59,6 +59,8 @@ def pytest_collectstart():
     con_ssh = setups.setup_tis_ssh(ProjVar.get_var("LAB"))
     ProjVar.set_var(con_ssh=con_ssh)
     CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
+    if setups.is_https(con_ssh):
+        CliAuth.set_vars(HTTPS=True)
     Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
     Tenant._set_region(CliAuth.get_var('OS_REGION_NAME'))
 

@@ -4,7 +4,7 @@ from utils import exceptions
 from utils import ssh
 from utils.ssh import ControllerClient
 from consts.timeout import CLI_TIMEOUT
-from consts.auth import Tenant
+from consts.auth import Tenant, CliAuth
 from consts.proj_vars import ProjVar
 from consts.openstack_cli import NEUTRON_MAP
 
@@ -71,9 +71,8 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
                          format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url'],
                                 auth_info['region']))
 
-            # Quick fix to https CGTS-6587
-
-            if 'https' in lab and lab['https'] == 'yes':
+            # Add additional auth args for https lab
+            if CliAuth.get_var('HTTPS'):
                 if cmd == 'openstack':
                     flags += ' --os-interface internal'
                 else:
@@ -152,13 +151,13 @@ def nova(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli
 
 
 def openstack(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
-              auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
-
+              auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False, source_admin_=False):
+    source_cred_ = Tenant.ADMIN if source_admin_ else None
     flags += ' --os-identity-api-version 3'
 
     return exec_cli('openstack', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_creden_=source_cred_)
 
 
 def system(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
@@ -178,11 +177,14 @@ def heat(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_
 
 
 def neutron(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
-            auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False, force_neutron=False):
+            auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False, convert_openstack=None,
+            force_neutron=False):
 
     openstack_cmd = None
-    if not force_neutron and ProjVar.get_var('OPENSTACK_CLI'):
-        openstack_cmd = NEUTRON_MAP.get(cmd, None)
+    if not force_neutron:
+        convert_openstack = convert_openstack if openstack_cmd is not None else ProjVar.get_var('OPENSTACK_CLI')
+        if convert_openstack:
+            openstack_cmd = NEUTRON_MAP.get(cmd, None)
 
     if openstack_cmd is not None:
         return openstack(cmd=openstack_cmd, positional_args=positional_args, flags=flags,
@@ -227,11 +229,12 @@ def glance(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cl
 
 
 def keystone(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-             auth_info=Tenant.ADMIN, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
+             auth_info=Tenant.ADMIN, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False, source_admin_=False):
 
+    source_cred_ = Tenant.ADMIN if source_admin_ else None
     return exec_cli('keystone', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_creden_=source_cred_)
 
 
 def qemu_img(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',

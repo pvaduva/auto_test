@@ -155,7 +155,6 @@ class Labs:
         'controller-1 ip': '128.224.150.106',
         'system_type': 'CPE',
         'controller_nodes': [22351, 22352],
-        'https' :'yes'
     }
 
     R720_3_7 = {
@@ -176,7 +175,6 @@ class Labs:
         'controller-1 ip': '128.224.150.70',
         'controller_nodes': [23198, 23199],
         'compute_nodes': [23200, 23201],
-        'https': 'yes'
     }
 
     WCP_7_12 = {
@@ -248,7 +246,6 @@ class Labs:
         'auth_url': 'http://127.168.204.2:5000/v3/',
         'controller-0 ip': '128.224.151.33',
         'controller_nodes': [23286],
-        'https': 'yes'
     }
 
     WCP_68 = {
@@ -258,7 +255,6 @@ class Labs:
         'auth_url': 'http://127.168.204.2:5000/v3/',
         'controller-0 ip': '128.224.151.38',
         'controller_nodes': [23287],
-        'https': 'yes'
     }
 
     WCP_71_75 = {

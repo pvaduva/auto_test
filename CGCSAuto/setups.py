@@ -2,7 +2,7 @@ import re
 import time
 import configparser
 
-from utils import exceptions
+from utils import exceptions, cli
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
 from utils.node import create_node_boot_dict, create_node_dict
@@ -12,7 +12,7 @@ from consts.filepaths import PrivKeyPath
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
 
-from keywords import vm_helper, host_helper, nova_helper, system_helper
+from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper
 from keywords.common import scp_to_local
 
 
@@ -494,3 +494,6 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
                                  controller1_ceph_mon_device=controller1_ceph_mon_device,
                                  ceph_mon_gib=ceph_mon_gib
                                  )
+
+def is_https(con_ssh):
+    return keystone_helper.is_https_lab(con_ssh=con_ssh, source_admin=True)

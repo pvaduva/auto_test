@@ -366,6 +366,9 @@ class SSHClient:
             err_only: if true, stdout will not be included in output
             rm_date (bool): weather to remove date output from cmd output before returning
             fail_ok (bool): whether to raise exception when non-zero exit-code is returned
+            searchwindowsize (int): max chars to look for match from the end of the output.
+                Usage: when expecting a prompt, set this to slightly larger than the number of chars of the prompt,
+                    to speed up the search, and to avoid matching in the middle of the output.
 
         Returns (tuple): (exit code (int), command output (str))
 
@@ -523,7 +526,7 @@ class SSHClient:
                 self.expect()
 
     def exec_sudo_cmd(self, cmd, expect_timeout=60, rm_date=True, fail_ok=True, get_exit_code=True,
-                      strict_passwd_prompt=False):
+                      searchwindowsize=None, strict_passwd_prompt=False):
         """
         Execute a command with sudo.
 
@@ -532,7 +535,11 @@ class SSHClient:
             expect_timeout (int): timeout waiting for command to return
             rm_date (bool): whether to remove date info at the end of the output
             fail_ok (bool): whether to raise exception when non-zero exit code is returned
-            strict_passwd_prompt (bool): whether to search output with strict password prompt
+            searchwindowsize (int): max chars to look for match from the end of the output.
+                Usage: when expecting a prompt, set this to slightly larger than the number of chars of the prompt,
+                    to speed up the search, and to avoid matching in the middle of the output.
+            strict_passwd_prompt (bool): whether to search output with strict password prompt (Not recommended. Use
+                searchwindowsize instead)
 
         Returns (tuple): (exit code (int), command output (str))
 
@@ -541,10 +548,10 @@ class SSHClient:
         LOG.info("Executing sudo command: {}".format(cmd))
         self.send(cmd)
         prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
-        index = self.expect([self.prompt, prompt], timeout=expect_timeout)
+        index = self.expect([self.prompt, prompt], timeout=expect_timeout, searchwindowsize=searchwindowsize)
         if index == 1:
             self.send(self.password)
-            self.expect(timeout=expect_timeout)
+            self.expect(timeout=expect_timeout, searchwindowsize=searchwindowsize)
 
         code, output = self.__process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
         if code != 0 and not fail_ok:
