@@ -1,15 +1,15 @@
+import pytest
 from pytest import mark, fixture, skip
-from utils.ssh import  SSHClient, ControllerClient
+from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
 from keywords import install_helper, host_helper, system_helper, cinder_helper, \
     storage_helper,  local_storage_helper, glance_helper, vm_helper, nova_helper, common
 from consts.cgcs import EventLogID, GuestImages
 from consts.build_server import Server, get_build_server_info
-from consts.auth import SvcCgcsAuto
+from consts.auth import SvcCgcsAuto, Tenant
 from consts.cgcs import Prompt
 from consts.proj_vars import ProjVar, InstallVars
 from testfixtures.resource_mgmt import ResourceCleanup
-import time
 
 
 MINIMUM_CEPH_MON_GIB = 20
@@ -19,8 +19,8 @@ def pre_ceph_install_check():
     backend_info = storage_helper.get_configured_system_storage_backend()
     lab = ProjVar.get_var("LAB")
     LOG.fixture_step('Verify no ceph backend is currently configured in system: {}'.format(lab['name']))
-    if 'ceph' in backend_info:
-        skip("ceph backend is already configured  in the system {}".format(lab['name']))
+    # if 'ceph' in backend_info:
+    #     skip("ceph backend is already configured  in the system {}".format(lab['name']))
 
     LOG.fixture_step('Verify system {} includes storage nodes'.format(lab['name']))
     if  'storage_nodes' not in lab:
@@ -43,7 +43,7 @@ def ceph_post_install_info():
     if '/dev/' not in rootfs:
         rootfs = '/dev/{}'.format(rootfs)
     size =  local_storage_helper.get_host_disk_size(controller0, disk=rootfs)
-    controller0_rootfs = [rootfs, size]
+    controller0_rootfs = [rootfs, int(size/1024)]
 
     rootfs = host_helper.get_hostshow_value(controller1,"rootfs_device")
     if '/dev/' not in rootfs:
@@ -51,11 +51,12 @@ def ceph_post_install_info():
 
     size = local_storage_helper.get_host_disk_size(controller1, disk=rootfs)
 
-    controller1_rootfs = [rootfs, size]
+    controller1_rootfs = [rootfs, int(size/1024)]
 
     assert controller0_rootfs[0] in  controller0_disks, "Incorrect  controller-0 disk information: {}; rootfs: {} "\
         .format(controller0_disks, controller0_rootfs)
-    assert controller1_rootfs[0] in  controller1_disks, "Incorrect standby controller-1 disk information: {}; rootfs: {} "\
+    assert controller1_rootfs[0] in  controller1_disks, "Incorrect standby controller-1 disk information: {}; " \
+                                                        "rootfs: {} "\
         .format(controller1_disks, controller1_rootfs)
 
     backend_info = storage_helper.get_storage_backend_info('lvm')
@@ -130,6 +131,7 @@ def is_infra_network_configured():
 
 
 def test_negative_ceph_post_install(ceph_post_install_info):
+    LOG.info("Ceph post install: {}".format(ceph_post_install_info))
     pass
 
 
@@ -181,13 +183,20 @@ def test_ceph_post_install(ceph_post_install_info):
                                                     ceph_mon_dev=ceph_mon_dev,
                                                     ceph_mon_dev_controller_0_uuid=uuid_0,
                                                     ceph_mon_dev_controller_1_uuid=uuid_1)
+    assert rc == 0, "Fail to add ceph backend post install: {}".format(output)
 
+    LOG.tc_step('Checking ceph is added and the task is set to reconfig-controller ...')
 
+    task = storage_helper.get_storage_backend_task_value('ceph')
+    state = storage_helper.get_storage_backend_state_value('ceph')
+
+    assert task and 'reconfig-controller' == task.strip(), "Unexpected task value {}".format(task)
+    assert state and 'configuring' == state.strip(), "Unexpected state value: {}".format(state)
 
     LOG.tc_step('Checking Config out-of-date events for controllers ...')
     for host in controllers:
-        entity_instance = 'host={}.'.format(host)
-        events = system_helper.wait_for_events(10, num=5, strict=False, fail_ok=True,
+        entity_instance = 'host={}'.format(host)
+        events = system_helper.wait_for_events(30, num=5, strict=False, fail_ok=True,
                                                **{'Entity Instance ID': entity_instance,
                                                   'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE,
                                                   'State': 'set'})
@@ -203,10 +212,14 @@ def test_ceph_post_install(ceph_post_install_info):
         host_helper.lock_host(controller, swact=True)
         host_helper.unlock_host(controller)
     assert system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, fail_ok=True),\
-            "Alarm {} not cleared".format(EventLogID.CONFIG_OUT_OF_DATE)
+        "Alarm {} not cleared".format(EventLogID.CONFIG_OUT_OF_DATE)
+
+    LOG.info("Swact back to controller-0...")
+    host_helper.swact_host('controller-1')
 
     assert 'ceph' in storage_helper.get_configured_system_storage_backend(), "Ceph backend not added"
-    assert 'None' == storage_helper.get_storage_backend_task_value('ceph'), "Ceph backend task is not None"
+    assert 'provision-storage' == storage_helper.get_storage_backend_task_value('ceph'),\
+        "Ceph backend task is not provision-storage"
 
     LOG.tc_step('Adding storage nodes ......')
     lab = ProjVar.get_var("LAB")
@@ -245,7 +258,9 @@ def test_ceph_post_install(ceph_post_install_info):
 
     vol_name = 'vol_{}'.format(new_img_name)
     LOG.info('Creating Volume {} from  image {}  ......'.format(vol_name, new_img_name))
-    rc, vol_id = cinder_helper.create_volume(name=vol_name, image_id=image_id_rbd, fail_ok=True)
+    ProjVar.set_var(**{"SOURCE_CREDENTIAL": Tenant.TENANT2})
+    rc, vol_id = cinder_helper.create_volume(name=vol_name, image_id=image_id_rbd, vol_type='ceph',
+                                             auth_info=Tenant.TENANT2, fail_ok=True)
     if rc != 1:
         ResourceCleanup.add("volume", vol_id)
     assert rc == 0, "Fail to create volume {}: {} ".format(vol_name, vol_id)
@@ -255,36 +270,39 @@ def test_ceph_post_install(ceph_post_install_info):
 
     LOG.info('Creating VM using image {}  ......'.format(new_img_name))
     vm_name = 'vm_{}'.format(new_img_name)
-    rc, vm_id, msg = vm_helper.boot_vm(name=vm_name, source='volume', source_id=vol_id, cleanup='function')
+    rc, vm_id, msg, new_vol_id = vm_helper.boot_vm(name=vm_name, source='volume', source_id=vol_id,
+                                                   auth_info=Tenant.TENANT2, cleanup='function')
     assert rc == 0, "VM {} boot failed: {}".format(vm_name,msg)
 
     LOG.info("Created  images, volumes and Vms  successfully  ceph as backend ....")
 
-    LOG.tc_step("Creating  image, volume and Vm lvm as backend ....")
+    LOG.tc_step("Creating  image, volume and Vm  using lvm as backend ....")
 
-    new_img_name = '{}_file_store'.format(current_images[0].split('.')[0])
-    source_image = '{}/{}'.format(GuestImages.IMAGE_DIR, current_images[0])
-    rc, image_id_file, msg = glance_helper.create_image(name=new_img_name, source_image_file=source_image)
-    ResourceCleanup.add("image", image_id_rbd)
-    assert rc == 0, "Fail to create image {} ceph as backend storage: {}".format(new_img_name, msg)
-    store = glance_helper.get_image_properties(image_id_file, 'store')['store']
-    assert store == 'file', "Invalid backend; store value used = {}; expected rbd".format(store)
-
-    vol_name = 'vol_{}'.format(new_img_name)
-    LOG.info('Creating Volume {} from  image {}  ......'.format(vol_name, new_img_name))
-    rc, vol_id = cinder_helper.create_volume(name=vol_name, image_id=image_id_file, fail_ok=True)
-    if rc != 1:
-        ResourceCleanup.add("volume", vol_id)
-    assert rc == 0, "Fail to create volume {}: {} ".format(vol_name, vol_id)
-    vol_type = cinder_helper.get_volume_show_values(vol_id, "volume_type")
-    assert vol_type.strip() == 'iscsi', "Unexpected volume type {} for volume {}; expected type is iscsi"\
-        .format(vol_type,vm_name)
-
-    LOG.info('Creating VM using image {}  ......'.format(new_img_name))
-    vm_name = 'vm_{}'.format(new_img_name)
-    rc, vm_id, msg = vm_helper.boot_vm(name=vm_name, source='volume', source_id=vol_id, cleanup='function')
-    assert rc == 0, "VM {} boot failed: {}".format(vm_name,msg)
-    LOG.info("Created  images, volumes and Vms  successfully  ceph as backend ....")
+    # new_img_name = '{}_file_store'.format(current_images[0].split('.')[0])
+    # source_image = '{}/{}'.format(GuestImages.IMAGE_DIR, current_images[0])
+    # rc, image_id_file, msg = glance_helper.create_image(name=new_img_name, source_image_file=source_image, store='file')
+    # ResourceCleanup.add("image", image_id_rbd)
+    # assert rc == 0, "Fail to create image {} lvm as backend storage: {}".format(new_img_name, msg)
+    # store = glance_helper.get_image_properties(image_id_file, 'store')['store']
+    # assert store == 'file', "Invalid backend; store value used = {}; expected file".format(store)
+    #
+    # vol_name = 'vol_{}'.format(new_img_name)
+    # LOG.info('Creating Volume {} from  image {}  ......'.format(vol_name, new_img_name))
+    # rc, vol_id = cinder_helper.create_volume(name=vol_name, image_id=image_id_file, vol_type='iscsi',
+    #                                          auth_info=Tenant.TENANT2, fail_ok=True)
+    # if rc != 1:
+    #     ResourceCleanup.add("volume", vol_id)
+    # assert rc == 0, "Fail to create volume {}: {} ".format(vol_name, vol_id)
+    # vol_type = cinder_helper.get_volume_show_values(vol_id, "volume_type")
+    # assert vol_type.strip() == 'iscsi', "Unexpected volume type {} for volume {}; expected type is iscsi"\
+    #     .format(vol_type,vm_name)
+    #
+    # LOG.info('Creating VM using image {}  ......'.format(new_img_name))
+    # vm_name = 'vm_{}'.format(new_img_name)
+    # rc, vm_id, msg, new_vol = vm_helper.boot_vm(name=vm_name, source='volume', source_id=vol_id,
+    #                                             auth_info=Tenant.TENANT2, cleanup='function')
+    # assert rc == 0, "VM {} boot failed: {}".format(vm_name,msg)
+    # LOG.info("Created  images, volumes and Vms  successfully  ceph as backend ....")
 
 
 def get_unused_rootfs_disk_space(total_size):

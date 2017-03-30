@@ -484,16 +484,10 @@ def get_storage_backend_info(backend, fail_ok=False, con_ssh=None):
     table_ = table_parser.table(cli.system('storage-backend-show', args, ssh_client=con_ssh, fail_ok=fail_ok))
 
     backend_info = {}
-
     if table_:
-
-        backend_info['cinder_pool_gib'] = table_parser.get_value_two_col_table(table_, 'cinder_pool_gib')
-        backend_info['glance_pool_gib'] = table_parser.get_value_two_col_table(table_, 'glance_pool_gib')
-        backend_info['ephemeral_pool_gib'] = table_parser.get_value_two_col_table(table_, 'ephemeral_pool_gib')
-        backend_info['object_pool_gib'] = table_parser.get_value_two_col_table(table_, 'cinder_pool_gib')
-        backend_info['ceph_total_space_gib'] = table_parser.get_value_two_col_table(table_, 'ceph_total_space_gib')
-        backend_info['object_gateway'] = table_parser.get_value_two_col_table(table_, 'object_gateway')
-
+        values = table_['values']
+        for value in values:
+            backend_info[value[0]] = value[1]
     return backend_info
 
 def get_configured_system_storage_backend(con_ssh=None, fail_ok=False):
