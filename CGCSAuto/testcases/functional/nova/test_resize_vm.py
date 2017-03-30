@@ -46,8 +46,6 @@ def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
     mark.nightly(('local_image', (4, 0, 0), (5, 1, 1), 'image')),
     ('local_image', (4, 1, 1), (5, 2, 2), 'image'),
     mark.nightly(('local_image', (5, 1, 1), (5, 1, 0), 'image')),
-    ('local_image', (5, 1, 1), (4, 1, 1), 'image'),
-    ('local_image', (5, 1, 1), (4, 1, 0), 'image'),
     ('local_image', (4, 0, 0), (5, 1, 1), 'volume'),
     mark.nightly(('local_image', (4, 1, 1), (0, 2, 2), 'volume')),
     mark.nightly(('local_image', (4, 1, 1), (1, 1, 0), 'volume')),
@@ -114,6 +112,8 @@ def test_resize_vm_positive(add_hosts_to_zone, storage_backing, origin_flavor, d
     ('local_lvm',   (1, 2, 1), (1, 1, 1), 'volume'),
     ('local_image', (5, 0, 0), (0, 0, 0), 'image'),      # Root disk can be resized, but cannot be 0
     ('local_image', (5, 2, 1), (5, 1, 1), 'image'),
+    ('local_image', (5, 1, 1), (4, 1, 1), 'image'),
+    ('local_image', (5, 1, 1), (4, 1, 0), 'image'),
     # ('local_image', (1, 0, 0), (0, 0, 0), 'volume'),    root disk size from volume not flavor
     ('local_image', (1, 1, 1), (1, 0, 1), 'volume'),
     ], ids=id_gen)
@@ -161,7 +161,7 @@ def test_resize_vm_negative(add_hosts_to_zone, storage_backing, origin_flavor, d
     code, output = vm_helper.resize_vm(vm_id, dest_flavor_id, fail_ok=True)
 
     assert nova_helper.get_vm_flavor(vm_id) == origin_flavor_id, 'VM did not keep origin flavor'
-    assert 1 == code, "Resize VM CLI is not rejected"
+    assert 1 or 2 == code, "Resize VM CLI is not rejected"
 
 
 def _create_flavor(flavor_info, storage_backing):
