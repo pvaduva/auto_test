@@ -88,6 +88,7 @@ class SSHClient:
 
     def __get_logpath(self):
         lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith('__')]
+        lab_list = [lab_ for lab_ in lab_list if isinstance(lab_, dict)]
         for lab in lab_list:
             if lab['floating ip'] == self.host:
                 lab_name = lab['short_name']
@@ -962,6 +963,7 @@ class FloatingClient(SSHClient):
 
         # get a list of floating ips for all known labs
         __lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith(r'__')]
+        __lab_list = [lab_ for lab_ in __lab_list if isinstance(lab_, dict)]
         ips = []
         for lab in __lab_list:
             ip = lab['floating ip']
@@ -1046,7 +1048,7 @@ class ControllerClient:
 
     # Each entry is a lab dictionary such as Labs.VBOX. For newly created dict entry, 'name' must be provided.
     __lab_attr_list = [attr for attr in dir(Labs) if not attr.startswith('__')]
-    __lab_list = [getattr(Labs, attr) for attr in __lab_attr_list]
+    __lab_list = [getattr(Labs, attr) for attr in __lab_attr_list if isinstance(attr, dict)]
     __lab_ssh_map = {}     # item such as 'PV0': [con_ssh, ...]
 
     @classmethod

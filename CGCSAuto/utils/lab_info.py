@@ -150,6 +150,7 @@ def __get_lab_dict(labname):
 
     labname = labname.strip().lower().replace('-', '_')
     labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
+    labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
 
     for lab in labs:
         if labname in lab['name'].replace('-', '_').lower().strip() \

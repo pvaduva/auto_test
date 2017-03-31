@@ -357,6 +357,8 @@ class Labs:
         'controller-1 ip': 'unknown_con1_ip',
     }
 
+    NO_LAB = None
+
 
 def edit_lab_entry():
     # TODO

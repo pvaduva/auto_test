@@ -343,38 +343,41 @@ def pytest_unconfigure():
     except:
         pass
 
-    tc_res_path = ProjVar.get_var('LOG_DIR') + '/test_results.log'
-    build_id = ProjVar.get_var('BUILD_ID')
-    build_server = ProjVar.get_var('BUILD_SERVER')
+    try:
+        tc_res_path = ProjVar.get_var('LOG_DIR') + '/test_results.log'
+        build_id = ProjVar.get_var('BUILD_ID')
+        build_server = ProjVar.get_var('BUILD_SERVER')
 
-    total_exec = TestRes.PASSNUM + TestRes.FAILNUM
-    pass_rate = fail_rate = '0'
-    if total_exec > 0:
-        pass_rate = "{}%".format(round(TestRes.PASSNUM * 100 / total_exec, 2))
-        fail_rate = "{}%".format(round(TestRes.FAILNUM * 100 / total_exec, 2))
-        with open(tc_res_path, mode='a') as f:
-            # Append general info to result log
-            f.write('\n\nLab: {}\n'
-                    'Build ID: {}\n'
-                    'Build Server: {}\n'
-                    'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server,
-                                                       ProjVar.get_var('LOG_DIR')))
-            # Add result summary to beginning of the file
-            f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
-                    format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
-            if TestRes.SKIPNUM > 0:
-                f.write('------------\nSkipped: {}'.format(TestRes.SKIPNUM))
+        total_exec = TestRes.PASSNUM + TestRes.FAILNUM
+        pass_rate = fail_rate = '0'
+        if total_exec > 0:
+            pass_rate = "{}%".format(round(TestRes.PASSNUM * 100 / total_exec, 2))
+            fail_rate = "{}%".format(round(TestRes.FAILNUM * 100 / total_exec, 2))
+            with open(tc_res_path, mode='a') as f:
+                # Append general info to result log
+                f.write('\n\nLab: {}\n'
+                        'Build ID: {}\n'
+                        'Build Server: {}\n'
+                        'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server,
+                                                           ProjVar.get_var('LOG_DIR')))
+                # Add result summary to beginning of the file
+                f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
+                        format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
+                if TestRes.SKIPNUM > 0:
+                    f.write('------------\nSkipped: {}'.format(TestRes.SKIPNUM))
 
-        LOG.info("Test Results saved to: {}".format(tc_res_path))
-        with open(tc_res_path, 'r') as fin:
-            print(fin.read())
+            LOG.info("Test Results saved to: {}".format(tc_res_path))
+            with open(tc_res_path, 'r') as fin:
+                print(fin.read())
+    except Exception:
+        LOG.exception("Failed to add session summary to test_results.py")
 
     # Below needs con_ssh to be initialized
     try:
         from utils.ssh import ControllerClient
         con_ssh = ControllerClient.get_active_controller()
     except:
-        LOG.warning("cannot find con_ssh")
+        LOG.warning("No con_ssh found")
         return
 
     if has_fail and ProjVar.get_var('COLLECT_ALL'):

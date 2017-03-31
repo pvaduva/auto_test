@@ -2,6 +2,7 @@ import re
 import time
 import configparser
 
+import setup_consts
 from utils import exceptions, cli
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
@@ -169,6 +170,7 @@ def boot_vms(is_boot):
 def get_lab_dict(labname):
     labname = labname.strip().lower().replace('-', '_')
     labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
+    labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
 
     for lab in labs:
         if labname in lab['name'].replace('-', '_').lower().strip() \
@@ -341,8 +343,13 @@ def get_auth_via_openrc(con_ssh):
 
 
 def get_lab_from_cmdline(lab_arg, installconf_path):
+    lab_dict = None
     if not lab_arg and not installconf_path:
-        raise ValueError("lab is not specified!")
+        lab_dict = setup_consts.LAB
+        if lab_dict is None:
+            raise ValueError("No lab is specified via cmdline or setup_consts.py")
+        LOG.warning("lab is not specified via cmdline! Using lab from setup_consts file: {}".format(
+                lab_dict['short_name']))
 
     if installconf_path:
         installconf = configparser.ConfigParser()
@@ -359,7 +366,9 @@ def get_lab_from_cmdline(lab_arg, installconf_path):
                         format(lab_arg, lab_name))
         lab_arg = lab_name
 
-    return get_lab_dict(lab_arg)
+    if lab_dict is None:
+        lab_dict = get_lab_dict(lab_arg)
+    return lab_dict
 
 
 def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0_ceph_mon_device,
