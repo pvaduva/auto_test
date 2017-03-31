@@ -10,7 +10,7 @@ from consts.auth import Tenant
 
 # Possible values for LAB: Labs.IP_1_4, Labs.HP380, Labs.PV0, Labs.WCP_7_12, WCP_13, etc
 # Please revert to LAB = Labs.NO_LAB after test completed.
-LAB = Labs.IP_28_30
+LAB = Labs.NO_LAB
 
 PRIMARY_TENANT = Tenant.TENANT2
 NATBOX = NatBoxes.NAT_BOX_HW
