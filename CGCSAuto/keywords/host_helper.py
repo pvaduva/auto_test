@@ -2775,8 +2775,8 @@ def get_mellanox_ports(host):
 
     """
     data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', rtn_list=True)
-    mt_ports = system_helper.get_host_ports_info(host, 'uuid', if_name=data_ports, strict=False, regex=True,
-                                                 **{'device type': MELLANOX_DEVICE})
+    mt_ports = system_helper.get_host_ports_values(host, 'uuid', if_name=data_ports, strict=False, regex=True,
+                                                   **{'device type': MELLANOX_DEVICE})
     LOG.info("Mellanox ports: {}".format(mt_ports))
     return mt_ports
 

@@ -19,11 +19,11 @@ def test_show_cpu_data():
         if host == 'None':
             continue
         LOG.tc_step("Getting cpu data for host: {}".format(host))
-        table_ = system_helper.get_host_cpu_list(host=host)
+        table_ = system_helper.get_host_cpu_list_table(host=host)
 
         for core in table_['values']:
             log_core = core[1]
-            table_2 = system_helper.get_host_cpu_values(host=host, proc_num=log_core)
+            table_2 = system_helper.get_host_cpu_show_table(host=host, proc_num=log_core)
 
             uuid_1 = table_parser.get_values(table_, 'uuid', strict=True, log_core=log_core)[0]
             uuid_2 = table_parser.get_value_two_col_table(table_2, 'uuid')
@@ -71,7 +71,7 @@ def test_show_mem_data():
             hp = table_parser.get_values(table_, 'hugepages(hp)_configured', strict=True, processor=proc)[0]
             assert 'True' == hp or 'False' == hp, "FAIL: Neither True nor False"
 
-            table_2 = system_helper.get_host_memory_values(host=host, proc_num=proc)
+            table_2 = system_helper.get_host_memory_table(host=host, proc_num=proc)
             total = table_parser.get_value_two_col_table(table_2, 'Memory:.*Total.*(MiB)', regex=True)
             assert mem_tot == total, "FAIL: The two tables don't agree on total memory"
             pages = table_parser.get_value_two_col_table(table_2, 'Huge Pages Configured')

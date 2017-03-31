@@ -1120,7 +1120,7 @@ def delete_storage_profile(profile='', con_ssh=None):
     cli.system(cmd, ssh_client=con_ssh, fail_ok=False, auth_info=Tenant.ADMIN, rtn_list=False)
 
 
-def get_host_cpu_list(host, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_host_cpu_list_table(host, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get the parsed version of the output from system host-cpu-list <host>
     Args:
@@ -1152,7 +1152,7 @@ def get_host_mem_list(host, con_ssh=None, auth_info=Tenant.ADMIN):
     return table_
 
 
-def get_host_cpu_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_host_cpu_show_table(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get the parsed version of the output from system host-cpu-show <host> <proc_num>
     Args:
@@ -1170,7 +1170,7 @@ def get_host_cpu_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
     return table_
 
 
-def get_host_memory_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_host_memory_table(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get the parsed version of the output from system host-memory-list <host> <proc_num>
     Args:
@@ -1188,8 +1188,8 @@ def get_host_memory_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN)
     return table_
 
 
-def get_host_ports_info(host, header='name', if_name=None, pci_addr=None, proc=None, dev_type=None, strict=True,
-                        regex=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+def get_host_ports_values(host, header='name', if_name=None, pci_addr=None, proc=None, dev_type=None, strict=True,
+                          regex=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     """
     Get
     Args:

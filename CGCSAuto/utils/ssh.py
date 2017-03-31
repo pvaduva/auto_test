@@ -61,7 +61,7 @@ class SSHClient:
     """
 
     def __init__(self, host, user='wrsroot', password='Li69nux*', force_password=True, initial_prompt=CONTROLLER_PROMPT,
-                 timeout=60, session=None):
+                 timeout=60, session=None, searchwindownsize=None):
         """
         Initiate an object for connecting to remote host
         Args:
@@ -83,6 +83,7 @@ class SSHClient:
         # self.cmd_output = ''
         self.force_password = force_password
         self.timeout = timeout
+        self.searchwindowsize=searchwindownsize
         # self.logpath = None
 
     def __get_logpath(self):
@@ -131,7 +132,7 @@ class SSHClient:
             # LOG into remote host
             try:
                 LOG.info("Attempt to connect to host - {}".format(self.host))
-                self._session = pxssh.pxssh(encoding='utf-8')
+                self._session = pxssh.pxssh(encoding='utf-8', searchwindowsize=self.searchwindowsize)
 
                 # set to ignore ssh host fingerprinting
                 self._session.SSH_OPTS = _SSH_OPTS
@@ -194,6 +195,20 @@ class SSHClient:
                 # print out error for more info before retrying
                 LOG.info("Login failed due to error: {}".format(e))
 
+                if 'password refused' in e.__str__():
+                    if self.searchwindowsize is None:
+                        before_str = self._parse_output(self._session.before)
+                        after_str = self._parse_output(self._session.after)
+                        output = before_str + after_str
+                        if 'password will expire in' in output:
+                            LOG.warning("Login failed due to password refused with password expire warning. "
+                                        "Retry with small searchwindowsize")
+                            self.searchwindowsize = 50
+                        else:
+                            raise
+                    else:
+                        self.searchwindowsize = None
+                        raise
             except:
                 LOG.error("Login failed due to unknown exception!")
                 raise
@@ -788,7 +803,7 @@ class SSHFromSSH(SSHClient):
                 LOG.info("Successfully connected to {} from {}!".format(self.host, self.parent.host))
                 return
 
-            except (OSError, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh) as e:
+            except (OSError, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh, exceptions.SSHException) as e:
                 LOG.info("Exception caught when attempt to ssh to {}: {}".format(self.host, e))
                 if isinstance(e, pexpect.TIMEOUT):
                     # LOG.debug("Reset _session.after for {} session".format(self.host))
