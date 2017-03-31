@@ -83,7 +83,7 @@ class SSHClient:
         # self.cmd_output = ''
         self.force_password = force_password
         self.timeout = timeout
-        self.searchwindowsize=searchwindownsize
+        self.searchwindowsize = searchwindownsize
         # self.logpath = None
 
     def __get_logpath(self):
@@ -130,6 +130,7 @@ class SSHClient:
         end_time = time.time() + retry_timeout
         while time.time() < end_time:
             # LOG into remote host
+            print(str(self.searchwindowsize))
             try:
                 LOG.info("Attempt to connect to host - {}".format(self.host))
                 self._session = pxssh.pxssh(encoding='utf-8', searchwindowsize=self.searchwindowsize)
@@ -193,15 +194,17 @@ class SSHClient:
                     raise
 
                 # print out error for more info before retrying
-                LOG.info("Login failed due to error: {}".format(e))
+                LOG.info("Login failed due to error: {}".format(e.__str__()))
 
                 if 'password refused' in e.__str__():
+                    print("hey: {}".format(self.searchwindowsize))
                     if self.searchwindowsize is None:
                         before_str = self._parse_output(self._session.before)
                         after_str = self._parse_output(self._session.after)
                         output = before_str + after_str
-                        if 'password will expire in' in output:
-                            LOG.warning("Login failed due to password refused with password expire warning. "
+                        print("output: {}".format(output))
+                        if 'your password' in output:
+                            LOG.warning("Login failed possibly due to password expire warning. "
                                         "Retry with small searchwindowsize")
                             self.searchwindowsize = 50
                         else:

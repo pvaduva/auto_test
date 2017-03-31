@@ -25,7 +25,7 @@ def setup_tis_ssh(lab):
 
     if con_ssh is None:
         con_ssh = SSHClient(lab['floating ip'], 'wrsroot', 'Li69nux*', CONTROLLER_PROMPT)
-        con_ssh.connect()
+        con_ssh.connect(retry=True, retry_timeout=30)
         ControllerClient.set_active_controller(con_ssh)
     # if 'auth_url' in lab:
     #     Tenant._set_url(lab['auth_url'])
