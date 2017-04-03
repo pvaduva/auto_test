@@ -1,5 +1,5 @@
 
-from pytest import fixture, mark
+from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 from consts.cgcs import VMStatus
 from keywords import vm_helper, nova_helper, network_helper
@@ -7,8 +7,8 @@ from keywords import vm_helper, nova_helper, network_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
-# @mark.parametrize('vm_type', ['avp', 'virtio', 'vswitch', 'vhost'])
-@mark.parametrize('vm_type', ['vswitch'])
+@mark.parametrize('vm_type', ['avp', 'vhost', 'vswitch'])
+#@mark.parametrize('vm_type', ['vhost'])
 def test_vif_models(vm_type):
     """
     boot avp,e100 and virtio instance
@@ -29,9 +29,12 @@ def test_vif_models(vm_type):
         - Delete vm created
 
     """
+    vms_launched = vm_helper.launch_vms_via_script(vm_type=vm_type)
+    if not vms_launched:
+        skip("{} vms cannot be launched".format(vm_type))
 
     LOG.tc_step("Boot vm to test with vm_type {} from script".format(vm_type))
-    vm_under_test = vm_helper.launch_vms_via_script(vm_type=vm_type)[0]
+    vm_under_test = vms_launched[0]
     ResourceCleanup.add('vm', vm_under_test)
 
     LOG.tc_step("Boot a base vm to test with vm_type {} from script".format(vm_type))
@@ -56,7 +59,10 @@ def test_vif_models(vm_type):
 
         LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
                     "after {}".format(vm_actions))
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt'])
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
+
+        if vm_type != 'vhost':
+            vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
 
         # if vm_type != 'vswitch':
         #     LOG.tc_step("Verify ping from base_vm to vm_under_test over data networks still works after {}"

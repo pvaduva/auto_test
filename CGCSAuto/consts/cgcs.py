@@ -245,6 +245,7 @@ class VifMapping:
     VIF_MAP = {'vswitch': 'DPDKAPPS',
                'avp': 'AVPAPPS',
                'virtio': 'VIRTIOAPPS',
+               'vhost': 'VHOSTAPPS',
                'sriov': 'SRIOVAPPS',
                'pcipt': 'PCIPTAPPS'
                }
