@@ -181,7 +181,7 @@ def scp_from_local(source_path, dest_ip, dest_path='/home/wrsroot',
     _scp_base(cmd, remote_password=dest_password, timeout=timeout)
 
 
-def scp_to_local(source_path, source_ip, dest_path='/home/wrsroot',
+def scp_to_local(dest_path, source_ip, source_path,
                  source_user='wrsroot', source_password='Li69nux*',
                  timeout=60, is_dir=False):
     """

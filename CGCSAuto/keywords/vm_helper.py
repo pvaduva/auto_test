@@ -16,7 +16,8 @@ from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
 
-from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
+from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
+    keystone_helper
 from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -369,6 +370,7 @@ def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=
             LOG.warning(msg)
             return False
         else:
+            network_helper.collect_networking_info(vms=vm_id)
             raise exceptions.VMNetworkError(msg)
 
 
@@ -1037,6 +1039,8 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         LOG.info(err_msg)
         return res_bool, res_dict
     else:
+        LOG.error("Ping vm(s) failed - Collecting networking info")
+        network_helper.collect_networking_info(vms=vm_ids)
         raise exceptions.VMNetworkError(err_msg)
 
 
@@ -1121,16 +1125,18 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         if to_vms is None:
             to_vms = vms_ids
 
-    with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
-                               prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
+    try:
+        with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
+                                   prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
+                res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings,
+                                timeout=timeout, fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry,
+                                retry_interval=retry_interval, vlan_zero_only=vlan_zero_only, exclude_nets=exclude_nets)
+                if not res[0]:
+                    from_vm_ssh.exec_cmd("ip addr", get_exit_code=False)
 
-        res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                        fail_ok=True, use_fip=to_fip, net_types=net_types, retry=retry,
-                        retry_interval=retry_interval, vlan_zero_only=vlan_zero_only, exclude_nets=exclude_nets)
-        if not res[0]:
-            from_vm_ssh.exec_cmd("ip addr", get_exit_code=False)
+                return res
 
-    if not res[0] and not fail_ok:
+    except:
         try:
             LOG.debug("ping vms from vm failed - attempt to ssh to to_vms and print ip addr")
             for vm_ in to_vms:
@@ -1139,10 +1145,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         except:
             pass
 
-        err_msg = "Ping unsuccessful from {} to vms {}: {}".format(from_vm, to_vms, res[1])
-        raise exceptions.VMNetworkError(err_msg)
-
-    return res
+        raise
 
 
 def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,

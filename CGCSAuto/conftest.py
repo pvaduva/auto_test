@@ -344,7 +344,8 @@ def pytest_unconfigure():
         pass
 
     try:
-        tc_res_path = ProjVar.get_var('LOG_DIR') + '/test_results.log'
+        log_dir = ProjVar.get_var('LOG_DIR')
+        tc_res_path = log_dir + '/test_results.log'
         build_id = ProjVar.get_var('BUILD_ID')
         build_server = ProjVar.get_var('BUILD_SERVER')
 
@@ -379,6 +380,13 @@ def pytest_unconfigure():
     except:
         LOG.warning("No con_ssh found")
         return
+
+    vswitch_info_hosts = list(set(ProjVar.get_var('VSWITCH_INFO_HOSTS')))
+    if vswitch_info_hosts:
+        try:
+            setups.scp_vswitch_log(hosts=vswitch_info_hosts, con_ssh=con_ssh)
+        except Exception as e:
+            LOG.warning("unable to scp vswitch log - {}".format(e.__str__()))
 
     if has_fail and ProjVar.get_var('COLLECT_ALL'):
         # Collect tis logs if collect all required upon test(s) failure

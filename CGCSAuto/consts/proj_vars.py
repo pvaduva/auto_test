@@ -9,6 +9,7 @@ class ProjVar:
                   'BUILD_SERVER': None,
                   'LOG_DIR': None,
                   'SOURCE_CREDENTIAL': None,
+                  'VSWITCH_INFO_HOSTS': [],
                   }
                   # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}
 
