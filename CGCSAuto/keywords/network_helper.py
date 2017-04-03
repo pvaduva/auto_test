@@ -5,7 +5,7 @@ import time
 from collections import Counter
 
 from consts.auth import Tenant
-from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4
+from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
 from keywords import common, keystone_helper, host_helper, system_helper, nova_helper
@@ -2116,10 +2116,27 @@ def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     return nics
 
 
+def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
+    """
+    Get interface uuids for given network type
+    Args:
+        ssh_client (SSHClient):
+        net_type: 'data', 'mgmt', or 'internal'
+
+    Returns (list): interface uuids
+
+    """
+    LOG.info("Getting {} interface-uuid via vshell address-list".format(net_type))
+    table_ = table_parser.table(ssh_client.exec_cmd('vshell address-list', fail_ok=False)[1])
+    interfaces = table_parser.get_values(table_, 'interface-uuid', regex=True, address=Networks.IP_PATTERN[net_type])
+
+    return interfaces
+
+
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
 
-def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
+def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False, vshell=False, interface=None):
     """
 
     Args:
@@ -2128,14 +2145,23 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
         num_pings (int):
         timeout (int): max time to wait for ping response in seconds
         fail_ok (bool): whether to raise exception if packet loss rate is 100%
+        vshell (bool): whether to ping via 'vshell ping' cmd
+        interface (str): interface uuid. vm's internal interface-uuid will be used when unset
 
     Returns (int): packet loss percentile, such as 100, 0, 25
 
     """
-    cmd = 'ping -c {} {}'.format(num_pings, server)
+    if not vshell:
+        cmd = 'ping -c {} {}'.format(num_pings, server)
+        output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
+        packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
+    else:
+        if not interface:
+            interface = _get_interfaces_via_vshell(ssh_client, net_type='internal')[0]
+        cmd = 'vshell ping --count {} {} {}'.format(num_pings, server, interface)
+        output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
+        packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
 
-    output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
-    packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
     packet_loss_rate = int(packet_loss_rate)
 
     if packet_loss_rate == 100:
@@ -2915,7 +2941,7 @@ def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
     res_dict = {}
     for ip_ in ips:
         packet_loss_rate = _ping_server(server=ip_, ssh_client=natbox_ssh, num_pings=num_pings, timeout=timeout,
-                                        fail_ok=True)[0]
+                                        fail_ok=True, vshell=False)[0]
         res_dict[ip_] = packet_loss_rate
 
     res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())

@@ -6,6 +6,9 @@ EXT_IP = '8.8.8.8'
 # such as in string '5 packets transmitted, 0 received, 100% packet loss, time 4031ms', number 100 will be found
 PING_LOSS_RATE = r'\, (\d{1,3})\% packet loss\,'
 
+# vshell ping loss rate pattern. 3 packets transmitted, 0 received, 0 total, 100.00%% loss
+VSHELL_PING_LOSS_RATE = '\, (\d{1,3}).\d{1,2}[%]% loss'
+
 # Matches 8-4-4-4-12 hexadecimal digits. Lower case only
 UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 
@@ -59,6 +62,11 @@ class Networks:
     # such as 10.1.1.44
     INTERNAL_IP = r'10.\d{1,3}.\d{1,3}.\d{1,3}'
     IPV4_IP = '\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}'
+    IP_PATTERN = {
+        'data': DATA_IP,
+        'mgmt': MGMT_IP,
+        'internal': INTERNAL_IP
+    }
 
 
 class SystemType:

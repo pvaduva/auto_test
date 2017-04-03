@@ -960,7 +960,7 @@ def _confirm_or_revert_resize(vm, revert=False, con_ssh=None, fail_ok=False):
 
 
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
-              net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None):
+              net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False):
     """
 
     Args:
@@ -989,19 +989,26 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         raise ValueError("Invalid net type(s) provided. Valid net_types: {}. net_types given: {}".
                          format(valid_net_types, net_types))
 
+    if vshell and 'data' not in net_types:
+        LOG.warning("'data' is not included in net_types, while vshell ping is only supported on 'data' network")
+
     vms_ips = []
+    vshell_ips = []
     if 'mgmt' in net_types:
         mgmt_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip,
                                                        exclude_nets=exclude_nets)
-        vms_ips += mgmt_ips
         if not mgmt_ips:
             raise exceptions.VMNetworkError("Management net ip is not found for vms {}".format(vm_ids))
+        vms_ips += mgmt_ips
 
     if 'data' in net_types:
         data_ips = network_helper.get_data_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
-        vms_ips += data_ips
         if not data_ips:
             raise exceptions.VMNetworkError("Data network ip is not found for vms {}".format(vm_ids))
+        if vshell:
+            vshell_ips += data_ips
+        else:
+            vms_ips += data_ips
 
     if 'internal' in net_types:
         internal_ips = network_helper.get_internal_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
@@ -1019,8 +1026,13 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     for i in range(retry + 1):
         for ip in vms_ips:
             packet_loss_rate = network_helper._ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings,
-                                                           timeout=timeout, fail_ok=True)[0]
+                                                           timeout=timeout, fail_ok=True, vshell=False)[0]
             res_dict[ip] = packet_loss_rate
+
+        for vshell_ip in vshell_ips:
+            packet_loss_rate = network_helper._ping_server(server=vshell_ip, ssh_client=ssh_client, num_pings=num_pings,
+                                                           timeout=timeout, fail_ok=True, vshell=True)[0]
+            res_dict[vshell_ip] = packet_loss_rate
 
         res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
         if res_bool:
@@ -1071,12 +1083,12 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
         natbox_client = NATBoxClient.get_natbox_client()
 
     return _ping_vms(vm_ids=vm_ids, ssh_client=natbox_client, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                     fail_ok=fail_ok, use_fip=use_fip, net_types='mgmt', retry=retry)
+                     fail_ok=fail_ok, use_fip=use_fip, net_types='mgmt', retry=retry, vshell=False)
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
                      num_pings=5, timeout=15, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
-                     net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None):
+                     net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False):
     """
 
     Args:
@@ -1098,7 +1110,12 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         retry (int): number of times to retry
         retry_interval (int): seconds to wait between each retries
         vlan_zero_only (bool): used if 'internal' is included in net_types. Ping vm over internal net with vlan id 0 if
-        True, otherwise ping all the internal net ips assigned to vm.
+            True, otherwise ping all the internal net ips assigned to vm.
+        exclude_nets (list): exclude ips from given network names
+        vshell (bool): whether to ping vms' data interface through internal interface.
+            Usage: when set to True, use 'vshell ping --count 3 <other_vm_data_ip> <internal_if_id>'
+                - dpdk vms should be booted from lab_setup scripts
+                - 'data' has to be included in net_types
 
     Returns (tuple):
         A tuple in form: (res (bool), packet_loss_dict (dict))
@@ -1130,7 +1147,8 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
                                    prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
                 res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings,
                                 timeout=timeout, fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry,
-                                retry_interval=retry_interval, vlan_zero_only=vlan_zero_only, exclude_nets=exclude_nets)
+                                retry_interval=retry_interval, vlan_zero_only=vlan_zero_only, exclude_nets=exclude_nets,
+                                vshell=vshell)
                 if not res[0]:
                     from_vm_ssh.exec_cmd("ip addr", get_exit_code=False)
 
