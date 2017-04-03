@@ -228,6 +228,15 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
 
     table_ = table_parser.table(cli.system('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info),
                                 combine_multiline_entry=True)
+
+    if not table_['headers']:
+        headers = ['UUID', 'Alarm ID', 'Reason Text', 'Entity ID', 'Severity', 'Time Stamp']
+        if not uuid:
+            headers.remove('UUID')
+        values = [['' for item in headers]]
+        table_['headers'] = headers
+        table_['values'] = values
+
     return table_
 
 
@@ -438,7 +447,9 @@ def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
     """
     if alarms is None:
         alarms_tab = get_alarms_table(uuid=True)
-        alarms = table_parser.get_column(alarms_tab, 'UUID')
+        alarms = []
+        if alarms_tab['headers']:
+            alarms = table_parser.get_column(alarms_tab, 'UUID')
 
     if isinstance(alarms, str):
         alarms = [alarms]
@@ -455,7 +466,10 @@ def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
             failed_clis.append(alarm)
 
     post_alarms_tab = get_alarms_table(uuid=True)
-    post_alarms = table_parser.get_column(post_alarms_tab, 'UUID')
+    if post_alarms_tab['headers']:
+        post_alarms = table_parser.get_column(post_alarms_tab, 'UUID')
+    else:
+        post_alarms = []
 
     undeleted_alarms = list(set(alarms) & set(post_alarms))
     if undeleted_alarms:
@@ -685,8 +699,9 @@ def set_retention_period(fail_ok=True, check_first=True, con_ssh=None, auth_info
             LOG.info(msg)
             return -1, msg
 
-    code, output = cli.system('pm-modify', 'retention_secs={}'.format(period), auth_info=auth_info, ssh_client=con_ssh,
-                              timeout=SysInvTimeout.RETENTION_PERIOD_MODIFY, fail_ok=fail_ok, rtn_list=True)
+    code, output = cli.system('pm-modify', 'retention_secs={} action=apply'.format(period), auth_info=auth_info,
+                              ssh_client=con_ssh, timeout=SysInvTimeout.RETENTION_PERIOD_MODIFY, fail_ok=fail_ok,
+                              rtn_list=True)
 
     if code == 1:
         return 1, output
@@ -1120,7 +1135,7 @@ def delete_storage_profile(profile='', con_ssh=None):
     cli.system(cmd, ssh_client=con_ssh, fail_ok=False, auth_info=Tenant.ADMIN, rtn_list=False)
 
 
-def get_host_cpu_list(host, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_host_cpu_list_table(host, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get the parsed version of the output from system host-cpu-list <host>
     Args:
@@ -1152,7 +1167,7 @@ def get_host_mem_list(host, con_ssh=None, auth_info=Tenant.ADMIN):
     return table_
 
 
-def get_host_cpu_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_host_cpu_show_table(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get the parsed version of the output from system host-cpu-show <host> <proc_num>
     Args:
@@ -1170,7 +1185,7 @@ def get_host_cpu_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
     return table_
 
 
-def get_host_memory_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_host_memory_table(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get the parsed version of the output from system host-memory-list <host> <proc_num>
     Args:
@@ -1188,8 +1203,8 @@ def get_host_memory_values(host, proc_num, con_ssh=None, auth_info=Tenant.ADMIN)
     return table_
 
 
-def get_host_ports_info(host, header='name', if_name=None, pci_addr=None, proc=None, dev_type=None, strict=True,
-                        regex=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+def get_host_ports_values(host, header='name', if_name=None, pci_addr=None, proc=None, dev_type=None, strict=True,
+                          regex=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     """
     Get
     Args:

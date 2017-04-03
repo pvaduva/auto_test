@@ -8,7 +8,7 @@ from utils import cli, exceptions, table_parser
 from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
 from utils.tis_log import LOG
 
-from consts.auth import Tenant, SvcCgcsAuto
+from consts.auth import Tenant, SvcCgcsAuto, Host
 from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState, Prompt, MELLANOX_DEVICE
 from consts.timeout import HostTimeout, CMDTimeout
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
@@ -2775,8 +2775,8 @@ def get_mellanox_ports(host):
 
     """
     data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', rtn_list=True)
-    mt_ports = system_helper.get_host_ports_info(host, 'uuid', if_name=data_ports, strict=False, regex=True,
-                                                 **{'device type': MELLANOX_DEVICE})
+    mt_ports = system_helper.get_host_ports_values(host, 'uuid', if_name=data_ports, strict=False, regex=True,
+                                                   **{'device type': MELLANOX_DEVICE})
     LOG.info("Mellanox ports: {}".format(mt_ports))
     return mt_ports
 
@@ -2804,3 +2804,13 @@ def get_host_network_interface_dev_names(host, con_ssh=None):
             LOG.warning("Failed to get interface device names for host {}".format(host))
 
     return dev_names
+
+
+def scp_files_to_controller(host, file_path, dest_dir, controller=None, dest_user=None, sudo=False, con_ssh=None,
+                            fail_ok=True):
+    dest_server = controller if controller else ''
+    dest_user = dest_user if dest_user else ''
+    con_ssh.scp_files(source_file=file_path, source_server=host, source_password=Host.PASSWORD, source_user=Host.USER,
+                      dest_file=dest_dir, dest_user=dest_user, dest_password=Host.PASSWORD, dest_server=dest_server,
+                      sudo=sudo, fail_ok=fail_ok)
+

@@ -6,6 +6,9 @@ EXT_IP = '8.8.8.8'
 # such as in string '5 packets transmitted, 0 received, 100% packet loss, time 4031ms', number 100 will be found
 PING_LOSS_RATE = r'\, (\d{1,3})\% packet loss\,'
 
+# vshell ping loss rate pattern. 3 packets transmitted, 0 received, 0 total, 100.00%% loss
+VSHELL_PING_LOSS_RATE = '\, (\d{1,3}).\d{1,2}[%]% loss'
+
 # Matches 8-4-4-4-12 hexadecimal digits. Lower case only
 UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 
@@ -20,14 +23,15 @@ DNS_NAMESERVERS = ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
 # Heat template path
 HEAT_PATH = 'heat/hot/simple/'
 HEAT_SCENARIO_PATH = 'heat/hot/scenarios/'
+
+# special NIC patterns
 MELLANOX_DEVICE = 'MT27500|MT27710'
+MELLANOX4 = 'MT.*ConnectX-4'
 
 
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
-    # set default_guest back to tis-centos-guest after US CentOS Guest SDK is closed by Nimalini
     DEFAULT_GUEST = 'tis-centos-guest'
-    #DEFAULT_GUEST = 'cgcs-guest'
     TIS_GUEST_PATTERN = 'cgcs-guest|tis-centos-guest'
     GUESTS_NO_RM = ['ubuntu_14', 'tis-centos-guest', 'cgcs-guest']
     # Image files name and size from yow-cgcs-test.wrs.com:/home/svc-cgcsauto/images
@@ -43,7 +47,7 @@ class GuestImages:
         'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16, 'opensuse_13.qcow2'),
         'win_2012': ('win2012r2.qcow2', 36, 'win_2012.qcow2'),   # Service Team img
         'cgcs-guest': (None, 1, 'cgcs-guest.img'),       # wrl
-        'tis-centos-guest': (None, 5, 'latest_tis-centos-guest.img')
+        'tis-centos-guest': (None, 2, 'latest_tis-centos-guest.img')
     }
 
 
@@ -57,6 +61,12 @@ class Networks:
     DATA_IP = r'172.\d{1,3}.\d{1,3}.\d{1,3}'
     # such as 10.1.1.44
     INTERNAL_IP = r'10.\d{1,3}.\d{1,3}.\d{1,3}'
+    IPV4_IP = '\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}'
+    IP_PATTERN = {
+        'data': DATA_IP,
+        'mgmt': MGMT_IP,
+        'internal': INTERNAL_IP
+    }
 
 
 class SystemType:

@@ -337,8 +337,7 @@ def multiple_provider_net_range(request):
             computer_host = nova_host
             break
     else:
-        assert False, "Can not find a free data interface "
-
+        skip("Can not find a free data interface")
 
     # Find a free port from host-if-list -a
     if_name = random.choice(list_interfaces)

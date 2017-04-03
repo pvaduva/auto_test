@@ -61,7 +61,7 @@ class SSHClient:
     """
 
     def __init__(self, host, user='wrsroot', password='Li69nux*', force_password=True, initial_prompt=CONTROLLER_PROMPT,
-                 timeout=60, session=None):
+                 timeout=60, session=None, searchwindownsize=None):
         """
         Initiate an object for connecting to remote host
         Args:
@@ -83,10 +83,12 @@ class SSHClient:
         # self.cmd_output = ''
         self.force_password = force_password
         self.timeout = timeout
+        self.searchwindowsize = searchwindownsize
         # self.logpath = None
 
     def __get_logpath(self):
         lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith('__')]
+        lab_list = [lab_ for lab_ in lab_list if isinstance(lab_, dict)]
         for lab in lab_list:
             if lab['floating ip'] == self.host:
                 lab_name = lab['short_name']
@@ -129,9 +131,10 @@ class SSHClient:
         end_time = time.time() + retry_timeout
         while time.time() < end_time:
             # LOG into remote host
+            print(str(self.searchwindowsize))
             try:
                 LOG.info("Attempt to connect to host - {}".format(self.host))
-                self._session = pxssh.pxssh(encoding='utf-8')
+                self._session = pxssh.pxssh(encoding='utf-8', searchwindowsize=self.searchwindowsize)
 
                 # set to ignore ssh host fingerprinting
                 self._session.SSH_OPTS = _SSH_OPTS
@@ -192,8 +195,24 @@ class SSHClient:
                     raise
 
                 # print out error for more info before retrying
-                LOG.info("Login failed due to error: {}".format(e))
+                LOG.info("Login failed due to error: {}".format(e.__str__()))
 
+                if 'password refused' in e.__str__():
+                    print("hey: {}".format(self.searchwindowsize))
+                    if self.searchwindowsize is None:
+                        before_str = self._parse_output(self._session.before)
+                        after_str = self._parse_output(self._session.after)
+                        output = before_str + after_str
+                        print("output: {}".format(output))
+                        if 'your password' in output:
+                            LOG.warning("Login failed possibly due to password expire warning. "
+                                        "Retry with small searchwindowsize")
+                            self.searchwindowsize = 50
+                        else:
+                            raise
+                    else:
+                        self.searchwindowsize = None
+                        raise
             except:
                 LOG.error("Login failed due to unknown exception!")
                 raise
@@ -366,6 +385,9 @@ class SSHClient:
             err_only: if true, stdout will not be included in output
             rm_date (bool): weather to remove date output from cmd output before returning
             fail_ok (bool): whether to raise exception when non-zero exit-code is returned
+            searchwindowsize (int): max chars to look for match from the end of the output.
+                Usage: when expecting a prompt, set this to slightly larger than the number of chars of the prompt,
+                    to speed up the search, and to avoid matching in the middle of the output.
 
         Returns (tuple): (exit code (int), command output (str))
 
@@ -501,6 +523,76 @@ class SSHClient:
         if not index == 0:
             raise exceptions.SSHException("Failed to scp files")
 
+    def scp_files(self, source_file, dest_file, source_server='', dest_server='', source_user='', source_password=None,
+                  dest_password=None, dest_user='', timeout=300, sudo=False, sudo_password=None, fail_ok=False):
+
+        if not source_server and not dest_server:
+            raise ValueError("At least one of the source_server and dest_server has to be specified.")
+
+        # Parsing source info
+        source_server_ = source_server + ':' if source_server else ''
+        source_user = source_user + '@' if source_user else ''
+        source = "{}{}{}".format(source_user, source_server_, source_file)
+
+        # Process destination info
+        # if not str(dest_file).endswith('/'):
+        #     dest_file += '/'
+        dest_server_ = dest_server + ':' if dest_server else ''
+        dest_user = dest_user + '@' if dest_user else ''
+        destination = "{}{}{}".format(dest_user, dest_server_, dest_file)
+        scp_cmd = ' '.join(['scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source,
+                            destination]).strip()
+        if sudo:
+            scp_cmd = 'sudo {}'.format(scp_cmd)
+
+        if sudo_password is None:
+            sudo_password = self.password
+
+        LOG.info("Copying file(s) from {} to {}: {}".format(source_server, dest_server, scp_cmd))
+        self.send(scp_cmd)
+        source_pswd_prompt = '{}.* password:'.format(source_server)
+        dest_pswd_prompt = '{}.* password:'.format(dest_server)
+        source_add_prompt = '{}.*\(yes/no\).*'.format(source_server)
+        dest_add_prompt = '{}.*\(yes/no\).*'.format(dest_server)
+        sudo_pswd_prompt = 'Password:'
+        search_window_size = 300
+        index = self.expect([self.prompt, dest_add_prompt, dest_pswd_prompt,
+                             source_add_prompt, source_pswd_prompt, sudo_pswd_prompt],
+                            timeout=timeout, searchwindowsize=search_window_size)
+        if index == 5:
+            # sudo password prompt
+            self.send(sudo_password)
+            index = self.expect([self.prompt, dest_pswd_prompt, dest_add_prompt, source_pswd_prompt, source_add_prompt],
+                                timeout=timeout, searchwindowsize=search_window_size)
+        if index == 4:
+            # source host add prompt
+            self.send('yes')
+            index = self.expect([self.prompt, dest_pswd_prompt, dest_add_prompt, source_pswd_prompt], timeout=timeout,
+                                searchwindowsize=search_window_size)
+        if index == 3:
+            # source password prompt
+            self.send(source_password)
+            index = self.expect([self.prompt, dest_pswd_prompt, dest_add_prompt], timeout=timeout,
+                                searchwindowsize=search_window_size)
+        if index == 2:
+            # dest host add prompt
+            self.send('yes')
+            index = self.expect([self.prompt, dest_pswd_prompt], timeout=timeout, searchwindowsize=search_window_size)
+        if index == 1:
+            # dest password prompt
+            self.send(dest_password)
+            index = self.expect([self.prompt], timeout=timeout, searchwindowsize=50)
+        if not index == 0:
+            raise exceptions.SSHException("Failed to scp files")
+
+        exit_code = self.get_exit_code()
+        if exit_code != 0:
+            msg = "SCP failed - {}".format(self.cmd_output)
+            if fail_ok:
+                LOG.error(msg)
+            else:
+                raise exceptions.SSHException(msg)
+
     def file_exists(self, file_path):
         return self.exec_cmd('stat {}'.format(file_path), fail_ok=True)[0] == 0
 
@@ -523,7 +615,7 @@ class SSHClient:
                 self.expect()
 
     def exec_sudo_cmd(self, cmd, expect_timeout=60, rm_date=True, fail_ok=True, get_exit_code=True,
-                      strict_passwd_prompt=False):
+                      searchwindowsize=None, strict_passwd_prompt=False):
         """
         Execute a command with sudo.
 
@@ -532,7 +624,11 @@ class SSHClient:
             expect_timeout (int): timeout waiting for command to return
             rm_date (bool): whether to remove date info at the end of the output
             fail_ok (bool): whether to raise exception when non-zero exit code is returned
-            strict_passwd_prompt (bool): whether to search output with strict password prompt
+            searchwindowsize (int): max chars to look for match from the end of the output.
+                Usage: when expecting a prompt, set this to slightly larger than the number of chars of the prompt,
+                    to speed up the search, and to avoid matching in the middle of the output.
+            strict_passwd_prompt (bool): whether to search output with strict password prompt (Not recommended. Use
+                searchwindowsize instead)
 
         Returns (tuple): (exit code (int), command output (str))
 
@@ -541,10 +637,10 @@ class SSHClient:
         LOG.info("Executing sudo command: {}".format(cmd))
         self.send(cmd)
         prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
-        index = self.expect([self.prompt, prompt], timeout=expect_timeout)
+        index = self.expect([self.prompt, prompt], timeout=expect_timeout, searchwindowsize=searchwindowsize)
         if index == 1:
             self.send(self.password)
-            self.expect(timeout=expect_timeout)
+            self.expect(timeout=expect_timeout, searchwindowsize=searchwindowsize)
 
         code, output = self.__process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
         if code != 0 and not fail_ok:
@@ -781,7 +877,7 @@ class SSHFromSSH(SSHClient):
                 LOG.info("Successfully connected to {} from {}!".format(self.host, self.parent.host))
                 return
 
-            except (OSError, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh) as e:
+            except (OSError, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh, exceptions.SSHException) as e:
                 LOG.info("Exception caught when attempt to ssh to {}: {}".format(self.host, e))
                 if isinstance(e, pexpect.TIMEOUT):
                     # LOG.debug("Reset _session.after for {} session".format(self.host))
@@ -937,6 +1033,7 @@ class FloatingClient(SSHClient):
 
         # get a list of floating ips for all known labs
         __lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith(r'__')]
+        __lab_list = [lab_ for lab_ in __lab_list if isinstance(lab_, dict)]
         ips = []
         for lab in __lab_list:
             ip = lab['floating ip']
@@ -1022,6 +1119,7 @@ class ControllerClient:
     # Each entry is a lab dictionary such as Labs.VBOX. For newly created dict entry, 'name' must be provided.
     __lab_attr_list = [attr for attr in dir(Labs) if not attr.startswith('__')]
     __lab_list = [getattr(Labs, attr) for attr in __lab_attr_list]
+    __lab_list = [lab for lab in __lab_list if isinstance(lab, dict)]
     __lab_ssh_map = {}     # item such as 'PV0': [con_ssh, ...]
 
     @classmethod

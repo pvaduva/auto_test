@@ -11,12 +11,13 @@ from utils.tis_log import LOG
 
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
-    VMNetworkStr, EventLogID, GuestImages
+    VMNetworkStr, EventLogID, GuestImages, Networks
 from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
 
-from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
+from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
+    keystone_helper
 from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -274,7 +275,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     LOG.info("Booting VM {}...".format(name))
     exitcode, output = cli.nova('boot', positional_args=args_, ssh_client=con_ssh,
-                                fail_ok=fail_ok, rtn_list=True, timeout=VMTimeout.BOOT_VM, auth_info=auth_info)
+                                fail_ok=True, rtn_list=True, timeout=VMTimeout.BOOT_VM, auth_info=auth_info)
 
     tmout = VMTimeout.STATUS_CHANGE
     if min_count is None and max_count is None:
@@ -284,6 +285,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             ResourceCleanup.add('vm', vm_id, scope=cleanup, del_vm_vols=False)
 
         if exitcode == 1:
+            if not fail_ok:
+                raise exceptions.VMOperationFailed(output)
+
             if vm_id:
                 return 1, vm_id, output, new_vol       # vm_id = '' if cli is rejected without vm created
             return 4, '', output, new_vol     # new_vol = '' if no new volume created. Pass this to test for proper teardown
@@ -366,6 +370,7 @@ def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=
             LOG.warning(msg)
             return False
         else:
+            network_helper.collect_networking_info(vms=vm_id)
             raise exceptions.VMNetworkError(msg)
 
 
@@ -955,7 +960,7 @@ def _confirm_or_revert_resize(vm, revert=False, con_ssh=None, fail_ok=False):
 
 
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
-              net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True):
+              net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False):
     """
 
     Args:
@@ -984,21 +989,29 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         raise ValueError("Invalid net type(s) provided. Valid net_types: {}. net_types given: {}".
                          format(valid_net_types, net_types))
 
+    if vshell and 'data' not in net_types:
+        LOG.warning("'data' is not included in net_types, while vshell ping is only supported on 'data' network")
+
     vms_ips = []
+    vshell_ips = []
     if 'mgmt' in net_types:
-        mgmt_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip)
-        vms_ips += mgmt_ips
+        mgmt_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip,
+                                                       exclude_nets=exclude_nets)
         if not mgmt_ips:
             raise exceptions.VMNetworkError("Management net ip is not found for vms {}".format(vm_ids))
+        vms_ips += mgmt_ips
 
     if 'data' in net_types:
-        data_ips = network_helper.get_data_ips_for_vms(vms=vm_ids, con_ssh=con_ssh)
-        vms_ips += data_ips
+        data_ips = network_helper.get_data_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
         if not data_ips:
             raise exceptions.VMNetworkError("Data network ip is not found for vms {}".format(vm_ids))
+        if vshell:
+            vshell_ips += data_ips
+        else:
+            vms_ips += data_ips
 
     if 'internal' in net_types:
-        internal_ips = network_helper.get_internal_ips_for_vms(vms=vm_ids, con_ssh=con_ssh)
+        internal_ips = network_helper.get_internal_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
         if not internal_ips:
             raise exceptions.VMNetworkError("Internal net ip is not found for vms {}".format(vm_ids))
         if vlan_zero_only:
@@ -1013,8 +1026,13 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     for i in range(retry + 1):
         for ip in vms_ips:
             packet_loss_rate = network_helper._ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings,
-                                                           timeout=timeout, fail_ok=True)[0]
+                                                           timeout=timeout, fail_ok=True, vshell=False)[0]
             res_dict[ip] = packet_loss_rate
+
+        for vshell_ip in vshell_ips:
+            packet_loss_rate = network_helper._ping_server(server=vshell_ip, ssh_client=ssh_client, num_pings=num_pings,
+                                                           timeout=timeout, fail_ok=True, vshell=True)[0]
+            res_dict[vshell_ip] = packet_loss_rate
 
         res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
         if res_bool:
@@ -1033,6 +1051,8 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         LOG.info(err_msg)
         return res_bool, res_dict
     else:
+        LOG.error("Ping vm(s) failed - Collecting networking info")
+        network_helper.collect_networking_info(vms=vm_ids)
         raise exceptions.VMNetworkError(err_msg)
 
 
@@ -1063,12 +1083,12 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
         natbox_client = NATBoxClient.get_natbox_client()
 
     return _ping_vms(vm_ids=vm_ids, ssh_client=natbox_client, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                     fail_ok=fail_ok, use_fip=use_fip, net_types='mgmt', retry=retry)
+                     fail_ok=fail_ok, use_fip=use_fip, net_types='mgmt', retry=retry, vshell=False)
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
                      num_pings=5, timeout=15, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
-                     net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True):
+                     net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False):
     """
 
     Args:
@@ -1090,7 +1110,12 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         retry (int): number of times to retry
         retry_interval (int): seconds to wait between each retries
         vlan_zero_only (bool): used if 'internal' is included in net_types. Ping vm over internal net with vlan id 0 if
-        True, otherwise ping all the internal net ips assigned to vm.
+            True, otherwise ping all the internal net ips assigned to vm.
+        exclude_nets (list): exclude ips from given network names
+        vshell (bool): whether to ping vms' data interface through internal interface.
+            Usage: when set to True, use 'vshell ping --count 3 <other_vm_data_ip> <internal_if_id>'
+                - dpdk vms should be booted from lab_setup scripts
+                - 'data' has to be included in net_types
 
     Returns (tuple):
         A tuple in form: (res (bool), packet_loss_dict (dict))
@@ -1117,16 +1142,19 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         if to_vms is None:
             to_vms = vms_ids
 
-    with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
-                               prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
+    try:
+        with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
+                                   prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
+                res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings,
+                                timeout=timeout, fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry,
+                                retry_interval=retry_interval, vlan_zero_only=vlan_zero_only, exclude_nets=exclude_nets,
+                                vshell=vshell)
+                if not res[0]:
+                    from_vm_ssh.exec_cmd("ip addr", get_exit_code=False)
 
-        res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                        fail_ok=True, use_fip=to_fip, net_types=net_types, retry=retry,
-                        retry_interval=retry_interval, vlan_zero_only=vlan_zero_only)
-        if not res[0]:
-            from_vm_ssh.exec_cmd("ip addr", get_exit_code=False)
+                return res
 
-    if not res[0] and not fail_ok:
+    except:
         try:
             LOG.debug("ping vms from vm failed - attempt to ssh to to_vms and print ip addr")
             for vm_ in to_vms:
@@ -1135,10 +1163,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         except:
             pass
 
-        err_msg = "Ping unsuccessful from {} to vms {}: {}".format(from_vm, to_vms, res[1])
-        raise exceptions.VMNetworkError(err_msg)
-
-    return res
+        raise
 
 
 def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
@@ -1157,7 +1182,7 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
 @contextmanager
 def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
                           timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, vm_ip=None,
-                          vm_ext_port=None, use_fip=False,  retry=True, retry_timeout=120, close_ssh=True):
+                          vm_ext_port=None, use_fip=False, retry=True, retry_timeout=120, close_ssh=True):
     """
     ssh to a vm from natbox.
 
@@ -1644,7 +1669,7 @@ def reboot_vm(vm_id, hard=False, fail_ok=False, con_ssh=None, auth_info=None, cl
         return 1, output
 
     expt_reboot = VMStatus.HARD_REBOOT if hard else VMStatus.SOFT_REBOOT
-    _wait_for_vm_status(vm_id, expt_reboot, check_interval=1, fail_ok=False)
+    _wait_for_vm_status(vm_id, expt_reboot, check_interval=0, fail_ok=False)
 
     actual_status = _wait_for_vm_status(vm_id, [VMStatus.ACTIVE, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh,
                                         timeout=reboot_timeout)
@@ -2153,7 +2178,7 @@ def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **
     return action_function_map[action](vm_id, con_ssh=con_ssh, auth_info=auth_info, **kwargs)
 
 
-def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
+def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=None, guest_os=None):
     """
     Add vlan for vm pci-passthrough interface and restart networking service.
     Do nothing if expected vlan interface already exists in 'ip addr'.
@@ -2162,6 +2187,7 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
         vm_id (str):
         net_seg_id (int|str): such as 1792
         retry (int): max number of times to reboot vm to try to recover it from non-exit
+        guest_os (str): guest os type. Default guest os assumed if None is given.
 
     Returns: None
 
@@ -2174,6 +2200,9 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
         By default will try to reboot for a maximum of 3 times
 
     """
+    if not guest_os:
+        guest_os = GuestImages.DEFAULT_GUEST
+
     if not vm_id or not net_seg_id:
         raise ValueError("vm_id and/or net_seg_id not provided.")
 
@@ -2186,6 +2215,20 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
 
         with ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
             for pcipt_nic in vm_pcipt_nics:
+                if exclude_nets:
+                    if isinstance(exclude_nets, str):
+                        exclude_nets = [exclude_nets]
+
+                    skip_nic = False
+                    for net_to_exclude in exclude_nets:
+                        if pcipt_nic['network'] == net_to_exclude:
+                            LOG.info("pcipt nic in {} is ignored: {}".format(net_to_exclude, pcipt_nic))
+                            skip_nic = True
+                            break
+
+                    if skip_nic:
+                        continue
+
                 mac_addr = pcipt_nic['mac_address']
                 eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
                 if not eth_name:
@@ -2206,42 +2249,106 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3):
                         LOG.info("{} already in ip addr. Skip.".format(vlan_name))
                         continue
 
-                    output_pre = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
-                    if vlan_name not in output_pre:
-                        if eth_name not in output_pre:
-                            LOG.info("Append new interface {} to /etc/network/interfaces".format(eth_name))
-                            if_to_add = VMNetworkStr.NET_IF.format(eth_name, eth_name)
-                            vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
-                                            format(if_to_add), fail_ok=False)
+                    # 'ip link add' works for all linux guests but it does not persists after network service restart
+                    # vm_ssh.exec_cmd('ip link add link {} name {} type vlan id {}'.format(eth_name, vlan_name,
+                    # net_seg_id))
+                    # vm_ssh.exec_cmd('ip link set {} up'.format(vlan_name))
 
-                        if '.' + net_seg_id in output_pre:
-                            LOG.info("Modify existing interface to {} in /etc/network/interfaces".format(vlan_name))
-                            vm_ssh.exec_cmd(r"sed -i -e 's/eth[0-9]\+\(.{}\)/{}\1/g' /etc/network/interfaces".
-                                            format(net_seg_id, eth_name), fail_ok=False)
-                        else:
-                            LOG.info("Append new interface {} to /etc/network/interfaces".format(vlan_name))
-                            if_to_add = VMNetworkStr.NET_IF.format(vlan_name, vlan_name)
-                            vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
-                                            format(if_to_add), fail_ok=False)
+                    wait_for_interfaces_up(vm_ssh, eth_name)
 
-                        output_post = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
-                        if vlan_name not in output_post:
-                            raise exceptions.VMNetworkError("Failed to add vlan to vm interfaces file")
+                    if 'centos' in guest_os.lower() and 'centos_6' not in guest_os.lower():
+                        # guest based on centos7
+                        ifcfg_dir = VMPath.VM_IF_PATH_CENTOS
+                        ifcfg_eth = '{}ifcfg-{}'.format(ifcfg_dir, eth_name)
+                        ifcfg_vlan = '{}ifcfg-{}'.format(ifcfg_dir, vlan_name)
 
-                    LOG.info("Restarting networking service for vm.")
-                    vm_ssh.exec_cmd("/etc/init.d/networking restart", expect_timeout=180)
-                    output_pre_ipaddr = vm_ssh.exec_cmd('ip addr', fail_ok=False)[1]
-                    if vlan_name not in output_pre_ipaddr:
+                        output_pre = vm_ssh.exec_cmd('ls {}'.format(ifcfg_dir), fail_ok=False)[1]
+                        if ifcfg_vlan not in output_pre:
+                            LOG.info("Add {} ifcfg file".format(vlan_name))
+                            vm_ssh.exec_sudo_cmd('cp {} {}'.format(ifcfg_eth, ifcfg_vlan), fail_ok=False)
+                            vm_ssh.exec_sudo_cmd("sed -i 's/{}/{}/g' {}".format(eth_name, vlan_name, ifcfg_vlan),
+                                                 fail_ok=False)
+                            vm_ssh.exec_sudo_cmd(r"echo -e 'VLAN=yes' >> {}".format(ifcfg_vlan), fail_ok=False)
+
+                        # restart network service regardless since vlan_name was not in ip addr
+                        LOG.info("Restarting networking service for vm.")
+                        vm_ssh.exec_sudo_cmd('systemctl restart network', expect_timeout=180)
+
+                    else:
+                        # assume it's wrl or ubuntu
+                        output_pre = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
+                        if vlan_name not in output_pre:
+                            if eth_name not in output_pre:
+                                LOG.info("Append new interface {} to /etc/network/interfaces".format(eth_name))
+                                if_to_add = VMNetworkStr.NET_IF.format(eth_name, eth_name)
+                                vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
+                                                format(if_to_add), fail_ok=False)
+
+                            if '.' + net_seg_id in output_pre:
+                                LOG.info("Modify existing interface to {} in /etc/network/interfaces".format(vlan_name))
+                                vm_ssh.exec_cmd(r"sed -i -e 's/eth[0-9]\+\(.{}\)/{}\1/g' /etc/network/interfaces".
+                                                format(net_seg_id, eth_name), fail_ok=False)
+                            else:
+                                LOG.info("Append new interface {} to /etc/network/interfaces".format(vlan_name))
+                                if_to_add = VMNetworkStr.NET_IF.format(vlan_name, vlan_name)
+                                vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
+                                                format(if_to_add), fail_ok=False)
+
+                            output_post = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
+                            if vlan_name not in output_post:
+                                raise exceptions.VMNetworkError("Failed to add vlan to vm interfaces file")
+
+                        LOG.info("Restarting networking service for vm.")
+                        vm_ssh.exec_cmd("/etc/init.d/networking restart", expect_timeout=180)
+
+                    LOG.info("Check if vlan is added successfully with IP assigned")
+                    output_post_ipaddr = vm_ssh.exec_cmd('ip addr', fail_ok=False)[1]
+                    if vlan_name not in output_post_ipaddr:
                         raise exceptions.VMNetworkError("vlan {} is not found in 'ip addr' after restarting networking "
                                                         "service.".format(vlan_name))
-                    LOG.info("vlan {} is successfully added.".format(vlan_name))
+                    if not is_ip_assigned(vm_ssh, eth_name=vlan_name):
+                        raise exceptions.VMNetworkError('No IP assigned to {} vlan interface'.format(vlan_name))
+                    LOG.info("vlan {} is successfully added and an IP is assigned.".format(vlan_name))
             else:
+                # did not break, meaning no 'rename' interface detected, vlan either existed or successfully added
                 return
 
+            # 'for' loop break which means 'rename' interface detected, and vm reboot triggered - known issue with wrl
             LOG.info("Reboot vm completed. Retry started.")
 
     else:
-        raise exceptions.VMNetworkError("pci-passthrough interface(s) not found in vm {}".format(vm_id))
+        raise exceptions.VMNetworkError("'rename' interface still exists in pci-passthrough vm {} with {} reboot "
+                                        "attempts.".format(vm_id, retry))
+
+
+def is_ip_assigned(vm_ssh, eth_name):
+    output = vm_ssh.exec_cmd('ip addr show {}'.format(eth_name), fail_ok=False)[1]
+    return re.search('inet {}'.format(Networks.IPV4_IP), output)
+
+
+def wait_for_interfaces_up(vm_ssh, eth_names, check_interval=3, timeout=180):
+    LOG.info("Waiting for vm interface(s) to be in UP state: {}".format(eth_names))
+    end_time = time.time() + timeout
+    if isinstance(eth_names, str):
+        eth_names = [eth_names]
+    ifs_to_check = list(eth_names)
+    while time.time() < end_time:
+        for eth in ifs_to_check:
+            output = vm_ssh.exec_cmd('ip -d link show {}'.format(eth), fail_ok=False)[1]
+            if 'state UP' in output:
+                ifs_to_check.remove(eth)
+                continue
+            else:
+                LOG.info("{} is not up - wait for {} seconds and check again".format(eth, check_interval))
+                break
+
+        if not ifs_to_check:
+            LOG.info('interfaces are up: {}'.format(eth_names))
+            return
+
+        time.sleep(check_interval)
+
+    raise exceptions.VMNetworkError("Interface(s) not up for given vm")
 
 
 def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True, con_ssh=None):
