@@ -131,7 +131,7 @@ class SSHClient:
         end_time = time.time() + retry_timeout
         while time.time() < end_time:
             # LOG into remote host
-            print(str(self.searchwindowsize))
+            # print(str(self.searchwindowsize))
             try:
                 LOG.info("Attempt to connect to host - {}".format(self.host))
                 self._session = pxssh.pxssh(encoding='utf-8', searchwindowsize=self.searchwindowsize)
