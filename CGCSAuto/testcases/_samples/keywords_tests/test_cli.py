@@ -1,6 +1,6 @@
 from utils import cli
 from consts.auth import CliAuth
-from keywords import ceilometer_helper, keystone_helper
+from keywords import ceilometer_helper, keystone_helper, system_helper
 
 
 def test_clis():
@@ -15,3 +15,10 @@ def test_clis():
     cli.neutron('router-list', convert_openstack=True)
     cli.cinder('list')
     cli.glance('image-list')
+
+
+def test_alarms():
+    system_helper.get_alarms()
+    system_helper.delete_alarms()
+    system_helper.get_alarms()
+    system_helper.get_alarms_table()

@@ -229,15 +229,21 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
     table_ = table_parser.table(cli.system('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info),
                                 combine_multiline_entry=True)
 
-    if not table_['headers']:
+    table_ = _compose_alarm_table(table_, uuid=uuid)
+
+    return table_
+
+
+def _compose_alarm_table(output, uuid=False):
+    if not output['headers']:
         headers = ['UUID', 'Alarm ID', 'Reason Text', 'Entity ID', 'Severity', 'Time Stamp']
         if not uuid:
             headers.remove('UUID')
         values = [['' for item in headers]]
-        table_['headers'] = headers
-        table_['values'] = values
+        output['headers'] = headers
+        output['values'] = values
 
-    return table_
+    return output
 
 
 def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=None, entity_id=None,
@@ -496,6 +502,7 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
     end_time = time.time() + timeout
     while time.time() < end_time:
         alarms_tab = table_parser.table(cli.system('alarm-list', ssh_client=con_ssh, auth_info=auth_info))
+        alarms_tab = _compose_alarm_table(alarms_tab, uuid=False)
 
         alarm_tab = table_parser.filter_table(alarms_tab, **{'Alarm ID': alarm_id})
         if table_parser.get_all_rows(alarm_tab):
@@ -1587,10 +1594,10 @@ def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh
                  "There may be cli errors when active controller's config updates")
         end_time = time.time() + timeout
         while time.time() < end_time:
-            res, out = cli.system('alarm-list', '--uuid',
-                                  ssh_client=con_ssh, fail_ok=True)
+            res, out = cli.system('alarm-list', '--uuid', ssh_client=con_ssh, fail_ok=True)
             if res == 0:
                 alarms_tab = table_parser.filter_table(table_parser.table(out), **{'Alarm ID': alarm_id})
+                alarms_tab = _compose_alarm_table(alarms_tab, uuid=True)
                 uuids = table_parser.get_values(alarms_tab, 'uuid')
                 if not uuids:
                     LOG.info("Config has been applied")
