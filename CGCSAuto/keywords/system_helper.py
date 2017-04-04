@@ -239,7 +239,7 @@ def _compose_alarm_table(output, uuid=False):
         headers = ['UUID', 'Alarm ID', 'Reason Text', 'Entity ID', 'Severity', 'Time Stamp']
         if not uuid:
             headers.remove('UUID')
-        values = [['' for item in headers]]
+        values = []
         output['headers'] = headers
         output['values'] = values
 
