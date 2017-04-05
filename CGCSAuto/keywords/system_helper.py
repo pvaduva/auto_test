@@ -1612,7 +1612,7 @@ def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh
     return 0, "The {} service parameter was applied".format(service)
 
 
-def get_hosts_by_personality(con_ssh=None):
+def get_hosts_by_personality(con_ssh=None, source_admin=False):
     """
     get hosts by different personality
     Args:
@@ -1623,7 +1623,8 @@ def get_hosts_by_personality(con_ssh=None):
             ([controller-0, controller-1], [], [])
 
     """
-    hosts_tab = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
+    source_cred = Tenant.ADMIN if source_admin else None
+    hosts_tab = table_parser.table(cli.system('host-list', ssh_client=con_ssh, source_creden_=source_cred))
     controllers = table_parser.get_values(hosts_tab, 'hostname', personality='controller')
     computes = table_parser.get_values(hosts_tab, 'hostname', personality='compute')
     storages = table_parser.get_values(hosts_tab, 'hostname', personality='storage')
