@@ -984,6 +984,9 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     if isinstance(net_types, str):
         net_types = [net_types]
 
+    if isinstance(vm_ids, str):
+        vm_ids = [vm_ids]
+
     valid_net_types = ['mgmt', 'data', 'internal']
     if not set(net_types) <= set(valid_net_types):
         raise ValueError("Invalid net type(s) provided. Valid net_types: {}. net_types given: {}".
@@ -1051,8 +1054,6 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         LOG.info(err_msg)
         return res_bool, res_dict
     else:
-        LOG.error("Ping vm(s) failed - Collecting networking info")
-        network_helper.collect_networking_info(vms=vm_ids)
         raise exceptions.VMNetworkError(err_msg)
 
 
@@ -1079,11 +1080,20 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
          ...
         }
     """
+    if isinstance(vm_ids, str):
+        vm_ids = [vm_ids]
+
     if not natbox_client:
         natbox_client = NATBoxClient.get_natbox_client()
 
-    return _ping_vms(vm_ids=vm_ids, ssh_client=natbox_client, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                     fail_ok=fail_ok, use_fip=use_fip, net_types='mgmt', retry=retry, vshell=False)
+    res_bool, res_dict = _ping_vms(vm_ids=vm_ids, ssh_client=natbox_client, con_ssh=con_ssh, num_pings=num_pings,
+                                   timeout=timeout, fail_ok=True, use_fip=use_fip, net_types='mgmt', retry=retry,
+                                   vshell=False)
+    if not res_bool and not fail_ok:
+        LOG.error("Ping vm(s) from NatBox failed - Collecting networking info")
+        network_helper.collect_networking_info(vms=vm_ids)
+
+    return res_bool, res_dict
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
@@ -1150,20 +1160,29 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
                                 retry_interval=retry_interval, vlan_zero_only=vlan_zero_only, exclude_nets=exclude_nets,
                                 vshell=vshell)
                 if not res[0]:
-                    from_vm_ssh.exec_cmd("ip addr", get_exit_code=False)
+                    _collect_vm_networking_info(from_vm_ssh)
 
                 return res
 
     except:
+        LOG.error("Ping vm(s) from vm failed - Collecting networking info")
+        network_helper.collect_networking_info(vms=to_vms)
+
         try:
-            LOG.debug("ping vms from vm failed - attempt to ssh to to_vms and print ip addr")
+            LOG.warning("Ping vm(s) from vm failed - Attempt to ssh to to_vms and collect vm networking info")
             for vm_ in to_vms:
                 with ssh_to_vm_from_natbox(vm_, retry=False, con_ssh=con_ssh) as to_ssh:
-                    to_ssh.exec_cmd('ip addr', get_exit_code=False)
+                    _collect_vm_networking_info(to_ssh)
         except:
             pass
 
         raise
+
+
+def _collect_vm_networking_info(vm_ssh):
+    vm_ssh.exec_cmd('ip addr', get_exit_code=False)
+    vm_ssh.exec_cmd('ip neigh', get_exit_code=False)
+    vm_ssh.exec_cmd('ip route', get_exit_code=False)
 
 
 def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
@@ -2185,7 +2204,7 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
 
     Args:
         vm_id (str):
-        net_seg_id (int|str): such as 1792
+        net_seg_id (int|str|dict): such as 1792
         retry (int): max number of times to reboot vm to try to recover it from non-exit
         guest_os (str): guest os type. Default guest os assumed if None is given.
 
@@ -2205,6 +2224,11 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
 
     if not vm_id or not net_seg_id:
         raise ValueError("vm_id and/or net_seg_id not provided.")
+
+    net_seg_id_dict = None
+    if isinstance(net_seg_id, dict):
+        net_seg_id_dict = net_seg_id
+        net_seg_id = None
 
     for i in range(retry):
         vm_pcipt_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, vif_model='pci-passthrough')
@@ -2242,6 +2266,11 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
                     break
 
                 else:
+                    if net_seg_id_dict:
+                        net_name = pcipt_nic['network']
+                        net_seg_id = net_seg_id_dict[net_name]
+                        LOG.info("Seg id for {}: {}".format(net_name, net_seg_id))
+
                     vlan_name = "{}.{}".format(eth_name, net_seg_id)
 
                     output_pre_ipaddr = vm_ssh.exec_cmd('ip addr', fail_ok=False)[1]
