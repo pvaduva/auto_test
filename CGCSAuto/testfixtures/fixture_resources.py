@@ -90,7 +90,7 @@ class VlmHostsReserved:
 
     @classmethod
     def _get_hosts_reserved(cls, scope):
-        return cls.__hosts_reserved_dict[scope]
+        return list(cls.__hosts_reserved_dict[scope])
 
     @classmethod
     def add(cls, hosts, scope='session'):
