@@ -1152,6 +1152,9 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         if to_vms is None:
             to_vms = vms_ids
 
+    if isinstance(to_vms, str):
+        to_vms = [to_vms]
+
     try:
         with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                    prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
