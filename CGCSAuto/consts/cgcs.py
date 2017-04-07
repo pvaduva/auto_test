@@ -242,6 +242,7 @@ class EventLogID:
     HOST_RECOVERY_IN_PROGRESS = '200.004'
     NTP_ALARM = '100.114'
     CINDER_IO_CONGEST = '800.101'
+    PROVIDER_NETWORK_FAILURE = '300.005'
 
 
 class NetworkingVmMapping:
