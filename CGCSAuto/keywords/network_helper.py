@@ -5,10 +5,12 @@ import time
 from collections import Counter
 
 from consts.auth import Tenant
-from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4
+from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE
+from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
-from keywords import common, keystone_helper, host_helper, system_helper
+from keywords import common, keystone_helper, host_helper, system_helper, nova_helper
 from utils import table_parser, cli, exceptions
+from utils.ssh import NATBoxClient
 from utils.tis_log import LOG
 
 
@@ -903,7 +905,7 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
 
             if exclude_nets:
                 for net_to_exclude in exclude_nets:
-                    if net_to_exclude == vm_net:
+                    if net_to_exclude in vm_net:
                         LOG.info("Excluding IPs from {}".format(net_to_exclude))
                         continue
             # find ips
@@ -957,7 +959,8 @@ def get_net_type_from_name(net_name):
     return net_type
 
 
-def get_routers(name=None, distributed=None, ha=None, gateway_ip=None, strict=True, auth_info=None, con_ssh=None):
+def get_routers(name=None, distributed=None, ha=None, gateway_ip=None, strict=True, regex=False,
+                auth_info=None, con_ssh=None):
     """
     Get router id(s) based on given criteria.
     Args:
@@ -986,7 +989,7 @@ def get_routers(name=None, distributed=None, ha=None, gateway_ip=None, strict=Tr
     table_ = table_parser.table(cli.neutron('router-list', ssh_client=con_ssh, auth_info=auth_info),
                                 combine_multiline_entry=True)
     if name is not None:
-        table_ = table_parser.filter_table(table_, strict=strict, name=name)
+        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, name=name)
 
     return table_parser.get_values(table_, 'id', **final_params)
 
@@ -1095,14 +1098,29 @@ def create_router(name=None, tenant=None, distributed=None, ha=None, admin_state
     return 0, router_id, succ_msg
 
 
-def get_router_subnets(router_id, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_router_subnets(router_id, rtn_val='subnet_id', mgmt_only=True, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+
+    Args:
+        router_id:
+        rtn_val (str): 'subnet_id' or 'ip_address'
+        auth_info:
+        con_ssh:
+
+    Returns:
+
+    """
     router_ports_tab = table_parser.table(cli.neutron('router-port-list', router_id, ssh_client=con_ssh,
                                                       auth_info=auth_info))
 
     fixed_ips = table_parser.get_column(router_ports_tab, 'fixed_ips')
-    subnets_ids = list(set([eval(item)['subnet_id'] for item in fixed_ips]))
+    rtn_val = 'subnet_id' if 'id' in rtn_val else 'ip_address'
+    subnets = list(set([eval(item)[rtn_val] for item in fixed_ips]))
 
-    return subnets_ids
+    if rtn_val == 'ip_address' and mgmt_only:
+        subnets = [ip_ for ip_ in subnets if re.match(Networks.MGMT_IP, ip_)]
+
+    return subnets
 
 
 def get_next_subnet_cidr(net_id, ip_pattern='\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', con_ssh=None):
@@ -2098,10 +2116,27 @@ def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     return nics
 
 
+def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
+    """
+    Get interface uuids for given network type
+    Args:
+        ssh_client (SSHClient):
+        net_type: 'data', 'mgmt', or 'internal'
+
+    Returns (list): interface uuids
+
+    """
+    LOG.info("Getting {} interface-uuid via vshell address-list".format(net_type))
+    table_ = table_parser.table(ssh_client.exec_cmd('vshell address-list', fail_ok=False)[1])
+    interfaces = table_parser.get_values(table_, 'interface-uuid', regex=True, address=Networks.IP_PATTERN[net_type])
+
+    return interfaces
+
+
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
 
-def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
+def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False, vshell=False, interface=None):
     """
 
     Args:
@@ -2110,14 +2145,23 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
         num_pings (int):
         timeout (int): max time to wait for ping response in seconds
         fail_ok (bool): whether to raise exception if packet loss rate is 100%
+        vshell (bool): whether to ping via 'vshell ping' cmd
+        interface (str): interface uuid. vm's internal interface-uuid will be used when unset
 
     Returns (int): packet loss percentile, such as 100, 0, 25
 
     """
-    cmd = 'ping -c {} {}'.format(num_pings, server)
+    if not vshell:
+        cmd = 'ping -c {} {}'.format(num_pings, server)
+        output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
+        packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
+    else:
+        if not interface:
+            interface = _get_interfaces_via_vshell(ssh_client, net_type='internal')[0]
+        cmd = 'vshell ping --count {} {} {}'.format(num_pings, server, interface)
+        output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
+        packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
 
-    output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
-    packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
     packet_loss_rate = int(packet_loss_rate)
 
     if packet_loss_rate == 100:
@@ -2820,3 +2864,99 @@ def get_pci_device_used_vfs_value_per_compute(host, device_id, con_ssh=None, aut
     LOG.debug('output from nova device-show for device-id:{}\n{}'.format(device_id, _table))
     _table = table_parser.filter_table(_table, Host=host)
     return table_parser.get_column(_table, 'pci_vfs_used')[0]
+
+
+def get_tenant_routers_for_vms(vms, con_ssh=None):
+    """
+    Get tenant routers for given vm
+
+    Args:
+        vms (str|list):
+        con_ssh (SSHClient):
+
+    Returns (list): list of router ids or names
+
+    """
+    if isinstance(vms, str):
+        vms = [vms]
+
+    auth_info = Tenant.ADMIN
+    field = 'tenant_id'
+    vms_tenants = []
+    for vm in vms:
+        vm_tenant = nova_helper.get_vm_nova_show_value(vm_id=vm, field=field, strict=True, con_ssh=con_ssh,
+                                                       auth_info=auth_info)
+        vms_tenants.append(vm_tenant)
+
+    vms_tenants = list(set(vms_tenants))
+
+    all_routers = get_routers(auth_info=Tenant.ADMIN)
+    vms_routers = []
+    for router in all_routers:
+        router_tenant = get_router_info(router, field=field, strict=True, auth_info=auth_info,
+                                                       con_ssh=con_ssh)
+        if router_tenant in vms_tenants:
+            vms_routers.append(router)
+            if len(vms_routers) == len(vms_tenants):
+                break
+
+    if len(vms_routers) < len(vms_tenants):
+        LOG.error("Cannot find tenant router for all vms. VMS: {}. Matching routers: {}".format(vms, vms_routers))
+
+    return vms_routers
+
+
+def collect_networking_info(routers=None, vms=None):
+    LOG.info("Ping tenant(s) router's external and internal gateway IPs")
+
+    if not routers:
+        if vms:
+            if isinstance(vms, str):
+                vms = [vms]
+            routers = get_tenant_routers_for_vms(vms=vms)
+        else:
+            routers = get_routers(name='tenant[12]-router', regex=True, auth_info=Tenant.ADMIN)
+    elif isinstance(routers, str):
+        routers = [routers]
+
+    ips_to_ping = []
+    for router_ in routers:
+        router_ips = get_router_subnets(router_id=router_, rtn_val='ip_address', mgmt_only=True)
+        ips_to_ping += router_ips
+
+    ping_ips_from_natbox(ips_to_ping, num_pings=3, timeout=15)
+
+    hosts = []
+    for router in routers:
+        hosts.append(get_router_info(router_id=router, field='wrs-net:host'))
+
+    LOG.info("Collect vswitch_info for {} router(s) on router host(s): ".format(routers, hosts))
+    for host in hosts:
+        ProjVar.get_var('VSWITCH_INFO_HOSTS').append(host)
+        collect_vswitch_info_on_host(host)
+
+
+def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
+    if not natbox_ssh:
+        natbox_ssh = NATBoxClient.get_natbox_client()
+
+    res_dict = {}
+    for ip_ in ips:
+        packet_loss_rate = _ping_server(server=ip_, ssh_client=natbox_ssh, num_pings=num_pings, timeout=timeout,
+                                        fail_ok=True, vshell=False)[0]
+        res_dict[ip_] = packet_loss_rate
+
+    res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
+    # LOG.error("PING RES: {}".format(res_dict))
+    if res_bool:
+        LOG.info("Ping successful from NatBox: {}".format(ips))
+    else:
+        LOG.warning("Ping unsuccessful from NatBox: {}".format(res_dict))
+
+    return res_bool, res_dict
+
+
+def collect_vswitch_info_on_host(host):
+    with host_helper.ssh_to_host(host) as host_ssh:
+        host_ssh.exec_sudo_cmd('/etc/collect.d/collect_vswitch', searchwindowsize=50, get_exit_code=False)
+        # vswitch log will be saved to /scratch/var/extra/vswitch.info on the compute host

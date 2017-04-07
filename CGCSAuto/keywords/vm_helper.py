@@ -16,7 +16,8 @@ from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
 
-from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
+from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
+    keystone_helper
 from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -369,6 +370,7 @@ def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=
             LOG.warning(msg)
             return False
         else:
+            network_helper.collect_networking_info(vms=vm_id)
             raise exceptions.VMNetworkError(msg)
 
 
@@ -958,7 +960,7 @@ def _confirm_or_revert_resize(vm, revert=False, con_ssh=None, fail_ok=False):
 
 
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
-              net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None):
+              net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False):
     """
 
     Args:
@@ -982,24 +984,34 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     if isinstance(net_types, str):
         net_types = [net_types]
 
+    if isinstance(vm_ids, str):
+        vm_ids = [vm_ids]
+
     valid_net_types = ['mgmt', 'data', 'internal']
     if not set(net_types) <= set(valid_net_types):
         raise ValueError("Invalid net type(s) provided. Valid net_types: {}. net_types given: {}".
                          format(valid_net_types, net_types))
 
+    if vshell and 'data' not in net_types:
+        LOG.warning("'data' is not included in net_types, while vshell ping is only supported on 'data' network")
+
     vms_ips = []
+    vshell_ips = []
     if 'mgmt' in net_types:
         mgmt_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip,
                                                        exclude_nets=exclude_nets)
-        vms_ips += mgmt_ips
         if not mgmt_ips:
             raise exceptions.VMNetworkError("Management net ip is not found for vms {}".format(vm_ids))
+        vms_ips += mgmt_ips
 
     if 'data' in net_types:
         data_ips = network_helper.get_data_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
-        vms_ips += data_ips
         if not data_ips:
             raise exceptions.VMNetworkError("Data network ip is not found for vms {}".format(vm_ids))
+        if vshell:
+            vshell_ips += data_ips
+        else:
+            vms_ips += data_ips
 
     if 'internal' in net_types:
         internal_ips = network_helper.get_internal_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
@@ -1017,8 +1029,13 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     for i in range(retry + 1):
         for ip in vms_ips:
             packet_loss_rate = network_helper._ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings,
-                                                           timeout=timeout, fail_ok=True)[0]
+                                                           timeout=timeout, fail_ok=True, vshell=False)[0]
             res_dict[ip] = packet_loss_rate
+
+        for vshell_ip in vshell_ips:
+            packet_loss_rate = network_helper._ping_server(server=vshell_ip, ssh_client=ssh_client, num_pings=num_pings,
+                                                           timeout=timeout, fail_ok=True, vshell=True)[0]
+            res_dict[vshell_ip] = packet_loss_rate
 
         res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
         if res_bool:
@@ -1063,16 +1080,25 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
          ...
         }
     """
+    if isinstance(vm_ids, str):
+        vm_ids = [vm_ids]
+
     if not natbox_client:
         natbox_client = NATBoxClient.get_natbox_client()
 
-    return _ping_vms(vm_ids=vm_ids, ssh_client=natbox_client, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                     fail_ok=fail_ok, use_fip=use_fip, net_types='mgmt', retry=retry)
+    res_bool, res_dict = _ping_vms(vm_ids=vm_ids, ssh_client=natbox_client, con_ssh=con_ssh, num_pings=num_pings,
+                                   timeout=timeout, fail_ok=True, use_fip=use_fip, net_types='mgmt', retry=retry,
+                                   vshell=False)
+    if not res_bool and not fail_ok:
+        LOG.error("Ping vm(s) from NatBox failed - Collecting networking info")
+        network_helper.collect_networking_info(vms=vm_ids)
+
+    return res_bool, res_dict
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
                      num_pings=5, timeout=15, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
-                     net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None):
+                     net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False):
     """
 
     Args:
@@ -1094,7 +1120,12 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         retry (int): number of times to retry
         retry_interval (int): seconds to wait between each retries
         vlan_zero_only (bool): used if 'internal' is included in net_types. Ping vm over internal net with vlan id 0 if
-        True, otherwise ping all the internal net ips assigned to vm.
+            True, otherwise ping all the internal net ips assigned to vm.
+        exclude_nets (list): exclude ips from given network names
+        vshell (bool): whether to ping vms' data interface through internal interface.
+            Usage: when set to True, use 'vshell ping --count 3 <other_vm_data_ip> <internal_if_id>'
+                - dpdk vms should be booted from lab_setup scripts
+                - 'data' has to be included in net_types
 
     Returns (tuple):
         A tuple in form: (res (bool), packet_loss_dict (dict))
@@ -1121,28 +1152,40 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         if to_vms is None:
             to_vms = vms_ids
 
-    with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
-                               prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
+    if isinstance(to_vms, str):
+        to_vms = [to_vms]
 
-        res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings, timeout=timeout,
-                        fail_ok=True, use_fip=to_fip, net_types=net_types, retry=retry,
-                        retry_interval=retry_interval, vlan_zero_only=vlan_zero_only, exclude_nets=exclude_nets)
-        if not res[0]:
-            from_vm_ssh.exec_cmd("ip addr", get_exit_code=False)
+    try:
+        with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
+                                   prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
+                res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings,
+                                timeout=timeout, fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry,
+                                retry_interval=retry_interval, vlan_zero_only=vlan_zero_only, exclude_nets=exclude_nets,
+                                vshell=vshell)
+                if not res[0]:
+                    _collect_vm_networking_info(from_vm_ssh)
 
-    if not res[0] and not fail_ok:
+                return res
+
+    except:
+        LOG.error("Ping vm(s) from vm failed - Collecting networking info")
+        network_helper.collect_networking_info(vms=to_vms)
+
         try:
-            LOG.debug("ping vms from vm failed - attempt to ssh to to_vms and print ip addr")
+            LOG.warning("Ping vm(s) from vm failed - Attempt to ssh to to_vms and collect vm networking info")
             for vm_ in to_vms:
                 with ssh_to_vm_from_natbox(vm_, retry=False, con_ssh=con_ssh) as to_ssh:
-                    to_ssh.exec_cmd('ip addr', get_exit_code=False)
+                    _collect_vm_networking_info(to_ssh)
         except:
             pass
 
-        err_msg = "Ping unsuccessful from {} to vms {}: {}".format(from_vm, to_vms, res[1])
-        raise exceptions.VMNetworkError(err_msg)
+        raise
 
-    return res
+
+def _collect_vm_networking_info(vm_ssh):
+    vm_ssh.exec_cmd('ip addr', get_exit_code=False)
+    vm_ssh.exec_cmd('ip neigh', get_exit_code=False)
+    vm_ssh.exec_cmd('ip route', get_exit_code=False)
 
 
 def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
@@ -2164,7 +2207,7 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
 
     Args:
         vm_id (str):
-        net_seg_id (int|str): such as 1792
+        net_seg_id (int|str|dict): such as 1792
         retry (int): max number of times to reboot vm to try to recover it from non-exit
         guest_os (str): guest os type. Default guest os assumed if None is given.
 
@@ -2184,6 +2227,11 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
 
     if not vm_id or not net_seg_id:
         raise ValueError("vm_id and/or net_seg_id not provided.")
+
+    net_seg_id_dict = None
+    if isinstance(net_seg_id, dict):
+        net_seg_id_dict = net_seg_id
+        net_seg_id = None
 
     for i in range(retry):
         vm_pcipt_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, vif_model='pci-passthrough')
@@ -2221,6 +2269,11 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
                     break
 
                 else:
+                    if net_seg_id_dict:
+                        net_name = pcipt_nic['network']
+                        net_seg_id = net_seg_id_dict[net_name]
+                        LOG.info("Seg id for {}: {}".format(net_name, net_seg_id))
+
                     vlan_name = "{}.{}".format(eth_name, net_seg_id)
 
                     output_pre_ipaddr = vm_ssh.exec_cmd('ip addr', fail_ok=False)[1]

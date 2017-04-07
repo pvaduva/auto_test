@@ -1,5 +1,6 @@
 import re
 import time
+import os.path
 import configparser
 
 import setup_consts
@@ -9,7 +10,7 @@ from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClie
 from utils.node import create_node_boot_dict, create_node_dict
 from consts.auth import Tenant, CliAuth, Host
 from consts.cgcs import Prompt
-from consts.filepaths import PrivKeyPath
+from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
 
@@ -504,5 +505,25 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
                                  ceph_mon_gib=ceph_mon_gib
                                  )
 
+
 def is_https(con_ssh):
     return keystone_helper.is_https_lab(con_ssh=con_ssh, source_admin=True)
+
+
+def scp_vswitch_log(con_ssh, hosts, log_path=None):
+    source_file = '/scratch/var/extra/vswitch.info'
+    for host in hosts:
+        LOG.info("scp vswitch log from {} to controller-0".format(host))
+        dest_file = "{}_vswitch.info".format(host)
+        dest_file = os.path.join(WRSROOT_HOME, dest_file)
+        con_ssh.scp_files(source_file, dest_file, source_server=host, dest_server='controller-0',
+                          source_user=Host.USER, source_password=Host.PASSWORD, dest_password=Host.PASSWORD,
+                          dest_user='', timeout=30, sudo=True, sudo_password=None, fail_ok=True)
+
+    LOG.info("SCP vswitch log from lab to automation log dir")
+    if log_path is None:
+        log_path = os.path.join(WRSROOT_HOME, '*_vswitch.info')
+    source_ip = ProjVar.get_var('LAB')['controller-0 ip']
+    dest_dir = ProjVar.get_var('TEMP_DIR')
+    scp_to_local(dest_path=dest_dir, source_user=Host.USER, source_password=Host.PASSWORD, source_path=log_path,
+                 source_ip=source_ip, timeout=60)

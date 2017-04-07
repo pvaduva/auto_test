@@ -41,12 +41,13 @@ def get_build_id(labname=None, log_dir=None, con_ssh=None):
         else:
             build_date = re.findall('''BUILD_DATE=\"(.*)\"''', output)
             if build_date and build_date[0]:
-                build_id = build_date[0].replace(" ", "_")
+                build_id = build_date[0].replace(' ', '_').replace(':', '-')
             else:
-                build_id = ' '
+                build_id = '_'
 
     if close:
         con_ssh.close()
+
     return build_id
 
 
@@ -123,7 +124,7 @@ def _get_sys_type(labname=None, log_dir=None, con_ssh=None):
         close = True
         con_ssh = __get_lab_ssh(labname=labname, log_dir=log_dir)
 
-    controllers, computes, storages = system_helper.get_hosts_by_personality(con_ssh=con_ssh)
+    controllers, computes, storages = system_helper.get_hosts_by_personality(con_ssh=con_ssh, source_admin=True)
 
     sys_type = "{}+{}+{}".format(len(controllers), len(computes), len(storages)).replace('+0', '')
 
