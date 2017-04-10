@@ -553,7 +553,7 @@ def burn_usb_load_image(install_output_dir, node, bld_server_conn, load_path, is
     usb_device = (output.splitlines()[0])[-3:]
 
     # Check if the ISO is available
-    pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
+    pre_opts = "sshpass -p '{0}'".format(WRSROOT_PASSWORD)
     if not iso_host: 
         iso_path = load_path + "/" + BOOT_IMAGE_ISO_PATH
         cmd = "test -f " + iso_path
@@ -599,7 +599,7 @@ def copy_iso(install_output_dir, tuxlab_server, bld_server_conn, load_path, iso_
     ISO_TMP_PATH = "/tmp/iso/" + c0_targetId + "/" + BOOT_IMAGE_ISO
 
     # Check if the ISO is available
-    pre_opts = 'sshpass -p "{0}"'.format(PASSWORD)
+    pre_opts = "sshpass -p '{0}'".format(PASSWORD)
     if not iso_host:
         iso_path = load_path + "/" + BOOT_IMAGE_ISO_PATH
         cmd = "test -f " + iso_path
@@ -896,7 +896,7 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
     '''
 
     patch_names = []
-    pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
+    pre_opts = "sshpass -p '{0}'".format(WRSROOT_PASSWORD)
     for dir_path in patch_dir_paths.split(","):
         if bld_server_conn.exec_cmd("test -d " + dir_path)[0] != 0:
             msg = "Patch directory path {} not found".format(dir_path)
@@ -1250,7 +1250,7 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
 
     # Download configuration files
 
-    pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
+    pre_opts = "sshpass -p '{0}'".format(WRSROOT_PASSWORD)
     bld_server_conn.rsync(LICENSE_FILEPATH, WRSROOT_USERNAME,
                           controller0.host_ip,
                           os.path.join(WRSROOT_HOME_DIR, "license.lic"),
@@ -1296,7 +1296,7 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
     
     bld_server_conn.rsync(os.path.join(CENTOS_GUEST, "latest_tis-centos-guest.img"),
                           WRSROOT_USERNAME, controller0.host_ip, \
-                          WRSROOT_IMAGES_DIR + "/",\
+                          WRSROOT_IMAGES_DIR + "/tis-centos-guest.img",\
                           pre_opts=pre_opts, allow_fail=True)
 
     if small_footprint:
@@ -1398,7 +1398,7 @@ def configureController(bld_server_conn, host_os, install_output_dir, banner, br
         apply_branding(controller0)
 
     # No consistency in naming of config file naming
-    pre_opts = 'sshpass -p "{0}"'.format(WRSROOT_PASSWORD)
+    pre_opts = "sshpass -p '{0}'".format(WRSROOT_PASSWORD)
     cfg_found = False
     if host_os == "centos":
         cfgfile_list = CENTOS_CFGFILE_LIST
