@@ -31,7 +31,7 @@ def skip_module():
 
 
 @fixture(scope='function', autouse=True)
-def hosts_ifup(request):
+def bring_up_hosts(request):
     def recover():
         for host_and_if in IF_DOWN_HOSTS:
             host, infra_if = host_and_if
