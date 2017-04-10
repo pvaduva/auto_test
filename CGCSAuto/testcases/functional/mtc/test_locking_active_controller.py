@@ -30,6 +30,8 @@ def test_locking_active_controller():
         - Checks the output and status of the controller
 
     """
+    if system_helper.is_simplex():
+        skip("Not applicable to Simplex system")
 
     name = system_helper.get_active_controller_name()
     LOG.tc_step("Attempting to lock {}".format(name))

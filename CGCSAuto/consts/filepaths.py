@@ -44,20 +44,18 @@ class BuildServerPath:
     LATEST_HOST_BUILD_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/',
                                '16.10': '/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/',
                                '17.00': '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/latest_build/',
-                              }
+                               }
     TIS_LICENSE_PATHS = {'15.12': ['/folk/cgts/lab/TiS15-GA-full.lic', '/folk/cgts/lab/TiS15.12-CPE-full-dec2016.lic'],
                          '16.10': ['/folk/cgts/lab/TiS16-full.lic', '/folk/cgts/lab/TiS16-CPE-full.lic'],
                          '17.00': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
-                        }
+                         }
 
     PATCH_DIR_PATHS = {'15.12': '/folk/cgts/patches-to-verify/15.12',
                        '16.10': '/folk/cgts/patches-to-verify/16.10',
                        '17.00': None
-                      }
+                       }
 
     GUEST_IMAGE_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',
                          '16.10': '/localdisk/loadbuild/jenkins/CGCS_3.0_Guest_Daily_Build/cgcs-guest.img',
                          '17.00': '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Guest_Build/latest_tis-centos-guest.img'
                          }
-
-

@@ -587,8 +587,9 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
     """
     pre_alarms = list(alarms)   # Don't update the original list
     LOG.info("Waiting for alarms_and_events to disappear from system alarm-list: {}".format(pre_alarms))
-    alarms_to_check = list(pre_alarms)
+    alarms_to_check = pre_alarms.copy()
 
+    alarms_cleared = []
     end_time = time.time() + timeout
     while time.time() < end_time:
         current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
@@ -598,12 +599,13 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
             if alarm not in current_alarms:
                 LOG.info("Removing alarm {} from current alarms_and_events list: {}".format(alarm, alarms_to_check))
                 alarms_to_check.remove(alarm)
+                alarms_cleared.append(alarm)
 
         if not alarms_to_check:
-            LOG.info("Following alarms_and_events cleared: {}".format(pre_alarms))
+            LOG.info("Following alarms_and_events cleared: {}".format(alarms_cleared))
             return True, []
 
-        pre_alarms = alarms_to_check
+        pre_alarms = alarms_to_check.copy()
         time.sleep(check_interval)
 
     else:
@@ -1246,6 +1248,26 @@ def get_host_ports_values(host, header='name', if_name=None, pci_addr=None, proc
     return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
+def get_host_interfaces_table(host, show_all=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get system host-if-list <host> table
+    Args:
+        host (str):
+        show_all (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (dict):
+
+    """
+    args = ''
+    args += ' --a' if show_all else ''
+    args += ' ' + host
+
+    table_ = table_parser.table(cli.system('host-if-list --nowrap', args, ssh_client=con_ssh, auth_info=auth_info))
+    return table_
+
+
 def get_host_interfaces_info(host, rtn_val='name', net_type=None, if_type=None, uses_ifs=None, used_by_ifs=None,
                              show_all=False, strict=True, regex=False, con_ssh=None, auth_info=Tenant.ADMIN,
                              exclude=False, **kwargs):
@@ -1269,12 +1291,7 @@ def get_host_interfaces_info(host, rtn_val='name', net_type=None, if_type=None, 
     Returns (list|dict):
 
     """
-
-    args = ' --nowrap'
-    args += ' --a' if show_all else ''
-    args += ' ' + host
-
-    table_ = table_parser.table(cli.system('host-if-list', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = get_host_interfaces_table(host=host, show_all=show_all, con_ssh=con_ssh, auth_info=auth_info)
 
     args_tmp = {
         'network type': net_type,
@@ -1307,7 +1324,7 @@ def get_host_ports_for_net_type(host, net_type='data', rtn_list=True, con_ssh=No
     Returns:
 
     """
-    table_ = table_parser.table(cli.system('host-if-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = get_host_interfaces_table(host=host, con_ssh=con_ssh, auth_info=auth_info)
     net_ifs_names = table_parser.get_values(table_, 'name', **{'network type': net_type})
     total_ports = {}
     for if_name in net_ifs_names:

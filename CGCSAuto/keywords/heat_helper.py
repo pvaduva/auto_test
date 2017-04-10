@@ -4,6 +4,8 @@ from keywords import network_helper,vm_helper,nova_helper
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 
+from consts.cgcs import GuestImages, HEAT_FLAVORS
+
 
 def _wait_for_heat_stack_deleted(stack_name=None, timeout=120, check_interval=3, con_ssh=None, auth_info=None):
     """
@@ -151,9 +153,9 @@ def get_heat_params(param_name=None):
         net_id = network_helper.get_mgmt_net_id()
         return network_helper.get_net_name_from_id(net_id=net_id)
     elif param_name is 'FLAVOR':
-        return 'small'
+        return 'small_ded'
     elif param_name is 'IMAGE':
-        return 'cgcs-guest'
+        return GuestImages.DEFAULT_GUEST
     else:
         return None
 
