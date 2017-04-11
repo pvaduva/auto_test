@@ -12,6 +12,8 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     bld_server = upgrade_setup['build_server']
 
     force = False
+    controller0 = lab['controller-0']
+    host_helper.ensure_host_provisioned(controller0.name)
     LOG.tc_step("Checking system health for upgrade .....")
     if check_system_health_query_upgrade[0] == 0:
         LOG.info("System health OK for upgrade......")

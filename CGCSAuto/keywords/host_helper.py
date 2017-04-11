@@ -2420,6 +2420,14 @@ def ensure_host_provisioned(host, cons_ssh=None):
     LOG.info("Checking if host {} is already provisioned ....".format(host))
     if is_host_provisioned(host, con_ssh=None):
         return 0, "Host {} is provisioned"
+    active_controller = system_helper.get_active_controller_name()
+    Conter_Swact_back =False
+    if active_controller == host:
+       LOG.tc_step("Swact active controller and ensure active controller is changed")
+       exit_code, output = swact_host(hostname=active_controller)
+       assert 0 == exit_code, "{} is not recognized as active controller".format(active_controller)
+       active_controller = system_helper.get_active_controller_name()
+       Conter_Swact_back = True
 
     LOG.info("Host {} not provisioned ; doing lock/unlock to provision the host ....".format(host))
     rc, output = lock_host(host,con_ssh=cons_ssh)
@@ -2431,10 +2439,16 @@ def ensure_host_provisioned(host, cons_ssh=None):
     if rc != 0:
         err_msg = "Unlock host {} failed: {}".format(host, output)
         raise exceptions.HostError(err_msg)
+    if Conter_Swact_back:
+        LOG.tc_step("Swact active controller back and ensure active controller is changed")
+        exit_code, output = swact_host(hostname=active_controller)
+        assert 0 == exit_code, "{} is not recognized as active controller".format(active_controller)
 
     LOG.info("Checking if host {} is provisioned after lock/unlock ....".format(host))
     if not is_host_provisioned(host, con_ssh=None):
         raise exceptions.HostError("Failed to provision host {}")
+    # Deleay for the alarm to clear . Could be improved.
+    time.sleep(120)
     return 0, "Host {} is provisioned after lock/unlock"
 
 
