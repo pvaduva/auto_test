@@ -77,6 +77,28 @@ def delete_resources_module(request):
     request.addfinalizer(delete_)
 
 
+@fixture(scope='session', autouse=True)
+def delete_resources_session(request):
+    """
+    Module level fixture to delete created resources after each caller testcase.
+
+    Notes: Auto used fixture - import it to a conftest.py file under a feature directory to auto use it on all children
+        testcases.
+
+    Examples:
+        - see nova/conftest.py for importing
+        - see ResourceCleanup.add function usages in nova/test_shared_cpu.py for adding resources to cleanups
+
+    Args:
+        request: pytest param present caller test function
+
+    """
+    def delete_():
+        _delete(ResourceCleanup._get_resources('session'), scope='session')
+        ResourceCleanup._reset('session')
+    request.addfinalizer(delete_)
+
+
 @fixture(scope='module')
 def flavor_id_module():
     """

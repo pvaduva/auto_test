@@ -13,7 +13,6 @@ from keywords import system_helper, vm_helper, nova_helper, cinder_helper, stora
 # Test Fixtures Module #
 ########################
 
-
 @fixture(scope='function')
 def check_alarms(request):
     """

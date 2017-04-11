@@ -23,6 +23,7 @@ DNS_NAMESERVERS = ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
 # Heat template path
 HEAT_PATH = 'heat/hot/simple/'
 HEAT_SCENARIO_PATH = 'heat/hot/scenarios/'
+HEAT_FLAVORS = ['small_ded', 'small_float']
 
 # special NIC patterns
 MELLANOX_DEVICE = 'MT27500|MT27710'
@@ -47,7 +48,7 @@ class GuestImages:
         'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16, 'opensuse_13.qcow2'),
         'win_2012': ('win2012r2.qcow2', 36, 'win_2012.qcow2'),   # Service Team img
         'cgcs-guest': (None, 1, 'cgcs-guest.img'),       # wrl
-        'tis-centos-guest': (None, 2, 'latest_tis-centos-guest.img')
+        'tis-centos-guest': (None, 2, 'tis-centos-guest.img')
     }
 
 
@@ -234,6 +235,10 @@ class EventLogID:
     CON_DRBD_SYNC = '400.001'
     SERVICE_GROUP_STATE_CHANGE = '400.001'
     MTC_MONITORED_PROCESS_FAILURE = '200.006'
+    INFRA_NET_FAIL = '200.009'
+    # 200.004	compute-0 experienced a service-affecting failure. Auto-recovery in progress.
+    # host=compute-0 	critical 	April 7, 2017, 2:34 p.m.
+    HOST_RECOVERY_IN_PROGRESS = '200.004'
 
 
 class NetworkingVmMapping:

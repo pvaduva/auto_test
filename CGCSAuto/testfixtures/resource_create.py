@@ -2,7 +2,7 @@ from pytest import fixture
 
 from utils.tis_log import LOG
 from consts.cgcs import GuestImages
-from keywords import nova_helper, glance_helper, keystone_helper, host_helper
+from keywords import nova_helper, glance_helper, keystone_helper
 
 
 # Session fixture to add affinitiy and anti-affinity server group

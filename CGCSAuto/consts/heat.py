@@ -47,7 +47,7 @@ class HeatUpdate:
     #OS_Nova_Flavor = {}
     #OS_Nova_KeyPair = {}
     #OS_Nova_Server = {}
-    OS_Nova_ServerGroup = {'params':['FLAVOR', 'SIZE'],'new_vals':['small.float', 3]}
+    OS_Nova_ServerGroup = {'params': ['FLAVOR', 'SIZE'], 'new_vals': ['small_float', 3]}
     #WR_Neutron_Port_Forwarding = {}
     #WR_Neutron_ProviderNet = {}
     #WR_Neutron_ProviderNetRange = {}

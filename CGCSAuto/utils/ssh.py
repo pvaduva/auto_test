@@ -342,6 +342,12 @@ class SSHClient:
             else:
                 LOG.warning("No match found for {}. \nexpect timeout.".format(blob_list))
                 raise
+        except Exception:
+            if fail_ok:
+                return -100
+            else:
+                LOG.warning("Exception occurred when expect")
+                raise
 
         # Match found, reformat the outputs
         before_str = self._parse_output(self._session.before)

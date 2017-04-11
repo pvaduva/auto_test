@@ -214,7 +214,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         raise exceptions.HostPostCheckFailed(err_msg)
 
 
-def wait_for_hosts_ready(hosts, con_ssh=None, fail_ok=False):
+def wait_for_hosts_ready(hosts, con_ssh=None):
     """
     Wait for hosts to be in online state is locked, and available and hypervisor/webservice up if unlocked
     Args:
@@ -2828,3 +2828,47 @@ def scp_files_to_controller(host, file_path, dest_dir, controller=None, dest_use
                       dest_file=dest_dir, dest_user=dest_user, dest_password=Host.PASSWORD, dest_server=dest_server,
                       sudo=sudo, fail_ok=fail_ok)
 
+
+def get_host_interfaces_for_net_type(host, net_type='infra', if_type=None, exclude_iftype=False, con_ssh=None):
+    """
+    Get interface names for given net_type that is expected to be listed in ifconfig on host
+    Args:
+        host (str):
+        net_type (str): 'infra', 'mgmt' or 'oam', (data is handled in AVS thus not shown in ifconfig on host)
+        if_type (str|None): When None, interfaces with all eth types will return
+        exclude_iftype(bool): whether or not to exclude the if type specified.
+        con_ssh (SSHClient):
+
+    Returns (list):
+
+    """
+    LOG.info("Getting expected eth names for {} network on {}".format(net_type, host))
+    table_origin = system_helper.get_host_interfaces_table(host=host, con_ssh=con_ssh)
+    table_ = table_parser.filter_table(table_origin, **{'network type': net_type})
+    if if_type:
+        table_ = table_parser.filter_table(table_, exclude=exclude_iftype, **{'type': if_type})
+
+    interfaces = []
+    table_eth = table_parser.filter_table(table_, **{'type': 'ethernet'})
+    eth_ifs = table_parser.get_values(table_eth, 'ports')
+    # such as ["[u'enp134s0f1']", "[u'enp131s0f1']"]
+
+    table_ae = table_parser.filter_table(table_, **{'type': 'ae'})
+    ae_ifs = table_parser.get_values(table_ae, 'uses i/f')
+
+    for ifs in eth_ifs + ae_ifs:
+        interfaces += eval(ifs)
+
+    table_vlan = table_parser.filter_table(table_, **{'type': ['vlan', 'vxlan']})
+    vlan_ifs_ = table_parser.get_values(table_vlan, 'uses i/f')
+    vlan_ids = table_parser.get_values(table_vlan, 'vlan id')
+    for i in range(len(vlan_ifs_)):
+        # assuming only 1 item in 'uses i/f' list
+        vlan_useif = eval(vlan_ifs_[i])[0]
+        vlan_useif_ports = eval(table_parser.get_values(table_origin, 'ports', name=vlan_useif)[0])
+        if vlan_useif_ports:
+            vlan_useif = vlan_useif_ports[0]
+        interfaces.append("{}.{}".format(vlan_useif, vlan_ids[i]))
+
+    LOG.info("Expected eth names for {} network on {}: {}".format(net_type, host, interfaces))
+    return interfaces
