@@ -417,13 +417,16 @@ def search_event(event_id='', type_id='', instance_id='', severity='', start='',
     criteria = []
 
     if event_id:
-        criteria.append('event_log_id="{}"'.format(event_id))
+        #criteria.append('event_log_id="{}"'.format(event_id))
+        criteria.append('event_log_id={}'.format(event_id))
 
     if start:
-        criteria.append('start="{}"'.format(start))
+        #criteria.append('start="{}"'.format(start))
+        criteria.append('start={}'.format(start))
 
     if end:
-        criteria.append('end="{}"'.format(end))
+        #criteria.append('end={}'.format(end))
+        criteria.append('end={}'.format(end))
 
     if type_id:
         criteria.append('entity_type_id="{}"'.format(type_id))
@@ -435,7 +438,11 @@ def search_event(event_id='', type_id='', instance_id='', severity='', start='',
         criteria.append('severity="{}"'.format(severity))
 
     limit = '-l {}'.format(limit) if limit >= 1 else ''
-    query = '-q {}'.format(';'.join(criteria)) if criteria else ''
+
+    query = '' 
+    if criteria:
+        query = '-q "{}"'.format(';'.join(criteria))
+
     cmd = '{} {} {}'.format(base_cmd, limit, query)
 
     table = table_parser.table(cli.system(cmd, ssh_client=con_ssh, auth_info=auth_info))

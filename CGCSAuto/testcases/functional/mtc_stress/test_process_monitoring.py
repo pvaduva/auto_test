@@ -24,6 +24,7 @@ _final_processes_status = {}
 DEF_RETRIES = 2
 DEF_DEBOUNCE = 20
 DEF_INTERVAL = 10
+DEGRADED_TO_AVAILABLE_TIMEOUT = 150
 SM_PROC_TIMEOUT = 90
 KILL_WAIT_RETRIES = 30
 
@@ -720,8 +721,8 @@ class MonitoredProcess:
             return -1
 
         cmd = 'true; n=0; for((;n<{};)); do pid=$(cat {} 2>/dev/null); if [ "x$pid" = "x" ]; then usleep 0.05; ' \
-              'continue; fi; sudo kill -9 $pid &>/dev/null; if [ $? -eq 0 ]; then ((n++)); sleep {}; ' \
-              'else usleep 0.05; fi; done; echo $pid'.format(retries, pid_file, interval)
+              'continue; fi; sudo kill -9 $pid &>/dev/null; if [ $? -eq 0 ]; then ((n++)); usleep `echo "{} - 0.1" | bc -l`; \
+              sleep {}; else usleep 0.05; fi; done; echo $pid'.format(retries, pid_file, interval, interval)
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
 
@@ -806,7 +807,7 @@ class MonitoredProcess:
                 if wait_recover:
                     operational = impact.split('-')[0]
                     if operational == 'disabled' or quorum == '1':
-                        wait_time = HostTimeout.REBOOT
+                        wait_time = HostTimeout.REBOOT + DEGRADED_TO_AVAILABLE_TIMEOUT
                     else:
                         wait_time += 60
 
