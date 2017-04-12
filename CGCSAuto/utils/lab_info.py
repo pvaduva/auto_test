@@ -6,7 +6,7 @@ import sys
 from utils.ssh import SSHClient, CONTROLLER_PROMPT
 from consts.lab import Labs
 from consts.proj_vars import ProjVar
-from consts.auth import Tenant
+from consts.auth import Tenant, HostLinuxCreds
 from keywords import system_helper
 
 
@@ -69,7 +69,7 @@ def __get_lab_ssh(labname, log_dir=None):
     ProjVar.set_var(log_dir=log_dir)
     ProjVar.set_var(lab=lab)
     ProjVar.set_var(source_admin=Tenant.ADMIN)
-    con_ssh = SSHClient(lab['floating ip'], 'wrsroot', 'Li69nux*', CONTROLLER_PROMPT)
+    con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.USER, HostLinuxCreds.PASSWORD, CONTROLLER_PROMPT)
     con_ssh.connect()
     # if 'auth_url' in lab:
     #     Tenant._set_url(lab['auth_url'])

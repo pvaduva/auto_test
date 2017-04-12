@@ -2,7 +2,7 @@ import math
 import time
 import re
 
-from consts.auth import Tenant, Host
+from consts.auth import Tenant, HostLinuxCreds
 from consts.timeout import SysInvTimeout
 from consts.cgcs import UUID, Prompt
 from utils import cli, table_parser, exceptions
@@ -2214,7 +2214,7 @@ def install_upgrade_license(license_path, timeout=30, con_ssh=None):
             con_ssh.send('y')
 
         if index == 1:
-            con_ssh.send(Host.PASSWORD)
+            con_ssh.send(HostLinuxCreds.PASSWORD)
 
         if index == 0:
             rc = con_ssh.exec_cmd("echo $?")[0]

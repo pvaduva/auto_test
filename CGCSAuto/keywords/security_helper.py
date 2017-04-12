@@ -3,12 +3,12 @@ import time
 import random
 from pexpect import EOF
 from consts.cgcs import Prompt
-from consts.auth import Tenant
+from consts.auth import Tenant, HostLinuxCreds
 from utils.ssh import ControllerClient, SSHClient
 
 
 class LinuxUser:
-    users = {'wrsroot': 'Li69nux*'}
+    users = {HostLinuxCreds.USER: HostLinuxCreds.PASSWORD}
     con_ssh = None
 
     def __init__(self, user, password, con_ssh=None):
@@ -72,7 +72,7 @@ class LdapUserManager(object, metaclass=Singleton):
 
     """
 
-    LINUX_ROOT_PASSWORD = 'Li69nux*'
+    LINUX_ROOT_PASSWORD = HostLinuxCreds.PASSWORD
     KEYSTONE_USER_NAME = Tenant.ADMIN['user']
     KEYSTONE_USER_DOMAIN_NAME = 'Default'
     KEYSTONE_PASSWORD = Tenant.ADMIN['password']

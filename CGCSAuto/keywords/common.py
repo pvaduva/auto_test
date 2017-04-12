@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timedelta
 
 from consts.cgcs import Prompt
-from consts.auth import Tenant, SvcCgcsAuto, Host
+from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.proj_vars import ProjVar
 from utils import exceptions
 from utils.tis_log import LOG
@@ -136,8 +136,8 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
 
 
 def scp_to_active_controller(source_path, dest_path='',
-                   dest_user='wrsroot', dest_password='Li69nux*',
-                   timeout=60, is_dir=False):
+                             dest_user=HostLinuxCreds.USER, dest_password=HostLinuxCreds.PASSWORD,
+                             timeout=60, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
 
@@ -147,7 +147,7 @@ def scp_to_active_controller(source_path, dest_path='',
 
 
 def scp_from_active_controller(source_path, dest_path='',
-                               src_user='wrsroot', src_password='Li69nux*',
+                               src_user=HostLinuxCreds.USER, src_password=HostLinuxCreds.PASSWORD,
                                timeout=60, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
@@ -157,8 +157,8 @@ def scp_from_active_controller(source_path, dest_path='',
                         timeout=timeout, is_dir=is_dir)
 
 
-def scp_from_local(source_path, dest_ip, dest_path='/home/wrsroot',
-                   dest_user='wrsroot', dest_password='Li69nux*',
+def scp_from_local(source_path, dest_ip, dest_path=WRSROOT_HOME,
+                   dest_user=HostLinuxCreds.USER, dest_password=HostLinuxCreds.PASSWORD,
                    timeout=60, is_dir=False):
     """
     Scp file(s) from localhost (i.e., from where the automated tests are executed).
@@ -182,7 +182,7 @@ def scp_from_local(source_path, dest_ip, dest_path='/home/wrsroot',
 
 
 def scp_to_local(dest_path, source_ip, source_path,
-                 source_user='wrsroot', source_password='Li69nux*',
+                 source_user=HostLinuxCreds.USER, source_password=HostLinuxCreds.PASSWORD,
                  timeout=60, is_dir=False):
     """
     Scp file(s) to localhost (i.e., to where the automated tests are executed).

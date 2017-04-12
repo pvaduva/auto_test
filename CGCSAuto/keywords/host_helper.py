@@ -8,7 +8,7 @@ from utils import cli, exceptions, table_parser
 from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
 from utils.tis_log import LOG
 
-from consts.auth import Tenant, SvcCgcsAuto, Host
+from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState, Prompt, MELLANOX_DEVICE
 from consts.timeout import HostTimeout, CMDTimeout
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
@@ -2824,8 +2824,8 @@ def scp_files_to_controller(host, file_path, dest_dir, controller=None, dest_use
                             fail_ok=True):
     dest_server = controller if controller else ''
     dest_user = dest_user if dest_user else ''
-    con_ssh.scp_files(source_file=file_path, source_server=host, source_password=Host.PASSWORD, source_user=Host.USER,
-                      dest_file=dest_dir, dest_user=dest_user, dest_password=Host.PASSWORD, dest_server=dest_server,
+    con_ssh.scp_files(source_file=file_path, source_server=host, source_password=HostLinuxCreds.PASSWORD, source_user=HostLinuxCreds.USER,
+                      dest_file=dest_dir, dest_user=dest_user, dest_password=HostLinuxCreds.PASSWORD, dest_server=dest_server,
                       sudo=sudo, fail_ok=fail_ok)
 
 

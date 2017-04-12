@@ -8,7 +8,7 @@ from utils import exceptions, cli
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
 from utils.node import create_node_boot_dict, create_node_dict
-from consts.auth import Tenant, CliAuth, Host
+from consts.auth import Tenant, CliAuth, HostLinuxCreds
 from consts.cgcs import Prompt
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
@@ -26,7 +26,7 @@ def setup_tis_ssh(lab):
     con_ssh = ControllerClient.get_active_controller(fail_ok=True)
 
     if con_ssh is None:
-        con_ssh = SSHClient(lab['floating ip'], 'wrsroot', 'Li69nux*', CONTROLLER_PROMPT)
+        con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.USER, HostLinuxCreds.PASSWORD, CONTROLLER_PROMPT)
         con_ssh.connect(retry=True, retry_timeout=30)
         ControllerClient.set_active_controller(con_ssh)
     # if 'auth_url' in lab:
@@ -123,7 +123,7 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh):
                     con_ssh.send('yes')
                     index = con_ssh.expect([Prompt.PASSWORD_PROMPT, Prompt.CONTROLLER_1])
                 if index == 0:
-                    con_ssh.send(Host.PASSWORD)
+                    con_ssh.send(HostLinuxCreds.PASSWORD)
                     con_ssh.expect()
 
                 con_ssh.exec_sudo_cmd('cp {} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.OPT_PLATFORM), fail_ok=False)
@@ -305,7 +305,7 @@ def copy_files_to_con1():
                 con_0_ssh.send('yes')
 
             if index == 1:
-                con_0_ssh.send(Host.PASSWORD)
+                con_0_ssh.send(HostLinuxCreds.PASSWORD)
 
             if index == 0:
                 output = int(con_0_ssh.exec_cmd('echo $?')[1])
@@ -518,7 +518,7 @@ def scp_vswitch_log(con_ssh, hosts, log_path=None):
         dest_file = "{}_vswitch.info".format(host)
         dest_file = os.path.join(WRSROOT_HOME, dest_file)
         con_ssh.scp_files(source_file, dest_file, source_server=host, dest_server='controller-0',
-                          source_user=Host.USER, source_password=Host.PASSWORD, dest_password=Host.PASSWORD,
+                          source_user=HostLinuxCreds.USER, source_password=HostLinuxCreds.PASSWORD, dest_password=HostLinuxCreds.PASSWORD,
                           dest_user='', timeout=30, sudo=True, sudo_password=None, fail_ok=True)
 
     LOG.info("SCP vswitch log from lab to automation log dir")
@@ -526,5 +526,5 @@ def scp_vswitch_log(con_ssh, hosts, log_path=None):
         log_path = os.path.join(WRSROOT_HOME, '*_vswitch.info')
     source_ip = ProjVar.get_var('LAB')['controller-0 ip']
     dest_dir = ProjVar.get_var('TEMP_DIR')
-    scp_to_local(dest_path=dest_dir, source_user=Host.USER, source_password=Host.PASSWORD, source_path=log_path,
+    scp_to_local(dest_path=dest_dir, source_user=HostLinuxCreds.USER, source_password=HostLinuxCreds.PASSWORD, source_path=log_path,
                  source_ip=source_ip, timeout=60)

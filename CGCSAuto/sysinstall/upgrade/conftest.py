@@ -1,7 +1,7 @@
 import pytest
 import os
 from consts import build_server as build_server_consts
-from consts.auth import SvcCgcsAuto, Host
+from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
 from keywords import install_helper,  patching_helper
 from utils.ssh import ControllerClient, SSHClient
@@ -271,7 +271,7 @@ def apply_patches(lab, server, patch_dir):
 
         patch_dest_dir = WRSROOT_HOME + "/upgrade_patches"
 
-        pre_opts = 'sshpass -p "{0}"'.format(Host.PASSWORD)
+        pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
         server.ssh_conn.rsync(patch_dir + "/*.patch",
                           lab['controller-0 ip'],
                           patch_dest_dir, pre_opts=pre_opts)
