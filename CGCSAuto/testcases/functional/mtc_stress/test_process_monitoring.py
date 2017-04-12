@@ -710,8 +710,8 @@ class MonitoredProcess:
 
         return -1, ()
 
-    def kill_pmon_process_and_verify_impact(self, name, impact, process_type, host, severity='major',
-                                            pid_file='', retries=2, interval=1, wait_recover=True, con_ssh=None):
+    def kill_pmon_process_and_verify_impact(self, name, impact, process_type, host, severity='major', pid_file='',
+                                            retries=2, interval=1, debounce=20, wait_recover=True, con_ssh=None):
         LOG.debug('Kill process and verify system behavior for PMON process:{}, impact={}, process_type={}'.format(
             name, impact, process_type))
         last_events = mtc_helper.search_event(mtc_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id'],
@@ -720,15 +720,19 @@ class MonitoredProcess:
             LOG.error('No pid-file provided')
             return -1
 
-        cmd = 'true; n=0; for((;n<{};)); do pid=$(cat {} 2>/dev/null); if [ "x$pid" = "x" ]; then usleep 0.05; ' \
-              'continue; fi; sudo kill -9 $pid &>/dev/null; if [ $? -eq 0 ]; then ((n++)); usleep `echo "{} - 0.1" | bc -l`; \
-              sleep {}; else usleep 0.05; fi; done; echo $pid'.format(retries, pid_file, interval, interval)
+        wait_after_each_kill = interval + random.randint(1, debounce)
+
+        LOG.info('interval={}, debounce={}, wait_each_kill={}'.format(interval, debounce, wait_after_each_kill))
+
+        cmd = '''true; n=1; last_pid=''; pid=''; for((;n<{};)); do pid=$(cat {} 2>/dev/null); date;
+                if [ "x$pid" = "x" -o "$pid" = "$last_pid" ]; then echo "stale or empty PID:$pid, last_pid=$last_pid";
+                usleep 0.05; continue; fi; sudo kill -9 $pid &>/dev/null;
+                if [ $? -eq 0 ]; then echo "OK $n - $pid killed"; ((n++)); last_pid=$pid; pid=''; sleep {};
+                else usleep 0.05; fi; done; echo $pid'''.format(retries+1, pid_file, wait_after_each_kill)
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
 
         wait_time = max(interval * retries + 60, 60)
-
-        debounce = int(getattr(self, 'debounce', '20'))
 
         self.pid = -1
         for _ in range(2):
@@ -747,7 +751,7 @@ class MonitoredProcess:
                 LOG.warn('Caught exception when running:{}, exception:{}, '
                          'but assuming the process {} was killed'.format(cmd, e, name))
 
-            check_event = False
+            check_event = True
             quorum = 0
             expected = {'operational': 'enabled', 'availability': 'available'}
 
@@ -819,6 +823,18 @@ class MonitoredProcess:
                                   'after been killed {} times'.format(host, expected, retries))
                         return -1
 
+                if check_event:
+                    code, events = self.wait_for_pmon_process_events(
+                        name, host, expected, process_type=process_type, severity=severity,
+                        last_events=last_events, expecting=True, con_ssh=con_ssh)
+
+                    if 0 != code:
+                        LOG.error('No event/alarm raised for process:{}, process_type:{}, host:{}'.format(
+                            name, process_type, host))
+                    else:
+                        found_event = True
+                        LOG.info('found events {} after been killed {} times on host {}'.format(events, retries, host))
+
                 if reached and not found_event:
                     LOG.error('No event/alarm raised for process:{}, process_type:{}, host:{}, '
                               'although host reached expected status:{}'.format(name, process_type, host, expected))
@@ -853,6 +869,7 @@ class MonitoredProcess:
         interval = self.interval
         pid_file = self.pid_file
         severity = self.severity
+        debounce = self.debounce
 
         on_active_controller = (node_type == 'active' and self.host == active_controller)
 
@@ -862,7 +879,7 @@ class MonitoredProcess:
         if process_type == 'pmon':
             code = self.kill_pmon_process_and_verify_impact(name, impact, process_type, host, severity=severity,
                                                             pid_file=pid_file, retries=retries,
-                                                            interval=interval, con_ssh=con_ssh)
+                                                            interval=interval, debounce=debounce, con_ssh=con_ssh)
 
         else:
             pid, host = mtc_helper.kill_sm_process_and_verify_impact(
