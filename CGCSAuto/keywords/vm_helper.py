@@ -1684,17 +1684,28 @@ def reboot_vm(vm_id, hard=False, fail_ok=False, con_ssh=None, auth_info=None, cl
     extra_arg = '--hard ' if hard else ''
     arg = "{}{}".format(extra_arg, vm_id)
 
+    date_format = "%Y%m%d %T"
+    start_time = common.get_date_in_format(date_format=date_format)
     code, output = cli.nova('reboot', arg, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True,
                             timeout=cli_timeout)
 
     if code == 1:
         return 1, output
 
-    expt_reboot = VMStatus.HARD_REBOOT if hard else VMStatus.SOFT_REBOOT
-    _wait_for_vm_status(vm_id, expt_reboot, check_interval=0, fail_ok=False)
+    # expt_reboot = VMStatus.HARD_REBOOT if hard else VMStatus.SOFT_REBOOT
+    # _wait_for_vm_status(vm_id, expt_reboot, check_interval=0, fail_ok=False)
+    LOG.info("Wait for vm reboot events to appear in system event-list")
+    expt_reason = 'hard-reboot' if hard else 'soft-reboot'
+    system_helper.wait_for_events(timeout=30, num=10, entity_instance_id=vm_id, start=start_time, fail_ok=False,
+                                  strict=False, **{'Event Log ID': EventLogID.REBOOT_VM_ISSUED,
+                                                   'Reason Text': expt_reason})
 
+    system_helper.wait_for_events(timeout=reboot_timeout, num=10, entity_instance_id=vm_id, start=start_time,
+                                  fail_ok=False, **{'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
+
+    LOG.info("Check vm status from nova show")
     actual_status = _wait_for_vm_status(vm_id, [VMStatus.ACTIVE, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh,
-                                        timeout=reboot_timeout)
+                                        timeout=30)
     if not actual_status:
         msg = "VM {} did not reach active state after reboot.".format(vm_id)
         LOG.warning(msg)

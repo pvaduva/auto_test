@@ -99,11 +99,13 @@ def bring_up_or_down_infra_on_host(host, infra_if, infra_up=False):
             IF_DOWN_HOSTS.remove(host_and_if)
 
 
-def wait_for_infra_net_fail_events(host, is_standby=False):
+def wait_for_infra_net_fail_events(host, is_standby=False, swacted=False):
     LOG.tc_step('Verify expected events for infra network failure')
     entity_inst_infra_fail = 'host={}.network=Infrastructure'.format(host)
-    system_helper.wait_for_alarm(alarm_id=EventLogID.INFRA_NET_FAIL, entity_id=entity_inst_infra_fail,
-                                 severity='critical', timeout=15, fail_ok=False)
+    if not swacted:
+        # Note: If condition added due to CGTS-6749, which is closed as 'won't fix'
+        system_helper.wait_for_alarm(alarm_id=EventLogID.INFRA_NET_FAIL, entity_id=entity_inst_infra_fail,
+                                     severity='critical', timeout=15, fail_ok=False)
 
     entity_inst_recovery = 'host={}'.format(host)
     res = system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_RECOVERY_IN_PROGRESS, entity_id=entity_inst_recovery,
@@ -187,7 +189,7 @@ def test_infra_network_failure_recovery(host_function):
         LOG.tc_step("Swact controllers to check infra heartbeat status persists with new active controller")
         host_helper.swact_host()
 
-    wait_for_infra_net_fail_events(host=host, is_standby=is_standby)
+    wait_for_infra_net_fail_events(host=host, is_standby=is_standby, swacted=do_swact)
 
     if is_standby:
         LOG.tc_step("Wait for standby controller to stay in degraded state for at least 60 seconds")

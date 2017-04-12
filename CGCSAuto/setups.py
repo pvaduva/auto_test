@@ -299,12 +299,13 @@ def copy_files_to_con1():
         end_time = time.time() + timeout
 
         while time.time() < end_time:
-            index = con_0_ssh.expect([con_0_ssh.prompt, PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout)
+            index = con_0_ssh.expect([con_0_ssh.prompt, PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout,
+                                     searchwindowsize=100)
             if index == 2:
                 con_0_ssh.send('yes')
 
             if index == 1:
-                con_0_ssh.send("Li69nux*")
+                con_0_ssh.send(Host.PASSWORD)
 
             if index == 0:
                 output = int(con_0_ssh.exec_cmd('echo $?')[1])

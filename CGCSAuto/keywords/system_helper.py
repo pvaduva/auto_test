@@ -419,8 +419,9 @@ def unsuppress_all_events(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
     return 0, succ_msg
 
 
-def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, query_key=None, query_value=None,
-                     query_type=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, event_log_id=None, entity_type_id=None,
+                     entity_instance_id=None, severity=None, start=None, end=None, query_key=None,
+                     query_value=None, query_type=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get a list of events with given criteria as dictionary
     Args:
@@ -428,9 +429,15 @@ def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, que
         uuid (bool): whether to show uuid
         show_only (str): 'alarms_and_events' or 'logs' to return only alarms_and_events or logs
         show_suppress (bool): whether or not to show suppressed alarms_and_events
-        query_key (str): one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
-        query_value (str): expected value for given key
-        query_type (str): data type of value. one of these: 'string', 'integer', 'float', 'boolean'
+        query_key (str): OBSOLETE. one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
+        query_value (str): OBSOLETE. expected value for given key
+        query_type (str): OBSOLETE. data type of value. one of these: 'string', 'integer', 'float', 'boolean'
+        event_log_id (str|None): event log id passed to system eventlog -q event_log_id=<event_log_id>
+        entity_type_id (str|None): entity_type_id passed to system eventlog -q entity_type_id=<entity_type_id>
+        entity_instance_id (str|None): entity_instance_id passed to system eventlog -q entity_instance_id=<entity_instance_id>
+        severity (str|None):
+        start (str|None): start date/time passed to '--query' in format "20170410"/"20170410 01:23:34"
+        end (str|None): end date/time passed to '--query' in format "20170410"/"20170410 01:23:34"
         con_ssh (SSHClient):
         auth_info (dict):
 
@@ -438,7 +445,37 @@ def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, que
         dict: events table in format: {'headers': <headers list>, 'values': <list of table rows>}
     """
     args = '-l {}'.format(num)
-    args = __process_query_args(args, query_key, query_value, query_type)
+    if query_key is not None:
+        if query_key in ['event_log_id', 'entity_type_id', 'entity_instance_id', 'severity', 'start', 'end']:
+            if eval(query_key) is not None:
+                LOG.warning("query_key/value params ignored since {} is already specified".format(query_key))
+                query_key = query_value = query_type = None
+
+    # args = __process_query_args(args, query_key, query_value, query_type)
+    query_dict = {
+        'event_log_id': event_log_id,
+        'entity_type_id': entity_type_id,
+        'entity_instance_id': entity_instance_id,
+        'severity': severity,
+        'start': '"{}"'.format(start) if start else None,
+        'end': '"{}"'.format(end) if end else None
+    }
+
+    queries = []
+    for q_key, q_val in query_dict.items():
+        if q_val is not None:
+            queries.append('{}={}'.format(q_key, str(q_val).lower()))
+
+    if query_key is not None:
+        if not query_value:
+            raise ValueError("Query value is not supplied for key - {}".format(query_key))
+        data_type_arg = '' if not query_type else "{}::".format(query_type.lower())
+        queries.append('{}={}{}'.format(query_key.lower(), data_type_arg, query_value.lower()))
+
+    query_string = ';'.join(queries)
+    if query_string:
+        args += " -q '{}'".format(query_string)
+
     args += ' --nowrap --nopaging'
     if uuid:
         args += ' --uuid'
@@ -448,7 +485,20 @@ def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, que
         args += ' --include_suppress'
 
     table_ = table_parser.table(cli.system('event-list ', args, ssh_client=con_ssh, auth_info=auth_info))
+    # table_ = _compose_events_table(table_, uuid=uuid)
     return table_
+
+
+def _compose_events_table(output, uuid=False):
+    if not output['headers']:
+        headers = ['UUID', 'Time Stamp', 'State', 'Event Log ID', 'Reason Text', 'Entity Instance ID', 'Severity']
+        if not uuid:
+            headers.remove('UUID')
+        values = []
+        output['headers'] = headers
+        output['values'] = values
+
+    return output
 
 
 def __process_query_args(args, query_key, query_value, query_type):
@@ -456,13 +506,14 @@ def __process_query_args(args, query_key, query_value, query_type):
         if not query_value:
             raise ValueError("Query value is not supplied for key - {}".format(query_key))
         data_type_arg = '' if not query_type else "{}::".format(query_type.lower())
-        args += ' -q {}={}{}'.format(query_key.lower(), data_type_arg, query_value.lower())
+        args += ' -q {}={}"{}"'.format(query_key.lower(), data_type_arg, query_value.lower())
     return args
 
 
 def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,
                     fail_ok=True, rtn_val='Event Log ID', con_ssh=None, auth_info=Tenant.ADMIN, regex=False,
-                    strict=True, check_interval=3, **kwargs):
+                    strict=True, check_interval=3, event_log_id=None, entity_type_id=None, entity_instance_id=None,
+                    severity=None, start=None, end=None, **kwargs):
     """
     Wait for event(s) to appear in system event-list
     Args:
@@ -480,6 +531,13 @@ def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=No
         regex (bool): Whether to use regex or string operation to search/match the value in kwargs
         strict (bool): whether it's a strict match (case is always ignored regardless of this flag)
         check_interval (int): how often to check the event logs
+        event_log_id (str|None): event log id passed to system eventlog -q event_log_id=<event_log_id>
+        entity_type_id (str|None): entity_type_id passed to system eventlog -q entity_type_id=<entity_type_id>
+        entity_instance_id (str|None): entity_instance_id passed to system eventlog -q entity_instance_id=<entity_instance_id>
+        severity (str|None):
+        start (str|None): start date/time passed to '--query' in format "20170410"/"20170410 01:23:34"
+        end (str|None): end date/time passed to '--query' in format "20170410"/"20170410 01:23:34"
+
         **kwargs: criteria to filter out event(s) from the events list table
 
     Returns:
@@ -488,8 +546,11 @@ def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=No
     """
     end_time = time.time() + timeout
     while time.time() < end_time:
-        events_tab = get_events_table(num=num, uuid=uuid, show_only=show_only, query_key=query_key, query_value=query_value,
-                                      query_type=query_type, con_ssh=con_ssh, auth_info=auth_info)
+        events_tab = get_events_table(num=num, uuid=uuid, show_only=show_only, event_log_id=event_log_id,
+                                      entity_type_id=entity_type_id, entity_instance_id=entity_instance_id,
+                                      severity=severity, start=start, end=end, query_key=query_key,
+                                      query_value=query_value, query_type=query_type,
+                                      con_ssh=con_ssh, auth_info=auth_info)
         events_tab = table_parser.filter_table(events_tab, strict=strict, regex=regex, **kwargs)
         events = table_parser.get_column(events_tab, rtn_val)
         if events:
@@ -498,11 +559,7 @@ def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=No
 
         time.sleep(check_interval)
 
-    criteria = ['{}={}'.format(key, value) for key, value in kwargs.items()]
-    criteria = ';'.join(criteria)
-    criteria += ";{}={}".format(query_key, query_value) if query_key else ''
-
-    msg = "Event(s) did not appear in system event-list within timeout. Criteria: {}".format(criteria)
+    msg = "Event(s) did not appear in system event-list within timeout."
     if fail_ok:
         LOG.warning(msg)
         return []

@@ -455,3 +455,18 @@ def wait_for_process(ssh_client, process, sudo=False, disappear=False, timeout=6
                                                   exclude=disappear, non_zero_rtn_ok=True, sudo=sudo, fail_ok=fail_ok)
 
     return res
+
+
+def get_date_in_format(ssh_client=None, date_format="%Y%m%d %T"):
+    """
+    Get date in given format.
+    Args:
+        ssh_client (SSHClient):
+        date_format (str): Please see date --help for valid format strings
+
+    Returns (str): date output in given format
+
+    """
+    if ssh_client is None:
+        ssh_client = ControllerClient.get_active_controller()
+    return ssh_client.exec_cmd("date +'{}'".format(date_format), fail_ok=False)[1]

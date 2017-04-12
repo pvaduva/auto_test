@@ -294,9 +294,9 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
 
     events_2 = system_helper.wait_for_events(timeout=EventLogTimeout.HEALTH_CHECK_FAIL, strict=False, fail_ok=True,
                                              **{'Entity Instance ID': vm_id, 'Event Log ID': [
-                                                EventLogID.SOFT_REBOOT_BY_VM, EventLogID.HEARTBEAT_CHECK_FAILED]})
+                                                EventLogID.REBOOT_VM_ISSUED, EventLogID.HEARTBEAT_CHECK_FAILED]})
 
-    assert EventLogID.SOFT_REBOOT_BY_VM not in events_2, "Auto recovery is triggered even if it's set to false."
+    assert EventLogID.REBOOT_VM_ISSUED not in events_2, "Auto recovery is triggered even if it's set to false."
 
     if heartbeat_enabled:
         assert EventLogID.HEARTBEAT_CHECK_FAILED in events_2, "VM heartbeat failure is not logged."
