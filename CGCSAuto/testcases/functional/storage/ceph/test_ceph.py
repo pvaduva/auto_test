@@ -375,22 +375,34 @@ def test_ceph_reboot_storage_node():
 
         LOG.tc_step('Check that OSDs are up')
         osd_list = storage_helper.get_osds(host, con_ssh)
-        for osd_id in osd_list:
-            osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
-            msg = 'OSD ID {} is down but should be up'.format(osd_id)
-            assert osd_up, msg
-            msg = 'OSD ID {} is up as expected'.format(osd_id)
-            LOG.info(msg)
+        down_list = osd_list.copy()
+        all_osds_up = False
+        end_time = time.time() + 60
+        while time.time() < end_time and not all_osds_up:
+            for osd_id in osd_list:
+                osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
+                if osd_up:
+                    msg = 'OSD ID {} is up as expected'.format(osd_id)
+                    LOG.info(msg)
+                    down_list.remove(osd_id)
+            if len(down_list) > 0:
+                osd_list = down_list.copy()
+            else:
+                msg = ' All OSDs are up as expected'
+                LOG.info(msg)
+                all_osds_up = True
 
-        # LOG.tc_step('Get alarms list')
-        # alarms_table = system_helper.get_alarms(con_ssh=None)
-        # reasons = table_parser.get_values(alarms_table, 'Reason Text')
-        # msg = '{0} \'ceph mon\' process has failed'.format(host)
-        # assert not re.search(msg, reasons), \
-        #     'Alarm {} system alarm-list'.format(msg)
+        assert all_osds_up, " One or more OSD(s) {}  is(are) down but should be up".format(down_list)
+
+
 
         LOG.tc_step('Check health of CEPH cluster')
-        ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+        end_time = time.time() + 40
+        while time.time() < end_time:
+            ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+            if ceph_healthy == True:
+                break
+
         assert ceph_healthy, msg
 
 
@@ -454,13 +466,8 @@ def test_lock_stor_check_osds_down(host):
     LOG.info(msg)
 
     LOG.tc_step('Check that host lock alarm is raised when {} is locked'.format(host))
-    query_value = 'host={}'.format(host)
-    alarms_table = system_helper.get_alarms_table(query_key='entity_instance_id',
-                                                  query_value=query_value,
-                                                  query_type='string')
-    LOG.info(alarms_table)
-    msg = "Alarm {} was not found in alarm-list".format(EventLogID.HOST_LOCK)
-    assert EventLogID.HOST_LOCK in str(alarms_table), msg
+    assert system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_LOCK, fail_ok=True)[0], "Alarm {} not raised"\
+        .format(EventLogID.HOST_LOCK)
 
     LOG.tc_step('Check health of CEPH cluster')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
@@ -480,24 +487,14 @@ def test_lock_stor_check_osds_down(host):
         LOG.info(msg)
 
     # Wait for alarms to be raised
-    time.sleep(15)
-
     # 800.011   Loss of replication in replication group group-0: OSDs are down
-    alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
-                                                  query_value=EventLogID.STORAGE_LOR,
-                                                  query_type='string')
-    LOG.info(alarms_table)
-    msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_LOR)
-    assert EventLogID.STORAGE_LOR in str(alarms_table), msg
+    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR, fail_ok=True)[0], "Alarm {} not raised"\
+        .format(EventLogID.STORAGE_LOR)
 
     # 800.001   Storage Alarm Condition: Pgs are degraded/stuck/blocked. Please
     # check 'ceph -s' for more details
-    alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
-                                                  query_value=EventLogID.STORAGE_ALARM_COND,
-                                                  query_type='string')
-    LOG.info(alarms_table)
-    msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_ALARM_COND)
-    assert EventLogID.STORAGE_ALARM_COND in str(alarms_table), msg
+    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND, fail_ok=True)[0], "Alarm {} not raised"\
+        .format(EventLogID.STORAGE_ALARM_COND)
 
     LOG.tc_step('Unlock storage node')
     rtn_code, out = host_helper.unlock_host(host)
@@ -517,29 +514,16 @@ def test_lock_stor_check_osds_down(host):
 
     # Check that alarms clear
     LOG.tc_step('Check that host lock alarm is cleared when {} is unlocked'.format(host))
-    query_value = 'host={}'.format(host)
-    alarms_table = system_helper.get_alarms_table(query_key='entity_instance_id',
-                                                  query_value=query_value,
-                                                  query_type='string')
-    LOG.info(alarms_table)
-    msg = "Alarm {} found in alarm-list".format(EventLogID.HOST_LOCK)
-    assert EventLogID.HOST_LOCK not in str(alarms_table), msg
+
+    assert system_helper.wait_for_alarm_gone(EventLogID.HOST_LOCK, fail_ok=True), "Alarm {} not cleared"\
+        .format(EventLogID.HOST_LOCK)
 
     LOG.tc_step('Check that the replication group alarm is cleared')
-    alarms_table = system_helper.get_alarms_table(con_ssh)
-    LOG.info(alarms_table)
-    ids = table_parser.get_values(alarms_table, 'Alarm ID')
-    for alarm_id in ids:
-        assert alarm_id != EventLogID.STORAGE_LOR, \
-            'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_LOR)
-
+    assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_LOR, fail_ok=True), "Alarm {} not cleared"\
+        .format(EventLogID.STORAGE_LOR)
     LOG.tc_step('Check that the Storage Alarm Condition is cleared')
-    alarms_table = system_helper.get_alarms_table(con_ssh)
-    LOG.info(alarms_table)
-    ids = table_parser.get_values(alarms_table, 'Alarm ID')
-    for alarm_id in ids:
-        assert alarm_id != EventLogID.STORAGE_ALARM_COND, \
-            'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
+    assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_ALARM_COND, fail_ok=True), "Alarm {} not cleared"\
+        .format(EventLogID.STORAGE_ALARM_COND)
 
     LOG.tc_step('Check OSDs are up after unlock')
     for osd_id in osd_list:
@@ -592,21 +576,12 @@ def test_lock_cont_check_mon_down():
     time.sleep(5)
 
     LOG.tc_step('Check that storage degrade alarm is raised when {} is locked'.format(host))
-    alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
-                                                  query_value=EventLogID.STORAGE_ALARM_COND,
-                                                  query_type='string')
-    LOG.info(alarms_table)
-    msg = 'Alarm {} not found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
-    assert len(alarms_table) == 2, msg
+    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND, fail_ok=True)[0], "Alarm {} not raised"\
+        .format(EventLogID.STORAGE_ALARM_COND)
 
     LOG.tc_step('Check that host lock alarm is raised when {} is locked'.format(host))
-    query_value = 'host={}'.format(host)
-    alarms_table = system_helper.get_alarms_table(query_key='entity_instance_id',
-                                                  query_value=query_value,
-                                                  query_type='string')
-    LOG.info(alarms_table)
-    msg = "Alarm {} not found in alarm-list".format(EventLogID.HOST_LOCK)
-    assert EventLogID.HOST_LOCK in str(alarms_table), msg
+    assert system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_LOCK, fail_ok=True)[0], "Alarm {} not raised"\
+        .format(EventLogID.HOST_LOCK)
 
     LOG.tc_step('Check OSDs are still up after lock')
     osd_list = storage_helper.get_osds(con_ssh=con_ssh)
@@ -621,29 +596,23 @@ def test_lock_cont_check_mon_down():
     rtn_code, out = host_helper.unlock_host(host)
     assert rtn_code == 0, out
 
-    # Wait for alarm to clear
-    time.sleep(20)
-
     # Check that alarms clear
     LOG.tc_step('Check that the host locked alarm is cleared')
-    query_value = 'host={}'.format(host)
-    alarms_table = system_helper.get_alarms_table(query_key='entity_instance_id',
-                                                  query_value=query_value,
-                                                  query_type='string')
-    LOG.info(alarms_table)
-    msg = "Alarm {} not found in alarm-list".format(EventLogID.HOST_LOCK)
-    assert EventLogID.HOST_LOCK not in str(alarms_table), msg
+    assert system_helper.wait_for_alarm_gone(EventLogID.HOST_LOCK, fail_ok=True), "Alarm {} not cleared"\
+        .format(EventLogID.HOST_LOCK)
 
     LOG.tc_step('Check that the Storage Alarm Condition is cleared')
-    alarms_table = system_helper.get_alarms_table(con_ssh)
-    LOG.info(alarms_table)
-    ids = table_parser.get_values(alarms_table, 'Alarm ID')
-    for alarm_id in ids:
-        assert alarm_id != EventLogID.STORAGE_ALARM_COND, \
-            'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
+    assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_ALARM_COND, fail_ok=True), "Alarm {} not cleared"\
+        .format(EventLogID.STORAGE_ALARM_COND)
 
     LOG.tc_step('Check health of CEPH cluster')
-    ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+    health = False
+    end_time = time.time() + 40
+    while time.time() < end_time:
+        ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+        if ceph_healthy:
+            break
+    assert ceph_healthy, msg
 
 
 # Pass on PV0 in 797.17 seconds
@@ -705,12 +674,8 @@ def test_storgroup_semantic_checks():
         assert not ceph_healthy, msg
 
         LOG.tc_step('Check that alarms are raised when {} is locked'.format(host))
-        alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
-                                                      query_value=EventLogID.HOST_LOCK,
-                                                      query_type='string')
-        LOG.info(alarms_table)
-        msg = "Alarm {} not found in alarm-list".format(EventLogID.HOST_LOCK)
-        assert len(alarms_table) == 2, msg
+        assert system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_LOCK, fail_ok=True)[0], "Alarm {} not raised"\
+            .format(EventLogID.HOST_LOCK)
 
         LOG.tc_step('Check that OSDs are down')
         osd_list = storage_helper.get_osds(host, con_ssh)
@@ -726,22 +691,14 @@ def test_storgroup_semantic_checks():
 
         # Check for loss of replication group alarm
         # 800.011   Loss of replication in replication group group-0: OSDs are down
-        alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
-                                                      query_value=EventLogID.STORAGE_LOR,
-                                                      query_type='string')
-        LOG.info(alarms_table)
-        msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_LOR)
-        assert len(alarms_table) == 2, msg
+        assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR, fail_ok=True)[0], "Alarm {} not raised"\
+            .format(EventLogID.STORAGE_LOR)
 
         # Check for Storage Alarm Condition
         # 800.001   Storage Alarm Condition: Pgs are degraded/stuck/blocked. Please
         # check 'ceph -s' for more details
-        alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
-                                                      query_value=EventLogID.STORAGE_LOR,
-                                                      query_type='string')
-        LOG.info(alarms_table)
-        msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_LOR)
-        assert len(alarms_table) == 2, msg
+        assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND, fail_ok=True)[0], "Alarm {} not raised"\
+            .format(EventLogID.STORAGE_ALARM_COND)
 
         if host == 'storage-0':
             hosts.append('controller-0')
@@ -763,48 +720,40 @@ def test_storgroup_semantic_checks():
 
         # Waita bit for alarms to clear
         # TODO: Why does it take so long to clear?
-        cleared = False
-        end_time = time.time() + 60
-        while time.time() < end_time:
-            LOG.info("Check if alarms have cleared")
-            alarms_table = system_helper.get_alarms_table(con_ssh)
-            LOG.info(alarms_table)
-            ids = table_parser.get_values(alarms_table, 'Alarm ID')
-            if EventLogID.HOST_LOCK not in ids and EventLogID.STORAGE_LOR not in ids \
-               and EventLogID.STORAGE_ALARM_COND not in ids:
-                cleared = True
-                break
-
-        err_alarms = [EventLogID.HOST_LOCK, EventLogID.STORAGE_LOR, EventLogID.STORAGE_ALARM_COND]
-        assert cleared, "Alarm(s) did not clear. Current alarm ids: {}. Alarms that should be cleared: {}"\
-                        .format(ids, err_alarms)
+        LOG.info("Check if alarms have cleared")
+        assert system_helper.wait_for_alarm_gone(EventLogID.HOST_LOCK, fail_ok=True), "Alarm {} not cleared"\
+            .format(EventLogID.HOST_LOCK)
+        assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_LOR, fail_ok=True), "Alarm {} not cleared"\
+            .format(EventLogID.STORAGE_LOR)
+        assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_ALARM_COND, fail_ok=True), "Alarm {} not cleared"\
+            .format(EventLogID.STORAGE_ALARM_COND)
 
         # Check that alarms clear
         # TODO this should not be needed anymore
-        LOG.tc_step('Check that the host locked alarm is cleared')
-        alarms_table = system_helper.get_alarms_table(con_ssh)
-        LOG.info(alarms_table)
-        ids = table_parser.get_values(alarms_table, 'Alarm ID')
-        for alarm_id in ids:
-            LOG.info("This is ID: {}".format(id))
-            assert alarm_id != EventLogID.HOST_LOCK, \
-                'Alarm ID {} was found in alarm-list'.format(EventLogID.HOST_LOCK)
-
-        LOG.tc_step('Check that the replication group alarm is cleared')
-        alarms_table = system_helper.get_alarms_table(con_ssh)
-        LOG.info(alarms_table)
-        ids = table_parser.get_values(alarms_table, 'Alarm ID')
-        for alarm_id in ids:
-            assert alarm_id != EventLogID.STORAGE_LOR, \
-                'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_LOR)
-
-        LOG.tc_step('Check that the Storage Alarm Condition is cleared')
-        alarms_table = system_helper.get_alarms_table(con_ssh)
-        LOG.info(alarms_table)
-        ids = table_parser.get_values(alarms_table, 'Alarm ID')
-        for alarm_id in ids:
-            assert alarm_id != EventLogID.STORAGE_ALARM_COND, \
-                'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
+        # LOG.tc_step('Check that the host locked alarm is cleared')
+        # alarms_table = system_helper.get_alarms_table(con_ssh)
+        # LOG.info(alarms_table)
+        # ids = table_parser.get_values(alarms_table, 'Alarm ID')
+        # for alarm_id in ids:
+        #     LOG.info("This is ID: {}".format(id))
+        #     assert alarm_id != EventLogID.HOST_LOCK, \
+        #         'Alarm ID {} was found in alarm-list'.format(EventLogID.HOST_LOCK)
+        #
+        # LOG.tc_step('Check that the replication group alarm is cleared')
+        # alarms_table = system_helper.get_alarms_table(con_ssh)
+        # LOG.info(alarms_table)
+        # ids = table_parser.get_values(alarms_table, 'Alarm ID')
+        # for alarm_id in ids:
+        #     assert alarm_id != EventLogID.STORAGE_LOR, \
+        #         'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_LOR)
+        #
+        # LOG.tc_step('Check that the Storage Alarm Condition is cleared')
+        # alarms_table = system_helper.get_alarms_table(con_ssh)
+        # LOG.info(alarms_table)
+        # ids = table_parser.get_values(alarms_table, 'Alarm ID')
+        # for alarm_id in ids:
+        #     assert alarm_id != EventLogID.STORAGE_ALARM_COND, \
+        #         'Alarm ID {} found in alarm-list'.format(EventLogID.STORAGE_ALARM_COND)
 
         # TODO: If storage host is a storage monitor, ensure the monitor alarm clears
         # We're not even seeing the monitor alarm
@@ -872,8 +821,9 @@ def test_import_with_cache_raw():
     if not image_names:
         LOG.info('No qcow2 images were found on the system')
         LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
-        image_names = storage_helper.download_images(dload_type='ubuntu',
+        storage_helper.download_images(dload_type='ubuntu',
             img_dest=img_dest, con_ssh=con_ssh)
+        image_names = storage_helper.find_images(con_ssh)
 
     LOG.tc_step('Import qcow2 images into glance')
     for image in image_names:
@@ -1073,18 +1023,11 @@ def _test_exceed_size_of_img_pool():
     else:
         raise exceptions.TimeoutException("Timed out (2 hours) filling out image pool.")
 
-    # Wait for alarm to appear
-    time.sleep(10)
-
     # 800.001   Storage Alarm Condition: Pgs are degraded/stuck/blocked.
     # Please check 'ceph -s' for more details
     LOG.tc_step('Query alarms for ceph alarms')
-    alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
-                                                  query_value=EventLogID.STORAGE_ALARM_COND,
-                                                  query_type='string')
-    LOG.info(alarms_table)
-    msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_ALARM_COND)
-    assert EventLogID.STORAGE_ALARM_COND in str(alarms_table), msg
+    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND, fail_ok=True), "Alarm {} not raised"\
+        .format(EventLogID.STORAGE_ALARM_COND)
 
     LOG.tc_step('Verify the health cluster is not healthy')         # yang TODO verify healthy or unhealthy?
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
@@ -1248,12 +1191,8 @@ def _test_modify_ceph_pool_size():
     total_used = glance_pool_gib + cinder_pool_gib + ephemeral_pool_gib
     if total_used != ceph_total_space_gib:
         # Check for 800.003 Ceph cluster has free space unused by storage pool quotas
-        alarms_table = system_helper.get_alarms_table(query_key='alarm_id',
-                                                      query_value=EventLogID.STORAGE_POOLQUOTA,
-                                                      query_type='string')
-        LOG.info(alarms_table)
-        msg = "Alarm {} not found in alarm-list".format(EventLogID.STORAGE_POOLQUOTA)
-        assert EventLogID.STORAGE_POOLQUOTA in str(alarms_table)
+        assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_POOLQUOTA, fail_ok=True),\
+            "Alarm {} not raised".format(EventLogID.STORAGE_POOLQUOTA)
 
         # Add the free space to the glance_pool_gib
         total_available = ceph_total_space_gib - total_used

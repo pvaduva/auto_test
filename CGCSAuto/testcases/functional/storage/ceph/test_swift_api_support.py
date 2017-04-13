@@ -136,7 +136,7 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
             LOG.tc_step("Enabling SWIFT object store .....")
 
     else:
-        assert pre_swift_check()[0], pre_swift_check[1]
+        assert pre_swift_check[0], pre_swift_check[1]
 
         unallocated_gib = int(ceph_backend_info['ceph_total_space_gib']) - \
                            (int(ceph_backend_info['cinder_pool_gib']) +
