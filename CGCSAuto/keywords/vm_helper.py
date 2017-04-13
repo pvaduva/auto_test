@@ -329,7 +329,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             return 1, vm_ids, output
 
         result, vms_in_state, vms_failed_to_reach_state = _wait_for_vms_values(vm_ids,fail_ok=True, timeout=tmout,
-                                                                                con_ssh=con_ssh, auth_info=auth_info)
+                                                                               con_ssh=con_ssh, auth_info=auth_info)
         if not result:
             msg = "VMs failed to reach ACTIVE state: {}".format(vms_failed_to_reach_state)
             if fail_ok:
@@ -1930,7 +1930,7 @@ def parse_cpu_list(list_in_str, prefix=''):
             if not cpus:
                 continue
             if '-' in cpus:
-                b, e = cpus.split('-')[0:2]
+                b, e = str(cpus).split(sep='-')[0:2]
                 results += list(range(int(b), int(e) + 1))
             else:
                 results.append(int(cpus))
@@ -1940,13 +1940,13 @@ def parse_cpu_list(list_in_str, prefix=''):
 def _parse_cpu_siblings(siblings_str):
     results = []
 
-    found = re.search(r'[,]?\s*siblings:\s*((\{\d+\,\d+\})(,(\{\d+\,\d+\}))*)', siblings_str, re.IGNORECASE)
+    found = re.search(r'[,]?\s*siblings:\s*((\{\d+,\d+\})(,(\{\d+,\d+\}))*)', siblings_str, re.IGNORECASE)
 
     if found:
         for cpus in found.group(1).split('},'):
             if not cpus:
                 continue
-            n1, n2 = cpus[1:].split(',')
+            n1, n2 = str(cpus[1:]).split(',')
             results.append((n1, n2))
 
     return results
@@ -1958,7 +1958,10 @@ def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None, retri
 
     Args:
         vm_id (str):
+        hypervisor
         con_ssh:
+        retries
+        retry_interval
 
     Returns (pci_info, vm_topology): details of the PCI device and VM topology
         Examples:
@@ -2006,7 +2009,7 @@ def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None, retri
     prev_pci_addr = None
     for line in details.splitlines():
         if stage == 0:
-            begin =  re.match(r'^\s*\|\s*{}\s*\|\s*([^\|]+)\s*\|\s*([^\|]+)\|\s*'.format(vm_id), line)
+            begin = re.match(r'^\s*\|\s*{}\s*\|\s*([^\|]+)\s*\|\s*([^\|]+)\|\s*'.format(vm_id), line)
             if begin:
                 topology_str = begin.group(1)
                 numa_node = re.search(r'node:\s*(\d+)', topology_str, re.IGNORECASE)
@@ -2034,8 +2037,7 @@ def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None, retri
                 continue
 
         elif stage == 1:
-            pci_info = re.match(
-                '\|\s*node:(\d+)\,\s*addr:(\w{4}:\w{2}:\w{2}\.\w),\s*type:([^\,]+),\s*vendor:([^\,]+),\s*product:([^\|]+)\s*\|', line)
+            pci_info = re.match('\|\s*node:(\d+)\,\s*addr:(\w{4}:\w{2}:\w{2}\.\w),\s*type:([^,]+),\s*vendor:([^,]+),\s*product:([^\|]+)\s*\|', line)
 
             if pci_info:
                 pci_numa_node, pci_addr, pci_type, vendor, product = pci_info.groups()
@@ -2216,6 +2218,7 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
         vm_id (str):
         net_seg_id (int|str|dict): such as 1792
         retry (int): max number of times to reboot vm to try to recover it from non-exit
+        exclude_nets (list|None): network names to exclude
         guest_os (str): guest os type. Default guest os assumed if None is given.
 
     Returns: None
@@ -2664,6 +2667,7 @@ def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, a
         con_ssh (SSHClient):
         fail_ok (bool): True if fail ok. Default to False, ie., throws exception upon cold migration fail.
         auth_info (dict):
+        vm_image_name
 
     Returns (tuple): (rtn_code, message)
         (0, success_msg) # Cold migration and confirm/revert succeeded. VM is back to original state or Active state.
@@ -3157,8 +3161,7 @@ def boot_vms_various_types(storage_backing=None, target_host=None, scope='functi
 
     wait_for_vm_pingable_from_natbox(vm3)
 
-    LOG.info("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it "
-                "pingable from NatBox")
+    LOG.info("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it pingable from NatBox")
     vm4_name = 'image_root_attachvol'
     vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone='nova', vm_host=target_host, cleanup=scope)[1]
 
