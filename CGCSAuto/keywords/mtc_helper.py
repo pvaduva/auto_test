@@ -62,7 +62,7 @@ KILL_PROC_EVENT_FORMAT = {
         #  host=controller-1.process=sm
         'critical': (
                 r'([^\s]+) ([^\s]+) \'([^\']+)\' process has ([^\s]+) and could not be auto-recovered gracefully. '
-                r'Auto recovery progression by host reboot is required and in progress.',
+                r'Auto.recovery progression by host reboot is required and in progress.',
                 r'host=([^\.]+)\.process=([^\s]+)'
              ),
         # compute-2 is degraded due to the failure of its 'fsmond' process. Auto recovery of this major

@@ -720,7 +720,7 @@ class MonitoredProcess:
             LOG.error('No pid-file provided')
             return -1
 
-        wait_after_each_kill = interval + random.randint(1, debounce)
+        wait_after_each_kill = random.randint(interval, debounce)
 
         LOG.info('interval={}, debounce={}, wait_each_kill={}'.format(interval, debounce, wait_after_each_kill))
 
@@ -906,7 +906,7 @@ class MonitoredProcess:
 @mark.parametrize(('process_name'), [
     mark.p1(('sm')),
     # TODO CGTS-6451
-    # mark.p1(('rmond')),
+    mark.p1(('rmond')),
     mark.p1(('fsmond')),
     mark.p1(('hbsClient')),
     mark.p1(('mtcClient')),
@@ -917,11 +917,11 @@ class MonitoredProcess:
     mark.p1(('sw-patch-controller-daemon')),
     mark.p1(('sw-patch-agent')),
     # TODO jira?
-    # mark.p1(('acpid')),
+    mark.p1(('acpid')),
     mark.p1(('ceilometer-polling')),
     mark.p1(('mtclogd')),
     # TODO need manual configuring
-    # mark.p1(('ntpd')),
+    mark.p1(('ntpd')),
     mark.p1(('sm-eru')),
     mark.p1(('sshd')),
     mark.p1(('syslog-ng')),
