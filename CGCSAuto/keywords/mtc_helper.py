@@ -635,7 +635,7 @@ def _check_status_after_killing_process(service, host, target_status, expecting=
 
 
 def check_impact(impact, service_name, host='', last_events=None,
-                 expecting_impact=False, process_type='sm', con_ssh=None, **kwargs):
+                 expecting_impact=False, process_type='sm', con_ssh=None, timeout=80, **kwargs):
     """
     Check if the expected IMPACT happens (or NOT) on the specified host
 
@@ -663,12 +663,11 @@ def check_impact(impact, service_name, host='', last_events=None,
     prev_active = kwargs.get('active_controller', 'controller-0')
     prev_standby = kwargs.get('standby_controller', 'controller-1')
     severity = kwargs.get('severity', 'major')
-    timeout = 80
 
     if impact in ('swact'):
         if expecting_impact:
             return is_controller_swacted(prev_active, prev_standby, con_ssh=con_ssh,
-                                         swact_start_timeout=20, swact_complete_timeout=timeout)
+                                         swact_start_timeout=max(timeout/2, 20), swact_complete_timeout=timeout)
         else:
             return not is_controller_swacted(prev_active, prev_standby, con_ssh=con_ssh, swact_start_timeout=timeout/4)
 

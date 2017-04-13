@@ -730,13 +730,14 @@ class MonitoredProcess:
             LOG.error('No pid-file provided')
             return -1
 
-        if 0 <= interval < debounce - 1:
+        if 0 <= interval <= debounce - 1:
             wait_after_each_kill = max(random.randint(interval, debounce - 1), 1)
         else:
             msg = 'Debounce time period is smaller than interval? Error in configuration. Skip the test! ' \
                   'interval={} debounce={}'.format(interval, debounce)
             LOG.warn(msg)
             skip(msg)
+            return -1
 
         LOG.info('interval={}, debounce={}, wait_each_kill={}'.format(interval, debounce, wait_after_each_kill))
 
