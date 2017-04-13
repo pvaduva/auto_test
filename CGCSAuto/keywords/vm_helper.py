@@ -3060,6 +3060,22 @@ def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None
 
 
 def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up=False, fail_ok=False):
+    """
+    Evacuate given vms by rebooting their host. VMs should be on specified host already when this keyword called.
+    Args:
+        host (str): host to reboot
+        vms_to_check (list): vms to check status for after host reboot
+        con_ssh (SSHClient):
+        timeout (int): Max time to wait for vms to reach active state after reboot -f initiated on host
+        wait_for_host_up (bool): whether to wait for host reboot completes before checking vm status
+        fail_ok (bool): whether to return or to fail test when vm(s) failed to evacuate
+
+    Returns (tuple): (<code> (int), <vms_failed_to_evac> (list))
+        - (0, [])   all vms evacuated successfully. i.e., active state, host changed, pingable from NatBox
+        - (1, <inactive_vms>)   some vms did not reach active state after host reboot
+        - (2, <vms_host_err>)   some vms' host did not change after host reboot
+
+    """
 
     LOG.info("Evacuate following vms from {}: {}".format(host, vms_to_check))
     host_helper.reboot_hosts(host, wait_for_reboot_finish=wait_for_host_up, con_ssh=con_ssh)
@@ -3099,6 +3115,22 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
 
 
 def boot_vms_various_types(storage_backing=None, target_host=None, scope='function'):
+    """
+    Boot following 5 vms and ensure they are pingable from NatBox:
+        - vm1: ephemeral=0, swap=0, boot_from_volume
+        - vm2: ephemeral=1, swap=1, boot_from_volume
+        - vm3: ephemeral=0, swap=0, boot_from_image
+        - vm4: ephemeral=0, swap=0, boot_from_image, attach_volume
+        - vm5: ephemeral=1, swap=1, boot_from_image
+    Args:
+        storage_backing (str|None): storage backing to set in flavor spec. When None, storage backing which used by
+            most up hypervisors will be used.
+        target_host (str|None): Boot vm on target_host when specified. (admin role has to be added to tenant under test)
+        scope (str): Scope for resource cleanup, valid values: 'function', 'class', 'module'
+
+    Returns (list): list of vm ids
+
+    """
     LOG.info("Create a flavor without ephemeral or swap disks")
     flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', flavor_1, scope=scope)

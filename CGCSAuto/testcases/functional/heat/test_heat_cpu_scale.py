@@ -166,7 +166,7 @@ def _test_heat_cpu_scale(action):
     # remove the tmp file in the vm
     LOG.tc_step("removing /tmp/vote_no_to_stop in vm")
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id_after_scale) as vm_ssh:
-        vm_ssh.exec_cmd("rm /tmp/vote_no_to_stop")
+        vm_ssh.exec_cmd("rm -f /tmp/vote_no_to_stop")
 
     # wait for vm to be deleted
     LOG.tc_step("Checking that the Vm is removed now")
