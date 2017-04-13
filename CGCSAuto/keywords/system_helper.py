@@ -1780,14 +1780,13 @@ def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh
                  "There may be cli errors when active controller's config updates")
         end_time = time.time() + timeout
         while time.time() < end_time:
-            res, out = cli.system('alarm-list', '--uuid', ssh_client=con_ssh, fail_ok=True)
-            if res == 0:
-                alarms_tab = table_parser.filter_table(table_parser.table(out), **{'Alarm ID': alarm_id})
-                alarms_tab = _compose_alarm_table(alarms_tab, uuid=True)
-                uuids = table_parser.get_values(alarms_tab, 'uuid')
-                if not uuids:
-                    LOG.info("Config has been applied")
-                    break
+            table_ = get_alarms_table(uuid=True, con_ssh=con_ssh)
+            alarms_tab = table_parser.filter_table(table_, **{'Alarm ID': alarm_id})
+            alarms_tab = _compose_alarm_table(alarms_tab, uuid=True)
+            uuids = table_parser.get_values(alarms_tab, 'uuid')
+            if not uuids:
+                LOG.info("Config has been applied")
+                break
             time.sleep(5)
         else:
             err_msg = "The config has not finished applying after timeout"
