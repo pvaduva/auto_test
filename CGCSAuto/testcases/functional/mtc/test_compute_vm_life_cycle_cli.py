@@ -99,7 +99,7 @@ def _is_cpe():
 @mark.usefixtures('ubuntu14_image')
 @mark.parametrize(('host', 'guest'), [
     ('compute-0', 'ubuntu_14'),
-    ('compute-0', None),            # cgcs-guest
+    ('compute-0', None),
     ('compute-1', 'ubuntu_14'),
     ('compute-1', None),
     ])

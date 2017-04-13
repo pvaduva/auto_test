@@ -36,7 +36,8 @@ def test_cold_migrate_vm_with_config_drive(hosts_per_stor_backing):
         - Delete created vm, volume, flavor
 
     """
-    guest_os = 'cgcs-guest'
+    # guest_os = 'cgcs-guest'
+    guest_os = 'tis-centos-guest'
     if len(hosts_per_stor_backing['local_image']) < 2:
         skip("Less than two hosts have local_image storage backing")
 

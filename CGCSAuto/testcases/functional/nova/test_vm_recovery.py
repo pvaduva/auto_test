@@ -162,7 +162,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
 
     Test Steps:
         - Create a flavor with heartbeat set to true, and auto recovery set to given value in extra spec
-        - Create a volume from cgcs-guest image
+        - Create a volume from tis image
         - Boot a vm with the flavor and the volume
         - Verify guest heartbeat is established via system event-logs
         - Set vm to unhealthy state via touch /tmp/unhealthy
@@ -241,7 +241,7 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
 
     Test Steps:
         - Create a flavor with auto recovery set to False and Guest Heartbeat set to given value in extra specs
-        - Create a volume from cgcs-guest image
+        - Create a volume from tis image
         - Boot a vm with the flavor and the volume
         - Verify vm heartbeat is (not) established based on the heartbeat setting in flavor
         - Set vm to unhealthy state using touch /tmp/unhealthy

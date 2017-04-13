@@ -1,18 +1,17 @@
 import os
 import time
-import re
 
 from pytest import mark
 
-from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec
-from consts.filepaths import WRSROOT_HOME
-from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper
-from setup_consts import P1
-from testfixtures.fixture_resources import ResourceCleanup
 from utils import cli
 from utils.tis_log import LOG
 from utils import multi_thread
-from utils.ssh import SSHClient, ControllerClient, VMSSHClient
+from utils.ssh import SSHClient, ControllerClient
+
+from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages
+from consts.filepaths import WRSROOT_HOME
+from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def check_heat_engine_log():
@@ -30,7 +29,7 @@ def check_heat_engine_log():
                      "reason=Action rejected by instance: file /tmp/vote_no_to_stop exists"]
     found = []
     # time out to exit the while loop if log entry is not found with in 5 min
-    timeout= time.time()+300
+    timeout = time.time()+300
 
     while time.time() < timeout:
         LOG.info("Checking the logs for scale down reject entries.")
@@ -38,17 +37,17 @@ def check_heat_engine_log():
         logs = out.split('\n')
         for line in logs:
             for i in range(0, len(searching_for)):
-               LOG.info("Searching for logs containing: {}".format(searching_for[i]))
-               if searching_for[i] not in found and line.find(searching_for[i]):
-                  found.append(searching_for[i])
-                  LOG.info("Found {}".format(line))
-                  if len(found) == len(searching_for):
-                      return 0
+                LOG.info("Searching for logs containing: {}".format(searching_for[i]))
+                if searching_for[i] not in found and line.find(searching_for[i]):
+                    found.append(searching_for[i])
+                    LOG.info("Found {}".format(line))
+                    if len(found) == len(searching_for):
+                        return True
 
         time.sleep(30)
 
     LOG.info("FAIL: expecting to find {} in the logs. Found {}.".format(searching_for, found))
-    return 1
+    return False
 
 
 def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
@@ -86,7 +85,7 @@ def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
     key_pair = vm_helper.get_any_keypair()
     cmd_list.append("-P KEYPAIR=%s " % key_pair)
 
-    image = 'cgcs-guest'
+    image = GuestImages.DEFAULT_GUEST
     cmd_list.append("-P IMAGE=%s " % image)
 
     # get the network and append it to the heat params
@@ -121,12 +120,10 @@ def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
     return 0, stack_name
 
 
-def wait_for_scale_up_down_vm(vm_name=None, expected_count=0, time_out=900, check_interval=5, con_ssh=None,
-                               auth_info=None):
+def wait_for_scale_up_down_vm(vm_name=None, expected_count=0, time_out=600, check_interval=5):
     if vm_name is None:
         vm_name = "NestedAutoScale_vm"
 
-    time_out=900
     # wait for scale up to happen
     LOG.info("Expected count of Vm is {}".format(expected_count))
     end_time = time.time() + time_out
@@ -142,7 +139,8 @@ def wait_for_scale_up_down_vm(vm_name=None, expected_count=0, time_out=900, chec
     LOG.warning(msg)
     return False
 
-def ssh_vm_and_send_cmd(vm_name=None, vm_image_name=None, cmd=None, con_ssh=None, auth_info=None):
+
+def ssh_vm_and_send_cmd(vm_name=None, vm_image_name=None, cmd=None):
     """
     Returns:
 
@@ -150,18 +148,19 @@ def ssh_vm_and_send_cmd(vm_name=None, vm_image_name=None, cmd=None, con_ssh=None
     # create a trigger for auto scale by login to vm and issue dd cmd
     vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
 
-    LOG.info("Sending cmd {} for vm {} using".format(cmd,vm_id))
-    dd_cmd = 'dd if=/dev/zero of=/dev/null &'
+    LOG.info("Sending cmd {} for vm {} using".format(cmd, vm_id))
+    if not cmd:
+        cmd = 'dd if=/dev/zero of=/dev/null &'
 
-    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id,vm_image_name=vm_image_name, con_ssh=con_ssh, close_ssh=False) as vm_ssh:
-        vm_ssh.exec_cmd(cmd=cmd)
+    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=vm_image_name, close_ssh=False) as vm_ssh:
+        vm_ssh.exec_cmd(cmd=cmd, fail_ok=False)
 
     return vm_ssh
 
 
 # Overall skipif condition for the whole test function (multiple test iterations)
 # This should be a relatively static condition.i.e., independent with test params values
-#@mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
+# @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
 @mark.parametrize('action', [
         mark.nightly('scale_up_reject_scale_down'),
@@ -174,7 +173,7 @@ def test_heat_vm_scale(action):
         Create heat stack for auto scaleing using NestedAutoScale.yaml , scale up/down/reject.
 
     Args:
-        none
+        action
 
     =====
     Prerequisites (skip test if not met):
@@ -196,7 +195,7 @@ def test_heat_vm_scale(action):
     """
     # create the heat stack
 
-    vm_image_name = "cgcs-guest"
+    vm_image_name = GuestImages.DEFAULT_GUEST
 
     LOG.tc_step("Creating heat stack for auto scaling Vms")
     return_code, msg = launch_vm_scaling_stack()
@@ -209,73 +208,67 @@ def test_heat_vm_scale(action):
     vm_name = stack_name
     LOG.info("Verifying server creation via heat")
     vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
-    if not vm_id:
-        return 1, "Error:vm was not created by stack"
-
+    assert vm_id, "Error:vm was not created by stack"
     LOG.info("Found VM %s", vm_id)
 
-    if not vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id):
-        return 1, "Error:vm is not pingable from NAT Box"
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
     # scale up now
     LOG.tc_step("Scaling up Vms")
     dd_cmd = 'dd if=/dev/zero of=/dev/null &'
-    vm_ssh_1 = ssh_vm_and_send_cmd(vm_name=vm_name,vm_image_name=vm_image_name,cmd=dd_cmd)
+    vm_ssh_1 = ssh_vm_and_send_cmd(vm_name=vm_name, vm_image_name=vm_image_name, cmd=dd_cmd)
 
-    LOG.tc_step ("Verifying the VM is scaling to 3 Vms")
-    if not wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=3):
-        assert "Failed to scale up, expected to see 3 vms in total"
+    LOG.tc_step("Verifying the VM is scaling to 3 Vms")
+    assert wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=3), \
+        "Failed to scale up, expected to see 3 vms in total"
 
     # Get the VM ids with stack_name
-    vm_ids_after_scale = nova_helper.get_vms(strict=False,name=stack_name)
+    vm_ids_after_scale = nova_helper.get_vms(strict=False, name=stack_name)
 
     vm_id_to_stop_scale = ''
-    if not vm_ids_after_scale:
-        assert "Couldn't find the vm id for {}".format(stack_name)
+    assert vm_ids_after_scale, "Couldn't find the vm id for {}".format(stack_name)
     # find a VM to put a file to stop scale down.
     for vm in vm_ids_after_scale:
-        LOG.info("vm is {},vm id is {}".format( vm, vm_id))
+        LOG.info("vm is {}, vm id is {}".format(vm, vm_id))
         if vm != vm_id:
             vm_id_to_stop_scale = vm
             LOG.info("Found a VM to stop scale down %s", vm_id_to_stop_scale)
             break
 
-    if not vm_id_to_stop_scale:
-         assert "Failed to find a vm to stop scale down"
+    assert vm_id_to_stop_scale, "Failed to find a vm to stop scale down"
 
     # login to vm and put a file
     LOG.tc_step("Creating /tmp/vote_no_to_stop in vm %s", vm_id_to_stop_scale)
     vm_name_1 = nova_helper.get_vm_name_from_id(vm_id_to_stop_scale)
     cmd = "touch /tmp/vote_no_to_stop"
-    thread1 = multi_thread.MThread(ssh_vm_and_send_cmd, vm_name_1,vm_image_name,cmd)
-    thread1.start_thread(timeout=1200)
-    out = thread1.get_output(wait=True)
+    thread1 = multi_thread.MThread(ssh_vm_and_send_cmd, vm_name_1, vm_image_name, cmd)
+    thread1.start_thread(timeout=60)
+    thread1.get_output(wait=True)
     thread1.end_thread()
     thread1.wait_for_thread_end(timeout=3)
 
-    ###Killl dd first
+    # Kill dd first
     LOG.tc_step("Killing dd in Vm")
-    vm_ssh_1.exec_cmd('killall dd')
+    vm_ssh_1.exec_cmd('pkill dd')
 
     LOG.tc_step("Scaling down Vms")
-    if not wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=2):
-        assert "Scale down failed, expect to see 2 vms"
+    assert wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=2), "Scale down failed, expect to see 2 vms"
 
     LOG.tc_step("Checking the heat-engine.log for scale down reject msg")
-    if not check_heat_engine_log():
-        assert "Coud not find the log entries in heat-engine.log for scale down reject"
+    assert check_heat_engine_log(), "Could not find the log entries in heat-engine.log for scale down reject"
 
     # remove the tmp file in the vm
     LOG.tc_step("removing /tmp/vote_no_to_stop in vm")
-    cmd = "rm /tmp/vote_no_to_stop"
+    cmd = "rm -f /tmp/vote_no_to_stop"
     thread_3 = multi_thread.MThread(ssh_vm_and_send_cmd, vm_name_1, vm_image_name, cmd)
-    thread_3.start_thread(timeout=1200)
-    out_2 = thread_3.get_output(wait=True)
+    thread_3.start_thread(timeout=60)
+    thread_3.get_output(wait=True)
+    thread1.end_thread()
+    thread1.wait_for_thread_end(timeout=3)
 
     # wait for vm to be deleted
     LOG.tc_step("Checking that the Vm is removed now")
-    if not wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=1):
-        assert "Scale down failed, expect to see 1 vm"
+    assert wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=1), "Scale down failed, expect to see 1 vm"
 
     # delete heat stack
     LOG.tc_step("Deleting heat stack{}".format(stack_name))
@@ -283,8 +276,9 @@ def test_heat_vm_scale(action):
     assert 0 == return_code, "Expected return code {}. Actual return code: {}; details: {}".format(0, return_code, msg)
     # can check vm is deleted
 
-##This test is not working due to CGTS-5254
-## add evacuation call
+
+# This test is not working due to CGTS-5254
+# add evacuation call
 @mark.usefixtures('check_alarms')
 @mark.parametrize('action', [
         mark.p1('swact_scale_up_down'),
@@ -293,7 +287,6 @@ def test_heat_vm_scale(action):
         mark.p2('live_migrate_scale_up_down'),
     ])
 # can add test fixture to configure hosts to be certain storage backing
-
 def _test_heat_vm__action_scale_up_down(action):
 
     """
@@ -301,7 +294,7 @@ def _test_heat_vm__action_scale_up_down(action):
         Create heat stack for auto scaleing using NestedAutoScale.yaml ,  swact and perform vm scale up and down.
 
     Args:
-        none
+        action
 
     =====
     Prerequisites (skip test if not met):
@@ -319,7 +312,7 @@ def _test_heat_vm__action_scale_up_down(action):
         - Delete Heat stack and verify resource deletion
     """
     # create the heat stack
-    vm_image_name = "cgcs-guest"
+    vm_image_name = GuestImages.DEFAULT_GUEST
     LOG.tc_step("Creating heat stack for auto scaling Vms")
     return_code, msg = launch_vm_scaling_stack()
 
@@ -341,7 +334,7 @@ def _test_heat_vm__action_scale_up_down(action):
 
     # swact here
     if action=="swact_scale_up_down":
-        LOG.tc_step ("swact to standby controller before scale up/down")
+        LOG.tc_step("Swact to standby controller before scale up/down")
         hostname = system_helper.get_active_controller_name()
         exit_code, output = host_helper.swact_host(hostname=hostname, swact_start_timeout=1, fail_ok=False)
         assert 0 == exit_code, "{} is not recognized as active controller".format(hostname)
@@ -349,7 +342,7 @@ def _test_heat_vm__action_scale_up_down(action):
         host_helper.wait_for_webservice_up(hostname)
     elif action == "evacuate_scale_up_down":
         LOG.tc_step("evacuate vm before scale up/down")
-        #evacuate the vm
+        # evacuate the vm
     elif action == "cold_migrate_scale_up_down":
         LOG.tc_step("cold migrate vm before scale up/down")
         vm_helper.perform_action_on_vm(vm_id=vm_id, action="cold_migrate")
@@ -366,10 +359,9 @@ def _test_heat_vm__action_scale_up_down(action):
     if not wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=3):
         assert "Failed to scale up, expected to see 3 vms in total"
 
-
-     ###Killl dd first
+    # Kill dd first
     LOG.tc_step("Killing dd in Vm")
-    vm_ssh_1.exec_cmd("killall dd")
+    vm_ssh_1.exec_cmd("pkill dd")
 
     LOG.tc_step("Scaling down Vms")
     # wait for vm to be deleted
@@ -381,4 +373,3 @@ def _test_heat_vm__action_scale_up_down(action):
     return_code, msg = heat_helper.delete_stack(stack_name=stack_name)
     assert 0 == return_code, "Expected return code {}. Actual return code: {}; details: {}".format(0, return_code, msg)
     # can check vm is deleted
-

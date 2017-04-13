@@ -163,7 +163,6 @@ def get_heat_params(param_name=None):
 def _wait_for_scale_up_down_vm(vm_name=None, expected_count=0, time_out=900, check_interval=5, con_ssh=None,
                                auth_info=None):
     vm_name = "NestedAutoScale_vm"
-    time_out = 900
     # wait for scale up to happen
     LOG.info("Expected count of Vm is {}".format(expected_count))
     end_time = time.time() + time_out
@@ -191,12 +190,12 @@ def scale_up_vms(vm_name=None, expected_count=0, time_out=900, check_interval=3,
     LOG.info("Boosting cpu usage for vm {} using 'dd'".format(vm_id))
     dd_cmd = 'dd if=/dev/zero of=/dev/null &'
 
-    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id,vm_image_name="cgcs-guest", con_ssh=con_ssh, close_ssh=False) as vm_ssh:
+    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, con_ssh=con_ssh, close_ssh=False) as vm_ssh:
         for i in range(cpu_num):
             vm_ssh.send(cmd=dd_cmd)
 
     return [vm_ssh, _wait_for_scale_up_down_vm(vm_name=vm_name,expected_count=expected_count,time_out=time_out,
-                                      check_interval=check_interval,con_ssh=con_ssh,auth_info=auth_info)]
+                                               check_interval=check_interval,con_ssh=con_ssh,auth_info=auth_info)]
 
 
 def scale_down_vms(vm_name=None, expected_count=0, time_out=900, check_interval=3, con_ssh=None, auth_info=None):
@@ -206,7 +205,7 @@ def scale_down_vms(vm_name=None, expected_count=0, time_out=900, check_interval=
     """
     # create a trigger for auto scale by login to vm and issue dd cmd
     vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
-    #with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id,vm_image_name="cgcs-guest") as vm_ssh:
+    #with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
     #    vm_ssh.exec_cmd("pkill -USR1 -x dd")
 
     return _wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=expected_count, time_out=time_out,

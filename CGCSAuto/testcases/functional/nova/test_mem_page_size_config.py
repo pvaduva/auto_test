@@ -172,12 +172,12 @@ def test_boot_vm_mem_page_size(flavor_2g, flavor_mem_page_size, image_mempage, i
     Args:
         flavor_2g (tuple): flavor id of a flavor with ram set to 2G, hosts configured and storage_backing
         flavor_mem_page_size (str): memory page size extra spec value to set in flavor
-        image_mempage (str): image id for cgcs-guest image
+        image_mempage (str): image id for tis image
         image_mem_page_size (str): memory page metadata value to set in image
 
     Setup:
         - Create a flavor with 2G RAM (module)
-        - Get image id of cgcs-guest image (module)
+        - Get image id of tis image (module)
 
     Test Steps:
         - Set/Unset flavor memory page size extra spec with given value (unset if None is given)

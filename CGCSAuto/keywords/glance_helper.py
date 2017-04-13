@@ -79,7 +79,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
     Args:
         name (str): string to be included in image name
         image_id (str): id for the image to be created
-        source_image_file (str): local image file to create image from. '/home/wrsroot/images/cgcs-guest.img' if unset
+        source_image_file (str): local image file to create image from. DefaultImage will be used if unset
         disk_format (str): One of these: ami, ari, aki, vhd, vmdk, raw, qcow2, vdi, iso
         container_format (str):  One of these: ami, ari, aki, bare, ovf
         min_disk (int): Minimum size of disk needed to boot image (in gigabytes)
@@ -416,7 +416,8 @@ def get_guest_image(guest_os, rm_image=True):
 
     if not img_id:
         image_path = _scp_guest_image(img_os=guest_os)
-        img_id = create_image(name=guest_os, source_image_file=image_path, disk_format='qcow2',
+        disk_format = 'raw' if guest_os == 'cgcs-guest' else 'qcow2'
+        img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
                               container_format='bare')[1]
 
         if rm_image and re.search('rhel|opensuse|centos_6|centos_7|ubuntu_12', guest_os):

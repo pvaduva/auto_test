@@ -239,10 +239,6 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         # create userdata cloud init file to run right after vm initialization to get ip on interfaces other than eth0.
         user_data = _create_cloud_init_if_conf(guest_os, nics_num=len(nics))
 
-        # # Add wrsroot/li69nux user to non cgcs-guest vm
-        # user_data_adduser = _get_cloud_config_add_user(con_ssh=con_ssh)
-        # user_data.append(user_data_adduser)
-
     # create cmd
     optional_args_dict = {'--flavor': flavor,
                           '--image': image,
@@ -1210,7 +1206,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
 
     Args:
         vm_id (str): vm to ssh to
-        vm_image_name (str): such as cgcs-guest
+        vm_image_name (str): such as cgcs-guest, tis-centos-guest, ubuntu_14, etc
         username (str):
         password (str):
         prompt (str):
@@ -2805,7 +2801,7 @@ def boost_cpu_usage(vm_id, cpu_num=1, con_ssh=None):
         con_ssh:
 
     Returns (VMSSHClient): vm_ssh where the dd commands were sent.
-        To terminate the dd to release the cpu resources, use: vm_ssh.exec_cmd('killall dd')
+        To terminate the dd to release the cpu resources, use: vm_ssh.exec_cmd('pkill dd')
     """
     LOG.info("Boosting cpu usage for vm {} using 'dd'".format(vm_id))
     dd_cmd = 'dd if=/dev/zero of=/dev/null &'
@@ -2848,7 +2844,7 @@ def boost_cpu_usage_new_thread(vm_id, cpu_num=1, timeout=1200):
     vm_ssh = thread.get_output(wait=True)
 
     def _kill_dd(vm_ssh_):
-        vm_ssh_.exec_cmd('killall dd')
+        vm_ssh_.exec_cmd('pkill dd')
 
     thread.set_end_func(_kill_dd, vm_ssh)
     return vm_ssh, thread

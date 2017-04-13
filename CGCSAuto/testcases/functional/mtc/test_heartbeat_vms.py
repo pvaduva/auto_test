@@ -94,7 +94,7 @@ def _perform_action_on_hb_vm(vm_id, action):
     ('False', 'swact'),
     ('True', 'pause'),
     mark.domain_sanity(('True', 'migrate')),
-    # ('True', 'reboot'),   fails because of CGTS-4911 (cgcs-guest issue)
+    ('True', 'reboot'),   # failed because of CGTS-4911 (cgcs-guest issue)
     ('True', 'lock'),
     ('False', 'lock'),
     mark.domain_sanity(('True', 'vim_restart'))

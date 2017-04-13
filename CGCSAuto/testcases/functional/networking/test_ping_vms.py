@@ -39,13 +39,13 @@ def _append_nics(vifs, net_ids, nics):
 
 
 @mark.parametrize(('guest_os', 'vifs'), [
-    mark.priorities('cpe_sanity', 'sanity')(('cgcs-guest', (('avp', None), ('virtio', '01:04')))),
+    # mark.priorities('cpe_sanity', 'sanity')(('cgcs-guest', (('avp', None), ('virtio', '01:04')))),
     mark.priorities('cpe_sanity', 'sanity')(('ubuntu_14', (('e1000', '00:1f'), ('virtio', None)))),
-    ('tis-centos-guest', (('avp', '00:1e'), ('virtio', '08:09')))
+    mark.priorities('cpe_sanity', 'sanity')(('tis-centos-guest', (('avp', '00:1e'), ('virtio', '08:09'))))
 ], ids=id_gen)
 def test_ping_between_two_vms(guest_os, vifs):
     """
-    Ping between two cgcs-guest/ubuntu vms with virtio and avp vif models
+    Ping between two vms with virtio and avp vif models
 
     Test Steps:
         - Create a favor with dedicated cpu policy and proper root disk size
@@ -59,15 +59,6 @@ def test_ping_between_two_vms(guest_os, vifs):
         - Delete vms, volumes, flavor created
 
     """
-    # determine the disk size and image id based on the guest os under test
-
-    # if guest_os == 'ubuntu_14':
-    #     image_id = ubuntu14_image
-    #     size = 9
-    # elif guest_os == 'cgcs-guest':
-    #     image_id = glance_helper.get_image_id_from_name('cgcs-guest')
-    #     size = 1
-
     image_id = glance_helper.get_guest_image(guest_os)
 
     LOG.tc_step("Create a favor dedicated cpu policy")
