@@ -33,7 +33,7 @@ DEF_PROCESS_PID_FILE_PATH = r'/var/run/{}.pid'
 
 INTERVAL_BETWEEN_SWACT = 300 + 10
 
-SKIP_PROCESS_LIST = ('postgres')
+SKIP_PROCESS_LIST = ('postgres', 'open-ldap', 'lighttpd', 'ceph-rest-api', 'horizon', 'patch-alarm-manager', 'ntpd')
 
 PROCESSES = {
     'sm': {
@@ -470,6 +470,16 @@ class MonitoredProcess:
             else:
                 self.interval = int(self.interval)
 
+            self.debounce = getattr(self, 'debounce', None)
+            if self.debounce is None:
+                self.debounce = 20
+            else:
+                self.debounce = int(self.debounce)
+            if self.debounce < 1:
+                msg = 'Debounce time is too small! Skip the test! debounce=<{}>'.format(self.debounce)
+                LOG.warn(msg)
+                skip(msg)
+
             if 'pidfile' in settings:
                 self.pid_file = settings['pidfile']
         else:
@@ -720,7 +730,13 @@ class MonitoredProcess:
             LOG.error('No pid-file provided')
             return -1
 
-        wait_after_each_kill = random.randint(interval, debounce)
+        if 0 <= interval < debounce - 1:
+            wait_after_each_kill = max(random.randint(interval, debounce - 1), 1)
+        else:
+            msg = 'Debounce time period is smaller than interval? Error in configuration. Skip the test! ' \
+                  'interval={} debounce={}'.format(interval, debounce)
+            LOG.warn(msg)
+            skip(msg)
 
         LOG.info('interval={}, debounce={}, wait_each_kill={}'.format(interval, debounce, wait_after_each_kill))
 
@@ -732,7 +748,7 @@ class MonitoredProcess:
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
 
-        wait_time = max(interval * retries + 60, 60)
+        wait_time = max(wait_after_each_kill * retries + 60, 60)
 
         self.pid = -1
         for _ in range(2):
@@ -938,12 +954,12 @@ class MonitoredProcess:
     mark.p1(('nova-compute')),
     mark.p1(('vswitch')),
 
-    # # mark.p1(('postgres')),
-    # # mark.p1(('rabbitmq-server')), # rabbit in SM
-    # # TODO CGTS-6336
-    # # TODO CGTS-6391
+    # mark.p1(('postgres')),
+    # mark.p1(('rabbitmq-server')), # rabbit in SM
+    # TODO CGTS-6336
+    # TODO CGTS-6391
     mark.p1(('rabbit')),
-    # # mark.p1(('sysinv-api')),  # sysinv-inv in SM
+    # mark.p1(('sysinv-api')),  # sysinv-inv in SM
     mark.p1(('sysinv-inv')),
     mark.p1(('sysinv-conductor')),
     mark.p1(('mtc-agent')),
@@ -951,10 +967,10 @@ class MonitoredProcess:
     mark.p1(('hw-mon')),
     mark.p1(('dnsmasq')),
     mark.p1(('fm-mgr')),
-    # # TODO CGTS-6396
+    # TODO CGTS-6396
     mark.p1(('keystone')),
     mark.p1(('glance-registry')),
-    # # TODO CGTS-6398
+    # TODO CGTS-6398
     # major
     mark.p1(('glance-api')),
     mark.p1(('neutron-server')),
@@ -971,7 +987,7 @@ class MonitoredProcess:
     mark.p1(('cinder-scheduler')),
     # retries = 32
     mark.p1(('cinder-volume')),
-
+    #
     mark.p1(('ceilometer-collector')),
     mark.p1(('ceilometer-api')),
     mark.p1(('ceilometer-agent-notification')),
@@ -982,7 +998,7 @@ class MonitoredProcess:
     mark.p1(('heat-api-cfn')),
     mark.p1(('heat-api-cloudwatch')),
     #
-
+    #
     # TODO CGTS-6426
     # mark.p1(('open-ldap')),, active/active
     # retries = 32
@@ -1132,6 +1148,7 @@ def test_process_monitoring(process_name, con_ssh=None):
             postgres        SKIPPED, ‘killing postgres process may cause data damage which could destabilize the system’
             patch-alarm-manager    SKIPPED, differently might running on either of the controllers
 
+            ntpd            SKIPPED, 'ntpd is not a restartable process'
     """
     LOG.tc_step('Start testing SM/PM Prcocess Monitoring')
 
