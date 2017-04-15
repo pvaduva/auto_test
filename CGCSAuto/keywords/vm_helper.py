@@ -412,7 +412,10 @@ def get_vm_apps_limit(vm_type='avp', con_ssh=None):
     with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as host_ssh:
         vm_limit = host_ssh.exec_cmd("grep --color='never' -r {} lab_setup.conf | cut -d = -f2".
                                      format(VifMapping.VIF_MAP[vm_type]))[1]
-    return int(vm_limit) if vm_limit else 0
+    vm_limit = vm_limit.split(sep='|')[0]
+    vm_limit = re.findall('(\d+)', vm_limit)
+
+    return int(vm_limit[0]) if vm_limit else 0
 
 
 def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_name=None, con_ssh=None):
@@ -453,12 +456,7 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
 
     # Get the list of VMs that are already launched on the system by name
     current_vms = nova_helper.get_all_vms(return_val="Name", con_ssh=con_ssh)
-
-    with host_helper.ssh_to_host('controller-0') as host_ssh:
-        vm_limit = host_ssh.exec_cmd("grep --color='never' -r {} lab_setup.conf | cut -d = -f2".
-                                     format(VifMapping.VIF_MAP[vm_type]))[1]
-
-    vm_limit = int(vm_limit) if vm_limit else 0
+    vm_limit = get_vm_apps_limit(vm_type=vm_type)
     if num_vms == 'all':
         num_vms = vm_limit
     elif num_vms > vm_limit:
@@ -2349,7 +2347,7 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
                         raise exceptions.VMNetworkError("vlan {} is not found in 'ip addr' after restarting networking "
                                                         "service.".format(vlan_name))
                     if not is_ip_assigned(vm_ssh, eth_name=vlan_name):
-                        raise exceptions.VMNetworkError('No IP assigned to {} vlan interface'.format(vlan_name))
+                        LOG.warning('No IP assigned to {} vlan interface'.format(vlan_name))
                     LOG.info("vlan {} is successfully added and an IP is assigned.".format(vlan_name))
             else:
                 # did not break, meaning no 'rename' interface detected, vlan either existed or successfully added

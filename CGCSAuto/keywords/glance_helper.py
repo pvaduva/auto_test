@@ -108,7 +108,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     source_str = file_path
 
-    known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'tis-centos-guest']
+    known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'tis-centos-guest', 'win']
     name = name if name else 'auto'
     for img_str in known_imgs:
         if img_str in name:
@@ -420,7 +420,7 @@ def get_guest_image(guest_os, rm_image=True):
         img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
                               container_format='bare')[1]
 
-        if rm_image and re.search('rhel|opensuse|centos_6|centos_7|ubuntu_12', guest_os):
+        if rm_image and not re.search('cgcs-guest|tis-centos|ubuntu_14', guest_os):
             con_ssh = ControllerClient.get_active_controller()
             con_ssh.exec_cmd('rm {}'.format(image_path), fail_ok=True, get_exit_code=False)
 

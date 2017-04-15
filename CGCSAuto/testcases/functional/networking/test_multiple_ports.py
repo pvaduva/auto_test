@@ -432,7 +432,7 @@ class TestMutiPortsPCI:
             - Delete created vms and flavor
         """
         base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info, extra_pcipt_net, \
-            extra_pcipt_net_name, extra_pcipt_seg_id = base_setup_pci
+            extra_pcipt_net_name = base_setup_pci
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'avp'}]

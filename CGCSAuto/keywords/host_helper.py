@@ -135,6 +135,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
 
     if reboot_con:
         hostnames.append(controller)
+        wait_for_hosts_states(
+                controller, timeout=HostTimeout.FAIL_AFTER_REBOOT, fail_ok=True, check_interval=10, duration=8,
+                con_ssh=con_ssh, availability=[HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED])
 
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
     unlocked_hosts_all = table_parser.get_values(table_, 'hostname', administrative='unlocked')
@@ -395,6 +398,8 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
     if exitcode == 1:
         return 1, output
+
+    wait_for_host_states(host=host, timeout=90, check_interval=0, fail_ok=True, task='Locking')
 
     # Wait for task complete. If task stucks, fail the test regardless. Perhaps timeout needs to be increased.
     wait_for_host_states(host=host, timeout=lock_timeout, task='', fail_ok=False)
