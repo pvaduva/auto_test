@@ -16,7 +16,8 @@ import time
 TEST_OBJ_DIR = "test_objects"
 TEST_OBJ_PATH = "/home/wrsroot/" + TEST_OBJ_DIR
 TEST_OBJ_DOWNLOAD_PATH = "/home/wrsroot/downloads"
-
+SWIFT_POOLS = ['.rgw.root', 'default.rgw.buckets.data', 'default.rgw.buckets.index', 'default.rgw.control',
+               'default.rgw.data.root', 'default.rgw.gc', 'default.rgw.log']
 
 def get_ceph_backend_info():
     if 'ceph' in storage_helper.get_configured_system_storage_backend():
@@ -781,12 +782,12 @@ def verify_swift_object_setup():
         LOG.info("Swift object pools:{}".format(output))
         if rc == 0:
             pools = output.split('\n')
-            if {'.rgw', '.rgw.buckets', '.rgw.control', '.rgw.gc', '.rgw.root'}.issubset(pools):
-                LOG.info("Swift object pools: ['.rgw', '.rgw.buckets', '.rgw.control', '.rgw.gc', '.rgw.root']"
-                         " are set...")
+            if set(SWIFT_POOLS).issubset(pools):
+                LOG.info("Swift object pools: {} "
+                         " are set...".format(SWIFT_POOLS))
             else:
-                LOG.info("Expected Swift object pools: ['.rgw', '.rgw.buckets', '.rgw.control', '.rgw.gc', '.rgw.root']"
-                         " are NOT set. Pools = {}".format(pools))
+                LOG.info("Expected Swift object pools: {}"
+                         " are NOT set. Pools = {}".format(SWIFT_POOLS, pools))
                 return False
         else:
             return False

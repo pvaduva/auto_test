@@ -362,12 +362,24 @@ def test_ceph_reboot_storage_node():
 
         LOG.tc_step('Check that OSDs are down')
         osd_list = storage_helper.get_osds(host, con_ssh)
-        for osd_id in osd_list:
-            osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
-            msg = 'OSD ID {} is up but should be down'.format(osd_id)
-            assert not osd_up, msg
-            msg = 'OSD ID {} is down as expected'.format(osd_id)
-            LOG.info(msg)
+        all_osds_up = True
+        up_list = osd_list.copy()
+        end_time = time.time() + 60
+        while time.time() < end_time and all_osds_up:
+            for osd_id in osd_list:
+                osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
+                if not osd_up:
+                    msg = 'OSD ID {} is down as expected'.format(osd_id)
+                    LOG.info(msg)
+                    up_list.remove(osd_id)
+            if len(up_list) > 0:
+                osd_list = up_list.copy()
+            else:
+                msg = ' All OSDs are down as expected'
+                LOG.info(msg)
+                all_osds_up = False
+
+        assert not all_osds_up, " One or more OSD(s) {}  is(are) up but should be down".format(up_list)
 
         if not host_helper.wait_for_host_states(host, availability='available', fail_ok=False):   # yang TODO use fail_ok flag?
             msg = 'Host {} did not come available in the expected time'.format(host)
@@ -393,8 +405,6 @@ def test_ceph_reboot_storage_node():
                 all_osds_up = True
 
         assert all_osds_up, " One or more OSD(s) {}  is(are) down but should be up".format(down_list)
-
-
 
         LOG.tc_step('Check health of CEPH cluster')
         end_time = time.time() + 40
