@@ -831,8 +831,9 @@ def test_import_with_cache_raw():
     if not image_names:
         LOG.info('No qcow2 images were found on the system')
         LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
-        storage_helper.download_images(dload_type='ubuntu',
-            img_dest=img_dest, con_ssh=con_ssh)
+        glance_helper._scp_guest_image()
+        # storage_helper.download_images(dload_type='ubuntu',
+        #     img_dest=img_dest, con_ssh=con_ssh)
         image_names = storage_helper.find_images(con_ssh)
 
     LOG.tc_step('Import qcow2 images into glance')
