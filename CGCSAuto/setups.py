@@ -276,9 +276,10 @@ def copy_files_to_con1():
 
     LOG.info("rsync test files from controller-0 to controller-1 if not already done")
 
+    file_to_check = '/home/wrsroot/images/tis-centos-guest.img'
     try:
         with host_helper.ssh_to_host("controller-1") as con_1_ssh:
-            if con_1_ssh.file_exists('/home/wrsroot/heat'):
+            if con_1_ssh.file_exists(file_to_check):
                 LOG.info("Test files already exist on controller-1. Skip rsync.")
                 return
 
