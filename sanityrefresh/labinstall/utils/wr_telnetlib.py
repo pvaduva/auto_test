@@ -872,10 +872,9 @@ class Telnet:
                     wr_exit()._exit(1, msg)
                 if index == 0:
                     log.info("Found login prompt. Login as {}".format(username))
-                    #self.write_line(username)
                     self.write(str.encode(username + '\r\n'))
-                    self.get_read_until(PASSWORD_PROMPT, TELNET_EXPECT_TIMEOUT)
-                    #self.write_line(password)
+                    if password:
+                        self.get_read_until(PASSWORD_PROMPT, TELNET_EXPECT_TIMEOUT)
                     self.write(str.encode(password + '\r\n'))
                     break
                 elif index == 1:
