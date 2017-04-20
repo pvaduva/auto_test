@@ -292,7 +292,7 @@ def copy_files_to_con1():
     cmd = "rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' " \
           "/home/wrsroot/* controller-1:/home/wrsroot/"
 
-    timeout = 600
+    timeout = 1800
 
     with host_helper.ssh_to_host("controller-0") as con_0_ssh:
         con_0_ssh.send(cmd)
