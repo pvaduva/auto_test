@@ -8,6 +8,7 @@ from utils.tis_log import LOG
 from keywords import glance_helper, vm_helper, host_helper, system_helper, \
     storage_helper, keystone_helper, cinder_helper, network_helper, swift_helper
 from consts.cgcs import GuestImages
+from consts.auth import HostLinuxCreds
 from consts.proj_vars import ProjVar
 from testfixtures.resource_mgmt import ResourceCleanup
 import time
@@ -16,8 +17,8 @@ import time
 TEST_OBJ_DIR = "test_objects"
 TEST_OBJ_PATH = "/home/wrsroot/" + TEST_OBJ_DIR
 TEST_OBJ_DOWNLOAD_PATH = "/home/wrsroot/downloads"
-SWIFT_POOLS = ['.rgw.root', 'default.rgw.buckets.data', 'default.rgw.buckets.index', 'default.rgw.control',
-               'default.rgw.data.root', 'default.rgw.gc', 'default.rgw.log']
+SWIFT_POOLS = ['.rgw.root', 'default.rgw.buckets.data', 'default.rgw.control', 'default.rgw.data.root',
+               'default.rgw.gc', 'default.rgw.log', 'default.rgw.users.uid']
 
 def get_ceph_backend_info():
     if 'ceph' in storage_helper.get_configured_system_storage_backend():
@@ -770,11 +771,20 @@ def test_swift_basic_object_copy(tc, ceph_backend_installed, pre_swift_check):
 
 def verify_swift_object_setup():
 
+    LOG.info("Verifying  swift endpoints...")
+    port = '7480'
+    endpoints_url = keystone_helper.get_endpoints(rtn_val='URL', service_name='swift', interface='public')[0]
+    LOG.info("Swift  public endpoint url: {}".format(endpoints_url))
+    url_port = endpoints_url.split(':')[2].split('/')[0].strip()
+    if url_port != port:
+        LOG.warning("Swift endpoint  use unexpected port {}. Expected port is {}.".format(url_port, port))
+        return False
+
     LOG.info("Verifying if swift object pools are setup...")
 
     if 'ceph' in storage_helper.get_configured_system_storage_backend():
         con_ssh = ControllerClient.get_active_controller()
-        cmd = "rados df | awk 'NR>1 && NR < 11 {print $1}'"
+        cmd = "rados df | awk 'NR>1 && NR < 11 {{print $1}}'"
         rc, output = con_ssh.exec_cmd(cmd, fail_ok=True)
         LOG.info("Swift object pools:{}".format(output))
         if rc == 0:
@@ -788,15 +798,6 @@ def verify_swift_object_setup():
                 return False
         else:
             return False
-
-    LOG.info("Verifying  swift endpoints...")
-    port = '7480'
-    endpoints_url = keystone_helper.get_endpoints(rtn_val='URL', service_name='swift', interface='public')[0]
-    LOG.info("Swift  public endpoint url: {}".format(endpoints_url))
-    url_port = endpoints_url.split(':')[2].split('/')[0].strip()
-    if url_port != port:
-        LOG.warning("Swift endpoint  use unexpected port {}. Expected port is {}.".format(url_port, port))
-        return False
 
     LOG.info("Verifying if swift object service (ceph-radosgw) is listed via 'sudo sm-dump' on the "
              "active controller...")
@@ -813,8 +814,17 @@ def verify_swift_object_setup():
 
 
 def get_test_obj_file_names(directory=TEST_OBJ_DIR, pattern='.sh'):
-    cmd = "cd; ls -l {} | grep {} | awk ' {{print $5 \" \" $9}}'".format(directory, pattern)
+
     con_ssh = ControllerClient.get_active_controller()
+    #test first if TEST_OBJ_DIR exist
+    cmd = "test -d /home/wrsroot/{}".format(directory)
+    rc, output = con_ssh.exec_cmd(cmd)
+    if rc != 0:
+        cmd = "cd; mkdir {}; cp *.sh {}".format(directory, directory)
+        con_ssh.exec_cmd(cmd)
+
+    cmd = "cd; ls -l {} | grep {} | awk ' {{print $5 \" \" $9}}'".format(directory, pattern)
+
     rc, output = con_ssh.exec_cmd(cmd)
     obj_files = []
     if rc == 0:
@@ -834,7 +844,16 @@ def delete_object_file(object_path, rm_dir=False):
     if rc == 0:
         cmd = 'rm {} {}'.format('-r' if rm_dir else '', object_path)
         con_ssh.exec_cmd(cmd)
-        return True
-    LOG.warning("File not found or unable to delete file {}: {}".format(object_path, output))
-    return False
+        LOG.info("Files deleted {}: {}".format(object_path, output))
+    standby_controller = system_helper.get_standby_controller_name()
+    with host_helper.ssh_to_host(standby_controller, username=HostLinuxCreds.USER, password=HostLinuxCreds.PASSWORD) \
+            as standby_ssh:
+        cmd = "ls {}".format(object_path)
+        rc, output = standby_ssh.exec_cmd(cmd)
+        if rc == 0:
+            cmd = 'rm {} {}'.format('-r' if rm_dir else '', object_path)
+            standby_ssh.exec_cmd(cmd)
+            LOG.info("Files deleted {}: {}".format(object_path, output))
+
+    return True
 

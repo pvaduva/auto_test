@@ -89,6 +89,112 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
                                            format(vol_id, vm_id, VMTimeout.VOL_ATTACH))
 
     LOG.info("Volume {} is attached to vm {}".format(vol_id, vm_id))
+    LOG.info("Checking if the attached Volume {} is not auto mounted".format(vol_id))
+    guest = nova_helper.get_vm_image_name(vm_id)
+    if guest and guest != 'cgcs_guest':
+
+        LOG.info("Attached Volume {} need to be mounted on vm {}".format(vol_id, vm_id))
+        attachment_info = cinder_helper.get_volume_attachments(vol_id, vm_id=vm_id)[0]
+        if attachment_info:
+            attached_device_name = attachment_info['device']
+            device = attached_device_name.split('/')[-1]
+            LOG.info("Volume {} is attached to VM {} as {}".format(vol_id, vm_id, attached_device_name))
+            if not mount_attached_volume(vm_id, device, vm_image_name=guest):
+                LOG.info("Failed to mount the attached Volume {} on VM {} filesystem".format(vol_id, vm_id))
+
+
+def is_attached_volume_mounted(vm_id, rootfs, vm_image_name=None, vm_ssh=None):
+    """
+    Checks if an attached volume is mounted in VM
+    Args:
+        vm_id (str): - the vm uuid where the volume is attached to
+        rootfs (str) - the device name of the attached volume like vda, vdb, vdc, ....
+        vm_image_name (str): - the  guest image the vm is booted with
+        vm_ssh (VMSSHClient): ssh client session to vm
+    Returns: bool
+
+    """
+
+    #wait_for_vm_pingable_from_natbox(vm_id)
+    if vm_image_name is None:
+        vm_image_name = nova_helper.get_vm_image_name(vm_id)
+
+    cmd = "mount | grep {} |  wc -l".format(rootfs)
+    mounted_msg = "Filesystem /dev/{} is mounted: {}".format(rootfs, vm_id)
+    not_mount_msg = "Filesystem /dev/{} is not mounted: {}".format(rootfs, vm_id)
+    if vm_ssh:
+        cmd_output = vm_ssh.exec_sudo_cmd(cmd)[1]
+        if cmd_output != '0':
+            LOG.info(mounted_msg)
+            return True
+        LOG.info(not_mount_msg)
+        return False
+
+    with ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name) as vm_ssh:
+
+        cmd_output = vm_ssh.exec_sudo_cmd(cmd)[1]
+        if cmd_output != '0':
+            LOG.info(mounted_msg)
+            return True
+        LOG.info(not_mount_msg)
+        return False
+
+def mount_attached_volume(vm_id, rootfs, vm_image_name=None):
+    """
+    Mounts an attached volume on VM
+    Args:
+        vm_id (str): - the vm uuid where the volume is attached to
+        rootfs (str) - the device name of the attached volume like vda, vdb, vdc, ....
+        vm_image_name (str): - the  guest image the vm is booted with
+
+
+    Returns: bool
+
+    """
+    wait_for_vm_pingable_from_natbox(vm_id)
+    if vm_image_name is None:
+        vm_image_name = nova_helper.get_vm_image_name(vm_id)
+
+    with ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name) as vm_ssh:
+
+        if not is_attached_volume_mounted(vm_id, rootfs, vm_image_name=vm_image_name, vm_ssh=vm_ssh):
+            LOG.info("Creating ext4 file system on /dev/{} ".format(rootfs))
+            cmd = "mkfs -t ext4 /dev/{}".format(rootfs)
+            rc, output = vm_ssh.exec_cmd(cmd)
+            if rc != 0:
+                msg = "Failed to create filesystem on /dev/{}: {}".format(rootfs, output)
+                LOG.warning(msg)
+                return False
+            LOG.info("Mounting /dev/{} to /mnt/volume".format(rootfs))
+            cmd = "test -e /mnt/volume"
+            rc, output = vm_ssh.exec_cmd(cmd)
+            mount_cmd = ''
+            if rc == 1:
+                mount_cmd += "mkdir -p /mnt/volume; mount /dev/{} /mnt/volume".format(rootfs)
+            else:
+                mount_cmd += "mount /dev/{} /mnt/volume".format(rootfs)
+
+            rc, output = vm_ssh.exec_cmd(mount_cmd)
+            if rc != 0:
+                msg = "Failed to mount /dev/{}: {}".format(rootfs, output)
+                LOG.warning(msg)
+                return False
+
+            LOG.info("Adding /dev/{} mounting point in /etc/fstab".format(rootfs))
+            cmd = "echo \"/dev/{} /mnt/volume ext4  defaults 0 0\" >> /etc/fstab".format(rootfs)
+
+            rc, output = vm_ssh.exec_cmd(cmd)
+            if rc != 0:
+                msg = "Failed to add /dev/{} mount point to /etc/fstab: {}".format(rootfs, output)
+                LOG.warning(msg)
+
+            LOG.info("/dev/{} is mounted to /mnt/volume".format(rootfs))
+            return True
+        else:
+            LOG.info("/dev/{} is already mounted to /mnt/volume".format(rootfs))
+            return True
+
+
 
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
