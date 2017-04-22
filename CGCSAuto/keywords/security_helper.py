@@ -727,3 +727,19 @@ class LdapUserManager(object, metaclass=Singleton):
             ssh_con.send('exit')
 
         return changed, ssh_con
+
+
+def get_admin_password_in_keyring(con_ssh=None):
+    """
+    Get admin password via 'keyring get CGCS admin'
+    Args:
+        con_ssh (SSHClient): active controller client
+
+    Returns (str): admin password returned
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    admin_pswd = con_ssh.exec_cmd('keyring get CGCS admin', fail_ok=False)[1]
+    return admin_pswd
