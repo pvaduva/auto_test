@@ -10,7 +10,7 @@ from keywords import keystone_helper, host_helper, common
 from keywords.common import Count
 
 
-def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=None, ephemeral=None, swap=None,
+def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None, ephemeral=None, swap=None,
                   is_public=None, rxtx_factor=None, guest_os=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None,
                   storage_backing=None, check_storage_backing=True):
     """

@@ -176,8 +176,8 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
         - Create two flavors, one for each vm.
         - If using 'flavor' for pol_source, set extra specs for the CPU_POLICY.
         - If using 'image' for pol_source, set ImageMetaData for the CPU_POLICY.
-        - If using 'volume' for boot_source, create volume from cgcs-guest image.
-        - If using 'image' for boot_source, use cgcs-guest image.
+        - If using 'volume' for boot_source, create volume from tis image.
+        - If using 'image' for boot_source, use tis image.
         - Determine the amount of free vcpu(s) on the compute before testing.
 
     Test Steps:

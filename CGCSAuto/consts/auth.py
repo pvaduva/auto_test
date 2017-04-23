@@ -86,7 +86,7 @@ class Tenant:
         setattr(cls, tenant_dictname, tenant_dict)
 
 
-class Host:
+class HostLinuxCreds:
     USER = 'wrsroot'
     PASSWORD = "Li69nux*"
 
@@ -172,6 +172,7 @@ class CliAuth:
             'OS_IDENTITY_API_VERSION': '3',
             'OS_REGION_NAME': 'RegionOne',
             'OS_INTERFACE': 'internal',
+            'HTTPS': False,
         }
 
     @classmethod

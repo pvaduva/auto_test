@@ -234,11 +234,12 @@ class TestMutiPortsPCI:
         pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')
         pci_pthru_nets = network_helper.get_pci_nets(vif='pthru', rtn_val='name')
         avail_nets = list(set(pci_pthru_nets) & set(pci_sriov_nets))
-        if 'internal0-net1' not in avail_nets:
+        internal_net_name = 'internal0-net1'
+        if internal_net_name not in avail_nets:
             skip("'internal-net1' does not have pci-sriov and/or pci-passthrough interfaces")
 
         LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
-        flavor_id = nova_helper.create_flavor(name='dedicated')[1]
+        flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048)[1]
         ResourceCleanup.add('flavor', flavor_id, scope='class')
 
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
@@ -246,13 +247,24 @@ class TestMutiPortsPCI:
 
         mgmt_net_id = network_helper.get_mgmt_net_id()
         tenant_net_id = network_helper.get_tenant_net_id()
-        internal_net_id = network_helper.get_internal_net_id(net_name='internal0-net1', strict=True)
+        internal_net_id = network_helper.get_internal_net_id(net_name=internal_net_name, strict=True)
+
+        extra_pcipt_net = None
+        extra_pcipt_net_name = None
+        pcipt_nets = network_helper.get_pci_vm_network(pci_type='pci-passthrough', net_name='internal0-net')
+        if isinstance(pcipt_nets, list):
+            pcipt_nets.remove(internal_net_name)
+            extra_pcipt_net_name = pcipt_nets[0]
+            extra_pcipt_net = network_helper.get_net_id_from_name(pcipt_nets[0])
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'virtio'},
                 {'net-id': internal_net_id, 'vif-model': 'virtio'},
                 {'net-id': internal_net_id, 'vif-model': 'pci-sriov'},
                 {'net-id': internal_net_id, 'vif-model': 'avp'}, ]
+
+        if extra_pcipt_net:
+            nics.append({'net-id': extra_pcipt_net, 'vif-model': 'virtio'})
 
         LOG.fixture_step("(class) Boot a base pci vm with following nics: {}".format(nics))
         base_vm_pci = vm_helper.boot_vm(name='multiports_pci_base', flavor=flavor_id, nics=nics, cleanup='class',
@@ -272,7 +284,16 @@ class TestMutiPortsPCI:
                                              auto_info=Tenant.ADMIN)
         assert seg_id, 'Segmentation id of internal0-net1 is not found'
 
-        return base_vm_pci, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info
+        if extra_pcipt_net:
+            extra_pcipt_seg_id = network_helper.get_net_info(net_id=extra_pcipt_net, field='segmentation_id',
+                                                             strict=False, auto_info=Tenant.ADMIN)
+            assert extra_pcipt_seg_id, 'Segmentation id of {} is not found'.format(extra_pcipt_net_name)
+
+            seg_id = {internal_net_name: seg_id,
+                      extra_pcipt_net_name: extra_pcipt_seg_id}
+
+        return base_vm_pci, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info, \
+            extra_pcipt_net, extra_pcipt_net_name
 
     @mark.parametrize('vifs', [
         mark.p2(['virtio_x7', 'avp_x5', 'pci-passthrough']),
@@ -313,7 +334,8 @@ class TestMutiPortsPCI:
             - Delete created vms and flavor
         """
 
-        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info = base_setup_pci
+        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info, extra_pcipt_net, \
+            extra_pcipt_net_name = base_setup_pci
 
         pcipt_included = False
         for vif in vifs:
@@ -329,6 +351,8 @@ class TestMutiPortsPCI:
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'avp'}]
         nics = _append_nics_for_net(vifs, net_id=internal_net_id, nics=nics)
+        if pcipt_included and extra_pcipt_net:
+            nics.append({'net-id': extra_pcipt_net, 'vif-model': 'pci-passthrough'})
 
         LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
         vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor, cleanup='function',
@@ -407,12 +431,16 @@ class TestMutiPortsPCI:
         Teardown:
             - Delete created vms and flavor
         """
-        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info = base_setup_pci
+        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info, extra_pcipt_net, \
+            extra_pcipt_net_name = base_setup_pci
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'avp'}]
         for vif in vifs:
             nics.append({'net-id': internal_net_id, 'vif-model': vif})
+
+        if extra_pcipt_net:
+            nics.append({'net-id': extra_pcipt_net, 'vif-model': 'pci-passthrough'})
 
         LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
         vm_under_test = vm_helper.boot_vm(name='multiports_pci_evac', nics=nics, flavor=flavor, cleanup='function',

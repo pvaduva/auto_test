@@ -313,6 +313,9 @@ def get_column(table_, header):
     Returns (list): target column. Each item is a string.
 
     """
+    if not table_['headers']:
+        LOG.warning("Empty table supplied")
+        return []
     rows = get_all_rows(table_)
     index = get_column_index(table_, header)
     column = []
@@ -430,6 +433,10 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
     Returns (list): a list of matching values for target header
 
     """
+    if not table_['headers']:
+        LOG.warning('Empty table supplied')
+        return []
+
     new_kwargs = {}
     for k, v in kwargs.items():
         if v is not None:
@@ -618,6 +625,11 @@ def filter_table(table_, strict=True, regex=False, exclude=False, **kwargs):
     table_ = table_.copy()
     if not kwargs:
         raise ValueError("At least one header and value(s) pair needs to be specified via kwargs")
+
+    if not table_['headers']:
+        LOG.warning("Empty table supplied")
+        return table_
+
     row_indexes = []
     first_iteration = True
     for header, values in kwargs.items():

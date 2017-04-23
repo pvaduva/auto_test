@@ -22,7 +22,7 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
 
     data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', rtn_list=True)
 
-    device_types = system_helper.get_host_ports_info(host, 'device type', if_name=data_ports, strict=True)
+    device_types = system_helper.get_host_ports_values(host, 'device type', if_name=data_ports, strict=True)
     extra_mt_ports = 0
     for device_type in device_types:
         if re.search(MELLANOX_DEVICE, device_type):

@@ -25,6 +25,7 @@ class ResourceCleanup:
         'function': deepcopy(__resources_dict),
         'class': deepcopy(__resources_dict),
         'module': deepcopy(__resources_dict),
+        'session': deepcopy(__resources_dict)
     }
 
     @classmethod
@@ -50,7 +51,7 @@ class ResourceCleanup:
         """
         scope = scope.lower()
         resource_type = resource_type.lower()
-        valid_scopes = ['function', 'class', 'module']
+        valid_scopes = ['function', 'class', 'module', 'session']
         valid_types = ['vm', 'volume', 'volume_type', 'qos', 'flavor', 'image', 'server_group', 'router',
                        'subnet', 'floating_ip', 'heat_stack', 'port']
 
@@ -90,7 +91,7 @@ class VlmHostsReserved:
 
     @classmethod
     def _get_hosts_reserved(cls, scope):
-        return cls.__hosts_reserved_dict[scope]
+        return list(cls.__hosts_reserved_dict[scope])
 
     @classmethod
     def add(cls, hosts, scope='session'):

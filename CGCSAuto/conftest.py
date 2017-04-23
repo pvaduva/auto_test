@@ -12,6 +12,7 @@ from consts.proj_vars import ProjVar, InstallVars
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
 
+
 tc_start_time = None
 has_fail = False
 stress_iteration = -1
@@ -343,39 +344,50 @@ def pytest_unconfigure():
     except:
         pass
 
-    tc_res_path = ProjVar.get_var('LOG_DIR') + '/test_results.log'
-    build_id = ProjVar.get_var('BUILD_ID')
-    build_server = ProjVar.get_var('BUILD_SERVER')
+    try:
+        log_dir = ProjVar.get_var('LOG_DIR')
+        tc_res_path = log_dir + '/test_results.log'
+        build_id = ProjVar.get_var('BUILD_ID')
+        build_server = ProjVar.get_var('BUILD_SERVER')
 
-    total_exec = TestRes.PASSNUM + TestRes.FAILNUM
-    pass_rate = fail_rate = '0'
-    if total_exec > 0:
-        pass_rate = "{}%".format(round(TestRes.PASSNUM * 100 / total_exec, 2))
-        fail_rate = "{}%".format(round(TestRes.FAILNUM * 100 / total_exec, 2))
-        with open(tc_res_path, mode='a') as f:
-            # Append general info to result log
-            f.write('\n\nLab: {}\n'
-                    'Build ID: {}\n'
-                    'Build Server: {}\n'
-                    'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server,
-                                                       ProjVar.get_var('LOG_DIR')))
-            # Add result summary to beginning of the file
-            f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
-                    format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
-            if TestRes.SKIPNUM > 0:
-                f.write('------------\nSkipped: {}'.format(TestRes.SKIPNUM))
+        total_exec = TestRes.PASSNUM + TestRes.FAILNUM
+        pass_rate = fail_rate = '0'
+        if total_exec > 0:
+            pass_rate = "{}%".format(round(TestRes.PASSNUM * 100 / total_exec, 2))
+            fail_rate = "{}%".format(round(TestRes.FAILNUM * 100 / total_exec, 2))
+            with open(tc_res_path, mode='a') as f:
+                # Append general info to result log
+                f.write('\n\nLab: {}\n'
+                        'Build ID: {}\n'
+                        'Build Server: {}\n'
+                        'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server,
+                                                           ProjVar.get_var('LOG_DIR')))
+                # Add result summary to beginning of the file
+                f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
+                        format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
+                if TestRes.SKIPNUM > 0:
+                    f.write('------------\nSkipped: {}'.format(TestRes.SKIPNUM))
 
-        LOG.info("Test Results saved to: {}".format(tc_res_path))
-        with open(tc_res_path, 'r') as fin:
-            print(fin.read())
+            LOG.info("Test Results saved to: {}".format(tc_res_path))
+            with open(tc_res_path, 'r') as fin:
+                print(fin.read())
+    except Exception:
+        LOG.exception("Failed to add session summary to test_results.py")
 
     # Below needs con_ssh to be initialized
     try:
         from utils.ssh import ControllerClient
         con_ssh = ControllerClient.get_active_controller()
     except:
-        LOG.warning("cannot find con_ssh")
+        LOG.warning("No con_ssh found")
         return
+
+    vswitch_info_hosts = list(set(ProjVar.get_var('VSWITCH_INFO_HOSTS')))
+    if vswitch_info_hosts:
+        try:
+            setups.scp_vswitch_log(hosts=vswitch_info_hosts, con_ssh=con_ssh)
+        except Exception as e:
+            LOG.warning("unable to scp vswitch log - {}".format(e.__str__()))
 
     if has_fail and ProjVar.get_var('COLLECT_ALL'):
         # Collect tis logs if collect all required upon test(s) failure
@@ -469,16 +481,16 @@ def pytest_collection_modifyitems(items):
 
 def pytest_generate_tests(metafunc):
     # Modify the order of the fixtures to delete resources before revert host
-    config_host_fixtures = {'class': 'config_host_class', 'module': 'config_host_module'}
-
-    for key, value in config_host_fixtures.items():
-        delete_res_func = 'delete_resources_{}'.format(key)
-
-        if value in metafunc.fixturenames and delete_res_func in metafunc.fixturenames:
-            index = list(metafunc.fixturenames).index('delete_resources_{}'.format(key))
-            index = max([0, index-1])
-            metafunc.fixturenames.remove(value)
-            metafunc.fixturenames.insert(index, value)
+    # config_host_fixtures = {'class': 'config_host_class', 'module': 'config_host_module'}
+    # metafunc.fixturenames = list(set(list(metafunc.fixturenames)))
+    # for key, config_fixture in config_host_fixtures.items():
+    #     delete_res_fixture = 'delete_resources_{}'.format(key)
+    #
+    #     if config_fixture in metafunc.fixturenames and delete_res_fixture in metafunc.fixturenames:
+    #         index = list(metafunc.fixturenames).index(delete_res_fixture)
+    #         index = max([0, index-1])
+    #         metafunc.fixturenames.remove(config_fixture)
+    #         metafunc.fixturenames.insert(index, config_fixture)
 
     # Stress fixture
     if metafunc.config.option.repeat > 0:
@@ -486,7 +498,51 @@ def pytest_generate_tests(metafunc):
         param_name = 'autorepeat'
 
         count = int(metafunc.config.option.repeat)
-        metafunc.parametrize(param_name, range(count), indirect=True, ids=__params_gen(count))
+        metafunc.parametrize(param_name, range(count),indirect=True, ids=__params_gen(count))
+
+    # print("{}".format(metafunc.fixturenames))
+
+
+##############################################################
+# Manipulating fixture orders based on following pytest rules
+# session > module > class > function
+# autouse > non-autouse
+# alphabetic after full-filling above criteria
+#
+# Orders we want on fixtures of same scope:
+# check_alarms > delete_resources > config_host
+#############################################################
+
+@pytest.fixture(scope='session')
+def check_alarms():
+    LOG.debug("Empty check alarms")
+    return
+
+
+@pytest.fixture(scope='session')
+def config_host_class():
+    LOG.debug("Empty config host class")
+    return
+
+
+@pytest.fixture(scope='session')
+def config_host_module():
+    LOG.debug("Empty config host module")
+
+
+@pytest.fixture(autouse=True)
+def a1_fixture(check_alarms):
+    return
+
+
+@pytest.fixture(scope='module', autouse=True)
+def c1_fixture(config_host_module):
+    return
+
+
+@pytest.fixture(scope='class', autouse=True)
+def c2_fixture(config_host_class):
+    return
 
 
 @pytest.fixture(autouse=True)
@@ -506,6 +562,10 @@ def __params_gen(iterations):
         ids.append('iter{}'.format(i))
 
     return ids
+
+#####################################
+# End of fixture order manipulation #
+#####################################
 
 
 def pytest_sessionfinish(session):

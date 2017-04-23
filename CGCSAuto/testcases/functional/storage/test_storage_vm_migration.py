@@ -19,6 +19,9 @@ def check_system():
     if len(host_helper.get_nova_hosts()) < 2:
         skip("at least two computes are required")
 
+    if len(nova_helper.get_storage_backing_with_max_hosts()[1]) < 2:
+        skip("at least two hosts with the same storage backing are required")
+
 
 @fixture(scope='function', autouse=True)
 def pre_alarm_():
@@ -141,8 +144,8 @@ def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
     - Terminate VMs
 
     Skip conditions:
-     - less that two computes
-     - no  storage node
+    - less than two computes
+    - no storage node
 
     """
     pre_alarms = pre_alarm_
@@ -298,7 +301,8 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_)
     - Terminate VMs
 
     Skip conditions:
-    - less that two computes
+    - less than two hosts with the same storage backing
+    - less than two computes
     - no storage node
 
     """
@@ -309,6 +313,7 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_)
 
     for vm in vms:
         vm_id = vm['id']
+
         LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm_id))
         vm_state = nova_helper.get_vm_status(vm_id)
 
@@ -369,13 +374,13 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate():
     - less than one storage
 
     """
-    skip("Currently not working. Centos image doesn't see both volumes")
+    #skip("Currently not working. Centos image doesn't see both volumes")
     LOG.tc_step("Creating a volume size=8GB.....")
     vol_id_0 = cinder_helper.create_volume(size=8)[1]
     ResourceCleanup.add('volume', vol_id_0, scope='function')
 
     LOG.tc_step("Creating a second volume size=8GB.....")
-    vol_id_1 = cinder_helper.create_volume(size=8)[1]
+    vol_id_1 = cinder_helper.create_volume(size=8, bootable=False)[1]
     LOG.tc_step("Volume id is: {}".format(vol_id_1))
     ResourceCleanup.add('volume', vol_id_1, scope='function')
 
@@ -383,7 +388,7 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate():
 
     rc, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm_0', source='volume', source_id=vol_id_0, cleanup='function')
     # ResourceCleanup.add('vm', vm_id, scope='function')
-    assert rc == 0, "VM vm_0 did not succeed: reaon {}".format(msg)
+    assert rc == 0, "VM vm_0 did not succeed: reason {}".format(msg)
     time.sleep(5)
 
     LOG.tc_step("Verify  VM can be pinged from NAT box...")

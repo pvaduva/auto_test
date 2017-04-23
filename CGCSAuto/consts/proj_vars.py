@@ -9,6 +9,7 @@ class ProjVar:
                   'BUILD_SERVER': None,
                   'LOG_DIR': None,
                   'SOURCE_CREDENTIAL': None,
+                  'VSWITCH_INFO_HOSTS': [],
                   }
                   # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}
 
@@ -33,7 +34,6 @@ class ProjVar:
             'REPORT_ALL': report_all,
             'REPORT_TAG': report_tag,
             'OPENSTACK_CLI': openstack_cli,
-            #'HTTPS': lab['https'] if 'https' in lab else None
         })
 
     @classmethod

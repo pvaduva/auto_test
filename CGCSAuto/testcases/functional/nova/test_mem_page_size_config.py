@@ -57,7 +57,8 @@ def add_1g_and_4k_pages(config_host_module, add_hosts_to_zone):
                 LOG.fixture_step("Modify host0 proc0 to have 0 of 1GB pages and 1GB of 4k pages")
                 cli.system("host-memory-modify -2M {} -1G {} {} {}".format(host0_proc0_2m, 0, hosts[0], 0))
             if host0_proc1_mod is True:
-                host0_proc1_2m = int((mem_host_0_proc_1[3] - 3 * 1024) / 2)
+                # host0_proc1_2m = int((mem_host_0_proc_1[3] - 3 * 1024) / 2)
+                host0_proc1_2m = int((mem_host_0_proc_1[3] - 2 * 1024) / 2)
                 LOG.fixture_step("Modify host0 proc1 to have 2GB of 1GB pages and 1GB of 4k pages")
                 cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(host0_proc1_2m), 2, hosts[0], 1))
         elif host == hosts[1]:
@@ -66,7 +67,8 @@ def add_1g_and_4k_pages(config_host_module, add_hosts_to_zone):
                 LOG.fixture_step("Modify host1 proc0 to have 0 of 1GB pages and 1GB of 4k pages")
                 cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(host1_proc0_2m), 0, hosts[1], 0))
             if host1_proc1_mod is True:
-                host1_proc1_2m = int((mem_host_1_proc_1[3] - 3 * 1024) / 2)
+                # host1_proc1_2m = int((mem_host_1_proc_1[3] - 3 * 1024) / 2)
+                host1_proc1_2m = int((mem_host_1_proc_1[3] - 2 * 1024) / 2)
                 LOG.fixture_step("Modify host1 proc1 to have 0 of 1GB pages and 2GB of 4k pages")
                 cli.system("host-memory-modify -2M {} -1G {} {} {}".format(host1_proc1_2m, 0, hosts[1], 1))
 
@@ -170,12 +172,12 @@ def test_boot_vm_mem_page_size(flavor_2g, flavor_mem_page_size, image_mempage, i
     Args:
         flavor_2g (tuple): flavor id of a flavor with ram set to 2G, hosts configured and storage_backing
         flavor_mem_page_size (str): memory page size extra spec value to set in flavor
-        image_mempage (str): image id for cgcs-guest image
+        image_mempage (str): image id for tis image
         image_mem_page_size (str): memory page metadata value to set in image
 
     Setup:
         - Create a flavor with 2G RAM (module)
-        - Get image id of cgcs-guest image (module)
+        - Get image id of tis image (module)
 
     Test Steps:
         - Set/Unset flavor memory page size extra spec with given value (unset if None is given)

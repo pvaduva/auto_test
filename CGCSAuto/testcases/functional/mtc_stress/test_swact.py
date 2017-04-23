@@ -15,7 +15,17 @@ def test_swact_20_times():
         - Boot a vm and ensure it's pingable
         - Start writing from pre-existed vm before swacting
         - Repeat following steps 20 times:
-            -
+            - ensure system has standby controller
+            - system host-swact
+            - ensure all services are active in sudo sm-dump on new active controller
+            - ensure pre-existed vm is still pingable from NatBox
+            - ensure writing did not stop on pre-existed vm
+            - ensure new vm can be launched in 2 minutes
+            - ensure newly booted vm is pingable from NatBox
+            - delete newly booted vm
+
+    Teardown:
+        - delete vms, volumes
 
     """
     if len(system_helper.get_controllers()) < 2:

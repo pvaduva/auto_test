@@ -8,7 +8,7 @@ from utils import cli, exceptions, table_parser
 from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
 from utils.tis_log import LOG
 
-from consts.auth import Tenant, SvcCgcsAuto
+from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState, Prompt, MELLANOX_DEVICE
 from consts.timeout import HostTimeout, CMDTimeout
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
@@ -135,6 +135,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
 
     if reboot_con:
         hostnames.append(controller)
+        wait_for_hosts_states(
+                controller, timeout=HostTimeout.FAIL_AFTER_REBOOT, fail_ok=True, check_interval=10, duration=8,
+                con_ssh=con_ssh, availability=[HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED])
 
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
     unlocked_hosts_all = table_parser.get_values(table_, 'hostname', administrative='unlocked')
@@ -214,7 +217,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         raise exceptions.HostPostCheckFailed(err_msg)
 
 
-def wait_for_hosts_ready(hosts, con_ssh=None, fail_ok=False):
+def wait_for_hosts_ready(hosts, con_ssh=None):
     """
     Wait for hosts to be in online state is locked, and available and hypervisor/webservice up if unlocked
     Args:
@@ -395,6 +398,8 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
     if exitcode == 1:
         return 1, output
+
+    wait_for_host_states(host=host, timeout=90, check_interval=0, fail_ok=True, task='Locking')
 
     # Wait for task complete. If task stucks, fail the test regardless. Perhaps timeout needs to be increased.
     wait_for_host_states(host=host, timeout=lock_timeout, task='', fail_ok=False)
@@ -2420,6 +2425,14 @@ def ensure_host_provisioned(host, cons_ssh=None):
     LOG.info("Checking if host {} is already provisioned ....".format(host))
     if is_host_provisioned(host, con_ssh=None):
         return 0, "Host {} is provisioned"
+    active_controller = system_helper.get_active_controller_name()
+    Conter_Swact_back =False
+    if active_controller == host:
+       LOG.tc_step("Swact active controller and ensure active controller is changed")
+       exit_code, output = swact_host(hostname=active_controller)
+       assert 0 == exit_code, "{} is not recognized as active controller".format(active_controller)
+       active_controller = system_helper.get_active_controller_name()
+       Conter_Swact_back = True
 
     LOG.info("Host {} not provisioned ; doing lock/unlock to provision the host ....".format(host))
     rc, output = lock_host(host,con_ssh=cons_ssh)
@@ -2431,10 +2444,16 @@ def ensure_host_provisioned(host, cons_ssh=None):
     if rc != 0:
         err_msg = "Unlock host {} failed: {}".format(host, output)
         raise exceptions.HostError(err_msg)
+    if Conter_Swact_back:
+        LOG.tc_step("Swact active controller back and ensure active controller is changed")
+        exit_code, output = swact_host(hostname=active_controller)
+        assert 0 == exit_code, "{} is not recognized as active controller".format(active_controller)
 
     LOG.info("Checking if host {} is provisioned after lock/unlock ....".format(host))
     if not is_host_provisioned(host, con_ssh=None):
         raise exceptions.HostError("Failed to provision host {}")
+    # Deleay for the alarm to clear . Could be improved.
+    time.sleep(120)
     return 0, "Host {} is provisioned after lock/unlock"
 
 
@@ -2775,8 +2794,8 @@ def get_mellanox_ports(host):
 
     """
     data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', rtn_list=True)
-    mt_ports = system_helper.get_host_ports_info(host, 'uuid', if_name=data_ports, strict=False, regex=True,
-                                                 **{'device type': MELLANOX_DEVICE})
+    mt_ports = system_helper.get_host_ports_values(host, 'uuid', if_name=data_ports, strict=False, regex=True,
+                                                   **{'device type': MELLANOX_DEVICE})
     LOG.info("Mellanox ports: {}".format(mt_ports))
     return mt_ports
 
@@ -2804,3 +2823,57 @@ def get_host_network_interface_dev_names(host, con_ssh=None):
             LOG.warning("Failed to get interface device names for host {}".format(host))
 
     return dev_names
+
+
+def scp_files_to_controller(host, file_path, dest_dir, controller=None, dest_user=None, sudo=False, con_ssh=None,
+                            fail_ok=True):
+    dest_server = controller if controller else ''
+    dest_user = dest_user if dest_user else ''
+    con_ssh.scp_files(source_file=file_path, source_server=host, source_password=HostLinuxCreds.PASSWORD, source_user=HostLinuxCreds.USER,
+                      dest_file=dest_dir, dest_user=dest_user, dest_password=HostLinuxCreds.PASSWORD, dest_server=dest_server,
+                      sudo=sudo, fail_ok=fail_ok)
+
+
+def get_host_interfaces_for_net_type(host, net_type='infra', if_type=None, exclude_iftype=False, con_ssh=None):
+    """
+    Get interface names for given net_type that is expected to be listed in ifconfig on host
+    Args:
+        host (str):
+        net_type (str): 'infra', 'mgmt' or 'oam', (data is handled in AVS thus not shown in ifconfig on host)
+        if_type (str|None): When None, interfaces with all eth types will return
+        exclude_iftype(bool): whether or not to exclude the if type specified.
+        con_ssh (SSHClient):
+
+    Returns (list):
+
+    """
+    LOG.info("Getting expected eth names for {} network on {}".format(net_type, host))
+    table_origin = system_helper.get_host_interfaces_table(host=host, con_ssh=con_ssh)
+    table_ = table_parser.filter_table(table_origin, **{'network type': net_type})
+    if if_type:
+        table_ = table_parser.filter_table(table_, exclude=exclude_iftype, **{'type': if_type})
+
+    interfaces = []
+    table_eth = table_parser.filter_table(table_, **{'type': 'ethernet'})
+    eth_ifs = table_parser.get_values(table_eth, 'ports')
+    # such as ["[u'enp134s0f1']", "[u'enp131s0f1']"]
+
+    table_ae = table_parser.filter_table(table_, **{'type': 'ae'})
+    ae_ifs = table_parser.get_values(table_ae, 'uses i/f')
+
+    for ifs in eth_ifs + ae_ifs:
+        interfaces += eval(ifs)
+
+    table_vlan = table_parser.filter_table(table_, **{'type': ['vlan', 'vxlan']})
+    vlan_ifs_ = table_parser.get_values(table_vlan, 'uses i/f')
+    vlan_ids = table_parser.get_values(table_vlan, 'vlan id')
+    for i in range(len(vlan_ifs_)):
+        # assuming only 1 item in 'uses i/f' list
+        vlan_useif = eval(vlan_ifs_[i])[0]
+        vlan_useif_ports = eval(table_parser.get_values(table_origin, 'ports', name=vlan_useif)[0])
+        if vlan_useif_ports:
+            vlan_useif = vlan_useif_ports[0]
+        interfaces.append("{}.{}".format(vlan_useif, vlan_ids[i]))
+
+    LOG.info("Expected eth names for {} network on {}: {}".format(net_type, host, interfaces))
+    return interfaces

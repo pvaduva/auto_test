@@ -59,7 +59,7 @@ def __unreserve(scope):
 
 
 @fixture(scope='module')
-def reserve_unreserve_all_hosts_module():
+def reserve_unreserve_all_hosts_module(unreserve_hosts_module):
     """
     Reserve all hosts in module setup and unreserve hosts in module teardown
     """
@@ -77,4 +77,5 @@ def reserve_unreserve_all_hosts_session(unreserve_hosts_session):
 def __reserve_unreserve_all_hosts(scope):
     hosts = vlm_helper.get_hostnames_from_consts()
     VlmHostsReserved.add(hosts, scope=scope)
+    # hosts_to_unreserve = VlmHostsReserved._get_hosts_reserved(scope)
     vlm_helper.reserve_hosts(hosts)

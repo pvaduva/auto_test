@@ -5,10 +5,12 @@ import time
 from collections import Counter
 
 from consts.auth import Tenant
-from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE
+from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE
+from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
-from keywords import common, keystone_helper, host_helper
+from keywords import common, keystone_helper, host_helper, system_helper, nova_helper
 from utils import table_parser, cli, exceptions
+from utils.ssh import NATBoxClient
 from utils.tis_log import LOG
 
 
@@ -808,7 +810,7 @@ def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None,
         return table_parser.get_column(table_, 'id')
 
 
-def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False):
+def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, exclude_nets=None):
     """
     This function returns the management IPs for all VMs on the system.
     We make the assumption that the management IPs start with "192".
@@ -818,16 +820,17 @@ def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         con_ssh (SSHClient): active controller SSHClient object
         auth_info (dict): use admin by default unless specified
         rtn_dict (bool): return list if False, return dict if True
+        exclude_nets (list|str) network name(s) - exclude ips from given network name(s)
 
     Returns (list|dict):
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
     return _get_net_ips_for_vms(netname_pattern=Networks.DATA_NET_NAME, ip_pattern=Networks.DATA_IP, vms=vms,
-                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict)
+                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
-def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False):
+def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, exclude_nets=None):
     """
     This function returns the management IPs for all VMs on the system.
     We make the assumption that the management IPs start with "192".
@@ -837,16 +840,19 @@ def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn
         con_ssh (SSHClient): active controller SSHClient object
         auth_info (dict): use admin by default unless specified
         rtn_dict (bool): return list if False, return dict if True
+        exclude_nets (list|str) network name(s) - exclude ips from given network name(s)
 
     Returns (list|dict):
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
     return _get_net_ips_for_vms(netname_pattern=Networks.INTERNAL_NET_NAME, ip_pattern=Networks.INTERNAL_IP, vms=vms,
-                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, use_fip=False)
+                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, use_fip=False,
+                                exclude_nets=exclude_nets)
 
 
-def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, use_fip=False):
+def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, use_fip=False,
+                         exclude_nets=None):
     """
     This function returns the management IPs for all VMs on the system.
     We make the assumption that the management IPs start with "192".
@@ -857,17 +863,19 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         auth_info (dict): use admin by default unless specified
         rtn_dict (bool): return list if False, return dict if True
         use_fip (bool): Whether to return only floating ip(s) if any vm has floating ip(s) associated with it
+        exclude_nets (list|str) network name(s) - exclude ips from given network name(s)
 
     Returns (list|dict):
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=Networks.MGMT_NET_NAME, ip_pattern=Networks.MGMT_IP, vms=vms, con_ssh=con_ssh,
-                                auth_info=auth_info, rtn_dict=rtn_dict, use_fip=use_fip)
+    return _get_net_ips_for_vms(netname_pattern=Networks.MGMT_NET_NAME, ip_pattern=Networks.MGMT_IP, vms=vms,
+                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, use_fip=use_fip,
+                                exclude_nets=exclude_nets)
 
 
 def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False,
-                         use_fip=False):
+                         use_fip=False, exclude_nets=None):
 
     table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=auth_info))
     if vms:
@@ -885,11 +893,22 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
     if use_fip:
         floatingips = get_floating_ips(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
 
+    if exclude_nets:
+        if isinstance(exclude_nets, str):
+            exclude_nets = [exclude_nets]
+
     for i in range(len(vm_ids)):
         vm_id = vm_ids[i]
         vm_nets = vms_nets[i].split(sep=';')
         targeted_ips_str = ''
         for vm_net in vm_nets:
+
+            if exclude_nets:
+                for net_to_exclude in exclude_nets:
+                    if net_to_exclude in vm_net:
+                        LOG.info("Excluding IPs from {}".format(net_to_exclude))
+                        continue
+            # find ips
             if re.search(netname_pattern, vm_net):
                 targeted_ips_str += vm_net
 
@@ -940,7 +959,8 @@ def get_net_type_from_name(net_name):
     return net_type
 
 
-def get_routers(name=None, distributed=None, ha=None, gateway_ip=None, strict=True, auth_info=None, con_ssh=None):
+def get_routers(name=None, distributed=None, ha=None, gateway_ip=None, strict=True, regex=False,
+                auth_info=None, con_ssh=None):
     """
     Get router id(s) based on given criteria.
     Args:
@@ -969,7 +989,7 @@ def get_routers(name=None, distributed=None, ha=None, gateway_ip=None, strict=Tr
     table_ = table_parser.table(cli.neutron('router-list', ssh_client=con_ssh, auth_info=auth_info),
                                 combine_multiline_entry=True)
     if name is not None:
-        table_ = table_parser.filter_table(table_, strict=strict, name=name)
+        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, name=name)
 
     return table_parser.get_values(table_, 'id', **final_params)
 
@@ -1078,14 +1098,29 @@ def create_router(name=None, tenant=None, distributed=None, ha=None, admin_state
     return 0, router_id, succ_msg
 
 
-def get_router_subnets(router_id, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_router_subnets(router_id, rtn_val='subnet_id', mgmt_only=True, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+
+    Args:
+        router_id:
+        rtn_val (str): 'subnet_id' or 'ip_address'
+        auth_info:
+        con_ssh:
+
+    Returns:
+
+    """
     router_ports_tab = table_parser.table(cli.neutron('router-port-list', router_id, ssh_client=con_ssh,
                                                       auth_info=auth_info))
 
     fixed_ips = table_parser.get_column(router_ports_tab, 'fixed_ips')
-    subnets_ids = list(set([eval(item)['subnet_id'] for item in fixed_ips]))
+    rtn_val = 'subnet_id' if 'id' in rtn_val else 'ip_address'
+    subnets = list(set([eval(item)[rtn_val] for item in fixed_ips]))
 
-    return subnets_ids
+    if rtn_val == 'ip_address' and mgmt_only:
+        subnets = [ip_ for ip_ in subnets if re.match(Networks.MGMT_IP, ip_)]
+
+    return subnets
 
 
 def get_next_subnet_cidr(net_id, ip_pattern='\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', con_ssh=None):
@@ -1537,6 +1572,7 @@ def update_router_distributed(router_id=None, distributed=True, pre_admin_down=T
         distributed (bool): True if set to distributed, False if set to centralized
         pre_admin_down (bool|None): whether to set admin state down before updating the distributed state
         post_admin_up (bool): whether to set admin state up after updating the distributed state
+        post_admin_up_on_failure (bool): whether to set admin state up if updating router failed
         fail_ok (bool): whether to throw exception if cli got rejected
         auth_info (dict):
         con_ssh (SSHClient):
@@ -1681,9 +1717,9 @@ def get_pci_devices_info(con_ssh=None, auth_info=None):
     LOG.info('device IDs from device-list:{}'.format(devices))
 
     nova_pci_devices = {}
-    for id in devices:
-        table = table_parser.table(cli.nova('device-show {}'.format(id)))
-        LOG.debug('output from nova device-show for device-id:{}\n{}'.format(id, table))
+    for id_ in devices:
+        table = table_parser.table(cli.nova('device-show {}'.format(id_)))
+        LOG.debug('output from nova device-show for device-id:{}\n{}'.format(id_, table))
 
         try:
             names = table_parser.get_column(table, 'Device Name')
@@ -1695,17 +1731,17 @@ def get_pci_devices_info(con_ssh=None, auth_info=None):
             pci_vfs = table_parser.get_column(table, 'pci_vfs_configured')
             pci_vfs_used = table_parser.get_column(table, 'pci_vfs_used')
 
-            for name, device_id, vendor_id, host, pci_pf, pci_pf_used, pci_vfs, pci_vfs_used in zip(
-                names, device_ids, vendor_ids, hosts, pci_pfs, pci_pfs_used, pci_vfs, pci_vfs_used):
-                nova_pci_devices[host] = {device_id: {'vendor_id': vendor_id,
-                                                      'pci_pfs_configured': pci_pfs,
-                                                      'pci_pfs_used': pci_pfs_used,
-                                                      'pci_vfs_configured': pci_vfs,
-                                                      'pci_vfs_used': pci_pfs_used,
-                                                      }}
+            for name, device_id, vendor_id, host, pci_pf, pci_pf_used, pci_vfs, pci_vfs_used in \
+                    zip(names, device_ids, vendor_ids, hosts, pci_pfs, pci_pfs_used, pci_vfs, pci_vfs_used):
+                    nova_pci_devices[host] = {device_id: {'vendor_id': vendor_id,
+                                                          'pci_pfs_configured': pci_pfs,
+                                                          'pci_pfs_used': pci_pfs_used,
+                                                          'pci_vfs_configured': pci_vfs,
+                                                          'pci_vfs_used': pci_pfs_used,
+                                                          }}
         except Exception as e:
             LOG.error('CLI output format error: CLI nova device-show {} changed its format. error message:{}'.format(
-                id, e))
+                id_, e))
             raise
 
     LOG.debug('nova_pci_deivces:{}'.format(nova_pci_devices))
@@ -1816,7 +1852,7 @@ def get_networks_on_providernet(providernet_id, rtn_val='id', con_ssh=None, auth
     networks = table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, exclude=exclude, **kwargs)
 
     LOG.info("Networks on providernet {} with args - '{}': {}".format(providernet_id, kwargs, networks))
-    #return list(set(networks))
+    # return list(set(networks))
     return list(networks)
 
 
@@ -1895,7 +1931,8 @@ def __filter_ips_with_subnet_vlan_id_openstack(ips, vlan_id=0, auth_info=Tenant.
 
     filtered_ips = []
     for subnet in subnets:
-        subnet_show_tab = table_parser.table(cli.neutron('subnet-show', subnet, ssh_client=con_ssh, auth_info=auth_info))
+        subnet_show_tab = table_parser.table(cli.neutron('subnet-show', subnet, ssh_client=con_ssh,
+                                                         auth_info=auth_info))
         if eval(table_parser.get_value_two_col_table(subnet_show_tab, 'wrs-net:vlan_id')) == vlan_id:
             filtered_ips.append(subnets[subnet])
 
@@ -1935,8 +1972,9 @@ def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD):
         return ''
 
 
-def create_providernet_range(providernet, range_min, range_max, rtn_val='id', range_name=None, shared=True, tenant_id=None,
-                             group=None, port=None, ttl=None, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+def create_providernet_range(providernet, range_min, range_max, rtn_val='id', range_name=None, shared=True,
+                             tenant_id=None, group=None, port=None, ttl=None, auth_info=Tenant.ADMIN, con_ssh=None,
+                             fail_ok=False):
     """
     Create a provider net range for given providernet with specified min and max range values
     Args:
@@ -2011,21 +2049,19 @@ def create_providernet_range(providernet, range_min, range_max, rtn_val='id', ra
         return 0, range_name
 
 
-def delete_providernet_range(providernet_range, range_val='name', con_ssh=None, auth_info=Tenant.ADMIN,
-                             fail_ok=False):
+def delete_providernet_range(providernet_range, range_val='name', con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
     """
-
+    Delete providernet range
     Args:
-        range_name:
-        con_ssh:
-        auth_info:
-        fail_ok
+        providernet_range (str): providernet range name or id
+        range_val (str): 'name' or 'id'
+        con_ssh (SSHClient):
+        auth_info (dict):
+        fail_ok (bool):
 
-    Returns:
-        0 for success
-        -1 for do nothing
-        1 error
-        2 can not be deleted
+    Returns (tuple): (code, output)
+        (0, <stdout>)   successfully deleted
+        (1, <stderr>)   cli rejected
 
     """
 
@@ -2080,10 +2116,27 @@ def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     return nics
 
 
+def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
+    """
+    Get interface uuids for given network type
+    Args:
+        ssh_client (SSHClient):
+        net_type: 'data', 'mgmt', or 'internal'
+
+    Returns (list): interface uuids
+
+    """
+    LOG.info("Getting {} interface-uuid via vshell address-list".format(net_type))
+    table_ = table_parser.table(ssh_client.exec_cmd('vshell address-list', fail_ok=False)[1])
+    interfaces = table_parser.get_values(table_, 'interface-uuid', regex=True, address=Networks.IP_PATTERN[net_type])
+
+    return interfaces
+
+
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
 
-def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
+def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False, vshell=False, interface=None):
     """
 
     Args:
@@ -2092,14 +2145,23 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
         num_pings (int):
         timeout (int): max time to wait for ping response in seconds
         fail_ok (bool): whether to raise exception if packet loss rate is 100%
+        vshell (bool): whether to ping via 'vshell ping' cmd
+        interface (str): interface uuid. vm's internal interface-uuid will be used when unset
 
     Returns (int): packet loss percentile, such as 100, 0, 25
 
     """
-    cmd = 'ping -c {} {}'.format(num_pings, server)
+    if not vshell:
+        cmd = 'ping -c {} {}'.format(num_pings, server)
+        output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
+        packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
+    else:
+        if not interface:
+            interface = _get_interfaces_via_vshell(ssh_client, net_type='internal')[0]
+        cmd = 'vshell ping --count {} {} {}'.format(num_pings, server, interface)
+        output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
+        packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
 
-    output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
-    packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
     packet_loss_rate = int(packet_loss_rate)
 
     if packet_loss_rate == 100:
@@ -2118,6 +2180,28 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False):
     return packet_loss_rate, untransmitted_packets
 
 
+def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict=False, con_ssh=None,
+                       auth_info=Tenant.ADMIN):
+    hosts_and_pnets = host_helper.get_hosts_and_pnets_with_pci_devs(pci_type=pci_type, up_hosts_only=True,
+                                                                    con_ssh=con_ssh, auth_info=auth_info)
+    print("hosts and pnets: {}".format(hosts_and_pnets))
+    host = list(hosts_and_pnets.keys())[0]
+    pnet = hosts_and_pnets[host][0]
+    kwargs = {'vlan_id': vlan_id} if vlan_id is not None else {}
+    nets = list(set(get_networks_on_providernet(pnet, rtn_val='name', **kwargs)))
+    print("pnet: {}; Nets: {}".format(pnet, nets))
+    final_nets = _get_preferred_nets(nets=nets, net_name=net_name, strict=strict)
+    vm_net = final_nets[0]
+    if pci_type == 'pci-passthrough':
+
+        port = system_helper.get_host_interfaces_info(host, rtn_val='ports', net_type=pci_type)[0]
+        host_nic = system_helper.get_host_ports_values(host, header='device type', **{'name': port})[0]
+        if re.match(MELLANOX4, host_nic):
+            vm_net = final_nets[0:2]
+
+    return vm_net
+
+
 def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only=True, vlan_id=0, net_name=None,
                                 strict=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """
@@ -2126,6 +2210,7 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
         min_hosts (int):
         pci_type (str): pci-sriov or pci-passthrough
         up_hosts_only (bool): whether or not to exclude down hypervisors
+        vlan_id (int): vlan id to filter out the network
         net_name (str):
         strict (bool):
         con_ssh (SSHClient):
@@ -2201,8 +2286,40 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
     return []
 
 
-def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, outside_port=None, protocol='tcp', tenant=None,
-                                description=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def _get_preferred_nets(nets, net_name=None, strict=False):
+    specified_nets = []
+    internal_nets = []
+    tenant_nets = []
+    mgmt_nets = []
+
+    for net in nets:
+        if net_name:
+            if strict:
+                if re.match(net_name, net):
+                    specified_nets.append(net)
+            else:
+                if re.search(net_name, net):
+                    specified_nets.append(net)
+        # If net_name unspecified:
+        elif re.search(Networks.INTERNAL_NET_NAME, net):
+            internal_nets.append(net)
+        elif re.search(Networks.DATA_NET_NAME, net):
+            tenant_nets.append(net)
+        elif re.search(Networks.MGMT_NET_NAME, net):
+            mgmt_nets.append(net)
+        else:
+            LOG.warning("Unknown network: {}. Ignore.".format(net))
+
+    for nets_ in (specified_nets, internal_nets, tenant_nets, mgmt_nets):
+        if nets_:
+            nets_counts = Counter(nets_)
+            nets_ = sorted(nets_counts.keys(), key=nets_counts.get, reverse=True)
+            LOG.info("Preferred networks selected: {}".format(nets_))
+            return nets_
+
+
+def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, outside_port=None, protocol='tcp',
+                                tenant=None, description=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
     """
 
     Args:
@@ -2236,7 +2353,8 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
     mgmt_ips_for_vms = get_mgmt_ips_for_vms()
 
     if inside_addr not in mgmt_ips_for_vms:
-        msg = "The inside_addr {} must be one of the  vm mgmt internal addresses: {}.".format(inside_addr, mgmt_ips_for_vms)
+        msg = "The inside_addr {} must be one of the  vm mgmt internal addresses: {}.".format(inside_addr,
+                                                                                              mgmt_ips_for_vms)
         return 1,  msg
 
     args_dict = {
@@ -2291,7 +2409,7 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
 
 
 def create_port_forwarding_rule_for_vm(vm_id, inside_addr=None, inside_port=None, outside_port=None, protocol='tcp',
-                                description=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                                       description=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
     """
 
     Args:
@@ -2351,7 +2469,7 @@ def update_portforwarding_rule(portforwarding_id, inside_addr=None, inside_port=
 
     """
 
-    if portforwarding_id is None  or not isinstance(portforwarding_id, str):
+    if portforwarding_id is None or not isinstance(portforwarding_id, str):
         raise ValueError("Expecting string value for portforwarding_id. Get {}".format(type(portforwarding_id)))
 
     args = ''
@@ -2374,8 +2492,8 @@ def update_portforwarding_rule(portforwarding_id, inside_addr=None, inside_port=
     LOG.info("Updating router {}: {}".format(portforwarding_id, args))
 
     args = '{} {}'.format(portforwarding_id, args.strip())
-    return cli.neutron('portforwarding-update', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True,
-                       force_neutron=True)
+    return cli.neutron('portforwarding-update', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                       rtn_list=True, force_neutron=True)
 
 
 def delete_portforwarding_rules(pf_ids, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
@@ -2419,8 +2537,8 @@ def delete_portforwarding_rule(portforwarding_id, auth_info=Tenant.ADMIN, con_ss
     """
 
     LOG.info("Deleting port-forwarding {}...".format(portforwarding_id))
-    code, output = cli.neutron('portforwarding-delete', portforwarding_id, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                               rtn_list=True)
+    code, output = cli.neutron('portforwarding-delete', portforwarding_id, ssh_client=con_ssh, auth_info=auth_info,
+                               fail_ok=fail_ok, rtn_list=True)
     if code != 0:
         msg = "CLI rejected. Fail to delete Port-forwarding {}; {}".format(portforwarding_id, output)
         LOG.warn(msg)
@@ -2451,7 +2569,6 @@ def get_portforwarding_rules(router_id=None, inside_addr=None, inside_port=None,
         inside_port (str): portforwarding  inside_port
         outside_port (str): portforwarding   outside_port"
         protocol (str):  portforwarding  protocol
-        tenant (str): Tenant name
         strict (bool):
         auth_info (dict):
         con_ssh (SSHClient):
@@ -2484,7 +2601,8 @@ def get_portforwarding_rules(router_id=None, inside_addr=None, inside_port=None,
     return table_parser.get_values(table_, 'id', **final_params)
 
 
-def get_portforwarding_rule_info(portforwarding_id, field='inside_addr', strict=True, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_portforwarding_rule_info(portforwarding_id, field='inside_addr', strict=True, auth_info=Tenant.ADMIN,
+                                 con_ssh=None):
     """
     Get value of specified field for given portforwarding rule
 
@@ -2499,8 +2617,8 @@ def get_portforwarding_rule_info(portforwarding_id, field='inside_addr', strict=
 
     """
 
-    table_ = table_parser.table(cli.neutron('portforwarding-show', portforwarding_id, ssh_client=con_ssh, auth_info=auth_info),
-                                combine_multiline_entry=True)
+    table_ = table_parser.table(cli.neutron('portforwarding-show', portforwarding_id, ssh_client=con_ssh,
+                                            auth_info=auth_info), combine_multiline_entry=True)
     return table_parser.get_value_two_col_table(table_, field, strict)
 
 
@@ -2704,9 +2822,7 @@ def get_pci_device_configured_vfs_value(device_id, con_ssh=None, auth_info=None)
     """
     _table = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
     LOG.info('output of nova device-list:{}'.format(_table))
-    #row_index = table_parser._get_row_indexes(_table, field='Device Id', value=device_id)
     _table = table_parser.filter_table(_table, **{'Device Id': device_id})
-    #_table = table_parser.__filter_table(_table, row_index)
     return table_parser.get_column(_table, 'pci_vfs_configured')[0]
 
 
@@ -2725,8 +2841,6 @@ def get_pci_device_used_vfs_value(device_id, con_ssh=None, auth_info=None):
     """
     _table = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
     LOG.info('output of nova device-list:{}'.format(_table))
-    #row_index = table_parser._get_row_indexes(_table, field='Device Id', value=device_id)
-    #LOG.info('output of nova row index:{}'.format(row_index))
     _table = table_parser.filter_table(_table, **{'Device Id': device_id})
     LOG.info('output of nova device-list:{}'.format(_table))
     return table_parser.get_column(_table, 'pci_vfs_used')[0]
@@ -2750,3 +2864,99 @@ def get_pci_device_used_vfs_value_per_compute(host, device_id, con_ssh=None, aut
     LOG.debug('output from nova device-show for device-id:{}\n{}'.format(device_id, _table))
     _table = table_parser.filter_table(_table, Host=host)
     return table_parser.get_column(_table, 'pci_vfs_used')[0]
+
+
+def get_tenant_routers_for_vms(vms, con_ssh=None):
+    """
+    Get tenant routers for given vm
+
+    Args:
+        vms (str|list):
+        con_ssh (SSHClient):
+
+    Returns (list): list of router ids or names
+
+    """
+    if isinstance(vms, str):
+        vms = [vms]
+
+    auth_info = Tenant.ADMIN
+    field = 'tenant_id'
+    vms_tenants = []
+    for vm in vms:
+        vm_tenant = nova_helper.get_vm_nova_show_value(vm_id=vm, field=field, strict=True, con_ssh=con_ssh,
+                                                       auth_info=auth_info)
+        vms_tenants.append(vm_tenant)
+
+    vms_tenants = list(set(vms_tenants))
+
+    all_routers = get_routers(auth_info=Tenant.ADMIN)
+    vms_routers = []
+    for router in all_routers:
+        router_tenant = get_router_info(router, field=field, strict=True, auth_info=auth_info,
+                                                       con_ssh=con_ssh)
+        if router_tenant in vms_tenants:
+            vms_routers.append(router)
+            if len(vms_routers) == len(vms_tenants):
+                break
+
+    if len(vms_routers) < len(vms_tenants):
+        LOG.error("Cannot find tenant router for all vms. VMS: {}. Matching routers: {}".format(vms, vms_routers))
+
+    return vms_routers
+
+
+def collect_networking_info(routers=None, vms=None):
+    LOG.info("Ping tenant(s) router's external and internal gateway IPs")
+
+    if not routers:
+        if vms:
+            if isinstance(vms, str):
+                vms = [vms]
+            routers = get_tenant_routers_for_vms(vms=vms)
+        else:
+            routers = get_routers(name='tenant[12]-router', regex=True, auth_info=Tenant.ADMIN)
+    elif isinstance(routers, str):
+        routers = [routers]
+
+    ips_to_ping = []
+    for router_ in routers:
+        router_ips = get_router_subnets(router_id=router_, rtn_val='ip_address', mgmt_only=True)
+        ips_to_ping += router_ips
+
+    ping_ips_from_natbox(ips_to_ping, num_pings=3, timeout=15)
+
+    hosts = []
+    for router in routers:
+        hosts.append(get_router_info(router_id=router, field='wrs-net:host'))
+
+    LOG.info("Collect vswitch_info for {} router(s) on router host(s): ".format(routers, hosts))
+    for host in hosts:
+        ProjVar.get_var('VSWITCH_INFO_HOSTS').append(host)
+        collect_vswitch_info_on_host(host)
+
+
+def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
+    if not natbox_ssh:
+        natbox_ssh = NATBoxClient.get_natbox_client()
+
+    res_dict = {}
+    for ip_ in ips:
+        packet_loss_rate = _ping_server(server=ip_, ssh_client=natbox_ssh, num_pings=num_pings, timeout=timeout,
+                                        fail_ok=True, vshell=False)[0]
+        res_dict[ip_] = packet_loss_rate
+
+    res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
+    # LOG.error("PING RES: {}".format(res_dict))
+    if res_bool:
+        LOG.info("Ping successful from NatBox: {}".format(ips))
+    else:
+        LOG.warning("Ping unsuccessful from NatBox: {}".format(res_dict))
+
+    return res_bool, res_dict
+
+
+def collect_vswitch_info_on_host(host):
+    with host_helper.ssh_to_host(host) as host_ssh:
+        host_ssh.exec_sudo_cmd('/etc/collect.d/collect_vswitch', searchwindowsize=50, get_exit_code=False)
+        # vswitch log will be saved to /scratch/var/extra/vswitch.info on the compute host

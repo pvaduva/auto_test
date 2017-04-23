@@ -67,8 +67,15 @@ def test_apply_storage_profile_negative(create_storage_profile, personality):
     profile_name = create_storage_profile['profile_name']
     origin_disk_num = create_storage_profile['disk_num']
     disks_num = len(local_storage_helper.get_host_disks_values(host_name, 'device_node'))
+
     expt_err = 'profile has more disks than host does' if disks_num < origin_disk_num -1 \
         else "Please check if host's disks match profile criteria"
+    expt_err_list = ["Please check if host's disks match profile criteria",
+                     "Failed to create storage function. Host personality must be 'storage'",
+                     ]
+    if disks_num < origin_disk_num -1:
+        expt_err_list.append("profile has more disks than host does")
+
     positional_arg = host_name + ' ' + profile_name
 
     HostsToRecover.add(host_name)
@@ -77,5 +84,6 @@ def test_apply_storage_profile_negative(create_storage_profile, personality):
                                   auth_info=Tenant.ADMIN, rtn_list=True)
     host_helper.unlock_host(host_name)
 
-    assert exitcode == 1 and expt_err in output
+    #assert exitcode == 1 and expt_err in output
+    assert exitcode == 1 and any(expt in  output for expt in expt_err_list)
 

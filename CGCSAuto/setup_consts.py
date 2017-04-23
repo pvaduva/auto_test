@@ -8,7 +8,10 @@ from consts.auth import Tenant
 # Start of Test session params          #
 #########################################
 
-LAB = Labs.UNKNOWN
+# Possible values for LAB: Labs.IP_1_4, Labs.HP380, Labs.PV0, Labs.WCP_7_12, WCP_13, etc
+# Please revert to LAB = Labs.NO_LAB after test completed.
+LAB = Labs.NO_LAB
+
 PRIMARY_TENANT = Tenant.TENANT2
 NATBOX = NatBoxes.NAT_BOX_HW
 BOOT_VMS = False

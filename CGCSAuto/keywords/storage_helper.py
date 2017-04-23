@@ -11,6 +11,7 @@ from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 from keywords import system_helper, host_helper
 
+
 def is_ceph_healthy(con_ssh=None):
     """
     Query 'ceph -s' and return True if ceph health is okay

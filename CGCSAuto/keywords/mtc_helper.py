@@ -62,7 +62,7 @@ KILL_PROC_EVENT_FORMAT = {
         #  host=controller-1.process=sm
         'critical': (
                 r'([^\s]+) ([^\s]+) \'([^\']+)\' process has ([^\s]+) and could not be auto-recovered gracefully. '
-                r'Auto recovery progression by host reboot is required and in progress.',
+                r'Auto.recovery progression by host reboot is required and in progress.',
                 r'host=([^\.]+)\.process=([^\s]+)'
              ),
         # compute-2 is degraded due to the failure of its 'fsmond' process. Auto recovery of this major
@@ -417,13 +417,16 @@ def search_event(event_id='', type_id='', instance_id='', severity='', start='',
     criteria = []
 
     if event_id:
-        criteria.append('event_log_id="{}"'.format(event_id))
+        #criteria.append('event_log_id="{}"'.format(event_id))
+        criteria.append('event_log_id={}'.format(event_id))
 
     if start:
-        criteria.append('start="{}"'.format(start))
+        #criteria.append('start="{}"'.format(start))
+        criteria.append('start={}'.format(start))
 
     if end:
-        criteria.append('end="{}"'.format(end))
+        #criteria.append('end={}'.format(end))
+        criteria.append('end={}'.format(end))
 
     if type_id:
         criteria.append('entity_type_id="{}"'.format(type_id))
@@ -435,7 +438,11 @@ def search_event(event_id='', type_id='', instance_id='', severity='', start='',
         criteria.append('severity="{}"'.format(severity))
 
     limit = '-l {}'.format(limit) if limit >= 1 else ''
-    query = '-q {}'.format(';'.join(criteria)) if criteria else ''
+
+    query = '' 
+    if criteria:
+        query = '-q "{}"'.format(';'.join(criteria))
+
     cmd = '{} {} {}'.format(base_cmd, limit, query)
 
     table = table_parser.table(cli.system(cmd, ssh_client=con_ssh, auth_info=auth_info))
@@ -628,7 +635,7 @@ def _check_status_after_killing_process(service, host, target_status, expecting=
 
 
 def check_impact(impact, service_name, host='', last_events=None,
-                 expecting_impact=False, process_type='sm', con_ssh=None, **kwargs):
+                 expecting_impact=False, process_type='sm', con_ssh=None, timeout=80, **kwargs):
     """
     Check if the expected IMPACT happens (or NOT) on the specified host
 
@@ -656,12 +663,11 @@ def check_impact(impact, service_name, host='', last_events=None,
     prev_active = kwargs.get('active_controller', 'controller-0')
     prev_standby = kwargs.get('standby_controller', 'controller-1')
     severity = kwargs.get('severity', 'major')
-    timeout = 80
 
     if impact in ('swact'):
         if expecting_impact:
             return is_controller_swacted(prev_active, prev_standby, con_ssh=con_ssh,
-                                         swact_start_timeout=20, swact_complete_timeout=timeout)
+                                         swact_start_timeout=max(timeout/2, 20), swact_complete_timeout=timeout)
         else:
             return not is_controller_swacted(prev_active, prev_standby, con_ssh=con_ssh, swact_start_timeout=timeout/4)
 

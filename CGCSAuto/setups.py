@@ -1,18 +1,20 @@
 import re
 import time
+import os.path
 import configparser
 
-from utils import exceptions
+import setup_consts
+from utils import exceptions, cli
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
 from utils.node import create_node_boot_dict, create_node_dict
-from consts.auth import Tenant, CliAuth, Host
+from consts.auth import Tenant, CliAuth, HostLinuxCreds
 from consts.cgcs import Prompt
-from consts.filepaths import PrivKeyPath
+from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
 
-from keywords import vm_helper, host_helper, nova_helper, system_helper
+from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper
 from keywords.common import scp_to_local
 
 
@@ -24,8 +26,8 @@ def setup_tis_ssh(lab):
     con_ssh = ControllerClient.get_active_controller(fail_ok=True)
 
     if con_ssh is None:
-        con_ssh = SSHClient(lab['floating ip'], 'wrsroot', 'Li69nux*', CONTROLLER_PROMPT)
-        con_ssh.connect()
+        con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.USER, HostLinuxCreds.PASSWORD, CONTROLLER_PROMPT)
+        con_ssh.connect(retry=True, retry_timeout=30)
         ControllerClient.set_active_controller(con_ssh)
     # if 'auth_url' in lab:
     #     Tenant._set_url(lab['auth_url'])
@@ -121,7 +123,7 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh):
                     con_ssh.send('yes')
                     index = con_ssh.expect([Prompt.PASSWORD_PROMPT, Prompt.CONTROLLER_1])
                 if index == 0:
-                    con_ssh.send(Host.PASSWORD)
+                    con_ssh.send(HostLinuxCreds.PASSWORD)
                     con_ssh.expect()
 
                 con_ssh.exec_sudo_cmd('cp {} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.OPT_PLATFORM), fail_ok=False)
@@ -169,6 +171,7 @@ def boot_vms(is_boot):
 def get_lab_dict(labname):
     labname = labname.strip().lower().replace('-', '_')
     labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
+    labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
 
     for lab in labs:
         if labname in lab['name'].replace('-', '_').lower().strip() \
@@ -273,9 +276,10 @@ def copy_files_to_con1():
 
     LOG.info("rsync test files from controller-0 to controller-1 if not already done")
 
+    file_to_check = '/home/wrsroot/images/tis-centos-guest.img'
     try:
         with host_helper.ssh_to_host("controller-1") as con_1_ssh:
-            if con_1_ssh.file_exists('/home/wrsroot/heat'):
+            if con_1_ssh.file_exists(file_to_check):
                 LOG.info("Test files already exist on controller-1. Skip rsync.")
                 return
 
@@ -288,7 +292,7 @@ def copy_files_to_con1():
     cmd = "rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' " \
           "/home/wrsroot/* controller-1:/home/wrsroot/"
 
-    timeout = 120
+    timeout = 1800
 
     with host_helper.ssh_to_host("controller-0") as con_0_ssh:
         con_0_ssh.send(cmd)
@@ -296,12 +300,13 @@ def copy_files_to_con1():
         end_time = time.time() + timeout
 
         while time.time() < end_time:
-            index = con_0_ssh.expect([con_0_ssh.prompt, PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout)
+            index = con_0_ssh.expect([con_0_ssh.prompt, PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout,
+                                     searchwindowsize=100)
             if index == 2:
                 con_0_ssh.send('yes')
 
             if index == 1:
-                con_0_ssh.send("Li69nux*")
+                con_0_ssh.send(HostLinuxCreds.PASSWORD)
 
             if index == 0:
                 output = int(con_0_ssh.exec_cmd('echo $?')[1])
@@ -341,8 +346,13 @@ def get_auth_via_openrc(con_ssh):
 
 
 def get_lab_from_cmdline(lab_arg, installconf_path):
+    lab_dict = None
     if not lab_arg and not installconf_path:
-        raise ValueError("lab is not specified!")
+        lab_dict = setup_consts.LAB
+        if lab_dict is None:
+            raise ValueError("No lab is specified via cmdline or setup_consts.py")
+        LOG.warning("lab is not specified via cmdline! Using lab from setup_consts file: {}".format(
+                lab_dict['short_name']))
 
     if installconf_path:
         installconf = configparser.ConfigParser()
@@ -359,7 +369,9 @@ def get_lab_from_cmdline(lab_arg, installconf_path):
                         format(lab_arg, lab_name))
         lab_arg = lab_name
 
-    return get_lab_dict(lab_arg)
+    if lab_dict is None:
+        lab_dict = get_lab_dict(lab_arg)
+    return lab_dict
 
 
 def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0_ceph_mon_device,
@@ -494,3 +506,26 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
                                  controller1_ceph_mon_device=controller1_ceph_mon_device,
                                  ceph_mon_gib=ceph_mon_gib
                                  )
+
+
+def is_https(con_ssh):
+    return keystone_helper.is_https_lab(con_ssh=con_ssh, source_admin=True)
+
+
+def scp_vswitch_log(con_ssh, hosts, log_path=None):
+    source_file = '/scratch/var/extra/vswitch.info'
+    for host in hosts:
+        LOG.info("scp vswitch log from {} to controller-0".format(host))
+        dest_file = "{}_vswitch.info".format(host)
+        dest_file = os.path.join(WRSROOT_HOME, dest_file)
+        con_ssh.scp_files(source_file, dest_file, source_server=host, dest_server='controller-0',
+                          source_user=HostLinuxCreds.USER, source_password=HostLinuxCreds.PASSWORD, dest_password=HostLinuxCreds.PASSWORD,
+                          dest_user='', timeout=30, sudo=True, sudo_password=None, fail_ok=True)
+
+    LOG.info("SCP vswitch log from lab to automation log dir")
+    if log_path is None:
+        log_path = os.path.join(WRSROOT_HOME, '*_vswitch.info')
+    source_ip = ProjVar.get_var('LAB')['controller-0 ip']
+    dest_dir = ProjVar.get_var('TEMP_DIR')
+    scp_to_local(dest_path=dest_dir, source_user=HostLinuxCreds.USER, source_password=HostLinuxCreds.PASSWORD, source_path=log_path,
+                 source_ip=source_ip, timeout=60)

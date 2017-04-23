@@ -246,8 +246,8 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
     return 0, msg
 
 
-def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_type=None, enabled=None, interface="admin", url=None,
-                  strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_type=None, enabled=None, interface="admin",
+                  url=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Get a list of endpoints with given arguments
     Args:
@@ -299,3 +299,12 @@ def get_endpoints_value(endpoint_id, target_field, con_ssh=None):
     args = endpoint_id
     table_ = table_parser.table(cli.openstack('endpoint show', args,  ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     return table_parser.get_value_two_col_table(table_, target_field)
+
+
+def is_https_lab(con_ssh=None, source_admin=True, auth_info=Tenant.ADMIN):
+    table_ = table_parser.table(cli.openstack('endpoint list', source_admin_=source_admin, ssh_client=con_ssh,
+                                              auth_info=auth_info))
+
+    filters = {'Service Name': 'keystone', 'Service Type': 'identity', 'Interface': 'public'}
+    keystone_pub = table_parser.get_values(table_=table_, target_header='URL', **filters)[0]
+    return 'https' in keystone_pub

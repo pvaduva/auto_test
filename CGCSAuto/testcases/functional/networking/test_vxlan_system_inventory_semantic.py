@@ -11,6 +11,11 @@ from consts.cli_errs import NetworkingErr
 pro_net_name = 'provider_vxlan'
 
 
+@fixture(scope='function')
+def check_alarms():
+    pass
+
+
 @fixture(scope='module')
 def get_interface_(request):
 
@@ -42,7 +47,7 @@ def get_interface_(request):
             computer_host = nova_host
             break
     else:
-        assert find, "Can not find a free data interface "
+        skip("Can not find a free data interface")
 
     # now lock the computer
     host_helper.lock_host(computer_host, swact=True)

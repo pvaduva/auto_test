@@ -220,11 +220,11 @@ def create_swift_container(container, con_ssh=None, fail_ok=False):
     except exceptions.CLIRejected as e:
         msg = "swift post cli command failed: {}".format(e.message)
 
-    if fail_ok:
-        LOG.warning(msg)
-        return 2, msg
-    else:
-        raise exceptions.SWiftError(msg)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, msg
+        else:
+            raise exceptions.SWiftError(msg)
 
 
 def post(container=None, object_=None, read_acl=None, write_acl=None, sync_to=None, sync_key=None,

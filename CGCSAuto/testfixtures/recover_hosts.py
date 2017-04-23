@@ -67,7 +67,7 @@ class HostsToRecover():
 
     @classmethod
     def _get_hosts_to_recover(cls, scope):
-        return cls.__hosts_to_recover[scope]
+        return list(cls.__hosts_to_recover[scope])
 
     @staticmethod
     def _recover_hosts(hostnames, scope):

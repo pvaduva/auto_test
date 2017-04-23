@@ -76,6 +76,7 @@ def test_dvr_update_router(router_info, _bring_up_router):
         - Revert router to it's original distributed setting if not already done so
 
     """
+    global result_
     result_ = False
     router_id = router_info
 
@@ -93,7 +94,6 @@ def test_dvr_update_router(router_info, _bring_up_router):
             "Router is not in active state after updating distributed to {}.".format(update_to_val)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
-    global result_
     result_ = True
 
 

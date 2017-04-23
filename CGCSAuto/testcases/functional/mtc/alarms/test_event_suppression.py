@@ -10,7 +10,7 @@ from keywords import system_helper
 #############################################################################################################
 
 
-@fixture(scope='module')
+@fixture(scope='function')
 def alarm_test_prep(request):
     LOG.fixture_step("Unsuppress all events")
     system_helper.unsuppress_all_events(fail_ok=True)
