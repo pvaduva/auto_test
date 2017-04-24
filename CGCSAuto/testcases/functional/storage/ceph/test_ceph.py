@@ -25,7 +25,7 @@ RESTARTS_BEFORE_ASSERT = 3      # number of process restarts until error asserti
 # CGTS-6464 take this test out for now - test might need to be re-written due to this jira (Maria will investigate)
 @mark.nightly
 @mark.usefixtures('ceph_precheck')
-def test_ceph_osd_process_kill():
+def _test_ceph_osd_process_kill():
     """
     us69932_tc1_ceph_osd_process_kill from us69932_ceph_monitoring.odt
 
@@ -166,7 +166,7 @@ def test_ceph_osd_process_kill():
     'controller-1',
     'storage-0'])
 @mark.usefixtures('ceph_precheck')
-def test_ceph_mon_process_kill(monitor):
+def _test_ceph_mon_process_kill(monitor):
     """
     us69932_tc2_ceph_mon_process_kill from us69932_ceph_monitoring.odt
 
