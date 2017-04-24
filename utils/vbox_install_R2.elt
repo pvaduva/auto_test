@@ -54,7 +54,7 @@ Install VirtualBox on Linux or Windows Host
 .	e.g. for windows
 .	./vbox_install.elt -r <windows machine IP> pull_new_image=yes topology=2x1 con=MI_O str=MI com=MI_D
 .	e.g for linux
-	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install.elt pull_new_image=yes topology=1x1 rel2=yes con=MI_O str=MI com=MI_D patch=no https=yes
+	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install.elt pull_new_image=yes topology=1x1 con=MI_O str=MI com=MI_D patch=no https=yes
 .
 . 	Supported topology
 . 		2only 	- controller-0 controller-1
@@ -355,7 +355,19 @@ $node_list=
 # remove controller-0 from node_list
 =$node_list - controller-0
 
+?if $load == GA2 ?[
+	$eth0=eth0
+	$eth1=eth1
+	$eth2=eth3
+]
 
+# native Interface
+?if $rel3 == yes ?[
+	$eth0=enp0s3
+	$eth1=enp0s8
+	$eth2=enp0s9
+	#eth3 = enp0s
+]
 ### Config Controller variables
 
 # Seperate Management & OAM Interface
@@ -973,9 +985,12 @@ $directory=R2_files
 		; === Install Patches
 		>sudo sw-patch install-local
 		<Patch installation is complete
+		; === set up sudo root access (to make it easier later in the interact session)
+		>echo "$pass" | sudo -S id
+		<root
                 >sudo sw-patch query
                 >sudo sw-patch query-hosts
-		; === Reboot the compute
+		; === Reboot the controller
 		>sudo reboot
 		*FORK serial
 		>>^M
@@ -997,8 +1012,8 @@ $directory=R2_files
 		>export TMOUT=0
 
 		; === setup first IP interface
-		>sudo /sbin/ip addr add $IP/24 dev eth0
-		>sudo /sbin/ip link set eth0 up
+		>sudo /sbin/ip addr add $IP/24 dev $eth0
+		>sudo /sbin/ip link set $eth0 up
 		>ping $ping_opt  $IP
 		<time=
 		>

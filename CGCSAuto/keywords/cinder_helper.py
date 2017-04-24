@@ -1029,3 +1029,14 @@ def is_volumes_pool_sufficient(min_size=40):
 
     # assume enough volumes in ceph:
     return True
+
+
+def get_volume_show_values(vol_id, field, con_ssh=None, auth_info=Tenant.ADMIN):
+
+    if not vol_id:
+        raise ValueError("Volume is not provided.")
+
+    table_ = table_parser.table(cli.cinder('show', vol_id, ssh_client=con_ssh, auth_info=auth_info))
+    val = table_parser.get_value_two_col_table(table_, field=field, merge_lines=False)
+
+    return val

@@ -173,7 +173,8 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
     LOG.info("Verifying Swift provisioning setups...")
     assert verify_swift_object_setup(), "Failure in swift setups"
 
-    guest_os = 'centos_7'
+    #guest_os = 'centos_7'
+    guest_os = GuestImages.DEFAULT_GUEST
     image_id = glance_helper.get_guest_image(guest_os=guest_os)
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
@@ -785,18 +786,23 @@ def verify_swift_object_setup():
     if 'ceph' in storage_helper.get_configured_system_storage_backend():
         con_ssh = ControllerClient.get_active_controller()
         cmd = "rados df | awk 'NR>1 && NR < 11 {{print $1}}'"
-        rc, output = con_ssh.exec_cmd(cmd, fail_ok=True)
-        LOG.info("Swift object pools:{}".format(output))
-        if rc == 0:
-            pools = output.split('\n')
-            if set(SWIFT_POOLS).issubset(pools):
-                LOG.info("Swift object pools: {} "
-                         " are set...".format(SWIFT_POOLS))
-            else:
-                LOG.info("Expected Swift object pools: {}"
-                         " are NOT set. Pools = {}".format(SWIFT_POOLS, pools))
-                return False
-        else:
+        endtime = time.time() + 35
+        pools_setup = False
+        while time.time() < endtime:
+            rc, output = con_ssh.exec_cmd(cmd, fail_ok=True)
+            LOG.info("Swift object pools:{}".format(output))
+
+            if rc == 0:
+                pools = output.split('\n')
+                if set(SWIFT_POOLS).issubset(pools):
+                    LOG.info("Swift object pools: {}  are set...".format(SWIFT_POOLS))
+                    pools_setup = True
+                    break
+            time.sleep(5)
+
+        if not pools_setup:
+            LOG.info("Expected Swift object pools: {}"
+                 " are NOT set. Pools = {}".format(SWIFT_POOLS, pools))
             return False
 
     LOG.info("Verifying if swift object service (ceph-radosgw) is listed via 'sudo sm-dump' on the "

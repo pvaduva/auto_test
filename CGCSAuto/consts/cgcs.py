@@ -235,6 +235,7 @@ class EventLogID:
     CON_DRBD_SYNC = '400.001'
     SERVICE_GROUP_STATE_CHANGE = '400.001'
     MTC_MONITORED_PROCESS_FAILURE = '200.006'
+    CONFIG_OUT_OF_DATE = '250.001'
     INFRA_NET_FAIL = '200.009'
     # 200.004	compute-0 experienced a service-affecting failure. Auto-recovery in progress.
     # host=compute-0 	critical 	April 7, 2017, 2:34 p.m.

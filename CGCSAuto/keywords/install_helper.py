@@ -519,10 +519,11 @@ def run_lab_setup(con_ssh=None, timeout=3600):
         return rc, msg
 
     cmd = "cd; source /etc/nova/openrc; ./lab_setup.sh"
+    con_ssh.set_prompt(Prompt.ADMIN_PROMPT)
     rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout)
     if rc != 0:
         msg = " lab_setup run failed: {}".format(msg)
         LOG.warning(msg)
         return rc, msg
-
+    con_ssh.set_prompt()
     return 0, "Lab_setup run successfully"
