@@ -40,13 +40,18 @@ def ceph_post_install_info():
     controller1_disks = local_storage_helper.get_host_disks_values(controller1, rtn_val='device_node')
 
     rootfs = host_helper.get_hostshow_value(controller0,"rootfs_device")
-    if '/dev/' not in rootfs:
+    if '/dev/disk/by-path'  in rootfs:
+        rootfs = local_storage_helper.get_host_disks_values(controller0, rtn_val='device_node', device_path=rootfs)[0]
+    elif '/dev/' not in rootfs:
         rootfs = '/dev/{}'.format(rootfs)
+
     size =  local_storage_helper.get_host_disk_size(controller0, disk=rootfs)
     controller0_rootfs = [rootfs, int(size/1024)]
 
     rootfs = host_helper.get_hostshow_value(controller1,"rootfs_device")
-    if '/dev/' not in rootfs:
+    if '/dev/disk/by-path'  in rootfs:
+        rootfs = local_storage_helper.get_host_disks_values(controller1, rtn_val='device_node', device_path=rootfs)[0]
+    elif '/dev/' not in rootfs:
         rootfs = '/dev/{}'.format(rootfs)
 
     size = local_storage_helper.get_host_disk_size(controller1, disk=rootfs)
