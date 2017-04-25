@@ -319,7 +319,7 @@ class TestHTEnabled:
         Test Steps:
             - Create a flavor with given number of vcpus
             - Set cpu policy to dedicated and extra specs as per flavor related test params
-            - Create an image from cgcs-guest
+            - Create an image from tis image
             - Set image metadata as per image related test params
             - Get the host vcpu usage before booting vm
             - Attempt to boot a vm with above flavor and image

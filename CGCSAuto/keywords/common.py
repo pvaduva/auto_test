@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timedelta
 
 from consts.cgcs import Prompt
-from consts.auth import Tenant, SvcCgcsAuto, Host
+from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.proj_vars import ProjVar
 from utils import exceptions
 from utils.tis_log import LOG
@@ -136,8 +136,8 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
 
 
 def scp_to_active_controller(source_path, dest_path='',
-                   dest_user='wrsroot', dest_password='Li69nux*',
-                   timeout=60, is_dir=False):
+                             dest_user=HostLinuxCreds.USER, dest_password=HostLinuxCreds.PASSWORD,
+                             timeout=60, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
 
@@ -147,7 +147,7 @@ def scp_to_active_controller(source_path, dest_path='',
 
 
 def scp_from_active_controller(source_path, dest_path='',
-                               src_user='wrsroot', src_password='Li69nux*',
+                               src_user=HostLinuxCreds.USER, src_password=HostLinuxCreds.PASSWORD,
                                timeout=60, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
@@ -157,8 +157,8 @@ def scp_from_active_controller(source_path, dest_path='',
                         timeout=timeout, is_dir=is_dir)
 
 
-def scp_from_local(source_path, dest_ip, dest_path='/home/wrsroot',
-                   dest_user='wrsroot', dest_password='Li69nux*',
+def scp_from_local(source_path, dest_ip, dest_path=WRSROOT_HOME,
+                   dest_user=HostLinuxCreds.USER, dest_password=HostLinuxCreds.PASSWORD,
                    timeout=60, is_dir=False):
     """
     Scp file(s) from localhost (i.e., from where the automated tests are executed).
@@ -182,7 +182,7 @@ def scp_from_local(source_path, dest_ip, dest_path='/home/wrsroot',
 
 
 def scp_to_local(dest_path, source_ip, source_path,
-                 source_user='wrsroot', source_password='Li69nux*',
+                 source_user=HostLinuxCreds.USER, source_password=HostLinuxCreds.PASSWORD,
                  timeout=60, is_dir=False):
     """
     Scp file(s) to localhost (i.e., to where the automated tests are executed).
@@ -330,7 +330,7 @@ def get_unique_name(name_str, existing_names=None, resource_type='other'):
         raise ValueError("Invalid resource_type provided. Valid types: {}".format(valid_types))
 
     if existing_names:
-        if resource_type in ['image', 'volume']:
+        if resource_type in ['image', 'volume', 'flavor']:
             unique_name = name_str
         else:
             unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
@@ -455,3 +455,18 @@ def wait_for_process(ssh_client, process, sudo=False, disappear=False, timeout=6
                                                   exclude=disappear, non_zero_rtn_ok=True, sudo=sudo, fail_ok=fail_ok)
 
     return res
+
+
+def get_date_in_format(ssh_client=None, date_format="%Y%m%d %T"):
+    """
+    Get date in given format.
+    Args:
+        ssh_client (SSHClient):
+        date_format (str): Please see date --help for valid format strings
+
+    Returns (str): date output in given format
+
+    """
+    if ssh_client is None:
+        ssh_client = ControllerClient.get_active_controller()
+    return ssh_client.exec_cmd("date +'{}'".format(date_format), fail_ok=False)[1]

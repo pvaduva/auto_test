@@ -44,8 +44,11 @@ WRSROOT_HEAT_DIR = WRSROOT_HOME_DIR + "/heat"
 JIRA_LOGS_DIR = "/folk/cgts/logs"
 CERTIFICATE_FILE_PATH = "/folk/cgts/lab/server-with-key-with-passwd.pem"
 CERTIFICATE_FILE_NAME = "server-with-key.pem"
-BANNER_DEST = '/opt/banner'
-BANNER_SRC = WRSROOT_HOME_DIR + '/banner'
+BANNER_DEST = '/opt/'
+BANNER_SRC = WRSROOT_HOME_DIR + '/banner/'
+BRANDING_DEST = '/opt/branding/'
+BRANDING_SRC = WRSROOT_HOME_DIR + '/branding/'
+SCRIPTS_HOME = WRSROOT_HOME_DIR + '/postinstall/'
 
 # Cumulus TiS on TiS setup
 #CUMULUS_SERVER_IP="128.224.151.50"
@@ -171,7 +174,7 @@ REMOVE_HOSTS_SSH_KEY_CMD = "ssh-keygen -f {} -R {}"
 # Command timeouts
 COLLECT_TIMEOUT=300
 RSYNC_TIMEOUT = 3600
-REBOOT_TIMEOUT = 7200
+REBOOT_TIMEOUT = 9000
 BIOS_TYPE_TIMEOUT = 1800
 CONFIG_CONTROLLER_TIMEOUT = 1800
 LAB_SETUP_TIMEOUT = 3600

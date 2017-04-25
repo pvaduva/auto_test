@@ -34,9 +34,6 @@ def test_vm_meta_data_retrieval():
 
 
     """
-    LOG.debug('Booting a VM')
-    # sourceid = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
-
     # create VM make sure it's pingable
     vm_id = vm_helper.boot_vm(source='image', cleanup='function')[1]
     # ResourceCleanup.add('vm', vm_id, del_vm_vols=True)

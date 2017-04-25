@@ -8,7 +8,7 @@ from utils.tis_log import LOG
 from consts.feature_marks import Features
 from consts.timeout import VMTimeout, EventLogTimeout
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
-from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper
+from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -162,7 +162,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
 
     Test Steps:
         - Create a flavor with heartbeat set to true, and auto recovery set to given value in extra spec
-        - Create a volume from cgcs-guest image
+        - Create a volume from tis image
         - Boot a vm with the flavor and the volume
         - Verify guest heartbeat is established via system event-logs
         - Set vm to unhealthy state via touch /tmp/unhealthy
@@ -199,23 +199,29 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
     LOG.tc_step("Login to vm via NatBox")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         LOG.tc_step("Run touch /tmp/unhealthy to put vm into unhealthy state.")
+        start_time = common.get_date_in_format()
         vm_ssh.exec_cmd("touch /tmp/unhealthy")
 
         step_str = "is rebooted automatically" if expt_autorecovery else "is not rebooted"
         LOG.tc_step("Verify vm {} with auto recovery set to {}".format(step_str, expt_autorecovery))
+        events = system_helper.wait_for_events(timeout=30, num=10, entity_instance_id=vm_id, start=start_time,
+                                               fail_ok=True, strict=False,
+                                               **{'Event Log ID': EventLogID.REBOOT_VM_ISSUED})
         natbox_ssh = NATBoxClient.get_natbox_client()
-        index = natbox_ssh.expect("Power button pressed", timeout=60, fail_ok=True)
+        natbox_ssh.send('')
+        index = natbox_ssh.expect(["Power button pressed|Broken pipe"], timeout=60, fail_ok=True)
 
     if not expt_autorecovery:
+        assert not events, "VM reboot is logged even though auto recovery is disabled"
         assert 0 > index, "VM is rebooted automatically even though Auto Recovery is set to false."
 
     else:
+        assert events
         assert 0 == index, "Auto recovery to reboot the vm is not kicked off within timeout."
 
         LOG.tc_step("Verify instance rebooting active alarm is on")
-        res = system_helper.wait_for_alarm(entity_id=vm_id, reason='Instance .* is rebooting on host',
-                                           regex=True, strict=False)[0]
-        assert res, "Instance rebooting active alarm is not listed within 60 seconds of vm reboot"
+        system_helper.wait_for_events(timeout=300, num=10, entity_instance_id=vm_id, start=start_time,
+                                      fail_ok=False, **{'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
 
         LOG.tc_step("Wait for VM reach active state")
         vm_helper.wait_for_vm_values(vm_id, timeout=180, status=VMStatus.ACTIVE)
@@ -241,7 +247,7 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
 
     Test Steps:
         - Create a flavor with auto recovery set to False and Guest Heartbeat set to given value in extra specs
-        - Create a volume from cgcs-guest image
+        - Create a volume from tis image
         - Boot a vm with the flavor and the volume
         - Verify vm heartbeat is (not) established based on the heartbeat setting in flavor
         - Set vm to unhealthy state using touch /tmp/unhealthy
@@ -294,9 +300,9 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
 
     events_2 = system_helper.wait_for_events(timeout=EventLogTimeout.HEALTH_CHECK_FAIL, strict=False, fail_ok=True,
                                              **{'Entity Instance ID': vm_id, 'Event Log ID': [
-                                                EventLogID.SOFT_REBOOT_BY_VM, EventLogID.HEARTBEAT_CHECK_FAILED]})
+                                                EventLogID.REBOOT_VM_ISSUED, EventLogID.HEARTBEAT_CHECK_FAILED]})
 
-    assert EventLogID.SOFT_REBOOT_BY_VM not in events_2, "Auto recovery is triggered even if it's set to false."
+    assert EventLogID.REBOOT_VM_ISSUED not in events_2, "Auto recovery is triggered even if it's set to false."
 
     if heartbeat_enabled:
         assert EventLogID.HEARTBEAT_CHECK_FAILED in events_2, "VM heartbeat failure is not logged."

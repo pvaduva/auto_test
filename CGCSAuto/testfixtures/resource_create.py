@@ -2,7 +2,7 @@ from pytest import fixture
 
 from utils.tis_log import LOG
 from consts.cgcs import GuestImages
-from keywords import nova_helper, glance_helper, keystone_helper, host_helper
+from keywords import nova_helper, glance_helper, keystone_helper
 
 
 # Session fixture to add affinitiy and anti-affinity server group
@@ -116,6 +116,11 @@ def tis_centos_image():
     return __create_image('tis-centos-guest', 'session')
 
 
+@fixture(scope='session', autouse=False)
+def cgcs_guest_image():
+    return __create_image('cgcs-guest', 'session')
+
+
 def __create_image(img_os, scope):
 
     LOG.fixture_step("({}) Get or create a glance image with {} guest OS".format(scope, img_os))
@@ -127,7 +132,8 @@ def __create_image(img_os, scope):
 
     img_id = glance_helper.get_image_id_from_name(img_os, strict=True)
     if not img_id:
-        img_id = glance_helper.create_image(name=img_os, source_image_file=image_path, disk_format='qcow2',
+        disk_format = 'raw' if img_os == 'cgcs-guest' else 'qcow2'
+        img_id = glance_helper.create_image(name=img_os, source_image_file=image_path, disk_format=disk_format,
                                             container_format='bare')[1]
 
     return img_id

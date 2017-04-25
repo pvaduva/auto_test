@@ -374,13 +374,13 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate():
     - less than one storage
 
     """
-    skip("Currently not working. Centos image doesn't see both volumes")
+    #skip("Currently not working. Centos image doesn't see both volumes")
     LOG.tc_step("Creating a volume size=8GB.....")
     vol_id_0 = cinder_helper.create_volume(size=8)[1]
     ResourceCleanup.add('volume', vol_id_0, scope='function')
 
     LOG.tc_step("Creating a second volume size=8GB.....")
-    vol_id_1 = cinder_helper.create_volume(size=8)[1]
+    vol_id_1 = cinder_helper.create_volume(size=8, bootable=False)[1]
     LOG.tc_step("Volume id is: {}".format(vol_id_1))
     ResourceCleanup.add('volume', vol_id_1, scope='function')
 
@@ -388,7 +388,7 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate():
 
     rc, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm_0', source='volume', source_id=vol_id_0, cleanup='function')
     # ResourceCleanup.add('vm', vm_id, scope='function')
-    assert rc == 0, "VM vm_0 did not succeed: reaon {}".format(msg)
+    assert rc == 0, "VM vm_0 did not succeed: reason {}".format(msg)
     time.sleep(5)
 
     LOG.tc_step("Verify  VM can be pinged from NAT box...")

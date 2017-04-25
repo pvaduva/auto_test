@@ -13,7 +13,7 @@ def get_storprof_diskconfig(profile=None, con_ssh=None):
 
     disk_sizes = {}
     for disk_size in table_parser.get_value_two_col_table(table, 'diskconfig', strict=True, regex=False).split(';'):
-        d, s = disk_size.split(':')
+        d, s = disk_size.split(': ')
         disk_sizes[d.strip()] = int(s.strip())
 
     return disk_sizes
@@ -79,13 +79,14 @@ def get_host_disk_sizes(host=None, con_ssh=None):
 
 
 def get_host_disks_values(host, rtn_val='size_mib', dev_type=None, serial_id=None, dev_num=None, dev_node=None,
-                          size_mib=None, strict=True, con_ssh=None):
+                          size_mib=None, device_path=None,  strict=True, con_ssh=None):
     assert host
     filters = {'device_node': dev_node,
                'device_num': dev_num,
                'device_type': dev_type,
                'size_mib': size_mib,
-               'serial_id': serial_id
+               'serial_id': serial_id,
+               'device_path': device_path
                }
     table_ = table_parser.table(cli.system('host-disk-list', '{} --nowrap'.format(host), ssh_client=con_ssh))
     vals = table_parser.get_values(table_, rtn_val, strict=strict, **filters)

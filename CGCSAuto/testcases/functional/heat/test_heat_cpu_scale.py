@@ -3,7 +3,7 @@ import time
 
 from pytest import mark
 
-from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec
+from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages
 from consts.filepaths import WRSROOT_HOME
 from keywords import nova_helper, vm_helper, heat_helper, network_helper
 from setup_consts import P1
@@ -45,7 +45,8 @@ def launch_cpu_scaling_stack(con_ssh=None, auth_info=None):
 
     key_pair = vm_helper.get_any_keypair()
     cmd_list.append("-P KEYPAIR=%s " % key_pair)
-    image = 'cgcs-guest'
+    # image = 'cgcs-guest'
+    image = GuestImages.DEFAULT_GUEST
     cmd_list.append("-P IMAGE=%s " % image)
 
     net_id = network_helper.get_mgmt_net_id()
@@ -122,7 +123,7 @@ def _test_heat_cpu_scale(action):
     """
     # create the heat stack
     LOG.tc_step("Creating heat stack for auto scaling Vms")
-    return_code, msg = launch_vm_scaling_stack()
+    return_code, msg = launch_cpu_scaling_stack()
 
     assert 0 == return_code, "Expected return code {}. Actual return code: {}; details: {}".format(0, return_code, msg)
 
@@ -165,7 +166,7 @@ def _test_heat_cpu_scale(action):
     # remove the tmp file in the vm
     LOG.tc_step("removing /tmp/vote_no_to_stop in vm")
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id_after_scale) as vm_ssh:
-        vm_ssh.exec_cmd("rm /tmp/vote_no_to_stop")
+        vm_ssh.exec_cmd("rm -f /tmp/vote_no_to_stop")
 
     # wait for vm to be deleted
     LOG.tc_step("Checking that the Vm is removed now")

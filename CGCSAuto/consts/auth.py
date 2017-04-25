@@ -86,7 +86,7 @@ class Tenant:
         setattr(cls, tenant_dictname, tenant_dict)
 
 
-class Host:
+class HostLinuxCreds:
     USER = 'wrsroot'
     PASSWORD = "Li69nux*"
 

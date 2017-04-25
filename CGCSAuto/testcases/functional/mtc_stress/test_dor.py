@@ -22,6 +22,22 @@ def power_off_and_on(barcode, power_off_event, timeout):
 
 @mark.usefixtures('check_alarms')
 def test_dead_office_recovery(reserve_unreserve_all_hosts_module):
+    """
+    Test dead office recovery with vms
+    Args:
+        reserve_unreserve_all_hosts_module: test fixture to reserve unreserve all vlm nodes for lab under test
+
+    Setups:
+        - Reserve all nodes in vlm
+
+    Test Steps:
+        - Boot 5 vms with various boot_source, disks, etc and ensure they can be reached from NatBox
+        - Power off all nodes in vlm using multi-processing to simulate a power outage
+        - Power on all nodes
+        - Wait for nodes to become online/available
+        - Check vms are recovered after hosts come back up and vms can be reached from NatBox
+
+    """
     LOG.tc_step("Boot 5 vms with various boot_source, disks, etc")
     vms = vm_helper.boot_vms_various_types()
 

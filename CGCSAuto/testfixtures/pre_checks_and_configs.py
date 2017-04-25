@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.reasons import SkipReason
 from consts.cgcs import EventLogID, HostAvailabilityState
-from keywords import system_helper, host_helper, keystone_helper
+from keywords import system_helper, host_helper, keystone_helper, security_helper
 
 
 @fixture(scope='session')
@@ -41,7 +41,8 @@ def wait_for_con_drbd_sync_complete():
 def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     more_than_one_controllers = wait_for_con_drbd_sync_complete
     prev_pswd = Tenant.ADMIN['password']
-    post_pswd = "'!{}9'".format(prev_pswd)
+    post_actual_pswd = '!{}9'.format(prev_pswd)
+    post_pswd = "'{}'".format(post_actual_pswd)
 
     LOG.fixture_step('(Session) Changing admin password to {}'.format(post_pswd))
     keystone_helper.update_user('admin', password=post_pswd)
@@ -58,13 +59,23 @@ def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
                 host_helper.unlock_host(active)
             else:
                 LOG.warning("Standby controller unavailable. Skip lock unlock controllers post admin password change.")
+        elif system_helper.is_simplex():
+            LOG.fixture_step("(Session) Simplex lab - lock/unlock controller to complete action")
+            host_helper.lock_host('controller-0', swact=False)
+            host_helper.unlock_host('controller-0')
 
     def revert_pswd():
         LOG.fixture_step("(Session) Reverting admin password to {}".format(prev_pswd))
         keystone_helper.update_user('admin', password=prev_pswd)
         _lock_unlock_controllers()
+
+        LOG.fixture_step("(Session) Check admin password is reverted to {} in keyring".format(prev_pswd))
+        assert prev_pswd == security_helper.get_admin_password_in_keyring()
     request.addfinalizer(revert_pswd)
 
     _lock_unlock_controllers()
+
+    LOG.fixture_step("(Session) Check admin password is changed to {} in keyring".format(post_pswd))
+    assert post_actual_pswd == security_helper.get_admin_password_in_keyring()
 
     return post_pswd

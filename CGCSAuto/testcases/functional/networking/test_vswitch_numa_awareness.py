@@ -175,6 +175,10 @@ class TestVSwitchCPUReconfig:
 
         assert host == nova_helper.get_vm_host(vm_id), "VM is not booted on configured host"
 
+    @fixture(scope='function')
+    def check_alarms(self):
+        pass
+
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required', 'expt_err'), [
         mark.p1(((1, 1), (5, 5), False, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
         mark.p3(((7, 9), (2, 2), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),   # Assume total<=10 cores/per proc & thread
@@ -659,12 +663,18 @@ class TestNovaSchedulerAVS:
         initial_host, other_host = hosts_configured
         vms_cores_dict = host_helper.get_host_cpu_cores_for_function(initial_host, function='VMs')
         p1_vm_cores = len(vms_cores_dict[1])
+        # p0_vm_cores = len(vms_cores_dict[0])
         if system_helper.is_hyperthreading_enabled(initial_host):
             p1_vm_cores *= 2
+            # p0_vm_cores *= 2
 
-        flavor_vcpu_num = int(p1_vm_cores / 4) + 1
+        if p1_vm_cores > 15:
+            vm_count = 3
+        else:
+            vm_count = 2
+        flavor_vcpu_num = int(p1_vm_cores / (vm_count + 1)) + 1
 
-        return initial_host, other_host, flavor_vcpu_num, storage_backing
+        return initial_host, other_host, flavor_vcpu_num, storage_backing, vm_count
 
     def test_vswitch_numa_affinity_sched_vms_one_host_avail(self, cal_vm_cores_one_host):
         """
@@ -681,7 +691,7 @@ class TestNovaSchedulerAVS:
 
         Test Steps;
             - Create a flavor with vswitch_numa_affinity=strict and vcpu_num = int(p1_vm_cores/4)+1 so that max 3
-                vms can be booted on vswitch node
+                vms can be booted on vswitch node (or max 2 vms if p1_vm_cores < 15)
             - Boot vms with above flavor until vswitch node full
             - Check above vms are booted on expected host and numa node
             - Attempt to boot one more vm and ensure it failed
@@ -695,13 +705,13 @@ class TestNovaSchedulerAVS:
             - Remove admin role from tenanat
 
         """
-        expt_host, other_host, flavor_vcpu_num, storage_backing = cal_vm_cores_one_host
+        expt_host, other_host, flavor_vcpu_num, storage_backing, vm_count = cal_vm_cores_one_host
 
         flv_id = _create_flavor(flavor_vcpu_num, storage_backing, 'strict', 1)
 
         LOG.tc_step("Boot 3 VMs and ensure they are booted on vswitch numa node on {}".format(expt_host))
         vms = []
-        for i in range(3):
+        for i in range(vm_count):
             code, vm_id, err, vol = vm_helper.boot_vm('vswitch_numa_one_host', flavor=flv_id, cleanup='function',
                                                       avail_zone='cgcsauto', fail_ok=True)
             # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
@@ -742,6 +752,7 @@ class TestNovaSchedulerAVS:
     def get_target_host_and_flavors(self, hosts_configured, request):
         hosts, storage_backing, ht_enabled = hosts_configured
         other_host, target_host = hosts
+        ht_enabled = system_helper.is_hyperthreading_enabled(target_host)
         LOG.fixture_step("(class) Add {} to cgcsauto aggregate".format(target_host))
         nova_helper.add_hosts_to_aggregate('cgcsauto', target_host)
 
@@ -795,7 +806,7 @@ class TestNovaSchedulerAVS:
             - Delete all vms on the system
             - Select target host with vswitch = 2, 0 and add it to cgcsauto aggregate
             - Create a flavor with 2 vcpus and vswitch affinity
-            - Create another flavor with many vcpus = vswitch ndoe vm cores - 1
+            - Create another flavor with many vcpus = vswitch node vm cores + 1
 
         Test Steps;
             - Boot a vm with dedicated 2 vcpu flavor in cgcsauto zone

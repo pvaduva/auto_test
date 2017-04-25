@@ -24,6 +24,7 @@ _final_processes_status = {}
 DEF_RETRIES = 2
 DEF_DEBOUNCE = 20
 DEF_INTERVAL = 10
+DEGRADED_TO_AVAILABLE_TIMEOUT = 150
 SM_PROC_TIMEOUT = 90
 KILL_WAIT_RETRIES = 30
 
@@ -32,7 +33,7 @@ DEF_PROCESS_PID_FILE_PATH = r'/var/run/{}.pid'
 
 INTERVAL_BETWEEN_SWACT = 300 + 10
 
-SKIP_PROCESS_LIST = ('postgres')
+SKIP_PROCESS_LIST = ('postgres', 'open-ldap', 'lighttpd', 'ceph-rest-api', 'horizon', 'patch-alarm-manager', 'ntpd')
 
 PROCESSES = {
     'sm': {
@@ -469,6 +470,16 @@ class MonitoredProcess:
             else:
                 self.interval = int(self.interval)
 
+            self.debounce = getattr(self, 'debounce', None)
+            if self.debounce is None:
+                self.debounce = 20
+            else:
+                self.debounce = int(self.debounce)
+            if self.debounce < 1:
+                msg = 'Debounce time is too small! Skip the test! debounce=<{}>'.format(self.debounce)
+                LOG.warn(msg)
+                skip(msg)
+
             if 'pidfile' in settings:
                 self.pid_file = settings['pidfile']
         else:
@@ -709,8 +720,8 @@ class MonitoredProcess:
 
         return -1, ()
 
-    def kill_pmon_process_and_verify_impact(self, name, impact, process_type, host, severity='major',
-                                            pid_file='', retries=2, interval=1, wait_recover=True, con_ssh=None):
+    def kill_pmon_process_and_verify_impact(self, name, impact, process_type, host, severity='major', pid_file='',
+                                            retries=2, interval=1, debounce=20, wait_recover=True, con_ssh=None):
         LOG.debug('Kill process and verify system behavior for PMON process:{}, impact={}, process_type={}'.format(
             name, impact, process_type))
         last_events = mtc_helper.search_event(mtc_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id'],
@@ -719,15 +730,26 @@ class MonitoredProcess:
             LOG.error('No pid-file provided')
             return -1
 
-        cmd = 'true; n=0; for((;n<{};)); do pid=$(cat {} 2>/dev/null); if [ "x$pid" = "x" ]; then usleep 0.05; ' \
-              'continue; fi; sudo kill -9 $pid &>/dev/null; if [ $? -eq 0 ]; then ((n++)); sleep {}; ' \
-              'else usleep 0.05; fi; done; echo $pid'.format(retries, pid_file, interval)
+        if 0 <= interval <= debounce - 1:
+            wait_after_each_kill = max(random.randint(interval, debounce - 1), 1)
+        else:
+            msg = 'Debounce time period is smaller than interval? Error in configuration. Skip the test! ' \
+                  'interval={} debounce={}'.format(interval, debounce)
+            LOG.warn(msg)
+            skip(msg)
+            return -1
+
+        LOG.info('interval={}, debounce={}, wait_each_kill={}'.format(interval, debounce, wait_after_each_kill))
+
+        cmd = '''true; n=1; last_pid=''; pid=''; for((;n<{};)); do pid=$(cat {} 2>/dev/null); date;
+                if [ "x$pid" = "x" -o "$pid" = "$last_pid" ]; then echo "stale or empty PID:$pid, last_pid=$last_pid";
+                usleep 0.05; continue; fi; sudo kill -9 $pid &>/dev/null;
+                if [ $? -eq 0 ]; then echo "OK $n - $pid killed"; ((n++)); last_pid=$pid; pid=''; sleep {};
+                else usleep 0.05; fi; done; echo $pid'''.format(retries+1, pid_file, wait_after_each_kill)
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
 
-        wait_time = max(interval * retries + 60, 60)
-
-        debounce = int(getattr(self, 'debounce', '20'))
+        wait_time = max(wait_after_each_kill * retries + 60, 60)
 
         self.pid = -1
         for _ in range(2):
@@ -746,7 +768,7 @@ class MonitoredProcess:
                 LOG.warn('Caught exception when running:{}, exception:{}, '
                          'but assuming the process {} was killed'.format(cmd, e, name))
 
-            check_event = False
+            check_event = True
             quorum = 0
             expected = {'operational': 'enabled', 'availability': 'available'}
 
@@ -806,7 +828,7 @@ class MonitoredProcess:
                 if wait_recover:
                     operational = impact.split('-')[0]
                     if operational == 'disabled' or quorum == '1':
-                        wait_time = HostTimeout.REBOOT
+                        wait_time = HostTimeout.REBOOT + DEGRADED_TO_AVAILABLE_TIMEOUT
                     else:
                         wait_time += 60
 
@@ -817,6 +839,18 @@ class MonitoredProcess:
                         LOG.error('host {} did not recoverd to enabled-available status from status:{} '
                                   'after been killed {} times'.format(host, expected, retries))
                         return -1
+
+                if check_event:
+                    code, events = self.wait_for_pmon_process_events(
+                        name, host, expected, process_type=process_type, severity=severity,
+                        last_events=last_events, expecting=True, con_ssh=con_ssh)
+
+                    if 0 != code:
+                        LOG.error('No event/alarm raised for process:{}, process_type:{}, host:{}'.format(
+                            name, process_type, host))
+                    else:
+                        found_event = True
+                        LOG.info('found events {} after been killed {} times on host {}'.format(events, retries, host))
 
                 if reached and not found_event:
                     LOG.error('No event/alarm raised for process:{}, process_type:{}, host:{}, '
@@ -852,6 +886,7 @@ class MonitoredProcess:
         interval = self.interval
         pid_file = self.pid_file
         severity = self.severity
+        debounce = self.debounce
 
         on_active_controller = (node_type == 'active' and self.host == active_controller)
 
@@ -861,7 +896,7 @@ class MonitoredProcess:
         if process_type == 'pmon':
             code = self.kill_pmon_process_and_verify_impact(name, impact, process_type, host, severity=severity,
                                                             pid_file=pid_file, retries=retries,
-                                                            interval=interval, con_ssh=con_ssh)
+                                                            interval=interval, debounce=debounce, con_ssh=con_ssh)
 
         else:
             pid, host = mtc_helper.kill_sm_process_and_verify_impact(
@@ -888,7 +923,7 @@ class MonitoredProcess:
 @mark.parametrize(('process_name'), [
     mark.p1(('sm')),
     # TODO CGTS-6451
-    # mark.p1(('rmond')),
+    mark.p1(('rmond')),
     mark.p1(('fsmond')),
     mark.p1(('hbsClient')),
     mark.p1(('mtcClient')),
@@ -899,11 +934,11 @@ class MonitoredProcess:
     mark.p1(('sw-patch-controller-daemon')),
     mark.p1(('sw-patch-agent')),
     # TODO jira?
-    # mark.p1(('acpid')),
+    mark.p1(('acpid')),
     mark.p1(('ceilometer-polling')),
     mark.p1(('mtclogd')),
     # TODO need manual configuring
-    # mark.p1(('ntpd')),
+    mark.p1(('ntpd')),
     mark.p1(('sm-eru')),
     mark.p1(('sshd')),
     mark.p1(('syslog-ng')),
@@ -920,12 +955,12 @@ class MonitoredProcess:
     mark.p1(('nova-compute')),
     mark.p1(('vswitch')),
 
-    # # mark.p1(('postgres')),
-    # # mark.p1(('rabbitmq-server')), # rabbit in SM
-    # # TODO CGTS-6336
-    # # TODO CGTS-6391
+    # mark.p1(('postgres')),
+    # mark.p1(('rabbitmq-server')), # rabbit in SM
+    # TODO CGTS-6336
+    # TODO CGTS-6391
     mark.p1(('rabbit')),
-    # # mark.p1(('sysinv-api')),  # sysinv-inv in SM
+    # mark.p1(('sysinv-api')),  # sysinv-inv in SM
     mark.p1(('sysinv-inv')),
     mark.p1(('sysinv-conductor')),
     mark.p1(('mtc-agent')),
@@ -933,10 +968,10 @@ class MonitoredProcess:
     mark.p1(('hw-mon')),
     mark.p1(('dnsmasq')),
     mark.p1(('fm-mgr')),
-    # # TODO CGTS-6396
+    # TODO CGTS-6396
     mark.p1(('keystone')),
     mark.p1(('glance-registry')),
-    # # TODO CGTS-6398
+    # TODO CGTS-6398
     # major
     mark.p1(('glance-api')),
     mark.p1(('neutron-server')),
@@ -953,7 +988,7 @@ class MonitoredProcess:
     mark.p1(('cinder-scheduler')),
     # retries = 32
     mark.p1(('cinder-volume')),
-
+    #
     mark.p1(('ceilometer-collector')),
     mark.p1(('ceilometer-api')),
     mark.p1(('ceilometer-agent-notification')),
@@ -964,7 +999,7 @@ class MonitoredProcess:
     mark.p1(('heat-api-cfn')),
     mark.p1(('heat-api-cloudwatch')),
     #
-
+    #
     # TODO CGTS-6426
     # mark.p1(('open-ldap')),, active/active
     # retries = 32
@@ -1114,6 +1149,7 @@ def test_process_monitoring(process_name, con_ssh=None):
             postgres        SKIPPED, ‘killing postgres process may cause data damage which could destabilize the system’
             patch-alarm-manager    SKIPPED, differently might running on either of the controllers
 
+            ntpd            SKIPPED, 'ntpd is not a restartable process'
     """
     LOG.tc_step('Start testing SM/PM Prcocess Monitoring')
 

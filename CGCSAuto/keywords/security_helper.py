@@ -3,12 +3,12 @@ import time
 import random
 from pexpect import EOF
 from consts.cgcs import Prompt
-from consts.auth import Tenant
+from consts.auth import Tenant, HostLinuxCreds
 from utils.ssh import ControllerClient, SSHClient
 
 
 class LinuxUser:
-    users = {'wrsroot': 'Li69nux*'}
+    users = {HostLinuxCreds.USER: HostLinuxCreds.PASSWORD}
     con_ssh = None
 
     def __init__(self, user, password, con_ssh=None):
@@ -72,7 +72,7 @@ class LdapUserManager(object, metaclass=Singleton):
 
     """
 
-    LINUX_ROOT_PASSWORD = 'Li69nux*'
+    LINUX_ROOT_PASSWORD = HostLinuxCreds.PASSWORD
     KEYSTONE_USER_NAME = Tenant.ADMIN['user']
     KEYSTONE_USER_DOMAIN_NAME = 'Default'
     KEYSTONE_PASSWORD = Tenant.ADMIN['password']
@@ -727,3 +727,19 @@ class LdapUserManager(object, metaclass=Singleton):
             ssh_con.send('exit')
 
         return changed, ssh_con
+
+
+def get_admin_password_in_keyring(con_ssh=None):
+    """
+    Get admin password via 'keyring get CGCS admin'
+    Args:
+        con_ssh (SSHClient): active controller client
+
+    Returns (str): admin password returned
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    admin_pswd = con_ssh.exec_cmd('keyring get CGCS admin', fail_ok=False)[1]
+    return admin_pswd

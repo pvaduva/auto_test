@@ -129,11 +129,13 @@ def _perform_action(vm_id, action, expt_fail):
         if expt_fail:
             LOG.tc_step("Verify that attempts to soft reboot the VM is not allowed")
             exitcode, output = vm_helper.reboot_vm(vm_id, hard=False, fail_ok=True)
+            assert 1 == exitcode
             assert ('action-rejected' in output)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
 
             LOG.tc_step("Verify that attempts to hard reboot the VM is not allowed")
-            exitcode, output = cli.nova('reboot --hard', vm_id, fail_ok=True)
+            exitcode, output = vm_helper.reboot_vm(vm_id, hard=True, fail_ok=True)
+            assert 1 == exitcode
             assert ('action-rejected' in output)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
         else:
@@ -141,21 +143,9 @@ def _perform_action(vm_id, action, expt_fail):
             vm_helper.reboot_vm(vm_id)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-            events_tab = system_helper.get_events_table(num=10)
-            reasons = table_parser.get_values(events_tab, 'Reason Text', strict=False,
-                                              **{'Entity Instance ID': vm_id, 'State': 'log'})
-            assert re.search('Reboot complete for instance .* now enabled on host', '\n'.join(reasons)), \
-                "Was not able to reboot VM"
-
             LOG.tc_step("Verify the VM can be hard rebooted")
-            cli.nova('reboot --hard', vm_id)
+            vm_helper.reboot_vm(vm_id, hard=True)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-
-            events_tab = system_helper.get_events_table(num=10)
-            reasons = table_parser.get_values(events_tab, 'Reason Text', strict=False,
-                                              **{'Entity Instance ID': vm_id, 'State': 'log'})
-            assert re.search('Reboot complete for instance .* now enabled on host', '\n'.join(reasons)), \
-                "Was not able to reboot VM even though voting is removed"
 
     elif action == 'stop':
         if expt_fail:

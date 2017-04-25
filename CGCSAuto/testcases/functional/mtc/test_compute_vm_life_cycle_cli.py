@@ -16,6 +16,11 @@ from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
+@fixture(scope='function', autouse=True)
+def check_alarms():
+    pass
+
+
 def _lock_unlock_computes_except_one(host_name, action='lock'):
     """"""
     compute_list = host_helper.get_hypervisors()
@@ -99,7 +104,7 @@ def _is_cpe():
 @mark.usefixtures('ubuntu14_image')
 @mark.parametrize(('host', 'guest'), [
     ('compute-0', 'ubuntu_14'),
-    ('compute-0', None),            # cgcs-guest
+    ('compute-0', None),
     ('compute-1', 'ubuntu_14'),
     ('compute-1', None),
     ])

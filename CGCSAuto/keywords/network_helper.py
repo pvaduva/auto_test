@@ -905,7 +905,7 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
 
             if exclude_nets:
                 for net_to_exclude in exclude_nets:
-                    if net_to_exclude == vm_net:
+                    if net_to_exclude in vm_net:
                         LOG.info("Excluding IPs from {}".format(net_to_exclude))
                         continue
             # find ips
@@ -2911,6 +2911,8 @@ def collect_networking_info(routers=None, vms=None):
 
     if not routers:
         if vms:
+            if isinstance(vms, str):
+                vms = [vms]
             routers = get_tenant_routers_for_vms(vms=vms)
         else:
             routers = get_routers(name='tenant[12]-router', regex=True, auth_info=Tenant.ADMIN)
