@@ -28,7 +28,7 @@ def vm_():
     vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, cleanup='module')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-    events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=False, timeout=60,
+    events = system_helper.wait_for_events(timeout=EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=False,
                                            **{'Entity Instance ID': vm_id,
                                               'Event Log ID': [EventLogID.HEARTBEAT_DISABLED,
                                                                EventLogID.HEARTBEAT_ENABLED]})
