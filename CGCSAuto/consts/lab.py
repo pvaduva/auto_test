@@ -239,6 +239,27 @@ class Labs:
         'storage_nodes': [23264, 23263, 23266, 23265],
     }
 
+
+    WCP_61_62 = {
+        'short_name': 'wcp_61_62',
+        'name': 'yow-cgcs-wildcat-61_62',
+        'floating ip': '128.224.151.82',
+        'controller-0 ip': '128.224.151.80',
+        'controller-1 ip': '128.224.151.81',
+        'controller_nodes': [23280, 23281],
+    }
+
+
+    WCP_63_66 = {
+        'short_name': 'wcp_63_66',
+        'name': 'yow-cgcs-wildcat-63_66',
+        'floating ip': '128.224.151.85',
+        'controller-0 ip': '128.224.151.83',
+        'controller-1 ip': '128.224.151.84',
+        'controller_nodes': [23282, 23283],
+        'compute_nodes': [23284, 23285],
+    }
+
     WCP_67 = {
         'short_name': 'wcp_67',
         'name': 'yow-cgcs-wildcat-67',
