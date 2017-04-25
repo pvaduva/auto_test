@@ -6,7 +6,6 @@ from keywords import vm_helper, nova_helper, network_helper
 
 from testfixtures.resource_mgmt import ResourceCleanup
 
-
 @mark.parametrize('vm_type', ['avp', 'vhost', 'vswitch', 'virtio', 'pcipt', 'sriov'])
 def test_vif_models(vm_type):
     """
