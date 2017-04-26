@@ -295,6 +295,7 @@ def copy_files_to_con1():
     timeout = 1800
 
     with host_helper.ssh_to_host("controller-0") as con_0_ssh:
+        LOG.info("rsync files from controller-0 to controller-1...")
         con_0_ssh.send(cmd)
 
         end_time = time.time() + timeout

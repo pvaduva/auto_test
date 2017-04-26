@@ -9,7 +9,7 @@ from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
 from utils.tis_log import LOG
 
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
-from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState, Prompt, MELLANOX_DEVICE
+from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState, Prompt, MELLANOX_DEVICE, Networks
 from consts.timeout import HostTimeout, CMDTimeout
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 
@@ -2877,3 +2877,43 @@ def get_host_interfaces_for_net_type(host, net_type='infra', if_type=None, exclu
 
     LOG.info("Expected eth names for {} network on {}: {}".format(net_type, host, interfaces))
     return interfaces
+
+
+def get_ntpq_status(host, con_ssh=None):
+    """
+
+    Returns:
+
+    """
+    cmd = 'ntpq -pn'
+    with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+        output = host_ssh.exec_sudo_cmd(cmd, fail_ok=False)[1]
+
+    output_lines = output.splitlines()
+    server_lines = list(output_lines)
+    for line in output_lines:
+        server_lines.remove(line)
+        if '======' in line:
+            break
+
+    selected = None
+    invalid = []
+    unreachable = []
+    for server_line in server_lines:
+        if re.match("{}.*".format(Networks.MGMT_IP), server_line[1:]):
+            continue
+
+        if server_line.startswith('*'):
+            selected = server_line
+        elif server_line.startswith(' '):
+            invalid.append(server_line)
+        elif server_line.startswith('-'):
+            unreachable.append(server_line)
+
+    if not selected:
+        return 1, "No NTP server selected"
+
+    if invalid or unreachable:
+        return 2, "Some NTP servers are not reachable"
+
+    return 0, "{} NTPQ is in healthy state".format(host)

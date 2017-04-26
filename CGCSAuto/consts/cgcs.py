@@ -240,6 +240,7 @@ class EventLogID:
     # 200.004	compute-0 experienced a service-affecting failure. Auto-recovery in progress.
     # host=compute-0 	critical 	April 7, 2017, 2:34 p.m.
     HOST_RECOVERY_IN_PROGRESS = '200.004'
+    NTP_ALARM = '100.114'
 
 
 class NetworkingVmMapping:
