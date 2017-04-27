@@ -90,7 +90,6 @@ def test_avp_vms_with_vm_actions(spec_name, spec_val, vm_type, vif_model, base_v
     ResourceCleanup.add('volume', volume)
     vm_under_test = vm_helper.boot_vm(cleanup='function', name='avs-vm', flavor=flavor_id, source='volume',
                                       source_id=volume, nics=nics)[1]
-    # ResourceCleanup.add('vm', vm_under_test)
 
     LOG.tc_step("Ping VM {} from NatBox".format(vm_under_test))
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)

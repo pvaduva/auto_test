@@ -294,6 +294,10 @@ def check_vm_set_error_recover(obj):
     obj.check_numa_affinity('set_error_recover')
 
 
+def check_vm_hard_reboot(obj):
+    obj.check_numa_affinity(msg_prefx='hard_reboot')
+
+
 class TestVmPCIOperations:
 
     NIC_PCI_TYPES = ['pci-passthrough', 'pci-sriov']
@@ -303,7 +307,8 @@ class TestVmPCIOperations:
                 'pause/unpause': check_vm_pause_unpause,
                 'suspend/resume': check_vm_suspend_resume,
                 'cold-migrate': check_vm_cold_migrate,
-                'set-error-state-recover': check_vm_set_error_recover
+                'set-error-state-recover': check_vm_set_error_recover,
+                'hard-reboot': check_vm_hard_reboot,
                 }
 
     def get_pci_nic(self):
@@ -608,7 +613,14 @@ class TestVmPCIOperations:
         vm_helper.wait_for_vm_values(vm_id=self.vm_id, status=VMStatus.ACTIVE, fail_ok=False, timeout=600)
 
         LOG.tc_step("Check vm still pingable over mgmt and {} nets after auto recovery".format(self.net_type))
-
         self.wait_check_vm_states(step='set-error-state-recover')
         vm_helper.ping_vms_from_vm(
                 from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
+
+        LOG.tc_step("Hard reboot {} vm".format(self.vif_model))
+        vm_helper.reboot_vm(self.vm_id, hard=True)
+        LOG.tc_step("Check vm still pingable over mgmt and {} nets after nova reboot hard".format(self.net_type))
+        self.wait_check_vm_states(step='hard-reboot')
+        vm_helper.ping_vms_from_vm(
+                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
+

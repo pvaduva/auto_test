@@ -135,7 +135,11 @@ class TestMutiPortsBasic:
         vm_under_test, nics = _boot_multiports_vm(flavor=flavor, mgmt_net_id=mgmt_net_id, vifs=vifs,
                                                   net_id=tenant_net_id, net_type='data', base_vm=base_vm)
 
-        for vm_actions in [['auto_recover'], ['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
+        for vm_actions in [['auto_recover'],
+                           ['cold_migrate'],
+                           ['pause', 'unpause'],
+                           ['suspend', 'resume'],
+                           ['hard_reboot']]:
             if vm_actions[0] == 'auto_recover':
                 LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from "
                             "base vm over management and data networks")
@@ -144,7 +148,13 @@ class TestMutiPortsBasic:
             else:
                 LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
                 for action in vm_actions:
-                    vm_helper.perform_action_on_vm(vm_under_test, action=action)
+                    kwargs = {}
+                    if action == 'hard_reboot':
+                        action = 'reboot'
+                        kwargs['hard'] = True
+                    kwargs['action'] = action
+
+                    vm_helper.perform_action_on_vm(vm_under_test, **kwargs)
 
             vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
 
