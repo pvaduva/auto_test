@@ -17,8 +17,10 @@ import time
 TEST_OBJ_DIR = "test_objects"
 TEST_OBJ_PATH = "/home/wrsroot/" + TEST_OBJ_DIR
 TEST_OBJ_DOWNLOAD_PATH = "/home/wrsroot/downloads"
+OBJ_POOL_GIB = 100
+
 SWIFT_POOLS = ['.rgw.root', 'default.rgw.buckets.data', 'default.rgw.control', 'default.rgw.data.root',
-               'default.rgw.gc', 'default.rgw.log', 'default.rgw.users.uid']
+               'default.rgw.gc', 'default.rgw.log']
 
 def get_ceph_backend_info():
     if 'ceph' in storage_helper.get_configured_system_storage_backend():
@@ -130,6 +132,7 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
         skip (msg = "Swift is already provisioned")
 
     object_pool_gib = None
+    cinder_pool_gib = ceph_backend_info['cinder_pool_gib']
     if pool_size == 'default':
         if not eval(ceph_backend_info['object_gateway'].strip()):
             LOG.tc_step("Enabling SWIFT object store .....")
@@ -138,13 +141,18 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
         assert pre_swift_check[0], pre_swift_check[1]
 
         unallocated_gib = int(ceph_backend_info['ceph_total_space_gib']) - \
-                           (int(ceph_backend_info['cinder_pool_gib']) +
+                           (int(cinder_pool_gib) +
                             int(ceph_backend_info['glance_pool_gib']) +
                             int(ceph_backend_info['ephemeral_pool_gib']))
+        if unallocated_gib == 0:
+            unallocated_gib = int(int(cinder_pool_gib) / 4)
+            cinder_pool_gib = str(int(cinder_pool_gib) - unallocated_gib)
+
         object_pool_gib = str(unallocated_gib)
         LOG.tc_step("Enabling SWIFT object store and setting object pool size to {}.....".format(object_pool_gib))
 
     rc, updated_backend_info = storage_helper.modify_storage_backend('ceph', object_gateway=True,
+                                                                     cinder=cinder_pool_gib,
                                                                      object_gib=object_pool_gib)
 
     LOG.info("Verifying if swift object gateway is enabled...")
@@ -786,23 +794,18 @@ def verify_swift_object_setup():
     if 'ceph' in storage_helper.get_configured_system_storage_backend():
         con_ssh = ControllerClient.get_active_controller()
         cmd = "rados df | awk 'NR>1 && NR < 11 {{print $1}}'"
-        endtime = time.time() + 35
-        pools_setup = False
-        while time.time() < endtime:
-            rc, output = con_ssh.exec_cmd(cmd, fail_ok=True)
-            LOG.info("Swift object pools:{}".format(output))
+        rc, output = con_ssh.exec_cmd(cmd, fail_ok=True)
+        LOG.info("Swift object pools:{}".format(output))
 
-            if rc == 0:
-                pools = output.split('\n')
-                if set(SWIFT_POOLS).issubset(pools):
-                    LOG.info("Swift object pools: {}  are set...".format(SWIFT_POOLS))
-                    pools_setup = True
-                    break
-            time.sleep(5)
-
-        if not pools_setup:
-            LOG.info("Expected Swift object pools: {}"
-                 " are NOT set. Pools = {}".format(SWIFT_POOLS, pools))
+        if rc == 0:
+            pools = output.split('\n')
+            if set(SWIFT_POOLS).issubset(pools):
+                LOG.info("Swift object pools: {}  are set...".format(SWIFT_POOLS))
+            else:
+                LOG.info("Expected Swift object pools: {}"
+                         " are NOT set. Pools = {}".format(SWIFT_POOLS, pools))
+                return False
+        else:
             return False
 
     LOG.info("Verifying if swift object service (ceph-radosgw) is listed via 'sudo sm-dump' on the "
