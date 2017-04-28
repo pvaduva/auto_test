@@ -623,4 +623,3 @@ class TestVmPCIOperations:
         self.wait_check_vm_states(step='hard-reboot')
         vm_helper.ping_vms_from_vm(
                 from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
-

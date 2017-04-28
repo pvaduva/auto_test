@@ -1364,6 +1364,31 @@ def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=Tru
     return int(info_str) if rtn_int else info_str
 
 
+def get_pci_interface_stats_for_providernet(providernet_id, fields=('pci_pfs_configured', 'pci_pfs_used',
+                                                                    'pci_vfs_configured', 'pci_vfs_used'),
+                                            auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    get pci interface usage
+    Args:
+        providernet_id (str): id of a providernet
+        fields: fields such as ('pci_vfs_configured', 'pci_pfs_used')
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple): tuple of integers
+
+    """
+    if not providernet_id:
+        raise ValueError("Providernet id is not provided.")
+
+    table_ = table_parser.table(cli.nova('providernet-show', providernet_id, ssh_client=con_ssh, auth_info=auth_info))
+    rtn_vals = []
+    for field in fields:
+        pci_stat = int(table_parser.get_value_two_col_table(table_, field, strict=True))
+        rtn_vals.append(pci_stat)
+    return tuple(rtn_vals)
+
+
 def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, mac_addr=None, pci_addr=None,
                            net_id=None, net_name=None, auth_info=Tenant.ADMIN, con_ssh=None):
     """
