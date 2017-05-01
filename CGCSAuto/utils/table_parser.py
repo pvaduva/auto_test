@@ -449,7 +449,7 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
     row_indexes = []
     for header, values in new_kwargs.items():
         if isinstance(values, tuple):
-            values = list(tuple)
+            values = list(values)
         elif not isinstance(values, list):
             values = [values]
 
