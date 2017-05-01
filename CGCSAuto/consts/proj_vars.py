@@ -212,6 +212,8 @@ class PatchingVars:
         'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_4.0_Test_Patch_Build/',
         'DEF_PATCH_IN_LAB_BASE_DIR': os.path.join(WRSROOT_HOME, 'patch-files'),
         'DEF_PATCH_DIR': 'latest',
+        'PATCH_DIR': '/localdisk/loadbuild/jenkins/CGCS_4.0_Test_Patch_Build/latest',
+        'PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
         'USERNAME': 'svc-cgcsauto',  # getpass.getuser()
         'PASSWORD': ')OKM0okm',  # getpass.getpass()
     }
@@ -232,20 +234,10 @@ class PatchingVars:
 
         patch_dir = cls.__var_dict.get('PATCH_DIR')
 
-        if not patch_dir:
-            patch_dir = os.path.join(cls.__var_dict['DEF_PATCH_BUILD_BASE_DIR'], cls.__var_dict['DEF_PATCH_DIR'])
-        # elif not os.path.abspath(patch_dir):
-        elif not patch_dir.startswith('/'):
+        if patch_dir and not patch_dir.startswith('/'):
             patch_dir = os.path.join(cls.__var_dict['DEF_PATCH_BUILD_BASE_DIR'], patch_dir)
 
         cls.__var_dict['PATCH_DIR'] = patch_dir
-
-        build_server = cls.__var_dict.get('PATCH_BUILD_SERVER')
-
-        if not build_server:
-            build_server = cls.__var_dict['DEF_PATCH_BUILD_SERVER']
-
-        cls.__var_dict['PATCH_BUILD_SERVER'] = build_server
 
         patch_dir_in_lab = cls.__var_dict.get('PATCH_DIR_IN_LAB')
 
