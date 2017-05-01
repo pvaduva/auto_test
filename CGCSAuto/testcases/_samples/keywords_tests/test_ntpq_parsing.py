@@ -41,9 +41,22 @@ def test_ntpq_parser():
     code, msg = _ntp_test(output=unreachable, host='controller-0')
     assert 2 == code
 
+    unreachable_ = """
+         remote           refid      st t when poll reach   delay   offset  jitter
+==============================================================================
++192.168.204.4   167.114.204.238  3 u   19   64  376    0.041   10.021   5.967
+ 192.95.25.79    83.157.230.212   3 u  915   64    0   18.556    9.543   0.000
+*131.188.3.221   .DCFp.           1 u    5   64  377  125.342    1.460   6.247
++208.81.1.244    200.98.196.212   2 u   62   64  377   32.534    4.918   4.020
+"""
+
+    code, msg = _ntp_test(output=unreachable_, host='controller-0')
+    assert 2 == code
+
 
 def _ntp_test(output, host):
     output_lines = output.splitlines()
+
     server_lines = list(output_lines)
     for line in output_lines:
         server_lines.remove(line)

@@ -2881,8 +2881,16 @@ def get_host_interfaces_for_net_type(host, net_type='infra', if_type=None, exclu
 
 def get_ntpq_status(host, con_ssh=None):
     """
+    Get ntp status via 'sudo ntpq -pn'
 
-    Returns:
+    Args:
+        host (str): host to check
+        con_ssh (SSHClient)
+
+    Returns(tuple): (<code>, <msg>)
+        - (0, "<host> NTPQ is in healthy state")
+        - (1, "No NTP server selected")
+        - (2, "Some NTP servers are discarded")
 
     """
     cmd = 'ntpq -pn'
@@ -2897,23 +2905,20 @@ def get_ntpq_status(host, con_ssh=None):
             break
 
     selected = None
-    invalid = []
-    unreachable = []
+    discarded = []
     for server_line in server_lines:
         if re.match("{}.*".format(Networks.MGMT_IP), server_line[1:]):
             continue
 
         if server_line.startswith('*'):
             selected = server_line
-        elif server_line.startswith(' '):
-            invalid.append(server_line)
-        elif server_line.startswith('-'):
-            unreachable.append(server_line)
+        elif server_line.startswith('-') or server_line.startswith('x') or server_line.startswith(' '):
+            discarded.append(server_line)
 
     if not selected:
         return 1, "No NTP server selected"
 
-    if invalid or unreachable:
-        return 2, "Some NTP servers are not reachable"
+    if discarded:
+        return 2, "Some NTP servers are discarded"
 
     return 0, "{} NTPQ is in healthy state".format(host)

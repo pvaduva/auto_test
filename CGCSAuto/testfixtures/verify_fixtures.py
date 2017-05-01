@@ -59,10 +59,10 @@ def __verify_alarms(request, scope):
                         alarm_tab = system_helper.get_alarms_table()
                         alarms_ = system_helper._get_alarms(alarm_tab)
                         assert item not in alarms_, "NTP alarm generated when NPPQ return healthy stats"
+
                     continue
 
                 new_alarms.append(item)
-
 
         if new_alarms:
             LOG.fixture_step("New alarms detected. Waiting for new alarms to clear.")

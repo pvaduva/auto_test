@@ -2,6 +2,7 @@ import time
 from pytest import mark, fixture
 
 from utils.tis_log import LOG
+from consts.cgcs import EventLogID
 from keywords import host_helper, system_helper
 
 
@@ -42,6 +43,19 @@ def test_system_alarms(pre_alarms_session):
     new_alarms = []
     for alarm in post_alarms:
         if alarm not in pre_alarms_session:
+            # NTP alarm handling
+            alarm_id, entity_id = alarm
+            if alarm_id == EventLogID.NTP_ALARM:
+                LOG.fixture_step("NTP alarm found, checking ntpq stats")
+                host = entity_id.split('host=')[1].split('.ntp')[0]
+                status, msg = host_helper.get_ntpq_status(host)
+                LOG.info(msg)
+                if status == 0:
+                    alarms_ = system_helper.get_alarms()
+                    assert alarm not in alarms_, "NTP alarm generated when NPPQ return healthy stats"
+
+                continue
+
             new_alarms.append(alarm)
 
     if new_alarms:
