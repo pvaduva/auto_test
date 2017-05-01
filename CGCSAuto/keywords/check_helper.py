@@ -222,7 +222,7 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
             # if cpu_thr_pol:
             #     # FIXME: assumption invalid. isolate will not require ht_host
                 # Assumption: hyper-threading must be enabled if vm launched successfully. And thread number is 2.
-            assert actual_thread_policy in cpu_thr_pol, 'cpu thread policy in vm topology is {} while flavor ' \
+            assert actual_thread_policy in cpu_thr_pol, 'cpu thread policy in vm topology is {} while expected ' \
                                                         'spec is {}'.format(actual_thread_policy, cpu_thr_pol)
 
             if cpu_thr_pol == 'isolate':
