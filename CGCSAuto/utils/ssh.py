@@ -556,11 +556,12 @@ class SSHClient:
 
         LOG.info("Copying file(s) from {} to {}: {}".format(source_server, dest_server, scp_cmd))
         self.send(scp_cmd)
-        source_pswd_prompt = '{}.* password:'.format(source_server)
-        dest_pswd_prompt = '{}.* password:'.format(dest_server)
-        source_add_prompt = '{}.*\(yes/no\).*'.format(source_server)
-        dest_add_prompt = '{}.*\(yes/no\).*'.format(dest_server)
-        sudo_pswd_prompt = 'Password:'
+        unmatchable_str = '\n11111111111\n'
+        source_pswd_prompt = '{}.* password:'.format(source_server) if source_server else unmatchable_str
+        dest_pswd_prompt = '{}.* password:'.format(dest_server) if dest_server else unmatchable_str
+        source_add_prompt = '{}.*\(yes/no\).*'.format(source_server) if source_server else unmatchable_str
+        dest_add_prompt = '{}.*\(yes/no\).*'.format(dest_server) if dest_server else unmatchable_str
+        sudo_pswd_prompt = 'Password:| password for '
         search_window_size = 300
         index = self.expect([self.prompt, dest_add_prompt, dest_pswd_prompt,
                              source_add_prompt, source_pswd_prompt, sudo_pswd_prompt],

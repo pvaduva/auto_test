@@ -2,7 +2,9 @@ import time
 from pytest import fixture, mark, skip
 
 from consts.auth import Tenant
+from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
+from utils.ssh import NATBoxClient
 from consts.cgcs import VMStatus
 from keywords import vm_helper, nova_helper, host_helper, network_helper, system_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
@@ -43,7 +45,6 @@ def snat_setups(request):
 
     LOG.fixture_step("Boot a VM from volume")
     vm_id = vm_helper.boot_vm(name='snat', reuse_vol=False, cleanup='module')[1]
-    # ResourceCleanup.add('vm', vm_id, scope='module')
 
     LOG.fixture_step("Attempt to ping from NatBox and ensure if fails")
     ping_res = vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True, use_fip=False)
@@ -88,6 +89,8 @@ def test_snat_vm_actions(snat_setups, snat):
     Test Steps:
         - Enable/Disable SNAT based on snat param
         - Ping from VM to 8.8.8.8
+        - wget <lab_fip> to VM
+        - scp from NatBox to VM
         - Live-migrate the VM and verify ping from VM
         - Cold-migrate the VM and verify ping from VM
         - Pause and un-pause the VM and verify ping from VM
@@ -109,6 +112,17 @@ def test_snat_vm_actions(snat_setups, snat):
 
     LOG.tc_step("Ping from VM {} to 8.8.8.8".format(vm_))
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
+
+    LOG.tc_step("wget to VM {}".format(vm_))
+    lab_fip = ProjVar.get_var('LAB')['floating ip']
+    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_, use_fip=True) as vm_ssh:
+        vm_ssh.exec_cmd('wget {}'.format(lab_fip), fail_ok=False)
+
+    LOG.tc_step("scp from NatBox to VM {}".format(vm_))
+    vm_fip = network_helper.get_mgmt_ips_for_vms(vms=vm_, use_fip=True)[0]
+    natbox_ssh = NATBoxClient.get_natbox_client()
+    natbox_ssh.scp_files(source_file='test', dest_file='/tmp/', dest_server=vm_fip,
+                         dest_password='root', dest_user='root', timeout=30, fail_ok=False)
 
     LOG.tc_step("Live-migrate the VM and verify ping from VM")
     vm_helper.live_migrate_vm(vm_)
