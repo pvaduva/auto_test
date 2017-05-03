@@ -10,7 +10,7 @@ from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus
 from consts.cli_errs import CPUThreadErr, SharedCPUErr, ColdMigErr, CPUPolicyErr, ScaleErr
 
 from keywords import nova_helper, system_helper, vm_helper, host_helper, glance_helper, cinder_helper, check_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -319,7 +319,7 @@ class TestHTEnabled:
         Test Steps:
             - Create a flavor with given number of vcpus
             - Set cpu policy to dedicated and extra specs as per flavor related test params
-            - Create an image from cgcs-guest
+            - Create an image from tis image
             - Set image metadata as per image related test params
             - Get the host vcpu usage before booting vm
             - Attempt to boot a vm with above flavor and image
@@ -680,7 +680,7 @@ class TestHTEnabled:
         mark.p1((3, 'dedicated', 'isolate', None, None, 'strict', 'volume', 'cold_mig_revert', None)),
         mark.p1((2, 'dedicated', 'prefer', None, None, None, 'volume', 'cold_mig_revert', None)),
         mark.p1((4, 'dedicated', 'isolate', 2, None, None, 'volume', ['suspend', 'resume', 'rebuild'], None)),
-        mark.domain_sanity((6, 'dedicated', 'require', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
+        mark.priorities('nightly', 'domain_sanity')((6, 'dedicated', 'require', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
         mark.p1((5, 'dedicated', 'prefer', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
         # mark.skipif(True, reason="Evacuation JIRA CGTS-4917")
         mark.domain_sanity((3, 'dedicated', 'isolate', None, None, 'strict', 'volume', ['cold_migrate', 'live_migrate'], 'evacuate')),
@@ -798,7 +798,7 @@ class TestHTEnabled:
             vm_helper.ping_vms_from_natbox(vm_id)
 
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'cpu_thr_in_flv'), [
-        mark.domain_sanity((2, 'dedicated', 'isolate', None, 'volume', 'live_migrate', False)),
+        mark.priorities('domain_sanity', 'nightly')((2, 'dedicated', 'isolate', None, 'volume', 'live_migrate', False)),
         mark.domain_sanity((4, 'dedicated', 'require', 'strict', 'image', 'live_migrate', False)),
         mark.domain_sanity((3, 'dedicated', 'require', 'strict', 'volume', 'live_migrate', False)),
         mark.p1((4, 'dedicated', 'prefer', 'strict', 'image', 'live_migrate', False)),

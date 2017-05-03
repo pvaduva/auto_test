@@ -1,12 +1,13 @@
 from pytest import mark, fixture, skip
 
+from utils import table_parser
 from utils.tis_log import LOG
 
-from consts.cgcs import FlavorSpec, ImageMetadata
+from consts.cgcs import FlavorSpec, ImageMetadata, GuestImages
 from consts.cli_errs import CPUPolicyErr        # used by eval
 
-from keywords import nova_helper, vm_helper, glance_helper, cinder_helper, check_helper, host_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from keywords import nova_helper, vm_helper, glance_helper, cinder_helper, check_helper, host_helper, system_helper
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @mark.parametrize(('flv_vcpus', 'flv_pol', 'img_pol', 'boot_source', 'expt_err'), [
@@ -37,7 +38,7 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
         image_id = glance_helper.create_image(name='cpu_pol_{}'.format(img_pol), **image_meta)[1]
         ResourceCleanup.add('image', image_id)
     else:
-        image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
+        image_id = glance_helper.get_image_id_from_name(GuestImages.DEFAULT_GUEST, strict=True)
 
     if boot_source == 'volume':
         LOG.tc_step("Create a volume from image")
@@ -50,9 +51,9 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
 
     LOG.tc_step("Attempt to boot a vm from above {} with above flavor".format(boot_source))
     code, vm_id, msg, ignore = vm_helper.boot_vm(name='cpu_pol', flavor=flavor_id, source=boot_source,
-                                                 source_id=source_id, fail_ok=True)
-    if vm_id:
-        ResourceCleanup.add('vm', vm_id)
+                                                 source_id=source_id, fail_ok=True, cleanup='function')
+    # if vm_id:
+    #     ResourceCleanup.add('vm', vm_id)
 
     # check for negative tests
     if expt_err is not None:
@@ -79,7 +80,7 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
     mark.domain_sanity((2, 'dedicated', 'flavor', 'volume')),
     mark.p2((3, 'shared', 'flavor', 'volume')),
     mark.p1((1, 'dedicated', 'flavor', 'image')),
-    mark.p1((2, 'dedicated', 'image', 'volume')),
+    mark.nightly((2, 'dedicated', 'image', 'volume')),
     mark.p2((3, 'shared', 'image', 'volume')),
     mark.domain_sanity((1, 'dedicated', 'image', 'image')),
 ])
@@ -88,7 +89,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
     flavor_id = nova_helper.create_flavor(name='cpu_pol', vcpus=flv_vcpus)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
-    image_id = glance_helper.get_image_id_from_name('cgcs-guest', strict=True)
+    image_id = glance_helper.get_image_id_from_name(GuestImages.DEFAULT_GUEST, strict=True)
     if cpu_pol is not None:
         if pol_source == 'flavor':
             specs = {FlavorSpec.CPU_POLICY: cpu_pol}
@@ -152,3 +153,107 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
     vm_host = nova_helper.get_vm_host(vm_id)
     check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=cpu_pol, vm_host=vm_host,
                                       prev_total_cpus=prev_cpus[vm_host])
+
+
+@mark.usefixtures('add_admin_role_module')
+@mark.parametrize(('vcpus_dedicated', 'vcpus_shared', 'pol_source', 'boot_source'), [
+    mark.p1((2, 1, 'flavor', 'image')),
+    mark.p1((1, 3, 'image', 'image')),
+    mark.p1((2, 4, 'image', 'volume')),
+    mark.nightly((3, 2, 'flavor', 'volume')),
+])
+def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_source, boot_source):
+    """
+    Test two vms coexisting on the same host, one with the dedicated cpu property, and one with the shared cpu property.
+
+    Args:
+        vcpus_dedicated: Amount of vcpu(s) to allocate for the vm with the dedicated CPU_POLICY.
+        vcpus_shared: Amount of vcpu(s) to allocate for the vm with the shared CPU_POLICY.
+        pol_source: Where the CPU_POLICY is set from.
+        boot_source: The boot media the vm will use to boot.
+
+    Test Setups:
+        - Create two flavors, one for each vm.
+        - If using 'flavor' for pol_source, set extra specs for the CPU_POLICY.
+        - If using 'image' for pol_source, set ImageMetaData for the CPU_POLICY.
+        - If using 'volume' for boot_source, create volume from tis image.
+        - If using 'image' for boot_source, use tis image.
+        - Determine the amount of free vcpu(s) on the compute before testing.
+
+    Test Steps:
+        - Boot the first vm with CPU_POLICY: dedicated.
+        - Wait until vm is pingable from natbox.
+        - Check vm topology for vcpu(s).
+        - Determine the amount of free vcpu(s) on the compute.
+        - Boot the second vm with CPU_POLICY: shared.
+        - Wait until vm is pingable from natbox.
+        - Check vm topology for vcpu(s).
+        - Delete vms
+        - Determine the amount of free vcpu(s) on the compute after testing.
+        - Compare free vcpu(s) on the compute before and after testing, ensuring they are the same.
+
+    Test Teardown
+        - Delete created volumes and flavors
+    """
+    LOG.tc_step("Getting host list")
+    target_hosts = host_helper.get_hypervisors(state='up', status='enabled')
+    target_host = target_hosts[0]
+    storage_backing = host_helper.get_local_storage_backing(host=target_host)
+    if 'image' in storage_backing:
+        storage_backing = 'local_image'
+    elif 'lvm' in storage_backing:
+        storage_backing = 'local_lvm'
+    elif 'remote' in storage_backing:
+        storage_backing = 'remote'
+
+    image_id = glance_helper.get_image_id_from_name(GuestImages.DEFAULT_GUEST, strict=True)
+    pre_test_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
+    vm_dedicated_id = ''
+    vm_shared_id = ''
+
+    collection = ['dedicated', 'shared']
+    vm_ids = []
+    for x in collection:
+        if x == 'dedicated':
+            vcpus = vcpus_dedicated
+        else:
+            vcpus = vcpus_shared
+        LOG.tc_step("Create {} flavor with {} vcpus".format(x, vcpus))
+        flavor_id = nova_helper.create_flavor(name=x, vcpus=vcpus, storage_backing=storage_backing,
+                                              check_storage_backing=False)[1]
+        ResourceCleanup.add('flavor', flavor_id)
+
+        if pol_source == 'flavor':
+            LOG.tc_step("Set CPU_POLICY for {} flavor".format(x))
+            specs = {FlavorSpec.CPU_POLICY: x}
+            nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+        else:
+            LOG.tc_step("Create image with CPU_POLICY: {}".format(x))
+            image_meta = {ImageMetadata.CPU_POLICY: x}
+            image_id = glance_helper.create_image(name='cpu_pol_{}'.format(x), **image_meta)[1]
+            ResourceCleanup.add('image', image_id)
+
+        if boot_source == 'volume':
+            LOG.tc_step("Create volume from image")
+            source_id = cinder_helper.create_volume(name='cpu_pol_{}'.format(x), image_id=image_id)[1]
+            ResourceCleanup.add('volume', source_id)
+        else:
+            source_id = image_id
+
+        pre_boot_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
+        LOG.tc_step("Booting cpu_pol_{}".format(x))
+        vm_id = vm_helper.boot_vm(name='cpu_pol_{}'.format(x), flavor=flavor_id, source=boot_source,
+                                  source_id=source_id, avail_zone='nova', vm_host=target_host)[1]
+        ResourceCleanup.add('vm', vm_id)
+
+        vm_ids.append(vm_id)
+
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, cpu_pol=x, vm_host=target_host,
+                                          prev_total_cpus=pre_boot_cpus[target_host])
+
+    LOG.tc_step("Deleting both dedicated and shared vms")
+    vm_helper.delete_vms(vms=vm_ids)
+
+    post_delete_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
+    assert post_delete_cpus == pre_test_cpus, "vcpu count after test does not equal vcpu count before test"

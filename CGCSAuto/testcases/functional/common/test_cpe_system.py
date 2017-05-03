@@ -11,7 +11,8 @@ def test_cpe_services_and_functions():
         skip("compute-0 exists - skip for non-CPE lab")
 
     LOG.tc_step("Check controller+compute subfunction via system host-show")
-    for controller in ['controller-0', 'controller-1']:
+    controllers = system_helper.get_controllers()
+    for controller in controllers:
         assert system_helper.is_small_footprint(controller=controller), \
             "{} does not have controller+compute subfunction in system host-show".format(controller)
 

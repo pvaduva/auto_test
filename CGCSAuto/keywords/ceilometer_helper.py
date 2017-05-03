@@ -55,7 +55,7 @@ def get_samples(header='Resource ID', limit=10, meter=None, query=None, con_ssh=
     Args:
         header (str): the header of the column to get values from
         limit (int): the max number of entries to return
-        meter (str): Name of meter to show samples for
+        meter (str|None): Name of meter to show samples for
         con_ssh (SSHClient):
         auth_info (dict):
         query (str): format: key[op]data_type::value; list.
@@ -106,7 +106,7 @@ def delete_samples():
     """
     LOG.info("Deleting expired ceilometer resources.")
     ssh_client = ControllerClient.get_active_controller()
-    ssh_client.exec_sudo_cmd('/usr/bin/ceilometer-expirer', fail_ok=False)
+    ssh_client.exec_sudo_cmd('/usr/bin/ceilometer-expirer', fail_ok=False, expect_timeout=90)
 
 
 def get_statistics_table(meter, period=None, groupby=None, aggregate=None, query=None, auth_info=Tenant.ADMIN,

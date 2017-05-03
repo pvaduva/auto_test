@@ -5,9 +5,11 @@ from pytest import mark, skip
 from utils import table_parser, cli
 from utils.tis_log import LOG
 
-from keywords import host_helper, system_helper
+from keywords import host_helper, system_helper, common
+from testfixtures.recover_hosts import HostsToRecover
 
 
+@mark.usefixtures('check_alarms')
 @mark.parametrize('host_type', [
     mark.sanity('controller'),
     mark.sanity('compute'),
@@ -32,16 +34,17 @@ def test_system_persist_over_host_reboot(host_type):
 
     host = None
     if host_type == 'controller':
-        LOG.tc_step("Swact active controller")
-        host_helper.swact_host()
+        if len(system_helper.get_controllers()) > 1:
+            LOG.tc_step("Swact active controller")
+            host_helper.swact_host()
+            # give it sometime to setting before rebooting
+            time.sleep(10)
 
         host = system_helper.get_active_controller_name()
-        # give it sometime to setting before rebooting
-        time.sleep(10)
     elif host_type == 'compute':
-        host = host_helper.get_nova_hosts()[-1]
         if system_helper.is_small_footprint():
-            host = system_helper.get_standby_controller_name()
+            skip("Not applicable to CPE")
+        host = host_helper.get_nova_hosts()[-1]
     elif host_type == 'storage':
         # Make a better function for this
         hosts = host_helper.get_hosts(personality='storage')
@@ -53,7 +56,8 @@ def test_system_persist_over_host_reboot(host_type):
         raise ValueError("Unknown host type specified. Valid options: controller, compute, storage")
 
     LOG.tc_step("Reboot a {} node: {}".format(host_type, host))
-    host_helper.reboot_hosts(host)
+    HostsToRecover.add(host)
+    host_helper.reboot_hosts(host, wait_for_reboot_finish=True)
 
     # sleep 30 seconds for services to settle
     time.sleep(30)

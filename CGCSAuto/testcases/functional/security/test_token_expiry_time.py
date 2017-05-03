@@ -1,4 +1,5 @@
-import time, datetime
+import time
+import datetime
 from pytest import fixture, mark
 from keywords import system_helper, html_helper, common
 from utils.tis_log import LOG
@@ -51,11 +52,12 @@ def test_token_expiry(service_params):
     token_expire_time = html_helper.get_user_token(rtn_value='expires')
     expt_time = time.time() + expire_time
     expt_datetime = datetime.datetime.utcfromtimestamp(expt_time).isoformat()
-    time_diff = abs(common.get_timedelta_for_isotimes(token_expire_time, expt_datetime).total_seconds())
+    time_diff = common.get_timedelta_for_isotimes(expt_datetime, token_expire_time).total_seconds()
 
     LOG.info("Expect expiry time to be {}. Token expiry time is {}. Difference is {}."
              .format(token_expire_time, expt_datetime, time_diff))
-    assert time_diff < 5, "Token is not set to expire after {} seconds".format(expire_time)
+    assert -5 < time_diff < 5, "Token expiry time is {}, but token expired {} seconds after expected time.".\
+        format(expire_time, time_diff)
 
     for expire_time in expire_times:
         if expire_time > 14400 or expire_time < 3600:
@@ -74,8 +76,8 @@ def test_token_expiry(service_params):
             token_expire_time = html_helper.get_user_token(rtn_value='expires')
             expt_time = time.time() + expire_time
             expt_datetime = datetime.datetime.utcfromtimestamp(expt_time).isoformat()
-            time_diff = abs(common.get_timedelta_for_isotimes(token_expire_time, expt_datetime).total_seconds())
+            time_diff = common.get_timedelta_for_isotimes(expt_datetime, token_expire_time).total_seconds()
 
             LOG.info("Expect expiry time to be {}. Token expiry time is {}. Difference is {}."
                      .format(token_expire_time, expt_datetime, time_diff))
-            assert time_diff < 5, "Token is not set to expire after {} seconds".format(expire_time)
+            assert -5 < time_diff < 5, "Token is not set to expire after {} seconds".format(expire_time)

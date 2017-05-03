@@ -86,7 +86,7 @@ class Tenant:
         setattr(cls, tenant_dictname, tenant_dict)
 
 
-class Host:
+class HostLinuxCreds:
     USER = 'wrsroot'
     PASSWORD = "Li69nux*"
 
@@ -101,6 +101,10 @@ class Host:
 
 class Guest:
     CREDS = {
+        'tis-centos-guest': {
+            'user': 'root',
+            'password': 'root'
+        },
 
         'cgcs-guest': {
             'user': 'root',
@@ -112,7 +116,12 @@ class Guest:
             'password': None
         },
 
-        'centos': {
+        'centos_6': {
+            'user': 'centos',
+            'password': None
+        },
+
+        'centos_7': {
             'user': 'centos',
             'password': None
         },
@@ -163,6 +172,7 @@ class CliAuth:
             'OS_IDENTITY_API_VERSION': '3',
             'OS_REGION_NAME': 'RegionOne',
             'OS_INTERFACE': 'internal',
+            'HTTPS': False,
         }
 
     @classmethod

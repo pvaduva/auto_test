@@ -3,13 +3,15 @@ import subprocess
 from time import sleep
 
 from consts.proj_vars import ProjVar
+from consts.auth import HostLinuxCreds
+from consts.filepaths import WRSROOT_HOME
 from keywords import host_helper
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 
-WRSUSER='wrsroot'
-WRSPASS='Li69nux*'
-WRSDIR='/home/wrsroot'
+WRSUSER=HostLinuxCreds.USER
+WRSPASS=HostLinuxCreds.PASSWORD
+WRSDIR=WRSROOT_HOME
 USER=os.environ['USER']
 WASSP_TESTCASE_BASE='/home/{}/wassp-repos/testcases/cgcs'.format(USER)
 BUILDSERVER='128.224.145.134'

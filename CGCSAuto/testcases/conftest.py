@@ -10,9 +10,13 @@ from consts.auth import CliAuth, Tenant
 from consts.proj_vars import ProjVar
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
+from utils import lab_info
+
+from testfixtures.resource_create import tis_centos_image
 
 natbox_ssh = None
 con_ssh = None
+initialized = False
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -52,20 +56,25 @@ def pytest_collectstart():
     """
     Set up the ssh session at collectstart. Because skipif condition is evaluated at the collecting test cases phase.
     """
-    global con_ssh
-    con_ssh = setups.setup_tis_ssh(ProjVar.get_var("LAB"))
-    ProjVar.set_var(con_ssh=con_ssh)
-    CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
-    Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
-    Tenant._set_region(CliAuth.get_var('OS_REGION_NAME'))
+    global initialized
+    if not initialized:
+        global con_ssh
+        con_ssh = setups.setup_tis_ssh(ProjVar.get_var("LAB"))
+        ProjVar.set_var(con_ssh=con_ssh)
+        CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
+        if setups.is_https(con_ssh):
+            CliAuth.set_vars(HTTPS=True)
+        Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
+        Tenant._set_region(CliAuth.get_var('OS_REGION_NAME'))
+        initialized = True
 
 
 def pytest_runtest_teardown(item):
     # print('')
     # message = 'Teardown started:'
     # testcase_log(message, item.nodeid, log_type='tc_teardown')
-    con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
     con_ssh.flush()
+    con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
 
 #
 # def pytest_unconfigure():

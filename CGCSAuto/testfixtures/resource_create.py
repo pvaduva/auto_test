@@ -1,7 +1,8 @@
 from pytest import fixture
 
 from utils.tis_log import LOG
-from keywords import nova_helper, glance_helper, keystone_helper, host_helper
+from consts.cgcs import GuestImages
+from keywords import nova_helper, glance_helper, keystone_helper
 
 
 # Session fixture to add affinitiy and anti-affinity server group
@@ -27,11 +28,11 @@ def server_groups():
 # Session fixture to add cgcsauto aggregate with cgcsauto availability zone
 @fixture(scope='session')
 def add_cgcsauto_zone(request):
-    LOG.fixture_step("Add cgcsauto aggregate and cgcsauto availability zone")
+    LOG.fixture_step("(session) Add cgcsauto aggregate and cgcsauto availability zone")
     nova_helper.create_aggregate(name='cgcsauto', avail_zone='cgcsauto', check_first=True)
 
     def remove_aggregate():
-        LOG.fixture_step("Delete cgcsauto aggregate")
+        LOG.fixture_step("(session) Delete cgcsauto aggregate")
         nova_helper.delete_aggregate('cgcsauto')
     request.addfinalizer(remove_aggregate)
 
@@ -56,7 +57,7 @@ def add_admin_role_func(request):
 
 
 def __add_admin_role(scope, request):
-    LOG.fixture_step("{} Add admin role to user under primary tenant".format(scope))
+    LOG.fixture_step("({}) Add admin role to user under primary tenant".format(scope))
     keystone_helper.add_or_remove_role(add_=True, role='admin')
 
     def remove_admin():
@@ -110,14 +111,29 @@ def rhel7_image():
     return __create_image('rhel_7', 'session')
 
 
+@fixture(scope='session', autouse=True)
+def tis_centos_image():
+    return __create_image('tis-centos-guest', 'session')
+
+
+@fixture(scope='session', autouse=False)
+def cgcs_guest_image():
+    return __create_image('cgcs-guest', 'session')
+
+
 def __create_image(img_os, scope):
 
     LOG.fixture_step("({}) Get or create a glance image with {} guest OS".format(scope, img_os))
-    image_path = glance_helper._scp_guest_image(img_os=img_os)
+    img_info = GuestImages.IMAGE_FILES[img_os]
+    if img_info[0] is not None:
+        image_path = glance_helper._scp_guest_image(img_os=img_os)
+    else:
+        image_path = "{}/{}".format(GuestImages.IMAGE_DIR, img_info[2])
 
     img_id = glance_helper.get_image_id_from_name(img_os, strict=True)
     if not img_id:
-        img_id = glance_helper.create_image(name=img_os, source_image_file=image_path, disk_format='qcow2',
+        disk_format = 'raw' if img_os == 'cgcs-guest' else 'qcow2'
+        img_id = glance_helper.create_image(name=img_os, source_image_file=image_path, disk_format=disk_format,
                                             container_format='bare')[1]
 
     return img_id

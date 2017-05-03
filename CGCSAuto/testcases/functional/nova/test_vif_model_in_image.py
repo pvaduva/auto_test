@@ -7,7 +7,7 @@ from consts.auth import Tenant
 from consts.cgcs import ImageMetadata
 from keywords import vm_helper, glance_helper, cinder_helper, network_helper
 
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @mark.p3
@@ -42,7 +42,7 @@ def test_attach_cinder_volume_to_instance(vol_vif):
             {'net-id': internal_net_id, 'vif-model': 'avp'},
             ]
 
-    LOG.tc_step("Boot up VM from default cgcs-guest image")
+    LOG.tc_step("Boot up VM from default tis image")
     vm_id = vm_helper.boot_vm(name='vm_attach_vol_{}'.format(vol_vif), source='image', nics=nics)[1]
 
     pre_nics = network_helper.get_vm_nics(vm_id)

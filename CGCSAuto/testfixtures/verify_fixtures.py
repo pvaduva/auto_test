@@ -13,7 +13,6 @@ from keywords import system_helper, vm_helper, nova_helper, cinder_helper, stora
 # Test Fixtures Module #
 ########################
 
-
 @fixture(scope='function')
 def check_alarms(request):
     """
@@ -49,6 +48,20 @@ def __verify_alarms(request, scope):
 
         for item in after_alarms:
             if item not in before_alarms:
+                # NTP alarm handling
+                alarm_id, entity_id = item
+                if alarm_id == EventLogID.NTP_ALARM:
+                    LOG.fixture_step("NTP alarm found, checking ntpq stats")
+                    host = entity_id.split('host=')[1].split('.ntp')[0]
+                    status, msg = host_helper.get_ntpq_status(host)
+                    LOG.info(msg)
+                    if status == 0:
+                        alarm_tab = system_helper.get_alarms_table()
+                        alarms_ = system_helper._get_alarms(alarm_tab)
+                        assert item not in alarms_, "NTP alarm generated when NPPQ return healthy stats"
+
+                    continue
+
                 new_alarms.append(item)
 
         if new_alarms:

@@ -9,3 +9,5 @@ class SkipReason:
     NO_HOST_WITH_BACKING = "No host with {} instance storage backing exists on system"
     LESS_THAN_TWO_HOSTS_WITH_BACKING = "Less than two hosts with {} instance storage backing exist on system"
     SMALL_CINDER_VOLUMES_POOL = "Cinder Volumes Pool is less than 30G"
+    LESS_THAN_TWO_CONTROLLERS = "Less than two controllers on system"
+    SIMPLEX_SYSTEM = 'Not applicable for Simplex system'

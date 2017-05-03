@@ -341,6 +341,7 @@ def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex):
     return lab_cfg_path, lab_settings_filepath
 
 def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on_tis, host_os, override, guest_load_path, simplex):
+
     ''' Get the directory path for the configuration file that is used in
         setting up the lab.
     '''
@@ -1237,6 +1238,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
         controller0.telnet_conn.login()
 
         # Think we only need this if we burn/boot from USB
+
         setupNetworking(host_os)
 
         # Reconnect ssh session
@@ -1723,7 +1725,9 @@ def main():
     stop = args.stop
     override = args.override
     banner = args.banner
+
     branding = args.branding
+
     bld_server = args.bld_server
     bld_server_wkspce = args.bld_server_wkspce
     tis_blds_dir = args.tis_blds_dir
@@ -1846,7 +1850,9 @@ def main():
         lab_cfg_path, lab_settings_filepath = verify_lab_cfg_location(bld_server_conn,
                                                   lab_cfg_location, load_path,
                                                   tis_on_tis, host_os, override,
+
                                                   guest_load_path, simplex)
+
 
     if lab_settings_filepath:
         log.info("Lab settings file path: " + lab_settings_filepath)
@@ -1915,6 +1921,7 @@ def main():
 
     global controller0
     controller0 = controller_dict[CONTROLLER0]
+
 
    # Due to simplex labs and unofficial config ip28-30
     if len(controller_dict) > 1:
@@ -2189,6 +2196,7 @@ def main():
             wait_state(nodes, AVAILABILITY, ONLINE)
         set_install_step_complete(lab_install_step)
 
+
     if stop == "5":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
 
@@ -2306,6 +2314,7 @@ def main():
     #Lab-install - swact and then lock/unlock controller-0 to complete setup
     lab_install_step = install_step("swact_lockunlock", 19, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
+
         if host_os == "centos" and len(controller_dict) > 1:
             cmd = "system alarm-list --nowrap"
             output = controller0.ssh_conn.exec_cmd(cmd)[1]

@@ -12,10 +12,18 @@ class VCPUSchedulerErr:
     CPU_MODEL_UNAVAIL = "No valid host was found.*Host VCPU model.*required.*"
 
 
+class NumaErr:
+    NUMA_AFFINITY_MISMATCH = " not match requested NUMA: {}"
+    NUMA_NODE_EXCLUDED = "NUMA: {} excluded"
+    UNINITIALIZED = '(NUMATopologyFilter) Uninitialized'
+    FLV_UNDEVISIBLE = 'ERROR (Conflict): flavor vcpus not evenly divisible by the specified hw:numa_nodes value'
+    FLV_CPU_OR_MEM_UNSPECIFIED = 'ERROR (Conflict): CPU and memory allocation must be provided for all NUMA nodes'
+
+
 class MinCPUErr:
     VAL_LARGER_THAN_VCPUS = "min_vcpus must be less than or equal to the flavor vcpus value"
     VAL_LESS_THAN_1 = "min_vcpus must be greater than or equal to 1"
-    CPU_POLICY_NOT_DEDICATED = "min_vcpus is only valid when hw:cpu_policy is 'dedicated'"
+    CPU_POLICY_NOT_DEDICATED = "min_vcpus is only valid when hw:cpu_policy is dedicated"
 
 
 class ScaleErr:
@@ -75,6 +83,8 @@ class LiveMigErr:
     BLOCK_MIG_UNSUPPORTED = "is not on local storage: Block migration can not be used with shared storage"
     GENERAL_NO_HOST = "No valid host was found. There are not enough hosts available."
     BLOCK_MIG_UNSUPPORTED_LVM = 'Block live migration is not supported for hosts with LVM backed storage'
+    LVM_PRECHECK_ERROR = 'Live migration can not be used with LVM backed storage except a booted from volume VM ' \
+                         'which does not have a local disk'
 
 
 class NetworkingErr:
@@ -102,3 +112,20 @@ class NetworkingErr:
     IP_VERSION_NOT_MATCH = "Network and gateway IP versions must match"
     GATEWAY_IP_IN_SUBNET = "Gateway address must not be within destination subnet"
     NETWORK_IP_EQUAL_TO_GATEWAY = "Network and gateway IP addresses must be different"
+
+
+class PciAddrErr:
+    NONE_ZERO_DOMAIN = 'Only domain 0000 is supported'
+    LARGER_THAN_MAX_BUS = 'PCI bus maximum value is 8'
+    NONE_ZERO_FUNCTION = 'Only function 0 is supported'
+    RESERVED_SLOTS_BUS0 = 'Slots 0,1 are reserved for PCI bus 0'
+    RESERVED_SLOT_ANY_BUS = 'Slots 0 is reserved for any PCI bus'
+    LARGER_THAN_MAX_SLOT = 'PCI slot maximum value is 31'
+    BAD_FORMAT = 'Bad PCI address format'
+    WRONG_BUS_VAL = 'Wrong bus value for PCI address'
+
+
+class SrvGrpErr:
+    EXCEEDS_GRP_SIZE = 'Action would result in server group {} exceeding the group size of {}'
+    HOST_UNAVAIL_ANTI_AFFINITY = '(ServerGroupAntiAffinityFilter) Anti-affinity server group specified, ' \
+                                 'but this host is already used by that group'

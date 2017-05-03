@@ -12,7 +12,7 @@ from utils import table_parser
 from consts.cgcs import FlavorSpec
 from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -27,7 +27,7 @@ def ensure_sufficient_4k_pages(request):
     # check if any 4k pages greater than 600000 means more than 2G(~536871 4k pages) total.
 
     hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
-    is_cpe = system_helper.is_small_footprint()
+    is_cpe = system_helper.is_two_node_cpe()
 
     if is_cpe and len(hypervisors) < 2:
         skip("Less than two hypersvisors are up for cpe lab.")

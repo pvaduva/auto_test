@@ -80,7 +80,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         table_ = table_parser.filter_table(table_, **criteria)
 
     if name is None and not criteria:
-        LOG.warning("No criteria specified, return {}s for all volumes for specific tenant".format(rtn_val))
+        LOG.debug("No criteria specified, return {}s for all volumes for specific tenant".format(rtn_val))
 
     return table_parser.get_column(table_, rtn_val)
 
@@ -169,14 +169,11 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
         elif source_vol_id:
             source_arg = '--source-volid ' + source_vol_id
         else:
-            guest_image = guest_image if guest_image else 'cgcs-guest'
+            guest_image = guest_image if guest_image else GuestImages.DEFAULT_GUEST
             image_id = image_id if image_id is not None else glance_helper.get_image_id_from_name(guest_image,
                                                                                                   strict=True)
             if size is None:
-                if 'cgcs-guest' in guest_image:
-                    size = 1
-                else:
-                    size = GuestImages.IMAGE_FILES[guest_image][1]
+                size = GuestImages.IMAGE_FILES[guest_image][1]
 
             source_arg = '--image-id ' + image_id
 
@@ -190,7 +187,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
         if value is not None:
             subcmd = ' '.join([subcmd.strip(), key, value.lower().strip()])
 
-    size = 1 if size is None else size
+    size = 5 if size is None else size
 
     subcmd = ' '.join([subcmd, source_arg, str(size)])
     LOG.info("Creating volume: {}".format(name))
@@ -242,6 +239,30 @@ def get_volume_states(vol_id, fields, con_ssh=None, auth_info=Tenant.ADMIN):
         states[field] = value
 
     return states
+
+
+def get_volume_attachments(vol_id, vm_id=None,  con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        vol_id (str):
+        con_ssh (str):
+        auth_info (dict):
+
+    Returns (list):
+        A  list of dicts with volume attachments info
+
+    """
+    attachments = get_volume_states(vol_id, "attachments", con_ssh=con_ssh, auth_info=auth_info)
+    attachments = eval(attachments['attachments'])
+    LOG.info("Volume {} attachments: {} attachment: {}".format(vol_id, attachments, attachments[0]))
+    if attachments and len(attachments) > 0:
+        for attachment in attachments:
+            if vm_id and attachment['server_id'] == vm_id:
+                return [attachment]
+
+        return [attachments]
+    return None
 
 
 def _wait_for_volume_status(vol_id, status='available', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
@@ -749,7 +770,7 @@ def create_volume_type(name=None, public=None, rtn_val='ID', fail_ok=False, auth
     if name is None:
         name = 'vol_type_auto'
 
-    args = common.get_unique_name(name, get_volume_types())
+    args = common.get_unique_name(name, get_volume_types(rtn_val='Name'))
 
     if public is not None:
         args = '--is-public {} {}'.format(public, args)
@@ -987,7 +1008,7 @@ def get_qos_association(qos_spec_id, con_ssh=None):
     return table_
 
 
-def is_volumes_pool_sufficient(min_size=30):
+def is_volumes_pool_sufficient(min_size=40):
     """
 
     Args:
@@ -1008,3 +1029,14 @@ def is_volumes_pool_sufficient(min_size=30):
 
     # assume enough volumes in ceph:
     return True
+
+
+def get_volume_show_values(vol_id, field, con_ssh=None, auth_info=Tenant.ADMIN):
+
+    if not vol_id:
+        raise ValueError("Volume is not provided.")
+
+    table_ = table_parser.table(cli.cinder('show', vol_id, ssh_client=con_ssh, auth_info=auth_info))
+    val = table_parser.get_value_two_col_table(table_, field=field, merge_lines=False)
+
+    return val

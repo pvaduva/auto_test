@@ -4,6 +4,8 @@ from keywords import network_helper,vm_helper,nova_helper
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 
+from consts.cgcs import GuestImages, HEAT_FLAVORS
+
 
 def _wait_for_heat_stack_deleted(stack_name=None, timeout=120, check_interval=3, con_ssh=None, auth_info=None):
     """
@@ -120,7 +122,7 @@ def delete_stack(stack_name, fail_ok=False, check_first=False, con_ssh=None, aut
             return -1, msg
 
     LOG.info("Deleting Heat Stack %s", stack_name)
-    exitcode, output = cli.heat('stack-delete', stack_name, ssh_client=con_ssh, auth_info=auth_info,
+    exitcode, output = cli.heat('stack-delete -y', stack_name, ssh_client=con_ssh, auth_info=auth_info,
                                 fail_ok=fail_ok, rtn_list=True)
     if exitcode == 1:
         LOG.warning("Delete heat stack request rejected.")
@@ -151,51 +153,61 @@ def get_heat_params(param_name=None):
         net_id = network_helper.get_mgmt_net_id()
         return network_helper.get_net_name_from_id(net_id=net_id)
     elif param_name is 'FLAVOR':
-        return 'small'
+        return 'small_ded'
     elif param_name is 'IMAGE':
-        return 'cgcs-guest'
+        return GuestImages.DEFAULT_GUEST
     else:
         return None
 
-def _wait_for_scale_up_down_vm(vm_name=None, expected_count=0, time_out=120, check_interval=3, con_ssh=None,
+
+def _wait_for_scale_up_down_vm(vm_name=None, expected_count=0, time_out=900, check_interval=5, con_ssh=None,
                                auth_info=None):
+    vm_name = "NestedAutoScale_vm"
     # wait for scale up to happen
+    LOG.info("Expected count of Vm is {}".format(expected_count))
     end_time = time.time() + time_out
     while time.time() < end_time:
-        vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
-        if len(vm_id) is expected_count:
+        vm_ids = nova_helper.get_vms(strict=False, name=vm_name)
+        LOG.info("length of vmid is {}".format(len(vm_ids)))
+        if len(vm_ids) is expected_count:
             return True
 
         time.sleep(check_interval)
 
-    msg = "Heat stack {} did not go to state {} within timeout".format(vm_name, expected_count)
+    msg = "Heat stack {} did not go to vm count {} within timeout".format(vm_name, expected_count)
     LOG.warning(msg)
     return False
 
 
-def scale_up_vms(vm_name=None, expected_count=0, time_out=120, check_interval=3, con_ssh=None, auth_info=None):
+def scale_up_vms(vm_name=None, expected_count=0, time_out=900, check_interval=3, con_ssh=None, auth_info=None,cpu_num=1):
     """
     Returns:
 
     """
     # create a trigger for auto scale by login to vm and issue dd cmd
     vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
-    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
-        vm_ssh.exec_cmd("dd if=/dev/urandom of=/dev/null")
 
-    return _wait_for_scale_up_down_vm(vm_name=vm_name,expected_count=expected_count,time_out=time_out,
-                                      check_interval=check_interval,con_ssh=con_ssh,auth_info=auth_info)
+    LOG.info("Boosting cpu usage for vm {} using 'dd'".format(vm_id))
+    dd_cmd = 'dd if=/dev/zero of=/dev/null &'
+
+    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, con_ssh=con_ssh, close_ssh=False) as vm_ssh:
+        for i in range(cpu_num):
+            vm_ssh.send(cmd=dd_cmd)
+
+    return [vm_ssh, _wait_for_scale_up_down_vm(vm_name=vm_name,expected_count=expected_count,time_out=time_out,
+                                               check_interval=check_interval,con_ssh=con_ssh,auth_info=auth_info)]
 
 
-def scale_down_vms(vm_name=None, expected_count=0, time_out=120, check_interval=3, con_ssh=None, auth_info=None):
+def scale_down_vms(vm_name=None, expected_count=0, time_out=900, check_interval=3, con_ssh=None, auth_info=None):
     """
     Returns:
 
     """
     # create a trigger for auto scale by login to vm and issue dd cmd
     vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
-    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
-        vm_ssh.exec_cmd("pkill -USR1 -x dd")
+    #with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
+    #    vm_ssh.exec_cmd("pkill -USR1 -x dd")
 
     return _wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=expected_count, time_out=time_out,
                                       check_interval=check_interval, con_ssh=con_ssh, auth_info=auth_info)
+

@@ -76,8 +76,7 @@ def test_ping_vms_from_vm_1(vm_count):
 @mark.parametrize('vm_image', [
     # 'cgcs-guest',
     # 'ubuntu_14',
-    'wrl5',
-    'centos',
+    'tis-centos-guest',
 ])
 def test_ping_vms_from_vm_various_images(vm_image):
     image_id = keywords.glance_helper.get_image_id_from_name(name=vm_image, strict=False)

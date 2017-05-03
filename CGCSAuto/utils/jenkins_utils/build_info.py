@@ -61,20 +61,20 @@ def __wait_for_new_load(build_server, build_dir, trigger_window, timeout):
             latest_bld_time = get_modify_time(bld_srv_ssh, build_dir)
             current_time = get_current_time(ssh_client=bld_srv_ssh)
             if current_time < latest_bld_time + window_time:
-                # print("New build available from {}:{}".format(build_server, build_dir))
+                print("New build available from {}:{}".format(build_server, build_dir))
                 return True
 
             time.sleep(60)
         else:
-            # print("No new build (modified within {} hours) available from {}:{} after {} hours polling".format(
-            #        trigger_window, build_server, build_dir, timeout))
+            print("No new build (modified within {} hours) available from {}:{} after {} hours polling".format(
+                trigger_window, build_server, build_dir, timeout))
             return False
 
 
 def get_current_time(ssh_client):
     output = ssh_client.exec_cmd('date', rm_date=False, get_exit_code=False)[1]
     # sample output: Mon Dec 12 08:54:08 EST 2016
-    current_time = datetime.datetime.strptime(output, "%a %b %d %H:%M:%S EST %Y")
+    current_time = datetime.datetime.strptime(output, "%a %b %d %H:%M:%S %Z %Y")
     return current_time
 
 
@@ -92,7 +92,7 @@ def __get_latest_build_dir(build_server, build_dir):
     with host_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
         output = bld_srv_ssh.exec_cmd('ls -l {} | grep --color="never" "latest_build"'.format(build_dir))[1]
         build_dir_ = output.split(sep=r'/')[-1]
-        # print("Latest build dir: {}".format(build_dir_))
+        print("Latest build dir: {}".format(build_dir_))
 
         return build_dir_
 

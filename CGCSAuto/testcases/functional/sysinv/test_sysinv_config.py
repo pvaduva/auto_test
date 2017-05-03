@@ -16,6 +16,13 @@ from keywords import network_helper
 from functools import wraps
 
 
+def id_gen(val):
+    if isinstance(val, (list, tuple)):
+        val = '_'.join([str(val_) for val_ in val])
+
+    return val
+
+
 def repeat_checking(repeat_times=20, wait_time=6):
     def actual_decorator(func):
         @wraps(func)
@@ -250,13 +257,12 @@ class TestDnsSettings:
 
     @mark.parametrize(
         'new_dns_servers', [
-            ('128.224.144.130', '147.11.57.128', '147.11.57.133'),
+            mark.nightly(('128.224.144.130', '147.11.57.128', '147.11.57.133')),
             ('10.10.10.3', '10.256.0.1', '8.8.8.8'),
             ('fd00:0:0:21::5', '2001:db8::'),
             (3232235521, 333333, 333),
             (3232235521, b'\xC0\xA8\x00\x01'),
-        ]
-    )
+    ], ids=id_gen)
     def test_change_dns_settings(self, new_dns_servers):
         """
         Test changing the DNS servers of the system under test

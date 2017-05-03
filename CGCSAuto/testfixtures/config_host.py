@@ -2,6 +2,7 @@ from pytest import fixture, mark
 
 from utils.tis_log import LOG
 from keywords import host_helper, system_helper
+from testfixtures.recover_hosts import HostsToRecover
 
 
 @mark.tryfirst
@@ -68,6 +69,8 @@ def __config_host_base(scope, request):
         if system_helper.get_active_controller_name() == host:
             LOG.fixture_step("({}) Swact before locking as {} is active controller".format(scope, host))
             host_helper.swact_host(host)
+
+        HostsToRecover.add(host, scope=scope)
 
         LOG.fixture_step("({}) Lock host: {}".format(scope, host))
         host_helper.lock_host(host=host)

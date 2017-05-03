@@ -5,7 +5,7 @@ from consts.cgcs import FlavorSpec
 from consts.cli_errs import SharedCPUErr, ResizeVMErr
 
 from keywords import nova_helper, vm_helper, host_helper, system_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @mark.p3
@@ -211,7 +211,7 @@ class TestSharedCpuEnabled:
             if shared_cores_for_host[0] and shared_cores_for_host[1]:
                 break
         else:
-            if system_helper.is_small_footprint():
+            if system_helper.is_two_node_cpe():
                 host_to_config = system_helper.get_standby_controller_name()
             else:
                 host_to_config = host_helper.get_nova_host_with_min_or_max_vms(rtn_max=False, hosts=hosts)

@@ -6,13 +6,47 @@ from utils import table_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, InstanceTopology
-from keywords import nova_helper, vm_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from consts.cli_errs import NumaErr
+from keywords import nova_helper, vm_helper, system_helper
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 ########################################
 # Test Set with NUMA node(s) Specified #
 ########################################
+
+@mark.p3
+@mark.parametrize(('vcpus', 'vswitch_affinity', 'numa_nodes', 'numa0', 'numa0_cpus', 'numa0_mem', 'numa1', 'numa1_cpus',
+                   'numa1_mem', 'expt_err'), [
+    (3, 'prefer', 2, 1, None, None, 0, None, None, 'NumaErr.FLV_UNDEVISIBLE'),
+    (4, 'strict', 2, 0, 0, 512, 1, 1, None, 'NumaErr.FLV_CPU_OR_MEM_UNSPECIFIED')
+])
+def test_flavor_setting_numa_negative(vcpus, vswitch_affinity, numa_nodes, numa0, numa0_cpus, numa0_mem,
+                                      numa1, numa1_cpus, numa1_mem, expt_err):
+
+    LOG.tc_step("Create a 1024ram flavor with {} vcpus".format(vcpus))
+    name = 'vswitch_affinity_{}_1G_{}cpu'.format(vswitch_affinity, vcpus)
+    flv_id = nova_helper.create_flavor(name=name, vcpus=vcpus, ram=1024, check_storage_backing=False)[1]
+    ResourceCleanup.add('flavor', flv_id)
+
+    specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_NODES: numa_nodes,
+             FlavorSpec.VSWITCH_NUMA_AFFINITY: vswitch_affinity}
+    tmp_dict = {FlavorSpec.NUMA_0: numa0,
+                FlavorSpec.NUMA0_CPUS: numa0_cpus,
+                FlavorSpec.NUMA0_MEM: numa0_mem,
+                FlavorSpec.NUMA_1: numa1,
+                FlavorSpec.NUMA1_CPUS: numa1_cpus,
+                FlavorSpec.NUMA1_MEM: numa1_mem}
+
+    for key, val in tmp_dict.items():
+        if val is not None:
+            specs[key] = val
+
+    LOG.tc_step("Attempt to set following extra spec to flavor {} and ensure it's rejected: {}".format(flv_id, specs))
+    code, output = nova_helper.set_flavor_extra_specs(flv_id, fail_ok=True, **specs)
+    assert 1 == code, "Invalid extra spec is not rejected. Details: {}".format(output)
+    assert eval(expt_err) in output, "Expected error message is not found"
+
 
 @fixture(scope='module')
 def flavor_2_nodes(request):
@@ -259,11 +293,10 @@ def test_0_node_unset_numa_nodes_reject(flavor_0_node):
 # Test vm NUMA node(s) configs #
 ################################
 
-@mark.p2
 @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'numa_node1'), [
-    (2, 1, 0, None),
-    (2, 2, 1, 0),
-    (1, 1, 1, None),
+    mark.p2((2, 1, 0, None)),
+    mark.nightly((2, 2, 1, 0)),
+    mark.p2((1, 1, 1, None)),
 ])
 # @mark.usefixtures('delete_resources_func')    # This fixture is auto-used by nova test cases
 def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
@@ -306,22 +339,23 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
     ResourceCleanup.add('vm', vm_id, scope='function')
 
     LOG.tc_step("Verify cpu info for vm {} via vm-topology.".format(vm_id))
-    con_ssh = ControllerClient.get_active_controller()
-    nova_tab, libvert_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers,libvirt',
-                                                                 expect_timeout=30)[1], combine_multiline_entry=False)
+    # con_ssh = ControllerClient.get_active_controller()
+    nova_tab, libvirt_tab = system_helper.get_vm_topology_tables('servers', 'libvirt')
+    # nova_tab, libvirt_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers,libvirt',
+    #                                                              expect_timeout=30)[1], combine_multiline_entry=False)
     # Filter out the line for vm under test
     nova_tab = table_parser.filter_table(nova_tab, ID=vm_id)
-    libvert_tab = table_parser.filter_table(libvert_tab, uuid=vm_id)
+    libvirt_tab = table_parser.filter_table(libvirt_tab, uuid=vm_id)
 
     instance_topology = table_parser.get_column(nova_tab, 'instance_topology')[0]
-    cpulist = table_parser.get_column(libvert_tab, 'cpulist')[0]
+    cpulist = table_parser.get_column(libvirt_tab, 'cpulist')[0]
     if '-' in cpulist:
         cpulist = cpulist.split(sep='-')
         cpulist_len = int(cpulist[1]) - int(cpulist[0]) + 1
     else:
         cpulist_len = len(cpulist.split(sep=','))
-    vcpus_libvert = int(table_parser.get_column(libvert_tab, 'vcpus')[0])
-    nodelist = table_parser.get_column(libvert_tab, 'nodelist')[0]
+    vcpus_libvirt = int(table_parser.get_column(libvirt_tab, 'vcpus')[0])
+    nodelist = table_parser.get_column(libvirt_tab, 'nodelist')[0]
 
     if isinstance(instance_topology, str):
         instance_topology = [instance_topology]
@@ -340,8 +374,8 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
     assert expected_node_vals == actual_node_vals, \
         "Individual NUMA node value(s) for vm {} is different than numa_node setting in flavor".format(vm_id)
 
-    assert vcpus == vcpus_libvert, \
-        "Number of vcpus for vm {} in libvert view is different than what's set in flavor.".format(vm_id)
+    assert vcpus == vcpus_libvirt, \
+        "Number of vcpus for vm {} in libvirt view is different than what's set in flavor.".format(vm_id)
 
     assert vcpus == cpulist_len, \
         "Number of entries in cpulist for vm {} in libvirt view is different than number of vcpus set in flavor".format(
@@ -354,4 +388,4 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
         nodelist_len = 1 if nodelist else 0
 
     assert numa_nodes == nodelist_len, \
-        "nodelist for vm {} in libvert view does not match number of numa nodes set in flavor".format(vm_id)
+        "nodelist for vm {} in libvirt view does not match number of numa nodes set in flavor".format(vm_id)

@@ -12,6 +12,11 @@ from consts.cli_errs import NetworkingErr
 pro_net_name = 'provider_vxlan'
 
 
+@fixture(scope='function')
+def check_alarms():
+    pass
+
+
 @fixture(scope='module', autouse=True)
 def providernet_(request):
 
@@ -337,8 +342,7 @@ def multiple_provider_net_range(request):
             computer_host = nova_host
             break
     else:
-        assert False, "Can not find a free data interface "
-
+        skip("Can not find a free data interface")
 
     # Find a free port from host-if-list -a
     if_name = random.choice(list_interfaces)

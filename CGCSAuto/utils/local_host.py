@@ -5,6 +5,8 @@ import subprocess
 import re
 from utils.tis_log import LOG
 
+from consts.vlm import VlmAction
+
 SSH_DIR = "~/.ssh"
 SSH_KEY_FPATH = SSH_DIR + "/id_rsa"
 GET_PUBLIC_SSH_KEY_CMD = "ssh-keygen -y -f {}"
@@ -13,13 +15,10 @@ KNOWN_HOSTS_PATH = SSH_DIR + "/known_hosts"
 REMOVE_HOSTS_SSH_KEY_CMD = "ssh-keygen -f {} -R {}"
 # VLM commands and options
 VLM = "/folk/vlm/commandline/vlmTool"
-VLM_RESERVE = 'reserve'
-VLM_UNRESERVE = 'unreserve'
-VLM_TURNON = 'turnOn'
-VLM_TURNOFF = 'turnOff'
-VLM_FINDMINE = 'findMine'
 
-VLM_CMDS = [VLM_RESERVE, VLM_UNRESERVE, VLM_TURNON, VLM_TURNOFF, VLM_FINDMINE]
+
+VLM_CMDS = [VlmAction.VLM_RESERVE, VlmAction.VLM_UNRESERVE, VlmAction.VLM_TURNON, VlmAction.VLM_TURNOFF,
+            VlmAction.VLM_FINDMINE, VlmAction.VLM_REBOOT]
 
 
 def get_host_name():
@@ -35,8 +34,10 @@ def get_host_ip():
 def get_user():
     return getpass.getuser()
 
+
 def exec_cmd(cmd, show_output=True):
     rc = 0
+    cmd = [str(i) for i in cmd]
     LOG.info(" ".join(cmd))
     try:
         output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, universal_newlines=True)
@@ -44,10 +45,14 @@ def exec_cmd(cmd, show_output=True):
         rc = ex.returncode
         output = ex.output
     output = output.rstrip()
+    if isinstance(output, bytes):
+        output = output.decode()
+    output = output.strip()
     if output and show_output:
         LOG.info("Output:\n" + output)
     LOG.info("Return code: " + str(rc))
-    return (rc, output)
+    return rc, output
+
 
 def get_ssh_key():
     ssh_key_fpath = os.path.expanduser(SSH_KEY_FPATH)
@@ -63,7 +68,7 @@ def get_ssh_key():
 
 
 def reserve_vlm_console(barcode, note=None):
-    action = VLM_RESERVE
+    action = VlmAction.VLM_RESERVE
     cmd = [VLM, action, "-t", str(barcode)]
     reserve_note_params = []
     if note is not None:
@@ -73,8 +78,8 @@ def reserve_vlm_console(barcode, note=None):
 
     reserved_barcodes = exec_cmd(cmd)[1]
     if not reserved_barcodes or "Error" in reserved_barcodes:
-        #check if node is already reserved by user
-        cmd = [VLM, "gtAttr", "-t", str(barcode), "port"]
+        # check if node is already reserved by user
+        cmd = [VLM, "getAttr", "-t", str(barcode), "port"]
         port = exec_cmd(cmd)[1]
         if "TARGET_NOT_RESERVED_BY_USER" in port:
             msg = "Failed to reserve target(s): " + str(barcode)
@@ -91,37 +96,40 @@ def reserve_vlm_console(barcode, note=None):
 
 
 def vlm_findmine():
-    cmd = [VLM, VLM_FINDMINE]
+    cmd = [VLM, VlmAction.VLM_FINDMINE]
     output = exec_cmd(cmd)[1]
     if re.search("\d+", output):
-        reserved_targets = output.split()
+        reserved_targets = output.split(sep=' ')
         msg = "Target(s) reserved by user: {}".format(str(reserved_targets))
     else:
-       msg = "User has no reserved target(s)"
-       reserved_targets = []
-       LOG.info(msg)
+        msg = "User has no reserved target(s)"
+        reserved_targets = []
+
+    reserved_targets = [int(barcode) for barcode in reserved_targets]
+    LOG.info(msg)
 
     return reserved_targets
 
 
-def vlm_exec_cmd(action, barcode):
+def vlm_exec_cmd(action, barcode, reserve=True):
     if action not in VLM_CMDS:
         msg = '"{}" is an invalid action.'.format(action)
         msg += " Valid actions: {}".format(str(VLM_CMDS))
-        LOG.info(msg)
+        raise ValueError(msg)
+
+    if reserve:
+        if int(barcode) not in vlm_findmine():
+            # reserve barcode
+            if reserve_vlm_console(barcode)[0] != 0:
+                msg = "Failed to {} target {}. Target is not reserved by user".format(action, barcode)
+                LOG.info(msg)
+                return 1, msg
+
+    cmd = [VLM, action, "-t", barcode]
+    output = exec_cmd(cmd)[1]
+    if output != "1":
+        msg = 'Failed to execute "{}" on target {}. Output: {}'.format(action, barcode, output)
+        LOG.error(msg)
         return 1, msg
 
-    elif barcode not in vlm_findmine():
-        #reserve barcode
-        if reserve_vlm_console(barcode)[0] != 0:
-            msg = "Failed to {} target {}. Target is not reserved by user".format(action, barcode)
-            LOG.info(msg)
-            return 1, msg
-    else:
-        cmd = [VLM, action, "-t", barcode]
-        output = exec_cmd(cmd)[1]
-        if output != "1":
-            msg = 'Failed to execute "{}" on target'.format(barcode)
-            LOG.info(msg)
-            return 1, msg
     return 0, None

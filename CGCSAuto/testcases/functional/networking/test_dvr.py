@@ -8,7 +8,7 @@ from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import RouterStatus
 from keywords import network_helper, vm_helper, nova_helper, host_helper, cinder_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 ##############################################
@@ -17,28 +17,44 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 # This is to test dvr, non-dvr routers with SNAT disabled. Tests with SNAT enabled are in test_avr_snat.py
 
+result_ = None
+
 
 @fixture(scope='module')
 def router_info(request):
+    global result_
+    result_ = False
+
     LOG.fixture_step("Disable SNAT and update router to DVR if not already done.")
 
     router_id = network_helper.get_tenant_router()
     network_helper.update_router_ext_gateway_snat(router_id, enable_snat=False)
     is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN))
 
-    if not is_dvr:
-        network_helper.update_router_distributed(router_id, distributed=True)
-
     def teardown():
         if eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN)) != is_dvr:
-            network_helper.update_router_distributed(router_id, distributed=is_dvr)
+                network_helper.update_router_distributed(router_id, distributed=is_dvr)
     request.addfinalizer(teardown)
 
+    if not is_dvr:
+        network_helper.update_router_distributed(router_id, distributed=True, post_admin_up_on_failure=False)
+
+    result_ = True
     return router_id
 
 
+@fixture()
+def _bring_up_router(request):
+
+    def _router_up():
+        if result_ is False:
+            router_id = network_helper.get_tenant_router()
+            network_helper._update_router(admin_state_up=True, router_id=router_id, fail_ok=False)
+    request.addfinalizer(_router_up)
+
+
 @mark.domain_sanity
-def test_dvr_update_router(router_info):
+def test_dvr_update_router(router_info, _bring_up_router):
     """
     Test update router to distributed and non-distributed
 
@@ -60,29 +76,32 @@ def test_dvr_update_router(router_info):
         - Revert router to it's original distributed setting if not already done so
 
     """
+    global result_
+    result_ = False
     router_id = router_info
 
     LOG.tc_step("Boot a vm before updating router and ping vm from NatBox")
-    vm_id = vm_helper.boot_vm(name='dvr_update', reuse_vol=False)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm(name='dvr_update', reuse_vol=False, cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_id)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
     for update_to_val in [False, True]:
         LOG.tc_step("Update router distributed to {}".format(update_to_val))
-        network_helper.update_router_distributed(router_id, distributed=update_to_val)
+        network_helper.update_router_distributed(router_id, distributed=update_to_val, post_admin_up_on_failure=False)
 
         LOG.tc_step("Verify router is in active state and vm can be ping'd from NatBox")
         assert RouterStatus.ACTIVE == network_helper.get_router_info(router_id, field='status'), \
             "Router is not in active state after updating distributed to {}.".format(update_to_val)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
+    result_ = True
 
-@mark.p3
+
 @mark.parametrize(('vms_num', 'srv_grp_policy'), [
-    (2, 'affinity'),
-    (2, 'anti-affinity'),
-    (3, 'affinity'),
-    (3, 'anti-affinity'),
+    mark.p2((2, 'affinity')),
+    mark.nightly((2, 'anti-affinity')),
+    mark.p2((3, 'affinity')),
+    mark.p2((3, 'anti-affinity')),
 ])
 def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, router_info):
     """
@@ -134,9 +153,9 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
     for i in range(vms_num):
         vol = cinder_helper.create_volume(rtn_exist=False)[1]
         ResourceCleanup.add(resource_type='volume', resource_id=vol)
-        vm_id = vm_helper.boot_vm('dvr_ew_traffic', source='volume', source_id=vol, nics=nics,
+        vm_id = vm_helper.boot_vm('dvr_ew_traffic', source='volume', source_id=vol, nics=nics, cleanup='function',
                                   hint={'group': srv_grp_id})[1]
-        ResourceCleanup.add(resource_type='vm', resource_id=vm_id)
+        # ResourceCleanup.add(resource_type='vm', resource_id=vm_id)
         vms.append(vm_id)
         LOG.tc_step("Wait for vm {} pingable from NatBox".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)

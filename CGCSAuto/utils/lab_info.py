@@ -6,7 +6,7 @@ import sys
 from utils.ssh import SSHClient, CONTROLLER_PROMPT
 from consts.lab import Labs
 from consts.proj_vars import ProjVar
-
+from consts.auth import Tenant, HostLinuxCreds
 from keywords import system_helper
 
 
@@ -41,12 +41,13 @@ def get_build_id(labname=None, log_dir=None, con_ssh=None):
         else:
             build_date = re.findall('''BUILD_DATE=\"(.*)\"''', output)
             if build_date and build_date[0]:
-                build_id = build_date[0]
+                build_id = build_date[0].replace(' ', '_').replace(':', '-')
             else:
-                build_id = ' '
+                build_id = '_'
 
     if close:
         con_ssh.close()
+
     return build_id
 
 
@@ -61,11 +62,14 @@ def __get_lab_ssh(labname, log_dir=None):
 
     """
     lab = __get_lab_dict(labname)
+
     # Doesn't have to save logs
     # if log_dir is None:
     #     log_dir = temp_dir = "/tmp/CGCSAUTO/"
     ProjVar.set_var(log_dir=log_dir)
-    con_ssh = SSHClient(lab['floating ip'], 'wrsroot', 'Li69nux*', CONTROLLER_PROMPT)
+    ProjVar.set_var(lab=lab)
+    ProjVar.set_var(source_admin=Tenant.ADMIN)
+    con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.USER, HostLinuxCreds.PASSWORD, CONTROLLER_PROMPT)
     con_ssh.connect()
     # if 'auth_url' in lab:
     #     Tenant._set_url(lab['auth_url'])
@@ -120,7 +124,7 @@ def _get_sys_type(labname=None, log_dir=None, con_ssh=None):
         close = True
         con_ssh = __get_lab_ssh(labname=labname, log_dir=log_dir)
 
-    controllers, computes, storages = system_helper.get_hosts_by_personality(con_ssh=con_ssh)
+    controllers, computes, storages = system_helper.get_hosts_by_personality(con_ssh=con_ssh, source_admin=True)
 
     sys_type = "{}+{}+{}".format(len(controllers), len(computes), len(storages)).replace('+0', '')
 
@@ -147,6 +151,7 @@ def __get_lab_dict(labname):
 
     labname = labname.strip().lower().replace('-', '_')
     labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
+    labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
 
     for lab in labs:
         if labname in lab['name'].replace('-', '_').lower().strip() \
@@ -193,7 +198,7 @@ def get_lab_info(labname=None, log_dir=None):
     Get build id (e.g., 2016-11-14_22-01-28), system type (e.g., 2+4+2)
     Args:
         labname (str): such as WCP_76-77, PV0, IP_1-4
-        log_dir (str): log directory. logs will be saved to /tmp/AUTOMATION_LOGS/<LAB> if unset
+        log_dir (str): log directory. logs will not be saved if unset
 
     Returns (tuple):
 

@@ -7,14 +7,15 @@ from consts.auth import Tenant
 from consts.cgcs import VMStatus, FlavorSpec, NetworkingVmMapping
 from keywords import vm_helper, nova_helper, host_helper, network_helper, cinder_helper, common
 
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
 def base_vm_():
+    storage_backing = nova_helper.get_storage_backing_with_max_hosts()[0]
 
     LOG.fixture_step("Create a base vm with dedicated CPU policy and virtio nics")
-    flavor_id = nova_helper.create_flavor(name='dedicated')[1]
+    flavor_id = nova_helper.create_flavor(name='dedicated', storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', flavor_id, scope='module')
 
     extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
@@ -27,17 +28,16 @@ def base_vm_():
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
             {'net-id': tenant_net_id, 'vif-model': 'virtio'},
             {'net-id': internal_net_id, 'vif-model': 'virtio'}
-    ]
-    base_vm = vm_helper.boot_vm(name='avs_base', flavor=flavor_id, nics=nics, reuse_vol=False)[1]
-    ResourceCleanup.add('vm', base_vm, scope='module')
+            ]
+    base_vm = vm_helper.boot_vm(name='avs_base', flavor=flavor_id, nics=nics, reuse_vol=False, cleanup='module')[1]
 
-    return base_vm, mgmt_net_id, tenant_net_id, internal_net_id
+    return base_vm, mgmt_net_id, tenant_net_id, internal_net_id, storage_backing
 
 
 @mark.parametrize(('spec_name', 'spec_val', 'vm_type', 'vif_model'), [
     mark.p3((FlavorSpec.NIC_ISOLATION, 'true', 'avp', 'avp')),
     mark.p3((FlavorSpec.NIC_ISOLATION, 'true', 'virtio', 'virtio')),
-    mark.domain_sanity((FlavorSpec.NIC_ISOLATION, 'true', 'vswitch', 'avp')),
+    mark.priorities('domain_sanity', 'nightly')((FlavorSpec.NIC_ISOLATION, 'true', 'vswitch', 'avp')),
 ])
 def test_avp_vms_with_vm_actions(spec_name, spec_val, vm_type, vif_model, base_vm_):
     """
@@ -66,7 +66,7 @@ def test_avp_vms_with_vm_actions(spec_name, spec_val, vm_type, vif_model, base_v
         - Delete vm1 and its flavor     (module)
 
     """
-    base_vm, mgmt_net_id, tenant_net_id, internal_net_id = base_vm_
+    base_vm, mgmt_net_id, tenant_net_id, internal_net_id, storage_backing = base_vm_
 
     existing_flavor_name = eval("NetworkingVmMapping.{}".format(vm_type.upper()))['flavor']
     existing_flavor = nova_helper.get_flavor_id(name=existing_flavor_name)
@@ -74,6 +74,8 @@ def test_avp_vms_with_vm_actions(spec_name, spec_val, vm_type, vif_model, base_v
     LOG.tc_step("Make a copy of flavor {}".format(existing_flavor_name))
     flavor_id = nova_helper.copy_flavor(from_flavor_id=existing_flavor, new_name='auto')
     ResourceCleanup.add('flavor', flavor_id)
+
+    nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.STORAGE_BACKING: storage_backing})
 
     LOG.tc_step("Set new flavor extra spec {} to {}".format(spec_name, spec_val))
     extra_specs = {FlavorSpec.NIC_ISOLATION: 'true'}
@@ -86,8 +88,8 @@ def test_avp_vms_with_vm_actions(spec_name, spec_val, vm_type, vif_model, base_v
     LOG.tc_step("Boot vm with flavor {} and vif_model {} for tenant-net".format(flavor_id, vif_model))
     volume = cinder_helper.create_volume(rtn_exist=False)[1]
     ResourceCleanup.add('volume', volume)
-    vm_under_test = vm_helper.boot_vm(name='avs-vm', flavor=flavor_id, source='volume', source_id=volume, nics=nics)[1]
-    ResourceCleanup.add('vm', vm_under_test)
+    vm_under_test = vm_helper.boot_vm(cleanup='function', name='avs-vm', flavor=flavor_id, source='volume',
+                                      source_id=volume, nics=nics)[1]
 
     LOG.tc_step("Ping VM {} from NatBox".format(vm_under_test))
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)

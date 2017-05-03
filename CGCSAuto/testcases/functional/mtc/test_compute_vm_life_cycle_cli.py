@@ -12,8 +12,13 @@ from utils import table_parser
 from consts.auth import Tenant
 from consts.cgcs import HostAvailabilityState
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
+
+
+@fixture(scope='function', autouse=True)
+def check_alarms():
+    pass
 
 
 def _lock_unlock_computes_except_one(host_name, action='lock'):
@@ -68,8 +73,8 @@ def launch_instance_on_compute(network_name=None,
     vm_ids = []
     for name in instance_names:
 
-        vm_id = vm_helper.boot_vm(name=instance_names[name], flavor=flavor_id, guest_os=image_name)[1]
-        ResourceCleanup.add('vm', vm_id)
+        vm_id = vm_helper.boot_vm(name=instance_names[name], flavor=flavor_id, guest_os=image_name, cleanup='function')[1]
+        # ResourceCleanup.add('vm', vm_id)
         vm_ids.append(vm_id)
 
     LOG.tc_step('Verify instances are running')
@@ -99,7 +104,7 @@ def _is_cpe():
 @mark.usefixtures('ubuntu14_image')
 @mark.parametrize(('host', 'guest'), [
     ('compute-0', 'ubuntu_14'),
-    ('compute-0', None),            # cgcs-guest
+    ('compute-0', None),
     ('compute-1', 'ubuntu_14'),
     ('compute-1', None),
     ])

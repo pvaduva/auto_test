@@ -5,7 +5,7 @@ import datetime
 from pytest import fixture, skip
 # from pytest import mark
 
-from consts.auth import Host
+from consts.auth import HostLinuxCreds
 from consts.filepaths import WRSROOT_HOME
 from consts.proj_vars import PatchingVars
 from keywords import host_helper
@@ -17,7 +17,6 @@ from utils import table_parser, cli
 from utils.ssh import SSHClient
 from utils.tis_log import LOG
 
-PUBLIC_SSH_KEY = local_host.get_ssh_key()
 PATCH_ALARM_ID = '900.001'
 PATCH_ALARM_REASON = 'Patching operation in progress'
 
@@ -135,6 +134,7 @@ def remove_patch(patch_id, con_ssh=None):
 
 
 def connect_to_build_server(server=None, username='', password='', prompt=''):
+    PUBLIC_SSH_KEY = local_host.get_ssh_key()
     server = server or PatchingVars.get_patching_var('build_server')
     LOG.info('patch_server={}'.format(server))
 
@@ -204,7 +204,7 @@ def get_patches_dir_to_test(con_ssh=None, single_file_ok=False):
     LOG.info('Downloading patch files to lab:{} from:{}'.format(dest_path, patch_files))
 
     ssh_to_server.rsync(patch_files, html_helper.get_ip_addr(), dest_path,
-                        dest_user=Host.USER, dest_password=Host.PASSWORD, timeout=900)
+                        dest_user=HostLinuxCreds.USER, dest_password=HostLinuxCreds.PASSWORD, timeout=900)
 
     LOG.info('OK, patch files were downloaded to: {}:{}, from: {} on server: {}'.format(
         html_helper.get_ip_addr(), dest_path, patch_files, patch_build_server))

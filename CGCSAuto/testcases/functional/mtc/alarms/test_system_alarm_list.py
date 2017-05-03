@@ -6,7 +6,7 @@
 
 import time
 
-from pytest import mark
+from pytest import mark, skip
 
 from utils import table_parser, cli
 from utils.tis_log import LOG
@@ -16,7 +16,9 @@ from keywords import system_helper, host_helper
 from testfixtures.recover_hosts import HostsToRecover
 
 
-@mark.sanity
+# Remove from sanity to reduce total execution time - alarm checking is already covered by check_alarms fixture which
+# is auto used by most testcases - table headers checking is of low priority
+# @mark.sanity
 def test_system_alarm_list_on_compute_reboot():
     """
     Verify system alarm-list command in the system
@@ -28,9 +30,9 @@ def test_system_alarm_list_on_compute_reboot():
     rows.
     """
 
-    # Clear the alarms currently present
-    LOG.tc_step("Clear the alarms table")
-    system_helper.delete_alarms()
+    # # Clear the alarms currently present
+    # LOG.tc_step("Clear the alarms table")
+    # system_helper.delete_alarms()
 
     LOG.tc_step("Check alarm-list table consists of correct headers")
     alarms_tab = system_helper.get_alarms_table(uuid=True)

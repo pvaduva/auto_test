@@ -195,6 +195,23 @@ class Labs:
         'floating ip': '128.224.151.229',
         'controller-0 ip': '128.224.150.133',
         'controller-1 ip': '128.224.150.136',
+        'controller_nodes': [23213, 23214],
+    }
+
+    WCP_13 = {
+        'short_name': 'wcp_13',
+        'name': 'yow-cgcs-wildcat-13',
+        'floating ip': '128.224.151.229',
+        'controller-0 ip': '128.224.150.133',
+        'controller_nodes': [23213],
+    }
+
+    WCP_14 = {
+        'short_name': 'wcp_14',
+        'name': 'yow-cgcs-wildcat-14',
+        'floating ip': '128.224.151.217',
+        'controller-0 ip': '128.224.150.136',
+        'controller_nodes': [23214],
     }
 
     WCP_15_22 = {
@@ -220,6 +237,45 @@ class Labs:
                           23250, 23249, 23248, 23247, 23246, 23245, 23244, 23243,
                           23262, 23261, 23260, 23259],
         'storage_nodes': [23264, 23263, 23266, 23265],
+    }
+
+
+    WCP_61_62 = {
+        'short_name': 'wcp_61_62',
+        'name': 'yow-cgcs-wildcat-61_62',
+        'floating ip': '128.224.151.82',
+        'controller-0 ip': '128.224.151.80',
+        'controller-1 ip': '128.224.151.81',
+        'controller_nodes': [23280, 23281],
+    }
+
+
+    WCP_63_66 = {
+        'short_name': 'wcp_63_66',
+        'name': 'yow-cgcs-wildcat-63_66',
+        'floating ip': '128.224.151.85',
+        'controller-0 ip': '128.224.151.83',
+        'controller-1 ip': '128.224.151.84',
+        'controller_nodes': [23282, 23283],
+        'compute_nodes': [23284, 23285],
+    }
+
+    WCP_67 = {
+        'short_name': 'wcp_67',
+        'name': 'yow-cgcs-wildcat-67',
+        'floating ip': '128.224.151.33',
+        'auth_url': 'http://127.168.204.2:5000/v3/',
+        'controller-0 ip': '128.224.151.33',
+        'controller_nodes': [23286],
+    }
+
+    WCP_68 = {
+        'short_name': 'wcp_68',
+        'name': 'yow-cgcs-wildcat-68',
+        'floating ip': '128.224.151.38',
+        'auth_url': 'http://127.168.204.2:5000/v3/',
+        'controller-0 ip': '128.224.151.38',
+        'controller_nodes': [23287],
     }
 
     WCP_71_75 = {
@@ -296,6 +352,8 @@ class Labs:
         'floating ip': '128.224.151.94',
         'controller-0 ip': '128.224.151.103',
         'controller-1 ip': '128.224.151.13',
+        'controller_nodes': [23312, 23313],
+        'compute_nodes': [23314, 23315, 23316]
     }
 
     VBOX = {
@@ -319,6 +377,8 @@ class Labs:
         'controller-0 ip': 'unknown_con0_ip',
         'controller-1 ip': 'unknown_con1_ip',
     }
+
+    NO_LAB = None
 
 
 def edit_lab_entry():

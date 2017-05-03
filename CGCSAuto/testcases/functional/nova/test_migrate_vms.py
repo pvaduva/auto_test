@@ -6,7 +6,7 @@ from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
@@ -22,6 +22,10 @@ def hosts_per_stor_backing():
     mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume', False)),
     mark.domain_sanity(('local_image', 0, 0, 'shared', 2, 'image', True)),
     mark.domain_sanity(('local_image', 1, 1, 'dedicated', 1, 'image', False)),
+    ('local_image', 1, 0, 'dedicated', 2, 'volume', False),       #
+    ('local_image', 0, 1, 'shared', 1, 'volume', False),
+    ('local_image', 0, 0, None, 2, 'image_with_vol', False),
+    ('local_image', 0, 0, 'dedicated', 1, 'image_with_vol', True),
     mark.p1(('local_lvm', 0, 0, None, 1, 'volume', False)),
     mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'volume', False)),
     mark.p1(('remote', 0, 0, None, 2, 'volume', False)),
@@ -65,26 +69,28 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
 
     LOG.tc_step("Ensure vm is pingable from NatBox after live migration")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    # TODO: add disk checking
+    #
 
 
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'vm_type', 'block_mig', 'expt_err'), [
     mark.p1(('local_image', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
-    mark.p1(('local_image', 1, 0, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),
-    mark.p1(('local_image', 0, 1, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),
-    mark.p1(('local_image', 0, 0, 'image_with_vol', False, 'LiveMigErr.GENERAL_NO_HOST')),
-    mark.p1(('local_image', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),
+    # mark.p1(('local_image', 1, 0, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),    newton change
+    # mark.p1(('local_image', 0, 1, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),    newton change
+    # mark.p1(('local_image', 0, 0, 'image_with_vol', False, 'LiveMigErr.GENERAL_NO_HOST')),    newton change
+    # mark.p1(('local_image', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),     newton change
     # mark.p1(('local_image', 0, 0, 'shared', 2, 'image', False, ??)),      obsolete in Mitaka
     # mark.p1(('local_image', 1, 1, 'dedicated', 1, 'image', False, ??)),   obsolete in Mitaka
     mark.p1(('local_lvm', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
     mark.p1(('local_lvm', 1, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
     mark.p1(('local_lvm', 0, 1, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
-    mark.p1(('local_lvm', 0, 1, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),
-    mark.p1(('local_lvm', 1, 0, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_lvm', 0, 1, 'volume', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
+    mark.p1(('local_lvm', 1, 0, 'volume', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
     mark.p1(('local_lvm', 0, 0, 'image', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
     mark.p1(('local_lvm', 1, 0, 'image', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
-    mark.p1(('local_lvm', 0, 0, 'image', False, 'LiveMigErr.GENERAL_NO_HOST')),
-    mark.p1(('local_lvm', 0, 1, 'image', False, 'LiveMigErr.GENERAL_NO_HOST')),
-    mark.p1(('local_lvm', 0, 0, 'image_with_vol', False, 'LiveMigErr.GENERAL_NO_HOST')),
+    mark.p1(('local_lvm', 0, 0, 'image', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
+    mark.p1(('local_lvm', 0, 1, 'image', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
+    mark.p1(('local_lvm', 0, 0, 'image_with_vol', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
     mark.p1(('local_lvm', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),
     mark.p1(('remote', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
     mark.p1(('remote', 1, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
@@ -121,12 +127,14 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
     # block_mig = True if boot_source == 'image' else False
     code, output = vm_helper.live_migrate_vm(vm_id, block_migrate=block_mig)
     assert 1 == code, "Expect live migration to have expected fail. Actual: {}".format(output)
-    assert 'Unexpected API Error'.lower() not in output.lower(), "'Unexpected API Error' returned."
 
-    # remove extra spaces in error message
-    output = re.sub(r'\s\s+', " ", output)
-    assert eval(expt_err) in output, "Expected error message {} is not in actual error message: {}".\
-        format(eval(expt_err), output)
+    # Remove below code due to live-migration is async in newton
+    # assert 'Unexpected API Error'.lower() not in output.lower(), "'Unexpected API Error' returned."
+    #
+    # # remove extra spaces in error message
+    # output = re.sub(r'\s\s+', " ", output)
+    # assert eval(expt_err) in output, "Expected error message {} is not in actual error message: {}".\
+    #     format(eval(expt_err), output)
 
     post_vm_host = nova_helper.get_vm_host(vm_id)
     assert prev_vm_host == post_vm_host, "VM host changed even though live migration request rejected."
@@ -276,8 +284,8 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 
     boot_source = 'volume' if vm_type == 'volume' else 'image'
     LOG.tc_step("Boot a vm from {}".format(boot_source))
-    vm_id = vm_helper.boot_vm('live-mig', flavor=flavor_id, source=boot_source, reuse_vol=False)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm('live-mig', flavor=flavor_id, source=boot_source, reuse_vol=False, cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_id)
 
     if vm_type == 'image_with_vol':
         LOG.tc_step("Attach volume to vm")
@@ -289,10 +297,11 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 @mark.parametrize(('guest_os', 'mig_type', 'cpu_pol'), [
     mark.sanity(('ubuntu_14', 'live', 'dedicated')),
     mark.sanity(('ubuntu_14', 'cold', 'dedicated')),
-    mark.sanity(('cgcs-guest', 'live', None)),
-    mark.priorities('sanity', 'cpe_sanity')(('cgcs-guest', 'cold', None)),
+    # mark.sanity(('cgcs-guest', 'live', None)),
+    mark.sanity(('tis-centos-guest', 'live', None)),
+    mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'cold', None)),
 ])
-def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu14_image):
+def test_migrate_vm(guest_os, mig_type, cpu_pol):
     LOG.tc_step("Create a flavor with 1 vcpu")
     flavor_id = nova_helper.create_flavor(name='{}-mig'.format(mig_type), vcpus=1, root_disk=9)[1]
     ResourceCleanup.add('flavor', flavor_id)
@@ -303,16 +312,14 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu14_image):
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
 
     LOG.tc_step("Create a volume from {} image".format(guest_os))
-    if guest_os == 'ubuntu_14':
-        image_id = ubuntu14_image
-    else:
-        image_id = glance_helper.get_image_id_from_name('cgcs-guest')
-    vol_id = cinder_helper.create_volume(name='ubuntu_14', image_id=image_id, size=9)[1]
+    image_id = glance_helper.get_guest_image(guest_os=guest_os)
+
+    vol_id = cinder_helper.create_volume(image_id=image_id, size=9, guest_image=guest_os)[1]
     ResourceCleanup.add('volume', vol_id)
 
     LOG.tc_step("Boot a vm from above flavor and volume")
-    vm_id = vm_helper.boot_vm('live-mig', flavor=flavor_id, source='volume', source_id=vol_id)[1]
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+    vm_id = vm_helper.boot_vm(guest_os, flavor=flavor_id, source='volume', source_id=vol_id, cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
@@ -334,11 +341,6 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu14_image):
 
 
 @mark.p2
-@mark.usefixtures('ubuntu14_image',
-                  'centos6_image', 'centos7_image',
-                  'opensuse11_image', 'opensuse12_image',
-                  # 'opensuse13_image',
-                  'rhel6_image', 'rhel7_image')
 @mark.parametrize(('guest_os', 'vcpus', 'cpu_pol', 'boot_source'), [
     ('ubuntu_14', 1, 'shared', 'volume'),
     ('ubuntu_14', 2, 'dedicated', 'image'),
@@ -354,6 +356,11 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol, ubuntu14_image):
     ('rhel_7', 1, 'dedicated', 'volume'),
 ])
 def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
+    LOG.tc_step("Get/Create {} image".format(guest_os))
+    img_id = glance_helper.get_guest_image(guest_os)
+    if guest_os != 'ubuntu_14':
+        ResourceCleanup.add('image', img_id)
+
     LOG.tc_step("Create a flavor with 1 vcpu")
     flavor_id = nova_helper.create_flavor(name='migrate', vcpus=vcpus, guest_os=guest_os)[1]
     ResourceCleanup.add('flavor', flavor_id)
@@ -363,7 +370,7 @@ def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
         LOG.tc_step("Add following extra specs: {}".format(specs))
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
 
-    source_id = None
+    source_id = img_id
     if boot_source == 'volume':
         LOG.tc_step("Create a volume from {} image".format(guest_os))
         code, vol_id = cinder_helper.create_volume(name=guest_os, guest_image=guest_os, fail_ok=True)
@@ -376,13 +383,13 @@ def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
 
     LOG.tc_step("Boot a {} VM with above flavor from {}".format(guest_os, boot_source))
     vm_id = vm_helper.boot_vm(name='{}-{}-migrate'.format(guest_os, cpu_pol), flavor=flavor_id,
-                              source=boot_source, source_id=source_id, guest_os=guest_os)[1]
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+                              source=boot_source, source_id=source_id, guest_os=guest_os, cleanup='function')[1]
+    # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     vm_host_origin = nova_helper.get_vm_host(vm_id)
     prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_origin],
-                                      vm_host=vm_host_origin, cpu_pol=cpu_pol)[1]
+                                                      vm_host=vm_host_origin, cpu_pol=cpu_pol)[1]
 
     LOG.tc_step("Live migrate {} VM".format(guest_os))
     vm_helper.live_migrate_vm(vm_id)

@@ -3,11 +3,11 @@ from pytest import mark
 
 from utils.tis_log import LOG
 
-from keywords import vm_helper, network_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from keywords import vm_helper, network_helper, glance_helper
+from testfixtures.fixture_resources import ResourceCleanup
 
 
-def test_boot_vms(ubuntu14_image, opensuse11_image, opensuse12_image, rhel6_image, rhel7_image):
+def test_boot_vms():
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
@@ -18,6 +18,7 @@ def test_boot_vms(ubuntu14_image, opensuse11_image, opensuse12_image, rhel6_imag
             {'net-id': internal_net_id}]
 
     for guest_os in ['ubuntu_14', 'cgcs-guest']:
+        glance_helper.get_guest_image(guest_os)
         vm_id = vm_helper.boot_vm(guest_os=guest_os, nics=nics)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 

@@ -4,20 +4,15 @@
 # of this software may be licensed only pursuant to the terms
 # of an applicable Wind River license agreement.
 
-import re
-
 import time
-import sys
+
 from pytest import fixture, mark
-from utils import cli
-from utils import table_parser
-from utils.ssh import NATBoxClient
+
 from utils.tis_log import LOG
-from consts.timeout import VMTimeout, EventLogTimeout
-from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
-from consts.auth import Tenant
-from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from consts.timeout import EventLogTimeout
+from consts.cgcs import FlavorSpec, EventLogID
+from keywords import nova_helper, vm_helper, system_helper, common
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
@@ -32,21 +27,16 @@ def flavor_(request):
 
 
 @fixture(scope='module')
-def vm_(request, flavor_):
+def vm_(flavor_):
 
     vm_name = 'vm_with_hb'
     flavor_id = flavor_
 
-    vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id)[1]
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
+    vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, cleanup='module')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-    events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
-                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
-                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
-
-    assert events, "VM heartbeat is not enabled."
-    assert EventLogID.HEARTBEAT_ENABLED == events[0], "VM heartbeat failed to establish."
+    system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, entity_instance_id=vm_id, fail_ok=False,
+                                  **{'Event Log ID': EventLogID.HEARTBEAT_ENABLED})
 
     return vm_id
 
@@ -57,7 +47,7 @@ def test_vm_with_heartbeat_failure(vm_):
 
     Test Steps:
         - Create a flavor with heartbeat set to true, and auto recovery set to given value in extra spec
-        - Create a volume from cgcs-guest image
+        - Create a volume from tis image
         - Boot a vm with the flavor and the volume
         - Verify guest heartbeat is established via system event-logs
         - Set vm to unhealthy state via touch /tmp/unhealthy
@@ -69,13 +59,13 @@ def test_vm_with_heartbeat_failure(vm_):
     """
 
     LOG.tc_step("Boot a vm using the flavor with guest heartbeat")
-    vm_name = 'vm_with_hb'
     vm_id = vm_
 
     LOG.tc_step('Determine which compute the vm is on')
-    compute_name = nova_helper.get_vm_host(vm_id)
+    pre_compute_name = nova_helper.get_vm_host(vm_id)
 
     LOG.tc_step("Kill the heartbeat daemon")
+    start_time = common.get_date_in_format()
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         cmd = "ps -ef | grep 'heartbeat' | grep -v grep | awk '{print $2}'"
         exitcode, output = vm_ssh.exec_cmd(cmd)
@@ -83,22 +73,24 @@ def test_vm_with_heartbeat_failure(vm_):
         vm_ssh.exec_sudo_cmd(cmd, expect_timeout=90)
 
     LOG.tc_step("Verify an active alarm for the reboot is present")
-    time.sleep(10)
-    alarms_tab = system_helper.get_alarms_table()
-    reasons = table_parser.get_values(alarms_tab, 'Reason Text', strict=False, **{'Entity ID': vm_id})
-    assert re.search('Instance .* is rebooting on host', '\n'.join(reasons)), \
-        "Instance rebooting active alarm is not listed"
-    time.sleep(10)
+    system_helper.wait_for_events(timeout=120, num=10, entity_instance_id=vm_id, start=start_time,
+                                  fail_ok=False, **{'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
+
+    compute_name = nova_helper.get_vm_host(vm_id)
+    assert compute_name == pre_compute_name
 
     LOG.tc_step("Kill the heartbeat daemon again")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        cmd = "ps -ef | grep [h]eartbeat | awk '{print $10}' "
+        vm_ssh.wait_for_cmd_output(cmd, 'cgcs.heartbeat', timeout=30, strict=False, expt_timeout=5, check_interval=2)
+
         cmd = "ps -ef | grep 'heartbeat' | grep -v grep | awk '{print $2}'"
         exitcode, out = vm_ssh.exec_cmd(cmd)
-        while not out:
-            exitcode, out = vm_ssh.exec_cmd(cmd)
         cmd = "kill -9 %s" % out
         vm_ssh.exec_sudo_cmd(cmd, expect_timeout=90)
-    time.sleep(10)
+
+    system_helper.wait_for_events(timeout=120, num=10, entity_instance_id=vm_id, start=start_time,
+                                  fail_ok=False, **{'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
 
     LOG.tc_step('Determine which compute the vm is on after the reboot')
     new_compute_name = nova_helper.get_vm_host(vm_id)

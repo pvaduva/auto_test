@@ -22,6 +22,8 @@ class TiSError(Exception):
 class NoMatchFoundError(TiSError):
     message = "No match found."
 
+class TelnetException(TiSError):
+    message = "Telnet Error"
 
 class InvalidStructure(TiSError):
     message = "Invalid cli output table structure."
@@ -159,3 +161,12 @@ class BuildServerError(TiSError):
 
 class ThreadingError(TiSError):
     message = "Multi threading error."
+
+
+class VLMError(TiSError):
+    message = "VLM Operation Error."
+
+
+class SWiftError(TiSError):
+    message = "Swift error."
+

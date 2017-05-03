@@ -153,7 +153,7 @@ def test_modify_mtu_data_interface(mtu_range):
     if len(hypervisors) < 2:
         skip("Less than two hypervisors available.")
 
-    if system_helper.is_small_footprint():
+    if system_helper.is_two_node_cpe():
         standby = system_helper.get_standby_controller_name()
         if not standby:
             skip("Standby controller unavailable on CPE system. Unable to lock host")
@@ -171,8 +171,11 @@ def test_modify_mtu_data_interface(mtu_range):
     mtu = __get_mtu_to_mod(providernet_name='-data', mtu_range=mtu_range)
     LOG.tc_step("Modify data MTU to {} for hosts: {}".format(mtu, hypervisors))
     for host in hypervisors:
-        interfaces = system_helper.get_host_interfaces_info(host=host, rtn_val='name', net_type='data')
-        for interface in interfaces:
+        interfaces = get_ifs_to_mod(host, 'data', mtu)
+        revert_ifs = list(interfaces)
+        revert_ifs.reverse()
+
+        for interface in revert_ifs:
             pre_mtu = int(system_helper.get_host_if_show_values(host, interface, 'imtu')[0])
             HOSTS_IF_MODIFY_ARGS.append("-m {} {} {}".format(pre_mtu, host, interface))
 
@@ -194,3 +197,22 @@ def test_modify_mtu_data_interface(mtu_range):
 
     assert 0 == code, "Failed to modify data MTU. Return code:{}; Details: {}".format(code, res)
     assert not failed_args, "Host if modify with below args failed: {}".format(failed_args)
+
+
+def get_ifs_to_mod(host, network_type, mtu_val):
+    table_ = table_parser.table(cli.system('host-if-list', '{} --nowrap'.format(host)))
+    table_ = table_parser.filter_table(table_, **{'network type': network_type})
+    uses_if_names = table_parser.get_values(table_, 'name', exclude=True, **{'uses i/f': '[]'})
+    non_uses_if_names = table_parser.get_values(table_, 'name', exclude=False, **{'uses i/f': '[]'})
+    uses_if_first = False
+    if uses_if_names:
+        current_mtu = int(system_helper.get_host_if_show_values(host, interface=uses_if_names[0], fields=['imtu'])[0])
+        if current_mtu <= mtu_val:
+            uses_if_first = True
+
+    if uses_if_first:
+        if_names = uses_if_names + non_uses_if_names
+    else:
+        if_names = non_uses_if_names + uses_if_names
+
+    return if_names

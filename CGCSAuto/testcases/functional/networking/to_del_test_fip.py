@@ -2,7 +2,7 @@ from  pytest import fixture
 from keywords import network_helper
 from utils.tis_log import LOG
 from keywords import vm_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 ######################################################################################
@@ -15,8 +15,8 @@ def fip_setups(request):
     floating_ip = network_helper.create_floating_ip()[1]
     ResourceCleanup.add('floating_ip', floating_ip, scope='module')
 
-    vm_id = vm_helper.boot_vm()[1]
-    ResourceCleanup.add('vm', vm_id, scope='module')
+    vm_id = vm_helper.boot_vm(cleanup='module')[1]
+    # ResourceCleanup.add('vm', vm_id, scope='module')
 
     network_helper.associate_floating_ip(floating_ip=floating_ip, vm_id=vm_id)
 

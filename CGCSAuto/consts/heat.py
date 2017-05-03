@@ -18,13 +18,39 @@ class Heat:
     OS_Nova_KeyPair = {'params':None,'verify':['key_pair'],'heat_user':'tenant','key_pair_name':'KeyPairDeluxe'}
     OS_Nova_Server = {'params':['NETWORK', 'IMAGE', 'FLAVOR'],'verify':['vm'], 'heat_user':'tenant',
                       'vm_name':'nova_server'}
-    OS_Nova_ServerGroup = {'params':None,'verify':['nova_server_group'],'heat_user':'tenant'}
+    OS_Nova_ServerGroup = {'params':['NETWORK', 'IMAGE', 'FLAVOR'],'verify':['nova_server_group'],'heat_user':'tenant'}
     WR_Neutron_Port_Forwarding = {}
     WR_Neutron_ProviderNet = {'params':None,'verify':['neutron_provider_net'],'heat_user':'admin'}
     WR_Neutron_ProviderNetRange = {'params':None,'verify':['neutron_provider_net_range'],'heat_user':'admin'}
     WR_Neutron_QoSPolicy = {'params':None,'verify':['neutron_qos'],'heat_user':'admin'}
     OS_Heat_AutoScalingGroup = {'params':['NETWORK', 'IMAGE', 'FLAVOR'],'verify':['vm'], 'heat_user':'tenant',
                       'vm_name':'nova_server'}
+    NestedAutoScale = {'params': ['NETWORK', 'IMAGE', 'FLAVOR'], 'verify': ['vm'], 'heat_user': 'tenant',
+                                'vm_name': 'nova_server'}
 
 
+class HeatUpdate:
+    #OS_Ceilometer_Alarm = {}
+    #OS_Cinder_Volume = {}
+    #OS_Cinder_VolumeAttachment = {}
+    #OS_Glance_Image = {}
+    #OS_Heat_AccessPolicy= {}
+    #OS_Heat_Stack = {}
+    #OS_Neutron_FloatingIP = {}
+    #OS_Neutron_Net = {}
+    #OS_Neutron_Port = {}
+    #OS_Neutron_Router = {}
+    #OS_Neutron_RouterGateway = {}
+    #OS_Neutron_RouterInterface = {}
+    #OS_Neutron_SecurityGroup = {}
+    #OS_Neutron_Subnet = {}
+    #OS_Nova_Flavor = {}
+    #OS_Nova_KeyPair = {}
+    #OS_Nova_Server = {}
+    OS_Nova_ServerGroup = {'params': ['FLAVOR', 'SIZE'], 'new_vals': ['small_float', 3]}
+    #WR_Neutron_Port_Forwarding = {}
+    #WR_Neutron_ProviderNet = {}
+    #WR_Neutron_ProviderNetRange = {}
+    #WR_Neutron_QoSPolicy = {}
+    #OS_Heat_AutoScalingGroup = {}
 

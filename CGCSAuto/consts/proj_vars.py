@@ -8,7 +8,9 @@ class ProjVar:
     __var_dict = {'BUILD_ID': None,
                   'BUILD_SERVER': None,
                   'LOG_DIR': None,
-                  'SOURCE_ADMIN': False}
+                  'SOURCE_CREDENTIAL': None,
+                  'VSWITCH_INFO_HOSTS': [],
+                  }
                   # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}
 
     @classmethod
@@ -44,7 +46,7 @@ class ProjVar:
         var_name = var_name.upper()
         valid_vars = cls.__var_dict.keys()
         if var_name not in valid_vars:
-            raise ValueError("Invalid var_name. Valid vars: {}".format(valid_vars))
+            raise ValueError("Invalid var_name: {}. Valid vars: {}".format(var_name, valid_vars))
 
         return cls.__var_dict[var_name]
 
@@ -66,10 +68,13 @@ class InstallVars:
                          lab_setup=None,
                          heat_templates=None,
                          license_path=None,
-                         out_put_dir=None):
-
+                         out_put_dir=None,
+                         controller0_ceph_mon_device=None,
+                         controller1_ceph_mon_device=None,
+                         ceph_mon_gib=None):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
+
 
         cls.__var_dict = {
             'LAB': lab,
@@ -100,6 +105,9 @@ class InstallVars:
             'HEAT_TEMPLATES': heat_templates if heat_templates else BuildServerPath.HEAT_TEMPLATES,
             'OUT_PUT_DIR': out_put_dir,
             'BUILD_ID': None,
+            'CONTROLLER0_CEPH_MON_DEVICE' : controller0_ceph_mon_device,
+            'CONTROLLER1_CEPH_MON_DEVICE' : controller1_ceph_mon_device,
+            'CEPH_MON_GIB': ceph_mon_gib
         }
 
     @classmethod
@@ -143,7 +151,8 @@ class UpgradeVars:
     def set_upgrade_vars(cls, build_server=None,
                          tis_build_dir=None,
                          upgrade_version=None,
-                         upgrade_license_path=None):
+                         upgrade_license_path=None,
+                         patch_dir=None):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
 
@@ -154,6 +163,7 @@ class UpgradeVars:
             'BUILD_SERVER': __build_server,
             'TIS_BUILD_DIR': tis_build_dir if tis_build_dir else
                 BuildServerPath.LATEST_HOST_BUILD_PATHS[upgrade_version],
+            'PATCH_DIR': patch_dir if patch_dir else BuildServerPath.PATCH_DIR_PATHS[upgrade_version],
 
             # Generic
             'UPGRADE_LICENSE': upgrade_license_path,
@@ -202,6 +212,8 @@ class PatchingVars:
         'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_4.0_Test_Patch_Build/',
         'DEF_PATCH_IN_LAB_BASE_DIR': os.path.join(WRSROOT_HOME, 'patch-files'),
         'DEF_PATCH_DIR': 'latest',
+        'PATCH_DIR': '/localdisk/loadbuild/jenkins/CGCS_4.0_Test_Patch_Build/latest',
+        'PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
         'USERNAME': 'svc-cgcsauto',  # getpass.getuser()
         'PASSWORD': ')OKM0okm',  # getpass.getpass()
     }
@@ -222,20 +234,10 @@ class PatchingVars:
 
         patch_dir = cls.__var_dict.get('PATCH_DIR')
 
-        if not patch_dir:
-            patch_dir = os.path.join(cls.__var_dict['DEF_PATCH_BUILD_BASE_DIR'], cls.__var_dict['DEF_PATCH_DIR'])
-        # elif not os.path.abspath(patch_dir):
-        elif not patch_dir.startswith('/'):
+        if patch_dir and not patch_dir.startswith('/'):
             patch_dir = os.path.join(cls.__var_dict['DEF_PATCH_BUILD_BASE_DIR'], patch_dir)
 
         cls.__var_dict['PATCH_DIR'] = patch_dir
-
-        build_server = cls.__var_dict.get('PATCH_BUILD_SERVER')
-
-        if not build_server:
-            build_server = cls.__var_dict['DEF_PATCH_BUILD_SERVER']
-
-        cls.__var_dict['PATCH_BUILD_SERVER'] = build_server
 
         patch_dir_in_lab = cls.__var_dict.get('PATCH_DIR_IN_LAB')
 

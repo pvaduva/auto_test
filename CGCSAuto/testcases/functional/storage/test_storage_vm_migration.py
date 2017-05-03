@@ -4,9 +4,9 @@ from pytest import fixture, skip, mark
 from utils.tis_log import LOG
 from utils import table_parser
 from keywords import host_helper, vm_helper, nova_helper, cinder_helper, glance_helper, system_helper
-from consts.cgcs import VMStatus
+from consts.cgcs import VMStatus, GuestImages
 from consts.auth import Tenant
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.verify_fixtures import check_alarms
 from utils.ssh import ControllerClient
 
@@ -18,6 +18,9 @@ def check_system():
 
     if len(host_helper.get_nova_hosts()) < 2:
         skip("at least two computes are required")
+
+    if len(nova_helper.get_storage_backing_with_max_hosts()[1]) < 2:
+        skip("at least two hosts with the same storage backing are required")
 
 
 @fixture(scope='function', autouse=True)
@@ -47,7 +50,7 @@ def image_():
     Returns: the guest image id
 
     """
-    return glance_helper.get_image_id_from_name(name='cgcs-guest')
+    return glance_helper.get_image_id_from_name()
 
 
 @fixture(scope='function')
@@ -63,6 +66,7 @@ def volumes_(image_):
          'size': <20 or 40>
         }
     """
+
     volumes = []
     cinder_params = [{'name': 'vol_inst1',
                       'size': 20},
@@ -101,14 +105,14 @@ def vms_(volumes_):
     for vol_params in volumes_:
 
         instance_name = vm_names[index]
-        vm_id = vm_helper.boot_vm(name=instance_name, source='volume',
-                                  source_id=vol_params['id'], user_data=get_user_data_file())[1]
+        vm_id = vm_helper.boot_vm(name=instance_name, source='volume', source_id=vol_params['id'],
+                                  cleanup='function')[1]   # , user_data=get_user_data_file())[1]
         vm = {
                 'id': vm_id,
                 'display_name': instance_name,
              }
         vms.append(vm)
-        ResourceCleanup.add('vm', vm_id, scope='function')
+        # ResourceCleanup.add('vm', vm_id, scope='function')
         index += 1
     return vms
 
@@ -140,8 +144,8 @@ def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
     - Terminate VMs
 
     Skip conditions:
-     - less that two computes
-     - no  storage node
+    - less than two computes
+    - no storage node
 
     """
     pre_alarms = pre_alarm_
@@ -297,7 +301,8 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_)
     - Terminate VMs
 
     Skip conditions:
-    - less that two computes
+    - less than two hosts with the same storage backing
+    - less than two computes
     - no storage node
 
     """
@@ -308,6 +313,7 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_)
 
     for vm in vms:
         vm_id = vm['id']
+
         LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm_id))
         vm_state = nova_helper.get_vm_status(vm_id)
 
@@ -337,8 +343,7 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_)
         # assert not rc, " alarm(s) found: {}".format(new_alarm)
 
 
-@mark.usefixtures('centos7_image')
-def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
+def test_instantiate_a_vm_with_multiple_volumes_and_migrate():
     """
     Test  a vm with a multiple volumes live, cold  migration and evacuation:
 
@@ -351,7 +356,7 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
     - get tenenat and managment network ids
 
     Test Steps:
-    - create volume for boot and another extra size 4GB
+    - create volume for boot and another extra size 8GB
     - boot vms from the created volume
     - Validate that VMs boot, and that no timeouts or error status occur.
     - Verify VM status is ACTIVE
@@ -369,22 +374,21 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
     - less than one storage
 
     """
-    skip("Currently not working. Centos image doesn't see both volumes")
-    LOG.tc_step("Creating  a volume size=8GB.....")
-    vol_id_0 = cinder_helper.create_volume(name='vol_0', image_id='centos_7', size=8)[1]
+    #skip("Currently not working. Centos image doesn't see both volumes")
+    LOG.tc_step("Creating a volume size=8GB.....")
+    vol_id_0 = cinder_helper.create_volume(size=8)[1]
     ResourceCleanup.add('volume', vol_id_0, scope='function')
 
-    LOG.tc_step("Creating  a second volume size=8GB.....")
-    vol_id_1 = cinder_helper.create_volume(name='vol_1', image_id='centos_7', size=8)[1]
+    LOG.tc_step("Creating a second volume size=8GB.....")
+    vol_id_1 = cinder_helper.create_volume(size=8, bootable=False)[1]
     LOG.tc_step("Volume id is: {}".format(vol_id_1))
     ResourceCleanup.add('volume', vol_id_1, scope='function')
 
     LOG.tc_step("Booting instance vm_0...")
 
-    rc, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm_0', source='volume',
-                                                source_id=vol_id_0, guest_os='centos_7')
-    ResourceCleanup.add('vm', vm_id, scope='function')
-    assert rc == 0, "VM vm_0 did not succeed: reaon {}".format(msg)
+    rc, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm_0', source='volume', source_id=vol_id_0, cleanup='function')
+    # ResourceCleanup.add('vm', vm_id, scope='function')
+    assert rc == 0, "VM vm_0 did not succeed: reason {}".format(msg)
     time.sleep(5)
 
     LOG.tc_step("Verify  VM can be pinged from NAT box...")
@@ -392,14 +396,13 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
     assert rc,  "VM is not pingable after {} seconds ".format(boot_time)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode....")
-    assert is_vm_filesystem_rw(vm_id, vm_image_name='centos_7'), 'vol_0 rootfs filesystem is not RW as expected.'
+    assert is_vm_filesystem_rw(vm_id), 'vol_0 rootfs filesystem is not RW as expected.'
 
     LOG.tc_step("Attemping to attach a second volume to VM...")
     vm_helper.attach_vol_to_vm(vm_id, vol_id_1)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode for both volumes....")
-    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb'], vm_image_name='centos_7'), 'volumes rootfs filesystem is ' \
-                                                                                        'not RW as expected.'
+    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'volumes rootfs filesystem is not RW as expected.'
 
     LOG.tc_step("Attemping live migrate VM...")
     code, msg = vm_helper.live_migrate_vm(vm_id=vm_id,  fail_ok=True)
@@ -407,18 +410,15 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
     assert code == 0, "Expected return code 0. Actual return code: {}; details: {}".format(code,  msg)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode after live migration....")
-    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb'], vm_image_name='centos_7'), 'After live migration rootfs ' \
-                                                                                        'filesystem is not RW ' \
-                                                                                        'as expected'
+    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'After live migration rootfs filesystem is not RW'
+
     LOG.tc_step("Attempting  cold migrate VM...")
     code, msg = vm_helper.cold_migrate_vm(vm_id, fail_ok=True)
     LOG.tc_step("Verify cold migration succeeded...")
     assert code == 0, "Expected return code 0. Actual return code: {}; details: {}".format(code,  msg)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode after live migration....")
-    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb'], vm_image_name='centos_7'), 'After cold migration rootfs ' \
-                                                                                        'filesystem is not ' \
-                                                                                        'RW as expected'
+    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'After cold migration rootfs filesystem is not RW'
     LOG.tc_step("Testing VM evacuation.....")
     before_host_0 = nova_helper.get_vm_host(vm_id)
 
@@ -435,8 +435,7 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate(image_):
         "previous host: {}; current host: {}".format(vm_id, before_host_0, after_evac_host_0)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode after live migration....")
-    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb'], vm_image_name='centos_7'), 'After evacuation filesystem is ' \
-                                                                                        'not RW as expected for VM vm_0'
+    assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'After evacuation filesystem is not RW'
 
 
 def check_vm_boot_time(vm_id):
@@ -446,7 +445,7 @@ def check_vm_boot_time(vm_id):
     return output, elapsed_time
 
 
-def is_vm_filesystem_rw(vm_id, rootfs='vda', vm_image_name='cgcs-guest'):
+def is_vm_filesystem_rw(vm_id, rootfs='vda', vm_image_name=None):
     """
 
     Args:
@@ -457,6 +456,9 @@ def is_vm_filesystem_rw(vm_id, rootfs='vda', vm_image_name='cgcs-guest'):
 
     """
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    if vm_image_name is None:
+        vm_image_name = GuestImages.DEFAULT_GUEST
+
     with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name) as vm_ssh:
         if isinstance(rootfs, str):
             rootfs = [rootfs]
@@ -514,6 +516,7 @@ def get_file_data(vm_ssh, file, to_look_for=None):
     return out
 
 
+# Remove below test from execution
 # temp stress test to reproduce a CGTS-4911
 @mark.usefixtures('centos7_image')
 @mark.parametrize(('image_id', 'backing', 'vol_size'), [
@@ -528,7 +531,7 @@ def get_file_data(vm_ssh, file, to_look_for=None):
     ('guest1', 'remote', 'small'),
     ('cgcsguestconsole', 'remote', 'small'),
 ])
-def test_cold_migrate_vms_with_large_volume_stress(image_id, backing, vol_size):
+def _test_cold_migrate_vms_with_large_volume_stress(image_id, backing, vol_size):
     end_time = time.time() + 12 * 3600
     # image_id = glance_helper.get_image_id_from_name('cgcs-guest')
 
@@ -615,6 +618,7 @@ def test_cold_migrate_vms_with_large_volume_stress(image_id, backing, vol_size):
         vm_helper.delete_vms([vm_1, vm_2], stop_first=False)
 
 
+# Remove below test from execution
 @mark.usefixtures('centos7_image')
 @mark.parametrize(('action', 'backing', 'image', 'size'), [
     ('livemigrate', 'image', 'guest1', 'big'),
@@ -636,7 +640,7 @@ def test_cold_migrate_vms_with_large_volume_stress(image_id, backing, vol_size):
     ('reboot', 'remote', 'guest1', 'small'),
     ('stop', 'remote', 'guest1', 'small'),
 ])
-def test_4911_other_stress_tests(action, backing, image, size):
+def _test_4911_other_stress_tests(action, backing, image, size):
     end_time = time.time() + 12 * 3600
     if backing == 'image':
         backing = 'local_image'
@@ -688,18 +692,18 @@ def test_4911_other_stress_tests(action, backing, image, size):
                 vol_2 = cinder_helper.create_volume(name='live_vm_1G', image_id=image, size=1)[1]
 
                 vm_1 = vm_helper.boot_vm(name='live_migrate_1g', source='volume', source_id=vol_1,
-                                         flavor=flav_id, vm_host=vm_host, guest_os=image)[1]
+                                         flavor=flav_id, avail_zone='nova', vm_host=vm_host, guest_os=image)[1]
                 vm_2 = vm_helper.boot_vm(name='live_migrate_1g', source='volume', source_id=vol_2,
-                                         flavor=flav_id, vm_host=vm_host, guest_os=image)[1]
+                                         flavor=flav_id, avail_zone='nova', vm_host=vm_host, guest_os=image)[1]
             else:
                 LOG.info("Boot two vms from 20g and 40g volume respectively")
                 vol_1 = cinder_helper.create_volume(name='live_vm_20G', image_id=image, size=20)[1]
                 vol_2 = cinder_helper.create_volume(name='live_vm_40G', image_id=image, size=40)[1]
 
                 vm_1 = vm_helper.boot_vm(name='live_migrate_20g', source='volume', source_id=vol_1,
-                                         flavor=flav_id, vm_host=vm_host, guest_os=image)[1]
+                                         flavor=flav_id, avail_zone='nova', vm_host=vm_host, guest_os=image)[1]
                 vm_2 = vm_helper.boot_vm(name='live_migrate_40g', source='volume', source_id=vol_2,
-                                         flavor=flav_id, vm_host=vm_host, guest_os=image)[1]
+                                         flavor=flav_id, avail_zone='nova', vm_host=vm_host, guest_os=image)[1]
 
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_1)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_2)

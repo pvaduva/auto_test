@@ -9,9 +9,11 @@ from utils.ssh import SSHClient
 from utils.ssh import SSHFromSSH
 from utils.tis_log import LOG
 
-username = 'wrsroot'
-password = 'Li69nux*'
-# hostname = '10.10.10.3'
+from consts.auth import HostLinuxCreds
+
+username = HostLinuxCreds.USER
+password = HostLinuxCreds.PASSWORD
+hostname = '10.10.10.3'
 #hostname = '128.224.150.73'
 # hostname = 'yow-cgcs-ironpass-1.wrs.com'
 
@@ -87,7 +89,7 @@ def test_config_fixture(tis_ssh):
 def test_ssh_from_ssh():
     LOG.tc_func_start()
     ssh_client.connect()
-    compute_ssh = SSHFromSSH(ssh_client, 'compute-0', 'wrsroot', 'Li69nux*')
+    compute_ssh = SSHFromSSH(ssh_client, 'compute-0', username, password)
     compute_ssh.connect()
     exit_code, output = compute_ssh.exec_cmd('date1')
     assert exit_code == 127

@@ -8,12 +8,11 @@ import time
 import re
 import sys
 from pytest import fixture, mark, skip, raises, fail
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from utils.tis_log import LOG
 from utils import cli, exceptions, table_parser
 from utils.ssh import ControllerClient
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
-
 
 
 def kill_instance_process(instance_num=None, instance_name=None):
@@ -53,30 +52,18 @@ def kill_instance_process(instance_num=None, instance_name=None):
 def test_092_vm_instance_recovery_kill_process_on_compute_node():
     """
     Verification
-    1. Boot ubuntu VM
+    1. Boot tis VM
     2. VM Instance Recovery: "kill -9" kvm process on compute node,
        ensure instance restarts automatically
     3. ping <private_ip> (from controller-0)
-    4. ssh ubuntu@<mgmt_ip>
+    4. ssh to vm
     5. kill -9 $(ps ax | grep qemu.*instance-00000001 | awk '{print $1}')
     6. ping <private_ip> (from controller-0)
     """
 
-
-    vm_image = 'cgcs-guest'
-    vol_size = 8
-
-    # Get the image uuid from glance
-    image_id = glance_helper.get_image_id_from_name(name=vm_image, strict=False)
-
-    # Create volume containing the image
-    vol_id = cinder_helper.create_volume(name='vol_' + vm_image, image_id=image_id, size=vol_size)[1]
-    ResourceCleanup.add(resource_type='volume', resource_id=vol_id, scope='function')
-
     # Create ubuntu instances
     LOG.tc_step("Create vm instances")
-    vm_id = vm_helper.boot_vm(name=vm_image, source='volume', source_id=vol_id)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm(cleanup='function')[1]
 
     LOG.tc_step("Check that VM responds on pings")
     ping_results, res_dict = vm_helper.ping_vms_from_natbox(vm_id)

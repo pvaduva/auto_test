@@ -4,14 +4,14 @@ from utils.tis_log import LOG
 from consts.cgcs import VMStatus
 from consts.reasons import SkipReason
 
-from keywords import vm_helper, host_helper, nova_helper, cinder_helper, keystone_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from keywords import vm_helper, host_helper, nova_helper, cinder_helper, keystone_helper, glance_helper
+from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
 @fixture(scope='module', autouse=True)
 def skip_test_if_less_than_two_hosts():
-    if len(host_helper.get_nova_hosts()) < 2:
+    if len(host_helper.get_up_hypervisors()) < 2:
         skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
 
     LOG.fixture_step("Update instance and volume quota to at least 10 and 20 respectively")
@@ -37,26 +37,26 @@ class TestCgcsGuest:
 
         LOG.fixture_step("Boot vm1 from volume with flavor flv_nolocaldisk and wait for it pingable from NatBox")
         vm1_name = "vol_nolocal"
-        vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, source='volume')[1]
-        ResourceCleanup.add('vm', vm1, scope='module')
+        vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, source='volume', cleanup='module')[1]
+        # ResourceCleanup.add('vm', vm1, scope='module')
         vm_helper.wait_for_vm_pingable_from_natbox(vm1)
 
         LOG.fixture_step("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
         vm2_name = "vol_local"
-        vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, source='volume')[1]
-        ResourceCleanup.add('vm', vm2, scope='module')
+        vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, source='volume', cleanup='module')[1]
+        # ResourceCleanup.add('vm', vm2, scope='module')
         vm_helper.wait_for_vm_pingable_from_natbox(vm2)
 
         LOG.fixture_step("Boot vm3 from image with flavor flv_nolocaldisk and wait for it pingable from NatBox")
         vm3_name = "image_novol"
-        vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, source='image')[1]
-        ResourceCleanup.add('vm', vm3, scope='module', del_vm_vols=False)
+        vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, source='image', cleanup='module')[1]
+        # ResourceCleanup.add('vm', vm3, scope='module', del_vm_vols=False)
         vm_helper.wait_for_vm_pingable_from_natbox(vm3)
 
         LOG.fixture_step("Boot vm4 from image with flavor flv_nolocaldisk and wait for it pingable from NatBox")
         vm4_name = 'image_vol'
-        vm4 = vm_helper.boot_vm(vm4_name, flavor_1, source='image')[1]
-        ResourceCleanup.add('vm', vm4, scope='module', del_vm_vols=True)
+        vm4 = vm_helper.boot_vm(vm4_name, flavor_1, source='image', cleanup='module')[1]
+        # ResourceCleanup.add('vm', vm4, scope='module', del_vm_vols=True)
         vm_helper.wait_for_vm_pingable_from_natbox(vm4)
 
         return [vm1, vm2, vm3, vm4]
@@ -111,11 +111,6 @@ class TestVariousGuests:
 
     @mark.trylast
     @mark.features('guest_os')
-    @mark.usefixtures('ubuntu14_image',
-                      'centos6_image', 'centos7_image',
-                      'opensuse11_image', 'opensuse12_image',
-                      # 'opensuse13_image',
-                      'rhel6_image', 'rhel7_image')
     @mark.parametrize('guest_os', [
         'ubuntu_14',
         'centos_6', 'centos_7',
@@ -128,9 +123,16 @@ class TestVariousGuests:
             if not cinder_helper.is_volumes_pool_sufficient(min_size=30):
                 skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
 
+        LOG.tc_step("Get/Create {} image".format(guest_os))
+        img_id = glance_helper.get_guest_image(guest_os)
+        if guest_os != 'ubuntu_14':
+            ResourceCleanup.add('image', img_id)
+
+        source_id = img_id if boot_source == 'image' else None
         LOG.tc_step("Boot a {} VM from {}".format(guest_os, boot_source))
-        vm_id = vm_helper.boot_vm(name="{}_{}".format(guest_os, boot_source), source=boot_source, guest_os=guest_os)[1]
-        ResourceCleanup.add('vm', vm_id)
+        vm_id = vm_helper.boot_vm(name="{}_{}".format(guest_os, boot_source), source=boot_source, source_id=source_id,
+                                  guest_os=guest_os, cleanup='function')[1]
+        # ResourceCleanup.add('vm', vm_id)
 
         LOG.tc_step("Wait for VM pingable from NATBox")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
@@ -160,13 +162,13 @@ class TestDefaultGuest:
         'local_lvm',
         'remote',
     ])
-    def test_evacuate_vms_with_inst_backing(self, storage_backing, add_admin_role):
+    def test_evacuate_vms_with_inst_backing(self, storage_backing, add_admin_role_class):
         """
         Test evacuate vms with various vm storage configs and host instance backing configs
 
         Args:
             storage_backing: storage backing under test
-            add_admin_role (None): test fixture to add admin role to primary tenant
+            add_admin_role_class (None): test fixture to add admin role to primary tenant
 
         Skip conditions:
             - Less than two hosts configured with storage backing under test
@@ -200,50 +202,57 @@ class TestDefaultGuest:
         LOG.tc_step("Create a flavor without ephemeral or swap disks")
         flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing,
                                              check_storage_backing=False)[1]
-        ResourceCleanup.add('flavor', flavor_1, scope='module')
+        ResourceCleanup.add('flavor', flavor_1, scope='class')
 
         LOG.tc_step("Create another flavor with ephemeral and swap disks")
         flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=1, storage_backing=storage_backing,
                                              check_storage_backing=False)[1]
-        ResourceCleanup.add('flavor', flavor_2, scope='module')
+        ResourceCleanup.add('flavor', flavor_2, scope='class')
 
         LOG.tc_step("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
         vm1_name = "vol_root"
-        vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, source='volume', vm_host=target_host)[1]
-        ResourceCleanup.add('vm', vm1, scope='module')
+        vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, source='volume', avail_zone='nova', vm_host=target_host,
+                                cleanup='class')[1]
+        # ResourceCleanup.add('vm', vm1, scope='module')
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm1)
 
         LOG.tc_step("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
         vm2_name = "vol_ephemswap"
-        vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, source='volume', vm_host=target_host)[1]
-        ResourceCleanup.add('vm', vm2, scope='module')
+        vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, source='volume', avail_zone='nova', vm_host=target_host,
+                                cleanup='class')[1]
+
+        # ResourceCleanup.add('vm', vm2, scope='module')
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm2)
 
         LOG.tc_step("Boot vm3 from image with flavor flv_rootdisk and wait for it pingable from NatBox")
         vm3_name = "image_root"
-        vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, source='image', vm_host=target_host)[1]
-        ResourceCleanup.add('vm', vm3, scope='module', del_vm_vols=False)
+        vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, source='image', avail_zone='nova', vm_host=target_host,
+                                cleanup='class')[1]
+
+        # ResourceCleanup.add('vm', vm3, scope='module', del_vm_vols=False)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm3)
 
         LOG.tc_step("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it "
                     "pingable from NatBox")
         vm4_name = 'image_root_attachvol'
-        vm4 = vm_helper.boot_vm(vm4_name, flavor_1, source='image', vm_host=target_host)[1]
-        ResourceCleanup.add('vm', vm4, scope='module', del_vm_vols=True)
+        vm4 = vm_helper.boot_vm(vm4_name, flavor_1, source='image', avail_zone='nova', vm_host=target_host,
+                                cleanup='class')[1]
+        # ResourceCleanup.add('vm', vm4, scope='module', del_vm_vols=True)
 
         vol = cinder_helper.create_volume(bootable=False)[1]
-        ResourceCleanup.add('volume', vol)
+        ResourceCleanup.add('volume', vol, scope='class')
         vm_helper.attach_vol_to_vm(vm4, vol_id=vol)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm4)
 
         LOG.tc_step("Boot vm5 from image with flavor flv_localdisk and wait for it pingable from NatBox")
         vm5_name = 'image_ephemswap'
-        vm5 = vm_helper.boot_vm(vm5_name, flavor_2, source='image', vm_host=target_host)[1]
-        ResourceCleanup.add('vm', vm5, scope='module', del_vm_vols=True)
+        vm5 = vm_helper.boot_vm(vm5_name, flavor_2, source='image', avail_zone='nova', vm_host=target_host,
+                                cleanup='class')[1]
+        # ResourceCleanup.add('vm', vm5, scope='module', del_vm_vols=True)
         vm_helper.wait_for_vm_pingable_from_natbox(vm5)
 
         LOG.tc_step("Check all VMs are booted on {}".format(target_host))

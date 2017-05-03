@@ -68,6 +68,8 @@ class MThread(threading.Thread):
             if timeout:
                 end_time = time.time() + timeout
                 while time.time() < end_time:
+                    if self._err:
+                        raise ThreadingError(str(self._err))
                     if self._output_returned.is_set():
                         # LOG.info("{}: {} returned: {}".format(self.name, self.func.__name__, self._output.__str__))
                         break
@@ -94,7 +96,7 @@ class MThread(threading.Thread):
         self._end_args = end_args
         self._end_kwargs = end_kwargs
 
-    def start_thread(self, timeout=None):
+    def start_thread(self, timeout=None, keep_alive=False):
         """
         Starts a thread.
         Test must wait for thread to terminate or it can continue running during other tests.
@@ -106,6 +108,8 @@ class MThread(threading.Thread):
 
         """
         self.timeout = timeout
+        if keep_alive:
+            self.keep_alive()
         self.__start_thread_base()
 
     def __start_thread_base(self):

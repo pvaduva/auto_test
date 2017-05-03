@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timedelta
 
 from consts.cgcs import Prompt
-from consts.auth import Tenant, SvcCgcsAuto, Host
+from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.proj_vars import ProjVar
 from utils import exceptions
 from utils.tis_log import LOG
@@ -136,8 +136,8 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
 
 
 def scp_to_active_controller(source_path, dest_path='',
-                   dest_user='wrsroot', dest_password='Li69nux*',
-                   timeout=60, is_dir=False):
+                             dest_user=HostLinuxCreds.USER, dest_password=HostLinuxCreds.PASSWORD,
+                             timeout=60, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
 
@@ -147,7 +147,7 @@ def scp_to_active_controller(source_path, dest_path='',
 
 
 def scp_from_active_controller(source_path, dest_path='',
-                               src_user='wrsroot', src_password='Li69nux*',
+                               src_user=HostLinuxCreds.USER, src_password=HostLinuxCreds.PASSWORD,
                                timeout=60, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
@@ -157,8 +157,8 @@ def scp_from_active_controller(source_path, dest_path='',
                         timeout=timeout, is_dir=is_dir)
 
 
-def scp_from_local(source_path, dest_ip, dest_path='/home/wrsroot',
-                   dest_user='wrsroot', dest_password='Li69nux*',
+def scp_from_local(source_path, dest_ip, dest_path=WRSROOT_HOME,
+                   dest_user=HostLinuxCreds.USER, dest_password=HostLinuxCreds.PASSWORD,
                    timeout=60, is_dir=False):
     """
     Scp file(s) from localhost (i.e., from where the automated tests are executed).
@@ -181,8 +181,8 @@ def scp_from_local(source_path, dest_ip, dest_path='/home/wrsroot',
     _scp_base(cmd, remote_password=dest_password, timeout=timeout)
 
 
-def scp_to_local(source_path, source_ip, dest_path='/home/wrsroot',
-                 source_user='wrsroot', source_password='Li69nux*',
+def scp_to_local(dest_path, source_ip, source_path,
+                 source_user=HostLinuxCreds.USER, source_password=HostLinuxCreds.PASSWORD,
                  timeout=60, is_dir=False):
     """
     Scp file(s) to localhost (i.e., to where the automated tests are executed).
@@ -216,11 +216,11 @@ def _scp_base(cmd, remote_password, logdir=None, timeout=60):
 
         if index == 2:
             local_child.sendline('yes')
-            index = local_child.expect(pexpect.EOF, 'assword:')
+            index = local_child.expect([pexpect.EOF, 'assword:'], timeout=timeout)
 
         if index == 1:
             local_child.sendline(remote_password)
-            local_child.expect(pexpect.EOF)
+            local_child.expect(pexpect.EOF, timeout=timeout)
 
 
 def get_tenant_name(auth_info=None):
@@ -330,7 +330,7 @@ def get_unique_name(name_str, existing_names=None, resource_type='other'):
         raise ValueError("Invalid resource_type provided. Valid types: {}".format(valid_types))
 
     if existing_names:
-        if resource_type in ['image', 'volume']:
+        if resource_type in ['image', 'volume', 'flavor']:
             unique_name = name_str
         else:
             unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
@@ -390,11 +390,19 @@ def get_timedelta_for_isotimes(time1, time2):
     Returns:
 
     """
-    time1 = time1.split(sep='.')[0]
-    time1_datetime = datetime.strptime(time1, "%Y-%m-%dT%H:%M:%S")
+    def _parse_time(time_):
+        time_ = time_.strip().split(sep='.')[0].split(sep='+')[0]
+        if 'T' in time_:
+            pattern = "%Y-%m-%dT%H:%M:%S"
+        elif ' ' in time_:
+            pattern = "%Y-%m-%d %H:%M:%S"
+        else:
+            raise ValueError("Unknown format for time1: {}".format(time_))
+        time_datetime = datetime.strptime(time_, pattern)
+        return time_datetime
 
-    time2 = time2.split(sep='.')[0]
-    time2_datetime = datetime.strptime(time2, "%Y-%m-%dT%H:%M:%S")
+    time1_datetime = _parse_time(time_=time1)
+    time2_datetime = _parse_time(time_=time2)
 
     return time2_datetime - time1_datetime
 
@@ -422,7 +430,8 @@ def wait_for_val_from_func(expt_val, timeout, check_interval, func, *args, **kwa
     return False, current_val
 
 
-def wait_for_process(ssh_client, process, sudo=False, disappear=False, timeout=60, check_interval=3, fail_ok=True):
+def wait_for_process(ssh_client, process, sudo=False, disappear=False, timeout=60, time_to_stay=1, check_interval=1,
+                     fail_ok=True):
     """
     Wait for given process to appear or disappear
 
@@ -431,29 +440,33 @@ def wait_for_process(ssh_client, process, sudo=False, disappear=False, timeout=6
         process (str): unique identification of process, such as pid, or unique proc name
         disappear (bool): whether to wait for proc appear or disappear
         timeout (int): max wait time
+        time_to_stay (int): seconds to persists
         check_interval (int): how often to check
+        fail_ok (bool):
 
     Returns (bool): whether or not process appear/disappear within timeout
 
     """
     cmd = 'ps aux | grep --color=never {} | grep -v grep'.format(process)
-    msg_str = 'disappear' if disappear else 'appear'
+    # msg_str = 'disappear' if disappear else 'appear'
 
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        if not sudo:
-            code, out = ssh_client.exec_cmd(cmd=cmd, fail_ok=True)
-        else:
-            code, out = ssh_client.exec_sudo_cmd(cmd=cmd, fail_ok=True)
+    res = ssh_client.wait_for_cmd_output_persists(cmd, process, timeout=timeout, time_to_stay=time_to_stay,
+                                                  strict=False, regex=False, check_interval=check_interval,
+                                                  exclude=disappear, non_zero_rtn_ok=True, sudo=sudo, fail_ok=fail_ok)
 
-        if (disappear and not out) or (out and not disappear):
-            LOG.info("Process {} {}ed".format(process, msg_str))
-            return True
+    return res
 
-        time.sleep(check_interval)
 
-    LOG.warning("Process {} did not {} within {} seconds".format(process, msg_str, timeout))
-    if fail_ok:
-        return False
-    else:
-        raise exceptions.TimeoutException("Timed out waiting for process {} to {}".format(process, msg_str))
+def get_date_in_format(ssh_client=None, date_format="%Y%m%d %T"):
+    """
+    Get date in given format.
+    Args:
+        ssh_client (SSHClient):
+        date_format (str): Please see date --help for valid format strings
+
+    Returns (str): date output in given format
+
+    """
+    if ssh_client is None:
+        ssh_client = ControllerClient.get_active_controller()
+    return ssh_client.exec_cmd("date +'{}'".format(date_format), fail_ok=False)[1]

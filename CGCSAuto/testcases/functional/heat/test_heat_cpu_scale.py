@@ -3,16 +3,16 @@ import time
 
 from pytest import mark
 
-from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec
+from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages
 from consts.filepaths import WRSROOT_HOME
 from keywords import nova_helper, vm_helper, heat_helper, network_helper
 from setup_consts import P1
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from utils import cli
 from utils.tis_log import LOG
 
 
-def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
+def launch_cpu_scaling_stack(con_ssh=None, auth_info=None):
     """
         Create heat stack using NestedAutoScale.yaml for vm scaling
             - Verify heat stack is created sucessfully
@@ -45,7 +45,8 @@ def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
 
     key_pair = vm_helper.get_any_keypair()
     cmd_list.append("-P KEYPAIR=%s " % key_pair)
-    image = 'cgcs-guest'
+    # image = 'cgcs-guest'
+    image = GuestImages.DEFAULT_GUEST
     cmd_list.append("-P IMAGE=%s " % image)
 
     net_id = network_helper.get_mgmt_net_id()
@@ -75,7 +76,7 @@ def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
     return 0, stack_name
 
 
-def wait_for_vm_to_scale(vm_name=None, expected_count=0, time_out=120, check_interval=3, con_ssh=None, auth_info=None):
+def wait_for_cpu_to_scale(vm_name=None, expected_count=0, time_out=120, check_interval=3, con_ssh=None, auth_info=None):
 
     end_time = time.time() + time_out
     while time.time() < end_time:
@@ -101,7 +102,7 @@ def wait_for_vm_to_scale(vm_name=None, expected_count=0, time_out=120, check_int
     ])
 # can add test fixture to configure hosts to be certain storage backing
 # FIXME test func args are unused. Deselected before fixing
-def _test_heat_vm_scale(action):
+def _test_heat_cpu_scale(action):
     """
     Basic Heat template testing:
         various Heat templates.
@@ -122,7 +123,7 @@ def _test_heat_vm_scale(action):
     """
     # create the heat stack
     LOG.tc_step("Creating heat stack for auto scaling Vms")
-    return_code, msg = launch_vm_scaling_stack()
+    return_code, msg = launch_cpu_scaling_stack()
 
     assert 0 == return_code, "Expected return code {}. Actual return code: {}; details: {}".format(0, return_code, msg)
 
@@ -165,7 +166,7 @@ def _test_heat_vm_scale(action):
     # remove the tmp file in the vm
     LOG.tc_step("removing /tmp/vote_no_to_stop in vm")
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id_after_scale) as vm_ssh:
-        vm_ssh.exec_cmd("rm /tmp/vote_no_to_stop")
+        vm_ssh.exec_cmd("rm -f /tmp/vote_no_to_stop")
 
     # wait for vm to be deleted
     LOG.tc_step("Checking that the Vm is removed now")

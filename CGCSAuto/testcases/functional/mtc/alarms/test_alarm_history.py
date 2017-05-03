@@ -68,7 +68,7 @@ def test_system_alarm_history_list():
     # Get the compute
         LOG.info("Lock compute and wait 30 seconds")
     host = 'compute-1'
-    if system_helper.is_small_footprint():
+    if system_helper.is_two_node_cpe():
         host = system_helper.get_standby_controller_name()
 
     HostsToRecover.add(host, scope='function')

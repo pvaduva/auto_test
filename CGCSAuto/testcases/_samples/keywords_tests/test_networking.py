@@ -1,7 +1,7 @@
 
 from utils.tis_log import LOG
 
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from keywords import vm_helper, network_helper
 
 

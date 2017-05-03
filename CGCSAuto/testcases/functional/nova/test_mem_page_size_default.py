@@ -6,7 +6,7 @@ from utils.tis_log import LOG
 from utils import table_parser
 from consts.cgcs import FlavorSpec, ImageMetadata
 from keywords import nova_helper, vm_helper, glance_helper, system_helper, cinder_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 #########################################

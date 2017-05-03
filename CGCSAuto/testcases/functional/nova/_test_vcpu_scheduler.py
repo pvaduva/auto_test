@@ -1,3 +1,6 @@
+##################################################################
+#  Disable vcpu scheduler tests for newton until feature ready  ##
+
 from pytest import mark
 
 from utils.tis_log import LOG
@@ -5,7 +8,7 @@ from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
 from consts.cli_errs import VCPUSchedulerErr        # Do not remove this import. Used in eval()
 from keywords import nova_helper, vm_helper, host_helper
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @mark.parametrize(('vcpu_num', 'vcpu_schedulers'), [

@@ -103,11 +103,13 @@ def test_upload_dir_log(get_patch_name):
         - Check the log files for the expected logs
 
     """
+
     patch_name = get_patch_name
     con_ssh = ControllerClient.get_active_controller()
     LOG.tc_step("Uploading patches from directory")
-    con_ssh.exec_sudo_cmd('sw-patch upload-dir test_patches')
-
+    code = con_ssh.exec_sudo_cmd('sw-patch upload-dir test_patches')[0]
+    if code is not 0:
+        skip("No patches found. Cannot test.")
     res_1 = check_dir(patch_name)
 
     search_for = ['sw-patch-controller-daemon.*INFO: Importing patches:.*{}'.format(patch_name),

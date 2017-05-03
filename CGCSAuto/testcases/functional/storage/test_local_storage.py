@@ -78,7 +78,7 @@ class TestLocalStorage(object):
                 while old_new_types:
                     host, old_type, _ = old_new_types.pop()
                     HostsToRecover.add(host, scope='class')
-                    host_helper.lock_host(host)
+                    host_helper.lock_host(host, swact=True)
                     cmd = 'host-lvg-modify -b {} {} nova-local'.format(old_type, host)
                     cli.system(cmd, fail_ok=False)
                     host_helper.unlock_host(host)
@@ -114,17 +114,18 @@ class TestLocalStorage(object):
             return -1, msg
 
         LOG.debug('compute: {} is not in local-storage-type:{} or will force to apply'.format(compute_dest, ls_type))
-        if compute_dest == system_helper.get_active_controller_name():
-            # this will happen on a CPE lab
-            LOG.debug('will swact the current active controller:{}'.format(compute_dest))
-            host_helper.swact_host()
+        # if compute_dest == system_helper.get_active_controller_name():
+        #     # this will happen on a CPE lab
+        #     LOG.debug('will swact the current active controller:{}'.format(compute_dest))
+        #     host_helper.swact_host()
 
         LOG.debug('get the original local-storage-type for compute:{}'.format(compute_dest))
         old_type = host_helper.get_local_storage_backing(compute_dest)
 
         LOG.tc_step('Lock the host:{} for applying storage-profile'.format(compute_dest))
         HostsToRecover.add(compute_dest, scope='function')
-        rtn_code, msg = host_helper.lock_host(compute_dest, con_ssh=ssh_client, fail_ok=False, check_first=True)
+        rtn_code, msg = host_helper.lock_host(compute_dest, con_ssh=ssh_client, fail_ok=False, check_first=True,
+                                              swact=True)
         if 0 == rtn_code:
             self._add_to_cleanup_list(to_cleanup=compute_dest, cleanup_type='locked')
 

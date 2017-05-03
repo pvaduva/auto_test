@@ -49,7 +49,7 @@ def test_modify_non_existing_cpu(lock_):
 
     """
     host = lock_
-    table_ = system_helper.get_host_cpu_list(host)
+    table_ = system_helper.get_host_cpu_list_table(host)
     cores = set(table_parser.get_column(table_, 'phy_core'))
     fake_proc_num = 2
     while fake_proc_num in cores:

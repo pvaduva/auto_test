@@ -6,7 +6,7 @@ from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
 from keywords import vm_helper, nova_helper, network_helper
 
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
@@ -25,19 +25,20 @@ def base_setup():
             {'net-id': tenant_net_id, 'vif-model': 'virtio'},
             {'net-id': internal_net_id, 'vif-model': 'virtio'}
     ]
-    base_vm = vm_helper.boot_vm(name='vif', flavor=flavor_id, nics=nics, reuse_vol=False)[1]
-    ResourceCleanup.add('vm', base_vm, scope='module')
+    base_vm = vm_helper.boot_vm(name='vif', flavor=flavor_id, nics=nics, cleanup='module', reuse_vol=False)[1]
+    # ResourceCleanup.add('vm', base_vm, scope='module')
 
     return base_vm, mgmt_net_id, tenant_net_id, internal_net_id
 
 
-@mark.sanity
+# Remove following testcase as it has been covered in other tests
+# @mark.sanity
 @mark.parametrize('vif_model', [
     'avp',
     'e1000',
     'virtio'
 ])
-def test_vif_models(vif_model, base_setup):
+def _test_vif_models(vif_model, base_setup):
     """
     boot avp,e100 and virtio instance
     KNI is same as avp
@@ -65,8 +66,8 @@ def test_vif_models(vif_model, base_setup):
             {'net-id': internal_net_id, 'vif-model': 'avp'}]
 
     LOG.tc_step("Boot vm with vif_model {} for tenant-net".format(vif_model))
-    vm_under_test = vm_helper.boot_vm(name=vif_model, nics=nics, reuse_vol=False)[1]
-    ResourceCleanup.add('vm', vm_under_test)
+    vm_under_test = vm_helper.boot_vm(name=vif_model, nics=nics, cleanup='function', reuse_vol=False)[1]
+    # ResourceCleanup.add('vm', vm_under_test)
 
     LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_under_test))
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)

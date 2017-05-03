@@ -10,7 +10,7 @@ from keywords import keystone_helper, host_helper, common
 from keywords.common import Count
 
 
-def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=None, ephemeral=None, swap=None,
+def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None, ephemeral=None, swap=None,
                   is_public=None, rxtx_factor=None, guest_os=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None,
                   storage_backing=None, check_storage_backing=True):
     """
@@ -56,7 +56,9 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=512, root_disk=None,
     flavor_name = common.get_unique_name(name_str=name, existing_names=existing_names, resource_type='flavor')
 
     if root_disk is None:
-        root_disk = GuestImages.IMAGE_FILES[guest_os][1] if guest_os else 1
+        if not guest_os:
+            guest_os = GuestImages.DEFAULT_GUEST
+        root_disk = GuestImages.IMAGE_FILES[guest_os][1]
 
     mandatory_args = ' '.join([flavor_name, flavor_id, str(ram), str(root_disk), str(vcpus)])
 
@@ -284,13 +286,9 @@ def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     Returns (str): id of the basic flavor
 
     """
-    size = 1
-    if guest_os and 'cgcs-guest' not in guest_os:
-        # if 'ubuntu' in guest_os:
-        #     size = 9
-        # elif 'centos' in guest_os:
-        #     size = 9
-        size = GuestImages.IMAGE_FILES[guest_os][1]
+    if not guest_os:
+        guest_os = GuestImages.DEFAULT_GUEST
+    size = GuestImages.IMAGE_FILES[guest_os][1]
 
     default_flavor_name = 'flavor-default-size{}'.format(size)
     flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)
@@ -324,7 +322,7 @@ def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok
     extra_specs_args = ''
     for key, value in extra_specs.items():
         extra_specs_args += " {}={}".format(key, value)
-    exit_code, output = cli.nova('flavor-key', '{} set {}'.format(flavor, extra_specs_args),
+    exit_code, output = cli.nova('flavor-key', '{} set {}'.format(flavor, extra_specs_args.strip()),
                                  ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
 
     if exit_code == 1:
@@ -920,6 +918,11 @@ def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=T
     return table_parser.get_value_two_col_table(table_, field, strict)
 
 
+def get_vm_fault_message(vm_id, con_ssh=None, auth_info=None):
+    table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_value_two_col_table(table_, 'fault', merge_lines=True)
+
+
 def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get value of specified field for given vm(s) as a dictionary.
@@ -932,7 +935,9 @@ def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADM
     Returns (dict): e.g.,{<vm_id1>: <value of the field for vm1>, <vm_id2>: <value of the field for vm2>}
 
     """
-    table_ = table_parser.table(cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info))
+    args =  '--all-tenants' if auth_info['tenant'] == 'admin' else ''
+
+    table_ = table_parser.table(cli.nova('list', args, ssh_client=con_ssh, auth_info=auth_info))
     if vm_ids:
         table_ = table_parser.filter_table(table_, ID=vm_ids)
     else:
@@ -1136,7 +1141,7 @@ def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN
         force (bool):
         con_ssh (SSHClient):
         auth_info (dict):
-        **kwargs: quota/limit pair(s)
+        **kwargs: quota/limit pair(s). Valid keys: user, instances, cores, ram, floating-ips, metadata-items, key-pairs
 
     Returns (None):
 
@@ -1150,6 +1155,7 @@ def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN
 
     args_ = ''
     for key in kwargs:
+        key = key.strip().replace('_', '-')
         args_ += '--{} {} '.format(key, kwargs[key])
 
     if force:
@@ -1241,7 +1247,7 @@ def get_image_metadata(image, meta_keys, auth_info=Tenant.ADMIN, con_ssh=None):
     results = {}
     for meta_key in meta_keys:
         meta_key = meta_key.strip()
-        value = table_parser.get_value_two_col_table(table_, 'metadata '+meta_key, strict=False)
+        value = table_parser.get_value_two_col_table(table_, meta_key, strict=False)
         if value:
             results[meta_key] = value
 
@@ -1358,12 +1364,43 @@ def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=Tru
     return int(info_str) if rtn_int else info_str
 
 
-def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_pci_interface_stats_for_providernet(providernet_id, fields=('pci_pfs_configured', 'pci_pfs_used',
+                                                                    'pci_vfs_configured', 'pci_vfs_used'),
+                                            auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    get pci interface usage
+    Args:
+        providernet_id (str): id of a providernet
+        fields: fields such as ('pci_vfs_configured', 'pci_pfs_used')
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple): tuple of integers
+
+    """
+    if not providernet_id:
+        raise ValueError("Providernet id is not provided.")
+
+    table_ = table_parser.table(cli.nova('providernet-show', providernet_id, ssh_client=con_ssh, auth_info=auth_info))
+    rtn_vals = []
+    for field in fields:
+        pci_stat = int(table_parser.get_value_two_col_table(table_, field, strict=True))
+        rtn_vals.append(pci_stat)
+    return tuple(rtn_vals)
+
+
+def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, mac_addr=None, pci_addr=None,
+                           net_id=None, net_name=None, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Get vm interface info for given nic from nova show
     Args:
         vm_id (str): id of the vm to get interface info for
-        nic (str): such as nic1 or nic2 ...
+        nic_names (str|list): nic name such as nic1, nic2, etc
+        vif_model (str): such as virtio, pci-sriov
+        mac_addr (str):
+        pci_addr (str):
+        net_id (str): network id to filter out the vm nic
+        net_name (str): network name. This is only used if net_id is None.
         auth_info (dict):
         con_ssh (SSHClient):
 
@@ -1380,26 +1417,41 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, auth_info=Tena
             if "nic" not in nic:
                 raise ValueError("Invalid nic(s) provided: {}. Should be in the form of: e.g., nic4".format(nic_names))
 
+    if net_id:
+        nets_tab = table_parser.table(cli.neutron('net-list', auth_info=auth_info, ssh_client=con_ssh))
+        net_name = table_parser.get_values(nets_tab, 'name', id=net_id)[0]
+
     table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))
     all_nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
+    if isinstance(all_nics, str):
+        all_nics = [all_nics]
     all_nics = [eval(nic_) for nic_ in all_nics]
+
+    # Sort the nics from nic1, nic2 ... nicN
+    all_nics = sorted(all_nics, key=lambda nic_: int((list(nic_.keys())[0]).split(sep='nic')[-1]))
+    LOG.debug("All nics: {}".format(all_nics))
 
     nics_to_rtn = list(all_nics)
     if not nics_to_rtn:
         LOG.warning("No nics attached to vm {}".format(vm_id))
         return []
-    elif vif_model or nic_names:
+    elif vif_model or nic_names or mac_addr or pci_addr or net_name:
         for item in all_nics:
-            if vif_model:
-                if vif_model != list(item.values())[0]['vif_model']:
-                    nics_to_rtn.remove(item)
+            nic_info = list(item.values())[0]
+            if (vif_model and vif_model != nic_info['vif_model']) or \
+                    (mac_addr and mac_addr != nic_info['mac_address']) or \
+                    (pci_addr and pci_addr != nic_info['vif_pci_address']) or \
+                    (net_name and net_name != nic_info['network']):
+                nics_to_rtn.remove(item)
+
             if nic_names:
                 for nic_name in nic_names:
                     if nic_name not in item:
                         nics_to_rtn.remove(item)
+            LOG.debug("nics_to_rtn: {}".format(nics_to_rtn))
 
         if not nics_to_rtn:
-            LOG.warning("Cannot find nic info for given nic_names {} and/or vif_model {}".format(nic_names, vif_model))
+            LOG.warning("Cannot find nic info with given criteria")
             return []
 
     nics_to_rtn = [list(nic_.values())[0] for nic_ in nics_to_rtn]

@@ -1,19 +1,20 @@
 import os
+import time
 from pytest import fixture, mark, skip
 
 from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
-from setup_consts import P1
+from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper, cinder_helper, glance_helper,\
+    host_helper, common, system_helper
+from setup_consts import P1, P2, P3
 
-from consts.heat import Heat
+from consts.heat import Heat, HeatUpdate
 from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HEAT_PATH
 from consts.auth import Tenant
-from testfixtures.resource_mgmt import ResourceCleanup
-
-from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper, cinder_helper, glance_helper,\
-    host_helper, common
+from consts.reasons import SkipReason
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, auth_info=None):
@@ -139,6 +140,68 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
     return 1
 
 
+def update_stack(stack_name, template_name=None, ssh_client=None, fail_ok=False, auth_info=Tenant.ADMIN):
+    """
+        Update heat stack and verify stack is updated as expected
+        Args:
+            stack_name (str): stack to be updated
+            template_name (str): template to be used to create heat stack.
+            ssh_client (SSHClient): If None, active controller ssh will be used.
+            auth_info (dict): Tenant dict. If None, primary tenant will be used.
+            fail_ok (bool): Whether to throw exception if update command fails to send
+
+        Returns (tuple): (rtn_code (int), message (str))
+
+    """
+
+    t_name, yaml = template_name.split('.')
+    to_verify = getattr(Heat, t_name)['verify']
+    update_params = getattr(HeatUpdate, t_name)['params']
+    update_vals = getattr(HeatUpdate, t_name)['new_vals']
+
+    template_path = os.path.join(WRSROOT_HOME, HEAT_PATH, template_name)
+    cmd_list = [" -f %s " % template_path]
+
+    for i in range(len(update_params)):
+        cmd_list.append("-P %s=%s " % (update_params[i], update_vals[i]))
+
+    #The -x parameter keeps the existing values of parameters not in update_params
+    cmd_list.append(" -x %s" % stack_name)
+    params_str = ''.join(cmd_list)
+    LOG.info("Executing command: heat %s stack-update", params_str);
+    exitcode, output = cli.heat('stack-update', params_str, ssh_client=ssh_client, fail_ok=fail_ok,
+                                auth_info=auth_info, rtn_list=True)
+
+    # See how long it takes to apply the update
+    start_time = time.time()
+
+    if exitcode == 1:
+        LOG.warning("Update heat stack request rejected.")
+        return [1, output]
+    LOG.info("Stack {} updated sucessfully.".format(stack_name))
+
+    LOG.tc_step("Verifying Heat Stack Status for UPDATE_COMPLETE for updated stack %s",stack_name)
+
+    if not heat_helper.wait_for_heat_state(stack_name=stack_name,state='UPDATE_COMPLETE',auth_info=auth_info):
+        return [1, 'stack did not go to state UPDATE_COMPLETE']
+    LOG.info("Stack {} is in expected UPDATE_COMPLETE state.".format(stack_name))
+    end_time = time.time();
+
+    LOG.info("Update took %d seconds", (end_time - start_time))
+
+    for item in to_verify:
+        LOG.tc_step("Verifying Heat updated resources %s for stack %s", item, stack_name)
+        verify_result = verify_heat_resource(to_verify=item, template_name=t_name,stack_name=stack_name,
+                                             auth_info=auth_info)
+        if verify_result is not 0:
+            LOG.warning("Verify resouces %s updated by heat stack Failed.", item)
+            return [1, "Heat resource verification failed"]
+
+    LOG.info("Stack {} resources are updated as expected.".format(stack_name))
+
+    return [0, 'stack_status']
+
+
 def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, delete_after_swact=False):
     """
         Create/Delete heat stack and verify the resource are created/deleted as expeted
@@ -155,7 +218,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 
     """
 
-    fail_ok = 0
+    fail_ok = False
 
     t_name, yaml = template_name.split('.')
     params = getattr(Heat, t_name)['params']
@@ -206,6 +269,13 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 
     LOG.info("Stack {} resources are created as expected.".format(stack_name))
 
+    if hasattr(HeatUpdate, t_name):
+        LOG.tc_step("Updating stack %s", stack_name)
+        update_code, update_msg = update_stack(stack_name, template_name, ssh_client=con_ssh, auth_info=auth_info,
+                                               fail_ok=fail_ok)
+        if update_code == 1:
+            return [1, update_msg] 
+
     if delete_after_swact:
         swact_result = host_helper.swact_host()
         if swact_result is 0:
@@ -232,42 +302,60 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     return [0, 'stack_status']
 
 
+@fixture(scope='module', autouse=True)
+def revert_quota(request):
+    tenants_quotas = {}
+    quota_tab = table_parser.table(cli.neutron('quota-list', auth_info=Tenant.ADMIN))
+    tenants = table_parser.get_column(quota_tab, 'tenant_id')
+    for tenant_id in set(tenants):
+        network_quota = network_helper.get_quota('network', tenant_id=tenant_id)
+        tenants_quotas[tenant_id] = network_quota
+
+    def revert():
+        LOG.fixture_step("Revert network quotas to original values.")
+        for tenant_id_, network_quota_ in tenants_quotas.items():
+            network_helper.update_quotas(tenant_id=tenant_id_, network=network_quota_)
+    request.addfinalizer(revert)
+
+    return tenants_quotas
+
 # Overall skipif condition for the whole test function (multiple test iterations)
 # This should be a relatively static condition.i.e., independent with test params values
 # @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
 @mark.parametrize(('template_name'), [
-        mark.sanity(('WR_Neutron_ProviderNetRange.yaml')),
-        P1(('WR_Neutron_ProviderNet.yaml')),
-        P1(('OS_Cinder_Volume.yaml')),
-        P1(('OS_Glance_Image.yaml')),
-        P1(('OS_Ceilometer_Alarm.yaml')),
-        P1(('OS_Neutron_Port.yaml')),
-        P1(('OS_Neutron_Net.yaml')),
-        P1(('OS_Neutron_Subnet.yaml')),
-        P1(('OS_Nova_Flavor.yaml')),
-        P1(('OS_Neutron_FloatingIP.yaml')),
-        P1(('OS_Neutron_Router.yaml')),
-        P1(('OS_Neutron_RouterGateway.yaml')),
-        P1(('OS_Neutron_RouterInterface.yaml')),
-        P1(('OS_Neutron_SecurityGroup.yaml')),
-        P1(('OS_Nova_ServerGroup.yaml')),
-        P1(('OS_Nova_KeyPair.yaml')),
-        P1(('WR_Neutron_QoSPolicy.yaml')),
-        P1(('OS_Heat_Stack.yaml')),
-        P1(('OS_Cinder_VolumeAttachment.yaml')),
-        P1(('OS_Nova_Server.yaml')),
-        P1(('OS_Heat_AccessPolicy.yaml')),
-        P1(('OS_Heat_AutoScalingGroup.yaml')),
+    mark.sanity(('WR_Neutron_ProviderNetRange.yaml')),
+    mark.nightly(('WR_Neutron_ProviderNet.yaml')),
+    mark.nightly(('OS_Cinder_Volume.yaml')),
+    mark.nightly(('OS_Glance_Image.yaml')),
+    mark.nightly(('OS_Ceilometer_Alarm.yaml')),
+    mark.nightly(('OS_Neutron_Port.yaml')),
+    mark.nightly(('OS_Neutron_Net.yaml')),
+    mark.nightly(('OS_Neutron_Subnet.yaml')),
+    mark.nightly(('OS_Nova_Flavor.yaml')),
+    mark.nightly(('OS_Neutron_FloatingIP.yaml')),
+    mark.nightly(('OS_Neutron_Router.yaml')),
+    mark.nightly(('OS_Neutron_RouterGateway.yaml')),
+    mark.nightly(('OS_Neutron_RouterInterface.yaml')),
+    mark.nightly(('OS_Neutron_SecurityGroup.yaml')),
+    mark.nightly(('OS_Nova_ServerGroup.yaml')),
+    mark.nightly(('OS_Nova_KeyPair.yaml')),
+    mark.nightly(('WR_Neutron_QoSPolicy.yaml')),
+    mark.nightly(('OS_Heat_Stack.yaml')),
+    mark.nightly(('OS_Cinder_VolumeAttachment.yaml')),
+    mark.nightly(('OS_Nova_Server.yaml')),
+    mark.nightly(('OS_Heat_AccessPolicy.yaml')),
+    mark.nightly(('OS_Heat_AutoScalingGroup.yaml')),
     ])
 # can add test fixture to configure hosts to be certain storage backing
-def test_heat_template(template_name):
+def test_heat_template(template_name, revert_quota):
     """
     Basic Heat template testing:
         various Heat templates.
 
     Args:
         template_name (str): e.g, OS_Cinder_Volume.
+        revert_quota (dict): test fixture to revert network quota.
 
     =====
     Prerequisites (skip test if not met):
@@ -280,6 +368,12 @@ def test_heat_template(template_name):
         - Delete Heat stack and verify resource deletion
 
     """
+    if template_name == 'OS_Neutron_RouterInterface.yaml':
+        LOG.tc_step("Increase network quota by 2 for every tenant")
+        tenants_quotas = revert_quota
+        for tenant_id, network_quota in tenants_quotas.items():
+            network_quota = network_helper.get_quota('network', tenant_id=tenant_id)
+            network_helper.update_quotas(tenant_id=tenant_id, network=network_quota + 2)
 
     # add test step
     return_code, msg = verify_basic_template(template_name)
@@ -293,10 +387,9 @@ def test_heat_template(template_name):
 # This should be a relatively static condition.i.e., independent with test params values
 # @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
-@mark.parametrize(
-    ('template_name'), [
-        P1(('OS_Cinder_Volume.yaml')),
-    ])
+@mark.parametrize('template_name', [
+    mark.nightly('OS_Cinder_Volume.yaml'),
+])
 # can add test fixture to configure hosts to be certain storage backing
 def test_delete_heat_after_swact(template_name):
     """
@@ -313,12 +406,12 @@ def test_delete_heat_after_swact(template_name):
         - Create a heat stack with the given template
         - Verify heat stack is created sucessfully
         - Verify heat resources are created
-        - Sawct controllers
+        - Swact controllers
         - Delete Heat stack and verify resource deletion
 
     """
-
-
+    if len(system_helper.get_controllers()) < 2:
+        skip(SkipReason.LESS_THAN_TWO_CONTROLLERS)
 
     # add test step
     return_code, msg = verify_basic_template(template_name, delete_after_swact=True)
