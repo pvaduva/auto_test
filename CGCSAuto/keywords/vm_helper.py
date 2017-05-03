@@ -1255,6 +1255,9 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
     if isinstance(to_vms, str):
         to_vms = [to_vms]
 
+    if not isinstance(from_vm, str):
+        raise ValueError("from_vm is not a string: {}".format(from_vm))
+
     try:
         with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                    prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
@@ -3184,6 +3187,8 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
         - (2, <vms_host_err>)   some vms' host did not change after host reboot
 
     """
+    if isinstance(vms_to_check, str):
+        vms_to_check = [vms_to_check]
 
     LOG.info("Evacuate following vms from {}: {}".format(host, vms_to_check))
     HostsToRecover.add(host)

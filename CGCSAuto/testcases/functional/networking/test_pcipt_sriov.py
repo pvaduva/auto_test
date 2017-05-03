@@ -42,27 +42,6 @@ def vif_model_check(request):
     if 'mgmt' in pci_net:
         skip("Only management networks have {} interface.".format(vif_model))
 
-    # host_num = 1
-    # pci_net = None
-    # pci_nets_with_min_two_hosts = network_helper.get_pci_nets_with_min_hosts(min_hosts=2, pci_type=vif_model)
-    #
-    # # for the issue that booting VM on that kind of net will fail
-    # if not pci_nets_with_min_two_hosts or len(pci_nets_with_min_two_hosts) < 1:
-    #     skip('Not enough PCI networks of type: {} on this lab'.format(vif_model))
-    #
-    # if pci_nets_with_min_two_hosts:
-    #     pci_net = pci_nets_with_min_two_hosts[0]
-    #     if 'mgmt' not in pci_net:
-    #         host_num = 2  # or > 2
-    #
-    # if host_num == 1:
-    #     pci_nets_with_one_host = network_helper.get_pci_nets_with_min_hosts(min_hosts=1, pci_type=vif_model)
-    #     if not pci_nets_with_one_host:
-    #         skip("Even though some host(s) configured with {} interface, but none is up".format(vif_model))
-    #     pci_net = pci_nets_with_one_host[0]
-    #     if 'mgmt' in pci_net:
-    #         skip("Only management networks have {} interface.".format(vif_model))
-
     if 'internal' in pci_net:
         net_type = 'internal'
     else:
@@ -203,37 +182,29 @@ def test_pci_resource_usage(vif_model_check):
     if 'sriov' in vif_model:
         vm_type = 'sriov'
         resource_param = 'pci_vfs_used'
+        max_resource = 'pci_vfs_configured'
     else:
         vm_type = 'pcipt'
         resource_param = 'pci_pfs_used'
+        max_resource = 'pci_pfs_configured'
 
     LOG.tc_step("Get resource usage for {} interface before booting VM(s)".format(vif_model))
     LOG.info("provider net id for {} interface: {}".format(vif_model, pnet_id))
 
     assert pnet_id, "provider network id for {} interface is not found".format(vif_model)
 
-    pre_resource_value = nova_helper.get_provider_net_info(pnet_id, field=resource_param)
-    LOG.info("Resource Usage {} for {}".format(pre_resource_value, vif_model))
+    total_val, pre_resource_value = nova_helper.get_pci_interface_stats_for_providernet(
+            pnet_id, fields=(max_resource, resource_param))
+    LOG.info("Resource Usage {} for {}. Resource configured: {}".format(pre_resource_value, vif_model, total_val))
 
-    vm_limit = vm_helper.get_vm_apps_limit(vm_type=vm_type)
-    LOG.info("limit {} for {}".format(vm_limit, vm_type))
-
-    assert vm_limit > 0, "VM limit for {} should be at least 1".format(vif_model)
-
+    expt_change = 2 if vif_model == 'pci-passthrough' and extra_pcipt_net else 1
+    vm_limit = int((total_val - pre_resource_value) / expt_change)
     vms_under_test = []
     for i in range(vm_limit):
         LOG.tc_step("Boot a vm with {} vif model on {} net".format(vif_model, net_type))
-        res, vm_id, err, vol_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, cleanup='function',
-                                                    nics=nics_to_test, fail_ok=True)
-        # if vm_id:
-        #     ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-        #     pass
-        # if vol_id:
-        #     ResourceCleanup.add('volume', vol_id)
-        #     pass
-        assert 0 == res, "VM is not booted successfully. Error: {}".format(err)
-
+        vm_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, cleanup='function', nics=nics_to_test)[1]
         vms_under_test.append(vm_id)
+
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
         if vm_type == 'pcipt':
@@ -245,18 +216,20 @@ def test_pci_resource_usage(vif_model_check):
 
         LOG.tc_step("Check resource usage for {} interface increased by 1".format(vif_model))
         resource_value = nova_helper.get_provider_net_info(pnet_id, field=resource_param)
-        assert pre_resource_value + 1 == resource_value, "Resource usage for {} is not increased by 1".format(vif_model)
+        assert pre_resource_value + expt_change == resource_value, "Resource usage for {} is not increased by {}".\
+            format(vif_model, expt_change)
+
         pre_resource_value = resource_value
 
     for vm_to_del in vms_under_test:
         LOG.tc_step("Check resource usage for {} interface reduced by 1 after deleting a vm".format(vif_model))
         vm_helper.delete_vms(vm_to_del, check_first=False, stop_first=False)
-        resource_val = common.wait_for_val_from_func(expt_val=pre_resource_value - 1, timeout=30, check_interval=3,
-                                                     func=nova_helper.get_provider_net_info,
+        resource_val = common.wait_for_val_from_func(expt_val=pre_resource_value - expt_change, timeout=30,
+                                                     check_interval=3, func=nova_helper.get_provider_net_info,
                                                      providernet_id=pnet_id, field=resource_param)[1]
-        # resource_value = nova_helper.get_provider_net_info(pnet_id, field=resource_param)
 
-        assert pre_resource_value - 1 == resource_val, "Resource usage for {} is not reduced by 1".format(vif_model)
+        assert pre_resource_value - expt_change == resource_val, "Resource usage for {} is not reduced by {}".\
+            format(vif_model, expt_change)
         pre_resource_value = resource_val
 
 

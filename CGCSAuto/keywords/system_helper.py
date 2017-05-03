@@ -352,7 +352,7 @@ def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=No
 
     rtn_vals_list = zip(*rtn_vals_list)
     if combine_entries:
-        rtn_vals_list = [' '.join(vals) for vals in rtn_vals_list]
+        rtn_vals_list = ['::::'.join(vals) for vals in rtn_vals_list]
 
     return rtn_vals_list
 

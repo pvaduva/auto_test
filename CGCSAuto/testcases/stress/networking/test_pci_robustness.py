@@ -1,4 +1,4 @@
-from pytest import fixture, mark, skip
+from pytest import fixture, skip
 
 from utils.tis_log import LOG
 
@@ -11,7 +11,11 @@ from testfixtures.recover_hosts import HostsToRecover
 """
 Userstory: us53856 & US58643 Robustness testcases
 Test plan: /teststrategies/cgcs2.0/us53856_us58643_sriov_test_strategy.txt
+
+Notes:
+- PCIPT Tests are best to run in CX4 lab (2 pcipt nics for each vm) with 3+ computes (able to move vm to other host)
 """
+
 
 def check_vm_pci_interface(vms, net_type, seg_id=None):
     for vm in vms:
@@ -23,7 +27,7 @@ def check_vm_pci_interface(vms, net_type, seg_id=None):
             vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_id, net_seg_id=seg_id)
 
     # Ensure pci interface working well
-    vm_helper.ping_vms_from_vm(vms[0], vms[1:], net_types=['mgmt', net_type], vlan_zero_only=True)
+    vm_helper.ping_vms_from_vm(vms[1:], vms[0], net_types=['mgmt', net_type], vlan_zero_only=True)
 
 
 def get_pci_net(request, vif_model, primary_tenant, primary_tenant_name, other_tenant):
@@ -90,6 +94,8 @@ def pci_prep():
     primary_tenant_name = common.get_tenant_name(primary_tenant)
     other_tenant = Tenant.TENANT2 if primary_tenant_name == 'tenant1' else Tenant.TENANT1
 
+    nova_helper.update_quotas(tenant='tenant1', cores=100)
+    nova_helper.update_quotas(tenant='tenant2', cores=100)
     return primary_tenant, primary_tenant_name, other_tenant
 
 
@@ -109,9 +115,9 @@ def get_pci_hosts(vif_model, pnet_name):
     return valid_pci_hosts
 
 
-class SriovRobustness:
+class TestSriov:
     @fixture(scope='class')
-    def sriov_prep(self, request, pci_prep):
+    def sriov_prep(self, request, pci_prep, add_cgcsauto_zone):
         primary_tenant, primary_tenant_name, other_tenant = pci_prep
         vif_model = 'pci-sriov'
 
@@ -122,11 +128,8 @@ class SriovRobustness:
 
         # Get initial host with least vcpus
         host_cpus = host_helper.get_vcpus_for_computes(hosts=pci_hosts, rtn_val='total')
-        min_cpu_num = min(host_cpus)
-        host_index = host_cpus.index(min_cpu_num)
-        initial_host = pci_hosts[host_index]
-        other_index = 0 if host_index == 1 else 1
-        other_host = pci_hosts[other_index]
+        initial_host = min(host_cpus, key=host_cpus.get)
+        other_host = pci_hosts[0] if initial_host == pci_hosts[1] else pci_hosts[1]
 
         def remove_host_from_zone():
             LOG.fixture_step("Remove {} hosts from cgcsauto zone".format(vif_model))
@@ -186,13 +189,14 @@ class SriovRobustness:
         LOG.fixture_step("Create a flavor with dedicated cpu policy and {} vcpus".format(vm_vcpus))
         flavor_id = nova_helper.create_flavor(name='dedicated_{}vcpu'.format(vm_vcpus), ram=1024, vcpus=vm_vcpus)[1]
         ResourceCleanup.add('flavor', flavor_id, scope='module')
-        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
+        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'prefer'}
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
         # Boot vms with 2 {} vifs each, and wait for pingable
         LOG.tc_step("Boot {} vms with 2 {} vifs each".format(vm_num, vif_model))
         vms = []
         for i in range(vm_num):
+            LOG.info("Booting vm{}...".format(i + 1))
             vm_id = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='function',
                                       vm_host=initial_host, avail_zone='cgcsauto')[1]
             vms.append(vm_id)
@@ -216,6 +220,9 @@ class SriovRobustness:
         vfs_use_post_lock = nova_helper.get_provider_net_info(pnet_id, field='pci_vfs_used')
         assert vfs_use_post_boot == vfs_use_post_lock, "Number of PCI vfs used after locking host is not as expected"
 
+        LOG.tc_step("Unlock {}".format(initial_host))
+        host_helper.unlock_host(initial_host)
+
         LOG.tc_step("Reboot {} and ensure vms are evacuated to {}".format(other_host, initial_host))
         vm_helper.evacuate_vms(other_host, vms, post_host=initial_host)
         check_vm_pci_interface(vms, net_type=net_type)
@@ -223,7 +230,7 @@ class SriovRobustness:
         assert vfs_use_post_boot == vfs_use_post_evac, "Number of PCI vfs used after evacuation is not as expected"
 
 
-class PciptRobustness:
+class TestPcipt:
     @fixture(scope='class')
     def pcipt_prep(self, request, pci_prep):
         primary_tenant, primary_tenant_name, other_tenant = pci_prep
@@ -235,9 +242,7 @@ class PciptRobustness:
 
         # Get initial host with least vcpus
         host_cpus = host_helper.get_vcpus_for_computes(hosts=pci_hosts, rtn_val='total')
-        min_cpu_num = min(host_cpus)
-        host_index = host_cpus.index(min_cpu_num)
-        min_vcpu_host = pci_hosts[host_index]
+        min_vcpu_host = min(host_cpus, key=host_cpus.get)
 
         LOG.fixture_step("Get seg_id for {} for vlan tagging on pci-passthough device later".format(pci_net_id))
         seg_id = network_helper.get_net_info(net_id=pci_net_id, field='segmentation_id', strict=False,
@@ -301,63 +306,78 @@ class PciptRobustness:
         LOG.fixture_step("Create a flavor with dedicated cpu policy and {} vcpus".format(vm_vcpus))
         flavor_id = nova_helper.create_flavor(name='dedicated_{}vcpu'.format(vm_vcpus), ram=1024, vcpus=vm_vcpus)[1]
         ResourceCleanup.add('flavor', flavor_id, scope='module')
-        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
+        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'prefer'}
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
         # Boot vms with 2 {} vifs each, and wait for pingable
         LOG.tc_step("Boot {} vms with 2 {} vifs each".format(vm_num, vif_model))
         vms = []
         for i in range(vm_num):
+            LOG.info("Booting pci-passthrough vm{}".format(i+1))
             vm_id = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='function')[1]
             vms.append(vm_id)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
             vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id, seg_id)
 
-        pfs_use_post_boot = nova_helper.get_provider_net_info(pnet_id, field='pci_vfs_used')
-        assert pfs_use_post_boot - pfs_use_init == vm_num, "Number of PCI pfs used is not as expected"
+        pfs_use_post_boot = nova_helper.get_provider_net_info(pnet_id, field='pci_pfs_used')
+        resource_change = 2 if isinstance(seg_id, dict) else 1
+        assert pfs_use_post_boot - pfs_use_init == vm_num * resource_change, "Number of PCI pfs used is not as expected"
 
         check_vm_pci_interface(vms=vms, net_type=net_type)
         HostsToRecover.add(pci_hosts)
 
-        LOG.tc_step("Test lock {} vms hosts started".format(vif_model))
-        for vm in vms:
-            vm_host = nova_helper.get_vm_host(vm)
-            assert vm_host in pci_hosts, "VM is not booted on pci_host"
+        pfs_use_pre_action = pfs_use_post_boot
+        iter_count = 2 if len(pci_hosts) < 3 else 1
+        for i in range(iter_count):
+            if i == 1:
+                LOG.tc_step("Delete a pcipt vm and test lock and reboot pcipt host again for success pass")
+                vm_helper.delete_vms(vms=vms[1])
+                vms.pop()
+                pfs_use_pre_action -= resource_change
+                common.wait_for_val_from_func(expt_val=pfs_use_pre_action, timeout=30, check_interval=3,
+                                              func=nova_helper.get_provider_net_info,
+                                              providernet_id=pnet_id, field='pci_pfs_used')
 
-            LOG.tc_step("Lock host of {} vms: {}".format(vif_model, vm_host))
-            code, output = host_helper.lock_host(host=vm_host, check_first=False, swact=True, fail_ok=True)
-            post_lock_host = nova_helper.get_vm_host(vm)
-            assert post_lock_host in pci_hosts, "VM is not on pci host after migrating"
+            LOG.tc_step("Test lock {} vms hosts started - iter{}".format(vif_model, i+1))
+            for vm in vms:
+                pre_lock_host = nova_helper.get_vm_host(vm)
+                assert pre_lock_host in pci_hosts, "VM is not booted on pci_host"
 
-            if len(pci_hosts) < 3:
-                assert 5 == code, "Expect host-lock fail due to migration of vm failure. Actual: {}".format(output)
-                assert vm_host == post_lock_host, "VM host should not change when no other host to migrate to"
-            else:
-                assert 0 == code, "Expect host-lock successful. Actual: {}".format(output)
-                assert post_lock_host != vm_host, "VM host did not change"
+                LOG.tc_step("Lock host of {} vms: {}".format(vif_model, pre_lock_host))
+                code, output = host_helper.lock_host(host=pre_lock_host, check_first=False, swact=True, fail_ok=True)
+                post_lock_host = nova_helper.get_vm_host(vm)
+                assert post_lock_host in pci_hosts, "VM is not on pci host after migrating"
 
-            check_vm_pci_interface(vms, net_type=net_type)
-            host_helper.unlock_host(vm_host, available_only=True)
+                if len(pci_hosts) < 3 and i == 0:
+                    assert 5 == code, "Expect host-lock fail due to migration of vm failure. Actual: {}".format(output)
+                    assert pre_lock_host == post_lock_host, "VM host should not change when no other host to migrate to"
+                else:
+                    assert 0 == code, "Expect host-lock successful. Actual: {}".format(output)
+                    assert pre_lock_host != post_lock_host, "VM host did not change"
+                    LOG.tc_step("Unlock {}".format(pre_lock_host))
 
-        pfs_use_post_lock = nova_helper.get_provider_net_info(pnet_id, field='pci_vfs_used')
-        assert pfs_use_post_boot == pfs_use_post_lock, "Number of PCI pfs used after host-lock is not as expected"
+                check_vm_pci_interface(vms, net_type=net_type)
+                host_helper.unlock_host(pre_lock_host, available_only=True)
 
-        LOG.tc_step("Test evacuate {} vms started".format(vif_model))
-        for vm in vms:
-            vm_host = nova_helper.get_vm_host(vm)
+            pfs_use_post_lock = nova_helper.get_provider_net_info(pnet_id, field='pci_pfs_used')
+            assert pfs_use_pre_action == pfs_use_post_lock, "Number of PCI pfs used after host-lock is not as expected"
 
-            LOG.tc_step("Reboot {} and ensure {} vm are evacuated when applicable".format(vm_host, vif_model))
-            code, output = vm_helper.evacuate_vms(vm_host, vm, fail_ok=True, wait_for_host_up=True)
+            LOG.tc_step("Test evacuate {} vms started - iter{}".format(vif_model, i+1))
+            for vm in vms:
+                pre_evac_host = nova_helper.get_vm_host(vm)
 
-            if len(pci_hosts) < 3:
-                assert 2 == code, "Expect vm to stay on same host due to no other pcipt host. Actual:{}".format(output)
-            else:
-                assert 0 == code, "Expect vm evacuated to other host. Actual: {}".format(output)
+                LOG.tc_step("Reboot {} and ensure {} vm are evacuated when applicable".format(pre_evac_host, vif_model))
+                code, output = vm_helper.evacuate_vms(pre_evac_host, vm, fail_ok=True, wait_for_host_up=True)
 
-            post_evac_host = nova_helper.get_vm_host(vm)
-            assert post_evac_host in pci_hosts, "VM is not on pci host after evacuation"
+                if len(pci_hosts) < 3 and i == 0:
+                    assert 2 == code, "Expect vm stay on same host due to migration fail. Actual:{}".format(output)
+                else:
+                    assert 0 == code, "Expect vm evacuated to other host. Actual: {}".format(output)
 
-            check_vm_pci_interface(vms, net_type=net_type)
+                post_evac_host = nova_helper.get_vm_host(vm)
+                assert post_evac_host in pci_hosts, "VM is not on pci host after evacuation"
 
-        pfs_use_post_evac = nova_helper.get_provider_net_info(pnet_id, field='pci_vfs_used')
-        assert pfs_use_post_boot == pfs_use_post_evac, "Number of PCI pfs used after evacuation is not as expected"
+                check_vm_pci_interface(vms, net_type=net_type)
+
+            pfs_use_post_evac = nova_helper.get_provider_net_info(pnet_id, field='pci_pfs_used')
+            assert pfs_use_pre_action == pfs_use_post_evac, "Number of PCI pfs used after evacuation is not as expected"

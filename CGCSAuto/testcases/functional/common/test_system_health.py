@@ -6,6 +6,12 @@ from consts.cgcs import EventLogID
 from keywords import host_helper, system_helper
 
 
+# Do not check alarms for test in this module, which are read only tests.
+@fixture()
+def check_alarms():
+    pass
+
+
 class TestCoreDumpsAndCrashes:
     @fixture(scope='class')
     def post_coredumps_and_crash_reports(self):
@@ -44,7 +50,7 @@ def test_system_alarms(pre_alarms_session):
     for alarm in post_alarms:
         if alarm not in pre_alarms_session:
             # NTP alarm handling
-            alarm_id, entity_id = alarm
+            alarm_id, entity_id = alarm.split('::::')
             if alarm_id == EventLogID.NTP_ALARM:
                 LOG.fixture_step("NTP alarm found, checking ntpq stats")
                 host = entity_id.split('host=')[1].split('.ntp')[0]

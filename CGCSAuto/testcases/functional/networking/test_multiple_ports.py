@@ -2,7 +2,7 @@ from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 
-from consts.cgcs import FlavorSpec, VMStatus
+from consts.cgcs import FlavorSpec, VMStatus, GuestImages
 from consts.reasons import SkipReason
 from consts.auth import Tenant
 from keywords import vm_helper, nova_helper, network_helper, host_helper, check_helper, glance_helper, common
@@ -364,10 +364,13 @@ class TestMutiPortsPCI:
         if pcipt_included and extra_pcipt_net:
             nics.append({'net-id': extra_pcipt_net, 'vif-model': 'pci-passthrough'})
 
+        # Change guest value to assist for manual test that requires cgcs-guest
+        # guest = 'cgcs-guest'
+        guest = GuestImages.DEFAULT_GUEST
+        glance_helper.get_guest_image(guest)
         LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
         vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor, cleanup='function',
-                                          reuse_vol=False)[1]
-        # ResourceCleanup.add('vm', vm_under_test, scope='function')
+                                          reuse_vol=False, guest_os=guest)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
         if pcipt_included:
