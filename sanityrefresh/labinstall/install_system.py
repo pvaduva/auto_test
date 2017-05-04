@@ -794,7 +794,7 @@ def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_di
 
     vlm_exec_cmd(VLM_TURNON, node.barcode)
     logutils.print_step("Installing {}...".format(node.name))
-    rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os, usb)
+    rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os, usb, lowlat)
 
     if close_telnet_conn:
         node.telnet_conn.close()
@@ -1481,10 +1481,11 @@ def run_cpe_compute_config_complete(host_os, install_output_dir):
     # complete before we can continue.
 
     log.info("Controller0 reset has started")
-    if host_os == "wrlinux":
-        controller0.telnet_conn.get_read_until("Rebooting...")
-    else:
-        controller0.telnet_conn.get_read_until("Restarting")
+    # SKIP FOR NOW
+    #if host_os == "wrlinux":
+    #    controller0.telnet_conn.get_read_until("Rebooting...")
+    #else:
+    #    controller0.telnet_conn.get_read_until("Restarting")
 
     controller0.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
     log.info("Found login prompt. Controller0 reset has completed")
