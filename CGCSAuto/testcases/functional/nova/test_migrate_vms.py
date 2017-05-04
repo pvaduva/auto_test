@@ -3,9 +3,9 @@ from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 
-from consts.cgcs import FlavorSpec
+from consts.cgcs import FlavorSpec, EventLogID
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
-from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper
+from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -319,9 +319,11 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol):
 
     LOG.tc_step("Boot a vm from above flavor and volume")
     vm_id = vm_helper.boot_vm(guest_os, flavor=flavor_id, source='volume', source_id=vol_id, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
+    if guest_os == 'ubuntu_14':
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CINDER_IO_CONGEST, entity_id='cinder_io_monitor',
+                                          strict=False, timeout=300, fail_ok=False)
 
     LOG.tc_step("{} migrate vm and check vm is moved to different host".format(mig_type))
     prev_vm_host = nova_helper.get_vm_host(vm_id)
