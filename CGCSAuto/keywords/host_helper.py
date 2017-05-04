@@ -725,7 +725,7 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None):
     return rtn
 
 
-def _wait_for_openstack_cli_enable(con_ssh=None, timeout=90, fail_ok=False, check_interval=1, reconnect=False,
+def _wait_for_openstack_cli_enable(con_ssh=None, timeout=180, fail_ok=False, check_interval=1, reconnect=False,
                                    reconnect_timeout=60):
     cli_enable_end_time = time.time() + timeout
     while True:
