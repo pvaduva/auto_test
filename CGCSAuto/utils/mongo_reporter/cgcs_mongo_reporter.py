@@ -43,20 +43,20 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
     options = parse_config_file()
     
     # get the environment variables
-    lab = options['lab'] if options['lab'] else ProjVar.get_var('LAB')
+    lab = options['lab'] if options.get('lab') else ProjVar.get_var('LAB')
     lab_name = lab['short_name'].upper()
-    build = options['build'] if options['build'] else build
-    build_server = options['build_server'] if options['build_server'] else build_server
-    userstory = options['userstory'] if options['userstory'] else setup_consts.USERSTORY.upper()
+    build = options['build'] if options.get('build') else build
+    build_server = options.get('build_server') if options.get('build_server') else build_server
+    userstory = options.get('userstory') if options.get('userstory') else setup_consts.USERSTORY.upper()
     
     if ProjVar.get_var('REPORT_TAG'):
         tag = ProjVar.get_var('REPORT_TAG')
     else:
-        tag = options['tag'] if options['tag'] else 'regression_%s_%s' % (build, lab_name)
-    jira = options['jira'] if options['jira'] else ''
+        tag = options['tag'] if options.get('tag') else 'regression_%s_%s' % (build, lab_name)
+    jira = options['jira'] if options.get('jira') else ''
     release_name = options['release_name']
     output = options['output']
-    tester_name = options['tester_name'] if options['tester_name'] else os.environ['USER']
+    tester_name = options['tester_name'] if options.get('tester_name') else os.environ['USER']
     
     if log_dir is None:
         logfile = options['logfile']
