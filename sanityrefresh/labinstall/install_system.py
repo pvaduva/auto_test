@@ -1481,11 +1481,10 @@ def run_cpe_compute_config_complete(host_os, install_output_dir):
     # complete before we can continue.
 
     log.info("Controller0 reset has started")
-    # SKIP FOR NOW
-    #if host_os == "wrlinux":
-    #    controller0.telnet_conn.get_read_until("Rebooting...")
-    #else:
-    #    controller0.telnet_conn.get_read_until("Restarting")
+    if host_os == "wrlinux":
+        controller0.telnet_conn.get_read_until("Rebooting...")
+    else:
+        controller0.telnet_conn.get_read_until("Restarting")
 
     controller0.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
     log.info("Found login prompt. Controller0 reset has completed")
