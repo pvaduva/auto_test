@@ -725,8 +725,8 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None):
     return rtn
 
 
-def _wait_for_openstack_cli_enable(con_ssh=None, timeout=180, fail_ok=False, check_interval=1, reconnect=False,
-                                   reconnect_timeout=60):
+def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=1,
+                                   reconnect=False, reconnect_timeout=60):
     cli_enable_end_time = time.time() + timeout
     while True:
         try:
@@ -849,8 +849,8 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
     return rtn
 
 
-def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=30, swact_complete_timeout=30,
-                            floating_ssh_timeout=30, fail_ok=True):
+def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=HostTimeout.SWACT,
+                            swact_complete_timeout=HostTimeout.SWACT, fail_ok=True):
     """
     Wait for swact to start and complete
     NOTE: This function assumes swact command was run from ssh session using floating ip!!
@@ -873,7 +873,6 @@ def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=30, s
         con_ssh = ControllerClient.get_active_controller()
 
     while con_ssh._is_connected(fail_ok=True):
-
         if time.time() > end_swact_start:
             if fail_ok:
                 return 3, "Swact did not start within {}".format(swact_start_timeout)
@@ -883,7 +882,7 @@ def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=30, s
 
     # permission denied is received when ssh right after swact initiated. Add delay to avoid sanity failure
     time.sleep(30)
-    con_ssh.connect(retry=True, retry_timeout=floating_ssh_timeout)
+    con_ssh.connect(retry=True, retry_timeout=swact_complete_timeout-30)
 
     # Give it sometime before openstack cmds enables on after host
     _wait_for_openstack_cli_enable(con_ssh=con_ssh, fail_ok=False)
