@@ -660,7 +660,7 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
                 kwargs['Reason Text'] = reason_text
 
             if kwargs:
-                alarms = table_parser.get_values(alarm_tab, strict=strict, **kwargs)
+                alarms = table_parser.filter_table(alarm_tab, strict=strict, **kwargs)
                 if not alarms:
                     LOG.info("Alarm {} with {} is not displayed in system alarm-list".format(alarm_id, kwargs))
                     return True
