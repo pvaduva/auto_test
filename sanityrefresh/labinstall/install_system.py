@@ -1307,6 +1307,12 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
                           os.path.join(WRSROOT_HOME_DIR, "license.lic"),
                           pre_opts=pre_opts)
 
+    if simplex:
+        bld_server_conn.rsync(SIMPLEX_LICENSE_FILEPATH, WRSROOT_USERNAME,
+                          controller0.host_ip,
+                          os.path.join(WRSROOT_HOME_DIR, "license.lic"),
+                          pre_opts=pre_opts)
+
     if host_os == "centos":
         wrsroot_etc_profile = WRSROOT_ETC_PROFILE
     else:
