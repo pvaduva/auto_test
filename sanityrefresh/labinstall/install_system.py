@@ -1248,7 +1248,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
 
 def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
                            guest_load_path, host_os, override,
-                           small_footprint, lab_cfg_location):
+                           small_footprint, lab_cfg_location, simplex):
 
     # Download configuration files
 
@@ -2104,7 +2104,7 @@ def main():
 
         downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
                            guest_load_path, host_os, override, small_footprint,
-                           lab_cfg_location)
+                           lab_cfg_location, simplex)
         set_install_step_complete(lab_install_step)
 
     if stop == "2":
