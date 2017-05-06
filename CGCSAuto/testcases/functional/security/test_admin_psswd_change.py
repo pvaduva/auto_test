@@ -1,3 +1,4 @@
+import time
 from pytest import mark, fixture, skip
 
 from keywords import host_helper, system_helper, keystone_helper, security_helper
@@ -14,6 +15,7 @@ def _revert_admin_pw(request):
         # revert password
         LOG.fixture_step("Reverting admin password to '{}'".format(prev_pswd))
         keystone_helper.update_user('admin', password=prev_pswd)
+        time.sleep(120)  # CGTS-6928
         assert prev_pswd == security_helper.get_admin_password_in_keyring()
     request.addfinalizer(_revert)
 
@@ -57,6 +59,8 @@ def test_admin_password(scenario, less_than_two_cons, _revert_admin_pw):
 
     LOG.tc_step('Changing admin password to {}'.format(post_pswd))
     keystone_helper.update_user('admin', password=post_pswd)
+
+    time.sleep(120)  # CGTS-6928
 
     LOG.tc_step("Check admin password is updated in keyring")
     assert post_actual_pswd == security_helper.get_admin_password_in_keyring()

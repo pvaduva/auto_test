@@ -65,7 +65,8 @@ def test_swact_20_times():
             LOG.tc_step("{}Ensure writing from pre-existed vm resumes after swact".format(iter_str))
             assert base_vm_thread.res is True, "Writing in pre-existed vm stopped after {}".format(iter_str.lower())
 
-            LOG.tc_step("{}Attemp to boot new vm after 2 minutes of post swact and ensure it's pingable".format(iter_str))
+            LOG.tc_step("{}Attemp to boot new vm after 2 minutes of post swact and ensure it's pingable".
+                        format(iter_str))
             time.sleep(60)
             for j in range(3):
                 code, vm_new, msg, vol = vm_helper.boot_vm(name='post_swact', source='image', fail_ok=True)

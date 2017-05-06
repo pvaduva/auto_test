@@ -9,7 +9,8 @@ from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
 from utils.tis_log import LOG
 
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
-from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState, Prompt, MELLANOX_DEVICE, Networks
+from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState, Prompt, MELLANOX_DEVICE, \
+    Networks, EventLogID
 from consts.timeout import HostTimeout, CMDTimeout
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 
@@ -865,6 +866,7 @@ def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=HostT
         (0, "Active controller is successfully swacted.")
         (3, "Swact did not start within <swact_start_timeout>")     # returns when fail_ok=True
         (4, "Active controller did not change after swact within <swact_complete_timeou>")  # returns when fail_ok=True
+        (5, "400.001 alarm is not cleared within timeout after swact")
 
     """
     start = time.time()
@@ -894,6 +896,11 @@ def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=HostT
         if fail_ok:
             return 4, "Active controller did not change after swact within {}".format(swact_complete_timeout)
         raise exceptions.HostPostCheckFailed("Swact failed. Active controller host did not change")
+
+    drbd_res = system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, entity_id=after_host,
+                                                 strict=False, fail_ok=fail_ok, timeout=300)
+    if not drbd_res:
+        return 5, "400.001 alarm is not cleared within timeout after swact"
 
     return 0, "Active controller is successfully swacted."
 

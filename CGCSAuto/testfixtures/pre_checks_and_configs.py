@@ -48,6 +48,7 @@ def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     keystone_helper.update_user('admin', password=post_pswd)
 
     def _lock_unlock_controllers():
+        time.sleep(120)  # CGTS-6928
         if more_than_one_controllers:
             active, standby = system_helper.get_active_standby_controllers()
             if standby:
