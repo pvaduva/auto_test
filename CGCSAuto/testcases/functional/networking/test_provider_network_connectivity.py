@@ -37,7 +37,6 @@ def get_vlan_providernet():
     vlan_entries_table = table_parser.filter_table(table_, **kwargs)
 
     vlan_entry_names = table_parser.get_values(vlan_entries_table, 'providernet')
-
     i = 0
     loop_count = len(vlan_entry_names)
     popped_entries = []
@@ -185,7 +184,7 @@ def test_vlan_no_connectivity_two_providernets(get_vlan_providernet):
     """
     providernet_id, range_id, providernet_name, min_range, max_range, popped_entry = get_vlan_providernet
     if popped_entry == '':
-        skip("All providernets are attached to the same interface.")
+        skip("All vlan providernets are attached to the same interface.")
     LOG.tc_step("Check alarms for Communication Failure on providernet under test")
     alarms = system_helper.get_alarms(alarm_id=EventLogID.PROVIDER_NETWORK_FAILURE, entity_id=popped_entry,
                                       strict=False)
@@ -339,7 +338,8 @@ def test_providernet_connectivity_cli_filters(get_vlan_providernet):
 
         cmd = cli.neutron('providernet-connectivity-test-list', auth_info=Tenant.ADMIN)
         kwargs = {'{}'.format(header): '{}'.format(value)}
-        filtered_with_keyword_table = table_parser.filter_table(table_parser.table(cmd), **kwargs)
+        table_ = table_parser.table(cmd)
+        filtered_with_keyword_table = table_parser.filter_table(table_, strict=False, **kwargs)
 
         assert len(filtered_with_command_table['values']) == len(filtered_with_keyword_table['values']), \
             "Table filtered with cli does not return the same table as a table filtered using keywords" \
