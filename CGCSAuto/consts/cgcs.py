@@ -71,7 +71,7 @@ class Networks:
 
 
 class SystemType:
-    CPE = 'CPE'
+    CPE = 'All-in-one'
     STANDARD = 'Standard'
 
 
