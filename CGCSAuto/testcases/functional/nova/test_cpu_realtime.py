@@ -1,11 +1,12 @@
 import re
+import time
 from pytest import mark, fixture, skip
 
 from utils.tis_log import LOG
 
-from consts.cgcs import FlavorSpec
+from consts.cgcs import FlavorSpec, ImageMetadata
 from consts.cli_errs import CpuRtErr        # Do not remove this import. Used in eval()
-from keywords import nova_helper, vm_helper, host_helper, common
+from keywords import nova_helper, vm_helper, host_helper, common, glance_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -45,7 +46,7 @@ def test_flavor_cpu_realtime_negative(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vc
 
 
 def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False, check_storage_backing=True,
-                     storage_backing=None):
+                     storage_backing=None, numa_nodes=None):
     LOG.tc_step("Create a flavor with {} vcpus".format(vcpus))
     flv_id = nova_helper.create_flavor(name='cpu_rt_{}'.format(vcpus), vcpus=vcpus,
                                        check_storage_backing=check_storage_backing, storage_backing=storage_backing)[1]
@@ -55,7 +56,8 @@ def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False
         FlavorSpec.CPU_POLICY: cpu_pol,
         FlavorSpec.CPU_REALTIME: cpu_rt,
         FlavorSpec.CPU_REALTIME_MASK: rt_mask,
-        FlavorSpec.SHARED_VCPU: shared_vcpu
+        FlavorSpec.SHARED_VCPU: shared_vcpu,
+        FlavorSpec.NUMA_NODES: numa_nodes
     }
 
     extra_specs = {}
@@ -181,15 +183,15 @@ def check_hosts():
     return storage_backing, hosts_with_shared_cpu
 
 
-@mark.parametrize(('vcpus', 'cpu_rt', 'rt_mask', 'shared_vcpu'), [
-    (3, None, '^0-1', None),
-    (4, 'yes', '^2-3', None),
-    (3, 'yes', '^0', None),
-    (4, 'no', '^0-2', 0),
-    (3, 'yes', '^1-2', 2),
-    (2, 'yes', '^1', 1)
+@mark.parametrize(('vcpus', 'cpu_rt', 'rt_mask', 'rt_source', 'shared_vcpu', 'numa_nodes'), [
+    (3, None, '^0', 'flavor', None, None),
+    (6, 'yes', '^2-3', 'flavor', None, 2),
+    (3, 'yes', '^0-1', 'image', None, None),
+    (4, 'no', '^0-2', 'image', 0, None),
+    (3, 'yes', '^1-2', 'image', 2, 2),
+    (2, 'yes', '^1', 'flavor', 1, 1)
 ])
-def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, shared_vcpu, check_hosts):
+def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu, numa_nodes, check_hosts):
     """
     Test vm with realtime cpu policy specified in flavor
     Args:
@@ -197,6 +199,7 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, shared_vcpu, check_host
         cpu_rt (str|None):
         rt_mask (str):
         shared_vcpu (int|None):
+        numa_nodes (int): number of numa_nodes to boot vm on
         check_hosts (tuple): test fixture
 
     Setups:
@@ -218,15 +221,36 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, shared_vcpu, check_host
     if shared_vcpu is not None and len(hosts_with_shared_cpu) < 2:
         skip("Less than two up hypervisors configured with shared cpu")
 
-    name = 'rt-{}_mask-{}_{}vcpu'.format(cpu_rt, rt_mask, vcpus)
-    flv_id = create_rt_flavor(vcpus, cpu_pol='dedicated', cpu_rt=cpu_rt, rt_mask=rt_mask, shared_vcpu=shared_vcpu,
-                              check_storage_backing=False, storage_backing=storage_backing)[0]
+    if rt_source == 'image':
+        # rt_mask_flv = cpu_rt_flv = None
+        rt_mask_flv = '^0'
+        cpu_rt_flv = 'yes'
+        rt_mask_img = rt_mask
+        cpu_rt_img = cpu_rt
+    else:
+        rt_mask_img = cpu_rt_img = None
+        rt_mask_flv = rt_mask
+        cpu_rt_flv = cpu_rt
+
+    image_id = None
+    if cpu_rt_img is not None:
+        image_medata = {ImageMetadata.CPU_RT_MASK: rt_mask_img, ImageMetadata.CPU_RT: cpu_rt_img}
+        image_id = glance_helper.create_image(name='rt_mask', **image_medata)[1]
+        ResourceCleanup.add('image', image_id)
+
+    vol_id = cinder_helper.create_volume(image_id=image_id)[1]
+    ResourceCleanup.add('volume', vol_id)
+
+    name = 'rt-{}_mask-{}_{}vcpu'.format(cpu_rt, rt_mask_flv, vcpus)
+    flv_id = create_rt_flavor(vcpus, cpu_pol='dedicated', cpu_rt=cpu_rt_flv, rt_mask=rt_mask_flv,
+                              shared_vcpu=shared_vcpu, numa_nodes=numa_nodes, check_storage_backing=False,
+                              storage_backing=storage_backing)[0]
 
     LOG.tc_step("Boot a vm with above flavor")
-    vm_id = vm_helper.boot_vm(name=name, flavor=flv_id, cleanup='function')[1]
-    flv_rt_cpus, flv_ord_cpus = parse_rt_and_ord_cpus(vcpus=vcpus, cpu_rt=cpu_rt, cpu_rt_mask=rt_mask)
+    vm_id = vm_helper.boot_vm(name=name, flavor=flv_id, cleanup='function', source='volume', source_id=vol_id)[1]
+    expt_rt_cpus, expt_ord_cpus = parse_rt_and_ord_cpus(vcpus=vcpus, cpu_rt=cpu_rt, cpu_rt_mask=rt_mask)
 
-    check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, flv_rt_cpus, flv_ord_cpus)
+    check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus)
     if shared_vcpu:
         vm_host = nova_helper.get_vm_host(vm_id)
         assert vm_host in hosts_with_shared_cpu
@@ -234,9 +258,13 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, shared_vcpu, check_host
     for actions in [['suspend', 'resume'], ['live_migrate'], ['cold_migrate'], ['rebuild']]:
         LOG.tc_step("Perform {} on vm and check realtime cpu policy".format(actions))
         for action in actions:
-            vm_helper.perform_action_on_vm(vm_id, action=action)
+            kwargs = {}
+            if action == 'rebuild':
+                kwargs = {'image_id': image_id}
+            vm_helper.perform_action_on_vm(vm_id, action=action, **kwargs)
 
-        check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, flv_rt_cpus, flv_ord_cpus)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=True)
+        check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus)
         if shared_vcpu:
             vm_host = nova_helper.get_vm_host(vm_id)
             assert vm_host in hosts_with_shared_cpu

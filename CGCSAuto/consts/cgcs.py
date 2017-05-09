@@ -192,6 +192,8 @@ class ImageMetadata:
     VIF_MODEL = 'hw_vif_model'
     CPU_THREAD_POLICY = 'hw_cpu_thread_policy'
     CPU_POLICY = 'hw_cpu_policy'
+    CPU_RT_MASK = 'hw_cpu_realtime_mask'
+    CPU_RT = 'hw_cpu_realtime'
 
 
 class ServerGroupMetadata:
