@@ -3297,3 +3297,52 @@ def boot_vms_various_types(storage_backing=None, target_host=None, scope='functi
 
     vms = [vm1, vm2, vm3, vm4, vm5]
     return vms
+
+
+def get_sched_policy_and_priority_for_vcpus(instance_pid, host_ssh, cpusets=None, comm=None):
+    """
+    Get cpu policy and priority for instance vcpus
+    Args:
+        instance_pid (str): pid from ps aux | grep <instance_name>
+        host_ssh (SSHClient): ssh for vm host
+        cpusets (str|list|None): such as '44', or [8, 44], etc. Will be used to grep ps with given cpuset(s) only
+        comm (str|None): regex expression, used to search for given pattern in ps output. Such as 'qemu-kvm|CPU.*KVM'
+
+    Returns (list of tuples): such as [('FF', '1'), ('TS', '-')]
+
+    """
+    LOG.info("Getting cpu scheduler policy and priority info for instance with pid {}".format(instance_pid))
+    cpuset_filters = []
+    cpu_filter = ''
+    if cpusets:
+        if isinstance(cpusets, str):
+            cpusets = [cpusets]
+
+        for cpuset in cpusets:
+            cpuset_filters.append('$5=="{}"'.format(cpuset))
+
+        cpu_filter = ' || '.join(cpuset_filters)
+        cpu_filter = ' && ({})'.format(cpu_filter)
+
+    cmd = """ps -eL -o pid=,lwp=,class=,rtprio=,psr=,comm= | awk '{{if ( $1=="{}" {}) print}}'""".format(
+            instance_pid, cpu_filter)
+
+    output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
+    out_lines = output.splitlines()
+
+    cpu_pol_and_prios = []
+    for out_line in out_lines:
+        get_line = True
+        if comm is not None:
+            if not re.search(comm, out_line):
+                get_line = False
+
+        if get_line:
+            items = out_line.split()
+            rt_policy = items[2]
+            rt_priority = items[3]
+            cpu_pol_and_prios.append((rt_policy, rt_priority))
+
+    LOG.info("CPU policy and priority for cpus with cpuset: {}; comm_pattern: {} - {}".format(cpusets, comm,
+                                                                                              cpu_pol_and_prios))
+    return cpu_pol_and_prios

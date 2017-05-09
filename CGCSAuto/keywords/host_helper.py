@@ -1192,7 +1192,7 @@ def get_values_virsh_xmldump(instance_name, host_ssh, tag_path, target_type='ele
     Args:
         instance_name (str): instance_name of a vm. Such as 'instance-00000002'
         host_ssh (SSHFromSSH): ssh of the host that hosting the given instance
-        tag_path (str): the tag path to reach to the target element. such as 'memoryBacking/hugepages/page'
+        tag_path (str|list|tuple): the tag path to reach to the target element. such as 'memoryBacking/hugepages/page'
         target_type (str): 'element', 'dict', 'text'
 
     Returns (list): list of Elements, dictionaries, or strings based on the target_type param.
@@ -1200,29 +1200,39 @@ def get_values_virsh_xmldump(instance_name, host_ssh, tag_path, target_type='ele
     """
     target_type = target_type.lower().strip()
     root_element = _get_element_tree_virsh_xmldump(instance_name, host_ssh)
-    elements = root_element.findall(tag_path)
+    values_list = []
+    if isinstance(tag_path, (tuple, list)):
+        tag_paths = tag_path
+        for tag_path_ in tag_paths:
+            elements = root_element.findall(tag_path_)
 
-    if 'dict' in target_type:
-        dics = []
-        for element in elements:
-            dics.append(element.attrib)
-        return dics
+            if 'dict' in target_type:
+                dics = []
+                for element in elements:
+                    dics.append(element.attrib)
+                values_list.append(dics)
 
-    elif 'text' in target_type:
-        texts = []
-        for element in elements:
-            text_list = element.itertext()
-            if not text_list:
-                LOG.warning("No text found under tag: {}.".format(tag_path))
+            elif 'text' in target_type:
+                texts = []
+                for element in elements:
+                    text_list = element.itertext()
+                    if not text_list:
+                        LOG.warning("No text found under tag: {}.".format(tag_path_))
+                    else:
+                        texts.append(text_list[0])
+                        if len(text_list) > 1:
+                            LOG.warning(("More than one text found under tag: {}, returning the first one.".
+                                         format(tag_path_)))
+
+                values_list.append(texts)
+
             else:
-                texts.append(text_list[0])
-                if len(text_list) > 1:
-                    LOG.warning(("More than one text found under tag: {}, returning the first one.".format(tag_path)))
+                values_list.append(elements)
 
-        return texts
-
+    if isinstance(tag_path, str):
+        return values_list[0]
     else:
-        return elements
+        return values_list
 
 
 def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=False, con_ssh=None,

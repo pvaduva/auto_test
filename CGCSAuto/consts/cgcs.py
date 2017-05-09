@@ -182,6 +182,8 @@ class FlavorSpec:
     PCI_NUMA_AFFINITY = "hw:wrs:pci_numa_affinity"
     PCI_PASSTHROUGH_ALIAS = "pci_passthrough:alias"
     PCI_IRQ_AFFINITY_MASK = "hw:pci_irq_affinity_mask"
+    CPU_REALTIME = 'hw:cpu_realtime'
+    CPU_REALTIME_MASK = 'hw:cpu_realtime_mask'
 
 
 class ImageMetadata:
