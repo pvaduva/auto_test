@@ -1,4 +1,4 @@
-import re
+import re, copy
 
 from utils import exceptions
 from utils.tis_log import LOG
@@ -810,3 +810,50 @@ def row_dict_table(table_, key_header, unique_key=True):
 
     LOG.debug("Converted table: {}".format(rtn_dict))
     return rtn_dict
+
+
+def remove_columns(table_, headers):
+    """
+    Remove header(s) and corresponding values from the table. If the supplied header is not found, skips that header.
+
+    Args:
+        table_ (dict): original table which in the format of {'headers': [<headers>], 'values': [<rows>]}
+        header (str/list/tuple): chosen key(s) to remove
+
+    Returns (dict): A table dictionary without key_headers and corresponding values
+
+    Examples: system host-list on 2+2 system
+        remove_columns(table_, 'hostname') will return following table:
+            {
+            'controller-0': [{'id': 1, 'personality': 'controller', ...}]
+            'controller-1': [{'id': 2, 'personality': 'controller', ...}]
+            'compute-0': ...
+            'compute-1': ...
+            }
+
+        remove_columns(table_, ['personality', 'hostname']) will return following table:
+            {
+            'controller': [{'id': 1, ...},
+                           {'id': 2, ...}]
+            'compute': [{'id': 3, ...},
+                        {'id': 4, ...}]
+            }
+    """
+    if isinstance(headers, str):
+        headers = [headers]
+
+    if not isinstance(headers, (list, tuple)):
+        raise ValueError("key_headers is not a list/string/tuple: {}".format(headers))
+
+    new_table_ = copy.deepcopy(table_)
+
+    for key in headers:
+        try:
+            column_id = get_column_index(new_table_, key)
+            new_table_['headers'].pop(column_id)
+            for row in new_table_['values']:
+                row.pop(column_id)
+        except ValueError:
+            continue
+
+    return new_table_
