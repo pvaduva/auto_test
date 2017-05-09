@@ -3312,6 +3312,12 @@ def get_sched_policy_and_priority_for_vcpus(instance_pid, host_ssh, cpusets=None
 
     """
     LOG.info("Getting cpu scheduler policy and priority info for instance with pid {}".format(instance_pid))
+
+    if not cpusets:
+        if cpusets is not None:
+            LOG.info("Empty cpusets provided, return []")
+            return []
+
     cpuset_filters = []
     cpu_filter = ''
     if cpusets:
