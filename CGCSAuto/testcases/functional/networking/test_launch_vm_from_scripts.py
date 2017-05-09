@@ -38,7 +38,12 @@ def test_vif_models(vm_type):
     ResourceCleanup.add('vm', vm_under_test)
 
     LOG.tc_step("Boot a base vm to test with vm_type {} from script".format(vm_type))
-    base_vm = vm_helper.launch_vms_via_script(vm_type=vm_type, tenant_name='tenant1')
+    vms_launched = vm_helper.launch_vms_via_script(vm_type=vm_type, tenant_name='tenant1')
+
+    if not vms_launched:
+        skip("{} vms cannot be launched".format(vm_type))
+
+    base_vm = vms_launched[0]
     ResourceCleanup.add('vm', base_vm)
 
     LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_under_test))
