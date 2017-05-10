@@ -252,7 +252,7 @@ class TestMutiPortsPCI:
         flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048)[1]
         ResourceCleanup.add('flavor', flavor_id, scope='class')
 
-        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
+        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'prefer'}
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
         mgmt_net_id = network_helper.get_mgmt_net_id()
@@ -306,7 +306,7 @@ class TestMutiPortsPCI:
             extra_pcipt_net, extra_pcipt_net_name
 
     @mark.parametrize('vifs', [
-        mark.p2(['virtio_x7', 'avp_x5', 'pci-passthrough']),
+        mark.p2(['virtio', 'avp', 'pci-passthrough']),
         mark.p2([('virtio_x7', '05:03'), ('avp_x5', '00:04'), ('pci-sriov', '05:02')]),
         mark.p3((['pci-sriov', 'pci-passthrough'])),
         mark.domain_sanity(([('avp', '00:02'), ('virtio', '02:01'), ('e1000', '08:01'), ('pci-passthrough', '05:1f'), ('pci-sriov', '08:02')])),
