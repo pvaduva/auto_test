@@ -62,9 +62,12 @@ def launch_instance_on_compute(network_name=None,
                                                             HostAvailabilityState.DEGRADED])
 
     lvm_hosts = host_helper.get_hosts_by_storage_aggregate('local_lvm')
+    remote_hosts = host_helper.get_hosts_by_storage_aggregate('remote')
     backing = 'local_image'
     if host_name in lvm_hosts:
         backing = 'local_lvm'
+    elif host_name in remote_hosts:
+        backing = 'remote'
     flavor_id = nova_helper.create_flavor(host_name, storage_backing=backing,
                                           check_storage_backing=False, guest_os=image_name)[1]
     ResourceCleanup.add('flavor', flavor_id)
