@@ -6,7 +6,8 @@ from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, ImageMetadata
 from consts.cli_errs import CpuRtErr        # Do not remove this import. Used in eval()
-from keywords import nova_helper, vm_helper, host_helper, common, glance_helper, cinder_helper
+from keywords import nova_helper, vm_helper, host_helper, common, glance_helper, cinder_helper, system_helper, \
+    check_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -46,7 +47,7 @@ def test_flavor_cpu_realtime_negative(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vc
 
 
 def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False, check_storage_backing=True,
-                     storage_backing=None, numa_nodes=None):
+                     storage_backing=None, numa_nodes=None, cpu_thread=None, min_vcpus=None):
     LOG.tc_step("Create a flavor with {} vcpus".format(vcpus))
     flv_id = nova_helper.create_flavor(name='cpu_rt_{}'.format(vcpus), vcpus=vcpus,
                                        check_storage_backing=check_storage_backing, storage_backing=storage_backing)[1]
@@ -57,7 +58,9 @@ def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False
         FlavorSpec.CPU_REALTIME: cpu_rt,
         FlavorSpec.CPU_REALTIME_MASK: rt_mask,
         FlavorSpec.SHARED_VCPU: shared_vcpu,
-        FlavorSpec.NUMA_NODES: numa_nodes
+        FlavorSpec.NUMA_NODES: numa_nodes,
+        FlavorSpec.CPU_THREAD_POLICY: cpu_thread,
+        FlavorSpec.MIN_VCPUS: min_vcpus
     }
 
     extra_specs = {}
@@ -175,30 +178,34 @@ def parse_rt_and_ord_cpus(vcpus, cpu_rt, cpu_rt_mask):
 def check_hosts():
     storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts(rtn_down_hosts=False)
     hosts_with_shared_cpu = []
+    ht_hosts = []
     for host in hosts:
         shared_cores_for_host = host_helper.get_host_cpu_cores_for_function(hostname=host, function='shared')
         if shared_cores_for_host[0] or shared_cores_for_host[1]:
             hosts_with_shared_cpu.append(host)
+        if system_helper.is_hyperthreading_enabled(host):
+            ht_hosts.append(host)
+    return storage_backing, hosts_with_shared_cpu, ht_hosts
 
-    return storage_backing, hosts_with_shared_cpu
 
-
-@mark.parametrize(('vcpus', 'cpu_rt', 'rt_mask', 'rt_source', 'shared_vcpu', 'numa_nodes'), [
-    (3, None, '^0', 'flavor', None, None),
-    (6, 'yes', '^2-3', 'flavor', None, 2),
-    (3, 'yes', '^0-1', 'image', None, None),
-    (4, 'no', '^0-2', 'image', 0, None),
-    (3, 'yes', '^1-2', 'image', 2, 2),
-    (2, 'yes', '^1', 'flavor', 1, 1)
+@mark.parametrize(('vcpus', 'cpu_rt', 'rt_mask', 'rt_source', 'shared_vcpu', 'numa_nodes', 'cpu_thread', 'min_vcpus'), [
+    (3, None, '^0', 'flavor', None, None, 'prefer', None),
+    (4, 'yes', '^0', 'favor', None, 2, 'require', None),
+    (6, 'yes', '^2-3', 'flavor', None, 1, 'isolate', 4),
+    (3, 'yes', '^0-1', 'image', None, None, None, 2),
+    (4, 'no', '^0-2', 'image', 0, None, None, None),
+    (3, 'yes', '^1-2', 'image', 2, 2, 'isolate', None),
+    (2, 'yes', '^1', 'flavor', 1, 1, None, None)
 ])
-def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu, numa_nodes, check_hosts):
+def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu, numa_nodes, cpu_thread, min_vcpus,
+                                 check_hosts):
     """
     Test vm with realtime cpu policy specified in flavor
     Args:
         vcpus (int):
         cpu_rt (str|None):
         rt_mask (str):
-        shared_vcpu (int|None):
+        shared_vcpu (int|None):min_vcpus
         numa_nodes (int): number of numa_nodes to boot vm on
         check_hosts (tuple): test fixture
 
@@ -216,7 +223,10 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
             ['rebuild']
 
     """
-    storage_backing, hosts_with_shared_cpu = check_hosts
+    storage_backing, hosts_with_shared_cpu, ht_hosts = check_hosts
+
+    if cpu_thread == 'require' and len(ht_hosts) < 2:
+        skip("Less than two hyperthreaded hosts")
 
     if shared_vcpu is not None and len(hosts_with_shared_cpu) < 2:
         skip("Less than two up hypervisors configured with shared cpu")
@@ -243,17 +253,29 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
 
     name = 'rt-{}_mask-{}_{}vcpu'.format(cpu_rt, rt_mask_flv, vcpus)
     flv_id = create_rt_flavor(vcpus, cpu_pol='dedicated', cpu_rt=cpu_rt_flv, rt_mask=rt_mask_flv,
-                              shared_vcpu=shared_vcpu, numa_nodes=numa_nodes, check_storage_backing=False,
-                              storage_backing=storage_backing)[0]
+                              shared_vcpu=shared_vcpu, numa_nodes=numa_nodes, cpu_thread=cpu_thread,
+                              min_vcpus=min_vcpus, check_storage_backing=False, storage_backing=storage_backing)[0]
 
     LOG.tc_step("Boot a vm with above flavor")
     vm_id = vm_helper.boot_vm(name=name, flavor=flv_id, cleanup='function', source='volume', source_id=vol_id)[1]
     expt_rt_cpus, expt_ord_cpus = parse_rt_and_ord_cpus(vcpus=vcpus, cpu_rt=cpu_rt, cpu_rt_mask=rt_mask)
 
     check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus)
+    vm_host = nova_helper.get_vm_host(vm_id)
     if shared_vcpu:
-        vm_host = nova_helper.get_vm_host(vm_id)
         assert vm_host in hosts_with_shared_cpu
+
+    numa_num = 1 if numa_nodes is None else numa_nodes
+    check_helper._check_vm_topology_via_vm_topology(vm_id, vcpus, 'dedicated', cpu_thread, numa_num, vm_host)
+
+    expt_current_cpu = vcpus
+    if min_vcpus is not None:
+        LOG.tc_step("Scale down cpu once")
+        vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
+
+        LOG.tc_step("Check current vcpus in nova show is reduced after scale down")
+        expt_current_cpu -= 1
+        check_helper.check_vm_vcpus_via_nova_show(vm_id, min_vcpus, expt_current_cpu, vcpus)
 
     for actions in [['suspend', 'resume'], ['live_migrate'], ['cold_migrate'], ['rebuild']]:
         LOG.tc_step("Perform {} on vm and check realtime cpu policy".format(actions))
@@ -265,6 +287,13 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=True)
         check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus)
+        vm_host = nova_helper.get_vm_host(vm_id)
         if shared_vcpu:
-            vm_host = nova_helper.get_vm_host(vm_id)
             assert vm_host in hosts_with_shared_cpu
+
+        LOG.tc_step("Check cpu thread policy in vm topology and vcpus in nova show after {}".format(actions))
+        check_helper._check_vm_topology_via_vm_topology(vm_id, vcpus, 'dedicated', cpu_thread, numa_num, vm_host,
+                                                        current_vcpus=expt_current_cpu)
+        if min_vcpus is not None:
+            LOG.tc_step("Check vm vcpus are not changed after {}".format(actions))
+            check_helper.check_vm_vcpus_via_nova_show(vm_id, min_vcpus, expt_current_cpu, vcpus)

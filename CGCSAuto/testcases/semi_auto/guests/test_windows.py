@@ -8,8 +8,8 @@ def test_boot_windows_guest():
     """
     # Change the following parameters to change the vm type.
     guest = 'win_2012'          # such as tis-centos-guest
-    storage = 'local_lvm'          # local_lvm, local_image, or remote
-    boot_source = 'volume'      # volume or image
+    storage = 'local_image'          # local_lvm, local_image, or remote
+    boot_source = 'image'      # volume or image
 
     LOG.tc_step("Get/Create {} glance image".format(guest))
     glance_helper.get_guest_image(guest_os=guest)
