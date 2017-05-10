@@ -21,7 +21,7 @@ def get_vlan_providernet():
     LOG.fixture_step("Get data interface with at least two provider networks on {}".format(hypervisor))
     table_ = system_helper.get_host_interfaces_table(hypervisor)
     kwargs = {'type': 'ethernet', 'network type': 'data', 'provider networks': ','}
-    interface_ids = table_parser.get_values(table_, 'uuid', **kwargs, strict=False)
+    interface_ids = table_parser.get_values(table_, 'uuid', strict=False, **kwargs)
 
     if len(interface_ids) < 1:
         skip("No interfaces with at least two provider networks attached")
@@ -37,6 +37,11 @@ def get_vlan_providernet():
     vlan_entries_table = table_parser.filter_table(table_, **kwargs)
 
     vlan_entry_names = table_parser.get_values(vlan_entries_table, 'providernet')
+
+    # Temporary skip for no vlan because vxlan still needs to be completed.
+    if len(vlan_entry_names) < 1:
+        skip("No VLAN providernets available.")
+
     i = 0
     loop_count = len(vlan_entry_names)
     popped_entries = []
@@ -98,21 +103,31 @@ def revert_vlan_provider_nets(request, get_vlan_providernet):
 @fixture(scope='module', autouse=True)
 def modify_neutron_config(request):
     host = system_helper.get_active_controller_name()
-    with host_helper.ssh_to_host(host) as con_ssh:
-        cmd = 'cat /etc/neutron/neutron.conf | grep --color=never pnet_audit_interval'
-        code, pnet_audit_interval = con_ssh.exec_sudo_cmd(cmd, fail_ok=False)
+
+    def get_audit_interval():
+        with host_helper.ssh_to_host(host) as host_ssh:
+            cmd = 'cat /etc/neutron/neutron.conf | grep --color=never pnet_audit_interval'
+            code, output = host_ssh.exec_sudo_cmd(cmd, fail_ok=False)
+            pnet_audit_interval = output.split('=', 1)[-1].replace(" ", "")
+            return int(pnet_audit_interval)
+
+    def modify_pnet_audit_interval(old_interval, new_interval):
+        with host_helper.ssh_to_host(host) as host_ssh:
+            LOG.fixture_step("Setting pnet_audit_interval to {} seconds".format(new_interval))
+            cmd = "sed -i 's/#pnet_audit_interval = {}/#pnet_audit_interval = {}/' /etc/neutron/neutron.conf".format(
+                old_interval, new_interval)
+            host_ssh.exec_sudo_cmd(cmd, fail_ok=False)
+
+    old_interval = get_audit_interval()
+    new_interval = 30
 
     def _modify():
-        with host_helper.ssh_to_host(host) as con_ssh:
-            LOG.fixture_step("Setting pnet_audit_interval to 30 seconds")
-            cmd = "sed -i 's/{}/#pnet_audit_interval = 30/' /etc/neutron/neutron.conf".format(pnet_audit_interval)
-            con_ssh.exec_sudo_cmd(cmd, fail_ok=False)
+        modify_pnet_audit_interval(old_interval, new_interval)
+        assert get_audit_interval() == new_interval, "pnet_audit_interval was not changed to {}".format(new_interval)
 
     def _revert():
-        with host_helper.ssh_to_host(host) as con_ssh:
-            LOG.fixture_step("Reverting pnet_audit_interval to original value")
-            cmd = "sed -i 's/#pnet_audit_interval = 30/{}/' /etc/neutron/neutron.conf".format(pnet_audit_interval)
-            con_ssh.exec_sudo_cmd(cmd, fail_ok=False)
+        modify_pnet_audit_interval(new_interval, old_interval)
+        assert get_audit_interval() == old_interval, "pnet_audit_interval was not changed to {}".format(old_interval)
 
     request.addfinalizer(_revert)
     _modify()
@@ -334,16 +349,19 @@ def test_providernet_connectivity_cli_filters(get_vlan_providernet):
         LOG.tc_step("Verify output of providernet-connectivity-test-list using the {} filter".format(param_filter))
         cmd = cli.neutron('providernet-connectivity-test-list {} {}'.format(param_filter, value),
                           auth_info=Tenant.ADMIN)
-        filtered_with_command_table = table_parser.table(cmd)
+        queried_table = table_parser.table(cmd)
+        columns = ['status', 'message', 'segmentation_ids']
+        queried_table = table_parser.remove_columns(queried_table, columns)
 
         cmd = cli.neutron('providernet-connectivity-test-list', auth_info=Tenant.ADMIN)
-        kwargs = {'{}'.format(header): '{}'.format(value)}
+        kwargs = {header: value}
         table_ = table_parser.table(cmd)
         filtered_with_keyword_table = table_parser.filter_table(table_, strict=False, **kwargs)
+        columns = ['status', 'message', 'segmentation_ids']
+        filtered_with_keyword_table = table_parser.remove_columns(filtered_with_keyword_table, columns)
 
-        assert len(filtered_with_command_table['values']) == len(filtered_with_keyword_table['values']), \
-            "Table filtered with cli does not return the same table as a table filtered using keywords" \
-            .format(header, value)
+        result, error = table_parser.compare_tables(queried_table, filtered_with_keyword_table)
+        assert result == 0, "Tables are not the same. Filtered using: {}. Error: {}".format(param_filter, error)
 
 
 def test_providernet_connectivity_different_mtu(get_vlan_providernet):
@@ -408,7 +426,7 @@ def test_providernet_connectivity_delete_segment(get_vlan_providernet):
     while time.time() < timeout:
         cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
         providernet_test_table = table_parser.table(cmd)
-        filtered_test_table = table_parser.filter_table(providernet_test_table, **kwargs, strict=False)
+        filtered_test_table = table_parser.filter_table(providernet_test_table, strict=False, **kwargs)
         if len(filtered_test_table['values']) > 0:
             break
 
