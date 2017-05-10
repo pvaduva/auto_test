@@ -124,8 +124,8 @@ class Labs:
         'controller-1 ip': '128.224.150.28',
         # 'auth_url': 'http://192.168.204.2:5000/v3/',
         'controller_nodes': [22715, 22716],
-        'compute_nodes': [22719, 22720, 22721, 22722],
-        'storage_nodes': [22717, 22718],
+        'compute_nodes': [22719, 22720, 22721, 22722, 23915, 23916],
+        'storage_nodes': [22717, 22718, 23954, 23955],
     }
 
     PV1 = {
