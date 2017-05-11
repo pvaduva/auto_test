@@ -9,6 +9,7 @@ from consts.cgcs import FlavorSpec, Prompt
 from keywords import network_helper, vm_helper, nova_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
+VMS_COUNT = 4
 
 @fixture(scope='module')
 def router_info(request):
@@ -82,7 +83,7 @@ def _vms(ubuntu14_image):
 
     vms = []
 
-    for (vm, i) in zip(vm_names, range(0, 4)):
+    for (vm, i) in zip(vm_names, range(0, VMS_COUNT)):
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_ids[i], 'vif-model': vm_vif_models[vm]},
                 {'net-id': internal_net_id, 'vif-model': vm_vif_models[vm]}]
@@ -92,8 +93,11 @@ def _vms(ubuntu14_image):
         # ResourceCleanup.add('volume', vol_id)
 
         LOG.fixture_step("Boot a ubuntu14 vm with {} nics from above flavor and volume".format(vm_vif_models[vm]))
-        vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=flavor_id, source='image', cleanup='function',
-                                  source_id=image_id, nics=nics, guest_os=guest_os)[1]
+        vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=flavor_id, source='volume', cleanup='function',
+                                  nics=nics, guest_os=guest_os)[1]
+        # vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=flavor_id, source='volume', cleanup='function',
+        #                           source_id=image_id, nics=nics, guest_os=guest_os)[1]
+
         # ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
         vms.append(vm_id)
 
@@ -144,7 +148,7 @@ def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from
     LOG.info("Setting NATBox SSH session ...")
     ssh_nat = NATBoxClient.set_natbox_client()
 
-    vm_threads = [None] * 4
+    vm_threads = [None] * VMS_COUNT
     index = 0
     for k, v in vm_tcp_pfs.items():
         greeting = "Hello {}".format(v['public_port'])
@@ -152,6 +156,7 @@ def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from
         thread_vm = MThread(check_ssh_to_vm_and_wait_for_packets, k, ext_ip_address, ssh_public_port, greeting)
         vm_threads[index] = thread_vm
         index += 1
+
 
     LOG.info("Starting VM ssh session threads .... ")
 
@@ -175,9 +180,9 @@ def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from
         output = t.get_output()
         LOG.info("Thread {} output: {}".format(t.name, output))
         outputs.append(output)
-    for i in range(0, 4):
+    for i in range(0, VMS_COUNT):
         assert outputs[i][1] in outputs[i][0], "VM  did not receive the expected packets {}".format(outputs[i][1])
-        for j in range(0, 4):
+        for j in range(0, VMS_COUNT):
             if j != i:
                 assert outputs[i][1] not in outputs[j][0], "VM  received the unexpected packets {}"\
                     .format(outputs[i][1])
@@ -186,7 +191,7 @@ def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from
 
     LOG.tc_step("Testing non tcp packets  in  TCP protocol port forwarding rules ...")
 
-    vm_threads = [None] * 4
+    vm_threads = [None] * VMS_COUNT
     index = 0
     for k, v in vm_tcp_pfs.items():
         greeting = "Hello {}".format(v['public_port'])
@@ -223,7 +228,7 @@ def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from
         LOG.info("Result rc= {}; Output = {}".format(rc, output))
 
     LOG.info("Checking non-tcp packets are not received by vms......")
-    for i in range(0, 4):
+    for i in range(0, VMS_COUNT):
         assert outputs[i] is None or outputs[i][1] not in outputs[i][0], "VM received UDP packets on TCP port " \
                                                                          "forwarding rules {}".format(outputs[i][1])
     LOG.info("Non-tcp packets not received as expected .... ")
@@ -312,7 +317,7 @@ def test_dnat_ubuntu_vm_udp(_vms, router_info):
     LOG.info("Setting NATBox SSH session ...")
     ssh_nat = NATBoxClient.set_natbox_client()
 
-    vm_threads = [None] * 4
+    vm_threads = [None] * VMS_COUNT
     index = 0
     for k, v in vm_udp_pfs.items():
         greeting = "Hello {}".format(v['public_port'])
@@ -343,9 +348,9 @@ def test_dnat_ubuntu_vm_udp(_vms, router_info):
         output = t.get_output()
         LOG.info("Thread {} output: {}".format(t.name, output))
         outputs.append(output)
-    for i in range(0, 4):
+    for i in range(0, VMS_COUNT):
         assert outputs[i][1] in outputs[i][0], "VM  did not receive the expected packets {}".format(outputs[i][1])
-        for j in range(0, 4):
+        for j in range(0, VMS_COUNT):
             if j != i:
                 assert outputs[i][1] not in outputs[j][0], "VM  received the unexpected packets {}"\
                     .format(outputs[i][1])
@@ -354,7 +359,7 @@ def test_dnat_ubuntu_vm_udp(_vms, router_info):
 
     LOG.tc_step("Testing non udp packets  in  UDP protocol port forwarding rules ...")
 
-    vm_threads = [None] * 4
+    vm_threads = [None] * VMS_COUNT
     index = 0
     for k, v in vm_udp_pfs.items():
         greeting = "Hello {}".format(v['public_port'])
@@ -392,7 +397,7 @@ def test_dnat_ubuntu_vm_udp(_vms, router_info):
         LOG.info("Result rc= {}; Output = {}".format(rc, output))
 
     LOG.info("Checking non-udp packets are not received by vms......")
-    for i in range(0, 4):
+    for i in range(0,VMS_COUNT):
         assert outputs[i] is None or outputs[i][1] not in outputs[i][0], "VM received UDP packets on TCP port " \
                                                                          "forwarding rules {}".format(outputs[i][1])
     LOG.info("Non-udp packets not received as expected .... ")
