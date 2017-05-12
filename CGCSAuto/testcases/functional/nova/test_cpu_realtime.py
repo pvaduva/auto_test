@@ -204,9 +204,12 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
     Args:
         vcpus (int):
         cpu_rt (str|None):
+        rt_source (str): flavor or image
         rt_mask (str):
         shared_vcpu (int|None):min_vcpus
         numa_nodes (int): number of numa_nodes to boot vm on
+        cpu_thread
+        min_vcpus
         check_hosts (tuple): test fixture
 
     Setups:

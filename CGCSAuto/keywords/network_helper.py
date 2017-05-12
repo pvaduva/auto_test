@@ -2846,24 +2846,46 @@ def get_pci_device_used_vfs_value(device_id, con_ssh=None, auth_info=None):
     return table_parser.get_column(_table, 'pci_vfs_used')[0]
 
 
-def get_pci_device_used_vfs_value_per_compute(host, device_id, con_ssh=None, auth_info=None):
+def get_pci_device_vfs_counts_for_host(host, device_id=None, fields=('pci_vfs_configured', 'pci_vfs_used'),
+                                       con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get PCI device used number of vfs value for given device id
 
     Args:
         host (str): compute hostname
         device_id (str):  device vf id
+        fields (tuple|str|list)
         con_ssh:
         auth_info:
 
     Returns:
-        str :
+        list
 
     """
-    _table = table_parser.table(cli.nova('device-show {}'.format(device_id)))
-    LOG.debug('output from nova device-show for device-id:{}\n{}'.format(device_id, _table))
-    _table = table_parser.filter_table(_table, Host=host)
-    return table_parser.get_column(_table, 'pci_vfs_used')[0]
+    if device_id is None:
+        device_id = get_pci_device_list_values(field='Device Id', con_ssh=con_ssh, auth_info=auth_info)[0]
+
+    table_ = table_parser.table(cli.nova('device-show {}'.format(device_id), ssh_client=con_ssh, auth_info=auth_info))
+    LOG.debug('output from nova device-show for device-id:{}\n{}'.format(device_id, table_))
+
+    table_ = table_parser.filter_table(table_, host=host)
+    counts = []
+    if isinstance(fields, str):
+        fields = [fields]
+
+    for field in fields:
+        counts.append(int(table_parser.get_column(table_, field)[0]))
+
+    return counts
+
+def get_pci_device_list_values(field='pci_vfs_used', con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+    table_ = table_parser.table(cli.nova(cmd='device-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    values = table_parser.get_values(table_, field, **kwargs)
+    if field in ['pci_pfs_configured', 'pci_pfs_used', 'pci_vfs_configured', 'pci_vfs_used']:
+        values = [int(value) for value in values]
+
+    return values
 
 
 def get_tenant_routers_for_vms(vms, con_ssh=None):

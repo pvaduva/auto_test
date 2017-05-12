@@ -621,7 +621,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
             live migration command executed successfully, but VM is not in before-migration-state
         (5, 'Post action check failed: VM host did not change!'):   (this scenario is removed from Newton)
             live migration command executed successfully, but VM is still on the same host after migration
-        (6, <cli_stderr>) This happens when vote_note_to_migrate is set for vm
+        (6, <cli_stderr>) This happens when vote_note_to_migrate is set for vm, or pci device is used in vm, etc
 
     For the first two scenarios, results will be returned regardless of the fail_ok flag.
     For scenarios other than the first two, returns are only applicable if fail_ok=True

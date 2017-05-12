@@ -179,6 +179,8 @@ def test_pci_resource_usage(vif_model_check):
     vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_id, extra_pcipt_net_name, extra_pcipt_net = \
         vif_model_check
 
+    LOG.tc_step("Ensure core/vm quota is sufficient")
+
     if 'sriov' in vif_model:
         vm_type = 'sriov'
         resource_param = 'pci_vfs_used'
@@ -198,7 +200,10 @@ def test_pci_resource_usage(vif_model_check):
     LOG.info("Resource Usage {} for {}. Resource configured: {}".format(pre_resource_value, vif_model, total_val))
 
     expt_change = 2 if vif_model == 'pci-passthrough' and extra_pcipt_net else 1
-    vm_limit = int((total_val - pre_resource_value) / expt_change)
+    vm_limit = int((total_val - pre_resource_value) / expt_change) if vif_model == 'pci-passthrough' else 5
+    inst_quota = nova_helper.get_quotas('instances')[0]
+    if inst_quota < vm_limit + 1:
+        nova_helper.update_quotas(instances=vm_limit + 1)
     vms_under_test = []
     for i in range(vm_limit):
         LOG.tc_step("Boot a vm with {} vif model on {} net".format(vif_model, net_type))
@@ -546,7 +551,9 @@ class TestVmPCIOperations:
 
         LOG.tc_step("Check {} usage is incremented by 1".format(resource_param))
         post_resource_value = nova_helper.get_provider_net_info(self.pnet_id, field=resource_param)
-        assert pre_resource_value + 1 == post_resource_value, "{} usage is not incremented by 1".format(resource_param)
+        expt_change = 2 if self.vif_model == 'pci-passthrough' and self.extra_pcipt_net else 1
+        assert pre_resource_value + expt_change == post_resource_value, "{} usage is not incremented by {} as " \
+                                                                        "expected".format(resource_param, expt_change)
 
         LOG.tc_step('Pause/Unpause {} vm'.format(self.vif_model))
         vm_helper.pause_vm(self.vm_id)

@@ -2274,20 +2274,25 @@ def abort_upgrade(con_ssh=None, timeout=60, fail_ok=False):
             raise exceptions.CLIRejected(err_msg)
 
 
-def get_host_device_list(host, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_host_device_list_values(host, field='name', con_ssh=None, auth_info=Tenant.ADMIN, strict=True, regex=False,
+                                **kwargs):
     """
     Get the parsed version of the output from system host-device-list <host>
     Args:
         host (str): host's name
+        field (str): field name to return value for
         con_ssh (SSHClient):
         auth_info (dict):
+        strict (bool): whether to perform strict search on filter
+        regex (bool): whether to use regular expression to search the value in kwargs
+        kwargs: key-value pairs to filter the table
 
     Returns (dict): output of system host-device-list <host> parsed by table_parser
 
     """
-    output = cli.system('host-device-list', host, ssh_client=con_ssh, auth_info=auth_info)
-    table_ = table_parser.table(output)
-    return table_
+    table_ = table_parser.table(cli.system('host-device-list', host, ssh_client=con_ssh, auth_info=auth_info))
+
+    return table_parser.get_values(table_, target_header=field, strict=strict, regex=regex, **kwargs)
 
 
 def get_host_device_values(host, device, fields, con_ssh=None, auth_info=Tenant.ADMIN):
