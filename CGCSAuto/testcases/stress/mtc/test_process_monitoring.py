@@ -208,7 +208,7 @@ PROCESSES = {
         'severity': 'critical', 'node_type': 'active'},
 
     'glance-api': {
-        'cmd': '/usr/bin/python2 /bin/glance-api', 'impact': 'enabled-degraded',
+        'cmd': '/usr/bin/python2 /bin/glance-api', 'impact': 'swact',
         'severity': 'major', 'node_type': 'active'},
 
     'neutron-server': {
@@ -242,8 +242,8 @@ PROCESSES = {
         'severity': 'major', 'node_type': 'active'},
 
     'cinder-api': {
-        'cmd': '/usr/bin/python2 /bin/cinder-api', 'impact': 'enabled-degraded',
-        'severity': 'major', 'node_type': 'active'},
+        'cmd': '/usr/bin/python2 /bin/cinder-api', 'impact': 'swact',
+        'severity': 'critical', 'node_type': 'active'},
 
     'cinder-scheduler': {
         'cmd': '/usr/bin/python2 /bin/cinder-scheduler', 'impact': 'swact',
@@ -316,8 +316,8 @@ PROCESSES = {
 
     # {'nfv-vim-api': {
     'vim-api': {
-        'cmd': '/usr/bin/python /bin/nfv-vim-api', 'impact': 'enabled-degraded',
-        'severity': 'major', 'node_type': 'active'},
+        'cmd': '/usr/bin/python /bin/nfv-vim-api', 'impact': 'swact',
+        'severity': 'critical', 'node_type': 'active'},
 
     'vim': {
         'cmd': '/usr/bin/python /bin/nfv-vim', 'impact': 'swact',
