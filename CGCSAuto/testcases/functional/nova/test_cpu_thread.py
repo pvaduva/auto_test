@@ -1230,4 +1230,4 @@ class TestVariousHT:
             LOG.tc_step("Attempt to lock host and ensure it is rejected as no other HT host to migrate require vm to")
             code, output = host_helper.lock_host(host=vm_host, check_first=False, fail_ok=True)
             HostsToRecover.add(vm_host)
-            assert 5 == code, "Host lock result unexpected. Details: {}".format(output)
+            assert 0 != code, "Host lock result unexpected. Details: {}".format(output)
