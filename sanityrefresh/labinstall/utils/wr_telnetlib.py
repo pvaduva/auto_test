@@ -941,7 +941,7 @@ class Telnet:
                 #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
                 # Construct regex to work with wildcatpass machines
                 # in legacy and uefi mode
-                regex = re.compile(b"\[\d+(;22H|;15H|;11H)(.*?)\x1b")
+                regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
 
                 log.info("wildcat: compiled regex is: {}".format(regex))
 
