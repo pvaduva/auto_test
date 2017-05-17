@@ -283,7 +283,7 @@ def generate_report(recipients, subject='', source='mongo', tags=None, start_dat
     tmp_file, lab, build, build_server, raw_status = write_report_file(source=source, tags=tags, start_date=start_date,
                                                                        end_date=end_date, logs_dir=logs_dir)
     try:
-        if mark_status:
+        if mark_status in [True, 'true', 'True', 'TRUE']:
             mark_status_on_build_server(status=raw_status, build_server=build_server, build_id=build)
     except:
         raise
