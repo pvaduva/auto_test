@@ -129,9 +129,12 @@ def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_
             "expected ordinary cpus: {}; Actual in virsh vcpupin: {}".format(expt_ord_cpus, virsh_ord_cpus)
         assert set(emulator_cpus) < set(expt_ord_cpus), "Emulator cpus is not a subset of ordinary cpus"
 
+        comm_pattern = 'CPU [{}]/KVM'
         LOG.tc_step("Check actual vm realtime cpu scheduler via ps")
+        rt_comm = comm_pattern.format(','.join([str(vcpu) for vcpu in expt_rt_cpus]))
         vm_pid = vm_helper.get_vm_pid(instance_name=inst_name, host_ssh=host_ssh)
-        ps_rt_scheds = vm_helper.get_sched_policy_and_priority_for_vcpus(vm_pid, host_ssh, cpusets=rt_cpusets)
+        ps_rt_scheds = vm_helper.get_sched_policy_and_priority_for_vcpus(vm_pid, host_ssh, cpusets=rt_cpusets,
+                                                                         comm=rt_comm)
         assert len(expt_rt_cpus) == len(ps_rt_scheds)
 
         for ps_rt_sched in ps_rt_scheds:
@@ -140,8 +143,9 @@ def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_
             assert ps_rt_prio == '1', "Actual priority: {}. ps_rt_sheds parsed: {}".format(ps_rt_pol, ps_rt_scheds)
 
         LOG.tc_step("Check actual vm ordinary cpu scheduler via ps")
+        ord_comm = comm_pattern.format(','.join([str(vcpu) for vcpu in expt_ord_cpus]))
         ps_ord_scheds = vm_helper.get_sched_policy_and_priority_for_vcpus(vm_pid, host_ssh, cpusets=ord_cpusets,
-                                                                          comm='CPU.*KVM|qemu-kvm')
+                                                                          comm=ord_comm)
         for ps_ord_sched in ps_ord_scheds:
             ps_ord_pol, ps_ord_prio = ps_ord_sched
             assert ps_ord_pol == 'TS' and ps_ord_prio == '-', "ps_ord_scheds parsed: {}".format(ps_ord_scheds)
@@ -193,8 +197,8 @@ def check_hosts():
     (4, 'yes', '^0', 'favor', None, 2, 'require', None),
     (6, 'yes', '^2-3', 'flavor', None, 1, 'isolate', 4),
     (3, 'yes', '^0-1', 'image', None, None, None, 2),
-    (4, 'no', '^0-2', 'image', 0, None, None, None),
-    (3, 'yes', '^1-2', 'image', 2, 2, 'isolate', None),
+    (4, 'no', '^0-2', 'image', 0, 2, None, None),
+    (3, 'yes', '^1-2', 'image', 2, None, 'isolate', None),
     (2, 'yes', '^1', 'flavor', 1, 1, None, None)
 ])
 def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu, numa_nodes, cpu_thread, min_vcpus,
@@ -234,20 +238,18 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
     if shared_vcpu is not None and len(hosts_with_shared_cpu) < 2:
         skip("Less than two up hypervisors configured with shared cpu")
 
+    cpu_rt_flv = cpu_rt
     if rt_source == 'image':
         # rt_mask_flv = cpu_rt_flv = None
         rt_mask_flv = '^0'
-        cpu_rt_flv = 'yes'
         rt_mask_img = rt_mask
-        cpu_rt_img = cpu_rt
     else:
-        rt_mask_img = cpu_rt_img = None
         rt_mask_flv = rt_mask
-        cpu_rt_flv = cpu_rt
+        rt_mask_img = None
 
     image_id = None
-    if cpu_rt_img is not None:
-        image_medata = {ImageMetadata.CPU_RT_MASK: rt_mask_img, ImageMetadata.CPU_RT: cpu_rt_img}
+    if rt_mask_img is not None:
+        image_medata = {ImageMetadata.CPU_RT_MASK: rt_mask_img}
         image_id = glance_helper.create_image(name='rt_mask', **image_medata)[1]
         ResourceCleanup.add('image', image_id)
 

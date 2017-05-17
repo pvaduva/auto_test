@@ -202,8 +202,8 @@ def test_pci_resource_usage(vif_model_check):
     expt_change = 2 if vif_model == 'pci-passthrough' and extra_pcipt_net else 1
     vm_limit = int((total_val - pre_resource_value) / expt_change) if vif_model == 'pci-passthrough' else 5
     inst_quota = nova_helper.get_quotas('instances')[0]
-    if inst_quota < vm_limit + 1:
-        nova_helper.update_quotas(instances=vm_limit + 1)
+    if inst_quota < vm_limit + 5:
+        nova_helper.update_quotas(instances=vm_limit + 5)
     vms_under_test = []
     for i in range(vm_limit):
         LOG.tc_step("Boot a vm with {} vif model on {} net".format(vif_model, net_type))

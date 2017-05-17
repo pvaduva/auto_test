@@ -9,8 +9,14 @@ from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
-@fixture(scope='module')
-def target_host(request):
+@fixture(autouse=True)
+def check_alarms():
+    # Override check alarms fixture
+    pass
+
+
+@fixture(scope='function')
+def target_host():
     nova_hosts = host_helper.get_nova_hosts()
     if len(nova_hosts) > 4:
         skip("More than 4 nova hosts detected.")
@@ -24,13 +30,7 @@ def target_host(request):
 
     nova_hosts = host_helper.get_nova_hosts()
     hosts_to_lock = list(set(nova_hosts) - {target_host})
-    HostsToRecover.add(hosts_to_lock, scope='module')
-
-    #
-    # def unlock():
-    #     if hosts_to_lock:
-    #         host_helper.unlock_hosts(hosts=hosts_to_lock)
-    # request.addfinalizer(unlock)
+    HostsToRecover.add(hosts_to_lock, scope='function')
 
     for host in hosts_to_lock:
         host_helper.lock_host(host, swact=False)

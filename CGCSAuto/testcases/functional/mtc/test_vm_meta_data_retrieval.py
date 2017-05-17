@@ -34,27 +34,21 @@ def test_vm_meta_data_retrieval():
 
 
     """
-    # create VM make sure it's pingable
+    LOG.tc_step("create VM make sure it's pingable")
     vm_id = vm_helper.boot_vm(source='image', cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
-    LOG.debug('Query meta-data')
+    LOG.tc_step('Query meta-data for vm instance id')
     # retrieve meta instance id by ssh to VM from natbox and wget to remote server
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         command = 'wget http://169.254.169.254/latest/meta-data/instance-id'
-        vm_ssh.exec_cmd(command)
+        vm_ssh.exec_cmd(command, fail_ok=False)
         command1 = 'more instance-id'
-        exitcode, instance_id_output = vm_ssh.exec_cmd(command1)
+        instance_id_output = vm_ssh.exec_cmd(command1, fail_ok=False)[1]
 
-    instance_id_output = re.findall(r'\-\s*(\w+)', instance_id_output)
-    LOG.info("Instance ID output from meta-data: {}".format(instance_id_output))
+    LOG.tc_step("Ensure instance id from metadata server is as expected")
+    actual_inst_id = instance_id_output.split(sep='-')[1]
+    inst_name = nova_helper.get_vm_instance_name(vm_id)
+    expt_inst_id = inst_name.split(sep='-')[1]
 
-    # compare the retrieved meta data to nova show vm's OS-EXT-SRV-ATTR:instance_name variable
-    instance_id = ['OS-EXT-SRV-ATTR:instance_name']
-    table_instance_id = nova_helper.get_vm_nova_show_values(vm_id, instance_id)[0]
-    LOG.info("Instance ID from table: {}".format(table_instance_id))
-    table_instance_id = re.findall(r'\-\s*(\w+)', table_instance_id)
-    LOG.info("Instance ID value from table: {}".format(table_instance_id))
-
-    assert instance_id_output == table_instance_id, "Expected {} = to {}".format(instance_id_output,table_instance_id)
+    assert expt_inst_id == actual_inst_id, "Instance ID retrieved from metadata server is not as expected"
