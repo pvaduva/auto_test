@@ -1726,3 +1726,15 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
     succ_msg = "Hosts successfully {}ed in aggregate {}: {}".format(msg_str.lower(), aggregate, hosts)
     LOG.info(succ_msg)
     return 0, succ_msg
+
+
+def run_migration_list(con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    nova migration-list to collect migration history of each vm
+    Args:
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    """
+    LOG.info("Listing migration history...")
+    cli.nova('migration-list', ssh_client=con_ssh, auth_info=auth_info)
