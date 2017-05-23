@@ -6,7 +6,7 @@ class HostTimeout:
     COMPUTE_UNLOCK = 840
     CONTROLLER_UNLOCK = 1360
     REBOOT = 1600
-    SWACT = 140
+    SWACT = 180
     LOCK = 900
     TASK_CLEAR = 180
     FAIL_AFTER_REBOOT = 120
