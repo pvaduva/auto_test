@@ -285,7 +285,7 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
 
     return load_path
 
-def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex):
+def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex, barcode_controller, barcode_compute):
     ''' Verify that the correct configuration file is used in setting up the
         lab.
     '''
@@ -322,19 +322,20 @@ def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex):
                                                 lab_cfg_location)
     if not found_system_cfg_file:
         msg += '\nFailed to find {} in {}'.format(cfgfile_list, lab_cfg_location)
+
     if not found_lab_settings_file:
-        msg += '\nFailed to find {} in {}'.format(CUSTOM_LAB_SETTINGS_FILENAME,
-                                                  lab_cfg_location)
+        log.info('Settings.ini not found. Will use stored values.')
+        lab_cfg_location = get_settings(barcode_controller, barcode_compute)
+        lab_cfg_location = LAB_SETTINGS_DIR + "/" + lab_cfg_location +".ini"
+        log.info('Using lab settings file path: {}'.format(lab_cfg_location))
 
     if not found_lab_setup_cfg_file:
         msg += '\nFailed to find {} in {}'.format(LAB_SETUP_CFG_FILENAME,
                                                   lab_cfg_location)
-
     if not (found_bulk_cfg_file and found_system_cfg_file and
-            found_lab_settings_file and found_lab_setup_cfg_file):
+            found_lab_setup_cfg_file):
         msg = 'Missing required configuration files'
         wr_exit()._exit(1, msg)
-
     if found_lab_settings_file and not tis_on_tis:
         lab_settings_filepath = lab_cfg_location + "/"\
                                 + CUSTOM_LAB_SETTINGS_FILENAME
@@ -397,7 +398,6 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on
             msg = 'No valid host bulk add file found in {}'.format(lab_cfg_path)
             log.error(msg)
             wr_exit()._exit(1, msg)
-
     # ~/wassp-repos/testcases/cgcs/sanityrefresh/labinstall/lab_settings/*.ini
     lab_settings_rel_path = LAB_SETTINGS_DIR + "/{}.ini".format(lab_cfg_location)
     lab_settings_filepath = SCRIPT_DIR + "/" + lab_settings_rel_path
@@ -774,6 +774,58 @@ def get_system_name(bld_server_conn, lab_cfg_path):
     system_name = bld_server_conn.exec_cmd(cmd)[1]
     return ((system_name.split('=')[1])[5:]).replace('"', '')
 
+def get_settings(barcode_controller, barcode_compute):
+    barcode_controller = barcode_controller.split(',')
+    if len(barcode_controller) > 1:
+        if barcode_compute != None:
+            barcode_compute = barcode_compute.split(',')
+            with open("node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
+                server_code.readline()
+                server_name = server_code.readline()
+            t, server_name = server_name.split('=')
+            server_name = server_name.replace('\n', '')
+            server_name = server_name.replace("yow-", "")
+            try:
+                server_name.index("cgcs-")
+            except ValueError:
+                server_name = "cgcs-" + server_name
+            with open("node_info/" + barcode_compute[-1] + ".ini", "r") as server_code:
+                server_code.readline()
+                last_server_name = server_code.readline()
+            last_server_name = last_server_name.split('-')
+            last_server_number = last_server_name[-1]
+            last_server_number = last_server_number.replace('\n', '')
+        else:
+            with open("node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
+                server_code.readline()
+                server_name = server_code.readline()
+            t, server_name = server_name.split('=')
+            server_name = server_name.replace('\n', '')
+            server_name = server_name.replace("yow-", "")
+            try:
+                server_name.index("cgcs-")
+            except ValueError:
+                server_name = "cgcs-" + server_name
+
+            with open("node_info/" + barcode_controller[-1] + ".ini", "r") as server_code:
+                server_code.readline()
+                last_server_name = server_code.readline()
+            last_server_name = last_server_name.split('-')
+            last_server_number = last_server_name[-1]
+            last_server_number = last_server_number.replace('\n', '')
+    else:
+        with open("node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
+            server_code.readline()
+            server_name = server_code.readline()
+        t, server_name = server_name.split('=')
+        server_name = server_name.replace('\n', '')
+        server_name = server_name.replace("yow-", "")
+        try:
+            server_name.index("cgcs-")
+        except ValueError:
+            server_name = "cgcs-" + server_name
+
+    return server_name + "_" + last_server_number
 
 def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True, usb=False, lowlat=False):
     ''' Initiate the boot and installation operation.
@@ -1688,8 +1740,6 @@ def main():
     PASSWORD = args.password or getpass.getpass()
     PUBLIC_SSH_KEY = get_ssh_key()
 
-
-
     tis_on_tis = args.tis_on_tis
     if tis_on_tis:
         print("\nRunning Tis-on-TiS lab install ...")
@@ -1848,11 +1898,12 @@ def main():
 
     if tis_on_tis:
         guest_load_path = "{}/{}".format(DEFAULT_WKSPCE, guest_bld_dir)
-
     load_path = get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
                                   tis_bld_dir)
     if os.path.isdir(lab_cfg_location):
-        lab_cfg_path, lab_settings_filepath = verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex)
+        barcode_controller = args.controller
+        barcode_compute = args.compute
+        lab_cfg_path, lab_settings_filepath = verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex, barcode_controller, barcode_compute)
     else:
         lab_cfg_path, lab_settings_filepath = verify_lab_cfg_location(bld_server_conn,
                                                   lab_cfg_location, load_path,
