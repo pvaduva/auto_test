@@ -379,7 +379,7 @@ class SSHClient:
             self.send_control('c')
             self.flush(10)
 
-    def exec_cmd(self, cmd, expect_timeout=10, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
+    def exec_cmd(self, cmd, expect_timeout=60, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
                  fail_ok=True, get_exit_code=True, blob=None, force_end=False, searchwindowsize=None):
         """
 
