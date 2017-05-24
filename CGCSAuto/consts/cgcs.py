@@ -119,6 +119,7 @@ class HostAvailabilityState:
 class HostTask:
     BOOTING = 'Booting'
     REBOOTING = 'Rebooting'
+    POWER_CYCLE = 'Critical Event Power-Cycle'
 
 
 class Prompt:
@@ -137,7 +138,6 @@ class Prompt:
     ROOT_PROMPT = '.*root@.*'
     Y_N_PROMPT = '.*\(y/n\)\?.*'
     YES_N_PROMPT = '.*\[yes/N\]\: ?'
-
 
 
 class NovaCLIOutput:
@@ -247,6 +247,7 @@ class EventLogID:
     NTP_ALARM = '100.114'
     CINDER_IO_CONGEST = '800.101'
     PROVIDER_NETWORK_FAILURE = '300.005'
+    BMC_SENSOR_ACTION = '200.007'
 
 
 class NetworkingVmMapping:

@@ -641,7 +641,7 @@ class SSHClient:
 
         """
         cmd = 'sudo ' + cmd
-        LOG.info("Executing sudo command: {}".format(cmd))
+        LOG.debug("Executing sudo command...")
         self.send(cmd)
         prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
         index = self.expect([self.prompt, prompt], timeout=expect_timeout, searchwindowsize=searchwindowsize)

@@ -648,7 +648,7 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
     LOG.info("Waiting for alarm {} to disappear from system alarm-list".format(alarm_id))
     end_time = time.time() + timeout
     while time.time() < end_time:
-        alarms_tab = table_parser.table(cli.system('alarm-list', ssh_client=con_ssh, auth_info=auth_info))
+        alarms_tab = table_parser.table(cli.system('alarm-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
         alarms_tab = _compose_alarm_table(alarms_tab, uuid=False)
 
         alarm_tab = table_parser.filter_table(alarms_tab, **{'Alarm ID': alarm_id})
@@ -722,13 +722,14 @@ def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=Non
     end_time = time.time() + timeout
     while time.time() < end_time:
         current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
-        if table_parser.get_values(current_alarms_tab, rtn_val, strict=strict, regex=regex, **kwargs):
+        val = table_parser.get_values(current_alarms_tab, rtn_val, strict=strict, regex=regex, **kwargs)
+        if val:
             LOG.info('Expected alarm appeared. Filters: {}'.format(kwargs))
-            return True, rtn_val
+            return True, val
 
         time.sleep(check_interval)
 
-    err_msg = "Alarm {} did not appear in system alarm-list within timeout".format(kwargs)
+    err_msg = "Alarm {} did not appear in system alarm-list within {} seconds".format(kwargs, timeout)
     if fail_ok:
         LOG.warning(err_msg)
         return False, None
