@@ -2,7 +2,7 @@ from pytest import mark, fixture, skip
 from utils import cli, table_parser
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
-from keywords import network_helper, vm_helper, nova_helper, system_helper, host_helper
+from keywords import network_helper, vm_helper, nova_helper, system_helper, host_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -358,6 +358,7 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_list):
     quota_instance = number_of_vms if number_of_vms > 20 else 20
     quota_cores = quota_instance * 4
     nova_helper.update_quotas(instances=quota_instance, cores=quota_cores)
+    cinder_helper.update_quotas(volumes=quota_instance)
 
     vms = {}
     for i in range(1, number_of_vms + 1):
