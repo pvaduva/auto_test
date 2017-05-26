@@ -326,49 +326,49 @@ def _test_suppress_unsuppress_sensorgroups(host, sensor_data_fit):
 #         assert res is True, "FAIL: Modifying sensor action failed for sensor on {}".format(host)
 
 
-@mark.parametrize(('host', 'eventlevel', 'action'), [
-    ('controller-1', 'actions_critical_group', 'log'),
-    ('controller-1', 'actions_critical_group', 'ignore'),
-    ('controller-1', 'actions_critical_group', 'power-cycle'),
-    ('controller-1', 'actions_critical_group', 'reset'),
-    ('controller-1', 'actions_critical_group', 'alarm'),
-    ('controller-1', 'actions_major_group', 'alarm'),
-    ('controller-1', 'actions_major_group', 'ignore'),
-    ('controller-1', 'actions_major_group', 'log'),
-    ('controller-1', 'actions_minor_group', 'alarm'),
-    ('controller-1', 'actions_minor_group', 'log'),
-    ('controller-1', 'actions_minor_group', 'ignore'),
-])
-def _test_set_sensorgroup_action(host, eventlevel, action, sensor_data_fit):
-    """
-    This test case verifies that it is possible to successfully set the
-    sensorgroup action to one of the acceptable values: log, alarm,
-    power-cycle, reset, and ignore.
-
-    Currently this test is parameterized to execute on one node but can be expanded to
-    validate all nodes in a system.
-
-
-    Test Steps:
-        - Check the state of the host
-        - Iterate through each sensorgroup on the host
-        - Test the ability to configure the action for each sensorgroup
-
-    """
-    bmc_hosts = sensor_data_fit
-    if host not in bmc_hosts:
-        skip("{} is not configured with BMC sensor".format(host))
-
-    LOG.tc_step("Modifying the sensorgroup action on {}".format(host))
-
-    for sensorgroup_name in bmc_helper.get_sensorgroup_name(host):
-        LOG.tc_step("Validating that sensorgroup: {} "
-                    "can be set to sensor action: {} "
-                    "for event level: {}".format(sensorgroup_name, action, eventlevel))
-        res = bmc_helper.set_sensorgroup_action(sensorgroup_name, host, eventlevel, action)
-
-        assert res is True, "FAIL: Modifying sensor action failed for sensor on {}".format(host)
-
+# @mark.parametrize(('host', 'eventlevel', 'action'), [
+#     ('controller-1', 'actions_critical_group', 'log'),
+#     ('controller-1', 'actions_critical_group', 'ignore'),
+#     ('controller-1', 'actions_critical_group', 'power-cycle'),
+#     ('controller-1', 'actions_critical_group', 'reset'),
+#     ('controller-1', 'actions_critical_group', 'alarm'),
+#     ('controller-1', 'actions_major_group', 'alarm'),
+#     ('controller-1', 'actions_major_group', 'ignore'),
+#     ('controller-1', 'actions_major_group', 'log'),
+#     ('controller-1', 'actions_minor_group', 'alarm'),
+#     ('controller-1', 'actions_minor_group', 'log'),
+#     ('controller-1', 'actions_minor_group', 'ignore'),
+# ])
+# def _test_set_sensorgroup_action(host, eventlevel, action, sensor_data_fit):
+#     """
+#     This test case verifies that it is possible to successfully set the
+#     sensorgroup action to one of the acceptable values: log, alarm,
+#     power-cycle, reset, and ignore.
+#
+#     Currently this test is parameterized to execute on one node but can be expanded to
+#     validate all nodes in a system.
+#
+#
+#     Test Steps:
+#         - Check the state of the host
+#         - Iterate through each sensorgroup on the host
+#         - Test the ability to configure the action for each sensorgroup
+#
+#     """
+#     bmc_hosts = sensor_data_fit
+#     if host not in bmc_hosts:
+#         skip("{} is not configured with BMC sensor".format(host))
+#
+#     LOG.tc_step("Modifying the sensorgroup action on {}".format(host))
+#
+#     for sensorgroup_name in bmc_helper.get_sensorgroup_name(host):
+#         LOG.tc_step("Validating that sensorgroup: {} "
+#                     "can be set to sensor action: {} "
+#                     "for event level: {}".format(sensorgroup_name, action, eventlevel))
+#         res = bmc_helper.set_sensorgroup_action(sensorgroup_name, host, eventlevel, action)
+#
+#         assert res is True, "FAIL: Modifying sensor action failed for sensor on {}".format(host)
+#
 #
 # @mark.parametrize(('host', 'eventlevel', 'action',
 #                    'expected_host_state',
@@ -464,21 +464,21 @@ def _test_set_sensorgroup_action(host, eventlevel, action, sensor_data_fit):
                    'expected_alarm_state',
                    'event_type',
                    'suppressionlevel'), [
-    ('compute-0', 'actions_critical_group', 'alarm', 'degraded', 'yes_alarm', 'cr', 'unsuppressed'),
-    ('compute-0', 'actions_critical_group', 'ignore', 'available', 'no_alarm', 'cr', 'unsuppressed'),
-    ('compute-0', 'actions_critical_group', 'log', 'available', 'no_alarm', 'cr', 'unsuppressed'),
-    ('compute-0', 'actions_critical_group', 'ignore', 'available', 'no_alarm', 'cr', 'unsuppressed'),
-    ('controller-0', 'actions_critical_group', 'alarm', 'degraded', 'yes_alarm', 'cr', 'unsuppressed'),
-    ('controller-1', 'actions_critical_group', 'power-cycle', 'power-off', 'yes_alarm', 'cr', 'unsuppressed'),
-    ('controller-1', 'actions_critical_group', 'reset', 'offline', 'yes_alarm', 'nr', 'unsuppressed'),
-    ('controller-1', 'actions_critical_group', 'alarm', 'degraded', 'yes_alarm', 'nr', 'unsuppressed'),
-    ('controller-1', 'actions_major_group', 'alarm', 'degraded', 'yes_alarm', 'nc', 'unsuppressed'),
-    ('controller-1', 'actions_major_group', 'ignore', 'available', 'no_alarm', 'nc', 'unsuppressed'),
-    ('controller-1', 'actions_major_group', 'power-cycle', 'degraded', 'yes_alarm', 'nc', 'unsuppressed'),
-    ('controller-1', 'actions_major_group', 'log', 'degraded', 'no_alarm', 'nc', 'unsuppressed'),
-    ('controller-1', 'actions_minor_group', 'alarm', 'degraded', 'no_alarm', 'minor', 'unsuppressed'),
-    ('controller-1', 'actions_minor_group', 'log', 'available', 'no_alarm', 'minor', 'unsuppressed'),
-    ('controller-1', 'actions_minor_group', 'ignore', 'available', 'no_alarm', 'minor', 'unsuppressed'),
+    ('compute-0', 'action_critical', 'alarm', 'degraded', 'yes_alarm', 'cr', 'unsuppressed'),
+    ('compute-0', 'action_critical', 'ignore', 'available', 'no_alarm', 'cr', 'unsuppressed'),
+    ('compute-0', 'action_critical', 'log', 'available', 'no_alarm', 'cr', 'unsuppressed'),
+    ('compute-0', 'action_critical', 'ignore', 'available', 'no_alarm', 'cr', 'unsuppressed'),
+    ('controller-0', 'action_critical', 'alarm', 'available', 'no_alarm', 'cr', 'suppressed'),
+    ('controller-1', 'action_critical', 'power-cycle', 'power-off', 'yes_alarm', 'cr', 'unsuppressed'),
+    ('controller-1', 'action_critical', 'reset', 'offline', 'yes_alarm', 'nr', 'unsuppressed'),
+    ('controller-1', 'action_critical', 'alarm', 'degraded', 'yes_alarm', 'nr', 'unsuppressed'),
+    ('controller-1', 'action_major', 'alarm', 'degraded', 'yes_alarm', 'nc', 'unsuppressed'),
+    ('controller-1', 'action_major', 'ignore', 'available', 'no_alarm', 'nc', 'unsuppressed'),
+    ('controller-1', 'action_major', 'power-cycle', 'degraded', 'yes_alarm', 'nc', 'unsuppressed'),
+    ('controller-1', 'action_major', 'log', 'degraded', 'no_alarm', 'nc', 'unsuppressed'),
+    ('controller-1', 'action_minor', 'alarm', 'degraded', 'no_alarm', 'minor', 'unsuppressed'),
+    ('controller-1', 'action_minor', 'log', 'available', 'no_alarm', 'minor', 'unsuppressed'),
+    ('controller-1', 'action_minor', 'ignore', 'available', 'no_alarm', 'minor', 'unsuppressed'),
 ])
 def test_sensorgroup_action_taken(host,
                                   eventlevel,
@@ -507,7 +507,9 @@ def test_sensorgroup_action_taken(host,
     if suppressionlevel == 'suppressed':
         global SUPPRESSED
         SUPPRESSED = host
-
+        suppress = True
+    else:
+        suppress = False
     # Get a sensor to validate
     for sensorgroup_name in bmc_helper.get_sensorgroup_name(host):
         LOG.tc_step("Validating that sensorgroup: {} "
@@ -516,10 +518,8 @@ def test_sensorgroup_action_taken(host,
                                                  eventlevel))
 
         # Set the event level and action
-        res = bmc_helper.set_sensorgroup_action(sensorgroup_name, host, event_level=eventlevel, action=action)
-
-        assert res is True, "FAIL: Modifying sensorgroup action failed for " \
-                            "sensor on {}".format(host)
+        bmc_helper.modify_sensorgroup(host, sensorgroup_name, value='name', suppress=suppress, audit_interval=10,
+                                      **{eventlevel: action})
 
         # Get a sensor that is part of the sensorgroup
         sensor_name = bmc_helper.get_first_sensor_from_sensorgroup(sensorgroup_name, host)
@@ -527,19 +527,13 @@ def test_sensorgroup_action_taken(host,
 
         LOG.tc_step("Trigger event for sensorgroup: {} and sensor name: {}".
                     format(sensorgroup_name, sensor_name))
-
-        bmc_helper.set_sensorgroup_audit_interval(sensorgroup_name, host, audit_value=10)
-
         if event_type in ['power-cycle', 'reset']:
             HostsToRecover.add(host)
-
         bmc_helper.trigger_event(host, sensor_name, event_type)
 
+        LOG.tc_step("Check sensor status and alarm for {}".format(sensor_name))
         res = system_helper.wait_for_alarm(alarm_id=EventLogID.BMC_SENSOR_ACTION, entity_id=entity_id,
                                            timeout=45, strict=False, fail_ok=True)[0]
-
-        LOG.tc_step("Check sensor status and alarm for {}".format(sensor_name))
-
         if expected_alarm_state == 'yes_alarm':
             assert res, "FAIL: Alarm expected but no alarms found for sensor on {}".format(host)
         else:
