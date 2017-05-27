@@ -464,13 +464,13 @@ def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, eve
     queries = []
     for q_key, q_val in query_dict.items():
         if q_val is not None:
-            queries.append('{}={}'.format(q_key, str(q_val).lower()))
+            queries.append('{}={}'.format(q_key, str(q_val)))
 
     if query_key is not None:
         if not query_value:
             raise ValueError("Query value is not supplied for key - {}".format(query_key))
         data_type_arg = '' if not query_type else "{}::".format(query_type.lower())
-        queries.append('{}={}{}'.format(query_key.lower(), data_type_arg, query_value.lower()))
+        queries.append('{}={}{}'.format(query_key.lower(), data_type_arg, query_value))
 
     query_string = ';'.join(queries)
     if query_string:

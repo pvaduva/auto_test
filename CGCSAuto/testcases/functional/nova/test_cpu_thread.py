@@ -282,8 +282,9 @@ class TestHTEnabled:
         mark.p1((2, 'dedicated', 'require', 'require', 'dedicated', True, None)),
         mark.p1((2, 'dedicated', 'prefer', 'prefer', 'dedicated', True, None)),
         mark.p1((3, 'dedicated', 'prefer', 'prefer', None, True, None)),
-        mark.p1((3, 'dedicated', 'prefer', 'isolate', 'dedicated', False, None)),
-        mark.p3((3, 'dedicated', 'prefer', 'require', 'dedicated', True, None)),
+        # Following two tests removed due to CGTS-6504. Upstream bug was opened.
+        # mark.p1((3, 'dedicated', 'prefer', 'isolate', 'dedicated', False, None)),
+        # mark.p3((3, 'dedicated', 'prefer', 'require', 'dedicated', True, None)),
         mark.p3((2, 'dedicated', 'isolate', 'require', 'dedicated', True, 'CPUThreadErr.CONFLICT_FLV_IMG')),
         mark.p2((2, 'dedicated', 'require', 'isolate', 'dedicated', True, 'CPUThreadErr.CONFLICT_FLV_IMG')),
         mark.p3((3, 'dedicated', 'require', 'isolate', 'dedicated', False, 'CPUThreadErr.CONFLICT_FLV_IMG')),

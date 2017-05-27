@@ -143,14 +143,15 @@ def modify_sensorgroup(host, sensor_group, value='name', action_critical=None, a
     if not args:
         raise ValueError("At least one field should be specified: {}".format(args_dict.keys()))
 
-    if value == 'uuid':
+    if value == 'name':
         sensor_group_uuid = get_sensor_uuid(sensor_group, host, sensor_group=True)
     else:
         sensor_group_uuid = sensor_group
 
     args = ' '.join([host, sensor_group_uuid, args.strip()])
 
-    code, out = cli.system('host-sensorgroup-modify', args, auth_info=auth_info, ssh_client=con_ssh, fail_ok=fail_ok)
+    code, out = cli.system('host-sensorgroup-modify', args, auth_info=auth_info, ssh_client=con_ssh, fail_ok=fail_ok,
+                           rtn_list=True)
     if code == 1:
         return code, out
 
@@ -158,7 +159,7 @@ def modify_sensorgroup(host, sensor_group, value='name', action_critical=None, a
     failed_to_mod = ''
     for key, val in validate_dict.items():
         post_val = table_parser.get_value_two_col_table(post_mod_tab, field=key)
-        if not val == post_val:
+        if not str(val) == post_val:
             failed_to_mod += '\n{} val is {} instead of {} after modify'.format(key, post_val, val)
 
     if failed_to_mod:
@@ -307,18 +308,9 @@ def get_first_sensor_from_sensorgroup(sensor_groupname, host):
     Returns:
         the sensor name
     """
-
     sensorgroup_table = get_sensors_table(host, sensor_group=True)
     sensors = eval(table_parser.get_values(sensorgroup_table, 'sensors', name=sensor_groupname)[0])
     return sensors[0]
-
-    # for i in range(len(sensorgroup_table['values'])):
-    #     row = sensorgroup_table['values'][i]
-    #     if row[1] == sensor_groupname:
-    #         sensor_list = row[3].replace("'",'')
-    #         sensor_list = sensor_list.replace("[u",'').split(',')
-    #         sensor_name = sensor_list[0]
-    #         return sensor_name
 
 
 def get_sensor_showtable(sensor_uuid, host, sensor_group=False):
@@ -443,8 +435,3 @@ def clear_events(host):
 
     # Restore the original sensor data file
     con_ssh.exec_sudo_cmd(cmd='cp {} {}'.format(original_sensor_datafile, sensor_data_file), fail_ok=False)
-
-
-
-
-

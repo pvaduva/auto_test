@@ -52,6 +52,7 @@ def tables(output_lines, combine_multiline_entry=False):
     (see OutputParser.table())
     And, if found, label key (separated line preceding the table_)
     is added to each tables dict.
+    Returns (list):
     """
     tables_ = []
 
@@ -415,6 +416,7 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
             when False, if a value spread into multiple lines, this value will be presented as a list with
                 each line being a string item in this list
                 Examples: 'subnets' in neutron net-list
+        exclude (bool): whether to exclude the values filtered out
 
         **kwargs: header/value pair(s) as search criteria. Used to filter out the target row(s).
             When multiple header/value pairs are given, they will be in 'AND' relation.
@@ -610,6 +612,7 @@ def filter_table(table_, strict=True, regex=False, exclude=False, **kwargs):
                 'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
         strict (bool):
         regex (bool): Whether to use regex to find matching value(s)
+        exclude (bool): whether to exclude the rows filtered out
 
         **kwargs: header/value pair(s) as search criteria. Used to filter out the target row(s).
             Examples: header_1 = [value1, value2, value3], header_2 = value_2
@@ -669,8 +672,8 @@ def compare_tables(table_one, table_two):
     table2_keys = set(table_two.keys())
     # compare number of keys in each set. They should be only 'headers' and 'values'
     if len(table1_keys) == len(table2_keys) == 2:
-        if table1_keys - {'headers','values'} or table2_keys - {'headers', 'values'}:
-            return 1, "The keys of the two tables is different than expected {'headers','values'}, " \
+        if table1_keys - {'headers', 'values'} or table2_keys - {'headers', 'values'}:
+            return 1, "The keys of the two tables is different than expected {{'headers','values'}}, " \
                       "Table one contain {}. Table two contain {}".format(table1_keys, table2_keys)
     else:
         return 2, "The number of keys is different between Table One and Table Two"
@@ -818,7 +821,7 @@ def remove_columns(table_, headers):
 
     Args:
         table_ (dict): original table which in the format of {'headers': [<headers>], 'values': [<rows>]}
-        header (str/list/tuple): chosen key(s) to remove
+        headers (str/list/tuple): chosen key(s) to remove
 
     Returns (dict): A table dictionary without key_headers and corresponding values
 
