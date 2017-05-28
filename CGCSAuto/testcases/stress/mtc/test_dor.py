@@ -6,7 +6,7 @@ from utils import local_host
 from consts.timeout import HostTimeout
 from consts.vlm import VlmAction
 from keywords import system_helper, vlm_helper, host_helper, vm_helper
-from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module
+from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module, unreserve_hosts_module
 
 
 def power_off_and_on(barcode, power_off_event, timeout):

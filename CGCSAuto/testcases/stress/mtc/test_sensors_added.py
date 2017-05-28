@@ -116,9 +116,9 @@ def cleanup_on_failure(request):
                    'event_type',
                    'suppressionlevel'), [
     ('compute-0', 'action_critical', 'alarm', 'degraded', 'yes_alarm', 'cr', 'unsuppressed'),
-    ('compute-0', 'action_critical', 'ignore', 'available', 'no_alarm', 'cr', 'unsuppressed'),
-    ('compute-0', 'action_critical', 'log', 'available', 'no_alarm', 'cr', 'unsuppressed'),
-    ('compute-0', 'action_critical', 'ignore', 'available', 'no_alarm', 'cr', 'unsuppressed'),
+    ('compute-0', 'action_critical', 'ignore', 'available', 'no_log', 'cr', 'unsuppressed'),
+    ('compute-0', 'action_critical', 'log', 'available', 'yes_log', 'cr', 'unsuppressed'),
+    ('compute-0', 'action_critical', 'ignore', 'available', 'no_log', 'cr', 'unsuppressed'),
     ('controller-0', 'action_critical', 'alarm', 'available', 'no_log', 'cr', 'suppressed'),
     ('controller-1', 'action_critical', 'power-cycle', 'power-off', 'yes_alarm', 'cr', 'unsuppressed'),
     ('controller-1', 'action_critical', 'reset', 'offline', 'yes_alarm', 'nr', 'unsuppressed'),
