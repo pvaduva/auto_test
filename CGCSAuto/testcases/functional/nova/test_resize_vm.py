@@ -32,7 +32,7 @@ def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
 
 @mark.parametrize(('storage_backing', 'origin_flavor', 'dest_flavor', 'boot_source'), [
     ('remote',      (4, 0, 0), (5, 1, 1), 'image'),
-    ('remote',      (5, 1, 1), (4, 2, 2), 'image'),
+    ('remote',      (4, 1, 1), (5, 2, 2), 'image'),
     ('remote',      (4, 1, 1), (4, 1, 0), 'image'),
     ('remote',      (4, 0, 0), (1, 1, 1), 'volume'),
     ('remote',      (4, 1, 1), (8, 2, 2), 'volume'),
