@@ -17,6 +17,16 @@ LAB_YOW_REL_PATH = EXPORT_LAB_REL_PATH + "/yow"
 LAB_SCRIPTS_REL_PATH = EXPORT_LAB_REL_PATH + "/scripts"
 CENTOS_LAB_REL_PATH = "std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab"
 HEAT_TEMPLATES_PATH = "std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates"
+TS_16_10_WKSPCE = "/folk/cgts/temp/prestaging/R3"
+TS_15_12_WKSPCE = "/folk/cgts/temp/prestaging/R2"
+TS_16_10_REL_PATH = "cgcs/extras.ND"
+TS_15_12_REL_PATH = "cgcs/extras.ND"
+TS_16_10_LAB_REL_PATH = "cgcs/extras.ND/lab"
+TS_15_12_LAB_REL_PATH = "cgcs/extras.ND/lab"
+TS_16_10_HEAT_TEMPLATE_PATH = "cgcs/openstack/recipes-base/python-heat/python-heat/templates"
+TS_15_12_HEAT_TEMPLATE_PATH = "cgcs/openstack/recipes-base/python-heat/python-heat/templates/hot"
+TS_16_10_CONF_PATH = "localdisk/loadbuild/jenkins/TS_16.10_Host/2016-10-27_18-08-31/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow"
+TS_15_12_CONF_PATH = "localdisk/loadbuild/jenkins/TS_15.12_Host/2016-01-29_17-36-48/layers/wr-cgcs/cgcs/extras.ND/lab/yow"
 
 SYSTEM_CFG_FILENAME = "system_config"
 WRL_CFGFILE_LIST = ["system_config", "TiS_config.ini_wrl", "TiS_config.ini"]
@@ -211,6 +221,8 @@ RETURN_CODE_CMD = "echo {}$?{}".format(OPEN_MARKER, CLOSE_MARKER)
 # e.g. Tue Nov 24 15:52:39 UTC 2015
 DATE_TIMESTAMP_REGEX = r"\w{3} \w{3} \d{2} \d{2}:\d{2}:\d{2} \w{3} \d{4}"
 TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
+TS_16_10_REGEX = "^TS_16.10*"
+TS_15_12_REGEX = "^TS_15.12*"
 
 # Email notification constants
 EMAIL_SERVER = 'prod-webmail.corp.ad.wrs.com'
