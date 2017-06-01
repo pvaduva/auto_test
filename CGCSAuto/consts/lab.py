@@ -167,6 +167,47 @@ class Labs:
         'compute_nodes': [21763, 21764, 21765],
     }
 
+    SM_1 = {
+        'short_name': 'sm_1',
+        'name': 'yow-cgcs-supermicro-1',
+        'floating ip': '128.224.150.235',
+        'controller-0 ip': '128.224.150.221',
+        'controller_nodes': [46808],
+    }
+
+    SM_2 = {
+        'short_name': 'sm_2',
+        'name': 'yow-cgcs-supermicro-2',
+        'floating ip': '128.224.150.240',
+        'controller-0 ip': '128.224.150.222',
+        'controller_nodes': [23907],
+    }
+
+    SM_3 = {
+        'short_name': 'sm_3',
+        'name': 'yow-cgcs-supermicro-3',
+        'floating ip': '128.224.150.81',
+        'controller-0 ip': '128.224.150.81',
+        'controller_nodes': [23514],
+    }
+
+    SM_4 = {
+        'short_name': 'sm_4',
+        'name': 'yow-cgcs-supermicro-4',
+        'floating ip': '128.224.150.83',
+        'controller-0 ip': '128.224.150.83',
+        'controller_nodes': [23515],
+    }
+
+    SM_5_6 = {
+        'short_name': 'sm_5_6',
+        'name': 'yow-cgcs-supermicro-5-6',
+        'floating ip': '128.224.151.54',
+        'controller-0 ip': '128.224.150.84',
+        'controller-1 ip': '128.224.150.56',
+        'controller_nodes': [23516, 23517],
+    }
+
     WCP_3_6 = {
         'short_name': 'wcp_3_6',
         'name': 'yow-cgcs-wildcat-3-6',
