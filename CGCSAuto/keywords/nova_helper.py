@@ -1404,7 +1404,7 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, mac_addr=None,
         auth_info (dict):
         con_ssh (SSHClient):
 
-    Returns (dict): such as [{"vif_model": "pci-passthrough", "network": "internal0-net1", "port_id":
+    Returns (list): such as [{"vif_model": "pci-passthrough", "network": "internal0-net1", "port_id":
         "33990477-dce6-4447-b153-4dee596fe3f4", "mtu": 9000, "mac_address": "90:e2:ba:60:c8:08", "vif_pci_address": ""}]
 
     """

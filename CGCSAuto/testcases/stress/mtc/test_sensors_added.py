@@ -30,11 +30,11 @@ def check_alarms():
 
 # Configure the connection to a BMC server
 # The following BMC servers are available: yow-cgcs-quanta-1 to yow-cgcs-quanta-5
-mac_addr = "2C:60:0C:AD:9A:A3"
-ip_addr = '128.224.151.124'   # -- yow-cgcs-quanta-5
-bm_type = 'quanta'
-bm_username = 'admin'
-bm_password = 'admin'
+# mac_addr = "2C:60:0C:AD:9A:A3"
+# ip_addr = '128.224.151.124'   # -- yow-cgcs-quanta-5
+# bm_type = 'quanta'
+# bm_username = 'admin'
+# bm_password = 'admin'
 
 HOST = ''
 # SUPPRESSED = False
@@ -61,9 +61,7 @@ def sensor_data_fit(request):
         LOG.fixture_step("(module) rm /var/run/fit/sensor_data")
         con_ssh = ControllerClient.get_active_controller()
         con_ssh.exec_sudo_cmd('rm /var/run/fit/sensor_data', fail_ok=False)
-
-        LOG.fixture_step("")
-    # request.addfinalizer(_revert)
+    request.addfinalizer(_revert)
     
     return bmc_hosts
 
@@ -115,11 +113,11 @@ def cleanup_on_failure(request):
                    'expected_alarm_state',
                    'event_type',
                    'suppressionlevel'), [
-    ('compute-0', 'action_critical', 'alarm', 'degraded', 'yes_alarm', 'cr', 'unsuppressed'),
-    ('compute-0', 'action_critical', 'ignore', 'available', 'no_log', 'cr', 'unsuppressed'),
-    ('compute-0', 'action_critical', 'log', 'available', 'yes_log', 'cr', 'unsuppressed'),
-    ('compute-0', 'action_critical', 'ignore', 'available', 'no_log', 'cr', 'unsuppressed'),
-    ('controller-0', 'action_critical', 'alarm', 'available', 'no_log', 'cr', 'suppressed'),
+    ('compute-1', 'action_critical', 'alarm', 'degraded', 'yes_alarm', 'cr', 'unsuppressed'),
+    ('compute-1', 'action_critical', 'ignore', 'available', 'no_log', 'cr', 'unsuppressed'),
+    ('compute-1', 'action_critical', 'log', 'available', 'yes_log', 'cr', 'unsuppressed'),
+    ('compute-1', 'action_critical', 'ignore', 'available', 'no_log', 'cr', 'unsuppressed'),
+    ('controller-1', 'action_critical', 'alarm', 'available', 'no_log', 'cr', 'suppressed'),
     ('controller-1', 'action_critical', 'power-cycle', 'power-off', 'yes_alarm', 'cr', 'unsuppressed'),
     ('controller-1', 'action_critical', 'reset', 'offline', 'yes_alarm', 'nr', 'unsuppressed'),
     ('controller-1', 'action_critical', 'alarm', 'degraded', 'yes_alarm', 'nr', 'unsuppressed'),
@@ -129,6 +127,14 @@ def cleanup_on_failure(request):
     ('controller-1', 'action_minor', 'alarm', 'available', 'yes_alarm', 'mn', 'unsuppressed'),
     ('controller-1', 'action_minor', 'log', 'available', 'yes_log', 'mn', 'unsuppressed'),
     ('controller-1', 'action_minor', 'ignore', 'available', 'no_log', 'mn', 'unsuppressed'),
+    ('compute-1', 'action_critical', 'alarm', 'available', 'no_log', 'cr', 'suppressed'),
+    ('controller-1', 'action_critical', 'log', 'available', 'no_log', 'cr', 'suppressed'),
+    ('controller-1', 'action_critical', 'ignore', 'available', 'no_log', 'cr', 'suppressed'),
+    ('controller-1', 'action_major', 'alarm', 'available', 'no_log', 'nc', 'suppressed'),
+    ('compute-1', 'action_major', 'log', 'available', 'no_log', 'nc', 'suppressed'),
+    ('compute-1', 'action_minor', 'alarm', 'available', 'no_log', 'mn', 'suppressed'),
+    ('controller-1', 'action_minor', 'log', 'available', 'no_log', 'mn', 'suppressed'),
+
 ])
 def test_sensorgroup_action_taken(host,
                                   eventlevel,
@@ -219,21 +225,24 @@ def test_sensorgroup_action_taken(host,
 # @mark.usefixtures('bmc_test_prep')
 @mark.parametrize(('host', 'event_type', 'action_level', 'action', 'suppression', 'expt_alarm', 'expt_host_avail',
                    'new_action', 'new_suppression', 'new_expt_alarm', 'new_expt_host_avail'), [
-    ('compute-0', 'cr', 'action_critical', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', 'ignore', None, 'no_log', 'available'),
-    ('compute-0', 'cr', 'action_critical', 'log', 'unsuppressed', 'yes_log', 'available', 'alarm', None, 'yes_alarm', 'degraded'),
-    ('compute-0', 'cr', 'action_critical', 'ignore', 'unsuppressed', 'no_log', 'available', 'log', None, 'yes_log', 'available'),
-    ('compute-0', 'nr', 'action_critical', 'ignore', 'unsuppressed', 'no_log', 'available', 'alarm', None, 'yes_alarm', 'degraded'),
-    ('compute-0', 'nr', 'action_critical', 'alarm', 'suppressed', 'no_log', 'available', 'reset', None, 'no_log', 'available'),
-    ('compute-0', 'nr', 'action_critical', 'log', 'suppressed', 'no_log', 'available', None, 'unsuppressed', 'yes_log', 'available'),
-    ('controller-0', 'nc', 'action_major', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', 'ignore', 'unsuppressed', 'no_log', 'available'),
-    ('controller-0', 'nc', 'action_major', 'alarm', 'suppressed', 'no_alarm', 'available', None, 'unsuppressed', 'yes_alarm', 'degraded'),
-    ('controller-0', 'nc', 'action_major', 'log', 'unsuppressed', 'yes_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded'),
-    ('controller-0', 'nc', 'action_major', 'ignore', 'unsuppressed', 'no_log', 'available', 'log', 'unsuppressed', 'yes_log',   'available'),
-    ('controller-0', 'nc', 'action_major', 'ignore', 'unsuppressed', 'no_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded'),
-    ('controller-0', 'mn', 'action_minor', 'alarm', 'unsuppressed', 'yes_alarm', 'available', 'ignore', 'unsuppressed', 'no_log', 'available'),
-    ('controller-0', 'mn', 'action_minor', 'log', 'unsuppressed', 'yes_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'available'),
-    ('controller-0', 'mn', 'action_minor', 'ignore', 'unsuppressed', 'no_log', 'available', 'log', 'unsuppressed', 'yes_log', 'available'),
-    ('controller-0', 'mn', 'action_minor', 'ignore', 'unsuppressed', 'no_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'available'),
+    # ('compute-0', 'cr', 'action_critical', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', 'ignore', None, 'no_log', 'available'),
+    # ('compute-0', 'cr', 'action_critical', 'log', 'unsuppressed', 'yes_log', 'available', 'alarm', None, 'yes_alarm', 'degraded'),
+    # ('compute-0', 'cr', 'action_critical', 'ignore', 'unsuppressed', 'no_log', 'available', 'log', None, 'yes_log', 'available'),
+    # ('compute-0', 'nr', 'action_critical', 'ignore', 'unsuppressed', 'no_log', 'available', 'alarm', None, 'yes_alarm', 'degraded'),
+    # ('compute-0', 'nr', 'action_critical', 'alarm', 'suppressed', 'no_log', 'available', 'reset', None, 'no_log', 'available'),
+    # ('compute-0', 'nr', 'action_critical', 'log', 'suppressed', 'no_log', 'available', None, 'unsuppressed', 'yes_log', 'available'),
+    # ('controller-0', 'nc', 'action_major', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', 'ignore', 'unsuppressed', 'no_log', 'available'),
+    # ('controller-0', 'nc', 'action_major', 'alarm', 'suppressed', 'no_alarm', 'available', None, 'unsuppressed', 'yes_alarm', 'degraded'),
+    # ('controller-0', 'nc', 'action_major', 'log', 'unsuppressed', 'yes_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded'),
+    # ('controller-0', 'nc', 'action_major', 'ignore', 'unsuppressed', 'no_log', 'available', 'log', 'unsuppressed', 'yes_log',   'available'),
+    # ('controller-0', 'nc', 'action_major', 'ignore', 'unsuppressed', 'no_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded'),
+    # ('controller-0', 'mn', 'action_minor', 'alarm', 'unsuppressed', 'yes_alarm', 'available', 'ignore', 'unsuppressed', 'no_log', 'available'),
+    # ('controller-0', 'mn', 'action_minor', 'log', 'unsuppressed', 'yes_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'available'),
+    # ('controller-0', 'mn', 'action_minor', 'ignore', 'unsuppressed', 'no_log', 'available', 'log', 'unsuppressed', 'yes_log', 'available'),
+    # ('controller-0', 'mn', 'action_minor', 'ignore', 'unsuppressed', 'no_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'available'),
+    # ('controller-0', 'cr', 'action_critical', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', None, 'suppressed', 'no_log', 'available'),
+    # ('compute-0', 'nc', 'action_major', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', None, 'suppressed', 'no_log', 'available'),
+    ('controller-0', 'nc', 'action_major', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', 'log', None, 'yes_log', 'available'),
 ])
 def test_transition_sensorgroup_actions(host,
                                         event_type,

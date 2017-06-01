@@ -2625,7 +2625,7 @@ def get_portforwarding_rule_info(portforwarding_id, field='inside_addr', strict=
 def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, device_owner=None,
                 admin_state_down=None, mac_addr=None, vnic_type=None, security_groups=None, no_security_groups=None,
                 extra_dhcp_opts=None, qos_pol=None, allowed_addr_pairs=None, no_allowed_addr_pairs=None, dns_name=None,
-                fail_ok=False, auth_info=None, con_ssh=None):
+                wrs_vif=None, fail_ok=False, auth_info=None, con_ssh=None):
     """
     Create a port on given network
 
@@ -2684,7 +2684,8 @@ def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, 
         '--vnic-type': vnic_type,
         # '--binding-profile':
         '--qos-policy': qos_pol,
-        '--dns-name': dns_name
+        '--dns-name': dns_name,
+        '--wrs-binding:vif_model': wrs_vif,
     }
 
     for key, val in kwargs_dict.items():

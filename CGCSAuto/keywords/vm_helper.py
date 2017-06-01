@@ -3248,18 +3248,21 @@ def boot_vms_various_types(storage_backing=None, target_host=None, scope='functi
         storage_backing (str|None): storage backing to set in flavor spec. When None, storage backing which used by
             most up hypervisors will be used.
         target_host (str|None): Boot vm on target_host when specified. (admin role has to be added to tenant under test)
-        scope (str): Scope for resource cleanup, valid values: 'function', 'class', 'module'
+        scope (str|None): Scope for resource cleanup, valid values: 'function', 'class', 'module', None.
+            When None, vms/volumes/flavors will be kept on system
 
     Returns (list): list of vm ids
 
     """
     LOG.info("Create a flavor without ephemeral or swap disks")
     flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing)[1]
-    ResourceCleanup.add('flavor', flavor_1, scope=scope)
+    if scope:
+        ResourceCleanup.add('flavor', flavor_1, scope=scope)
 
     LOG.info("Create another flavor with ephemeral and swap disks")
     flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=1, storage_backing=storage_backing)[1]
-    ResourceCleanup.add('flavor', flavor_2, scope=scope)
+    if scope:
+        ResourceCleanup.add('flavor', flavor_2, scope=scope)
 
     LOG.info("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
     vm1_name = "vol_root"
@@ -3284,7 +3287,8 @@ def boot_vms_various_types(storage_backing=None, target_host=None, scope='functi
     vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone='nova', vm_host=target_host, cleanup=scope)[1]
 
     vol = cinder_helper.create_volume(bootable=False)[1]
-    ResourceCleanup.add('volume', vol, scope='class')
+    if scope:
+        ResourceCleanup.add('volume', vol, scope='class')
     attach_vol_to_vm(vm4, vol_id=vol)
 
     wait_for_vm_pingable_from_natbox(vm4)
