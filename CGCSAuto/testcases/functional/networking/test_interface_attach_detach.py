@@ -27,10 +27,10 @@ def base_vm():
 
 
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vif_model'), [
-    ('tis-centos-guest', 'net_id', 'e1000'),
+    #('tis-centos-guest', 'net_id', 'e1000'),
     ('tis-centos-guest', 'net_id', 'avp'),
-    ('tis-centos-guest', 'net_id', 'virtio'),
-    ('tis-centos-guest', 'port_id', 'rtl8139')
+    ('tis-centos-guest', 'net_id', 'virtio')
+    #('tis-centos-guest', 'port_id', 'rtl8139')
 ])
 def _test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     """
@@ -153,9 +153,12 @@ def _test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     ## ('centos_7', 'net_id', 'avp'),
     ## ('centos_7', 'net_id', 'virtio'),
     ##('centos_7', 'port_id', 'rtl8139'),
-    ('cgcs-guest', 'net_id', 'avp'),
-    ('cgcs-guest', 'net_id', 'e1000'),
-    ('cgcs-guest', 'port_id', 'virtio')
+    #('cgcs-guest', 'net_id', 'avp'),
+    #('cgcs-guest', 'net_id', 'e1000'),
+    #('cgcs-guest', 'port_id', 'virtio'),
+    ('tis-centos-guest', 'net_id', 'avp')
+    #('tis-centos-guest', 'net_id', 'virtio'),
+    #('tis-centos-guest', 'port_id', 'e1000')
     ## ('cgcs-guest', 'net_id', 'rtl8139')
 
 ])
@@ -188,6 +191,7 @@ def _test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vi
     base_vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id = base_vm
 
     nic_action = False
+    #dhclient = True if vif_model in ['avp', 'e1000', 'virtio'] else False
 
     internal_port_id = None
     if if_attach_arg == 'port_id':
@@ -217,7 +221,7 @@ def _test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vi
                                       guest_os=guest_os)[1]
     ResourceCleanup.add('vm', vm_under_test)
 
-    for vm_actions in [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
+    for vm_actions in [['live_migrate'], ['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
         tenant_port_ids = []
         LOG.tc_step("atttach maximum number of vnics to the VM")
         vnics_attached=len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
@@ -283,8 +287,11 @@ def _bring_up_attached_interface(vm_id, guest_os, num=1):
             eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
             assert eth_name, "Interface with mac {} is not listed in 'ip addr' in vm {}".format(mac_addr, vm_id)
             vm_ssh.exec_sudo_cmd('ip link set dev {} up'.format(eth_name))
-            if not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
-                vm_ssh.exec_sudo_cmd('dhclient {} -r'.format(eth_name))
+            #if not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
+            #    vm_ssh.exec_sudo_cmd('dhclient {} -r'.format(eth_name))
+            vm_ssh.exec_sudo_cmd('dhclient -r {}'.format(eth_name), expect_timeout=180)
             vm_ssh.exec_sudo_cmd('dhclient {}'.format(eth_name))
+            #vm_ssh.exec_sudo_cmd('dhclient -r {}'.format(eth_name))
+            #vm_ssh.exec_sudo_cmd('dhclient {}'.format(eth_name))
 
         vm_ssh.exec_sudo_cmd('ip addr')
