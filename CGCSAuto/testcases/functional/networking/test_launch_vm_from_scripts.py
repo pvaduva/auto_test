@@ -2,9 +2,19 @@
 from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 from consts.cgcs import VMStatus
-from keywords import vm_helper, nova_helper, network_helper
+from keywords import vm_helper, nova_helper, network_helper, host_helper, system_helper
 
 from testfixtures.resource_mgmt import ResourceCleanup
+
+
+@fixture(scope='module', autouse=True)
+def check_launch_script_exists():
+    controller = system_helper.get_active_controller_name()
+    with host_helper.ssh_to_host(controller) as con_ssh:
+        cmd = "ls -A /home/wrsroot/instances_group0"
+        if con_ssh.exec_cmd(cmd)[1] == '':
+            skip("Lab setup using heat. No VM launch script.")
+
 
 @mark.parametrize('vm_type', ['avp', 'vhost', 'vswitch', 'virtio', 'pcipt', 'sriov'])
 def test_vif_models(vm_type):
