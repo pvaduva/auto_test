@@ -1731,13 +1731,14 @@ def get_pci_devices_info(con_ssh=None, auth_info=None):
             pci_vfs = table_parser.get_column(table, 'pci_vfs_configured')
             pci_vfs_used = table_parser.get_column(table, 'pci_vfs_used')
 
-            for name, device_id, vendor_id, host, pci_pf, pci_pf_used, pci_vfs, pci_vfs_used in \
+            for name, device_id, vendor_id, host, pci_pf, pci_pf_used, pci_vf, pci_vf_used in \
                     zip(names, device_ids, vendor_ids, hosts, pci_pfs, pci_pfs_used, pci_vfs, pci_vfs_used):
+
                     nova_pci_devices[host] = {device_id: {'vendor_id': vendor_id,
-                                                          'pci_pfs_configured': pci_pfs,
-                                                          'pci_pfs_used': pci_pfs_used,
-                                                          'pci_vfs_configured': pci_vfs,
-                                                          'pci_vfs_used': pci_pfs_used,
+                                                          'pci_pfs_configured': pci_pf,
+                                                          'pci_pfs_used': pci_pf_used,
+                                                          'pci_vfs_configured': pci_vf,
+                                                          'pci_vfs_used': pci_pf_used,
                                                           }}
         except Exception as e:
             LOG.error('CLI output format error: CLI nova device-show {} changed its format. error message:{}'.format(
