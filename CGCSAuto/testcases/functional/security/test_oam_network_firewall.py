@@ -26,7 +26,8 @@ def test_config_iptables_reboot():
             LOG.tc_step("checking iptables status")
             cmd = 'service iptables status'
             code, output = con_ssh.exec_sudo_cmd(cmd)
-            assert 'Active: inactive' in output, "iptables service did not stop running on host {}".format(controller)
+            assert 'Active: inactive' or 'Active: failed' in output, "iptables service did not stop running on host {}"\
+                .format(controller)
 
         LOG.tc_step("Rebooting {}".format(controller))
         host_helper.reboot_hosts(controller)
