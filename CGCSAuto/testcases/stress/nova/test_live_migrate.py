@@ -69,8 +69,8 @@ def test_live_migrate_while_launch_delete_vms(flavors):
 
     """
     end_event = Event()
-    # run_time = 8 * 3600
-    run_time = 300
+    run_time = 10 * 3600
+    # run_time = 300
     start_time = time.time()
     end_time = start_time + run_time
     thread_timeout = run_time + 300
@@ -119,8 +119,8 @@ def test_launch_delete_vms(flavors):
 
     """
     end_event = Event()
-    # run_time = 8 * 3600
-    run_time = 300
+    run_time = 10 * 3600
+    # run_time = 300
     start_time = time.time()
     end_time = start_time + run_time
     thread_timeout = run_time + 300
