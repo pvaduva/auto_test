@@ -29,10 +29,10 @@ def base_vm():
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vif_model'), [
     #('tis-centos-guest', 'net_id', 'e1000'),
     ('tis-centos-guest', 'net_id', 'avp'),
-    ('tis-centos-guest', 'net_id', 'virtio')
-    #('tis-centos-guest', 'port_id', 'rtl8139')
+    ('tis-centos-guest', 'net_id', 'virtio'),
+    ('tis-centos-guest', 'port_id', 'rtl8139')
 ])
-def _test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
+def test_interface_attach_detach(base_vm, guest_os, if_attach_arg, vif_model):
     """
     Sample test case for interface attach/detach
     Args:
@@ -289,9 +289,8 @@ def _bring_up_attached_interface(vm_id, guest_os, num=1):
             vm_ssh.exec_sudo_cmd('ip link set dev {} up'.format(eth_name))
             #if not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
             #    vm_ssh.exec_sudo_cmd('dhclient {} -r'.format(eth_name))
-            vm_ssh.exec_sudo_cmd('dhclient -r {}'.format(eth_name), expect_timeout=180)
-            vm_ssh.exec_sudo_cmd('dhclient {}'.format(eth_name))
-            #vm_ssh.exec_sudo_cmd('dhclient -r {}'.format(eth_name))
-            #vm_ssh.exec_sudo_cmd('dhclient {}'.format(eth_name))
-
+            vm_ssh.exec_sudo_cmd('pkill -f dhclient')
+            vm_ssh.exec_sudo_cmd('dhclient --restrict-interfaces {}'.format(eth_name), expect_timeout=180)
+            #process_id = vm_ssh.exec_sudo_cmd("ps -ef | grep restrict-interfaces | awk '{print $2}'")[1]
+            #vm_ssh.exec_sudo_cmd('pkill -f dhclient')
         vm_ssh.exec_sudo_cmd('ip addr')
