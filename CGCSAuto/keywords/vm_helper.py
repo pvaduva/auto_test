@@ -695,6 +695,8 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         if _is_live_migration_allowed(vm_id, block_migrate=block_migrate) and \
                 (destination_host or get_dest_host_for_live_migrate(vm_id)):
             if fail_ok:
+                LOG.info("async live migrate failed. Wait for 2.5 minutes before proceed")
+                time.sleep(150)
                 return 2, output
             else:
                 raise exceptions.VMPostCheckFailed("Unexpected failure of live migration!")
