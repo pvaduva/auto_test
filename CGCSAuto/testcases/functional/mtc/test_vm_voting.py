@@ -208,6 +208,7 @@ def test_vm_voting(action, hb_flavor):
             skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
 
     vm_id = boot_vm_(hb_flavor)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 

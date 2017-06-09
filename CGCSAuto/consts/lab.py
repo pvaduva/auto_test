@@ -280,7 +280,6 @@ class Labs:
         'storage_nodes': [23264, 23263, 23266, 23265],
     }
 
-
     WCP_61_62 = {
         'short_name': 'wcp_61_62',
         'name': 'yow-cgcs-wildcat-61_62',
@@ -289,7 +288,6 @@ class Labs:
         'controller-1 ip': '128.224.151.81',
         'controller_nodes': [23280, 23281],
     }
-
 
     WCP_63_66 = {
         'short_name': 'wcp_63_66',
@@ -317,6 +315,15 @@ class Labs:
         'auth_url': 'http://127.168.204.2:5000/v3/',
         'controller-0 ip': '128.224.151.38',
         'controller_nodes': [23287],
+    }
+
+    WCP_69_70 = {
+        'short_name': 'wcp_69_70',
+        'name': 'yow-cgcs-wildcat-69_70',
+        'floating ip': '128.224.151.241',
+        'controller-0 ip': '128.224.151.240',
+        'controller-1 ip': '128.224.151.253',
+        'controller_nodes': [23288, 23289],
     }
 
     WCP_71_75 = {
