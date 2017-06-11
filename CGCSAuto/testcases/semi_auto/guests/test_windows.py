@@ -12,6 +12,7 @@ def test_boot_windows_guest():
     storage = 'local_image'          # local_lvm, local_image, or remote
     boot_source = 'volume'      # volume or image
 
+
     LOG.tc_step("Get/Create {} glance image".format(guest))
     glance_helper.get_guest_image(guest_os=guest)
 

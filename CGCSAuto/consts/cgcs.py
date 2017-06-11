@@ -32,10 +32,12 @@ MELLANOX4 = 'MT.*ConnectX-4'
 
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
+    TMP_IMG_DIR = '/opt/backups'
     DEFAULT_GUEST = 'tis-centos-guest'
     TIS_GUEST_PATTERN = 'cgcs-guest|tis-centos-guest'
     GUESTS_NO_RM = ['ubuntu_14', 'tis-centos-guest', 'cgcs-guest']
     # Image files name and size from yow-cgcs-test.wrs.com:/home/svc-cgcsauto/images
+    # <glance_image_name>: <source_file_name>, <root disk size>, <dest_file_name>
     IMAGE_FILES = {
         'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_14.qcow2'),
         'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2'),
@@ -46,7 +48,8 @@ class GuestImages:
         'opensuse_11': ('openSUSE-11.3-x86_64.qcow2', 11, 'opensuse_11.qcow2'),     # OVP img
         'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21, 'opensuse_12.qcow2'),      # OVP img
         'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16, 'opensuse_13.qcow2'),
-        'win_2012': ('win2012r2.qcow2', 36, 'win_2012.qcow2'),   # Service Team img
+        # 'win_2012': ('win2012r2.qcow2', 36, 'win_2012.qcow2'),   # Service Team img
+        'win_2012': ('windows_server_2012_r2_standard_eval_kvm_20170321.qcow2', 13, 'win2012r2.qcow2'),  # MattP
         'cgcs-guest': (None, 1, 'cgcs-guest.img'),       # wrl
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img')
     }
