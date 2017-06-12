@@ -373,11 +373,6 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     if dest_dir.endswith('/'):
         dest_dir = dest_dir[:-1]
 
-    chmod = False
-    if '/opt' in dest_dir:
-        chmod = True
-        con_ssh.exec_sudo_cmd(cmd='chmod a+w {}'.format(dest_dir))
-
     dest_path = '{}/{}'.format(dest_dir, dest_name)
 
     if con_ssh.file_exists(file_path=dest_path):
@@ -393,29 +388,23 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}@{}:{} {}'.format(
             SvcCgcsAuto.USER, SvcCgcsAuto.SERVER, source_path, dest_path)
 
-    try:
-        con_ssh.send(scp_cmd)
-        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=3600)
-        if index == 2:
-            con_ssh.send('yes')
-            index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=3600)
-        if index == 1:
-            con_ssh.send(SvcCgcsAuto.PASSWORD)
-            index = con_ssh.expect(timeout=timeout)
-        if index != 0:
-            raise exceptions.SSHException("Failed to scp files")
+    con_ssh.send(scp_cmd)
+    index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=3600)
+    if index == 2:
+        con_ssh.send('yes')
+        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=3600)
+    if index == 1:
+        con_ssh.send(SvcCgcsAuto.PASSWORD)
+        index = con_ssh.expect(timeout=timeout)
+    if index != 0:
+        raise exceptions.SSHException("Failed to scp files")
 
-        exit_code = con_ssh.get_exit_code()
-        if not exit_code == 0:
-            raise exceptions.CommonError("scp unsuccessfully")
+    exit_code = con_ssh.get_exit_code()
+    if not exit_code == 0:
+        raise exceptions.CommonError("scp unsuccessfully")
 
-        if not con_ssh.file_exists(file_path=dest_path):
-            raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
-    except:
-        raise
-    finally:
-        if chmod:
-            con_ssh.exec_sudo_cmd(cmd='chmod go-w {}'.format(dest_dir))
+    if not con_ssh.file_exists(file_path=dest_path):
+        raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
 
     LOG.info("{} image downloaded successfully and saved to {}".format(img_os, dest_path))
     return dest_path
@@ -435,14 +424,12 @@ def get_guest_image(guest_os, rm_image=True):
     img_id = get_image_id_from_name(guest_os, strict=True)
 
     if not img_id:
-        is_tmp = bool(rm_image and not re.search('cgcs-guest|tis-centos|ubuntu_14', guest_os))
-        dest_dir = GuestImages.TMP_IMG_DIR if is_tmp else GuestImages.IMAGE_DIR
-        image_path = _scp_guest_image(img_os=guest_os, dest_dir=dest_dir)
+        image_path = _scp_guest_image(img_os=guest_os)
         disk_format = 'raw' if guest_os == 'cgcs-guest' else 'qcow2'
         img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
-                              container_format='bare', **{'hypervisor_type': 'QEMU', 'os_type': 'windows'})[1]
+                              container_format='bare')[1]
 
-        if is_tmp:
+        if rm_image and not re.search('cgcs-guest|tis-centos|ubuntu_14', guest_os):
             con_ssh = ControllerClient.get_active_controller()
             con_ssh.exec_cmd('rm {}'.format(image_path), fail_ok=True, get_exit_code=False)
 
