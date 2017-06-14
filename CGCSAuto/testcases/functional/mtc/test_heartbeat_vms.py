@@ -168,3 +168,4 @@ def test_hb_vm_with_action(hb_enabled, action, heartbeat_flavors):
             else:
                 assert not heartbeat_proc_appear, "Heartbeat set to False, However, heartbeat process is running " \
                                                   "after {}.".format(action)
+
