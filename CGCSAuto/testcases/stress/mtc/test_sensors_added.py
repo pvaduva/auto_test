@@ -75,7 +75,7 @@ def cleanup_on_failure(request):
         if HOST:
             bmc_helper.clear_events(HOST)
             system_helper.wait_for_alarm_gone(alarm_id=EventLogID.BMC_SENSOR_ACTION, entity_id=HOST, strict=False,
-                                              timeout=45)
+                                              timeout=60)
         #
         # global SUPPRESSED
         # if SUPPRESSED:
@@ -113,27 +113,27 @@ def cleanup_on_failure(request):
                    'expected_alarm_state',
                    'event_type',
                    'suppressionlevel'), [
-    ('compute-1', 'action_critical', 'alarm', 'degraded', 'yes_alarm', 'cr', 'unsuppressed'),
-    ('compute-1', 'action_critical', 'ignore', 'available', 'no_log', 'cr', 'unsuppressed'),
-    ('compute-1', 'action_critical', 'log', 'available', 'yes_log', 'cr', 'unsuppressed'),
-    ('compute-1', 'action_critical', 'ignore', 'available', 'no_log', 'cr', 'unsuppressed'),
-    ('controller-1', 'action_critical', 'alarm', 'available', 'no_log', 'cr', 'suppressed'),
-    ('controller-1', 'action_critical', 'power-cycle', 'power-off', 'yes_alarm', 'cr', 'unsuppressed'),
-    ('controller-1', 'action_critical', 'reset', 'offline', 'yes_alarm', 'nr', 'unsuppressed'),
-    ('controller-1', 'action_critical', 'alarm', 'degraded', 'yes_alarm', 'nr', 'unsuppressed'),
-    ('controller-1', 'action_major', 'alarm', 'degraded', 'yes_alarm', 'nc', 'unsuppressed'),
-    ('controller-1', 'action_major', 'ignore', 'available', 'no_log', 'nc', 'unsuppressed'),
-    ('controller-1', 'action_major', 'log', 'available', 'yes_log', 'nc', 'unsuppressed'),
-    ('controller-1', 'action_minor', 'alarm', 'available', 'yes_alarm', 'mn', 'unsuppressed'),
-    ('controller-1', 'action_minor', 'log', 'available', 'yes_log', 'mn', 'unsuppressed'),
-    ('controller-1', 'action_minor', 'ignore', 'available', 'no_log', 'mn', 'unsuppressed'),
-    ('compute-1', 'action_critical', 'alarm', 'available', 'no_log', 'cr', 'suppressed'),
-    ('controller-1', 'action_critical', 'log', 'available', 'no_log', 'cr', 'suppressed'),
-    ('controller-1', 'action_critical', 'ignore', 'available', 'no_log', 'cr', 'suppressed'),
-    ('controller-1', 'action_major', 'alarm', 'available', 'no_log', 'nc', 'suppressed'),
-    ('compute-1', 'action_major', 'log', 'available', 'no_log', 'nc', 'suppressed'),
-    ('compute-1', 'action_minor', 'alarm', 'available', 'no_log', 'mn', 'suppressed'),
-    ('controller-1', 'action_minor', 'log', 'available', 'no_log', 'mn', 'suppressed'),
+    # ('compute-1', 'action_critical', 'alarm', 'degraded', 'yes_alarm', 'cr', 'unsuppressed'),
+    # ('compute-1', 'action_critical', 'ignore', 'available', 'no_log', 'cr', 'unsuppressed'),
+    # ('compute-1', 'action_critical', 'log', 'available', 'yes_log', 'cr', 'unsuppressed'),
+    # ('compute-1', 'action_critical', 'ignore', 'available', 'no_log', 'cr', 'unsuppressed'),
+    # ('controller-1', 'action_critical', 'alarm', 'available', 'no_log', 'cr', 'suppressed'),
+    # ('compute-1', 'action_critical', 'power-cycle', 'power-off', 'yes_alarm', 'cr', 'unsuppressed'),
+    ('compute-0', 'action_critical', 'reset', 'offline', 'yes_alarm', 'nr', 'unsuppressed'),
+    # ('controller-1', 'action_critical', 'alarm', 'degraded', 'yes_alarm', 'nr', 'unsuppressed'),
+    # ('controller-1', 'action_major', 'alarm', 'degraded', 'yes_alarm', 'nc', 'unsuppressed'),
+    # ('controller-1', 'action_major', 'ignore', 'available', 'no_log', 'nc', 'unsuppressed'),
+    # ('controller-1', 'action_major', 'log', 'available', 'yes_log', 'nc', 'unsuppressed'),
+    # ('controller-1', 'action_minor', 'alarm', 'available', 'yes_alarm', 'mn', 'unsuppressed'),
+    # ('controller-1', 'action_minor', 'log', 'available', 'yes_log', 'mn', 'unsuppressed'),
+    # ('controller-1', 'action_minor', 'ignore', 'available', 'no_log', 'mn', 'unsuppressed'),
+    # ('compute-1', 'action_critical', 'alarm', 'available', 'no_log', 'cr', 'suppressed'),
+    # ('controller-1', 'action_critical', 'log', 'available', 'no_log', 'cr', 'suppressed'),
+    # ('controller-1', 'action_critical', 'ignore', 'available', 'no_log', 'cr', 'suppressed'),
+    # ('controller-1', 'action_major', 'alarm', 'available', 'no_log', 'nc', 'suppressed'),
+    # ('compute-1', 'action_major', 'log', 'available', 'no_log', 'nc', 'suppressed'),
+    # ('compute-1', 'action_minor', 'alarm', 'available', 'no_log', 'mn', 'suppressed'),
+    # ('controller-1', 'action_minor', 'log', 'available', 'no_log', 'mn', 'suppressed'),
 
 ])
 def test_sensorgroup_action_taken(host,
@@ -186,7 +186,7 @@ def test_sensorgroup_action_taken(host,
 
         LOG.tc_step("Trigger event for sensorgroup: {} and sensor name: {}".
                     format(sensorgroup_name, sensor_name))
-        if event_type in ['power-cycle', 'reset']:
+        if action in ['power-cycle', 'reset']:
             HostsToRecover.add(host)
 
         start_time = common.get_date_in_format()
@@ -195,9 +195,9 @@ def test_sensorgroup_action_taken(host,
         LOG.tc_step("Check sensor status and alarm for {}".format(sensor_name))
         if expected_alarm_state == 'yes_alarm':
             system_helper.wait_for_alarm(alarm_id=EventLogID.BMC_SENSOR_ACTION, entity_id=entity_id,
-                                         severity=expt_severity, timeout=45, strict=False, fail_ok=False)
+                                         severity=expt_severity, timeout=60, strict=False, fail_ok=False)
         else:
-            events = system_helper.wait_for_events(timeout=45, num=10, event_log_id=EventLogID.BMC_SENSOR_ACTION,
+            events = system_helper.wait_for_events(timeout=60, num=10, event_log_id=EventLogID.BMC_SENSOR_ACTION,
                                                    entity_instance_id=entity_id, start=start_time, state='log',
                                                    severity=expt_severity, fail_ok=True, strict=False)
             if expected_alarm_state == 'yes_log':
@@ -208,15 +208,19 @@ def test_sensorgroup_action_taken(host,
                                                   timeout=5, fail_ok=False)
 
         LOG.tc_step("Check the host status for sensor: {}".format(sensor_name))
-        host_helper.wait_for_host_states(host, timeout=120, fail_ok=False, availability=expected_host_state)
-        if event_type == 'power-cycle':
+        host_state_timeout = 120
+        if action == 'reset':
+            host_state_timeout = 1080    # 15 min reset interval in between two reset triggers
+        host_helper.wait_for_host_states(host, timeout=host_state_timeout, fail_ok=False,
+                                         availability=expected_host_state)
+        if action == 'power-cycle':
             host_helper.wait_for_host_states(host, timeout=20, task=HostTask.POWER_CYCLE, strict=False)
 
         LOG.tc_step("Check the alarm clears and host in available state after clearing events")
         bmc_helper.clear_events(host)
         system_helper.wait_for_alarm_gone(alarm_id=EventLogID.BMC_SENSOR_ACTION, entity_id=host, strict=False,
-                                          timeout=45)
-        wait_time = 3000 if event_type == 'power-cycle' else HostTimeout.REBOOT
+                                          timeout=60)
+        wait_time = 3000 if action == 'power-cycle' else HostTimeout.REBOOT
         host_helper.wait_for_host_states(host, fail_ok=False, timeout=wait_time, availability='available')
 
     HOST = ''
@@ -225,23 +229,23 @@ def test_sensorgroup_action_taken(host,
 # @mark.usefixtures('bmc_test_prep')
 @mark.parametrize(('host', 'event_type', 'action_level', 'action', 'suppression', 'expt_alarm', 'expt_host_avail',
                    'new_action', 'new_suppression', 'new_expt_alarm', 'new_expt_host_avail'), [
-    # ('compute-0', 'cr', 'action_critical', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', 'ignore', None, 'no_log', 'available'),
-    # ('compute-0', 'cr', 'action_critical', 'log', 'unsuppressed', 'yes_log', 'available', 'alarm', None, 'yes_alarm', 'degraded'),
-    # ('compute-0', 'cr', 'action_critical', 'ignore', 'unsuppressed', 'no_log', 'available', 'log', None, 'yes_log', 'available'),
-    # ('compute-0', 'nr', 'action_critical', 'ignore', 'unsuppressed', 'no_log', 'available', 'alarm', None, 'yes_alarm', 'degraded'),
-    # ('compute-0', 'nr', 'action_critical', 'alarm', 'suppressed', 'no_log', 'available', 'reset', None, 'no_log', 'available'),
-    # ('compute-0', 'nr', 'action_critical', 'log', 'suppressed', 'no_log', 'available', None, 'unsuppressed', 'yes_log', 'available'),
-    # ('controller-0', 'nc', 'action_major', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', 'ignore', 'unsuppressed', 'no_log', 'available'),
-    # ('controller-0', 'nc', 'action_major', 'alarm', 'suppressed', 'no_alarm', 'available', None, 'unsuppressed', 'yes_alarm', 'degraded'),
-    # ('controller-0', 'nc', 'action_major', 'log', 'unsuppressed', 'yes_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded'),
-    # ('controller-0', 'nc', 'action_major', 'ignore', 'unsuppressed', 'no_log', 'available', 'log', 'unsuppressed', 'yes_log',   'available'),
-    # ('controller-0', 'nc', 'action_major', 'ignore', 'unsuppressed', 'no_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded'),
-    # ('controller-0', 'mn', 'action_minor', 'alarm', 'unsuppressed', 'yes_alarm', 'available', 'ignore', 'unsuppressed', 'no_log', 'available'),
-    # ('controller-0', 'mn', 'action_minor', 'log', 'unsuppressed', 'yes_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'available'),
-    # ('controller-0', 'mn', 'action_minor', 'ignore', 'unsuppressed', 'no_log', 'available', 'log', 'unsuppressed', 'yes_log', 'available'),
-    # ('controller-0', 'mn', 'action_minor', 'ignore', 'unsuppressed', 'no_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'available'),
-    # ('controller-0', 'cr', 'action_critical', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', None, 'suppressed', 'no_log', 'available'),
-    # ('compute-0', 'nc', 'action_major', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', None, 'suppressed', 'no_log', 'available'),
+    ('compute-0', 'cr', 'action_critical', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', 'ignore', None, 'no_log', 'available'),
+    ('compute-0', 'cr', 'action_critical', 'log', 'unsuppressed', 'yes_log', 'available', 'alarm', None, 'yes_alarm', 'degraded'),
+    ('compute-0', 'cr', 'action_critical', 'ignore', 'unsuppressed', 'no_log', 'available', 'log', None, 'yes_log', 'available'),
+    ('compute-0', 'nr', 'action_critical', 'ignore', 'unsuppressed', 'no_log', 'available', 'alarm', None, 'yes_alarm', 'degraded'),
+    ('compute-0', 'nr', 'action_critical', 'alarm', 'suppressed', 'no_log', 'available', 'reset', None, 'no_log', 'available'),
+    ('compute-0', 'nr', 'action_critical', 'log', 'suppressed', 'no_log', 'available', None, 'unsuppressed', 'yes_log', 'available'),
+    ('controller-0', 'nc', 'action_major', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', 'ignore', 'unsuppressed', 'no_log', 'available'),
+    ('controller-0', 'nc', 'action_major', 'alarm', 'suppressed', 'no_alarm', 'available', None, 'unsuppressed', 'yes_alarm', 'degraded'),
+    ('controller-0', 'nc', 'action_major', 'log', 'unsuppressed', 'yes_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded'),
+    ('controller-0', 'nc', 'action_major', 'ignore', 'unsuppressed', 'no_log', 'available', 'log', 'unsuppressed', 'yes_log',   'available'),
+    ('controller-0', 'nc', 'action_major', 'ignore', 'unsuppressed', 'no_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded'),
+    ('controller-0', 'mn', 'action_minor', 'alarm', 'unsuppressed', 'yes_alarm', 'available', 'ignore', 'unsuppressed', 'no_log', 'available'),
+    ('controller-0', 'mn', 'action_minor', 'log', 'unsuppressed', 'yes_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'available'),
+    ('controller-0', 'mn', 'action_minor', 'ignore', 'unsuppressed', 'no_log', 'available', 'log', 'unsuppressed', 'yes_log', 'available'),
+    ('controller-0', 'mn', 'action_minor', 'ignore', 'unsuppressed', 'no_log', 'available', 'alarm', 'unsuppressed', 'yes_alarm', 'available'),
+    ('controller-0', 'cr', 'action_critical', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', None, 'suppressed', 'no_log', 'available'),
+    ('compute-0', 'nc', 'action_major', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', None, 'suppressed', 'no_log', 'available'),
     ('controller-0', 'nc', 'action_major', 'alarm', 'unsuppressed', 'yes_alarm', 'degraded', 'log', None, 'yes_log', 'available'),
 ])
 def test_transition_sensorgroup_actions(host,
@@ -299,8 +303,8 @@ def test_transition_sensorgroup_actions(host,
         bmc_helper.trigger_event(host, sensor_name, event_type)
 
         LOG.tc_step("Check the alarm status for sensor: {}".format(sensor_name))
-        res = system_helper.wait_for_alarm(alarm_id=EventLogID.BMC_SENSOR_ACTION, timeout=45, entity_id=entity_id,
-                                           severity=expt_severity, regex=True, strict=False, fail_ok=True)[0]
+        res = system_helper.wait_for_alarm(alarm_id=EventLogID.BMC_SENSOR_ACTION, timeout=60, entity_id=entity_id,
+                                           severity=expt_severity, strict=False, fail_ok=True)[0]
 
         if expt_alarm == 'yes_alarm':
             assert res, "FAIL: Alarm expected but no alarms found for sensor on {}".format(host)
@@ -323,9 +327,9 @@ def test_transition_sensorgroup_actions(host,
 
         if new_expt_alarm == 'yes_alarm':
             system_helper.wait_for_alarm(alarm_id=EventLogID.BMC_SENSOR_ACTION, entity_id=entity_id,
-                                         severity=new_expt_severity, timeout=45, strict=False, fail_ok=False)
+                                         severity=new_expt_severity, timeout=60, strict=False, fail_ok=False)
         else:
-            events = system_helper.wait_for_events(timeout=45, num=10, event_log_id=EventLogID.BMC_SENSOR_ACTION,
+            events = system_helper.wait_for_events(timeout=60, num=10, event_log_id=EventLogID.BMC_SENSOR_ACTION,
                                                    entity_instance_id=entity_id, start=start_time, state='log',
                                                    fail_ok=True, strict=False, severity=new_expt_severity)
             if new_expt_alarm == 'yes_log':
@@ -341,7 +345,7 @@ def test_transition_sensorgroup_actions(host,
         LOG.tc_step("Check the alarm clears and host in available state after clearing events")
         bmc_helper.clear_events(host)
         system_helper.wait_for_alarm_gone(alarm_id=EventLogID.BMC_SENSOR_ACTION, entity_id=host, strict=False,
-                                          timeout=45)
+                                          timeout=60)
         host_helper.wait_for_host_states(host, fail_ok=False, availability='available')
 
     HOST = ''

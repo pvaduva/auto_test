@@ -384,14 +384,15 @@ def trigger_event(host, sensor_name, sensor_value):
 
     """
     clear_events(host)
+    sensor_data_file_name = "hwmond_{}_sensor_data".format(host)
 
-    LOG.info("Update the sensordata file /var/run/ipmitool/hwmond_{}_sensor_data to trigger the sensor: {}".
-             format(host, sensor_name))
+    LOG.info("Update the sensordata file /var/run/ipmitool/{} to trigger the sensor: {}".
+             format(sensor_data_file_name, sensor_name))
 
-    sensor_data_file = "/var/run/ipmitool/hwmond_{}_sensor_data".format(host)
+    sensor_data_file = "/var/run/ipmitool/{}".format(sensor_data_file_name)
     # sensor_data_file = "/home/wrsroot/nokia_sensor_data_simulator".format(host)
 
-    tmp_sensor_datafile = "/tmp/{}_sensor_data".format(host)
+    tmp_sensor_datafile = "/tmp/{}".format(sensor_data_file_name)
     print('sensor_data_file: {}'.format(sensor_data_file))
 
     con_ssh = ControllerClient.get_active_controller()
@@ -412,7 +413,9 @@ def trigger_event(host, sensor_name, sensor_value):
 
     LOG.info("Check sed sensor status successful")
     output = con_ssh.exec_sudo_cmd(cmd='grep "{}" {}'.format(sensor_name, sensor_data_file), fail_ok=False)[1]
-    assert re.search('{} .* \| {}'.format(sensor_name, sensor_value), output), "sed unsuccessful"
+
+    escaped_name = re.escape(sensor_name)
+    assert re.search('{} .* \| {}'.format(escaped_name, sensor_value), output), "sed unsuccessful"
     LOG.info("Sensor data updated successfully")
 
 
@@ -429,7 +432,7 @@ def clear_events(host):
     sensor_data_file = '/var/run/ipmitool/hwmond_{}_sensor_data'.format(host)
 
     # original_sensor_datafile = "/var/run/ipmitool/nokia_sensor_data.ok"
-    original_sensor_datafile = "/home/wrsroot/{}_sensor_data.ok".format(host)
+    original_sensor_datafile = "/home/wrsroot/hwmond_{}_sensor_data".format(host)
 
     con_ssh = ControllerClient.get_active_controller()
 

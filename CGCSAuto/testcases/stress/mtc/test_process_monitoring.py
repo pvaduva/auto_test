@@ -921,47 +921,46 @@ class MonitoredProcess:
 
 
 @mark.parametrize(('process_name'), [
-    mark.p1(('sm')),
-    # TODO CGTS-6451
-    mark.p1(('rmond')),
-    mark.p1(('fsmond')),
-    mark.p1(('hbsClient')),
-    mark.p1(('mtcClient')),
-    mark.p1(('mtcalarmd')),
-    mark.p1(('sm-api')),
-    mark.p1(('sm-watchdog')),
-    mark.p1(('sysinv-agent')),
-    mark.p1(('sw-patch-controller-daemon')),
-    mark.p1(('sw-patch-agent')),
-    # TODO jira?
-    mark.p1(('acpid')),
-    mark.p1(('ceilometer-polling')),
-    mark.p1(('mtclogd')),
-    # TODO need manual configuring
-    mark.p1(('ntpd')),
-    mark.p1(('sm-eru')),
-    mark.p1(('sshd')),
-    mark.p1(('syslog-ng')),
-    mark.p1(('io-monitor-manager')),
-    mark.p1(('logmgmt')),
-    mark.p1(('guestServer')),
-    mark.p1(('host_agent')),
-    mark.p1(('libvirtd')),
-    mark.p1(('neutron-avr-agent')),
-    mark.p1(('neutron-avs-agent')),
-    mark.p1(('neutron-dhcp-agent')),
-    mark.p1(('neutron-metadata-agent')),
-    mark.p1(('neutron-sriov-nic-agent')),
-    mark.p1(('nova-compute')),
-    mark.p1(('vswitch')),
+    # mark.p1(('sm')),
+    # # TODO CGTS-6451
+    # mark.p1(('rmond')),
+    # mark.p1(('fsmond')),
+    # mark.p1(('hbsClient')),
+    # mark.p1(('mtcClient')),
+    # mark.p1(('mtcalarmd')),
+    # mark.p1(('sm-api')),
+    # mark.p1(('sm-watchdog')),
+    # mark.p1(('sysinv-agent')),
+    # mark.p1(('sw-patch-controller-daemon')),
+    # mark.p1(('sw-patch-agent')),
+    # # TODO jira?
+    # mark.p1(('acpid')),
+    # mark.p1(('ceilometer-polling')),
+    # mark.p1(('mtclogd')),
+    # # TODO need manual configuring
+    # mark.p1(('ntpd')),
+    # mark.p1(('sm-eru')),
+    # mark.p1(('sshd')),
+    # mark.p1(('syslog-ng')),
+    # mark.p1(('io-monitor-manager')),
+    # mark.p1(('logmgmt')),
+    # mark.p1(('guestServer')),
+    # mark.p1(('host_agent')),
+    # mark.p1(('libvirtd')),
+    # mark.p1(('neutron-avr-agent')),
+    # mark.p1(('neutron-avs-agent')),
+    # mark.p1(('neutron-dhcp-agent')),
+    # mark.p1(('neutron-metadata-agent')),
+    # mark.p1(('neutron-sriov-nic-agent')),
+    # mark.p1(('nova-compute')),
+    # mark.p1(('vswitch')),
 
     # mark.p1(('postgres')),
     # mark.p1(('rabbitmq-server')), # rabbit in SM
     # TODO CGTS-6336
     # TODO CGTS-6391
     mark.p1(('rabbit')),
-    # mark.p1(('sysinv-api')),  # sysinv-inv in SM
-    mark.p1(('sysinv-inv')),
+    mark.p1(('sysinv-inv')),    # sysinv-inv in SM
     mark.p1(('sysinv-conductor')),
     mark.p1(('mtc-agent')),
     mark.p1(('hbs-agent')),

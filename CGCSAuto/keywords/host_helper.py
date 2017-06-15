@@ -762,6 +762,7 @@ def wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, str
     last_vals = {}
     for field in states:
         last_vals[field] = None
+
     while time.time() < end_time:
         table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
         for field, expt_vals in states.items():
