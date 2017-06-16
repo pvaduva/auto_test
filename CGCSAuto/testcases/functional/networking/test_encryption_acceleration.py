@@ -207,7 +207,7 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_list, enable_device_an
 
 
 def _perform_nova_actions(vms_dict, flavors, vfs=None):
-    for vm_name, vm_id in vms_dict:
+    for vm_name, vm_id in vms_dict.items():
         LOG.tc_step("Cold migrate VM {} ....".format(vm_name))
         vm_helper.cold_migrate_vm(vm_id=vm_id)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
