@@ -38,7 +38,7 @@ class Labs:
         'short_name': 'ip_7_12',
         'name': 'cgcs-ironpass-7_12',
         'floating ip': '128.224.151.243',
-        'controller-0 ip': '128.224.150.244',
+        'controller-0 ip': '128.224.151.244',
         'controller-1 ip': '128.224.150.205',
         'controller_nodes': [21786, 21788],
         'compute_nodes': [21789, 21791],
