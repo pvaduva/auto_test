@@ -138,7 +138,7 @@ def parse_args():
                          help="Boot using the existing load on the USB")
 
     lab_grp.add_argument('--iso-path', dest='iso_path', default='',
-                         help='Full path to ISO') 
+                         help='Full path to ISO')
 
     lab_grp.add_argument('--iso-host', dest='iso_host', default='',
                          help='Host where ISO resides')
@@ -342,8 +342,9 @@ def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex, barcod
     if not found_lab_settings_file:
         log.info('Settings.ini not found. Will use stored values.')
         lab_cfg_location = get_settings(barcode_controller, barcode_compute)
-        lab_cfg_location = LAB_SETTINGS_DIR + "/" + lab_cfg_location +".ini"
-        log.info('Using lab settings file path: {}'.format(lab_cfg_location))
+        lab_settings_filepath = SCRIPT_DIR + "/" +LAB_SETTINGS_DIR + "/" + lab_cfg_location +".ini"
+        #lab_cfg_location = execute_path + "/" +LAB_SETTINGS_DIR + "/" + lab_cfg_location +".ini"
+        log.info('Using lab settings file path: {}'.format(lab_settings_filepath))
 
     if not found_lab_setup_cfg_file:
         msg += '\nFailed to find {} in {}'.format(LAB_SETUP_CFG_FILENAME,
@@ -355,6 +356,7 @@ def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex, barcod
     if found_lab_settings_file and not tis_on_tis:
         lab_settings_filepath = lab_cfg_location + "/"\
                                 + CUSTOM_LAB_SETTINGS_FILENAME
+
     return lab_cfg_path, lab_settings_filepath
 
 def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on_tis, host_os, override, guest_load_path, simplex):
@@ -578,7 +580,7 @@ def burn_usb_load_image(install_output_dir, node, bld_server_conn, load_path, is
 
     # Check if the ISO is available
     pre_opts = "sshpass -p '{0}'".format(WRSROOT_PASSWORD)
-    if not iso_host: 
+    if not iso_host:
         iso_path = load_path + "/" + BOOT_IMAGE_ISO_PATH
         cmd = "test -f " + iso_path
         if bld_server_conn.exec_cmd(cmd)[0] != 0:
@@ -597,8 +599,8 @@ def burn_usb_load_image(install_output_dir, node, bld_server_conn, load_path, is
         iso_host_conn.rsync(iso_path, WRSROOT_USERNAME, node.host_ip, BOOT_IMAGE_ISO_TMP_PATH, pre_opts=pre_opts)
 
     # Write the ISO to USB
-    cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync".format(WRSROOT_PASSWORD, 
-                                                                                  BOOT_IMAGE_ISO_TMP_PATH, 
+    cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync".format(WRSROOT_PASSWORD,
+                                                                                  BOOT_IMAGE_ISO_TMP_PATH,
                                                                                   usb_device)
     if node.telnet_conn.exec_cmd(cmd, timeout=RSYNC_TIMEOUT)[0] != 0:
         msg = 'Failed to burn boot image iso file \"{}\" onto USB'.format(iso_path)
@@ -803,7 +805,7 @@ def get_settings(barcodes_controller, barcodes_compute):
     if len(barcode_controller) > 1:
         if barcodes_compute != None:
             barcode_compute = barcodes_compute.split(',')
-            with open("node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
+            with open(SCRIPT_DIR + "/node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
                 server_code.readline()
                 server_name = server_code.readline()
             t, server_name = server_name.split('=')
@@ -813,7 +815,7 @@ def get_settings(barcodes_controller, barcodes_compute):
                 server_name.index("cgcs-")
             except ValueError:
                 server_name = "cgcs-" + server_name
-            with open("node_info/" + barcode_compute[-1] + ".ini", "r") as server_code:
+            with open(SCRIPT_DIR + "/node_info/" + barcode_compute[-1] + ".ini", "r") as server_code:
                 server_code.readline()
                 last_server_name = server_code.readline()
             last_server_name = last_server_name.split('-')
@@ -821,7 +823,7 @@ def get_settings(barcodes_controller, barcodes_compute):
             last_server_number = last_server_number.replace('\n', '')
             last_server_number = "_" + last_server_number
         else:
-            with open("node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
+            with open(SCRIPT_DIR + "/node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
                 server_code.readline()
                 server_name = server_code.readline()
             t, server_name = server_name.split('=')
@@ -832,7 +834,7 @@ def get_settings(barcodes_controller, barcodes_compute):
             except ValueError:
                 server_name = "cgcs-" + server_name
 
-            with open("node_info/" + barcode_controller[-1] + ".ini", "r") as server_code:
+            with open(SCRIPT_DIR + "/node_info/" + barcode_controller[-1] + ".ini", "r") as server_code:
                 server_code.readline()
                 last_server_name = server_code.readline()
             last_server_name = last_server_name.split('-')
@@ -840,7 +842,7 @@ def get_settings(barcodes_controller, barcodes_compute):
             last_server_number = last_server_number.replace('\n', '')
             last_server_number = "_" + last_server_number
     else:
-        with open("node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
+        with open(SCRIPT_DIR + "/node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
             server_code.readline()
             server_name = server_code.readline()
         t, server_name = server_name.split('=')
@@ -949,14 +951,14 @@ def run_postinstall(node):
     cmd = 'ls -1 --color=none ' + SCRIPTS_HOME
     rc, output = node.ssh_conn.exec_cmd(cmd)
     if rc != 0:
-        msg = "Failed to list scripts in: " + SCRIPTS_HOME 
+        msg = "Failed to list scripts in: " + SCRIPTS_HOME
         log.error(msg)
         return
 
     for item in output.splitlines():
         msg = 'Attempting to run script {}'.format(item)
         log.info(msg)
-        cmd = "chmod 755 " + SCRIPTS_HOME + "/" + item 
+        cmd = "chmod 755 " + SCRIPTS_HOME + "/" + item
         if node.ssh_conn.exec_cmd(cmd)[0] != 0:
             msg = 'Unable to change file permissions'
             log.error(msg)
@@ -1383,7 +1385,7 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
                           WRSROOT_USERNAME, controller0.host_ip, \
                           WRSROOT_IMAGES_DIR + "/",\
                           pre_opts=pre_opts)
-    
+
     bld_server_conn.rsync(os.path.join(CENTOS_GUEST, "latest_tis-centos-guest.img"),
                           WRSROOT_USERNAME, controller0.host_ip, \
                           WRSROOT_IMAGES_DIR + "/tis-centos-guest.img",\
@@ -2434,7 +2436,7 @@ def main():
                 rc, output = controller0.ssh_conn.exec_cmd(cmd)
 
                 time.sleep(60)
-                
+
                 controller0.ssh_conn.disconnect()
                 cont1_ssh_conn = SSHClient(log_path=install_output_dir +\
                                         "/" + CONTROLLER1 + ".ssh.log")
