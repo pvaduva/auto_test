@@ -37,10 +37,14 @@ def test_sudo_log():
     """
     ssh = SSHClient(host=html_helper.get_ip_addr())
     ssh.connect()
+
+    LOG.tc_step("Get timestamp for last line in auth.log")
+    start_time = ssh.exec_cmd("tail -1 /var/log/auth.log | awk '{print $1}'")[1]
+
     cmd = 'ls -l'
     LOG.tc_step("Executing sudo command {}".format(cmd))
     ssh.exec_sudo_cmd(cmd, fail_ok=True)
-    code, out = ssh.exec_cmd("tail /var/log/auth.log")
+    code, out = ssh.exec_cmd("""cat /var/log/auth.log | awk '$0 > "{}"'""".format(start_time))
     out = out.split('\n')
     ssh.close()
     searching_for = ['sudo: notice  wrsroot.*PWD=/home/wrsroot ; USER=root ; COMMAND=/usr/bin/ls -l']
