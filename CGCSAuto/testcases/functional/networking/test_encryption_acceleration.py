@@ -213,9 +213,9 @@ def _perform_nova_actions(vms_dict, flavors, vfs=None):
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
         LOG.tc_step("Live migrate VM {} ....".format(vm_name))
-        expt_code = 0 if 'vm_no_crypto' in vm_name else 6
+        expt_codes = [0] if 'vm_no_crypto' in vm_name else [2, 6]
         code, msg = vm_helper.live_migrate_vm(vm_id=vm_id, fail_ok=True)
-        assert expt_code == code, "Expect live migrate to fail for vm with pci device attached. Actual: {}".format(msg)
+        assert code in expt_codes, "Expect live migrate to fail for vm with pci device attached. Actual: {}".format(msg)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
         LOG.tc_step("Suspend/Resume VM {} ....".format(vm_name))
