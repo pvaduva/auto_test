@@ -181,7 +181,7 @@ class TestVSwitchCPUReconfig:
 
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required', 'expt_err'), [
         mark.p1(((1, 1), (5, 5), False, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
-        mark.p3(((7, 9), (2, 2), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),   # Assume total<=10 cores/per proc & thread
+        mark.p3(((7, 6), (2, 5), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),   # Assume total<=10 cores/per proc & thread
         # mark.p3((('cores-2', 'cores-2'), (2, 2), None, None, "CpuAssignment.NO_VM_CORE")), Removed due to CGTS-5715
         mark.p3(((1, 1), (9, 8), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),   # Assume total <= 10 cores/per proc & thread
         mark.p3(((5, 5), (5, 4), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),

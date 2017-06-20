@@ -1417,8 +1417,8 @@ class VMInfo:
         VMInfo.__instances[vm_id] = self            # add instance to class variable for tracking
 
     def refresh_table(self):
-        self.table_ = table_parser.table(cli.nova('show', self.vm_id, ssh_client=self.con_ssh, auth_info=self.auth_info,
-                                                  timeout=5))
+        self.table_ = table_parser.table(cli.nova('show', self.vm_id, ssh_client=self.con_ssh,
+                                                  auth_info=self.auth_info))
 
     def __get_nics(self):
         raw_nics = table_parser.get_value_two_col_table(self.initial_table_, 'wrs-if:nics')

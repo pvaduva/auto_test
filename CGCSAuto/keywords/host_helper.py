@@ -108,6 +108,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         host_ssh.send(password)
         con_ssh.expect(timeout=30)
 
+    # reconnect to lab and wait for system up if rebooting active controller
     if reboot_con:
         LOG.info("Rebooting active controller: {}".format(controller))
         con_ssh.send('sudo reboot -f')
@@ -162,6 +163,12 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
                                                          con_ssh=con_ssh, availability=['available', 'degraded'])
 
         if unlocked_hosts_in_states:
+            for host_unlocked in unlocked_hosts:
+                LOG.info("Waiting for task clear for {}".format(host_unlocked))
+                # TODO: check fail_ok?
+                wait_for_host_states(host_unlocked, timeout=HostTimeout.TASK_CLEAR, fail_ok=False, task='')
+
+            LOG.info("Get available hosts after task clear and wait for hypervsior/webservice up")
             hosts_tab = table_parser.table(cli.system('host-list --nowrap', ssh_client=con_ssh))
             hosts_to_check_tab = table_parser.filter_table(hosts_tab, hostname=unlocked_hosts)
             hosts_avail = table_parser.get_values(hosts_to_check_tab, 'hostname',
@@ -293,7 +300,7 @@ def __hosts_stay_in_states(hosts, duration=10, con_ssh=None, **states):
 def wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, duration=3, con_ssh=None, fail_ok=True,
                           **states):
     """
-    Wait for hosts to go in specified states
+    Wait for hosts to go in specified states via system host-list
 
     Args:
         hosts (str|list):

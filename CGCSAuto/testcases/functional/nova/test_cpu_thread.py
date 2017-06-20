@@ -462,7 +462,8 @@ class TestHTEnabled:
         return ht_host, max_vm_num, flavor_id, left_over_isolate_cores, non_ht_hosts
 
     @mark.p2
-    def test_boot_multiple_vms_cpu_thread_isolate(self, prepare_multi_vm_env):
+    # TODO Use require instead
+    def _test_boot_multiple_vms_cpu_thread_isolate(self, prepare_multi_vm_env):
         """
         Test isolate thread policy with multiple vms
 
