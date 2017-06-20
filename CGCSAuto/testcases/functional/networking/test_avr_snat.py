@@ -114,9 +114,8 @@ def test_snat_vm_actions(snat_setups, snat):
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("wget to VM {}".format(vm_))
-    lab_fip = ProjVar.get_var('LAB')['floating ip']
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_, use_fip=True) as vm_ssh:
-        vm_ssh.exec_cmd('wget {}'.format(lab_fip), fail_ok=False)
+        vm_ssh.exec_cmd('wget google.ca', fail_ok=False)
 
     LOG.tc_step("scp from NatBox to VM {}".format(vm_))
     vm_fip = network_helper.get_mgmt_ips_for_vms(vms=vm_, use_fip=True)[0]
