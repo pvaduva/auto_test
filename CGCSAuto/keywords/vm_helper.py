@@ -654,7 +654,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         extra_str = ' to ' + destination_host
     LOG.info("Live migrating VM {} from {}{} started.".format(vm_id, before_host, extra_str))
     positional_args = ' '.join([optional_arg.strip(), str(vm_id), destination_host]).strip()
-    exit_code, output = cli.nova('live-migration', positional_args=positional_args, ssh_client=con_ssh, fail_ok=True,
+    exit_code, output = cli.nova('live-migration', positional_args=positional_args, ssh_client=con_ssh, fail_ok=fail_ok,
                                  auth_info=auth_info)
 
     if exit_code == 1:
@@ -695,14 +695,18 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         if _is_live_migration_allowed(vm_id, block_migrate=block_migrate) and \
                 (destination_host or get_dest_host_for_live_migrate(vm_id)):
             if fail_ok:
-                LOG.info("async live migrate failed. Wait for 2.5 minutes before proceed")
-                time.sleep(150)
-                return 2, output
+                # TODO Workaround for CGTS-CGTS-7276
+                LOG.warning("async live migrate failed. Wait for 130 seconds before proceed")
+                time.sleep(130)
+                return 2, "Unknown live migration failure"
             else:
                 raise exceptions.VMPostCheckFailed("Unexpected failure of live migration!")
         else:
+            # TODO Workaround for CGTS-CGTS-7276
+            LOG.warning("async live migrate failed. Wait for 130 seconds before proceed")
+            time.sleep(130)
             LOG.debug("System does not allow live migrating vm {} as expected.".format(vm_id))
-            return 1, output
+            return 1, "Live migration failed as expected"
         # if fail_ok:
         #     return 5, "Post action check failed: VM host did not change!"
         # else:

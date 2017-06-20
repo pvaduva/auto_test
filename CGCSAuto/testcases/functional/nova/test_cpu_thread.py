@@ -909,6 +909,29 @@ class TestHTEnabled:
             LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
             check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
 
+    @fixture(scope='class')
+    def _add_hosts_to_cgcsauto(self, request, ht_hosts_, add_cgcsauto_zone):
+        ht_hosts, non_ht_hosts = ht_hosts_
+
+        if not non_ht_hosts:
+            skip("No non-HT host available")
+
+        LOG.fixture_step("Add one HT host and nonHT hosts to cgcsauto zone")
+
+        if len(ht_hosts) > 1:
+            ht_hosts = [ht_hosts[0]]
+
+        host_in_cgcsauto = ht_hosts + non_ht_hosts
+
+        def _revert():
+            nova_helper.remove_hosts_from_aggregate(aggregate='cgcsauto', hosts=host_in_cgcsauto)
+        request.addfinalizer(_revert)
+
+        nova_helper.add_hosts_to_aggregate('cgcsauto', ht_hosts + non_ht_hosts)
+
+        LOG.info("cgcsauto zone: HT: {}; non-HT: {}".format(ht_hosts, non_ht_hosts))
+        return ht_hosts, non_ht_hosts
+
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol', 'cpu_thr_source', 'vs_numa_affinity', 'boot_source'), [
         # (2, 'dedicated', 'isolate', 'flavor', 'strict', 'volume'),
         # (1, 'dedicated', 'isolate', 'flavor', None, 'image'),
@@ -917,7 +940,7 @@ class TestHTEnabled:
         mark.p3((2, 'dedicated', 'require', 'image', None, 'volume'))
     ])
     def test_cpu_thr_live_mig_negative(self, vcpus, cpu_pol, cpu_thr_pol, cpu_thr_source, vs_numa_affinity,
-                                       boot_source, ht_hosts_):
+                                       boot_source, _add_hosts_to_cgcsauto):
         """
         Test live migration is rejected for require VM when only one HT host available
 
@@ -949,14 +972,7 @@ class TestHTEnabled:
             - Delete created vm, volume, flavor, image
 
         """
-        ht_hosts, non_ht_hosts = ht_hosts_
-        LOG.tc_step("Ensure system has only one HT host")
-
-        if len(ht_hosts) > 1:
-            skip(SkipReason.MORE_THAN_ONE_HT_HOSTS)
-
-        if len(host_helper.get_hypervisors(state='up', status='available')) < 2:
-            skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+        ht_hosts, non_ht_hosts = _add_hosts_to_cgcsauto
 
         specs = {}
         if cpu_thr_source == 'flavor':
@@ -1003,7 +1019,8 @@ class TestHTEnabled:
 
         LOG.tc_step("Boot a vm from {} with above flavor and ensure it's booted on HT host.".format(boot_source))
         vm_name = 'cpu_thr_{}_{}_{}'.format(cpu_thr_pol, cpu_thr_source, vcpus)
-        vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, source=boot_source, source_id=source_id)[1]
+        vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, source=boot_source, source_id=source_id,
+                                  avail_zone='cgcsauto')[1]
         ResourceCleanup.add('vm', vm_id)
 
         vm_host = nova_helper.get_vm_host(vm_id)
@@ -1021,6 +1038,10 @@ class TestHTEnabled:
         LOG.tc_step("Attempt to live migrate vm and ensure it's rejected due to no other HT host")
         code, output = vm_helper.live_migrate_vm(vm_id, fail_ok=True)
         assert 2 == code, "Expect live migration request to be rejected. Actual: {}".format(output)
+
+        LOG.tc_step("Attempt to cold migrate vm and ensure it's rejected due to non other HT host")
+        code, output = vm_helper.cold_migrate_vm(vm_id, fail_ok=True)
+        assert 2 == code, "Expect cold migration request to be rejected. Actual: {}".format(output)
 
         expt_pol_str = "u'{}'".format(cpu_thr_pol)
         if cpu_thr_source == 'flavor':
