@@ -42,7 +42,7 @@ def prepare_modify_cpu(request):
     data = {'profilename': 'test_compute_profile',
             'profiletype': 'cpu',
             'ihost_uuid': uuid}
-    resp = html_helper.post_request(url, headers=headers, data=data)
+    resp = html_helper.post_request(url, headers=headers, data=data, verify=False)
     iprofile_uuid = resp['uuid']
     LOG.info("The new profile uuid is: {}".format(iprofile_uuid))
 
@@ -52,7 +52,7 @@ def prepare_modify_cpu(request):
 
         url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER,
                                      'iprofile/{}'.format(iprofile_uuid))
-        html_helper.delete_request(url, headers=headers)
+        html_helper.delete_request(url, headers=headers, verify=False)
 
     request.addfinalizer(unlock)
 
@@ -118,7 +118,7 @@ def test_get_extensions():
     """
     headers = get_headers()
     url = html_helper.create_url(IP_ADDR, HTTPPorts.NEUTRON_PORT, HTTPPorts.NEUTRON_VER, 'extensions')
-    data = html_helper.get_request(url, headers=headers)
+    data = html_helper.get_request(url, headers=headers, verify=False)
 
     res = validate_extensions(data)
     assert res == 0, "FAIL: The extensions returned are not valid."
@@ -136,7 +136,7 @@ def test_get_host_pipelines():
     """
     headers = get_headers()
     url = html_helper.create_url(IP_ADDR, HTTPPorts.CEIL_PORT, HTTPPorts.CEIL_VER, 'wrs-pipelines')
-    pipelines = html_helper.get_request(url, headers=headers)
+    pipelines = html_helper.get_request(url, headers=headers, verify=False)
     LOG.tc_step("Checking how many pipelines were returned. Expecting at least {}.".format(NUM_PIPELINES))
     assert len(pipelines) >= NUM_PIPELINES, "FAIL: Expected {} pipelines. Only {} pipelines were found."\
                                             .format(NUM_PIPELINES, len(pipelines))
@@ -154,7 +154,7 @@ def test_get_individual_pipelines():
 
     headers = get_headers()
     url = html_helper.create_url(IP_ADDR, HTTPPorts.CEIL_PORT, HTTPPorts.CEIL_VER, 'wrs-pipelines')
-    pipelines = html_helper.get_request(url, headers=headers)
+    pipelines = html_helper.get_request(url, headers=headers, verify=False)
     for item in pipelines:
         LOG.tc_step("Validating {}".format(item))
         res = validate_pipelines(item)
@@ -179,12 +179,12 @@ def test_put_pipelines():
     """
     headers = get_headers()
     url = html_helper.create_url(IP_ADDR, HTTPPorts.CEIL_PORT, HTTPPorts.CEIL_VER, 'wrs-pipelines')
-    pipelines = html_helper.get_request(url, headers=headers)
+    pipelines = html_helper.get_request(url, headers=headers, verify=False)
     for item in pipelines:
         pipeline_id = "wrs-pipelines/" + item["name"]
         pipeline_url = html_helper.create_url(IP_ADDR, HTTPPorts.CEIL_PORT, HTTPPorts.CEIL_VER, pipeline_id)
         LOG.tc_step("Getting original pipeline data")
-        payload = html_helper.get_request(pipeline_url, headers=headers)
+        payload = html_helper.get_request(pipeline_url, headers=headers, verify=False)
         copy_payload = copy.deepcopy(payload)
 
         payload['backup_count'] = 7
@@ -193,12 +193,12 @@ def test_put_pipelines():
         payload['max_bytes'] = 9000000
 
         LOG.tc_step("Sending modified pipeline to server")
-        html_helper.put_request(pipeline_url, payload, headers=headers)
-        data = html_helper.get_request(pipeline_url, headers=headers)
+        html_helper.put_request(pipeline_url, payload, headers=headers, verify=False)
+        data = html_helper.get_request(pipeline_url, headers=headers, verify=False)
 
         LOG.tc_step("Reverting back to original pipeline data")
-        html_helper.put_request(pipeline_url, copy_payload, headers=headers)
-        reset_pipeline = html_helper.get_request(pipeline_url, headers=headers)
+        html_helper.put_request(pipeline_url, copy_payload, headers=headers, verify=False)
+        reset_pipeline = html_helper.get_request(pipeline_url, headers=headers, verify=False)
         assert payload == data, "FAIL: The pipeline {}'s values were not changed correctly.".format(item["name"])
         assert copy_payload == reset_pipeline, "FAIL: The pipeline {} was not set back to its original state."\
                                                .format(item["name"])
@@ -223,7 +223,7 @@ def test_modify_cpu(prepare_modify_cpu):
     headers = get_headers()
 
     url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER, "ihosts")
-    hosts = html_helper.get_request(url=url, headers=headers)['ihosts']
+    hosts = html_helper.get_request(url=url, headers=headers, verify=False)['ihosts']
     found = False
     for host in hosts:
         if host['uuid'] == uuid:
@@ -236,10 +236,10 @@ def test_modify_cpu(prepare_modify_cpu):
     url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER, "ihosts/{}".format(uuid))
     lock_data = [{"path": "/action", "value": "lock", "op": "replace"}]
     HostsToRecover.add(name, scope='function')
-    html_helper.patch_request(url=url, headers=headers, data=lock_data)
+    html_helper.patch_request(url=url, headers=headers, data=lock_data, verify=False)
     time.sleep(timeout.HostTimeout.COMPUTE_LOCK)
 
-    host = html_helper.get_request(url=url, headers=headers)
+    host = html_helper.get_request(url=url, headers=headers, verify=False)
     assert 'locked' == host['administrative'], "FAIL: Couldn't lock {}".format(name)
 
     res, out = host_helper.modify_host_cpu(name, 'shared', p0=1, p1=1)
@@ -248,7 +248,7 @@ def test_modify_cpu(prepare_modify_cpu):
     LOG.tc_step("Applying cpu profile")
     data = [{"path": "/iprofile_uuid", "value": "{}".format(iprofile_uuid), "op": "replace"},
             {"path": "/action", "value": "apply-profile", "op": "replace"}]
-    resp = html_helper.patch_request(url=url, headers=headers, data=data)
+    resp = html_helper.patch_request(url=url, headers=headers, data=data, verify=False)
 
     res, out = host_helper.compare_host_to_cpuprofile(name, iprofile_uuid)
     assert 0 == res, "FAIL: The host doesn't have the same cpu functions as the cpu profile"

@@ -5,6 +5,7 @@ from consts.auth import Tenant
 from utils import table_parser, cli
 from utils.tis_log import LOG
 from consts.proj_vars import ProjVar
+from keywords import keystone_helper
 
 
 def get_ip_addr():
@@ -14,7 +15,7 @@ def get_ip_addr():
 def create_url(ip=None, port=None, version=None, extension=None):
     """
     Creates a url with the given parameters inn the form:
-    http://<ip address>:<port>/<version>/<extension>
+    http(s)://<ip address>:<port>/<version>/<extension>
     Args:
         ip (str): the main ip address. If set to None will be set to the lab's ip address by default.
         port (int): the port number to connect to.
@@ -24,7 +25,10 @@ def create_url(ip=None, port=None, version=None, extension=None):
     Returns (str): a url created with the given parameters
 
     """
-    url = 'http://'
+    if keystone_helper.is_https_lab() is True:
+        url = 'https://'
+    else:
+        url = 'http://'
     if ip:
         url += ip
     else:
@@ -58,18 +62,19 @@ def get_user_token(rtn_value='id', con_ssh=None):
     return token
 
 
-def get_request(url, headers):
+def get_request(url, headers, verify=True):
     """
     Sends a GET request to the url
     Args:
         url (str): url to send request to
         headers (dict): header to add to the request
+        verify: Verify SSL certificate
 
     Returns (dict): The response for the request
 
     """
     LOG.info("Sending GET request to {}. Headers: {}".format(url, headers))
-    resp = requests.get(url, headers=headers)
+    resp = requests.get(url, headers=headers, verify=verify)
 
     if resp.status_code == requests.codes.ok:
         data = json.loads(resp.text)
@@ -80,13 +85,14 @@ def get_request(url, headers):
     return None
 
 
-def post_request(url, data, headers):
+def post_request(url, data, headers, verify=True):
     """
         Sends a POST request to the url
         Args:
             url (str): url to send request to
             data (dict): data to be sent in the request body
             headers (dict): header to add to the request
+            verify: Verify SSL certificate
 
         Returns (dict): The response for the request
 
@@ -94,7 +100,7 @@ def post_request(url, data, headers):
     if not isinstance(data, str):
         data = json.dumps(data)
     LOG.info("Sending POST request to {}. Headers: {}. Data: {}".format(url, headers, data))
-    resp = requests.post(url, headers=headers, data=data)
+    resp = requests.post(url, headers=headers, data=data, verify=verify)
 
     if resp.status_code == requests.codes.ok:
         data = json.loads(resp.text)
@@ -105,13 +111,14 @@ def post_request(url, data, headers):
     return None
 
 
-def put_request(url, data, headers):
+def put_request(url, data, headers, verify=True):
     """
         Sends a GET request to the url
         Args:
             url (str): url to send request to
             data (dict): data to be sent in the request body
             headers (dict): header to add to the request
+            verify: Verify SSL certificate
 
         Returns (dict): The response for the request
 
@@ -119,7 +126,7 @@ def put_request(url, data, headers):
     if not isinstance(data, str):
         data = json.dumps(data)
     LOG.info("Sending PUT request to {}. Headers: {}. Data: {}".format(url, headers, data))
-    resp = requests.put(url, headers=headers, data=data)
+    resp = requests.put(url, headers=headers, data=data, verify=verify)
 
     if resp.status_code == requests.codes.ok:
         data = json.loads(resp.text)
@@ -130,18 +137,19 @@ def put_request(url, data, headers):
     return None
 
 
-def delete_request(url, headers):
+def delete_request(url, headers, verify=True):
     """
         Sends a GET request to the url
         Args:
             url (str): url to send request to
             headers (dict): header to add to the request
+            verify: Verify SSL certificate
 
         Returns (dict): The response for the request
 
         """
     LOG.info("Sending DELETE request to {}. Headers: {}".format(url, headers))
-    resp = requests.delete(url, headers=headers)
+    resp = requests.delete(url, headers=headers, verify=verify)
 
     if resp.status_code == requests.codes.ok:
         data = json.loads(resp.text)
@@ -152,13 +160,14 @@ def delete_request(url, headers):
     return None
 
 
-def patch_request(url, data, headers):
+def patch_request(url, data, headers, verify=True):
     """
         Sends a PATCH request to the url
         Args:
             url (str): url to send request to
             data (dict): data to be sent in the request body
             headers (dict): header to add to the request
+            verify: Verify SSL certificate
 
         Returns (dict): The response for the request
 
@@ -166,7 +175,7 @@ def patch_request(url, data, headers):
     if not isinstance(data, str):
         data = json.dumps(data)
     LOG.info("Sending PATCH request to {}. Headers: {}. Data: {}".format(url, headers, data))
-    resp = requests.patch(url, headers=headers, data=data)
+    resp = requests.patch(url, headers=headers, data=data, verify=verify)
 
     if resp.status_code == requests.codes.ok:
         data = json.loads(resp.text)
