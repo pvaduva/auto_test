@@ -2192,7 +2192,7 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
     nets = list(set(get_networks_on_providernet(pnet, rtn_val='name', **kwargs)))
     print("pnet: {}; Nets: {}".format(pnet, nets))
     final_nets = _get_preferred_nets(nets=nets, net_name=net_name, strict=strict)
-    vm_net = final_nets[0]
+    vm_net = final_nets[-1]
     if pci_type == 'pci-passthrough':
 
         port = system_helper.get_host_interfaces_info(host, rtn_val='ports', net_type=pci_type)[0]
