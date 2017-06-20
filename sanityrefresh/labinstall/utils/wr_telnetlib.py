@@ -246,19 +246,19 @@ class Telnet:
         self.cookedq = b''
         self.eof = 0
         self.iacseq = b'' # Buffer for IAC sequence.
-#-- mod begins
+        #-- mod begins
         self.negotiate = negotiate
         self.vt100query = vt100query
         if self.vt100query:
             self.vt100querybuffer = b'' # Buffer for VT100 queries
-#-- mod ends
+            #-- mod ends
         self.sb = 0 # flag for SB and SE sequence.
         self.sbdataq = b''
         self.option_callback = None
-#-- mod begins
+        #-- mod begins
         self.logfile = logfile
         self.echo = None
-#-- mod ends
+        #-- mod ends
         if host is not None:
             self.open(host, port, timeout)
 
@@ -480,7 +480,7 @@ class Telnet:
                         continue
                     if c == b"\021":
                         continue
-#-- mod begins
+                        #-- mod begins
                     # deal with vt100 escape sequences
                     if self.vt100query:
                         if self.vt100querybuffer:
@@ -493,7 +493,7 @@ class Telnet:
                         if not self.vt100querybuffer and c == ESC:
                            self.vt100querybuffer += c
                     # deal with IAC sequences
-#-- mod ends
+                    #-- mod ends
                     if c != IAC:
                         buf[self.sb] = buf[self.sb] + c
                         continue
@@ -535,7 +535,7 @@ class Telnet:
                         if self.option_callback:
                             self.option_callback(self.sock, cmd, opt)
                         else:
-#-- mod begins
+                            #-- mod begins
                             if self.negotiate:
                                 # do some limited logic to use SGA if asked
                                 if cmd == DONT and opt == SGA:
@@ -545,7 +545,7 @@ class Telnet:
                                 else:
                                    self.sock.sendall(IAC + WONT + opt)
                             else:
-#-- mod ends
+                                #-- mod ends
                                 self.sock.sendall(IAC + WONT + opt)
                     elif cmd in (WILL, WONT):
                         self.msg('IAC %s %d',
@@ -553,7 +553,7 @@ class Telnet:
                         if self.option_callback:
                             self.option_callback(self.sock, cmd, opt)
                         else:
-#-- mod begins
+                            #-- mod begins
                             if self.negotiate:
                                 # do some limited logic to use SGA if asked
                                 if cmd == WONT and opt == SGA:
@@ -565,18 +565,18 @@ class Telnet:
                                 else:
                                    self.sock.sendall(IAC + DONT + opt)
                             else:
-#-- mod ends
+                                #-- mod ends
                                 self.sock.sendall(IAC + DONT + opt)
         except EOFError: # raised by self.rawq_getchar()
             self.iacseq = b'' # Reset on EOF
             self.sb = 0
             pass
         self.cookedq = self.cookedq + buf[0]
-#-- mod begins
+        #-- mod begins
         self.log_write(buf[0])
         if self.echo:
             self.echo.write(buf[0].decode('utf-8', 'ignore'))
-#-- mod ends
+            #-- mod ends
         self.sbdataq = self.sbdataq + buf[1]
 
     def rawq_getchar(self):
@@ -654,9 +654,9 @@ class Telnet:
             line = sys.stdin.readline()
             if not line:
                 break
-#-- mod begins
+                #-- mod begins
             self.write(line)
-#-- mod ends
+            #-- mod ends
 
     def listener(self):
         """Helper for mt_interact() -- this executes in the other thread."""
@@ -667,9 +667,9 @@ class Telnet:
                 print('*** Connection closed by remote host ***')
                 return
             if data:
-#-- mod begins
+                #-- mod begins
                 sys.stdout.write(data)
-#-- mod ends
+                #-- mod ends
             else:
                 sys.stdout.flush()
 
@@ -729,7 +729,8 @@ class Telnet:
             raise EOFError
         return (-1, None, text)
 
-#-- mod begins
+        #-- mod begins
+
     def log_write(self, text):
         if not text:
             return
@@ -750,9 +751,10 @@ class Telnet:
                 # these messages when a node is being installed
                 #print(' following text caused a UNICODE ENCODE ERROR ')
                 pass
-#-- mod ends
+                #-- mod ends
 
-#-- new functions begin
+                #-- new functions begin
+
     def write_line(self, text):
         """Wrapper for write().
            Writes text followed by line separator in utf-8 encoding.
@@ -768,7 +770,6 @@ class Telnet:
 
     def get_read_until(self, expected, timeout=TELNET_EXPECT_TIMEOUT):
         """Wrapper for read_until().
-
            Returns text in utf-8 encoding.
            Fails if given string is not found or if EOF is encountered.
         """
@@ -793,7 +794,6 @@ class Telnet:
             end = -1
         else:
             end = None
-
         output = "\n".join(output.splitlines()[start:end])
 
         return output
@@ -915,7 +915,7 @@ class Telnet:
             self.get_read_until("boot menu", 360)
             log.info("Enter BIOS key")
             self.write(str.encode(bios_key))
-
+            print(boot_device_dict)
             boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
             log.info("wildcat boot_device_regex: {}".format(boot_device_regex))
             if boot_device_regex is None:
@@ -933,7 +933,7 @@ class Telnet:
             while count < MAX_SEARCH_ATTEMPTS:
 
                 # GENERIC USB
-                if usb and node.name == CONTROLLER0: 
+                if usb and node.name == CONTROLLER0:
                     log.info("Looking for USB device")
                     boot_device_regex = "USB|Kingston|JetFlash"
 
@@ -1038,9 +1038,156 @@ class Telnet:
             log.info("Found login prompt. {} installation has completed".format(node.name))
             return 0
 
+        if "supermicro" in node.host_name:
+            index = 0
+            bios_key = '\x1b!'
+            #bios_key = '\x1b[23~'
+            bios_key_hr = 'F11'#BIOS_TYPE_FN_HUMAN_READ[index]
+            install_timeout = 2400#INSTALL_TIMEOUTS[index]
+            bios_type = b"American Megatrends"#BIOS_TYPES[index]
+            log.info("BIOS type: " + bios_type.decode('utf-8', 'ignore'))
+            log.info("Use BIOS key: " + bios_key_hr)
+            log.info("Installation timeout: " + str(install_timeout))
+
+            self.get_read_until("Boot Menu", 360)
+            log.info("Enter BIOS key")
+            self.write(str.encode(bios_key))
+
+            boot_device_regex = next(
+                (value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
+            log.info("supermicro boot_device_regex: {}".format(boot_device_regex))
+            if boot_device_regex is None:
+                msg = "Failed to determine boot device for: " + node.name
+                log.error(msg)
+            if usb:
+                log.info("Boot device is: USB")
+            else:
+                log.info("Boot device is: " + str(boot_device_regex))
+
+            self.get_read_until("Please select boot device", 30)
+
+            count = 0
+            down_press_count = 0
+            while count < MAX_SEARCH_ATTEMPTS:
+
+                # GENERIC USB
+                if usb and node.name == CONTROLLER0:
+                    log.info("Looking for USB device")
+                    boot_device_regex = "USB|Kingston|JetFlash"
+
+                log.info("Searching boot device menu for {}...".format(boot_device_regex))
+                # \x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
+                # Construct regex to work with wildcatpass machines
+                # in legacy and uefi mode
+                #regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
+                regex = re.compile(b"Slot \d{4} v\d+")
+
+                log.info("supermicro: compiled regex is: {}".format(regex))
+
+                try:
+                    index, match = self.expect([regex], BOOT_MENU_TIMEOUT)[:2]
+                    log.info("supermicro: index: {} match: {} ".format(index, match))
+                except EOFError:
+                    msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
+                    log.exception(msg)
+                    wr_exit()._exit(1, msg)
+                if index == 0:
+                    match = match.group(0).decode('utf-8', 'ignore')
+                    log.info("supermicro: Matched: " + match)
+                    if re.search(boot_device_regex, match, re.IGNORECASE):
+                        log.info("Found boot device {}".format(boot_device_regex))
+                        time.sleep(1)
+                        log.info("Pressing ENTER key")
+                        self.write(str.encode("\r\r"))
+                        break
+                    else:
+                        time.sleep(1)
+                        self.write(str.encode(DOWN))
+                        down_press_count += 1
+                        log.info("DOWN key count: " + str(down_press_count))
+                count += 1
+
+            if count == MAX_SEARCH_ATTEMPTS:
+                msg = "Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex)
+                log.error(msg)
+                return 1
+                # wr_exit()._exit(1, msg)
+
+            # log.info("Waiting for ESC to exit")
+            if node.name == CONTROLLER0:
+                if usb:
+                    self.get_read_until("Select kernel options and boot kernel", 120)
+                    if small_footprint:
+                        log.info("Selecting Serial Controller+Compute Node Install")
+                        time.sleep(3)
+                        log.info("Pressing down key")
+                        self.write(str.encode(DOWN))
+                        log.info("Pressing down key")
+                        self.write(str.encode(DOWN))
+                        if host_os == 'wrlinux':
+                            self.write(str.encode(DOWN))
+                        time.sleep(1)
+                        log.info("Pressing ENTER key")
+                        self.write(str.encode("\r\r"))
+                    else:
+                        time.sleep(1)
+                        log.info("Selecting Serial Controller Node Install")
+                        log.info("Pressing ENTER key")
+                    self.write(str.encode("\r\r"))
+                # If we are performing a UEFI install then we need to use
+                # different logic to select the install option
+                elif "UEFI" in boot_device_regex:
+                    log.info("wildcat boot_device_regex, selecting UEFI boot option 2: {}".format(boot_device_regex))
+                    self.get_read_until("UEFI CentOS Serial Controller Install", BOOT_MENU_TIMEOUT)
+                    self.write(str.encode(DOWN))
+                    log.info("Pressing ENTER key")
+                    self.write(str.encode("\r\r"))
+                else:
+                    self.get_read_until("Boot from hard drive", 240)
+                    # New pxeboot cfg menu
+                    # 0) Boot from hard drive
+                    # 1) WRL Serial Controller Install
+                    # 2) CentOS Serial Controller Install
+                    # 3) WRL Serial CPE Install
+                    # 4) CentOS Serial CPE Install
+                    log.info("Enter option for {} Controller Install".format(host_os))
+                    if host_os == 'wrlinux':
+                        # selection_menu_option = '1'
+                        if small_footprint:
+                            selection_menu_option = '3'
+                        else:
+                            selection_menu_option = '1'
+
+                    else:
+                        if small_footprint and lowlat:
+                            selection_menu_option = '6'
+                        elif small_footprint:
+                            selection_menu_option = '4'
+                        else:
+                            selection_menu_option = '2'
+
+                    if hasattr(node, "host_kickstart_menu_selection"):
+                        selection_menu_option = getattr(node, "host_kickstart_menu_selection")
+
+                    log.info("Boot from hard drive selection = {}".format(selection_menu_option))
+
+                    self.write_line(selection_menu_option)
+
+            self.get_read_until(LOGIN_PROMPT, install_timeout)
+            log.info("Found login prompt. {} installation has completed".format(node.name))
+            return 0
+
+
+
+
+
+
+
+
+
         try:
             log.info("Find BIOS type")
-            index, match = self.expect(BIOS_TYPES, BIOS_TYPE_TIMEOUT)[:2]
+            index, match = self.expect(BIOS_TYPES, BOOT_TYPE_TIMEOUT)[:2]
         except EOFError:
             msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
             log.exception(msg)
@@ -1085,7 +1232,7 @@ class Telnet:
             while count < MAX_SEARCH_ATTEMPTS:
 
                 # GENERIC USB
-                if usb and node.name == CONTROLLER0: 
+                if usb and node.name == CONTROLLER0:
                     log.info("Looking for USB device")
                     boot_device_regex = "USB|Kingston|JetFlash"
 
@@ -1208,7 +1355,7 @@ class Telnet:
                 log.info("Boot device is: " + str(boot_device_regex))
 
             # GENERIC USB
-            if usb and node.name == CONTROLLER0: 
+            if usb and node.name == CONTROLLER0:
                 log.info("Looking for USB device")
                 boot_device_regex = "USB|Kingston|JetFlash"
 
@@ -1251,7 +1398,7 @@ class Telnet:
                 log.error(msg)
                 return 1
                 #wr_exit()._exit(1, msg)
-        
+
             if node.name == CONTROLLER0:
                 self.get_read_until("Boot from hard drive", 300)
                 log.info("Enter install type")
@@ -1278,7 +1425,6 @@ class Telnet:
 
                 log.info("Boot from hard drive selection = {}".format(selection_menu_option))
                 self.write_line(selection_menu_option)
-
         # Not fool-proof.  FIX
         self.get_read_until(LOGIN_PROMPT, install_timeout)
         log.info("Found login prompt. {} installation has completed".format(node.name))
