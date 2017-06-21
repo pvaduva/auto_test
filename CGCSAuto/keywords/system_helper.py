@@ -1838,6 +1838,8 @@ def get_system_health_query_upgrade(con_ssh=None):
                 ok[k.strip()] = v.strip()
             elif "[Fail]" in v.strip():
                 failed[k.strip()] = v.strip()
+        elif "Missing manifests" in line:
+            failed[line] = line
     if len(failed) > 0:
         return 1, failed
     else:
