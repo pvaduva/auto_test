@@ -1169,6 +1169,8 @@ $directory=R3_files
 >time sudo config_controller
 <time correct
 >y
+<timezone
+>^M
 <Cinder storage backend
 >$storage_type
 <Database storage
