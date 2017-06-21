@@ -815,12 +815,19 @@ def get_settings(barcodes_controller, barcodes_compute):
                 server_name.index("cgcs-")
             except ValueError:
                 server_name = "cgcs-" + server_name
+            words = server_name.split('-')
+            if '0' < words[-1] < '10':
+                words[-1] = words[-1].replace('0','')
+            server_name = '-'.join(words)
+
             with open(SCRIPT_DIR + "/node_info/" + barcode_compute[-1] + ".ini", "r") as server_code:
                 server_code.readline()
                 last_server_name = server_code.readline()
             last_server_name = last_server_name.split('-')
             last_server_number = last_server_name[-1]
             last_server_number = last_server_number.replace('\n', '')
+            if '0' < last_server_number < '10':
+                last_server_number = last_server_number.replace('0','')
             last_server_number = "_" + last_server_number
         else:
             with open(SCRIPT_DIR + "/node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
@@ -833,6 +840,10 @@ def get_settings(barcodes_controller, barcodes_compute):
                 server_name.index("cgcs-")
             except ValueError:
                 server_name = "cgcs-" + server_name
+            words = server_name.split('-')
+            if '0' < words[-1] < '10':
+                words[-1] = words[-1].replace('0','')
+            server_name = '-'.join(words)
 
             with open(SCRIPT_DIR + "/node_info/" + barcode_controller[-1] + ".ini", "r") as server_code:
                 server_code.readline()
@@ -840,6 +851,8 @@ def get_settings(barcodes_controller, barcodes_compute):
             last_server_name = last_server_name.split('-')
             last_server_number = last_server_name[-1]
             last_server_number = last_server_number.replace('\n', '')
+            if '0' < last_server_number < '10':
+                last_server_number = last_server_number.replace('0','')
             last_server_number = "_" + last_server_number
     else:
         with open(SCRIPT_DIR + "/node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
@@ -852,6 +865,10 @@ def get_settings(barcodes_controller, barcodes_compute):
             server_name.index("cgcs-")
         except ValueError:
             server_name = "cgcs-" + server_name
+        words = server_name.split('-')
+        if '0' < words[-1] < '10':
+            words[-1] = words[-1].replace('0','')
+        server_name = '-'.join(words)
 
     return server_name + last_server_number
 
