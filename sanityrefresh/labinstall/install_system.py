@@ -676,12 +676,10 @@ def wipe_disk(node, install_output_dir):
     #if small_footprint:
     #subprocess.call(["ssh", "{}".format(), "-c 4", "{}".format(nodes[0].host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
 
-    subprocess.call(["rsync", SCRIPT_DIR + "wipedisk_helper", "wrsroot@{}:~".format(nodes[0].host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
-
-    controller1.ssh_conn = establish_ssh_connection(controller1, install_output_dir)
-    print(controller1)
-    controller1.ssh_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
-
+    bld_server_conn.rsync()
+    node_connection.rysnc(SCRIPT_DIR, WRSROOT_USERNAME,"{}".format(nodes[0].host_ip),"~",["--delete", "--force"])
+    input()
+    input()
     #print(node)
     #ssh compute-0 'sudo wipedisk'
     #cmd = "ssh {}".format(node.name)
@@ -2246,7 +2244,9 @@ def main():
             print(nodes[0].host_ip)
             rvalue = subprocess.call(["ping", "-w {}".format(PING_TIMEOUT), "-c 4", "{}".format(nodes[0].host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
         if(rvalue == 0):
-            subprocess.call(["rsync", "{}".format(SCRIPT_DIR + "/wipedisk_helper"), "wrsroot@{}:~".format(nodes[0].host_ip)])
+            controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
+            controller0.ssh_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
+            node_connection.rysnc(SCRIPT_DIR, WRSROOT_USERNAME,"{}".format(nodes[0].host_ip),"~",["--delete", "--force"])
             nodesExceptController0 = [x for x in nodes if x.name != 'controller-0']
             input()
             for node in nodesExceptController0:
