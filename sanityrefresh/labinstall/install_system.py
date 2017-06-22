@@ -343,7 +343,6 @@ def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex, barcod
         log.info('Settings.ini not found. Will use stored values.')
         lab_cfg_location = get_settings(barcode_controller, barcode_compute)
         lab_settings_filepath = SCRIPT_DIR + "/" +LAB_SETTINGS_DIR + "/" + lab_cfg_location +".ini"
-        #lab_cfg_location = execute_path + "/" +LAB_SETTINGS_DIR + "/" + lab_cfg_location +".ini"
         log.info('Using lab settings file path: {}'.format(lab_settings_filepath))
 
     if not found_lab_setup_cfg_file:
@@ -845,7 +844,7 @@ def get_settings(barcodes_controller, barcodes_compute):
                 words[-1] = words[-1].replace('0','')
             server_name = '-'.join(words)
 
-            with open(SCRIPT_DIR + "/node_info/" + barcode_controller[-1] + ".ini", "r") as server_code:
+            with open(SCRIPT_DIR + "/node_info/" + barcode_compute[-1] + ".ini", "r") as server_code:
                 server_code.readline()
                 last_server_name = server_code.readline()
             last_server_name = last_server_name.split('-')
@@ -854,6 +853,33 @@ def get_settings(barcodes_controller, barcodes_compute):
             if '0' < last_server_number < '10':
                 last_server_number = last_server_number.replace('0','')
             last_server_number = "_" + last_server_number
+
+    elif barcodes_compute != None:
+        barcode_compute = barcodes_compute.split(',')
+        with open(SCRIPT_DIR + "/node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
+            server_code.readline()
+            server_name = server_code.readline()
+        t, server_name = server_name.split('=')
+        server_name = server_name.replace('\n', '')
+        server_name = server_name.replace("yow-", "")
+        try:
+            server_name.index("cgcs-")
+        except ValueError:
+            server_name = "cgcs-" + server_name
+        words = server_name.split('-')
+        if '0' < words[-1] < '10':
+            words[-1] = words[-1].replace('0','')
+        server_name = '-'.join(words)
+        with open(SCRIPT_DIR + "/node_info/" + barcode_compute[-1] + ".ini", "r") as server_code:
+            server_code.readline()
+            last_server_name = server_code.readline()
+        last_server_name = last_server_name.split('-')
+        last_server_number = last_server_name[-1]
+        last_server_number = last_server_number.replace('\n', '')
+        if '0' < last_server_number < '10':
+            last_server_number = last_server_number.replace('0','')
+        last_server_number = "_" + last_server_number
+
     else:
         with open(SCRIPT_DIR + "/node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
             server_code.readline()
