@@ -915,7 +915,7 @@ def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=T
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (str): value of specified field.
+    Returns (str|list): value of specified field. Return list for multi-line value
 
     """
     table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))

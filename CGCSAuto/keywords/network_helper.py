@@ -2984,3 +2984,49 @@ def collect_vswitch_info_on_host(host):
     with host_helper.ssh_to_host(host) as host_ssh:
         host_ssh.exec_sudo_cmd('/etc/collect.d/collect_vswitch', searchwindowsize=50, get_exit_code=False)
         # vswitch log will be saved to /scratch/var/extra/vswitch.info on the compute host
+
+
+def get_pci_device_numa_nodes(hosts):
+    """
+    Get processors of crypto PCI devices for given hosts
+
+    Args:
+        hosts (list): list of hosts to check
+
+    Returns (dict): host, numa_nodes map. e.g., {'compute-0': ['0'], 'compute-1': ['0', '1']}
+
+    """
+    hosts_numa = {}
+    for host in hosts:
+        numa_nodes = system_helper.get_host_device_list_values(host, field='numa_node')
+        hosts_numa[host] = numa_nodes
+
+    LOG.info("Hosts numa_nodes map for PCI devices: {}".format(hosts_numa))
+    return hosts_numa
+
+
+def get_pci_procs(hosts, net_type='pci-sriov'):
+    """
+    Get processors of pci-sriov or pci-passthrough devices for given hosts
+
+    Args:
+        hosts (list): list of hosts to check
+        net_type (str): pci-sriov or pci-passthrough
+
+    Returns (dict): host, procs map. e.g., {'compute-0': ['0'], 'compute-1': ['0', '1']}
+
+    """
+    hosts_procs = {}
+    for host in hosts:
+        ports_list = system_helper.get_host_interfaces_info(host, rtn_val='ports', net_type=net_type)
+
+        ports = []
+        for port in ports_list:
+            ports += port
+        ports = list(set(ports))
+
+        procs = system_helper.get_host_ports_values(host, header='processor', **{'name': ports})
+        hosts_procs[host] = list(set(procs))
+
+    LOG.info("Hosts procs map for {} devices: {}".format(net_type, hosts_procs))
+    return hosts_procs

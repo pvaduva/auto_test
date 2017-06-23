@@ -522,7 +522,7 @@ class TestHTEnabled:
 
                 # TODO assert '4c,1t' in topology_on_numa_node['topology'], 'vm topology is not as expected'
 
-                pcpus = topology_on_numa_node['pcpus']
+                pcpus = sorted(topology_on_numa_node['pcpus'])
                 vm_pcpus += pcpus
 
             LOG.info("pcpus for vm {}: {}".format(vm_id, vm_pcpus))
