@@ -15,7 +15,7 @@ from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_
 
 
 @mark.p3
-def test_alarm_timestamp_order():
+def test_events_timestamp_order():
     """
     Verify the chronological order to the alarms
 

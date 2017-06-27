@@ -89,6 +89,7 @@ def vms_with_upgrade():
     vms = [vm1, vm2, vm3, vm4, vm5]
     return vms
 
+
 def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_query_upgrade):
 
     LOG.info("Boot VM before upgrade ")

@@ -17,13 +17,13 @@ from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_
 
 
 @mark.p1
-def test_system_alarm_history_list():
+def test_system_alarm_on_host_lock():
     """
-    Verify system alarm-history-list command in the system
+    Verify system event-list command in the system upon host-lock
 
     Scenario:
     1. Execute "system alarm-list" command in the system.
-    2. Reboot one active computes and wait 30 seconds.
+    2. Lock one compute and wait 30 seconds.
     3. Verify commands return list of active alarms in table with expected
     rows.
     """
