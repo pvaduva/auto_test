@@ -695,16 +695,10 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         if _is_live_migration_allowed(vm_id, block_migrate=block_migrate) and \
                 (destination_host or get_dest_host_for_live_migrate(vm_id)):
             if fail_ok:
-                # TODO Workaround for CGTS-CGTS-7276
-                LOG.warning("async live migrate failed. Wait for 130 seconds before proceed")
-                time.sleep(130)
                 return 2, "Unknown live migration failure"
             else:
                 raise exceptions.VMPostCheckFailed("Unexpected failure of live migration!")
         else:
-            # TODO Workaround for CGTS-CGTS-7276
-            LOG.warning("async live migrate failed. Wait for 130 seconds before proceed")
-            time.sleep(130)
             LOG.debug("System does not allow live migrating vm {} as expected.".format(vm_id))
             return 1, "Live migration failed as expected"
         # if fail_ok:
