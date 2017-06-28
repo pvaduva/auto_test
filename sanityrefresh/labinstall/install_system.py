@@ -661,86 +661,6 @@ def copy_iso(install_output_dir, tuxlab_server, bld_server_conn, load_path, iso_
     logutils.print_step("Iso copy finished")
     # wr_exit()._exit(54, "done for now")
 
-
-
-
-def wipe_disk(node, install_output_dir):
-    ''' Perform a wipedisk operation on the lab before booting a new load into
-        it.
-    '''
-
-    # Until we have time to figure out how to have this fool-proof
-    #return
-
-    # Only works for small footprint
-    #if small_footprint:
-    #subprocess.call(["ssh", "{}".format(), "-c 4", "{}".format(nodes[0].host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
-
-    bld_server_conn.rsync()
-    node_connection.rysnc(SCRIPT_DIR, WRSROOT_USERNAME,"{}".format(nodes[0].host_ip),"~",["--delete", "--force"])
-    input()
-    input()
-    #print(node)
-    #ssh compute-0 'sudo wipedisk'
-    #cmd = "ssh {}".format(node.name)
-    #cmd2 = "sudo -k wipedisk{} y wipediskscompletely nexit".format(WRSROOT_PASSWORD,)
-    #controller1.ssh_conn.exec_cmd('echo Li69nux*|echo y|echo wipediskscompletely|sudo wipedisk')
-    controller1.ssh_conn.exec_cmd('echo wipediskscompletely|echo y|echo Li69nux*|sudo wipedisk')
-    #controller1.ssh_conn.exec_cmd('Li69nux*')
-    #controller1.ssh_conn.exec_cmd('y')
-    #controller1.ssh_conn.exec_cmd('wipediskscompletely')
-    controller1.ssh_conn.exec_cmd('exit')
-
-    #cmd = "exit"
-    #controller0.ssh_conn.exec_cmd(cmd)
-
-    '''
-        #print(node.telnet_ip)
-        #node.telnet_conn = telnetlib.connect(node.telnet_ip, \
-        #                                    int(node.telnet_port), \
-        #                                    negotiate=node.telnet_negotiate,\
-        #                                    vt100query=node.telnet_vt100query,\
-        #                                    log_path=install_output_dir + "/"\
-        #                                    + node.name + ".telnet.log", \
-        #                                    debug=False)
-
-
-
-        #return
-
-        # Check that the node is accessible for wipedisk to run.
-        # If we cannot successfully ping the interface of the node, then it is
-        # expected that the login will fail. This may be due to the node not
-        # being left in an installed state.
-        print("login in")
-        print("host_ip = " + node.host_ip)
-        #rvalue = subprocess.call(["ping", "-w {}".format(PING_TIMEOUT), "-c 4", "{}".format(node.host_ip)])
-        #rvalue = os.system("ping -w {} -c 4 {}".format(PING_TIMEOUT, node.host_ip))
-        print("rvalue = " + str(rvalue))
-        """
-        node.telnet_conn.login()
-        cmd = "ping -w {} -c 4 {}".format(PING_TIMEOUT, node.host_ip)
-        if (node.telnet_conn.exec_cmd(cmd, timeout=PING_TIMEOUT +
-                                      TIMEOUT_BUFFER)[0] != 0):
-            log.info("Node not responding. Skipping wipedisk process")
-            return
-        else:
-            node.telnet_conn.login()
-
-        return
-    print("wipe some disks")
-    node.telnet_conn.write_line("sudo -k wipedisk")
-    node.telnet_conn.get_read_until(PASSWORD_PROMPT)
-    node.telnet_conn.write_line(WRSROOT_PASSWORD)
-    node.telnet_conn.get_read_until("[y/n]")
-    node.telnet_conn.write_line("y")
-    node.telnet_conn.get_read_until("confirm")
-    node.telnet_conn.write_line("wipediskscompletely")
-    node.telnet_conn.get_read_until("The disk(s) have been wiped.", WIPE_DISK_TIMEOUT)
-
-    log.info("Disk(s) have been wiped on: " + node.name)
-    '''
-
 def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
     ''' Function to wait for the lab to enter a specified state.
         If the expected state is not entered, the boot operation will be
@@ -2115,6 +2035,7 @@ def main():
     controller0 = controller_dict[CONTROLLER0]
 
 
+
    # Due to simplex labs and unofficial config ip28-30
     if len(controller_dict) > 1:
         global controller1
@@ -2234,6 +2155,7 @@ def main():
     # Reserve the nodes via VLM
     # Unreserve first to close any opened telnet sessions.
     if not tis_on_tis:
+        pre_opts = "sshpass -p '{0}'".format(WRSROOT_PASSWORD)
         [barcodes.append(node.barcode) for node in nodes]
         installer_exit.lab_barcodes = barcodes
         vlm_unreserve(barcodes)
@@ -2242,25 +2164,25 @@ def main():
         # Run the wipedisk utility if the nodes are accessible
         with open(os.devnull, 'wb') as devnull:
             print(nodes[0].host_ip)
-            rvalue = subprocess.call(["ping", "-w {}".format(PING_TIMEOUT), "-c 4", "{}".format(nodes[0].host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
-        if(rvalue == 0):
-            controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
-            controller0.ssh_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
-            node_connection.rysnc(SCRIPT_DIR, WRSROOT_USERNAME,"{}".format(nodes[0].host_ip),"~",["--delete", "--force"])
-            nodesExceptController0 = [x for x in nodes if x.name != 'controller-0']
+            isControllerOnline = subprocess.call(["ping", "-w {}".format(PING_TIMEOUT), "-c 4", "{}".format(nodes[0].host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
+        if(isControllerOnline == 0):
+            bld_server_conn.rsync(load_path + '/' + CENTOS_LAB_REL_PATH + "/scripts/wipedisk_*", WRSROOT_USERNAME, "{}".format(nodes[0].host_ip), "~", pre_opts=pre_opts)
             input()
-            for node in nodesExceptController0:
-                node_thread = threading.Thread(target=wipe_disk, name=node.name, args=(node, install_output_dir,))
-                threads.append(node_thread)
-                log.info("Starting thread for {}".format(node_thread.name))
-                node_thread.start()
-
-                for thread in threads:
-                    thread.join()
+            if controller0.ssh_conn is None:
+                controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
+            cmd = "chmod 755 wipedisk_helper"
+            controller0.ssh_conn.exec_cmd(cmd)
+            cmd = "chmod 755 wipedisk_automater"
+            controller0.ssh_conn.exec_cmd(cmd)
+            cmd = "./wipedisk_automater"
+            controller0.ssh_conn.exec_cmd(cmd)
         else:
             log.info("Unable to reach controller-0, will continue without wipedisk")
         input()
         input()
+        if stop == "0":
+            wr_exit()._exit(0, "User requested stop after {}".format(msg))
+        #---------------------------------------REMOVE STOP WHEN DONE --------------------------------
         # Power down all the nodes via VLM (note: this can also be done via board management control)
         if not continue_install:
             for barcode in barcodes:
