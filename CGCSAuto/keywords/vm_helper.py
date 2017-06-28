@@ -655,7 +655,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     LOG.info("Live migrating VM {} from {}{} started.".format(vm_id, before_host, extra_str))
     positional_args = ' '.join([optional_arg.strip(), str(vm_id), destination_host]).strip()
     exit_code, output = cli.nova('live-migration', positional_args=positional_args, ssh_client=con_ssh, fail_ok=fail_ok,
-                                 auth_info=auth_info)
+                                 auth_info=auth_info, rtn_list=True)
 
     if exit_code == 1:
         return 6, output
