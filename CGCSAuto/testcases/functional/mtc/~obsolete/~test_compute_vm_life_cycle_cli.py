@@ -104,6 +104,7 @@ def _is_cpe():
     return system_helper.is_small_footprint()
 
 
+# Remove this test as launching vms on specific host are already covered in various other testcases
 @mark.usefixtures('ubuntu14_image')
 @mark.parametrize(('host', 'guest'), [
     ('compute-0', 'ubuntu_14'),
@@ -111,7 +112,7 @@ def _is_cpe():
     ('compute-1', 'ubuntu_14'),
     ('compute-1', None),
     ])
-def test_launch_guest_instances_on_specific_compute(host, guest, _is_cpe):
+def _test_launch_guest_instances_on_specific_compute(host, guest, _is_cpe):
     """
     Test launching Guest instances on specified compute
 

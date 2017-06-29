@@ -3,13 +3,13 @@ import time
 
 from consts import timeout
 from consts.cgcs import HTTPPorts
-from pytest import fixture, mark, skip
+from pytest import fixture, skip
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import html_helper, host_helper, system_helper
+from keywords import html_helper, host_helper
 from utils.tis_log import LOG
 
 
-#default expected number of pipelines
+# default expected number of pipelines
 NUM_PIPELINES = 1
 IP_ADDR = html_helper.get_ip_addr()
 
@@ -46,13 +46,12 @@ def prepare_modify_cpu(request):
     iprofile_uuid = resp['uuid']
     LOG.info("The new profile uuid is: {}".format(iprofile_uuid))
 
-
     def unlock():
         host_helper.apply_cpu_profile(host, iprofile_uuid)
 
-        url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER,
-                                     'iprofile/{}'.format(iprofile_uuid))
-        html_helper.delete_request(url, headers=headers, verify=False)
+        url_ = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER,
+                                      'iprofile/{}'.format(iprofile_uuid))
+        html_helper.delete_request(url_, headers=headers, verify=False)
 
     request.addfinalizer(unlock)
 
@@ -69,7 +68,7 @@ def validate_extensions(data):
         for d in l:
             for key in d:
                 if key != u"links":
-                    #it seems in Python3 all strings are in unicode
+                    # it seems in Python3 all strings are in unicode
                     if not isinstance(d[key], str):
                         LOG.error("Received wrong data type for key %s" % key)
                         LOG.error("Unicode expected, %s received" % type(d[key]))
@@ -92,17 +91,17 @@ def validate_pipelines(data):
     """
 
     # We should probably report which field is of the wrong type if we have a fail
-    #The json objects don't seem to have a 'meters' attribute anymore.
+    # The json objects don't seem to have a 'meters' attribute anymore.
     # type(data["meters"]) is not list or \
-    if type(data["name"]) is not str or \
-        type(data["location"]) is not str or \
-        type(data["compress"]) is not bool or \
-        type(data["enabled"]) is not bool or \
-        type(data["backup_count"]) is not int or \
-        type(data["max_bytes"]) is not int:
-            LOG.error("Received wrong data type")
-            LOG.error("Pipelines data type test: FAILED")
-            return 1
+    if type(data["name"]) is not str \
+            or type(data["location"]) is not str \
+            or type(data["compress"]) is not bool \
+            or type(data["enabled"]) is not bool \
+            or type(data["backup_count"]) is not int \
+            or type(data["max_bytes"]) is not int:
+        LOG.error("Received wrong data type")
+        LOG.error("Pipelines data type test: FAILED")
+        return 1
 
     return 0
 
@@ -158,7 +157,7 @@ def test_get_individual_pipelines():
     for item in pipelines:
         LOG.tc_step("Validating {}".format(item))
         res = validate_pipelines(item)
-        #might not work if there is no name attribute
+        # might not work if there is no name attribute
         assert res == 0, "FAIL: Pipeline {} has invalid information.".format(item["name"])
 
 

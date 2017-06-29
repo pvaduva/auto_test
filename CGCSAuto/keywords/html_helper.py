@@ -165,7 +165,7 @@ def patch_request(url, data, headers, verify=True):
         Sends a PATCH request to the url
         Args:
             url (str): url to send request to
-            data (dict): data to be sent in the request body
+            data (dict|str|list): data to be sent in the request body
             headers (dict): header to add to the request
             verify: Verify SSL certificate
 
