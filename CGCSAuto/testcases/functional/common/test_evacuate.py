@@ -84,10 +84,10 @@ class TestCgcsGuest:
         HostsToRecover.add(target_host)
 
         LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-        vm_helper._wait_for_vms_values(vms_, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
+        vm_helper.wait_for_vms_values(vms_, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
 
         LOG.tc_step("Check vms are in Active state and moved to other host(s) after host reboot")
-        res, active_vms, inactive_vms = vm_helper._wait_for_vms_values(vms=vms_, values=VMStatus.ACTIVE, timeout=600)
+        res, active_vms, inactive_vms = vm_helper.wait_for_vms_values(vms=vms_, values=VMStatus.ACTIVE, timeout=600)
 
         vms_host_err = []
         for vm in vms_:
@@ -265,10 +265,10 @@ class TestDefaultGuest:
         HostsToRecover.add(target_host)
 
         LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-        vm_helper._wait_for_vms_values(vms, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
+        vm_helper.wait_for_vms_values(vms, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
 
         LOG.tc_step("Check vms are in Active state and moved to other host(s) after host reboot")
-        res, active_vms, inactive_vms = vm_helper._wait_for_vms_values(vms=vms, values=VMStatus.ACTIVE, timeout=600)
+        res, active_vms, inactive_vms = vm_helper.wait_for_vms_values(vms=vms, values=VMStatus.ACTIVE, timeout=600)
 
         vms_host_err = []
         for vm in vms:

@@ -434,8 +434,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         if exitcode == 1:
             return 1, vm_ids, output
 
-        result, vms_in_state, vms_failed_to_reach_state = _wait_for_vms_values(vm_ids,fail_ok=True, timeout=tmout,
-                                                                               con_ssh=con_ssh, auth_info=auth_info)
+        result, vms_in_state, vms_failed_to_reach_state = wait_for_vms_values(vm_ids, fail_ok=True, timeout=tmout,
+                                                                              con_ssh=con_ssh, auth_info=auth_info)
         if not result:
             msg = "VMs failed to reach ACTIVE state: {}".format(vms_failed_to_reach_state)
             if fail_ok:
@@ -1682,7 +1682,7 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
 
 
 def wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VMTimeout.STATUS_CHANGE, fail_ok=True,
-                         check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
+                        check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
 
     """
     Wait for specific vms to reach any of the given state(s)
@@ -1903,9 +1903,9 @@ def _start_or_stop_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_CHANGE
         if not vms_to_check:
             return 1, output
 
-    res_bool, res_pass, res_fail = _wait_for_vms_values(vms_to_check, 'Status', [expt_status, VMStatus.ERROR],
-                                                        fail_ok=fail_ok, check_interval=check_interval,
-                                                        con_ssh=con_ssh, timeout=timeout)
+    res_bool, res_pass, res_fail = wait_for_vms_values(vms_to_check, 'Status', [expt_status, VMStatus.ERROR],
+                                                       fail_ok=fail_ok, check_interval=check_interval,
+                                                       con_ssh=con_ssh, timeout=timeout)
 
     if not res_bool:
         msg = "Some VM(s) did not reach expected state(s) - {}. Actual states: {}".format(expt_status, res_fail)
@@ -3197,12 +3197,12 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
 
     if not wait_for_host_up:
         LOG.info("Wait for vms to reach ERROR or REBUILD state with best effort")
-        _wait_for_vms_values(vms_to_check, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120,
-                             con_ssh=con_ssh)
+        wait_for_vms_values(vms_to_check, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120,
+                            con_ssh=con_ssh)
 
     LOG.tc_step("Check vms are in Active state and moved to other host(s) after host reboot")
-    res, active_vms, inactive_vms = _wait_for_vms_values(vms=vms_to_check, values=VMStatus.ACTIVE, timeout=timeout,
-                                                         con_ssh=con_ssh)
+    res, active_vms, inactive_vms = wait_for_vms_values(vms=vms_to_check, values=VMStatus.ACTIVE, timeout=timeout,
+                                                        con_ssh=con_ssh)
 
     vms_host_err = []
     for vm in vms_to_check:

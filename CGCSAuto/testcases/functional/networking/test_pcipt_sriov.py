@@ -151,7 +151,7 @@ def test_evacuate_pci_vm(vif_model_check):
     HostsToRecover.add(host, scope='function')
 
     LOG.tc_step("Wait for vm to reach ERROR or REBUILD state with best effort")
-    vm_helper._wait_for_vms_values(vm_id, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
+    vm_helper.wait_for_vms_values(vm_id, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
 
     LOG.tc_step("Verify vm is evacuated to other host")
     vm_helper._wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)

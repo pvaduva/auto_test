@@ -207,7 +207,7 @@ def test_snat_evacuate_vm(snat_setups, snat):
     host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
 
     LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-    vm_helper._wait_for_vms_values(vm_, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
+    vm_helper.wait_for_vms_values(vm_, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
 
     LOG.tc_step("Verify vm is evacuated to other host")
     vm_helper._wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)

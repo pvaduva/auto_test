@@ -783,10 +783,10 @@ class TestHTEnabled:
             HostsToRecover.add(target_host)
 
             LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-            vm_helper._wait_for_vms_values(vm_id, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
+            vm_helper.wait_for_vms_values(vm_id, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
 
             LOG.tc_step("Check vms are in Active state and moved to other host(s) after host reboot")
-            vm_helper._wait_for_vms_values(vms=vm_id, values=VMStatus.ACTIVE, timeout=300, fail_ok=False)
+            vm_helper.wait_for_vms_values(vms=vm_id, values=VMStatus.ACTIVE, timeout=300, fail_ok=False)
             vm_host_post_evac = nova_helper.get_vm_host(vm_id)
             assert target_host != vm_host_post_evac, "VM stuck on the same host upon host reboot"
 

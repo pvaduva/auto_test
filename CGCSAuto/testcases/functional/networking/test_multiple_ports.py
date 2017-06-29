@@ -209,8 +209,8 @@ class TestMutiPortsBasic:
         HostsToRecover.add(host, scope='function')
 
         LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-        vm_helper._wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
-                                       timeout=120)
+        vm_helper.wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
+                                      timeout=120)
 
         LOG.tc_step("Verify vm is evacuated to other host")
         vm_helper._wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
@@ -478,8 +478,8 @@ class TestMutiPortsPCI:
         HostsToRecover.add(host, scope='function')
 
         LOG.tc_step("Wait for vm to reach ERROR or REBUILD state with best effort")
-        vm_helper._wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
-                                       timeout=120)
+        vm_helper.wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
+                                      timeout=120)
 
         LOG.tc_step("Verify vm is evacuated to other host")
         vm_helper._wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=120, fail_ok=False)
