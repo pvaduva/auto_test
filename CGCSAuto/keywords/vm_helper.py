@@ -1681,7 +1681,7 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
                                        format(timeout, vms_to_check))
 
 
-def _wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VMTimeout.STATUS_CHANGE, fail_ok=True,
+def wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VMTimeout.STATUS_CHANGE, fail_ok=True,
                          check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
 
     """
