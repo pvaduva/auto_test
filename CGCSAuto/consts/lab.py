@@ -477,11 +477,17 @@ def add_lab_entry(floating_ip, dict_name=None, short_name=None, name=None, **kwa
 
 
 class NatBoxes:
+    # NAT_BOX_HW = {
+    #     'name': 'nat_hw',
+    #     'ip': '128.224.150.11',
+    #     'user': 'cgcs',
+    #     'password': 'li69nux'
+    # }
     NAT_BOX_HW = {
         'name': 'nat_hw',
-        'ip': '128.224.150.11',
-        'user': 'cgcs',
-        'password': 'li69nux'
+        'ip': '128.224.186.181',
+        'user': 'svc-cgcsauto',
+        'password': ')OKM0okm'
     }
 
     NAT_BOX_CUMULUS = {

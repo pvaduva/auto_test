@@ -1058,7 +1058,7 @@ class NATBoxClient:
     # internal dict that holds the natbox client if set_natbox_client was called
     __natbox_ssh_map = {}
 
-    _PROMPT = r'\@.*\:\~[$#]'  # use user+_PROMPT to differentiate before and after ssh to vm
+    _PROMPT = r'\@.*\:\~[$#] '  # use user+_PROMPT to differentiate before and after ssh to vm
 
     @classmethod
     def get_natbox_client(cls, natbox_ip=None):
