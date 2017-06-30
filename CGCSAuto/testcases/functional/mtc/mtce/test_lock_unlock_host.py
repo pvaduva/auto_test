@@ -11,9 +11,8 @@ from testfixtures.fixture_resources import ResourceCleanup
 from keywords import host_helper,system_helper, nova_helper, vm_helper
 
 
-# Remove from sanity due to feature are of low priority and unlikely to break
-# @mark.sanity
-# @mark.cpe_sanity
+@mark.sanity
+@mark.cpe_sanity
 def test_lock_active_controller_reject():
     """
     Verify lock unlock active controller. Expected it to fail
