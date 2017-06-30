@@ -764,7 +764,7 @@ def sm_dump_table(output_lines):
     return table_
 
 
-def row_dict_table(table_, key_header, unique_key=True):
+def row_dict_table(table_, key_header, unique_key=True, eliminate_keys=None):
     """
     convert original table to a dictionary with a given column to be the keys.
 
@@ -773,6 +773,7 @@ def row_dict_table(table_, key_header, unique_key=True):
         key_header (str): chosen keys for the table
         unique_key (bool): if key_header is unique for each row, such as UUID, then value for each key will be dict
             instead of list of dict
+        eliminate_keys (None|str|list): columns to eliminate
 
     Returns (dict): dictionary with value of the key_header as key, and the complete row as the value.
         The value itself is a list, number of items in the list depends on how many rows has the same value for
@@ -797,6 +798,10 @@ def row_dict_table(table_, key_header, unique_key=True):
     """
     keys = get_column(table_, key_header)
     all_headers = table_['headers']
+    if eliminate_keys is None:
+        eliminate_keys = []
+    elif isinstance(eliminate_keys, str):
+        eliminate_keys = [eliminate_keys]
 
     rtn_dict = {}
     for header_val in keys:
@@ -805,6 +810,9 @@ def row_dict_table(table_, key_header, unique_key=True):
         values = []
         for row_ in applicable_rows:
             row_dict = dict(zip(all_headers, row_))
+            for key_to_rm in list(eliminate_keys):
+                row_dict.pop(key_to_rm, None)
+
             values.append(row_dict)
 
         if unique_key:

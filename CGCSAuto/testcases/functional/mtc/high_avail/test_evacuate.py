@@ -4,7 +4,7 @@ from utils.tis_log import LOG
 from consts.cgcs import VMStatus
 from consts.reasons import SkipReason
 
-from keywords import vm_helper, host_helper, nova_helper, cinder_helper, keystone_helper, glance_helper
+from keywords import vm_helper, host_helper, nova_helper, cinder_helper, glance_helper, system_helper, network_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -63,6 +63,7 @@ class TestCgcsGuest:
 
     @mark.trylast
     @mark.sanity
+    @mark.cpe_sanity
     def test_evacuate_vms(self, vms_):
         vm1, vm2, vm3, vm4 = vms_
 
@@ -78,6 +79,11 @@ class TestCgcsGuest:
 
         LOG.tc_step("Attach volume to vm4 which was booted from image: {}.".format(vm4))
         vm_helper.attach_vol_to_vm(vm4)
+
+        pre_res_sys, pre_msg_sys = system_helper.wait_for_services_enable(timeout=20, fail_ok=True)
+        up_hypervisors = host_helper.get_up_hypervisors()
+        pre_res_neutron, pre_msg_neutron = network_helper.wait_for_agents_alive(up_hypervisors, timeout=20,
+                                                                                fail_ok=True)
 
         LOG.tc_step("Reboot target host {}".format(target_host))
         host_helper.reboot_hosts(target_host, wait_for_reboot_finish=False)
@@ -101,6 +107,22 @@ class TestCgcsGuest:
 
         LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
         vm_helper.ping_vms_from_natbox(vms_)
+
+        LOG.tc_step("Wait for {} to finish rebooting".format(target_host))
+        host_helper.wait_for_hosts_ready(target_host)
+
+        LOG.tc_step("Check rebooted host can still host vm")
+        vm_helper.live_migrate_vm(vm1, destination_host=target_host)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm1)
+
+        LOG.tc_step("Check system services and neutron agents after {} reboot".format(target_host))
+        post_res_sys, post_msg_sys = system_helper.wait_for_services_enable(fail_ok=True)
+        post_res_neutron, post_msg_neutron = network_helper.wait_for_agents_alive(hosts=up_hypervisors, fail_ok=True)
+
+        assert post_res_sys, "\nPost-evac system services stats: {}\nPre-evac system services stats: {}".\
+            format(post_msg_sys, pre_msg_sys)
+        assert post_res_neutron, "\nPost evac neutron agents stats: {}\nPre-evac neutron agents stats: {}".\
+            format(pre_msg_neutron, post_msg_neutron)
 
 
 class TestVariousGuests:

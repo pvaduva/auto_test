@@ -2446,3 +2446,32 @@ def get_controller_fs_values(con_ssh=None, auth_info=Tenant.ADMIN):
         values[row[0].strip()] = row[1].strip()
     return values
 
+
+def wait_for_services_enable(timeout=300, fail_ok=False, con_ssh=None):
+    """
+    Wait for services to be enabled-active in system service-list
+    Args:
+        timeout (int): max wait time in seconds
+        fail_ok (bool): whether return False or raise exception when some services fail to reach enabled-active state
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<res>(bool), <msg>(str))
+        (True, "All services are enabled-active")
+        (False, "Some services are not enabled-active: <failed_rows>")      Applicable if fail_ok=True
+
+    """
+    LOG.info("Wait for services to be enabled-active in system service-list")
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        service_list_tab = table_parser.table(cli.system('service-list', ssh_client=con_ssh)[1])
+        states = table_parser.get_column(service_list_tab, 'state')
+        if all(state == 'enabled-active' for state in states):
+            LOG.info("All services are enabled-active in system service-list")
+            return True, "All services are enabled-active"
+
+    LOG.warning("Not all services are enabled-ative within {} seconds".format(timeout))
+    inactive_services_tab = table_parser.filter_table(service_list_tab, exclude=True, state='enabled-active')
+    msg = "Some services are not enabled-active: {}".format(table_parser.get_all_rows(inactive_services_tab))
+    if fail_ok:
+        return False, msg
+    raise exceptions.SysinvError(msg)

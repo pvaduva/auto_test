@@ -178,9 +178,9 @@ def _perform_action(vm_id, action, expt_fail):
 
 
 @mark.parametrize('action', [
-    mark.nightly('migrate'),
-    mark.nightly('suspend'),
-    mark.nightly('reboot'),
+    mark.p2('migrate'),
+    mark.p2('suspend'),
+    mark.p2('reboot'),
     mark.priorities('domain_sanity', 'nightly')('stop'),
 ])
 def test_vm_voting(action, hb_flavor):

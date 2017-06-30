@@ -6,7 +6,7 @@ from pytest import mark, skip
 
 from utils.tis_log import LOG
 from consts.reasons import SkipReason
-from keywords import host_helper, system_helper, vm_helper
+from keywords import host_helper, system_helper, vm_helper, network_helper
 
 from testfixtures.resource_mgmt import ResourceCleanup
 
@@ -24,14 +24,21 @@ def test_swact_controllers(wait_for_con_drbd_sync_complete):
         - Verify vm is still pingable
 
     """
+    if system_helper.is_simplex():
+        skip("Simplex system detected")
+
     if not wait_for_con_drbd_sync_complete:
         skip(SkipReason.LESS_THAN_TWO_CONTROLLERS)
 
     LOG.tc_step('retrieve active and available controllers')
     pre_active_controller = system_helper.get_active_controller_name()
     pre_standby_controller = system_helper.get_standby_controller_name()
-
     assert pre_standby_controller, "No standby controller available"
+
+    pre_res_sys, pre_msg_sys = system_helper.wait_for_services_enable(timeout=20, fail_ok=True)
+    up_hypervisors = host_helper.get_up_hypervisors()
+    pre_res_neutron, pre_msg_neutron = network_helper.wait_for_agents_alive(up_hypervisors, timeout=20,
+                                                                            fail_ok=True)
 
     LOG.tc_step("Boot a vm from image and ping it")
     vm_id_img = vm_helper.boot_vm(name='swact_img', source='image', cleanup='function')[1]
@@ -56,6 +63,14 @@ def test_swact_controllers(wait_for_con_drbd_sync_complete):
 
     LOG.tc_step("Check boot-from-image vm still pingable after swact")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id_img, timeout=30)
-
     LOG.tc_step("Check boot-from-volume vm still pingable after swact")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id_vol, timeout=30)
+
+    LOG.tc_step("Check system services and neutron agents after swact from {}".format(pre_active_controller))
+    post_res_sys, post_msg_sys = system_helper.wait_for_services_enable(fail_ok=True)
+    post_res_neutron, post_msg_neutron = network_helper.wait_for_agents_alive(hosts=up_hypervisors, fail_ok=True)
+
+    assert post_res_sys, "\nPost-evac system services stats: {}\nPre-evac system services stats: {}". \
+        format(post_msg_sys, pre_msg_sys)
+    assert post_res_neutron, "\nPost evac neutron agents stats: {}\nPre-evac neutron agents stats: {}". \
+        format(pre_msg_neutron, post_msg_neutron)

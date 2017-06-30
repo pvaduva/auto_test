@@ -95,6 +95,19 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
 
 
 def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=False, con_ssh=None):
+    """
+    Get storage backing that has the most hypervisors
+    Args:
+        prefer (str): preferred storage_backing. If unset, local_image > local_lvm > remote
+        rtn_down_hosts (bool): whether or not to count down hosts as well. Default is to return up hosts only.
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<storage_backing>(str), <hosts>(list))
+        Examples:
+            Regular/Storage system: ('local_image',['compute-1', 'compute-3'])
+            AIO: ('local_lvm', ['controller-0', 'controller-1'])
+
+    """
 
     hosts_by_backing = {'local_image': host_helper.get_hosts_by_storage_aggregate(con_ssh=con_ssh),
                         'local_lvm': host_helper.get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh),

@@ -3030,3 +3030,43 @@ def get_pci_procs(hosts, net_type='pci-sriov'):
 
     LOG.info("Hosts procs map for {} devices: {}".format(net_type, hosts_procs))
     return hosts_procs
+
+
+def wait_for_agents_alive(hosts=None, timeout=120, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Wait for neutron agents to be alive
+    Args:
+        hosts (str|list): hostname(s) to check. When None, all nova hypervisors will be checked
+        timeout (int): max wait time in seconds
+        fail_ok (bool): whether to return False or raise exception when non-alive agents exist
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (<res>(bool), <msg>(str))
+        (True, "All agents for <hosts> are alive")
+        (False, "Some agents are not alive: <non_alive_rows>")      Applicable when fail_ok=True
+
+    """
+    if hosts is None:
+        hosts = host_helper.get_hypervisors(con_ssh=con_ssh)
+    elif isinstance(hosts, str):
+        hosts = [hosts]
+
+    LOG.info("Wait for neutron agents to be alive for {}".format(hosts))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        agents_tab = table_parser.table(cli.neutron('agent-list', ssh_client=con_ssh, auth_info=auth_info))
+        agents_tab = table_parser.filter_table(agents_tab, host=hosts)
+        alive_vals = table_parser.get_column(agents_tab, 'alive')
+        if all(alive_val == ':-)' for alive_val in alive_vals):
+            succ_msg = "All agents for {} are alive".format(hosts)
+            LOG.info(succ_msg)
+            return True, succ_msg
+
+    LOG.warning("Some neutron agents are not alive")
+    non_alive_tab = table_parser.filter_table(agents_tab, exclude=True, alive=':-)')
+    non_alive_rows = table_parser.get_all_rows(non_alive_tab)
+    msg = "Some agents are not alive: {}".format(non_alive_rows)
+    if fail_ok:
+        return False, msg
+    raise exceptions.NeutronError(msg)

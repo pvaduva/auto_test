@@ -115,12 +115,17 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         index = con_ssh.expect(['.*[pP]assword:.*', 'Rebooting'])
         if index == 0:
             con_ssh.send(password)
+
+        LOG.info("Active controller reboot started. Wait for 20 seconds then attempt to reconnect for "
+                 "maximum {}s".format(timeout))
         time.sleep(20)
         con_ssh.connect(retry=True, retry_timeout=timeout)
+
+        LOG.info("Reconnected via fip. Waiting for system show cli to re-enable")
         _wait_for_openstack_cli_enable(con_ssh=con_ssh)
 
     if not wait_for_reboot_finish:
-        msg = "Reboot hosts command sent."
+        msg = "Hosts reboot -f cmd sent"
         LOG.info(msg)
         return -1, msg
 
