@@ -10,7 +10,7 @@ from testfixtures.recover_hosts import HostsToRecover
 @mark.usefixtures('check_alarms')
 @mark.parametrize('host_type', [
     mark.sanity('controller'),
-    mark.sanity('compute'),
+    'compute',
     'storage'
 ])
 def test_system_persist_over_host_reboot(host_type):
