@@ -2162,12 +2162,13 @@ def main():
         vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
         # Run the wipedisk utility if the nodes are accessible
+        log.info("Attempting to wipe disks")
         with open(os.devnull, 'wb') as devnull:
             print(nodes[0].host_ip)
             isControllerOnline = subprocess.call(["ping", "-w {}".format(PING_TIMEOUT), "-c 4", "{}".format(nodes[0].host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
         if(isControllerOnline == 0):
-            bld_server_conn.rsync(load_path + '/' + CENTOS_LAB_REL_PATH + "/scripts/wipedisk_*", WRSROOT_USERNAME, "{}".format(nodes[0].host_ip), "~", pre_opts=pre_opts)
-            input()
+            bld_server_conn.rsync(/folk/jlevesqu/cgcs/sanityrefresh/labinstall/wipedisk_*", WRSROOT_USERNAME, "{}".format(nodes[0].host_ip), "~", pre_opts=pre_opts)
+            #bld_server_conn.rsync(load_path + '/' + CENTOS_LAB_REL_PATH + "/scripts/wipedisk_*", WRSROOT_USERNAME, "{}".format(nodes[0].host_ip), "~", pre_opts=pre_opts)
             if controller0.ssh_conn is None:
                 controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
             cmd = "chmod 755 wipedisk_helper"
@@ -2178,11 +2179,6 @@ def main():
             controller0.ssh_conn.exec_cmd(cmd)
         else:
             log.info("Unable to reach controller-0, will continue without wipedisk")
-        input()
-        input()
-        if stop == "0":
-            wr_exit()._exit(0, "User requested stop after {}".format(msg))
-        #---------------------------------------REMOVE STOP WHEN DONE --------------------------------
         # Power down all the nodes via VLM (note: this can also be done via board management control)
         if not continue_install:
             for barcode in barcodes:
