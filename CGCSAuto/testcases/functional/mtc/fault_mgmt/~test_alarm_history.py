@@ -16,8 +16,10 @@ from testfixtures.recover_hosts import HostsToRecover
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
 
 
-@mark.p1
-def test_system_alarm_on_host_lock():
+# Remove below test as it's already covered in test_system_alarms_and_events_on_lock_unlock_compute
+# Plus this test does not have proper verifications
+# @mark.p1
+def _test_system_alarm_on_host_lock():
     """
     Verify system event-list command in the system upon host-lock
 
