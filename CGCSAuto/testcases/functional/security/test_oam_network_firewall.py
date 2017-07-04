@@ -106,7 +106,8 @@ def test_custom_iptables_rules():
 
     with host_helper.ssh_to_host(system_helper.get_active_controller_name()) as con_ssh:
         LOG.tc_step("Check for custom firewall rules")
-        cmd = 'grep /opt/platform/config/17.06/cgcs_config -e "FIREWALL_RULES_FILE="'
+        version = system_helper.get_system_software_version()
+        cmd = 'grep /opt/platform/config/{}/cgcs_config -e "FIREWALL_RULES_FILE="'.format(version)
         code, output = con_ssh.exec_cmd(cmd)
         if output is '':
             skip("No custom firewall rules are used. Cannot test customs rules.")
