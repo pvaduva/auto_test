@@ -117,10 +117,10 @@ PATCH_AVAILABLE_STATE = "Available"
 DEFAULT_BOOT_DEVICE_DICT = {'controller-0': '[ABC]00',
                         'compute': '[ABC]01',
                         'storage': '[ABC]01'}
-BIOS_TYPES = [b"American Megatrends", b"Hewlett-Packard", b"Phoenix", b"PowerEdge"]
-BIOS_TYPE_FN_KEY_ESC_CODES = ['\x1b' + '[17~', '\x1b' + '@', '\x1b' + '[24~', '\x1b' + '[23~'] # F6, ESC + @, F12 Phoenix used for R720 nodes (i.e. Dell)
-BIOS_TYPE_FN_HUMAN_READ = ['F6', 'ESC + @', 'F12', 'F11']
-INSTALL_TIMEOUTS = [2400, 2400, 2400]  # Some labs take longer that 2100 seconds to install; increased to 2400.
+BIOS_TYPES = [b"American Megatrends", b"Hewlett-Packard", b"Phoenix", b"PowerEdge", b"American Megatrends"]
+BIOS_TYPE_FN_KEY_ESC_CODES = ['\x1b' + '[17~', '\x1b' + '@', '\x1b' + '[24~', '\x1b' + '[23~', '\x1b!'] # F6, ESC + @, F12 Phoenix used for R720 nodes (i.e. Dell), F6 for supermicro
+BIOS_TYPE_FN_HUMAN_READ = ['F6', 'ESC + @', 'F12', 'F11', 'F11']
+INSTALL_TIMEOUTS = [2400, 2400, 2400, 2400, 2400]  # Some labs take longer that 2100 seconds to install; increased to 2400.
 SERIAL_KICKSTART_CONTROLLER_INSTALL = "Serial Kickstart Controller Install"
 MAX_BOOT_MENU_LINES = 15
 

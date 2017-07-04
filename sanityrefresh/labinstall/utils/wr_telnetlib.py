@@ -902,154 +902,22 @@ class Telnet:
     #      should be increased/decreased
     #TODO: If script returns zero, should check return code, otherwise remove it
     def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', usb=False, lowlat=False):
-        if "wildcat" in node.host_name:
-            index = 0
+        if "wildcat" or "supermicro" in node.host_name:
+            if "wildcat" in node.host_name:
+                index = 0
+                boot_menu_name = "boot menu"
+            else:
+                index = 4
+                boot_menu_name = "Boot Menu"
             bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[index]
             bios_key_hr = BIOS_TYPE_FN_HUMAN_READ[index]
             install_timeout = INSTALL_TIMEOUTS[index]
             bios_type = BIOS_TYPES[index]
-            log.info("BIOS type: " + bios_type.decode('utf-8','ignore'))
-            log.info("Use BIOS key: " + bios_key_hr)
-            log.info("Installation timeout: " + str(install_timeout))
-
-            self.get_read_until("boot menu", 360)
-            log.info("Enter BIOS key")
-            self.write(str.encode(bios_key))
-            print(boot_device_dict)
-            boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
-            log.info("wildcat boot_device_regex: {}".format(boot_device_regex))
-            if boot_device_regex is None:
-                msg = "Failed to determine boot device for: " + node.name
-                log.error(msg)
-            if usb:
-                log.info("Boot device is: USB")
-            else:
-                log.info("Boot device is: " + str(boot_device_regex))
-
-            self.get_read_until("Please select boot device", 60)
-
-            count = 0
-            down_press_count = 0
-            while count < MAX_SEARCH_ATTEMPTS:
-
-                # GENERIC USB
-                if usb and node.name == CONTROLLER0:
-                    log.info("Looking for USB device")
-                    boot_device_regex = "USB|Kingston|JetFlash"
-
-                log.info("Searching boot device menu for {}...".format(boot_device_regex))
-                #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
-                # Construct regex to work with wildcatpass machines
-                # in legacy and uefi mode
-                regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
-
-                log.info("wildcat: compiled regex is: {}".format(regex))
-
-                try:
-                    index, match = self.expect([regex], BOOT_MENU_TIMEOUT)[:2]
-                    log.info("wildcat: index: {} match: {} ".format(index, match))
-                except EOFError:
-                    msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
-                    log.exception(msg)
-                    wr_exit()._exit(1, msg)
-                if index == 0:
-                    match = match.group(2).decode('utf-8','ignore')
-                    log.info("wildcat: Matched: " + match)
-                    if re.search(boot_device_regex, match, re.IGNORECASE):
-                        log.info("Found boot device {}".format(boot_device_regex))
-                        time.sleep(1)
-                        log.info("Pressing ENTER key")
-                        self.write(str.encode("\r\r"))
-                        break
-                    else:
-                        time.sleep(1)
-                        self.write(str.encode(DOWN))
-                        down_press_count += 1
-                        log.info("DOWN key count: " + str(down_press_count))
-                count += 1
-
-            if count == MAX_SEARCH_ATTEMPTS:
-                msg = "Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex)
-                log.error(msg)
-                return 1
-                #wr_exit()._exit(1, msg)
-
-            #log.info("Waiting for ESC to exit")
-            if node.name == CONTROLLER0:
-                if usb:
-                    self.get_read_until("Select kernel options and boot kernel", 120)
-                    if small_footprint:
-                        log.info("Selecting Serial Controller+Compute Node Install")
-                        time.sleep(3)
-                        log.info("Pressing down key")
-                        self.write(str.encode(DOWN))
-                        log.info("Pressing down key")
-                        self.write(str.encode(DOWN))
-                        if host_os == 'wrlinux':
-                           self.write(str.encode(DOWN))
-                        time.sleep(1)
-                        log.info("Pressing ENTER key")
-                        self.write(str.encode("\r\r"))
-                    else:
-                        time.sleep(1)
-                        log.info("Selecting Serial Controller Node Install")
-                        log.info("Pressing ENTER key")
-                    self.write(str.encode("\r\r"))
-                # If we are performing a UEFI install then we need to use
-                # different logic to select the install option
-                elif "UEFI" in boot_device_regex:
-                    log.info("wildcat boot_device_regex, selecting UEFI boot option 2: {}".format(boot_device_regex))
-                    self.get_read_until("UEFI CentOS Serial Controller Install", BOOT_MENU_TIMEOUT)
-                    self.write(str.encode(DOWN))
-                    log.info("Pressing ENTER key")
-                    self.write(str.encode("\r\r"))
-                else:
-                    self.get_read_until("Boot from hard drive", 240)
-                    # New pxeboot cfg menu
-                    # 0) Boot from hard drive
-                    # 1) WRL Serial Controller Install
-                    # 2) CentOS Serial Controller Install
-                    # 3) WRL Serial CPE Install
-                    # 4) CentOS Serial CPE Install
-                    log.info("Enter option for {} Controller Install".format(host_os))
-                    if host_os == 'wrlinux':
-                        #selection_menu_option = '1'
-                        if small_footprint:
-                            selection_menu_option = '3'
-                        else:
-                            selection_menu_option = '1'
-
-                    else:
-                        if small_footprint and lowlat:
-                            selection_menu_option = '6'
-                        elif small_footprint:
-                            selection_menu_option = '4'
-                        else:
-                            selection_menu_option = '2'
-
-                    if hasattr(node, "host_kickstart_menu_selection"):
-                        selection_menu_option =  getattr(node, "host_kickstart_menu_selection")
-
-                    log.info("Boot from hard drive selection = {}".format(selection_menu_option))
-
-                    self.write_line(selection_menu_option)
-
-            self.get_read_until(LOGIN_PROMPT, install_timeout)
-            log.info("Found login prompt. {} installation has completed".format(node.name))
-            return 0
-
-        if "supermicro" in node.host_name:
-            index = 0
-            bios_key = '\x1b!'
-            #bios_key = '\x1b[23~'
-            bios_key_hr = 'F11'#BIOS_TYPE_FN_HUMAN_READ[index]
-            install_timeout = 2400#INSTALL_TIMEOUTS[index]
-            bios_type = b"American Megatrends"#BIOS_TYPES[index]
             log.info("BIOS type: " + bios_type.decode('utf-8', 'ignore'))
             log.info("Use BIOS key: " + bios_key_hr)
             log.info("Installation timeout: " + str(install_timeout))
 
-            self.get_read_until("Boot Menu", 360)
+            self.get_read_until(boot_menu_name, 360)
             log.info("Enter BIOS key")
             self.write(str.encode(bios_key))
 
