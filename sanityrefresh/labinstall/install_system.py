@@ -855,7 +855,7 @@ def get_settings(barcodes_controller, barcodes_compute):
                 words[-1] = words[-1].replace('0','')
             server_name = '-'.join(words)
 
-            with open(SCRIPT_DIR + "/node_info/" + barcode_compute[-1] + ".ini", "r") as server_code:
+            with open(SCRIPT_DIR + "/node_info/" + barcode_controller[-1] + ".ini", "r") as server_code:
                 server_code.readline()
                 last_server_name = server_code.readline()
             last_server_name = last_server_name.split('-')
