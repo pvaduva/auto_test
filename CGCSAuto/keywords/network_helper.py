@@ -2137,7 +2137,7 @@ def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
 
-def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False, vshell=False, interface=None):
+def _ping_server(server, ssh_client, num_pings=5, timeout=30, fail_ok=False, vshell=False, interface=None):
     """
 
     Args:
@@ -2154,14 +2154,20 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False, vsh
     """
     if not vshell:
         cmd = 'ping -c {} {}'.format(num_pings, server)
-        output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
-        packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
+        code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout, fail_ok=True)
+        if code != 0:
+            packet_loss_rate = 100
+        else:
+            packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
     else:
         if not interface:
             interface = _get_interfaces_via_vshell(ssh_client, net_type='internal')[0]
         cmd = 'vshell ping --count {} {} {}'.format(num_pings, server, interface)
-        output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
-        packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
+        code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)
+        if code != 0:
+            packet_loss_rate = 100
+        else:
+            packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
 
     packet_loss_rate = int(packet_loss_rate)
 
