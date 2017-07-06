@@ -530,3 +530,7 @@ def scp_vswitch_log(con_ssh, hosts, log_path=None):
     dest_dir = ProjVar.get_var('TEMP_DIR')
     scp_to_local(dest_path=dest_dir, source_user=HostLinuxCreds.USER, source_password=HostLinuxCreds.PASSWORD, source_path=log_path,
                  source_ip=source_ip, timeout=60)
+
+
+def list_migration_history(con_ssh):
+    nova_helper.run_migration_list(con_ssh=con_ssh)

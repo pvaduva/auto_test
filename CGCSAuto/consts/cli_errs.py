@@ -129,3 +129,16 @@ class SrvGrpErr:
     EXCEEDS_GRP_SIZE = 'Action would result in server group {} exceeding the group size of {}'
     HOST_UNAVAIL_ANTI_AFFINITY = '(ServerGroupAntiAffinityFilter) Anti-affinity server group specified, ' \
                                  'but this host is already used by that group'
+
+
+class CpuRtErr:
+    # ERROR (Conflict): Realtime policy needs vCPU(s) mask configured with at least 1 RT vCPU and 1 ordinary vCPU.
+    # See hw:cpu_realtime_mask or hw_cpu_realtime_mask (HTTP 409)
+    RT_AND_ORD_REQUIRED = 'Realtime policy needs vCPU.* mask configured with at least 1 RT vCPU and 1 ordinary vCPU'
+    # ERROR (Conflict): Cannot set realtime policy in a non dedicated cpu pinning policy (HTTP 409)
+    DED_CPU_POL_REQUIRED = 'Cannot set realtime policy in a non dedicated cpu pinning policy'
+    # ERROR (BadRequest): Invalid hw:cpu_realtime_mask '^2-3', reason: hw:wrs:shared_vcpu (1) is not a subset of
+    # non-realtime vCPUs (2,3). (HTTP 400)
+    RT_MASK_SHARED_VCPU_CONFLICT = 'hw:wrs:shared_vcpu .* is not a subset of non-realtime vCPUs'
+    # ERROR (BadRequest): Invalid hw:cpu_realtime_mask '^0', reason: Realtime policy needs vCPU(s) mask configured with
+    # at least 1 RT vCPU and 1 ordinary vCPU. See hw:cpu_realtime_mask or hw_cpu_realtime_mask.

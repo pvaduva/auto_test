@@ -11,15 +11,15 @@ from pytest import mark, skip
 from utils import table_parser, cli
 from utils.tis_log import LOG
 
-from keywords import system_helper, host_helper
+from keywords import system_helper, host_helper, common
 
 from testfixtures.recover_hosts import HostsToRecover
 
 
-# Remove from sanity to reduce total execution time - alarm checking is already covered by check_alarms fixture which
+# Remove following test - alarm checking is already covered by check_alarms fixture which
 # is auto used by most testcases - table headers checking is of low priority
 # @mark.sanity
-def test_system_alarm_list_on_compute_reboot():
+def _test_system_alarm_list_on_compute_reboot():
     """
     Verify system alarm-list command in the system
 
@@ -56,18 +56,19 @@ def test_system_alarm_list_on_compute_reboot():
 
 
 @mark.sanity
-def test_system_alarm_show_on_lock_unlock_compute():
+def test_system_alarms_and_events_on_lock_unlock_compute():
     """
     Verify system alarm-show command
 
     Test Steps:
-    1. Lock one nova compute host
-    2. Execute system alarm list and get uuid.
-    3. Execute system alarm-show <uuid>.
-    4. Verify alarm-list and alarm-show values are in sync
-    5. Unlock nova compute host
-    6. Verify system alarm-list and check if there is no entries compute host related entries displayed.
-
+    - Delete active alarms
+    - Lock a host
+    - Check active alarm generated for host lock
+    - Check relative values are the same in system alarm-list and system alarm-show <uuid>
+    - Check host lock 'set' event logged via system event-list
+    - Unlock host
+    - Check active alarms cleared via system alarm-list
+    - Check host lock 'clear' event logged via system event-list
     """
 
     # Clear the alarms currently present
@@ -76,25 +77,21 @@ def test_system_alarm_show_on_lock_unlock_compute():
 
     # Raise a new alarm by locking a compute node
     # Get the compute
-    compute_host = host_helper.get_nova_hosts()[0]
+    compute_host = host_helper.get_up_hypervisors()[0]
     if compute_host == system_helper.get_active_controller_name():
         compute_host = system_helper.get_standby_controller_name()
 
     LOG.tc_step("Lock a nova hypervisor host {}".format(compute_host))
+    pre_lock_time = common.get_date_in_format()
     HostsToRecover.add(compute_host)
     host_helper.lock_host(compute_host)
-    time.sleep(20)
 
-    LOG.tc_step("Check system alarm-list after locking")
+    LOG.tc_step("Check host lock alarm is generated")
+    post_lock_alarms = system_helper.wait_for_alarm(rtn_val='UUID', entity_id=compute_host, reason=compute_host,
+                                                    strict=False, fail_ok=False)[1]
+
+    LOG.tc_step("Check related fields in system alarm-list and system alarm-show are of the same values")
     post_lock_alarms_tab = system_helper.get_alarms_table(uuid=True)
-    post_lock_alarms_tab = table_parser.filter_table(post_lock_alarms_tab, strict=False,
-                                                     **{'Reason Text': compute_host})
-
-    post_lock_alarms = table_parser.get_column(post_lock_alarms_tab, 'UUID')
-
-    LOG.info("{} related active alarms: \n{}".format(compute_host, post_lock_alarms_tab))
-
-    # Verify that the alarm table contains the correct alarm
 
     alarms_l = ['Alarm ID', 'Entity ID', 'Severity', 'Reason Text']
     alarms_s = ['alarm_id', 'entity_instance_id', 'severity', 'reason_text']
@@ -109,16 +106,23 @@ def test_system_alarm_show_on_lock_unlock_compute():
             alarm_l_val = table_parser.get_column(alarm_list_tab, alarms_l[i])[0]
             alarm_s_val = table_parser.get_value_two_col_table(alarm_show_tab, alarms_s[i])
 
-            assert alarm_l_val == alarm_s_val, "{} value in alarm-list: {} is not in synce with alarm-show: {}".format(
+            assert alarm_l_val == alarm_s_val, "{} value in alarm-list: {} is different than alarm-show: {}".format(
                 alarms_l[i], alarm_l_val, alarm_s_val)
 
-    LOG.tc_step("Unlock compute and wait for hypervisor state up")
+    LOG.tc_step("Check host lock is logged via system event-list")
+    event_ids = system_helper.wait_for_events(entity_instance_id=compute_host, start=pre_lock_time, fail_ok=False,
+                                              **{'state': 'set'})
+
+    pre_unlock_time = common.get_date_in_format()
+    LOG.tc_step("Unlock {}".format(compute_host))
     host_helper.unlock_host(compute_host)
-    time.sleep(30)
 
-    LOG.tc_step("Verify that alarms generated due to lock compute is destroyed from alarm list table")
-    post_unlock_alarms_tab = system_helper.get_alarms_table(uuid=True)
-    post_unlock_alarms = table_parser.get_values(post_unlock_alarms_tab, 'UUID', **{'Reason Text': compute_host})
+    LOG.tc_step("Check active alarms cleared")
+    alarm_ids = table_parser.get_values(post_lock_alarms_tab, 'Alarm ID', uuid=post_lock_alarms)
+    alarm_sets = [(alarm_id, compute_host) for alarm_id in alarm_ids]
+    system_helper.wait_for_alarms_gone(alarm_sets, fail_ok=False)
 
-    assert not post_unlock_alarms, "Some alarm(s) still exist after unlock: {}. Alarms before unlock: {}".format(
-            post_unlock_alarms, post_lock_alarms)
+    LOG.tc_step("Check clear events logged")
+    for event_id in event_ids:
+        system_helper.wait_for_events(event_log_id=event_id, start=pre_unlock_time, entity_instance_id=compute_host,
+                                      fail_ok=False, **{'state': 'clear'})

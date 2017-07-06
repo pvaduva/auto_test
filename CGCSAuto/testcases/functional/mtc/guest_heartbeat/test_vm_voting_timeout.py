@@ -3,22 +3,20 @@
 ###
 
 
-from pytest import fixture, mark, skip
+from pytest import fixture, mark
 from time import sleep
 
 from utils.tis_log import LOG
 from consts.cgcs import EventLogID, FlavorSpec
 from consts.timeout import EventLogTimeout
-from keywords import nova_helper, vm_helper, host_helper, system_helper
+from keywords import nova_helper, vm_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
-def heartbeat_flavor_vm(request):
+def heartbeat_flavor_vm():
     """
     Text fixture to create flavor with specific 'heartbeat'
-    Args:
-        request: pytest arg
 
     Returns: flavor dict as following:
         {'id': <flavor_id>,
@@ -33,10 +31,9 @@ def heartbeat_flavor_vm(request):
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
 
     vm_id = vm_helper.boot_vm(flavor=flavor_id, cleanup='module')[1]
-    # ResourceCleanup.add('vm', vm_id, scope='module')
-    events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
-                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
-                                              EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
+    system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
+                                  **{'Entity Instance ID': vm_id,
+                                     'Event Log ID': [EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
 
     vm = {'id': vm_id,
           'heartbeat': heartbeat
@@ -100,4 +97,3 @@ def test_vm_voting_timeout(heartbeat_flavor_vm, action, revert, vm_voting):
         eval(cmd_str)
 
     sleep(10)
-

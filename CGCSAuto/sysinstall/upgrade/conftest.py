@@ -16,7 +16,7 @@ from testfixtures.pre_checks_and_configs import *
 
 natbox_ssh = None
 con_ssh = None
-SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.00']]
+SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.00'], ['16.10', '17.06']]
 
 ########################
 # Command line options #

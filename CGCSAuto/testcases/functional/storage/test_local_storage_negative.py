@@ -84,6 +84,5 @@ def test_apply_storage_profile_negative(create_storage_profile, personality):
                                   auth_info=Tenant.ADMIN, rtn_list=True)
     host_helper.unlock_host(host_name)
 
-    #assert exitcode == 1 and expt_err in output
-    assert exitcode == 1 and any(expt in  output for expt in expt_err_list)
+    assert exitcode == 1 and any(expt in output for expt in expt_err_list)
 

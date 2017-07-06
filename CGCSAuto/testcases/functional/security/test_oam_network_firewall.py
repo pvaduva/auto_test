@@ -26,7 +26,8 @@ def test_config_iptables_reboot():
             LOG.tc_step("checking iptables status")
             cmd = 'service iptables status'
             code, output = con_ssh.exec_sudo_cmd(cmd)
-            assert 'Active: inactive' in output, "iptables service did not stop running on host {}".format(controller)
+            assert 'Active: inactive' or 'Active: failed' in output, "iptables service did not stop running on host {}"\
+                .format(controller)
 
         LOG.tc_step("Rebooting {}".format(controller))
         host_helper.reboot_hosts(controller)
@@ -105,7 +106,8 @@ def test_custom_iptables_rules():
 
     with host_helper.ssh_to_host(system_helper.get_active_controller_name()) as con_ssh:
         LOG.tc_step("Check for custom firewall rules")
-        cmd = 'grep /opt/platform/config/17.00/cgcs_config -e "FIREWALL_RULES_FILE="'
+        version = system_helper.get_system_software_version()
+        cmd = 'grep /opt/platform/config/{}/cgcs_config -e "FIREWALL_RULES_FILE="'.format(version)
         code, output = con_ssh.exec_cmd(cmd)
         if output is '':
             skip("No custom firewall rules are used. Cannot test customs rules.")

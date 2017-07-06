@@ -434,8 +434,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         if exitcode == 1:
             return 1, vm_ids, output
 
-        result, vms_in_state, vms_failed_to_reach_state = _wait_for_vms_values(vm_ids,fail_ok=True, timeout=tmout,
-                                                                               con_ssh=con_ssh, auth_info=auth_info)
+        result, vms_in_state, vms_failed_to_reach_state = wait_for_vms_values(vm_ids, fail_ok=True, timeout=tmout,
+                                                                              con_ssh=con_ssh, auth_info=auth_info)
         if not result:
             msg = "VMs failed to reach ACTIVE state: {}".format(vms_failed_to_reach_state)
             if fail_ok:
@@ -621,7 +621,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
             live migration command executed successfully, but VM is not in before-migration-state
         (5, 'Post action check failed: VM host did not change!'):   (this scenario is removed from Newton)
             live migration command executed successfully, but VM is still on the same host after migration
-        (6, <cli_stderr>) This happens when vote_note_to_migrate is set for vm
+        (6, <cli_stderr>) This happens when vote_note_to_migrate is set for vm, or pci device is used in vm, etc
 
     For the first two scenarios, results will be returned regardless of the fail_ok flag.
     For scenarios other than the first two, returns are only applicable if fail_ok=True
@@ -654,8 +654,8 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         extra_str = ' to ' + destination_host
     LOG.info("Live migrating VM {} from {}{} started.".format(vm_id, before_host, extra_str))
     positional_args = ' '.join([optional_arg.strip(), str(vm_id), destination_host]).strip()
-    exit_code, output = cli.nova('live-migration', positional_args=positional_args, ssh_client=con_ssh, fail_ok=True,
-                                 auth_info=auth_info)
+    exit_code, output = cli.nova('live-migration', positional_args=positional_args, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info, rtn_list=True)
 
     if exit_code == 1:
         return 6, output
@@ -695,12 +695,12 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         if _is_live_migration_allowed(vm_id, block_migrate=block_migrate) and \
                 (destination_host or get_dest_host_for_live_migrate(vm_id)):
             if fail_ok:
-                return 2, output
+                return 2, "Unknown live migration failure"
             else:
                 raise exceptions.VMPostCheckFailed("Unexpected failure of live migration!")
         else:
             LOG.debug("System does not allow live migrating vm {} as expected.".format(vm_id))
-            return 1, output
+            return 1, "Live migration failed as expected"
         # if fail_ok:
         #     return 5, "Post action check failed: VM host did not change!"
         # else:
@@ -1415,8 +1415,8 @@ class VMInfo:
         VMInfo.__instances[vm_id] = self            # add instance to class variable for tracking
 
     def refresh_table(self):
-        self.table_ = table_parser.table(cli.nova('show', self.vm_id, ssh_client=self.con_ssh, auth_info=self.auth_info,
-                                                  timeout=5))
+        self.table_ = table_parser.table(cli.nova('show', self.vm_id, ssh_client=self.con_ssh,
+                                                  auth_info=self.auth_info))
 
     def __get_nics(self):
         raw_nics = table_parser.get_value_two_col_table(self.initial_table_, 'wrs-if:nics')
@@ -1681,8 +1681,8 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
                                        format(timeout, vms_to_check))
 
 
-def _wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VMTimeout.STATUS_CHANGE, fail_ok=True,
-                         check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
+def wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VMTimeout.STATUS_CHANGE, fail_ok=True,
+                        check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
 
     """
     Wait for specific vms to reach any of the given state(s)
@@ -1903,9 +1903,9 @@ def _start_or_stop_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_CHANGE
         if not vms_to_check:
             return 1, output
 
-    res_bool, res_pass, res_fail = _wait_for_vms_values(vms_to_check, 'Status', [expt_status, VMStatus.ERROR],
-                                                        fail_ok=fail_ok, check_interval=check_interval,
-                                                        con_ssh=con_ssh, timeout=timeout)
+    res_bool, res_pass, res_fail = wait_for_vms_values(vms_to_check, 'Status', [expt_status, VMStatus.ERROR],
+                                                       fail_ok=fail_ok, check_interval=check_interval,
+                                                       con_ssh=con_ssh, timeout=timeout)
 
     if not res_bool:
         msg = "Some VM(s) did not reach expected state(s) - {}. Actual states: {}".format(expt_status, res_fail)
@@ -2059,6 +2059,110 @@ def _parse_cpu_siblings(siblings_str):
     return results
 
 
+def get_vm_pci_dev_info_via_nova_show(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get vm pci devices info via nova show. Returns a list of dictionaries.
+    Args:
+        vm_id:
+        con_ssh:
+        auth_info:
+
+    Returns (dict):
+    Examples:
+        {'0000:81:0f.7': {'node':0, 'addr':'0000:81:0f.7', 'type':'VF', 'vendor':'8086', 'product':'154c'},
+        '0000:81:0f.9': {'node':0, 'addr':'0000:81:0f.9', 'type':'VF', 'vendor':'8086', 'product':'154c'},
+        '0000:90:02.3': {'node':1, 'addr':'0000:90:02.3', 'type':'VF', 'vendor':'8086', 'product':'154c'}}
+
+    """
+    pci_devs_raw = nova_helper.get_vm_nova_show_value(vm_id, field='wrs-res:pci_devices', con_ssh=con_ssh,
+                                                      auth_info=auth_info)
+    if isinstance(pci_devs_raw, str):
+        pci_devs_raw = [pci_devs_raw]
+
+    pci_devs_info = {}
+    for pci_dev in pci_devs_raw:
+        pci_dev_dict = {}
+        info = pci_dev.split(sep=', ')
+        for item in info:
+            k, v = item.split(sep=':', maxsplit=1)
+            if k == 'node':
+                v = int(v)
+            pci_dev_dict[k] = v
+
+        pci_devs_info[pci_dev_dict['addr']] = pci_dev_dict
+
+    return pci_devs_info
+
+
+def get_vm_irq_info_from_hypervisor(vm_id, con_ssh=None):
+    """
+    Gather vm irq info from vm host
+
+    Args:
+        vm_id (str):
+        con_ssh (SSHClient):
+
+    Returns (dict):
+    Examples:
+        {
+            "0000:83:03.7":{
+                "cpulist":[10,15,16,30,35],
+                "irq":"69",
+                "msi_irqs": ["69"],
+                "nic":"83:03.7 Co-processor: Intel Corporation DH895XCC Series QAT Virtual Function",
+                "node":"1",
+                "product":"0443",
+                "vendor":"8086"
+                },
+            }
+
+    """
+    vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+    nova_show_pci_devs = get_vm_pci_dev_info_via_nova_show(vm_id, con_ssh=con_ssh)
+    pci_addrs = list(nova_show_pci_devs.keys())
+
+    pci_devs_dict = {}
+    with host_helper.ssh_to_host(vm_host, con_ssh=con_ssh) as host_ssh:
+
+        for pci_addr in pci_addrs:
+            pci_dev_dict = dict(type=nova_show_pci_devs[pci_addr]['type'])
+            pci_dev_info_path = '/sys/bus/pci/devices/{}'.format(pci_addr)
+
+            irq = host_ssh.exec_sudo_cmd('cat {}/{}'.format(pci_dev_info_path, 'irq'))[1]
+            pci_dev_dict['irq'] = irq
+
+            numa_node = host_ssh.exec_sudo_cmd('cat {}/{}'.format(pci_dev_info_path, 'numa_node'))[1]
+            pci_dev_dict['node'] = int(numa_node)
+
+            msi_irqs = (host_ssh.exec_sudo_cmd('ls {}/{}/'.format(pci_dev_info_path, 'msi_irqs'))[1]).split()
+            pci_dev_dict['msi_irqs'] = msi_irqs
+
+            # compute-1:~$ cat /sys/bus/pci/devices/0000\:81\:0f.7/uevent |grep PCI_ID
+            # PCI_ID=8086:154C
+            vendor_product = host_ssh.exec_sudo_cmd('cat {}/{} | grep PCI_ID'.format(pci_dev_info_path, 'uevent'))[1]
+            vendor, product = vendor_product.split('=', 1)[1].split(':', 1)
+            pci_dev_dict['vendor'] = vendor
+            pci_dev_dict['product'] = product
+
+            lspci_info = host_ssh.exec_sudo_cmd('lspci -s {}'.format(pci_addr))[1]
+            pci_dev_dict['nic'] = lspci_info
+
+            irqs_to_check = list(msi_irqs)
+            if irq and irq is not '0':
+                irqs_to_check.append(irq)
+
+            cpu_list = []
+            for irq_to_check in irqs_to_check:
+                cpu_list_irq = host_ssh.exec_sudo_cmd('cat /proc/irq/{}/smp_affinity_list'.format(irq_to_check))[1]
+                cpu_list += common._parse_cpus_list(cpu_list_irq)
+            pci_dev_dict['cpulist'] = sorted(list(set([int(i) for i in cpu_list])))
+
+            pci_devs_dict[pci_addr] = pci_dev_dict
+
+    LOG.info("PCI dev info gathered from {} for vm {}: \n{}".format(vm_host, vm_id, pci_devs_dict))
+    return pci_devs_dict
+
+
 def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None, retries=3, retry_interval=45):
     """
     Get information for all PCI devices using tool nova-pci-interrupts.
@@ -2072,134 +2176,29 @@ def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None, retri
 
     Returns (pci_info, vm_topology): details of the PCI device and VM topology
         Examples:
-            vm_topology:
-            {
-                "memory":1024,
-                "numa_node":1,
+            vm_topology: {
+                "mem":1024,
+                "node":1,
                 "pcpus":[35,15,10,30,16],
-                "siblings":[],
+                "siblings": None,
                 "vcpus":[0,1,2,3,4]
-            }
+                }
 
-            pci_info:
-            {
-                "memory":1024, "numa_node":1, "pcpus":[35, 15, 10, 30, 16], "siblings":[],"vcpus":[0,1,2,3,4]}
-
-                pci_info:
-                    {"0000:83:03.7":{
-                        "cpulist":[10,15,16,30,35],
-                        "irq":"69",
-                        "msi_irqs":"69",
-                        "nic":"83:03.7 Co-processor: Intel Corporation DH895XCC Series QAT Virtual Function",
-                        "numa_node":"1",
-                        "product":"0443",
-                        "vendor":"8086"
+            pci_info: {
+                "0000:83:03.7":{
+                    "cpulist":[10,15,16,30,35],
+                    "irq":"69",
+                    "msi_irqs":"69",
+                    "nic":"83:03.7 Co-processor: Intel Corporation DH895XCC Series QAT Virtual Function",
+                    "node": 1,
+                    "product":"0443",
+                    "vendor":"8086"
                     },
-            }
-
-
+                }
     """
-    hypervisor = hypervisor or get_vm_host_and_numa_nodes(vm_id=vm_id, con_ssh=con_ssh)[0]
 
-    details = ''
-    try_count = 0
-    while try_count < retries and not details:
-        with host_helper.ssh_to_host(hypervisor, con_ssh=con_ssh) as compute_ssh:
-            code, details = compute_ssh.exec_sudo_cmd('nova-pci-interrupts')
-
-        try_count += 1
-        time.sleep(retry_interval)
-
-    pci_infos = {}
-    vm_topology = {}
-    stage = 0
-    prev_pci_addr = None
-    for line in details.splitlines():
-        if stage == 0:
-            begin = re.match(r'^\s*\|\s*{}\s*\|\s*([^\|]+)\s*\|\s*([^\|]+)\|\s*'.format(vm_id), line)
-            if begin:
-                topology_str = begin.group(1)
-                numa_node = re.search(r'node:\s*(\d+)', topology_str, re.IGNORECASE)
-                if numa_node:
-                    vm_topology['numa_node'] = numa_node.group(1)
-
-                memory = re.search(r'[,]?\s*(\d+)(MB|GB)', topology_str, re.IGNORECASE)
-                if memory:
-                    memory_size = int(memory.group(1))
-                    memory_size *= 1024 if memory.group(2).upper() == 'GB' else 1
-                    vm_topology['memory'] = memory_size
-
-                vm_topology['vcpus'] = parse_cpu_list(topology_str, 'vcpus:')
-                vm_topology['pcpus'] = parse_cpu_list(topology_str, 'pcpus:')
-                vm_topology['siblings'] = _parse_cpu_siblings(topology_str)
-
-                pci_info = re.search(
-                    '\|\s*node:(\d+)\,\s*addr:(\w{4}:\w{2}:\w{2}\.\w),\s*type:([^\,]+),\s*vendor:([^\,]+),\s*product:([^\|]+)\s*\|', line)
-
-                if pci_info:
-                    pci_numa_node, pci_addr, pci_type, vendor, product = pci_info.groups()
-                    pci_infos[pci_addr] = {
-                        'node': pci_numa_node, 'addr': pci_addr, 'type': pci_type, 'vendor': vendor, 'product': product}
-                stage = 1
-                continue
-
-        elif stage == 1:
-            pci_info = re.match('\|\s*node:(\d+)\,\s*addr:(\w{4}:\w{2}:\w{2}\.\w),\s*type:([^,]+),\s*vendor:([^,]+),\s*product:([^\|]+)\s*\|', line)
-
-            if pci_info:
-                pci_numa_node, pci_addr, pci_type, vendor, product = pci_info.groups()
-                pci_infos[pci_addr] = {
-                    'node': pci_numa_node, 'addr': pci_addr, 'type': pci_type, 'vendor': vendor, 'product': product}
-                continue
-            else:
-                stage = 2
-
-        if stage == 2:
-            all_pcis = re.search('INFO Found: pci_addrs:((\s*(\w{4}:\w{2}:\w{2}\.\w))+)', line)
-            if all_pcis:
-                # this list contains all pci-addrs for all the VMs on the host, so we have to remove those for other VMs
-                pci_infos['pci_addr_list'] = list(pci_infos.keys())
-                stage = 3
-                continue
-
-        if stage == 3:
-            pci_raw = re.match(r'.*INFO addr:\s*(\w{4}:\w{2}:\w{2}\.\w)\s*(.*)', line)
-            if pci_raw:
-                pci_addr = str(pci_raw.group(1))
-                prev_pci_addr = pci_addr
-
-                if pci_addr not in pci_infos:
-                    LOG.warn('UNKNOWN pci_addr:{}, \nraw line:\n{}'.format(pci_addr, line))
-                else:
-                    pci_info, nic_info = pci_raw.group(2).split(';')
-                    pci = re.findall('([^: ]+):([^ :]*)', pci_info)
-                    pci_infos[pci_addr].update({k.strip(): v.strip() for k, v in dict(pci).items()})
-                    pci_infos[pci_addr].update(
-                        {pci[-1][0].strip(): pci_info.split(':')[-1].strip(), 'nic': nic_info.strip()})
-                continue
-
-            irq_cpulist = re.search('irq:(\d+) \s*cpulist:(.*)$', line)
-            if irq_cpulist:
-                irq = irq_cpulist.group(1)
-                cpulist = parse_cpu_list(irq_cpulist.group(2))
-                # LOG.info('pci_addr:{}\ncpulist:{}\n'.format(prev_pci_addr or '', cpulist))
-
-                if prev_pci_addr is not None and prev_pci_addr in pci_infos:
-                    if irq != pci_infos[prev_pci_addr]['irq'] and irq not in pci_infos[prev_pci_addr]['msi_irqs']:
-                        LOG.warn('Mismatched irq, expecting:{}, actual:{}, \nline:\n{}\n'.format(
-                            pci_infos[prev_pci_addr]['irq'], irq, line))
-                        pci_infos[prev_pci_addr]['irq'] = irq
-                    # simply update the cpulist with the assumption all cpulists are same
-                    pci_infos[prev_pci_addr]['cpulist'] = sorted(set(cpulist))
-                else:
-                    LOG.warn('UNKOWN PCI addr:{} to vm:{}'.format(prev_pci_addr, vm_id))
-
-    # make sure to exclude irrelated PCI info
-    for pci_addr in list(pci_infos.keys()):
-        if pci_addr == 'pci_addr_list':
-            continue
-        if pci_addr not in pci_infos['pci_addr_list']:
-            pci_infos.pop(pci_addr)
+    pci_infos = get_vm_irq_info_from_hypervisor(vm_id, con_ssh=con_ssh)
+    vm_topology = get_instance_topology(vm_id, con_ssh=con_ssh)
 
     return pci_infos, vm_topology
 
@@ -2214,7 +2213,7 @@ def get_instance_topology(vm_id, con_ssh=None, source='vm-topology'):
         con_ssh (SSHClient):
         source (str): 'vm-topology' or 'nova show'
 
-    Returns (list|dict):
+    Returns (list):
 
     """
     if source == 'vm-topology':
@@ -2248,7 +2247,7 @@ def get_instance_topology(vm_id, con_ssh=None, source='vm-topology'):
                             min_, max_ = val.split(sep='-')
                             values += list(range(int(min_), int(max_) + 1))
 
-                    value_ = sorted([int(val) for val in values])
+                    value_ = [int(val) for val in values]
 
                 elif key_ == 'siblings':
                     # example: siblings:{0,1},{2,3},{5,6,8-10}
@@ -2261,10 +2260,12 @@ def get_instance_topology(vm_id, con_ssh=None, source='vm-topology'):
                 value_ = item_list[0]
                 if re.match(InstanceTopology.TOPOLOGY, value_):
                     instance_topology_dict['topology'] = value_
-                # TODO add mem size
+
+                if value_.endswith('MB'):
+                    instance_topology_dict['mem'] = int(value_.split('MB')[0])
 
         # Add as None if item is not displayed in vm-topology
-        all_keys = ['node', 'pgsize', 'vcpus', 'pcpus', 'pol', 'thr', 'siblings', 'topology']   # TODO: add mem
+        all_keys = ['node', 'pgsize', 'vcpus', 'pcpus', 'pol', 'thr', 'siblings', 'topology', 'mem']
         for key in all_keys:
             if key not in instance_topology_dict:
                 instance_topology_dict[key] = None
@@ -3196,12 +3197,12 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
 
     if not wait_for_host_up:
         LOG.info("Wait for vms to reach ERROR or REBUILD state with best effort")
-        _wait_for_vms_values(vms_to_check, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120,
-                             con_ssh=con_ssh)
+        wait_for_vms_values(vms_to_check, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120,
+                            con_ssh=con_ssh)
 
     LOG.tc_step("Check vms are in Active state and moved to other host(s) after host reboot")
-    res, active_vms, inactive_vms = _wait_for_vms_values(vms=vms_to_check, values=VMStatus.ACTIVE, timeout=timeout,
-                                                         con_ssh=con_ssh)
+    res, active_vms, inactive_vms = wait_for_vms_values(vms=vms_to_check, values=VMStatus.ACTIVE, timeout=timeout,
+                                                        con_ssh=con_ssh)
 
     vms_host_err = []
     for vm in vms_to_check:
@@ -3248,18 +3249,21 @@ def boot_vms_various_types(storage_backing=None, target_host=None, scope='functi
         storage_backing (str|None): storage backing to set in flavor spec. When None, storage backing which used by
             most up hypervisors will be used.
         target_host (str|None): Boot vm on target_host when specified. (admin role has to be added to tenant under test)
-        scope (str): Scope for resource cleanup, valid values: 'function', 'class', 'module'
+        scope (str|None): Scope for resource cleanup, valid values: 'function', 'class', 'module', None.
+            When None, vms/volumes/flavors will be kept on system
 
     Returns (list): list of vm ids
 
     """
     LOG.info("Create a flavor without ephemeral or swap disks")
     flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing)[1]
-    ResourceCleanup.add('flavor', flavor_1, scope=scope)
+    if scope:
+        ResourceCleanup.add('flavor', flavor_1, scope=scope)
 
     LOG.info("Create another flavor with ephemeral and swap disks")
     flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=1, storage_backing=storage_backing)[1]
-    ResourceCleanup.add('flavor', flavor_2, scope=scope)
+    if scope:
+        ResourceCleanup.add('flavor', flavor_2, scope=scope)
 
     LOG.info("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
     vm1_name = "vol_root"
@@ -3284,7 +3288,8 @@ def boot_vms_various_types(storage_backing=None, target_host=None, scope='functi
     vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone='nova', vm_host=target_host, cleanup=scope)[1]
 
     vol = cinder_helper.create_volume(bootable=False)[1]
-    ResourceCleanup.add('volume', vol, scope='class')
+    if scope:
+        ResourceCleanup.add('volume', vol, scope='class')
     attach_vol_to_vm(vm4, vol_id=vol)
 
     wait_for_vm_pingable_from_natbox(vm4)
@@ -3297,3 +3302,58 @@ def boot_vms_various_types(storage_backing=None, target_host=None, scope='functi
 
     vms = [vm1, vm2, vm3, vm4, vm5]
     return vms
+
+
+def get_sched_policy_and_priority_for_vcpus(instance_pid, host_ssh, cpusets=None, comm=None):
+    """
+    Get cpu policy and priority for instance vcpus
+    Args:
+        instance_pid (str): pid from ps aux | grep <instance_name>
+        host_ssh (SSHClient): ssh for vm host
+        cpusets (str|list|None): such as '44', or [8, 44], etc. Will be used to grep ps with given cpuset(s) only
+        comm (str|None): regex expression, used to search for given pattern in ps output. Such as 'qemu-kvm|CPU.*KVM'
+
+    Returns (list of tuples): such as [('FF', '1'), ('TS', '-')]
+
+    """
+    LOG.info("Getting cpu scheduler policy and priority info for instance with pid {}".format(instance_pid))
+
+    if not cpusets:
+        if cpusets is not None:
+            LOG.info("Empty cpusets provided, return []")
+            return []
+
+    cpuset_filters = []
+    cpu_filter = ''
+    if cpusets:
+        if isinstance(cpusets, str):
+            cpusets = [cpusets]
+
+        for cpuset in cpusets:
+            cpuset_filters.append('$5=="{}"'.format(cpuset))
+
+        cpu_filter = ' || '.join(cpuset_filters)
+        cpu_filter = ' && ({})'.format(cpu_filter)
+
+    cmd = """ps -eL -o pid=,lwp=,class=,rtprio=,psr=,comm= | awk '{{if ( $1=="{}" {}) print}}'""".format(
+            instance_pid, cpu_filter)
+
+    output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
+    out_lines = output.splitlines()
+
+    cpu_pol_and_prios = []
+    for out_line in out_lines:
+        get_line = True
+        if comm is not None:
+            if not re.search(comm, out_line):
+                get_line = False
+
+        if get_line:
+            items = out_line.split()
+            rt_policy = items[2]
+            rt_priority = items[3]
+            cpu_pol_and_prios.append((rt_policy, rt_priority))
+
+    LOG.info("CPU policy and priority for cpus with cpuset: {}; comm_pattern: {} - {}".format(cpusets, comm,
+                                                                                              cpu_pol_and_prios))
+    return cpu_pol_and_prios

@@ -34,8 +34,8 @@ class PrivKeyPath:
 class BuildServerPath:
     DEFAULT_BUILD_SERVER = 'yow-cgts4-lx'
     DEFAULT_WORK_SPACE = '/localdisk/loadbuild/jenkins'
-    DEFAULT_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build'
-    DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Guest_Build/latest_tis-centos-guest.img'
+    DEFAULT_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/CGCS_5.0_Host'
+    DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_tis-centos-guest.img'
     DEFAULT_HOST_BUILD_PATH = '{}/latest_build/'.format(DEFAULT_HOST_BUILDS_DIR)
     DEFAULT_LICENSE_PATH = '/folk/cgts/lab/TiS16-full.lic'
     HEAT_TEMPLATES = 'std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates'
@@ -44,18 +44,22 @@ class BuildServerPath:
     LATEST_HOST_BUILD_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/',
                                '16.10': '/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/',
                                '17.00': '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/latest_build/',
+                               '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Host/latest_build/',
                                }
     TIS_LICENSE_PATHS = {'15.12': ['/folk/cgts/lab/TiS15-GA-full.lic', '/folk/cgts/lab/TiS15.12-CPE-full-dec2016.lic'],
                          '16.10': ['/folk/cgts/lab/TiS16-full.lic', '/folk/cgts/lab/TiS16-CPE-full.lic'],
                          '17.00': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
+                         '17.06': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
                          }
 
     PATCH_DIR_PATHS = {'15.12': '/folk/cgts/patches-to-verify/15.12',
                        '16.10': '/folk/cgts/patches-to-verify/16.10',
-                       '17.00': None
+                       '17.00': None,
+                       '17.06': None
                        }
 
     GUEST_IMAGE_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',
                          '16.10': '/localdisk/loadbuild/jenkins/CGCS_3.0_Guest_Daily_Build/cgcs-guest.img',
-                         '17.00': '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Guest_Build/latest_tis-centos-guest.img'
+                         '17.00': '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Guest_Build/latest_tis-centos-guest.img',
+                         '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Guest/latest_tis-centos-guest.img'
                          }

@@ -3,9 +3,9 @@ from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 
-from consts.cgcs import FlavorSpec
+from consts.cgcs import FlavorSpec, EventLogID
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
-from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper
+from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -22,10 +22,13 @@ def hosts_per_stor_backing():
     mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume', False)),
     mark.domain_sanity(('local_image', 0, 0, 'shared', 2, 'image', True)),
     mark.domain_sanity(('local_image', 1, 1, 'dedicated', 1, 'image', False)),
-    ('local_image', 1, 0, 'dedicated', 2, 'volume', False),       #
+    ('local_image', 1, 0, 'dedicated', 2, 'volume', False),
     ('local_image', 0, 1, 'shared', 1, 'volume', False),
+    ('local_image', 1, 0, 'dedicated', 2, 'volume', True),     # TODO New matrix from Gerry
     ('local_image', 0, 0, None, 2, 'image_with_vol', False),
     ('local_image', 0, 0, 'dedicated', 1, 'image_with_vol', True),
+    ('local_image', 1, 1, 'dedicated', 2, 'image_with_vol', True),
+    ('local_image', 1, 1, 'dedicated', 2, 'image_with_vol', False),
     mark.p1(('local_lvm', 0, 0, None, 1, 'volume', False)),
     mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'volume', False)),
     mark.p1(('remote', 0, 0, None, 2, 'volume', False)),
@@ -70,15 +73,14 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
     LOG.tc_step("Ensure vm is pingable from NatBox after live migration")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     # TODO: add disk checking
-    #
 
 
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'vm_type', 'block_mig', 'expt_err'), [
     mark.p1(('local_image', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
-    # mark.p1(('local_image', 1, 0, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),    newton change
-    # mark.p1(('local_image', 0, 1, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),    newton change
-    # mark.p1(('local_image', 0, 0, 'image_with_vol', False, 'LiveMigErr.GENERAL_NO_HOST')),    newton change
-    # mark.p1(('local_image', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),     newton change
+    # mark.p1(('local_image', 1, 0, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),    # newton change
+    # mark.p1(('local_image', 0, 1, 'volume', False, 'LiveMigErr.GENERAL_NO_HOST')),    # newton change
+    # mark.p1(('local_image', 0, 0, 'image_with_vol', False, 'LiveMigErr.GENERAL_NO_HOST')),    # newton change
+    # mark.p1(('local_image', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),     # newton change
     # mark.p1(('local_image', 0, 0, 'shared', 2, 'image', False, ??)),      obsolete in Mitaka
     # mark.p1(('local_image', 1, 1, 'dedicated', 1, 'image', False, ??)),   obsolete in Mitaka
     mark.p1(('local_lvm', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
@@ -319,9 +321,11 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol):
 
     LOG.tc_step("Boot a vm from above flavor and volume")
     vm_id = vm_helper.boot_vm(guest_os, flavor=flavor_id, source='volume', source_id=vol_id, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
+    if guest_os == 'ubuntu_14':
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CINDER_IO_CONGEST, entity_id='cinder_io_monitor',
+                                          strict=False, timeout=300, fail_ok=False)
 
     LOG.tc_step("{} migrate vm and check vm is moved to different host".format(mig_type))
     prev_vm_host = nova_helper.get_vm_host(vm_id)

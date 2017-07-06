@@ -4,15 +4,10 @@
 # of this software may be licensed only pursuant to the terms
 # of an applicable Wind River license agreement.
 
-import re
-from datetime import timedelta
-
-from pytest import fixture, mark, skip, raises, fail
+from pytest import mark
 from utils.tis_log import LOG
-from utils import cli, exceptions, table_parser
-from utils.ssh import ControllerClient, ssh_to_controller0
-from consts.auth import Tenant
-from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper,  common
+from utils import cli, table_parser
+from keywords import common
 
 
 @mark.p3
@@ -24,8 +19,7 @@ def test_alarm_overwritten():
     1. Query the alarm table
     2. Verify the list is shown most recent alarm to oldest (based on timestamp) [REQ-14]
     """
-    output = cli.system('event-list', '--limit 10 --nowrap --nopaging --uuid',
-                                  auth_info=Tenant.ADMIN)
+    output = cli.system('event-list', '--limit 10 --nowrap --nopaging --uuid')
     alarm_table = table_parser.table(output, combine_multiline_entry=True)
     size = len(alarm_table['values'])
 

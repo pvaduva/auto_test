@@ -58,6 +58,7 @@ def test_event_list_vms(event_option, severity):
         retcode, output = delete_alarm_log(uuid=uuid_val)
         assert retcode == 0, output
 
+
 def query_check(length, local_limit):
     flag = 0
     if local_limit < length:

@@ -30,6 +30,7 @@ def base_vm_():
             {'net-id': internal_net_id, 'vif-model': 'virtio'}
             ]
     base_vm = vm_helper.boot_vm(name='avs_base', flavor=flavor_id, nics=nics, reuse_vol=False, cleanup='module')[1]
+    vm_helper.wait_for_vm_pingable_from_natbox(base_vm)
 
     return base_vm, mgmt_net_id, tenant_net_id, internal_net_id, storage_backing
 

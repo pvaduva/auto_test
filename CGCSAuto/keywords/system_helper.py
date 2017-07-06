@@ -464,13 +464,13 @@ def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, eve
     queries = []
     for q_key, q_val in query_dict.items():
         if q_val is not None:
-            queries.append('{}={}'.format(q_key, str(q_val).lower()))
+            queries.append('{}={}'.format(q_key, str(q_val)))
 
     if query_key is not None:
         if not query_value:
             raise ValueError("Query value is not supplied for key - {}".format(query_key))
         data_type_arg = '' if not query_type else "{}::".format(query_type.lower())
-        queries.append('{}={}{}'.format(query_key.lower(), data_type_arg, query_value.lower()))
+        queries.append('{}={}{}'.format(query_key.lower(), data_type_arg, query_value))
 
     query_string = ';'.join(queries)
     if query_string:
@@ -648,7 +648,7 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
     LOG.info("Waiting for alarm {} to disappear from system alarm-list".format(alarm_id))
     end_time = time.time() + timeout
     while time.time() < end_time:
-        alarms_tab = table_parser.table(cli.system('alarm-list', ssh_client=con_ssh, auth_info=auth_info))
+        alarms_tab = table_parser.table(cli.system('alarm-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
         alarms_tab = _compose_alarm_table(alarms_tab, uuid=False)
 
         alarm_tab = table_parser.filter_table(alarms_tab, **{'Alarm ID': alarm_id})
@@ -660,7 +660,7 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
                 kwargs['Reason Text'] = reason_text
 
             if kwargs:
-                alarms = table_parser.get_values(alarm_tab, strict=strict, **kwargs)
+                alarms = table_parser.get_values(alarm_tab, target_header='Alarm ID', strict=strict, **kwargs)
                 if not alarms:
                     LOG.info("Alarm {} with {} is not displayed in system alarm-list".format(alarm_id, kwargs))
                     return True
@@ -722,13 +722,14 @@ def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=Non
     end_time = time.time() + timeout
     while time.time() < end_time:
         current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
-        if table_parser.get_values(current_alarms_tab, rtn_val, strict=strict, regex=regex, **kwargs):
+        val = table_parser.get_values(current_alarms_tab, rtn_val, strict=strict, regex=regex, **kwargs)
+        if val:
             LOG.info('Expected alarm appeared. Filters: {}'.format(kwargs))
-            return True, rtn_val
+            return True, val
 
         time.sleep(check_interval)
 
-    err_msg = "Alarm {} did not appear in system alarm-list within timeout".format(kwargs)
+    err_msg = "Alarm {} did not appear in system alarm-list within {} seconds".format(kwargs, timeout)
     if fail_ok:
         LOG.warning(err_msg)
         return False, None
@@ -1837,6 +1838,8 @@ def get_system_health_query_upgrade(con_ssh=None):
                 ok[k.strip()] = v.strip()
             elif "[Fail]" in v.strip():
                 failed[k.strip()] = v.strip()
+        elif "Missing manifests" in line:
+            failed[line] = line
     if len(failed) > 0:
         return 1, failed
     else:
@@ -2274,20 +2277,25 @@ def abort_upgrade(con_ssh=None, timeout=60, fail_ok=False):
             raise exceptions.CLIRejected(err_msg)
 
 
-def get_host_device_list(host, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_host_device_list_values(host, field='name', con_ssh=None, auth_info=Tenant.ADMIN, strict=True, regex=False,
+                                **kwargs):
     """
     Get the parsed version of the output from system host-device-list <host>
     Args:
         host (str): host's name
+        field (str): field name to return value for
         con_ssh (SSHClient):
         auth_info (dict):
+        strict (bool): whether to perform strict search on filter
+        regex (bool): whether to use regular expression to search the value in kwargs
+        kwargs: key-value pairs to filter the table
 
     Returns (dict): output of system host-device-list <host> parsed by table_parser
 
     """
-    output = cli.system('host-device-list', host, ssh_client=con_ssh, auth_info=auth_info)
-    table_ = table_parser.table(output)
-    return table_
+    table_ = table_parser.table(cli.system('host-device-list', host, ssh_client=con_ssh, auth_info=auth_info))
+
+    return table_parser.get_values(table_, target_header=field, strict=strict, regex=regex, **kwargs)
 
 
 def get_host_device_values(host, device, fields, con_ssh=None, auth_info=Tenant.ADMIN):
@@ -2438,3 +2446,32 @@ def get_controller_fs_values(con_ssh=None, auth_info=Tenant.ADMIN):
         values[row[0].strip()] = row[1].strip()
     return values
 
+
+def wait_for_services_enable(timeout=300, fail_ok=False, con_ssh=None):
+    """
+    Wait for services to be enabled-active in system service-list
+    Args:
+        timeout (int): max wait time in seconds
+        fail_ok (bool): whether return False or raise exception when some services fail to reach enabled-active state
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<res>(bool), <msg>(str))
+        (True, "All services are enabled-active")
+        (False, "Some services are not enabled-active: <failed_rows>")      Applicable if fail_ok=True
+
+    """
+    LOG.info("Wait for services to be enabled-active in system service-list")
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        service_list_tab = table_parser.table(cli.system('service-list', ssh_client=con_ssh)[1])
+        states = table_parser.get_column(service_list_tab, 'state')
+        if all(state == 'enabled-active' for state in states):
+            LOG.info("All services are enabled-active in system service-list")
+            return True, "All services are enabled-active"
+
+    LOG.warning("Not all services are enabled-ative within {} seconds".format(timeout))
+    inactive_services_tab = table_parser.filter_table(service_list_tab, exclude=True, state='enabled-active')
+    msg = "Some services are not enabled-active: {}".format(table_parser.get_all_rows(inactive_services_tab))
+    if fail_ok:
+        return False, msg
+    raise exceptions.SysinvError(msg)
