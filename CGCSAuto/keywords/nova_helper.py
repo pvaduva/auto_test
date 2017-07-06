@@ -95,6 +95,19 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
 
 
 def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=False, con_ssh=None):
+    """
+    Get storage backing that has the most hypervisors
+    Args:
+        prefer (str): preferred storage_backing. If unset, local_image > local_lvm > remote
+        rtn_down_hosts (bool): whether or not to count down hosts as well. Default is to return up hosts only.
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<storage_backing>(str), <hosts>(list))
+        Examples:
+            Regular/Storage system: ('local_image',['compute-1', 'compute-3'])
+            AIO: ('local_lvm', ['controller-0', 'controller-1'])
+
+    """
 
     hosts_by_backing = {'local_image': host_helper.get_hosts_by_storage_aggregate(con_ssh=con_ssh),
                         'local_lvm': host_helper.get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh),
@@ -802,7 +815,11 @@ def get_vm_storage_type(vm_id, con_ssh=None):
     Returns (str): storage extra spec value. Possible return values: 'local_image', 'local_lvm', or 'remote'
 
     """
-    flavor_output = get_vm_nova_show_value(vm_id=vm_id, field='flavor', strict=True, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+    flavor_output = get_vm_nova_show_value(vm_id=vm_id, field='flavor', strict=True, con_ssh=con_ssh,
+                                           auth_info=Tenant.ADMIN)
+    # extra_specs = eval(flavor_output)['extra_specs']
+    # return extra_specs['aggregate_instance_extra_specs:storage']
+
     flavor_id = re.search(r'\((.*)\)', flavor_output).group(1)
 
     table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
@@ -911,7 +928,7 @@ def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=T
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (str): value of specified field.
+    Returns (str|list): value of specified field. Return list for multi-line value
 
     """
     table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
@@ -1404,7 +1421,7 @@ def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, mac_addr=None,
         auth_info (dict):
         con_ssh (SSHClient):
 
-    Returns (dict): such as [{"vif_model": "pci-passthrough", "network": "internal0-net1", "port_id":
+    Returns (list): such as [{"vif_model": "pci-passthrough", "network": "internal0-net1", "port_id":
         "33990477-dce6-4447-b153-4dee596fe3f4", "mtu": 9000, "mac_address": "90:e2:ba:60:c8:08", "vif_pci_address": ""}]
 
     """
@@ -1726,3 +1743,15 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
     succ_msg = "Hosts successfully {}ed in aggregate {}: {}".format(msg_str.lower(), aggregate, hosts)
     LOG.info(succ_msg)
     return 0, succ_msg
+
+
+def run_migration_list(con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    nova migration-list to collect migration history of each vm
+    Args:
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    """
+    LOG.info("Listing migration history...")
+    cli.nova('migration-list', ssh_client=con_ssh, auth_info=auth_info)

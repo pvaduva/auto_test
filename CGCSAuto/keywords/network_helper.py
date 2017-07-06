@@ -1731,13 +1731,14 @@ def get_pci_devices_info(con_ssh=None, auth_info=None):
             pci_vfs = table_parser.get_column(table, 'pci_vfs_configured')
             pci_vfs_used = table_parser.get_column(table, 'pci_vfs_used')
 
-            for name, device_id, vendor_id, host, pci_pf, pci_pf_used, pci_vfs, pci_vfs_used in \
+            for name, device_id, vendor_id, host, pci_pf, pci_pf_used, pci_vf, pci_vf_used in \
                     zip(names, device_ids, vendor_ids, hosts, pci_pfs, pci_pfs_used, pci_vfs, pci_vfs_used):
+
                     nova_pci_devices[host] = {device_id: {'vendor_id': vendor_id,
-                                                          'pci_pfs_configured': pci_pfs,
-                                                          'pci_pfs_used': pci_pfs_used,
-                                                          'pci_vfs_configured': pci_vfs,
-                                                          'pci_vfs_used': pci_pfs_used,
+                                                          'pci_pfs_configured': pci_pf,
+                                                          'pci_pfs_used': pci_pf_used,
+                                                          'pci_vfs_configured': pci_vf,
+                                                          'pci_vfs_used': pci_pf_used,
                                                           }}
         except Exception as e:
             LOG.error('CLI output format error: CLI nova device-show {} changed its format. error message:{}'.format(
@@ -2136,7 +2137,7 @@ def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
 
-def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False, vshell=False, interface=None):
+def _ping_server(server, ssh_client, num_pings=5, timeout=30, fail_ok=False, vshell=False, interface=None):
     """
 
     Args:
@@ -2153,14 +2154,20 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False, vsh
     """
     if not vshell:
         cmd = 'ping -c {} {}'.format(num_pings, server)
-        output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
-        packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
+        code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout, fail_ok=True)
+        if code != 0:
+            packet_loss_rate = 100
+        else:
+            packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
     else:
         if not interface:
             interface = _get_interfaces_via_vshell(ssh_client, net_type='internal')[0]
         cmd = 'vshell ping --count {} {} {}'.format(num_pings, server, interface)
-        output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
-        packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
+        code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)
+        if code != 0:
+            packet_loss_rate = 100
+        else:
+            packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
 
     packet_loss_rate = int(packet_loss_rate)
 
@@ -2191,7 +2198,7 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
     nets = list(set(get_networks_on_providernet(pnet, rtn_val='name', **kwargs)))
     print("pnet: {}; Nets: {}".format(pnet, nets))
     final_nets = _get_preferred_nets(nets=nets, net_name=net_name, strict=strict)
-    vm_net = final_nets[0]
+    vm_net = final_nets[-1]
     if pci_type == 'pci-passthrough':
 
         port = system_helper.get_host_interfaces_info(host, rtn_val='ports', net_type=pci_type)[0]
@@ -2625,7 +2632,7 @@ def get_portforwarding_rule_info(portforwarding_id, field='inside_addr', strict=
 def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, device_owner=None,
                 admin_state_down=None, mac_addr=None, vnic_type=None, security_groups=None, no_security_groups=None,
                 extra_dhcp_opts=None, qos_pol=None, allowed_addr_pairs=None, no_allowed_addr_pairs=None, dns_name=None,
-                fail_ok=False, auth_info=None, con_ssh=None):
+                wrs_vif=None, fail_ok=False, auth_info=None, con_ssh=None):
     """
     Create a port on given network
 
@@ -2684,7 +2691,8 @@ def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, 
         '--vnic-type': vnic_type,
         # '--binding-profile':
         '--qos-policy': qos_pol,
-        '--dns-name': dns_name
+        '--dns-name': dns_name,
+        '--wrs-binding:vif_model': wrs_vif,
     }
 
     for key, val in kwargs_dict.items():
@@ -2846,24 +2854,46 @@ def get_pci_device_used_vfs_value(device_id, con_ssh=None, auth_info=None):
     return table_parser.get_column(_table, 'pci_vfs_used')[0]
 
 
-def get_pci_device_used_vfs_value_per_compute(host, device_id, con_ssh=None, auth_info=None):
+def get_pci_device_vfs_counts_for_host(host, device_id=None, fields=('pci_vfs_configured', 'pci_vfs_used'),
+                                       con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get PCI device used number of vfs value for given device id
 
     Args:
         host (str): compute hostname
         device_id (str):  device vf id
+        fields (tuple|str|list)
         con_ssh:
         auth_info:
 
     Returns:
-        str :
+        list
 
     """
-    _table = table_parser.table(cli.nova('device-show {}'.format(device_id)))
-    LOG.debug('output from nova device-show for device-id:{}\n{}'.format(device_id, _table))
-    _table = table_parser.filter_table(_table, Host=host)
-    return table_parser.get_column(_table, 'pci_vfs_used')[0]
+    if device_id is None:
+        device_id = get_pci_device_list_values(field='Device Id', con_ssh=con_ssh, auth_info=auth_info)[0]
+
+    table_ = table_parser.table(cli.nova('device-show {}'.format(device_id), ssh_client=con_ssh, auth_info=auth_info))
+    LOG.debug('output from nova device-show for device-id:{}\n{}'.format(device_id, table_))
+
+    table_ = table_parser.filter_table(table_, host=host)
+    counts = []
+    if isinstance(fields, str):
+        fields = [fields]
+
+    for field in fields:
+        counts.append(int(table_parser.get_column(table_, field)[0]))
+
+    return counts
+
+def get_pci_device_list_values(field='pci_vfs_used', con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+    table_ = table_parser.table(cli.nova(cmd='device-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    values = table_parser.get_values(table_, field, **kwargs)
+    if field in ['pci_pfs_configured', 'pci_pfs_used', 'pci_vfs_configured', 'pci_vfs_used']:
+        values = [int(value) for value in values]
+
+    return values
 
 
 def get_tenant_routers_for_vms(vms, con_ssh=None):
@@ -2960,3 +2990,89 @@ def collect_vswitch_info_on_host(host):
     with host_helper.ssh_to_host(host) as host_ssh:
         host_ssh.exec_sudo_cmd('/etc/collect.d/collect_vswitch', searchwindowsize=50, get_exit_code=False)
         # vswitch log will be saved to /scratch/var/extra/vswitch.info on the compute host
+
+
+def get_pci_device_numa_nodes(hosts):
+    """
+    Get processors of crypto PCI devices for given hosts
+
+    Args:
+        hosts (list): list of hosts to check
+
+    Returns (dict): host, numa_nodes map. e.g., {'compute-0': ['0'], 'compute-1': ['0', '1']}
+
+    """
+    hosts_numa = {}
+    for host in hosts:
+        numa_nodes = system_helper.get_host_device_list_values(host, field='numa_node')
+        hosts_numa[host] = numa_nodes
+
+    LOG.info("Hosts numa_nodes map for PCI devices: {}".format(hosts_numa))
+    return hosts_numa
+
+
+def get_pci_procs(hosts, net_type='pci-sriov'):
+    """
+    Get processors of pci-sriov or pci-passthrough devices for given hosts
+
+    Args:
+        hosts (list): list of hosts to check
+        net_type (str): pci-sriov or pci-passthrough
+
+    Returns (dict): host, procs map. e.g., {'compute-0': ['0'], 'compute-1': ['0', '1']}
+
+    """
+    hosts_procs = {}
+    for host in hosts:
+        ports_list = system_helper.get_host_interfaces_info(host, rtn_val='ports', net_type=net_type)
+
+        ports = []
+        for port in ports_list:
+            ports += port
+        ports = list(set(ports))
+
+        procs = system_helper.get_host_ports_values(host, header='processor', **{'name': ports})
+        hosts_procs[host] = list(set(procs))
+
+    LOG.info("Hosts procs map for {} devices: {}".format(net_type, hosts_procs))
+    return hosts_procs
+
+
+def wait_for_agents_alive(hosts=None, timeout=120, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Wait for neutron agents to be alive
+    Args:
+        hosts (str|list): hostname(s) to check. When None, all nova hypervisors will be checked
+        timeout (int): max wait time in seconds
+        fail_ok (bool): whether to return False or raise exception when non-alive agents exist
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (<res>(bool), <msg>(str))
+        (True, "All agents for <hosts> are alive")
+        (False, "Some agents are not alive: <non_alive_rows>")      Applicable when fail_ok=True
+
+    """
+    if hosts is None:
+        hosts = host_helper.get_hypervisors(con_ssh=con_ssh)
+    elif isinstance(hosts, str):
+        hosts = [hosts]
+
+    LOG.info("Wait for neutron agents to be alive for {}".format(hosts))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        agents_tab = table_parser.table(cli.neutron('agent-list', ssh_client=con_ssh, auth_info=auth_info))
+        agents_tab = table_parser.filter_table(agents_tab, host=hosts)
+        alive_vals = table_parser.get_column(agents_tab, 'alive')
+        if all(alive_val == ':-)' for alive_val in alive_vals):
+            succ_msg = "All agents for {} are alive".format(hosts)
+            LOG.info(succ_msg)
+            return True, succ_msg
+
+    LOG.warning("Some neutron agents are not alive")
+    non_alive_tab = table_parser.filter_table(agents_tab, exclude=True, alive=':-)')
+    non_alive_rows = table_parser.get_all_rows(non_alive_tab)
+    msg = "Some agents are not alive: {}".format(non_alive_rows)
+    if fail_ok:
+        return False, msg
+    raise exceptions.NeutronError(msg)

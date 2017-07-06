@@ -2,6 +2,7 @@ from utils.tis_log import LOG
 from utils import exceptions, table_parser
 from keywords import host_helper, system_helper
 
+# Remove following tests as functionality already covered in various nova testcases
 
 def test_show_cpu_data():
     """

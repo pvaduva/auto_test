@@ -399,6 +399,10 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     if index != 0:
         raise exceptions.SSHException("Failed to scp files")
 
+    exit_code = con_ssh.get_exit_code()
+    if not exit_code == 0:
+        raise exceptions.CommonError("scp unsuccessfully")
+
     if not con_ssh.file_exists(file_path=dest_path):
         raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
 

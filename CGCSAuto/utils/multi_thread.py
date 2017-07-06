@@ -45,6 +45,7 @@ class MThread(threading.Thread):
         self.timeout = None
         self._err = None
         self._keep_running = threading.Event()
+        self.end_event = kwargs.get('end_event', None)
         self._end = threading.Event()
         self._end_func = None
         self._end_args = None
@@ -150,8 +151,11 @@ class MThread(threading.Thread):
             LOG.info("Terminating thread: {}".format(self.thread_id))
         except:
             err = traceback.format_exc()
-            LOG.error("Error found in thread call {}".format(err))
+            # LOG.error("Error found in thread call {}".format(err))
             self._err = err
+            if self.end_event is not None:
+                # set the end_event to terminate other threads
+                self.end_event.set()
             raise
         finally:
             ControllerClient.get_active_controller().close()
@@ -173,10 +177,8 @@ class MThread(threading.Thread):
 
         """
         if not self.is_alive():
-            if not fail_ok:
-                assert not self._err, "{} was not running because it ran into an error: {}".format(self.name, self._err)
             LOG.info("{} was already finished".format(self.name))
-            return True
+            return True, self._err
 
         if self.timeout:
             timeout = self.timeout
@@ -195,9 +197,10 @@ class MThread(threading.Thread):
             # Thread didn't finish before timeout
             LOG.error("{} did not finish within timeout".format(self.name))
             if fail_ok:
-                return False
+                return False, self._err
             raise ThreadingError(TIMEOUT_ERR.format(self.func, self.args, self.kwargs))
-        return True
+
+        return True, self._err
 
     def keep_alive(self):
         """

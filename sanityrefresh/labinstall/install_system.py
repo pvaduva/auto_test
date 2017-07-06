@@ -210,7 +210,7 @@ def parse_args():
                          "\n(default: %(default)s)")
     bld_grp.add_argument('--tis-blds-dir', metavar='DIR',
                          dest='tis_blds_dir',
-                         default="CGCS_4.0_Centos_Build",
+                         default="CGCS_5.0_Host",
                          help='Directory under "--bld-server-wkspce"'
                          " containing directories for Titanium Server loads"
                          "\n(default: %(default)s)")
@@ -221,7 +221,7 @@ def parse_args():
                          " \n(default: %(default)s)")
     bld_grp.add_argument('--guest-bld-dir', metavar='DIR',
                          dest='guest_bld_dir',
-                         default="CGCS_3.0_Guest_Daily_Build",
+                         default="CGCS_5.0_Guest",
                          help='Directory under "--bld-server-wkspce"'
                          " containing directories for guest images"
                          "\n(default: %(default)s)")
@@ -271,9 +271,17 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
     prestage_load_path = ""
     load_path = "{}/{}".format(bld_server_wkspce, tis_blds_dir)
 
+    TC_17_06_pattern = re.compile(TC_17_06_REGEX)
     TS_16_10_pattern = re.compile(TS_16_10_REGEX)
     TS_15_12_pattern = re.compile(TS_15_12_REGEX)
-    if TS_16_10_pattern.match(tis_blds_dir):
+    if TC_17_06_pattern.match(tis_blds_dir):
+        prestage_load_path = TC_17_06_WKSPCE
+        cmd = "test -d " + prestage_load_path
+        if bld_server_conn.exec_cmd(cmd)[0] != 0:
+            msg = "Load path {} not found".format(prestage_load_path)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+    elif TS_16_10_pattern.match(tis_blds_dir):
         prestage_load_path = TS_16_10_WKSPCE
         cmd = "test -d " + prestage_load_path
         if bld_server_conn.exec_cmd(cmd)[0] != 0:
@@ -343,7 +351,6 @@ def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex, barcod
         log.info('Settings.ini not found. Will use stored values.')
         lab_cfg_location = get_settings(barcode_controller, barcode_compute)
         lab_settings_filepath = SCRIPT_DIR + "/" +LAB_SETTINGS_DIR + "/" + lab_cfg_location +".ini"
-        #lab_cfg_location = execute_path + "/" +LAB_SETTINGS_DIR + "/" + lab_cfg_location +".ini"
         log.info('Using lab settings file path: {}'.format(lab_settings_filepath))
 
     if not found_lab_setup_cfg_file:
@@ -364,7 +371,10 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on
     ''' Get the directory path for the configuration file that is used in
         setting up the lab.
     '''
-    if load_path == TS_16_10_WKSPCE:
+    if load_path == TC_17_06_WKSPCE:
+        lab_cfg_rel_path = TC_17_06_LAB_REL_PATH + "/yow/" + lab_cfg_location
+        lab_cfg_path = load_path + "/" + lab_cfg_rel_path
+    elif load_path == TS_16_10_WKSPCE:
         lab_cfg_rel_path = TS_16_10_LAB_REL_PATH + "/yow/" + lab_cfg_location
         lab_cfg_path = load_path + "/" + lab_cfg_rel_path
     elif load_path == TS_15_12_WKSPCE:
@@ -443,14 +453,14 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on
         wr_exit()._exit(1, msg)
 
     # Confirm we have a valid cgcs guest
-    guest_path = guest_load_path + "/" + DEFAULT_GUEST
-    cmd = "test -f " + guest_path
-    if bld_server_conn.exec_cmd(cmd)[0] == 0:
-        log.info('Using guest location: {}'.format(guest_path))
-    else:
-        msg = 'Guest {} not found in {}'.format(DEFAULT_GUEST, guest_path)
-        log.error(msg)
-        wr_exit()._exit(1, msg)
+    #guest_path = guest_load_path + "/" + DEFAULT_GUEST
+    #cmd = "test -f " + guest_path
+    #if bld_server_conn.exec_cmd(cmd)[0] == 0:
+    #    log.info('Using guest location: {}'.format(guest_path))
+    #else:
+    #    msg = 'Guest {} not found in {}'.format(DEFAULT_GUEST, guest_path)
+    #    log.error(msg)
+    #    wr_exit()._exit(1, msg)
 
     return lab_cfg_path, lab_settings_filepath
 
@@ -854,6 +864,33 @@ def get_settings(barcodes_controller, barcodes_compute):
             if '0' < last_server_number < '10':
                 last_server_number = last_server_number.replace('0','')
             last_server_number = "_" + last_server_number
+
+    elif barcodes_compute != None:
+        barcode_compute = barcodes_compute.split(',')
+        with open(SCRIPT_DIR + "/node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
+            server_code.readline()
+            server_name = server_code.readline()
+        t, server_name = server_name.split('=')
+        server_name = server_name.replace('\n', '')
+        server_name = server_name.replace("yow-", "")
+        try:
+            server_name.index("cgcs-")
+        except ValueError:
+            server_name = "cgcs-" + server_name
+        words = server_name.split('-')
+        if '0' < words[-1] < '10':
+            words[-1] = words[-1].replace('0','')
+        server_name = '-'.join(words)
+        with open(SCRIPT_DIR + "/node_info/" + barcode_compute[-1] + ".ini", "r") as server_code:
+            server_code.readline()
+            last_server_name = server_code.readline()
+        last_server_name = last_server_name.split('-')
+        last_server_number = last_server_name[-1]
+        last_server_number = last_server_number.replace('\n', '')
+        if '0' < last_server_number < '10':
+            last_server_number = last_server_number.replace('0','')
+        last_server_number = "_" + last_server_number
+
     else:
         with open(SCRIPT_DIR + "/node_info/" + barcode_controller[0] + ".ini", "r") as server_code:
             server_code.readline()
@@ -1401,9 +1438,9 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
     bld_server_conn.rsync(os.path.join(guest_load_path, "cgcs-guest.img"),
                           WRSROOT_USERNAME, controller0.host_ip, \
                           WRSROOT_IMAGES_DIR + "/",\
-                          pre_opts=pre_opts)
+                          pre_opts=pre_opts, allow_fail=True)
 
-    bld_server_conn.rsync(os.path.join(CENTOS_GUEST, "latest_tis-centos-guest.img"),
+    bld_server_conn.rsync(os.path.join(guest_load_path, "latest_tis-centos-guest.img"),
                           WRSROOT_USERNAME, controller0.host_ip, \
                           WRSROOT_IMAGES_DIR + "/tis-centos-guest.img",\
                           pre_opts=pre_opts, allow_fail=True)

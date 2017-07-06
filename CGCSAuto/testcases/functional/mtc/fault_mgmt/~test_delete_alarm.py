@@ -13,7 +13,8 @@ from consts.auth import Tenant
 from keywords import system_helper
 
 
-def test_delete_alarm():
+# Remove following test as it's covered by test_timestamp_order.py and test_event_suppression.py
+def _test_delete_alarm():
     """
     Attempt to delete system alarm with 'system alarm-delete' cli and verify it's working
     sample cli:

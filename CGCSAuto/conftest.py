@@ -382,6 +382,11 @@ def pytest_unconfigure():
         LOG.warning("No con_ssh found")
         return
 
+    try:
+        setups.list_migration_history(con_ssh=con_ssh)
+    except:
+        LOG.warning("Failed to run nova migration-list")
+
     vswitch_info_hosts = list(set(ProjVar.get_var('VSWITCH_INFO_HOSTS')))
     if vswitch_info_hosts:
         try:
@@ -396,7 +401,6 @@ def pytest_unconfigure():
             setups.collect_tis_logs(con_ssh)
         except:
             LOG.warning("'collect all' failed.")
-            pass
 
     # close ssh session
     try:

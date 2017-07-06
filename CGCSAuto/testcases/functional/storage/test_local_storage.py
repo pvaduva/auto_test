@@ -40,7 +40,7 @@ def min_no_disks_hypervisor(con_ssh=None):
 
 @fixture(scope='module')
 def ensure_multiple_disks():
-    if (min_no_disks_hypervisor() < 2):
+    if min_no_disks_hypervisor() < 2:
         skip('Every hypervisor must have 2+ hard disks')
 
 

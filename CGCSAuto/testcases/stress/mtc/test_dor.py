@@ -6,7 +6,7 @@ from utils import local_host
 from consts.timeout import HostTimeout
 from consts.vlm import VlmAction
 from keywords import system_helper, vlm_helper, host_helper, vm_helper
-from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module
+from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module, unreserve_hosts_module
 
 
 def power_off_and_on(barcode, power_off_event, timeout):
@@ -51,13 +51,13 @@ def test_dead_office_recovery(reserve_unreserve_all_hosts_module):
     except:
         raise
     finally:
-        LOG.tc_step("Wait for 30 seconds and power on hosts: {}".format(hosts))
-        time.sleep(30)
+        LOG.tc_step("Wait for 60 seconds and power on hosts: {}".format(hosts))
+        time.sleep(60)
         LOG.info("Hosts to check after power-on: {}".format(hosts_to_check))
-        vlm_helper.power_on_hosts(hosts, reserve=False, reconnect_timeout=HostTimeout.REBOOT+120,
+        vlm_helper.power_on_hosts(hosts, reserve=False, reconnect_timeout=HostTimeout.REBOOT+HostTimeout.REBOOT,
                                   hosts_to_check=hosts_to_check)
 
     LOG.tc_step("Check vms are recovered after dead office recovery")
-    vm_helper._wait_for_vms_values(vms, fail_ok=False, timeout=600)
+    vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
     for vm in vms:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)

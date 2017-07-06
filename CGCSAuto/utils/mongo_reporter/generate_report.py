@@ -4,6 +4,8 @@ import datetime
 import requests
 
 from utils import lab_info, local_host
+from consts.filepaths import BuildServerPath
+from keywords import host_helper
 
 TEST_SERVER_HTTP_AUTOLOG = 'http://128.224.150.21/auto_logs/'
 TEST_SERVER_FS_AUTOLOG = 'yow-cgcs-test.*:/sandbox/AUTOMATION_LOGS/'
@@ -221,6 +223,41 @@ def _get_overall_status(pass_rate):
     return res
 
 
+def mark_status_on_build_server(status, build_server, build_id=None, builds_dir=None, build_path=None):
+    """
+    This is for marking the load RED/YELLOW/GREEN.
+    e.g., touch /localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/2017-05-08_22-01-14/GREEN
+
+    Args:
+        status (str): GREEN, YELLOW or RED
+        build_server (str): yow-cgts4-lx, etc
+        build_id (str|None): e.g., 2017-05-08_22-01-14. Only used if build_path is None
+        builds_dir (str|None): e.g, /localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build. Only used if build_path is None
+        build_path (str|None): e.g., /localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/2017-05-08_22-01-14/
+    """
+    if status not in ['RED', 'YELLOW', 'GREEN']:
+        raise ValueError("Invalid status {}".format(status))
+
+    if not build_path:
+        if not build_id:
+            raise ValueError("Either build_id or build_dir has to be provided")
+        if not builds_dir:
+            builds_dir = BuildServerPath.DEFAULT_HOST_BUILDS_DIR
+
+        build_path = builds_dir + '/' + build_id
+
+    with host_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
+        if not bld_srv_ssh.file_exists(file_path=build_path):
+            raise ValueError("Build path {} does not exist!".format(build_path))
+
+        status_file = '{}/{}'.format(build_path, status)
+        bld_srv_ssh.exec_cmd('touch {}'.format(status_file), fail_ok=False)
+        if not bld_srv_ssh.file_exists(file_path=status_file):
+            raise FileNotFoundError("Touched file {} does not exist!".format(status_file))
+
+        print("{} is successfully touched on {}".format(status_file, build_server))
+
+
 def send_report(subject, recipients, msg_file=TMP_FILE):
     """
     send report to specified recipients
@@ -241,9 +278,16 @@ def send_report(subject, recipients, msg_file=TMP_FILE):
     os.system(cmd)
 
 
-def generate_report(recipients, subject='', source='mongo', tags=None, start_date=None, end_date=None, logs_dir=None):
+def generate_report(recipients, subject='', source='mongo', tags=None, start_date=None, end_date=None, logs_dir=None,
+                    mark_status=False):
     tmp_file, lab, build, build_server, raw_status = write_report_file(source=source, tags=tags, start_date=start_date,
                                                                        end_date=end_date, logs_dir=logs_dir)
-    subject = subject.strip()
-    subject = "TiS {} Test Report {} [{}] - {}".format(subject, lab, build, raw_status)
-    send_report(subject=subject, recipients=recipients)
+    try:
+        if mark_status in [True, 'true', 'True', 'TRUE']:
+            mark_status_on_build_server(status=raw_status, build_server=build_server, build_id=build)
+    except:
+        raise
+    finally:
+        subject = subject.strip()
+        subject = "TiS {} Test Report {} [{}] - {}".format(subject, lab, build, raw_status)
+        send_report(subject=subject, recipients=recipients)

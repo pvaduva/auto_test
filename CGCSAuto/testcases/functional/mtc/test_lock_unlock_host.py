@@ -2,7 +2,7 @@
 # test_467_lock_unlock_compute_node sanity_juno_unified_R3.xls
 ###
 import time
-from pytest import mark
+from pytest import mark, skip
 
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
@@ -17,19 +17,14 @@ def test_lock_active_controller_reject():
     """
     Verify lock unlock active controller. Expected it to fail
 
-
-    Args:
-        - Nothing
-
-    Setup:
-        - Nothing
-
     Test Steps:
-        - Get standby controller
-        - Lock standby controller and ensure it is successfully locked
-        - Unlock standby controller and ensure it is successfully unlocked with web-services up
+        - Get active controller
+        - Attempt to lock active controller and ensure it's rejected
 
     """
+    if system_helper.is_simplex():
+        skip("Not applicable to Simplex system")
+
     LOG.tc_step('Retrieve the active controller from the lab')
     active_controller = system_helper.get_active_controller_name()
 
@@ -37,9 +32,11 @@ def test_lock_active_controller_reject():
 
     # lock standby controller node and verify it is successfully locked
     LOG.tc_step("Lock active controller and ensure it fail to lock")
-    exit_code, cmd_output = host_helper.lock_host(active_controller, fail_ok=True, swact=False)
+    exit_code, cmd_output = host_helper.lock_host(active_controller, fail_ok=True, swact=False, check_first=False)
+    assert exit_code == 1, 'Expect locking active controller to be rejected. Actual: {}'.format(cmd_output)
 
-    assert exit_code == 1, 'Locking of active controller passed. However it was expected to fail'
+    status = host_helper.get_hostshow_value(active_controller, 'administrative')
+    assert status == 'unlocked', "Fail: The active controller was locked."
 
 
 @mark.sanity
@@ -47,13 +44,6 @@ def test_lock_active_controller_reject():
 def test_lock_unlock_standby_controller():
     """
     Verify lock unlock standby controller
-
-
-    Args:
-        - Nothing
-
-    Setup:
-        - Nothing
 
     Test Steps:
         - Get standby controller
@@ -86,11 +76,9 @@ def test_lock_unlock_standby_controller():
                                                           'state but is not.'.format(standby_controller)
 
 
-# Remove from sanity as it is already covered by system alarm-list/show sanity test cases
-# Updated the test to lock with vms on host
-
+# Remove since it's already covered by test_lock_with_vms
 # @mark.sanity
-def test_lock_unlock_vm_host():
+def _test_lock_unlock_vm_host():
     """
     Verify lock unlock vm host
 

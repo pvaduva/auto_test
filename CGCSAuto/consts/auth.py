@@ -132,7 +132,7 @@ class Guest:
             'password': None
         },
 
-        # OPV image which is has root/root enabled
+        # OPV image has root/root enabled
         'rhel': {
             'user': 'root',
             'password': 'root'
@@ -141,6 +141,11 @@ class Guest:
         'cirros': {
             'user': 'cirros',
             'password': 'cubswin:)'
+        },
+
+        'win_2012': {
+            'user': 'Administrator',
+            'password': 'root'
         }
 
     }

@@ -1,4 +1,4 @@
-import pytest
+import time
 from pytest import mark, fixture, skip
 from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
@@ -237,7 +237,14 @@ def test_ceph_post_install(ceph_post_install_info):
     assert storage_helper.is_ceph_healthy(), "Ceph not healthy after ceph post install"
 
     LOG.tc_step('Verifying system health after addition of storage nodes ......')
-    rc, output = system_helper.get_system_health_query()
+    end_time = time.time() + 120
+    while time.time() < end_time:
+        rc, output = system_helper.get_system_health_query()
+        if rc == 0:
+            break
+        else:
+            time.sleep(5)
+
     assert rc == 0, "System health check failed: {}".format(output)
 
     LOG.info('Verifying image creation using lvm and ceph backends ......')

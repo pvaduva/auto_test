@@ -2,11 +2,28 @@
 from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 from consts.cgcs import VMStatus
-from keywords import vm_helper, nova_helper, network_helper
+from keywords import vm_helper, nova_helper, network_helper, host_helper, system_helper
 
 from testfixtures.resource_mgmt import ResourceCleanup
 
-@mark.parametrize('vm_type', ['avp', 'vhost', 'vswitch', 'virtio', 'pcipt', 'sriov'])
+
+@fixture(scope='module', autouse=True)
+def check_launch_script_exists():
+    controller = system_helper.get_active_controller_name()
+    with host_helper.ssh_to_host(controller) as con_ssh:
+        cmd = "ls -A /home/wrsroot/instances_group0"
+        if con_ssh.exec_cmd(cmd)[1] == '':
+            skip("Lab setup using heat. No VM launch script.")
+
+
+@mark.parametrize('vm_type', [
+    'avp',
+    'vhost',
+    'vswitch',
+    'virtio',
+    # 'pcipt', CGTS-7376
+    'sriov'
+])
 def test_vif_models(vm_type):
     """
     boot avp,e100 and virtio instance
@@ -38,7 +55,12 @@ def test_vif_models(vm_type):
     ResourceCleanup.add('vm', vm_under_test)
 
     LOG.tc_step("Boot a base vm to test with vm_type {} from script".format(vm_type))
-    base_vm = vm_helper.launch_vms_via_script(vm_type=vm_type, tenant_name='tenant1')
+    vms_launched = vm_helper.launch_vms_via_script(vm_type=vm_type, tenant_name='tenant1')
+
+    if not vms_launched:
+        skip("{} vms cannot be launched".format(vm_type))
+
+    base_vm = vms_launched[0]
     ResourceCleanup.add('vm', base_vm)
 
     LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_under_test))

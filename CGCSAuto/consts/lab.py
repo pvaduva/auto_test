@@ -38,7 +38,7 @@ class Labs:
         'short_name': 'ip_7_12',
         'name': 'cgcs-ironpass-7_12',
         'floating ip': '128.224.151.243',
-        'controller-0 ip': '128.224.150.244',
+        'controller-0 ip': '128.224.151.244',
         'controller-1 ip': '128.224.150.205',
         'controller_nodes': [21786, 21788],
         'compute_nodes': [21789, 21791],
@@ -124,8 +124,8 @@ class Labs:
         'controller-1 ip': '128.224.150.28',
         # 'auth_url': 'http://192.168.204.2:5000/v3/',
         'controller_nodes': [22715, 22716],
-        'compute_nodes': [22719, 22720, 22721, 22722],
-        'storage_nodes': [22717, 22718],
+        'compute_nodes': [22719, 22720, 22721, 22722, 23915, 23916],
+        'storage_nodes': [22717, 22718, 23954, 23955],
     }
 
     PV1 = {
@@ -165,6 +165,47 @@ class Labs:
         'controller-1 ip': '128.224.151.36',
         'controller_nodes': [21805, 21806],
         'compute_nodes': [21763, 21764, 21765],
+    }
+
+    SM_1 = {
+        'short_name': 'sm_1',
+        'name': 'yow-cgcs-supermicro-1',
+        'floating ip': '128.224.150.235',
+        'controller-0 ip': '128.224.150.221',
+        'controller_nodes': [46808],
+    }
+
+    SM_2 = {
+        'short_name': 'sm_2',
+        'name': 'yow-cgcs-supermicro-2',
+        'floating ip': '128.224.150.240',
+        'controller-0 ip': '128.224.150.222',
+        'controller_nodes': [23907],
+    }
+
+    SM_3 = {
+        'short_name': 'sm_3',
+        'name': 'yow-cgcs-supermicro-3',
+        'floating ip': '128.224.150.81',
+        'controller-0 ip': '128.224.150.81',
+        'controller_nodes': [23514],
+    }
+
+    SM_4 = {
+        'short_name': 'sm_4',
+        'name': 'yow-cgcs-supermicro-4',
+        'floating ip': '128.224.150.83',
+        'controller-0 ip': '128.224.150.83',
+        'controller_nodes': [23515],
+    }
+
+    SM_5_6 = {
+        'short_name': 'sm_5_6',
+        'name': 'yow-cgcs-supermicro-5-6',
+        'floating ip': '128.224.151.54',
+        'controller-0 ip': '128.224.150.84',
+        'controller-1 ip': '128.224.150.56',
+        'controller_nodes': [23516, 23517],
     }
 
     WCP_3_6 = {
@@ -239,7 +280,6 @@ class Labs:
         'storage_nodes': [23264, 23263, 23266, 23265],
     }
 
-
     WCP_61_62 = {
         'short_name': 'wcp_61_62',
         'name': 'yow-cgcs-wildcat-61_62',
@@ -248,7 +288,6 @@ class Labs:
         'controller-1 ip': '128.224.151.81',
         'controller_nodes': [23280, 23281],
     }
-
 
     WCP_63_66 = {
         'short_name': 'wcp_63_66',
@@ -276,6 +315,15 @@ class Labs:
         'auth_url': 'http://127.168.204.2:5000/v3/',
         'controller-0 ip': '128.224.151.38',
         'controller_nodes': [23287],
+    }
+
+    WCP_69_70 = {
+        'short_name': 'wcp_69_70',
+        'name': 'yow-cgcs-wildcat-69_70',
+        'floating ip': '128.224.151.241',
+        'controller-0 ip': '128.224.151.240',
+        'controller-1 ip': '128.224.151.253',
+        'controller_nodes': [23288, 23289],
     }
 
     WCP_71_75 = {
@@ -429,11 +477,17 @@ def add_lab_entry(floating_ip, dict_name=None, short_name=None, name=None, **kwa
 
 
 class NatBoxes:
+    # NAT_BOX_HW = {
+    #     'name': 'nat_hw',
+    #     'ip': '128.224.150.11',
+    #     'user': 'cgcs',
+    #     'password': 'li69nux'
+    # }
     NAT_BOX_HW = {
         'name': 'nat_hw',
-        'ip': '128.224.150.11',
-        'user': 'cgcs',
-        'password': 'li69nux'
+        'ip': '128.224.186.181',
+        'user': 'svc-cgcsauto',
+        'password': ')OKM0okm'
     }
 
     NAT_BOX_CUMULUS = {

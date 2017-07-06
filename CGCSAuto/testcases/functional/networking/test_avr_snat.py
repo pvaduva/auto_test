@@ -114,9 +114,8 @@ def test_snat_vm_actions(snat_setups, snat):
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("wget to VM {}".format(vm_))
-    lab_fip = ProjVar.get_var('LAB')['floating ip']
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_, use_fip=True) as vm_ssh:
-        vm_ssh.exec_cmd('wget {}'.format(lab_fip), fail_ok=False)
+        vm_ssh.exec_cmd('wget google.ca', fail_ok=False)
 
     LOG.tc_step("scp from NatBox to VM {}".format(vm_))
     vm_fip = network_helper.get_mgmt_ips_for_vms(vms=vm_, use_fip=True)[0]
@@ -208,7 +207,7 @@ def test_snat_evacuate_vm(snat_setups, snat):
     host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
 
     LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-    vm_helper._wait_for_vms_values(vm_, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
+    vm_helper.wait_for_vms_values(vm_, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
 
     LOG.tc_step("Verify vm is evacuated to other host")
     vm_helper._wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)

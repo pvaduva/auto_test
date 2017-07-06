@@ -134,7 +134,7 @@ class TestLockWithVMs:
         return target_hosts, storages_to_test
 
     # @mark.usefixtures('delete_all_vms')
-    @mark.domain_sanity
+    @mark.nightly
     def test_lock_with_vms(self, target_hosts):
         """
         Test lock host with vms on it.
@@ -274,5 +274,5 @@ class TestLockWithVMsNegative:
             post_vms_status = nova_helper.get_vms_info(vm_ids=vms_on_host, field='Status')
 
             LOG.tc_step("Verify lock rejected and vms status unchanged.")
-            assert lock_code in [1, 4, 5], "Unexpected result: {}".format(lock_output)
+            assert lock_code in [1, 2, 4, 5], "Unexpected result: {}".format(lock_output)
             assert pre_vms_status == post_vms_status, "VM(s) status has changed after host-lock {}".format(host)

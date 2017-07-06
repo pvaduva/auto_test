@@ -27,7 +27,7 @@ def check_vm_pci_interface(vms, net_type, seg_id=None):
             vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_id, net_seg_id=seg_id)
 
     # Ensure pci interface working well
-    vm_helper.ping_vms_from_vm(vms[1:], vms[0], net_types=['mgmt', net_type], vlan_zero_only=True)
+    vm_helper.ping_vms_from_vm(vms, vms[0], net_types=['mgmt', net_type], vlan_zero_only=True)
 
 
 def get_pci_net(request, vif_model, primary_tenant, primary_tenant_name, other_tenant):

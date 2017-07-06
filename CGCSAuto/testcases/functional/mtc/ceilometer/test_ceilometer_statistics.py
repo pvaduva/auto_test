@@ -38,7 +38,7 @@ def test_statistics_for_one_meter(meter):
     for header in headers:
         header_val = eval(table_parser.get_column(stats_tab, header)[0])
 
-        assert 0 < header_val, "Value for {} in {} stats table is not larger than zero".format(header, meter)
+        assert 0 <= header_val, "Value for {} in {} stats table is less than zero".format(header, meter)
 
 
 @mark.sanity

@@ -104,12 +104,14 @@ def wait_for_infra_net_fail_events(host, is_standby=False, swacted=False):
     entity_inst_infra_fail = 'host={}.network=Infrastructure'.format(host)
     if not swacted:
         # Note: If condition added due to CGTS-6749, which is closed as 'won't fix'
+        # For infra AE, it might take up to 60 seconds to start rebooting host, for single infra, it took about 15
+        # seconds
         system_helper.wait_for_alarm(alarm_id=EventLogID.INFRA_NET_FAIL, entity_id=entity_inst_infra_fail,
-                                     severity='critical', timeout=15, fail_ok=False)
+                                     severity='critical', timeout=60, fail_ok=False)
 
     entity_inst_recovery = 'host={}'.format(host)
     res = system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_RECOVERY_IN_PROGRESS, entity_id=entity_inst_recovery,
-                                       severity='critical', timeout=15, fail_ok=True)[0]
+                                       severity='critical', timeout=60, fail_ok=True)[0]
 
     if is_standby:
         assert not res, "Host recovery event is logged for standby controller"
@@ -217,9 +219,10 @@ def test_infra_network_failure_recovery(host_function):
     host_helper.wait_for_hosts_ready(hosts=host)
 
     LOG.tc_step("Check relative alarms are cleared after recovery")
-    system_helper.wait_for_alarm_gone(EventLogID.INFRA_NET_FAIL, fail_ok=False, timeout=60)
+    system_helper.wait_for_alarm_gone(EventLogID.INFRA_NET_FAIL, entity_id=host, fail_ok=False, timeout=60)
     if not is_standby:
-        system_helper.wait_for_alarm_gone(EventLogID.HOST_RECOVERY_IN_PROGRESS, fail_ok=False, timeout=30)
+        system_helper.wait_for_alarm_gone(EventLogID.HOST_RECOVERY_IN_PROGRESS, entity_id=host, fail_ok=False,
+                                          timeout=30)
 
     if is_standby:
         LOG.tc_step("Check swact controllers are working after infra recovery on standby controller")

@@ -208,7 +208,7 @@ PROCESSES = {
         'severity': 'critical', 'node_type': 'active'},
 
     'glance-api': {
-        'cmd': '/usr/bin/python2 /bin/glance-api', 'impact': 'enabled-degraded',
+        'cmd': '/usr/bin/python2 /bin/glance-api', 'impact': 'swact',
         'severity': 'major', 'node_type': 'active'},
 
     'neutron-server': {
@@ -242,8 +242,8 @@ PROCESSES = {
         'severity': 'major', 'node_type': 'active'},
 
     'cinder-api': {
-        'cmd': '/usr/bin/python2 /bin/cinder-api', 'impact': 'enabled-degraded',
-        'severity': 'major', 'node_type': 'active'},
+        'cmd': '/usr/bin/python2 /bin/cinder-api', 'impact': 'swact',
+        'severity': 'critical', 'node_type': 'active'},
 
     'cinder-scheduler': {
         'cmd': '/usr/bin/python2 /bin/cinder-scheduler', 'impact': 'swact',
@@ -316,8 +316,8 @@ PROCESSES = {
 
     # {'nfv-vim-api': {
     'vim-api': {
-        'cmd': '/usr/bin/python /bin/nfv-vim-api', 'impact': 'enabled-degraded',
-        'severity': 'major', 'node_type': 'active'},
+        'cmd': '/usr/bin/python /bin/nfv-vim-api', 'impact': 'swact',
+        'severity': 'critical', 'node_type': 'active'},
 
     'vim': {
         'cmd': '/usr/bin/python /bin/nfv-vim', 'impact': 'swact',
@@ -955,13 +955,10 @@ class MonitoredProcess:
     mark.p1(('nova-compute')),
     mark.p1(('vswitch')),
 
-    # mark.p1(('postgres')),
-    # mark.p1(('rabbitmq-server')), # rabbit in SM
-    # TODO CGTS-6336
-    # TODO CGTS-6391
+    # mark.p1(('postgres')),    # Bin recommend not to test this. Whole system down when kill this.
+    # mark.p1(('rabbitmq-server')), # rabbit in SM don't test as per CGTS-6336
     mark.p1(('rabbit')),
-    # mark.p1(('sysinv-api')),  # sysinv-inv in SM
-    mark.p1(('sysinv-inv')),
+    mark.p1(('sysinv-inv')),    # sysinv-inv in SM
     mark.p1(('sysinv-conductor')),
     mark.p1(('mtc-agent')),
     mark.p1(('hbs-agent')),

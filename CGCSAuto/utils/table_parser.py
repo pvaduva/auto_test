@@ -1,4 +1,4 @@
-import re
+import re, copy
 
 from utils import exceptions
 from utils.tis_log import LOG
@@ -52,6 +52,7 @@ def tables(output_lines, combine_multiline_entry=False):
     (see OutputParser.table())
     And, if found, label key (separated line preceding the table_)
     is added to each tables dict.
+    Returns (list):
     """
     tables_ = []
 
@@ -415,6 +416,7 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
             when False, if a value spread into multiple lines, this value will be presented as a list with
                 each line being a string item in this list
                 Examples: 'subnets' in neutron net-list
+        exclude (bool): whether to exclude the values filtered out
 
         **kwargs: header/value pair(s) as search criteria. Used to filter out the target row(s).
             When multiple header/value pairs are given, they will be in 'AND' relation.
@@ -610,6 +612,7 @@ def filter_table(table_, strict=True, regex=False, exclude=False, **kwargs):
                 'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
         strict (bool):
         regex (bool): Whether to use regex to find matching value(s)
+        exclude (bool): whether to exclude the rows filtered out
 
         **kwargs: header/value pair(s) as search criteria. Used to filter out the target row(s).
             Examples: header_1 = [value1, value2, value3], header_2 = value_2
@@ -669,8 +672,8 @@ def compare_tables(table_one, table_two):
     table2_keys = set(table_two.keys())
     # compare number of keys in each set. They should be only 'headers' and 'values'
     if len(table1_keys) == len(table2_keys) == 2:
-        if table1_keys - {'headers','values'} or table2_keys - {'headers', 'values'}:
-            return 1, "The keys of the two tables is different than expected {'headers','values'}, " \
+        if table1_keys - {'headers', 'values'} or table2_keys - {'headers', 'values'}:
+            return 1, "The keys of the two tables is different than expected {{'headers','values'}}, " \
                       "Table one contain {}. Table two contain {}".format(table1_keys, table2_keys)
     else:
         return 2, "The number of keys is different between Table One and Table Two"
@@ -761,7 +764,7 @@ def sm_dump_table(output_lines):
     return table_
 
 
-def row_dict_table(table_, key_header, unique_key=True):
+def row_dict_table(table_, key_header, unique_key=True, eliminate_keys=None):
     """
     convert original table to a dictionary with a given column to be the keys.
 
@@ -770,6 +773,7 @@ def row_dict_table(table_, key_header, unique_key=True):
         key_header (str): chosen keys for the table
         unique_key (bool): if key_header is unique for each row, such as UUID, then value for each key will be dict
             instead of list of dict
+        eliminate_keys (None|str|list): columns to eliminate
 
     Returns (dict): dictionary with value of the key_header as key, and the complete row as the value.
         The value itself is a list, number of items in the list depends on how many rows has the same value for
@@ -794,6 +798,10 @@ def row_dict_table(table_, key_header, unique_key=True):
     """
     keys = get_column(table_, key_header)
     all_headers = table_['headers']
+    if eliminate_keys is None:
+        eliminate_keys = []
+    elif isinstance(eliminate_keys, str):
+        eliminate_keys = [eliminate_keys]
 
     rtn_dict = {}
     for header_val in keys:
@@ -802,6 +810,9 @@ def row_dict_table(table_, key_header, unique_key=True):
         values = []
         for row_ in applicable_rows:
             row_dict = dict(zip(all_headers, row_))
+            for key_to_rm in list(eliminate_keys):
+                row_dict.pop(key_to_rm, None)
+
             values.append(row_dict)
 
         if unique_key:
@@ -810,3 +821,50 @@ def row_dict_table(table_, key_header, unique_key=True):
 
     LOG.debug("Converted table: {}".format(rtn_dict))
     return rtn_dict
+
+
+def remove_columns(table_, headers):
+    """
+    Remove header(s) and corresponding values from the table. If the supplied header is not found, skips that header.
+
+    Args:
+        table_ (dict): original table which in the format of {'headers': [<headers>], 'values': [<rows>]}
+        headers (str/list/tuple): chosen key(s) to remove
+
+    Returns (dict): A table dictionary without key_headers and corresponding values
+
+    Examples: system host-list on 2+2 system
+        remove_columns(table_, 'hostname') will return following table:
+            {
+            'controller-0': [{'id': 1, 'personality': 'controller', ...}]
+            'controller-1': [{'id': 2, 'personality': 'controller', ...}]
+            'compute-0': ...
+            'compute-1': ...
+            }
+
+        remove_columns(table_, ['personality', 'hostname']) will return following table:
+            {
+            'controller': [{'id': 1, ...},
+                           {'id': 2, ...}]
+            'compute': [{'id': 3, ...},
+                        {'id': 4, ...}]
+            }
+    """
+    if isinstance(headers, str):
+        headers = [headers]
+
+    if not isinstance(headers, (list, tuple)):
+        raise ValueError("key_headers is not a list/string/tuple: {}".format(headers))
+
+    new_table_ = copy.deepcopy(table_)
+
+    for key in headers:
+        try:
+            column_id = get_column_index(new_table_, key)
+            new_table_['headers'].pop(column_id)
+            for row in new_table_['values']:
+                row.pop(column_id)
+        except ValueError:
+            continue
+
+    return new_table_

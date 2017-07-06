@@ -379,7 +379,7 @@ class SSHClient:
             self.send_control('c')
             self.flush(10)
 
-    def exec_cmd(self, cmd, expect_timeout=10, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
+    def exec_cmd(self, cmd, expect_timeout=60, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
                  fail_ok=True, get_exit_code=True, blob=None, force_end=False, searchwindowsize=None):
         """
 
@@ -641,7 +641,7 @@ class SSHClient:
 
         """
         cmd = 'sudo ' + cmd
-        LOG.info("Executing sudo command: {}".format(cmd))
+        LOG.debug("Executing sudo command...")
         self.send(cmd)
         prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
         index = self.expect([self.prompt, prompt], timeout=expect_timeout, searchwindowsize=searchwindowsize)
@@ -1058,7 +1058,7 @@ class NATBoxClient:
     # internal dict that holds the natbox client if set_natbox_client was called
     __natbox_ssh_map = {}
 
-    _PROMPT = r'\@.*\:\~[$#]'  # use user+_PROMPT to differentiate before and after ssh to vm
+    _PROMPT = r'\@.*\:\~[$#] '  # use user+_PROMPT to differentiate before and after ssh to vm
 
     @classmethod
     def get_natbox_client(cls, natbox_ip=None):

@@ -8,6 +8,11 @@ from keywords import host_helper, system_helper
 from testfixtures.recover_hosts import HostsToRecover
 
 
+@fixture(scope='function', autouse=True)
+def check_alarms():
+    pass
+
+
 @fixture(scope='module')
 def get_host():
     if system_helper.is_two_node_cpe():
