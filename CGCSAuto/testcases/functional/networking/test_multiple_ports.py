@@ -244,9 +244,14 @@ class TestMutiPortsPCI:
         pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')
         pci_pthru_nets = network_helper.get_pci_nets(vif='pthru', rtn_val='name')
         avail_nets = list(set(pci_pthru_nets) & set(pci_sriov_nets))
-        internal_net_name = 'internal0-net1'
-        if internal_net_name not in avail_nets:
-            skip("'internal-net1' does not have pci-sriov and/or pci-passthrough interfaces")
+
+        internal_net_name = None
+        for net_ in avail_nets:
+            if 'internal' in net_:
+                internal_net_name = net_
+                break
+        else:
+            skip('No internal network found that has both pcipt and sriov interfaces')
 
         LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
         flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048)[1]

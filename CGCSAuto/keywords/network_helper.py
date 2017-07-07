@@ -579,7 +579,7 @@ def get_neutron_port(name=None, con_ssh=None, auth_info=None):
 
 
 def get_providernets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN,
-                     **kwargs):
+                     merge_lines=False, **kwargs):
     """
     Get the neutron provider net list based on name if given
 
@@ -596,9 +596,10 @@ def get_providernets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=
     """
     table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is None:
-        return table_parser.get_values(table_, rtn_val, **kwargs)
+        return table_parser.get_values(table_, rtn_val, merge_lines=merge_lines,**kwargs)
 
-    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, name=name, **kwargs)
+    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, name=name, merge_lines=merge_lines,
+                                   **kwargs)
 
 
 def get_providernet_ranges(rtn_val='name', range_name=None, providernet_name=None, providernet_type=None, strict=False,
@@ -1859,9 +1860,17 @@ def get_networks_on_providernet(providernet_id, rtn_val='id', con_ssh=None, auth
 
 def get_pci_nets(vif='sriov', rtn_val='name', vlan_id=0, con_ssh=None, auth_info=Tenant.ADMIN):
 
-    pnet_id = get_providernet_for_interface(interface=vif, con_ssh=con_ssh, auth_info=auth_info)
+    pnet_id = get_providernet_for_interface(interface=vif, rtn_val='id', con_ssh=con_ssh, auth_info=auth_info)
 
-    return get_networks_on_providernet(pnet_id, rtn_val, con_ssh=con_ssh, auth_info=auth_info, vlan_id=vlan_id)
+    nets = get_networks_on_providernet(pnet_id, rtn_val, con_ssh=con_ssh, auth_info=auth_info, vlan_id=vlan_id)
+    if 'sriov' in vif:
+        first_seg = get_first_segment_of_providernet(pnet_id, pnet_val='id', con_ssh=con_ssh)
+        untagged_net = get_net_on_segment(pnet_id, seg_id=first_seg, rtn_val='name', con_ssh=con_ssh)
+        if untagged_net in nets:
+            LOG.info("{} is on first segment of {} range with untagged frames. Remove for sriov.".
+                     format(untagged_net, pnet_id))
+            nets.remove(untagged_net)
+    return nets
 
 
 def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_ssh=None):
@@ -2193,10 +2202,18 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
                                                                     con_ssh=con_ssh, auth_info=auth_info)
     print("hosts and pnets: {}".format(hosts_and_pnets))
     host = list(hosts_and_pnets.keys())[0]
-    pnet = hosts_and_pnets[host][0]
+    pnet_name = hosts_and_pnets[host][0]
     kwargs = {'vlan_id': vlan_id} if vlan_id is not None else {}
-    nets = list(set(get_networks_on_providernet(pnet, rtn_val='name', **kwargs)))
-    print("pnet: {}; Nets: {}".format(pnet, nets))
+    nets = list(set(get_networks_on_providernet(pnet_name, rtn_val='name', **kwargs)))
+    if pci_type == 'pci-sriov':
+        first_seg = get_first_segment_of_providernet(pnet_name, pnet_val='name', con_ssh=con_ssh)
+        untagged_net = get_net_on_segment(pnet_name, seg_id=first_seg, rtn_val='name', con_ssh=con_ssh)
+        if untagged_net in nets:
+            LOG.info("{} is on first segment of {} range with untagged frames. Remove for sriov.".
+                     format(untagged_net, pnet_name))
+            nets.remove(untagged_net)
+
+    print("pnet: {}; Nets: {}".format(pnet_name, nets))
     final_nets = _get_preferred_nets(nets=nets, net_name=net_name, strict=strict)
     vm_net = final_nets[-1]
     if pci_type == 'pci-passthrough':
@@ -2207,6 +2224,47 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
             vm_net = final_nets[0:2]
 
     return vm_net
+
+
+def get_first_segment_of_providernet(providernet, pnet_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get first segment id within the range of given providernet
+    Args:
+        providernet (str): pnet name or id
+        pnet_val: 'id' or 'name' based on the value for providernet param
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (int): segment id
+
+    """
+    ranges = get_providernets(rtn_val='ranges', con_ssh=con_ssh, auth_info=auth_info, merge_lines=False,
+                              **{pnet_val: providernet})[0]
+
+    if isinstance(ranges, list):
+        ranges = ranges[0]
+    first_seg = eval(ranges)['minimum']
+    return first_seg
+
+
+def get_net_on_segment(providernet, seg_id, rtn_val='name', con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get network name on given prvidernet with specified segment id
+    Args:
+        providernet (str): pnet name or id
+        seg_id (int): segment id
+        rtn_val (str): 'name' or 'id'
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (str|None): network id/name or None if no network on given seg id
+
+    """
+    nets = get_networks_on_providernet(providernet_id=providernet, rtn_val=rtn_val, con_ssh=con_ssh,
+                                       auth_info=auth_info, **{'segmentation_id': seg_id})
+
+    net = nets[0] if nets else None
+    return net
 
 
 def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only=True, vlan_id=0, net_name=None,
