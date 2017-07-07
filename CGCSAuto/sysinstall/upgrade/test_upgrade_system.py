@@ -1,3 +1,4 @@
+import time
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient, SSHClient
 from keywords import system_helper, host_helper, install_helper, storage_helper
@@ -37,6 +38,8 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     LOG.tc_step("Unlocking controller-1 after upgrade......")
     host_helper.unlock_host("controller-1", available_only=True, check_hypervisor_up=False)
     LOG.info("Host controller-1 unlocked after upgrade......")
+
+    time.sleep(60)
 
     # Swact to standby controller-1
     LOG.tc_step("Swacting to controller-1 .....")
