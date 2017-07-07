@@ -71,6 +71,7 @@ class Networks:
         'mgmt': MGMT_IP,
         'internal': INTERNAL_IP
     }
+    INFRA_NETWORK_CIDR = "192.168.205.0/24"
 
 
 class SystemType:

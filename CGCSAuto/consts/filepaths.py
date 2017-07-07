@@ -24,6 +24,7 @@ class UserData:
 
 class TestServerPath:
     USER_DATA = '/home/svc-cgcsauto/userdata/'
+    TEST_SCRIPT = '/home/svc-cgcauto/test_scripts/'
 
 
 class PrivKeyPath:

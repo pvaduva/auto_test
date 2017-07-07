@@ -4,7 +4,7 @@ import re
 
 from consts.auth import Tenant, HostLinuxCreds
 from consts.timeout import SysInvTimeout
-from consts.cgcs import UUID, Prompt
+from consts.cgcs import UUID, Prompt, Networks
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -2447,6 +2447,7 @@ def get_controller_fs_values(con_ssh=None, auth_info=Tenant.ADMIN):
     return values
 
 
+
 def wait_for_services_enable(timeout=300, fail_ok=False, con_ssh=None):
     """
     Wait for services to be enabled-active in system service-list
@@ -2475,3 +2476,54 @@ def wait_for_services_enable(timeout=300, fail_ok=False, con_ssh=None):
     if fail_ok:
         return False, msg
     raise exceptions.SysinvError(msg)
+
+
+def is_infra_network_conifgured(con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Whether infra network is configured in the system
+    Args:
+        con_ssh (SSHClient):
+
+    Returns:
+        (bool): True if infra network is configured, else False
+         value dict:
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+    output = cli.system('infra-show', ssh_client=con_ssh, auth_info=auth_info )
+    if "Infrastructure network not configured" in output:
+        return False,  None
+    table_ = table_parser.table(output)
+    rows = table_parser.get_all_rows(table_)
+    values = {}
+    for row in rows:
+        values[row[0].strip()] = row[1].strip()
+    return True, values
+
+def add_infra_network(infra_network_cidr=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Adds infra network to the system
+    Args:
+        infra_network_cidr:
+        con_ssh:
+        auth_info:
+
+    Returns:
+
+    """
+
+    if infra_network_cidr is None:
+        infra_network_cidr = Networks.INFRA_NETWORK_CIDR
+
+    output = cli.system('infra-add', infra_network_cidr,  ssh_client=con_ssh, auth_info=auth_info)
+    if "Infrastructure network not configured" in output:
+        msg = "Infra Network already configured in the system"
+        LOG.info(msg)
+        return False,  None
+    table_ = table_parser.table(output)
+    rows = table_parser.get_all_rows(table_)
+    values = {}
+    for row in rows:
+        values[row[0].strip()] = row[1].strip()
+    return True, values
+
