@@ -2162,11 +2162,13 @@ def main():
         vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
         # Run the wipedisk utility if the nodes are accessible
+        print(load_path)
+        input()
         log.info("Attempting to wipe disks")
         with open(os.devnull, 'wb') as devnull:
             isControllerOnline = subprocess.call(["ping", "-w {}".format(PING_TIMEOUT), "-c 4", "{}".format(controller0.host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
         if(isControllerOnline == 0):
-            bld_server_conn.rsync("/folk/jlevesqu/cgcs/sanityrefresh/labinstall/wipedisk_*", WRSROOT_USERNAME, "{}".format(nodes[0].host_ip), "~", pre_opts=pre_opts)
+            bld_server_conn.rsync( load_path + '/' + CENTOS_LAB_REL_PATH + "/scripts/wipedisk_*", WRSROOT_USERNAME, "{}".format(nodes[0].host_ip), "~", pre_opts=pre_opts)
             if controller0.ssh_conn is None:
                 controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
             cmd = "chmod 755 wipedisk_helper"
