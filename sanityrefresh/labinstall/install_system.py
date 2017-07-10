@@ -2340,7 +2340,7 @@ def main():
 
     # Heat stack changes
     if host_os != "wrlinux":
-        lab_install_step = install_step("check_heat_resources_file", 8, ['cpe', 'simplex'])
+        lab_install_step = install_step("check_heat_resources_file", 8, ['simplex'])
         if do_next_install_step(lab_type, lab_install_step):
             setupHeat(bld_server_conn)
             set_install_step_complete(lab_install_step)
@@ -2470,7 +2470,7 @@ def main():
 
     # Heat stack changes
     if host_os != "wrlinux":
-        lab_install_step = install_step("check_heat_resources_file", 18, ['regular', 'storage'])
+        lab_install_step = install_step("check_heat_resources_file", 18, ['cpe', 'regular', 'storage'])
         if do_next_install_step(lab_type, lab_install_step):
             setupHeat(bld_server_conn)
             set_install_step_complete(lab_install_step)
