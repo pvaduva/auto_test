@@ -178,6 +178,10 @@ def parse_args():
                          choices=['before', 'no'], default='before',
                          help='Apply branding files before config controller')
 
+    lab_grp.add_argument('--wipedisk', dest='wipedisk',
+                         action='store_true',
+                         help="wipedisk during installation")
+
     #TODO: Custom directory path is not supported yet. Need to add code
     #      to rsync files from custom directory path on local PC to controller-0
     #      Can use rsync exec_cmd(...) in common.py to do the transfer locally
@@ -1831,6 +1835,7 @@ def main():
     stop = args.stop
     override = args.override
     banner = args.banner
+    wipedisk = args.wipedisk
 
     branding = args.branding
 
@@ -1914,6 +1919,7 @@ def main():
     logutils.print_name_value("Stop", stop)
     logutils.print_name_value("Override", override)
     logutils.print_name_value("Banner", banner)
+    logutils.print_name_value("wipedisk", wipedisk)
     logutils.print_name_value("Branding", branding)
     logutils.print_name_value("Skip feed", skip_feed)
     logutils.print_name_value("Boot USB", boot_usb)
@@ -2162,24 +2168,26 @@ def main():
         vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
         # Run the wipedisk utility if the nodes are accessible
-        print(load_path)
-        input()
-        log.info("Attempting to wipe disks")
-        with open(os.devnull, 'wb') as devnull:
-            isControllerOnline = subprocess.call(["ping", "-w {}".format(PING_TIMEOUT), "-c 4", "{}".format(controller0.host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
-        if(isControllerOnline == 0):
-            bld_server_conn.rsync( load_path + '/' + CENTOS_LAB_REL_PATH + "/scripts/wipedisk_*", WRSROOT_USERNAME, "{}".format(nodes[0].host_ip), "~", pre_opts=pre_opts)
-            if controller0.ssh_conn is None:
-                controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
-            cmd = "chmod 755 wipedisk_helper"
-            controller0.ssh_conn.exec_cmd(cmd)
-            cmd = "chmod 755 wipedisk_automater"
-            controller0.ssh_conn.exec_cmd(cmd)
-            cmd = "./wipedisk_automater"
-            controller0.ssh_conn.exec_cmd(cmd)
-        else:
-            log.info("Unable to reach controller-0, will continue without wipedisk")
-        input()
+        if wipedisk:
+            log.info("Attempting to wipe disks")
+            with open(os.devnull, 'wb') as devnull:
+                isControllerOnline = subprocess.call(["ping", "-w {}".format(PING_TIMEOUT), "-c 4", "{}".format(controller0.host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
+            if(isControllerOnline == 0):
+                if controller0.ssh_conn is None:
+                    controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
+                cmd = "test -f " + "wipedisk_helper " + "&& " + "test -f " + "wipedisk_automater"
+                if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
+                    cmd = "chmod 755 wipedisk_helper"
+                    controller0.ssh_conn.exec_cmd(cmd)
+                    cmd = "chmod 755 wipedisk_automater"
+                    controller0.ssh_conn.exec_cmd(cmd)
+                    cmd = "./wipedisk_automater"
+                    controller0.ssh_conn.exec_cmd(cmd)
+                else:
+                    log.info("wipedisk files are not on the load, will not wipedisks")
+            else:
+                log.info("Unable to reach controller-0, will continue without wipedisk")
+
         # Power down all the nodes via VLM (note: this can also be done via board management control)
         if not continue_install:
             for barcode in barcodes:
