@@ -126,7 +126,7 @@ def run_cmd(cmd, con_ssh=None, **kwargs):
 
 def get_track_back(log_file='patching.log', con_ssh=None):
     patching_trace_backs = run_cmd('grep -i "traceback" /var/log/{} 2>/dev/null'.format(log_file), con_ssh=con_ssh)[1]
-    return [record.strip() for record in patching_trace_backs]
+    return [record.strip() for record in patching_trace_backs.splitlines()]
 
 
 def check_error_states(con_ssh=None, pre_states=None, pre_trace_backs=None, no_checking=True, fail_on_error=False):
@@ -249,15 +249,14 @@ def delete_patches(patch_ids=None, con_ssh=None):
     code, patch_info, _ = run_patch_cmd('delete', args=args, con_ssh=con_ssh)
     assert 0 == code, 'Failed to delete patch(es):{}'.format(args)
 
-    # return [pi[0] for pi in patch_info]
-    return patch_info
+    return code, patch_info
 
 
 def delete_patch(patch_id, con_ssh=None):
     LOG.info('deleting patch:{}'.format(patch_id))
-    deleted_ids = delete_patches((patch_id,), con_ssh=con_ssh)
+    code, deleted_ids = delete_patches((patch_id,), con_ssh=con_ssh)
 
-    return deleted_ids[0]
+    return code, deleted_ids[0]
 
 
 def upload_patch_file(con_ssh=None, patch_file=None, fail_if_existing=False):
@@ -592,7 +591,7 @@ def check_host_installed(host, reboot_required=True, con_ssh=None):
 
 def host_install(host, reboot_required=True, fail_if_locked=True, con_ssh=None):
     if reboot_required:
-        code, msg = host_helper.lock_host(host, con_ssh=con_ssh, fail_ok=False)
+        code, msg = host_helper.lock_host(host, con_ssh=con_ssh, fail_ok=False, lock_timeout=1800, timeout=2000)
         LOG.info('lock host: rr={} patch on host={}, locking msg={}'.format(reboot_required, host, msg))
         if -1 == code:
             LOG.warn('host:{} already locked, msg:{}'.format(host, msg))

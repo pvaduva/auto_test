@@ -16,6 +16,7 @@ from utils import local_host
 from utils import table_parser, cli
 from utils.ssh import SSHClient
 from utils.tis_log import LOG
+from utils import lab_info
 
 PATCH_ALARM_ID = '900.001'
 PATCH_ALARM_REASON = 'Patching operation in progress'
@@ -74,7 +75,6 @@ def install_impacted_hosts(patch_ids, cur_states=None, con_ssh=None, remove=Fals
         code, output = host_helper.swact_host(active_controller, fail_ok=False, con_ssh=con_ssh)
         assert 0 == code, 'Failed to swact host: from {}'.format(active_controller)
 
-
     if active_controller is not None:
         patching_helper.host_install(active_controller, reboot_required=reboot_required, con_ssh=con_ssh)
 
@@ -117,7 +117,10 @@ def remove_patch(patch_id, con_ssh=None):
         if patch_states[patch_id]['state'] in ['Applied', 'Parital-Apply']:
             patch_ids = [patch_id]
 
-    assert patch_ids, 'No patches can be removed'
+    if len(patch_ids) <= 0:
+        skip("No patches can be removed")
+        return
+
     LOG.info('OK, will remove patch IDs:{}'.format(patch_ids))
 
     patches = ' '.join(patch_ids)
@@ -133,8 +136,43 @@ def remove_patch(patch_id, con_ssh=None):
     return patch_ids_removed
 
 
+def delete_patch(patch_id, con_ssh=None):
+    """Delete the specified patch or all patches in Available status
+
+    Args:
+        patch_id: ID of the patch to remove. Use value of 'ALL' to remove all patches
+        con_ssh:
+
+    Returns:
+
+    """
+    LOG.tc_step('Get patch ids to delete')
+    states = patching_helper.get_patching_states(con_ssh=con_ssh, fail_ok=False)
+    patch_states = states['patch_states']
+
+    expected_states = ['Available']
+    if patch_id.upper() in ['ALL']:
+        candidates = [pid for pid in patch_states.keys()
+                      if patch_states[pid]['state'] in expected_states]
+        if len(candidates) <= 0:
+            skip('No patch can be deleted because none in {} status'.format(expected_states))
+            return
+    else:
+        if patch_id not in patch_states:
+            skip('patch with ID: {} is not in system'.format(patch_id))
+            return
+
+        if patch_states[patch_id]['state'] not in expected_states:
+            skip('patch with ID:{} in status {} cannot be deleted'.format(patch_id, patch_states[patch_id]['state']))
+            return
+
+        candidates = [patch_id]
+
+    patching_helper.delete_patches(candidates)
+
+
 def connect_to_build_server(server=None, username='', password='', prompt=''):
-    PUBLIC_SSH_KEY = local_host.get_ssh_key()
+    public_ssh_key = local_host.get_ssh_key()
     server = server or PatchingVars.get_patching_var('build_server')
     LOG.info('patch_server={}'.format(server))
 
@@ -150,10 +188,48 @@ def connect_to_build_server(server=None, username='', password='', prompt=''):
     ssh_to_server.connect()
     ssh_to_server.exec_cmd("bash")
     ssh_to_server.set_prompt(prompt)
-    ssh_to_server.deploy_ssh_key(PUBLIC_SSH_KEY)
+    ssh_to_server.deploy_ssh_key(public_ssh_key)
 
     LOG.info('ssh connection to server:{} established: {}'.format(server, ssh_to_server))
     return ssh_to_server
+
+
+def find_patches_on_server(patch_dir, ssh_to_server, single_file_ok=False, build_server=None):
+    patch_dir_or_file = patch_dir
+    patch_base_dir = PatchingVars.get_patching_var('def_patch_build_base_dir')
+
+    # if an absolute path is specified, we do not need to guess the location of patch file(s),
+    # otherwise, we need to deduce where they are based on the build information
+    if patch_dir is None:
+        patch_dir_or_file = os.path.join(patch_base_dir, lab_info.get_build_id())
+
+    elif not os.path.abspath(patch_dir):
+        patch_dir_or_file = os.path.join(patch_base_dir, patch_dir)
+
+    else:
+        pass
+
+    rt_code, output = ssh_to_server.exec_cmd(
+        'ls -ld {} 2>/dev/null'.format(os.path.join(patch_dir_or_file, '*.patch')),
+        fail_ok=True)
+
+    if 0 == rt_code and output:
+        patch_dir_or_file = os.path.join(patch_dir_or_file, '*.patch')
+
+    else:
+        err_msg = 'No patch files ready in direcotry :{} on the Patch Build server {}:\n{}'.format(
+            patch_dir_or_file, build_server, output)
+        LOG.warn(err_msg)
+
+        LOG.warn('Check if {} is a patch file'.format(patch_dir_or_file))
+        assert single_file_ok, err_msg
+
+        rt_code = ssh_to_server.exec_cmd('test -f {}'.format(patch_dir_or_file), fail_ok=True)[0]
+        assert 0 == rt_code, err_msg
+
+    LOG.debug('Will use patch from {}:{}'.format(build_server, patch_dir_or_file))
+
+    return patch_dir_or_file
 
 
 def get_patches_dir_to_test(con_ssh=None, single_file_ok=False):
@@ -163,15 +239,20 @@ def get_patches_dir_to_test(con_ssh=None, single_file_ok=False):
         yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_4.0_Test_Patch_Build/latest_build
         yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_4.0_Test_Patch_Build/2016-12-07_16-48-53
 
+        or for 17.07
+        yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build/2017-07-08_22-07-06
+
     Args:
         con_ssh:
-        single_file_ok: Flag indicating if single file is accepted. By default, only directory is accepted.
+        single_file_ok: Flag indicating if single file is accepted. By default, directory is expected.
 
     Returns: the path on the active controller where the downloaded patch files saved
 
     Notes:
         To save time for downloading patch files from remote patch build server, the files are download once only in a
         test session and reused.
+
+    US99792 Update patching to use matching test patch for specific load by default
     """
 
     global patch_dir_in_lab
@@ -180,34 +261,25 @@ def get_patches_dir_to_test(con_ssh=None, single_file_ok=False):
 
     patch_build_server = PatchingVars.get_patching_var('patch_build_server')
     patch_dir = PatchingVars.get_patching_var('patch_dir')
-    patch_files = os.path.join(patch_dir, '*.patch')
 
     ssh_to_server = connect_to_build_server(server=patch_build_server)
 
-    rt_code, output = ssh_to_server.exec_cmd('ls {} 2>/dev/null'.format(patch_files), fail_ok=True)
-    if 0 != rt_code or not output:
-        err_msg = 'No patch files ready on:{} on directory of Patch Build server:{}:{}'.format(
-            patch_files, patch_build_server, output)
-        LOG.warn(err_msg)
-
-        LOG.warn('Check if {} is patch file'.format(patch_dir))
-        assert single_file_ok, err_msg
-
-        rt_code = ssh_to_server.exec_cmd('test -f {}'.format(patch_dir), fail_ok=True)[0]
-        assert 0 == rt_code, err_msg
-        patch_files = patch_dir
+    patch_dir_or_files = find_patches_on_server(patch_dir,
+                                                ssh_to_server,
+                                                single_file_ok=single_file_ok,
+                                                build_server=patch_build_server)
 
     dest_path = os.path.join(WRSROOT_HOME, 'patch-files-' + datetime.datetime.utcnow().isoformat())
     rt_code, output = patching_helper.run_cmd('mkdir -p {}'.format(dest_path), con_ssh=con_ssh)
     assert 0 == rt_code, 'Failed to create patch dir:{} on the active-controller'.format(dest_path)
 
-    LOG.info('Downloading patch files to lab:{} from:{}'.format(dest_path, patch_files))
+    LOG.info('Downloading patch files to lab:{} from:{}'.format(dest_path, patch_dir_or_files))
 
-    ssh_to_server.rsync(patch_files, html_helper.get_ip_addr(), dest_path,
+    ssh_to_server.rsync(patch_dir_or_files, html_helper.get_ip_addr(), dest_path,
                         dest_user=HostLinuxCreds.USER, dest_password=HostLinuxCreds.PASSWORD, timeout=900)
 
     LOG.info('OK, patch files were downloaded to: {}:{}, from: {} on server: {}'.format(
-        html_helper.get_ip_addr(), dest_path, patch_files, patch_build_server))
+        html_helper.get_ip_addr(), dest_path, patch_dir_or_files, patch_build_server))
 
     # todo, skip failure patches for now
     patching_helper.run_cmd(
@@ -216,7 +288,8 @@ def get_patches_dir_to_test(con_ssh=None, single_file_ok=False):
     rt_code, output = patching_helper.run_cmd('ls {}/*.patch 2> /dev/null'.format(dest_path), con_ssh=con_ssh)
     assert 0 == rt_code, 'No patch files to test'.format(rt_code, output)
     if not output:
-        skip('No patches to test, skip the reset of the test, supposed to test patch_files:{}'.format(patch_files))
+        skip('No patches to test, skip the reset of the test, supposed to test patch_files:{}'.format(
+            patch_dir_or_files))
         return dest_path
 
     patch_dir_in_lab = dest_path
@@ -246,6 +319,7 @@ def _test_upload_patches_from_dir(con_ssh=None):
         con_ssh:
     Returns:
 
+    US99792 Update patching to use matching test patch for specific load by default
     """
     LOG.tc_step('Download patch files from specified location')
     patch_dir = get_patches_dir_to_test(con_ssh=con_ssh, single_file_ok=True)
@@ -388,3 +462,14 @@ def test_remove_patch(con_ssh=None):
     """
     remove_patch('all', con_ssh=con_ssh)
 
+
+def test_delete_patch(con_ssh=None):
+    """Delete patch(es). Note the patches need to be in Available status before to be deleted
+
+    Args:
+        con_ssh:
+
+    Returns:
+
+    """
+    delete_patch('all', con_ssh=con_ssh)
