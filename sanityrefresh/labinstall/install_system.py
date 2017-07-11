@@ -104,6 +104,10 @@ def parse_args():
     lab_grp.add_argument('--iso-install', dest='iso_install' , action="store_true", default=False,
                          help="iso install flag ")
 
+    lab_grp.add_argument('--config-region', dest='config_region' , action="store_true", default=False,
+                         help="configure_region instead of config_controller")
+
+
     #TODO: This option is not being referenced in code. Add logic to
     #      exit after config_controller unless this option is specified
     #      or modify this option to be "skip_lab_setup" so that it skips
@@ -1494,7 +1498,7 @@ def setupHeat(bld_server_conn):
         wr_exit()._exit(1, msg)
 
 
-def configureController(bld_server_conn, host_os, install_output_dir, banner, branding):
+def configureController(bld_server_conn, host_os, install_output_dir, banner, branding, config_region):
     # Configure the controller as required
     global controller0
     if not cumulus:
@@ -1528,7 +1532,10 @@ def configureController(bld_server_conn, host_os, install_output_dir, banner, br
             else:
                 rc, output = controller0.ssh_conn.exec_cmd(cmd)
             cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
-            cmd += " config_controller --config-file " + cfgfile
+            if config_region is False:
+                cmd += " config_controller --config-file " + cfgfile
+            else:
+                cmd += " config_region " + cfgfile
             os.environ["TERM"] = "xterm"
             if host_os == "centos" and not cumulus:
                 rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
@@ -1846,6 +1853,7 @@ def main():
     guest_bld_dir = args.guest_bld_dir
     patch_dir_paths = args.patch_dir_paths
     iso_install = args.iso_install
+    config_region = args.config_region
 
     install_timestr = time.strftime("%Y%m%d-%H%M%S")
     continue_install = args.continue_install
@@ -1929,6 +1937,7 @@ def main():
     logutils.print_name_value("Simplex", simplex)
     logutils.print_name_value("Low Lat", lowlat)
     logutils.print_name_value("Run Postinstall Scripts", postinstall)
+    logutils.print_name_value("Run config_region instead of config_controller", config_region)
 
     email_info = {}
     email_info['email_server'] = EMAIL_SERVER
@@ -2249,7 +2258,7 @@ def main():
     lab_install_step = install_step(msg, 3, ['regular', 'storage', 'cpe', 'simplex'])
 
     if do_next_install_step(lab_type, lab_install_step):
-        configureController(bld_server_conn, host_os, install_output_dir, banner, branding)
+        configureController(bld_server_conn, host_os, install_output_dir, banner, branding, config_region)
         set_install_step_complete(lab_install_step)
 
     time.sleep(10)
