@@ -787,7 +787,7 @@ def get_settings(barcodes_controller, barcodes_compute):
             try:
                 server_name.index("cgcs-")
             except ValueError:
-            fix in get_settings
+                # TODO: fix in get_settings
                 server_name = "cgcs-" + server_name
             words = server_name.split('-')
             if '0' < words[-1] < '10':
@@ -814,7 +814,7 @@ def get_settings(barcodes_controller, barcodes_compute):
                 server_name.index("cgcs-")
             except ValueError:
                 server_name = "cgcs-" + server_name
-            fix in get_settings
+                # TODO: fix in get_settings
             words = server_name.split('-')
             if '0' < words[-1] < '10':
                 words[-1] = words[-1].replace('0','')
