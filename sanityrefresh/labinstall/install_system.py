@@ -676,6 +676,8 @@ def wipe_disk(node, install_output_dir):
     #if small_footprint:
     #subprocess.call(["ssh", "{}".format(), "-c 4", "{}".format(nodes[0].host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
 
+    subprocess.call(["rsync", SCRIPT_DIR + "wipedisk_helper", "wrsroot@{}:~".format(nodes[0].host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
+
     controller1.ssh_conn = establish_ssh_connection(controller1, install_output_dir)
     print(controller1)
     controller1.ssh_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
@@ -859,6 +861,7 @@ def get_settings(barcodes_controller, barcodes_compute):
             try:
                 server_name.index("cgcs-")
             except ValueError:
+            fix in get_settings
                 server_name = "cgcs-" + server_name
             words = server_name.split('-')
             if '0' < words[-1] < '10':
@@ -885,6 +888,7 @@ def get_settings(barcodes_controller, barcodes_compute):
                 server_name.index("cgcs-")
             except ValueError:
                 server_name = "cgcs-" + server_name
+            fix in get_settings
             words = server_name.split('-')
             if '0' < words[-1] < '10':
                 words[-1] = words[-1].replace('0','')
@@ -2239,9 +2243,12 @@ def main():
 
         # Run the wipedisk utility if the nodes are accessible
         with open(os.devnull, 'wb') as devnull:
+            print(nodes[0].host_ip)
             rvalue = subprocess.call(["ping", "-w {}".format(PING_TIMEOUT), "-c 4", "{}".format(nodes[0].host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
         if(rvalue == 0):
+            subprocess.call(["rsync", "{}".format(SCRIPT_DIR + "/wipedisk_helper"), "wrsroot@{}:~".format(nodes[0].host_ip)])
             nodesExceptController0 = [x for x in nodes if x.name != 'controller-0']
+            input()
             for node in nodesExceptController0:
                 node_thread = threading.Thread(target=wipe_disk, name=node.name, args=(node, install_output_dir,))
                 threads.append(node_thread)
