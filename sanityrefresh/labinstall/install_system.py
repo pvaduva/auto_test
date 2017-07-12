@@ -2410,7 +2410,7 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
 
         unlock_node(nodes, selection_filter="storage")
-        wait_state(node, OPERATIONAL, ENABLED)
+        wait_state(nodes, OPERATIONAL, ENABLED)
         set_install_step_complete(lab_install_step)
 
     # After unlocking storage nodes, wait for ceph to come up
