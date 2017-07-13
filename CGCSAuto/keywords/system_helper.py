@@ -2285,7 +2285,10 @@ def abort_upgrade(con_ssh=None, timeout=60, fail_ok=False):
         index = con_ssh.expect([con_ssh.prompt,  Prompt.YES_N_PROMPT], timeout=timeout)
         if index == 1:
             con_ssh.send('yes')
-
+            index = con_ssh.expect([con_ssh.prompt, Prompt.CONFIRM_PROMPT], timeout=timeout)
+            if index == 1:
+               con_ssh.send('abort')
+               index = con_ssh.expect([con_ssh.prompt, Prompt.CONFIRM_PROMPT], timeout=timeout)
         if index == 0:
             rc = con_ssh.exec_cmd("echo $?")[0]
             con_ssh.flush()

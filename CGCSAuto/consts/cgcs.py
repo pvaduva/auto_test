@@ -144,6 +144,8 @@ class Prompt:
     ROOT_PROMPT = '.*root@.*'
     Y_N_PROMPT = '.*\(y/n\)\?.*'
     YES_N_PROMPT = '.*\[yes/N\]\: ?'
+    CONFIRM_PROMPT = '.*confirm: ?'
+
 
 
 class NovaCLIOutput:
