@@ -49,7 +49,8 @@ class GuestImages:
         'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21, 'opensuse_12.qcow2'),      # OVP img
         'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16, 'opensuse_13.qcow2'),
         # 'win_2012': ('win2012r2.qcow2', 36, 'win_2012.qcow2'),   # Service Team img
-        'win_2012': ('windows_server_2012_r2_standard_eval_kvm_20170321.qcow2', 13, 'win2012r2.qcow2'),  # MattP
+        # 'win_2012': ('windows_server_2012_r2_standard_eval_kvm_20170321.qcow2', 13, 'win2012r2.qcow2'),  # MattP+ssh
+        'win_2012': ('win2012r2_cygwin_compressed.qcow2', 13, 'win2012r2.qcow2'),  # MattP
         'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img'),       # wrl-6
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img')
     }

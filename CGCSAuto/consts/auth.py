@@ -145,7 +145,7 @@ class Guest:
 
         'win_2012': {
             'user': 'Administrator',
-            'password': 'root'
+            'password': 'Li69nux*'
         }
 
     }
