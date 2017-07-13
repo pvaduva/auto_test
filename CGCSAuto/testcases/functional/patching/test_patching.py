@@ -1,8 +1,9 @@
 import os
-# import random
+import re
+import time
 import datetime
 
-from pytest import fixture, skip
+from pytest import fixture, skip, mark
 # from pytest import mark
 
 from consts.auth import HostLinuxCreds
@@ -22,6 +23,11 @@ PATCH_ALARM_ID = '900.001'
 PATCH_ALARM_REASON = 'Patching operation in progress'
 
 patch_dir_in_lab = None
+
+
+@fixture()
+def check_alarms():
+    pass
 
 
 def is_reboot_required(patch_states):
@@ -65,15 +71,14 @@ def install_impacted_hosts(patch_ids, cur_states=None, con_ssh=None, remove=Fals
     for host in controllers:
         if host_helper.is_active_controller(host, con_ssh=con_ssh):
             active_controller = host
-            continue
+        else:
+            patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
 
-        patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
-
-    assert active_controller is not None, 'No active controller!?!:{}'.format(active_controller)
-        
     if reboot_required and active_controller is not None:
         code, output = host_helper.swact_host(active_controller, fail_ok=False, con_ssh=con_ssh)
         assert 0 == code, 'Failed to swact host: from {}'.format(active_controller)
+        # need to wait for some time before the system in stable status after swact
+        time.sleep(60)
 
     if active_controller is not None:
         patching_helper.host_install(active_controller, reboot_required=reboot_required, con_ssh=con_ssh)
@@ -374,13 +379,17 @@ def test_install_impacted_hosts(con_ssh=None):
 
     """
 
-    patch_ids = _test_upload_patches_from_dir(con_ssh=con_ssh)
+    # patch_ids = _test_upload_patches_from_dir(con_ssh=con_ssh)
 
-    applied_patches = _test_apply_patches(patch_ids=patch_ids, apply_all=True, fail_if_patched=True, con_ssh=con_ssh)
+    # applied_patches = _test_apply_patches(patch_ids=patch_ids, apply_all=True, fail_if_patched=True, con_ssh=con_ssh)
+
+    applied_patches = patching_helper.get_partial_applied(con_ssh=con_ssh) \
+                      + patching_helper.get_partial_removed(con_ssh=con_ssh)
 
     _test_install_impacted_hosts(applied_patches, con_ssh=con_ssh)
 
 
+@mark.usefixtures('check_alarms')
 def test_apply_patches(con_ssh=None):
     """Apply all the patches uploaded
 
@@ -464,7 +473,7 @@ def test_remove_patch(con_ssh=None):
 
 
 def test_delete_patch(con_ssh=None):
-    """Delete patch(es). Note the patches need to be in Available status before to be deleted
+    """Delete patch(es). Note the patches need to be in Available status before being deleted
 
     Args:
         con_ssh:
@@ -473,3 +482,141 @@ def test_delete_patch(con_ssh=None):
 
     """
     delete_patch('all', con_ssh=con_ssh)
+
+
+def get_host_states(output):
+    # header = re.compile('\s* Hostname\s* IP Address\s* Patch Current\s* Reboot Required\s* Release\s* State\s*')
+    pattern = re.compile('([^\s]+)\s* ([^\s]+)\s* ([^\s]+)\s* (Yes|No)\s* ([^\s]+)\s* ([^\s]+)\s*')
+    host_states = []
+    for line in output.splitlines():
+        found = pattern.match(line)
+        if found and len(found.groups()) == 6:
+            host_states.append((found.group(1), found.group(3)))
+
+    assert len(host_states) > 0, 'Failed to get host patching states, raw output{}'.format(output)
+
+    return host_states
+
+
+def get_patch_states(output):
+    pattern = re.compile('([^\s]+)\s* (Y|N)\s* ([^\s]+)\s* ([^\s]+)\s*')
+    patch_states = []
+    for line in output.splitlines():
+        found = pattern.match(line)
+        if found and len(found.groups()) == 4:
+            patch_states.append((found.group(1), found.group(4)))
+
+    assert len(patch_states) > 0, 'Failed to get patch states, raw output{}'.format(output)
+
+    return patch_states
+
+
+def wait_hosts_in_stable_states(hosts, con_ssh=None):
+    expected_state = {'patch-current': True,
+                      'rr': False,
+                      'state': 'idle'}
+
+    for host in hosts:
+        wait_host_in_stable_states(host, expected_state, con_ssh=con_ssh)
+
+
+def wait_host_in_stable_states(host, expected_state, con_ssh=None):
+    LOG.info('Wait host: {} stablized into states: {}'.format(host, expected_state))
+    code, state = patching_helper.wait_host_states(host, expected_states=expected_state, con_ssh=con_ssh)
+    assert 0 == code, \
+        'Host:{} failed to reach states, expected={}, actual={}'.format(host, expected_state, state)
+
+
+@mark.parametrize('operation', [
+     'apply',
+     'remove'
+])
+def test_patch_nonapplicable(operation, con_ssh=None):
+
+    """Verify the patching behavior during applying (removing) not-applicable patch(es)
+
+        Because there is no easy way to know which patch(es) is(are) not-applicable for each releases, we choose
+            storage-only patches, which are for sure not-applicable for non-storage lab.
+
+        Due to sw-query and sw-patch query-host do NOT run quickly enough to catch the Partial-Apply, Partial-Remove
+            or Pending states of patches and host, this TC will randomly failed to verify the state.
+            In case it fails, check the log file for further verification.
+
+    Args:
+        con_ssh:
+
+    Returns:
+
+    User Stories:
+        US100411 US93673 US94532    not in XStudio
+    """
+
+    LOG.tc_step('Check if the lab is a NON-storage lab, because only patches known not applicable '
+                'are storage-only patches')
+    if len(system_helper.get_storage_nodes(con_ssh=con_ssh)) > 0:
+        skip('current patches will impact at least one type of host in a storage-lab')
+        return
+
+    patch_ops = {
+        'apply': {
+            'op': 'apply', 'expected_state': 'Partial-Apply', 'initial_state': 'Available', 'final_state': 'Applied'
+        },
+        'remove': {
+            'op': 'remove', 'expected_state': 'Partial-Remove', 'initial_state': 'Applied', 'final_state': 'Available'
+        }
+    }
+
+    LOG.info('The lab is NON-storage lab and can be tested with storage-only patches')
+
+    LOG.tc_step('Check if there is Storage-only patches in "Available" states')
+    candidate_patches = patching_helper.get_all_patch_ids(
+        con_ssh=con_ssh, expected_states=[patch_ops[operation]['initial_state']])
+
+    if len(candidate_patches) <= 0:
+        skip('no patches in "{}" states'.format(patch_ops[operation]['initial_state']))
+
+    storage_patches = [patch_id for patch_id in candidate_patches if 'STORAGE' in patch_id.upper()]
+    patch_ids = ' '.join(storage_patches)
+
+    LOG.tc_step('{} the Storage-only patches and check the states of both the patches and hosts'.format(operation))
+    cmd = 'date; sudo sw-patch {} {} && sudo sw-patch query && sudo sw-patch query-hosts'.format(
+        patch_ops[operation]['op'], patch_ids)
+
+    _, output = patching_helper.run_sudo_cmd(cmd, fail_ok=False)
+    LOG.debug('output={}'.format(output))
+
+    LOG.info('OK, {} storage-only patches'.format(patch_ops[operation]['op']))
+
+    host_states = get_host_states(output)
+    patch_states = get_patch_states(output)
+
+    expected_host_state = ['Pending']
+    LOG.tc_step('Verify the hosts are in {} state'.format(expected_host_state))
+
+    for host, state in host_states:
+        assert state in expected_host_state, \
+            'Host "{}" is NOT in "{}" as expected, but actually in "{}" state'.format(
+                host, expected_host_state, state)
+
+        LOG.info('OK, Host "{}" is in "{}" as expected'.format(host, expected_host_state))
+
+    expected_patch_state = patch_ops[operation]['expected_state']
+    LOG.tc_step('Verify the patches are in {} state'.format(expected_patch_state))
+    for patch, state in patch_states:
+        if patch not in patch_ids:
+            continue
+        msg = 'Patch "{}" is NOT in "{}" as expected, but actually in "{}" state'.format(
+                patch, expected_patch_state, state)
+
+        assert state in expected_patch_state, msg
+        LOG.info('OK, Patch "{}" is in "{}" as expected'.format(patch, expected_patch_state))
+
+    LOG.tc_step('Verify the hosts reach stable states finally')
+    hosts = [host for host, _ in host_states]
+    wait_hosts_in_stable_states(hosts, con_ssh=con_ssh)
+
+    LOG.tc_step('Verify the patches reach state {} finally'.format(patch_ops[operation]['final_state']))
+
+    patches = [patch for patch, _ in patch_states]
+    patching_helper.wait_for_patch_states(patches, expected=[patch_ops[operation]['final_state']])
+    LOG.info('Scuccessfully patched the system with NON-Applicable patches ')
