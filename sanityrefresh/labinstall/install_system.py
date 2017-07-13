@@ -2410,11 +2410,15 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
 
         unlock_node(nodes, selection_filter="storage")
-        wait_state(nodes, OPERATIONAL, ENABLED)
+        storage_nodes = []
+        for node in nodes:
+            if "storage" in node.name:
+                storage_nodes.append(node)
+        wait_state(storage_nodes, OPERATIONAL, ENABLED)
         set_install_step_complete(lab_install_step)
 
     # After unlocking storage nodes, wait for ceph to come up
-    if lab_type is 'storage':
+    if lab_type == 'storage':
         wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os=host_os)
 
     # Lab-install -  run_lab_setup - applicable storage labs
@@ -2438,6 +2442,7 @@ def main():
     # Lab-install - unlock_computes - applicable storage and regular labs
     lab_install_step = install_step("unlock_computes", 16, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
+        print(nodes)
         unlock_node(nodes, selection_filter="compute")
         wait_state(nodes, OPERATIONAL, ENABLED)
         set_install_step_complete(lab_install_step)
