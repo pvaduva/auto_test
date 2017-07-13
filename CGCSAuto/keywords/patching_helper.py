@@ -117,16 +117,26 @@ def repeat(times=5, wait_per_iter=3, expected_code=0, expected_hits=1, stop_code
 
 
 def run_cmd(cmd, con_ssh=None, **kwargs):
-    con_ssh = con_ssh or ControllerClient.get_active_controller()
-    if isinstance(con_ssh, list):
-        con_ssh = con_ssh[0]
+    ssh_client = con_ssh or ControllerClient.get_active_controller()
+    if isinstance(ssh_client, list):
+        LOG.info('ssh_client is a LIST:{}'.format(ssh_client))
+        ssh_client = ssh_client[0]
 
-    return con_ssh.exec_cmd(cmd, **kwargs)
+    return ssh_client.exec_cmd(cmd, **kwargs)
+
+
+def run_sudo_cmd(cmd, con_ssh=None, **kwargs):
+    ssh_client = con_ssh or ControllerClient.get_active_controller()
+    if isinstance(ssh_client, list):
+        LOG.info('ssh_client is a LIST:{}'.format(ssh_client))
+        ssh_client = ssh_client[0]
+
+    return ssh_client.exec_sudo_cmd(cmd, **kwargs)
 
 
 def get_track_back(log_file='patching.log', con_ssh=None):
     patching_trace_backs = run_cmd('grep -i "traceback" /var/log/{} 2>/dev/null'.format(log_file), con_ssh=con_ssh)[1]
-    return [record.strip() for record in patching_trace_backs]
+    return [record.strip() for record in patching_trace_backs.splitlines()]
 
 
 def check_error_states(con_ssh=None, pre_states=None, pre_trace_backs=None, no_checking=True, fail_on_error=False):
@@ -152,6 +162,7 @@ def check_error_states(con_ssh=None, pre_states=None, pre_trace_backs=None, no_c
 
 
 def run_patch_cmd(cmd, args='', con_ssh=None, fail_ok=False, timeout=120):
+
     assert cmd in PATCH_CMDS, 'Unknown patch comamnd:<{}>'.format(cmd)
 
     ssh_client = con_ssh or ControllerClient.get_active_controller()
@@ -249,15 +260,14 @@ def delete_patches(patch_ids=None, con_ssh=None):
     code, patch_info, _ = run_patch_cmd('delete', args=args, con_ssh=con_ssh)
     assert 0 == code, 'Failed to delete patch(es):{}'.format(args)
 
-    # return [pi[0] for pi in patch_info]
-    return patch_info
+    return code, patch_info
 
 
 def delete_patch(patch_id, con_ssh=None):
     LOG.info('deleting patch:{}'.format(patch_id))
-    deleted_ids = delete_patches((patch_id,), con_ssh=con_ssh)
+    code, deleted_ids = delete_patches((patch_id,), con_ssh=con_ssh)
 
-    return deleted_ids[0]
+    return code, deleted_ids[0]
 
 
 def upload_patch_file(con_ssh=None, patch_file=None, fail_if_existing=False):
@@ -428,6 +438,31 @@ def get_patch_state(patch_id, con_ssh=None):
     return patch_id_states[patch_id]
 
 
+def __get_patch_ids(con_ssh=None, expected_states=None):
+    _, states = get_patches_states()
+
+    if expected_states is None:
+        return states.keys()
+    else:
+        return [patch_id for patch_id in states if states[patch_id]['state'] in expected_states]
+
+
+def get_partial_applied(con_ssh=None):
+    return __get_patch_ids(con_ssh=con_ssh, expected_states=('Paritial-Apply'))
+
+
+def get_partial_removed(con_ssh=None):
+    return __get_patch_ids(con_ssh=con_ssh, expected_states=('Paritial-Remove'))
+
+
+def get_available_patches(con_ssh=None):
+    return __get_patch_ids(con_ssh=con_ssh, expected_states=('Available'))
+
+
+def get_all_patch_ids(con_ssh=None, expected_states=None):
+    return __get_patch_ids(con_ssh=con_ssh, expected_states=expected_states)
+
+
 def parse_patch_detail(patch_id, output=''):
     LOG.info('parse_patch_detail: output={}'.format(output))
     lines = output.splitlines()
@@ -495,6 +530,15 @@ def get_host_state(host, con_ssh=None):
     return hosts_states.get(host)
 
 
+def get_hosts_in_states(con_ssh=None, expected_states=None):
+    _, states = get_hosts_states(con_ssh=con_ssh)
+
+    if expected_states is None:
+        return states.keys()
+
+    return [host for host in states if states[host]['state'] in expected_states]
+
+
 def get_personality(host, con_ssh=None):
     table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
     subfunc = table_parser.get_value_two_col_table(table_, 'subfunctions')
@@ -515,7 +559,7 @@ def wait_for_host_state(host, expected, con_ssh=None):
 
 
 @repeat(times=1000, wait_first=True, expected_hits=2, message='wait_for_hosts_states')
-def wait_for_host_states(host, expected_states, con_ssh=None):
+def wait_host_states(host, expected_states, con_ssh=None):
     host_state = get_host_state(host, con_ssh=con_ssh)
 
     for state in expected_states.keys():
@@ -592,7 +636,7 @@ def check_host_installed(host, reboot_required=True, con_ssh=None):
 
 def host_install(host, reboot_required=True, fail_if_locked=True, con_ssh=None):
     if reboot_required:
-        code, msg = host_helper.lock_host(host, con_ssh=con_ssh, fail_ok=False)
+        code, msg = host_helper.lock_host(host, con_ssh=con_ssh, fail_ok=False, lock_timeout=1800, timeout=2000)
         LOG.info('lock host: rr={} patch on host={}, locking msg={}'.format(reboot_required, host, msg))
         if -1 == code:
             LOG.warn('host:{} already locked, msg:{}'.format(host, msg))
@@ -620,7 +664,7 @@ def host_install(host, reboot_required=True, fail_if_locked=True, con_ssh=None):
                       'state': 'idle'}
 
     LOG.info('Wait after host-install, host into states: {}'.format(expected_state))
-    code, state = wait_for_host_states(host, expected_state, con_ssh=con_ssh)
+    code, state = wait_host_states(host, expected_state, con_ssh=con_ssh)
     assert 0 == code, \
         'Host:{} failed to reach states, expected={}, actual={}'.format(host, expected_state, state)
 

@@ -209,10 +209,10 @@ class UpgradeVars:
 class PatchingVars:
     __var_dict = {
         'DEF_PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
-        'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_4.0_Test_Patch_Build/',
+        'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build',
         'DEF_PATCH_IN_LAB_BASE_DIR': os.path.join(WRSROOT_HOME, 'patch-files'),
-        'DEF_PATCH_DIR': 'latest',
-        'PATCH_DIR': '/localdisk/loadbuild/jenkins/CGCS_4.0_Test_Patch_Build/latest',
+        'DEF_PATCH_DIR': '/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build',
+        'PATCH_DIR': None,
         'PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
         'USERNAME': 'svc-cgcsauto',  # getpass.getuser()
         'PASSWORD': ')OKM0okm',  # getpass.getpass()
@@ -229,17 +229,4 @@ class PatchingVars:
 
     @classmethod
     def set_patching_var(cls, **kwargs):
-        for k, v in kwargs.items():
-            cls.__var_dict[k.upper()] = v
-
-        patch_dir = cls.__var_dict.get('PATCH_DIR')
-
-        if patch_dir and not patch_dir.startswith('/'):
-            patch_dir = os.path.join(cls.__var_dict['DEF_PATCH_BUILD_BASE_DIR'], patch_dir)
-
-        cls.__var_dict['PATCH_DIR'] = patch_dir
-
-        patch_dir_in_lab = cls.__var_dict.get('PATCH_DIR_IN_LAB')
-
-        if not patch_dir_in_lab:
-            cls.__var_dict['PATCH_DIR_IN_LAB'] = cls.__var_dict['DEF_PATCH_IN_LAB_BASE_DIR']
+        cls.__var_dict.update(**kwargs)
