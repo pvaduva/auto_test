@@ -19,7 +19,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 @mark.parametrize(('vcpus', 'vswitch_affinity', 'numa_nodes', 'numa0', 'numa0_cpus', 'numa0_mem', 'numa1', 'numa1_cpus',
                    'numa1_mem', 'expt_err'), [
     (3, 'prefer', 2, 1, None, None, 0, None, None, 'NumaErr.FLV_UNDEVISIBLE'),
-    (4, 'strict', 2, 0, 0, 512, 1, 1, None, 'NumaErr.FLV_CPU_OR_MEM_UNSPECIFIED')
+    (4, 'strict', 2, 0, 0, 512, 1, 1, None, 'NumaErr.FLV_CPU_OR_MEM_UNSPECIFIED'),
 ])
 def test_flavor_setting_numa_negative(vcpus, vswitch_affinity, numa_nodes, numa0, numa0_cpus, numa0_mem,
                                       numa1, numa1_cpus, numa1_mem, expt_err):

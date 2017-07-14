@@ -863,6 +863,11 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
         if not res:
             return 5, "Web-services for new controller is not active"
 
+    if system_helper.is_two_node_cpe(con_ssh=con_ssh):
+        hypervisor_up_res = wait_for_hypervisors_up(hostname, fail_ok=fail_ok, con_ssh=con_ssh)
+        if not hypervisor_up_res:
+            return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
+
     return rtn
 
 
