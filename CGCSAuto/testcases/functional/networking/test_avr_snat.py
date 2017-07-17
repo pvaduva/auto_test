@@ -5,7 +5,7 @@ from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
 from utils.ssh import NATBoxClient
-from consts.cgcs import VMStatus
+from consts.cgcs import VMStatus, FlavorSpec
 from keywords import vm_helper, nova_helper, host_helper, network_helper, system_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -153,6 +153,15 @@ def test_snat_vm_actions(snat_setups, snat):
 
     LOG.tc_step("Reboot the VM and verify ping from VM")
     vm_helper.reboot_vm(vm_)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
+
+    LOG.tc_step("Resize the vm to a flavor with 2 dedicated cpus and verify ping from VM")
+    new_flv = nova_helper.create_flavor(name='ded', vcpus=2)[1]
+    ResourceCleanup.add('flavor', new_flv, scope='module')
+    nova_helper.set_flavor_extra_specs(new_flv, **{FlavorSpec.CPU_POLICY: 'dedicated'})
+
+    vm_helper.resize_vm(vm_, new_flv)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 

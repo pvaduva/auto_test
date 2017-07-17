@@ -7,7 +7,6 @@ from consts.auth import Tenant
 from consts.cgcs import EventLogID
 from testfixtures.recover_hosts import HostsToRecover
 
-#TODO vxlan tests still need to be completed. Skipped due to steps in test plan are unclear.
 
 @fixture(scope='module')
 def get_vlan_providernet():
@@ -301,7 +300,7 @@ def test_providernet_connectivity_reboot():
     assert len(pre_passed_connectivity_tests['values']) == len(post_passed_connectivity_tests['values'])
 
 
-def test_providernet_connectivity_cli_filters(get_vlan_providernet):
+def test_vlan_providernet_connectivity_cli_filters(get_vlan_providernet):
     """
         US75531 - Providernet Connectivity Test List using CLI
 
@@ -364,7 +363,7 @@ def test_providernet_connectivity_cli_filters(get_vlan_providernet):
         assert result == 0, "Tables are not the same. Filtered using: {}. Error: {}".format(param_filter, error)
 
 
-def test_providernet_connectivity_different_mtu(get_vlan_providernet):
+def test_vlan_providernet_connectivity_different_mtu(get_vlan_providernet):
     """
         US75531 - Providernet Connectivity Test with different MTU size
 
@@ -395,7 +394,7 @@ def test_providernet_connectivity_different_mtu(get_vlan_providernet):
     assert first_test == second_test, "MTU change impacted providernet-connectivity-test-list"
 
 
-def test_providernet_connectivity_delete_segment(get_vlan_providernet):
+def test_vlan_providernet_connectivity_delete_segment(get_vlan_providernet):
     """
         US75531 - Providernet Connectivity Test after deleting vlan segment range
 
