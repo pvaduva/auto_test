@@ -8,6 +8,7 @@ from keywords import vm_helper, nova_helper, network_helper
 
 from testfixtures.fixture_resources import ResourceCleanup
 
+
 def id_params(val):
     if not isinstance(val, str):
         new_val = []

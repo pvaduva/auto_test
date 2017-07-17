@@ -7,7 +7,6 @@ from utils import table_parser
 from utils.tis_log import LOG
 from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper, cinder_helper, glance_helper,\
     host_helper, common, system_helper
-from setup_consts import P1, P2, P3
 
 from consts.heat import Heat, HeatUpdate
 from consts.filepaths import WRSROOT_HOME
@@ -25,6 +24,7 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
             to_verify (list): Resources to verify creation or deletion.
             template_name (str): template to be used to create heat stack.
             stack_name(str): stack name used to create the stack
+            auth_info
 
         Returns (int): return 0 if success 1 if failure
 
@@ -165,10 +165,10 @@ def update_stack(stack_name, template_name=None, ssh_client=None, fail_ok=False,
     for i in range(len(update_params)):
         cmd_list.append("-P %s=%s " % (update_params[i], update_vals[i]))
 
-    #The -x parameter keeps the existing values of parameters not in update_params
+    # The -x parameter keeps the existing values of parameters not in update_params
     cmd_list.append(" -x %s" % stack_name)
     params_str = ''.join(cmd_list)
-    LOG.info("Executing command: heat %s stack-update", params_str);
+    LOG.info("Executing command: heat %s stack-update", params_str)
     exitcode, output = cli.heat('stack-update', params_str, ssh_client=ssh_client, fail_ok=fail_ok,
                                 auth_info=auth_info, rtn_list=True)
 
@@ -180,18 +180,18 @@ def update_stack(stack_name, template_name=None, ssh_client=None, fail_ok=False,
         return [1, output]
     LOG.info("Stack {} updated sucessfully.".format(stack_name))
 
-    LOG.tc_step("Verifying Heat Stack Status for UPDATE_COMPLETE for updated stack %s",stack_name)
+    LOG.tc_step("Verifying Heat Stack Status for UPDATE_COMPLETE for updated stack %s", stack_name)
 
-    if not heat_helper.wait_for_heat_state(stack_name=stack_name,state='UPDATE_COMPLETE',auth_info=auth_info):
+    if not heat_helper.wait_for_heat_state(stack_name=stack_name, state='UPDATE_COMPLETE', auth_info=auth_info):
         return [1, 'stack did not go to state UPDATE_COMPLETE']
     LOG.info("Stack {} is in expected UPDATE_COMPLETE state.".format(stack_name))
-    end_time = time.time();
+    end_time = time.time()
 
     LOG.info("Update took %d seconds", (end_time - start_time))
 
     for item in to_verify:
         LOG.tc_step("Verifying Heat updated resources %s for stack %s", item, stack_name)
-        verify_result = verify_heat_resource(to_verify=item, template_name=t_name,stack_name=stack_name,
+        verify_result = verify_heat_resource(to_verify=item, template_name=t_name, stack_name=stack_name,
                                              auth_info=auth_info)
         if verify_result is not 0:
             LOG.warning("Verify resouces %s updated by heat stack Failed.", item)
@@ -213,6 +213,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
             con_ssh (SSHClient): If None, active controller ssh will be used.
             template_name (str): template to be used to create heat stack.
             auth_info (dict): Tenant dict. If None, primary tenant will be used.
+            delete_after_swact
 
         Returns (tuple): (rnt_code (int), message (str))
 
@@ -319,33 +320,34 @@ def revert_quota(request):
 
     return tenants_quotas
 
+
 # Overall skipif condition for the whole test function (multiple test iterations)
 # This should be a relatively static condition.i.e., independent with test params values
 # @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
-@mark.parametrize(('template_name'), [
-    mark.sanity(('WR_Neutron_ProviderNetRange.yaml')),
-    mark.nightly(('WR_Neutron_ProviderNet.yaml')),
-    mark.nightly(('OS_Cinder_Volume.yaml')),
-    mark.nightly(('OS_Glance_Image.yaml')),
-    mark.nightly(('OS_Ceilometer_Alarm.yaml')),
-    mark.nightly(('OS_Neutron_Port.yaml')),
-    mark.nightly(('OS_Neutron_Net.yaml')),
-    mark.nightly(('OS_Neutron_Subnet.yaml')),
-    mark.nightly(('OS_Nova_Flavor.yaml')),
-    mark.nightly(('OS_Neutron_FloatingIP.yaml')),
-    mark.nightly(('OS_Neutron_Router.yaml')),
-    mark.nightly(('OS_Neutron_RouterGateway.yaml')),
-    mark.nightly(('OS_Neutron_RouterInterface.yaml')),
-    mark.nightly(('OS_Neutron_SecurityGroup.yaml')),
-    mark.nightly(('OS_Nova_ServerGroup.yaml')),
-    mark.nightly(('OS_Nova_KeyPair.yaml')),
-    mark.nightly(('WR_Neutron_QoSPolicy.yaml')),
-    mark.nightly(('OS_Heat_Stack.yaml')),
-    mark.nightly(('OS_Cinder_VolumeAttachment.yaml')),
-    mark.nightly(('OS_Nova_Server.yaml')),
-    mark.nightly(('OS_Heat_AccessPolicy.yaml')),
-    mark.nightly(('OS_Heat_AutoScalingGroup.yaml')),
+@mark.parametrize('template_name', [
+    mark.sanity('WR_Neutron_ProviderNetRange.yaml'),
+    mark.nightly('WR_Neutron_ProviderNet.yaml'),
+    mark.nightly('OS_Cinder_Volume.yaml'),
+    mark.nightly('OS_Glance_Image.yaml'),
+    mark.nightly('OS_Ceilometer_Alarm.yaml'),
+    mark.nightly('OS_Neutron_Port.yaml'),
+    mark.nightly('OS_Neutron_Net.yaml'),
+    mark.nightly('OS_Neutron_Subnet.yaml'),
+    mark.nightly('OS_Nova_Flavor.yaml'),
+    mark.nightly('OS_Neutron_FloatingIP.yaml'),
+    mark.nightly('OS_Neutron_Router.yaml'),
+    mark.nightly('OS_Neutron_RouterGateway.yaml'),
+    mark.nightly('OS_Neutron_RouterInterface.yaml'),
+    mark.nightl('OS_Neutron_SecurityGroup.yaml'),
+    mark.nightly('OS_Nova_ServerGroup.yaml'),
+    mark.nightly('OS_Nova_KeyPair.yaml'),
+    mark.nightly('WR_Neutron_QoSPolicy.yaml'),
+    mark.nightly('OS_Heat_Stack.yaml'),
+    mark.nightly('OS_Cinder_VolumeAttachment.yaml'),
+    mark.nightly('OS_Nova_Server.yaml'),
+    mark.nightly('OS_Heat_AccessPolicy.yaml'),
+    mark.nightly('OS_Heat_AutoScalingGroup.yaml'),
     ])
 # can add test fixture to configure hosts to be certain storage backing
 def test_heat_template(template_name, revert_quota):
