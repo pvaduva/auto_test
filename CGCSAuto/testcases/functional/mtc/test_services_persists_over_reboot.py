@@ -11,7 +11,7 @@ from testfixtures.recover_hosts import HostsToRecover
 @mark.parametrize('host_type', [
     mark.sanity('controller'),
     'compute',
-    'storage'
+    # 'storage'
 ])
 def test_system_persist_over_host_reboot(host_type):
     """
