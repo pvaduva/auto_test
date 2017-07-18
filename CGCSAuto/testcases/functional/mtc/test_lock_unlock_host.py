@@ -11,12 +11,6 @@ from testfixtures.fixture_resources import ResourceCleanup
 from keywords import host_helper,system_helper, nova_helper, vm_helper
 
 
-def test_lock_host_simplex():
-    host = system_helper.get_active_controller_name()
-    host_helper.lock_host(host=host)
-    host_helper.unlock_host(host=host)
-
-
 @mark.sanity
 @mark.cpe_sanity
 def test_lock_active_controller_reject():
