@@ -477,6 +477,17 @@ def wait_for_ssh_disconnect(ssh=None, timeout=120, fail_ok=False):
     return True
 
 
+def _wait_for_simplex_reconnect(con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK):
+    time.sleep(30)
+    wait_for_ssh_disconnect(ssh=con_ssh, timeout=120)
+    time.sleep(30)
+    con_ssh.connect(retry=True, retry_timeout=timeout)
+    # Give it sometime before openstack cmds enables on after host
+    _wait_for_openstack_cli_enable(con_ssh=con_ssh, fail_ok=False, timeout=timeout, check_interval=5, reconnect=True)
+    time.sleep(10)
+    LOG.info("Re-connected via ssh and openstack CLI enabled")
+
+
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,
                 auth_info=Tenant.ADMIN, check_hypervisor_up=True, check_webservice_up=True, check_subfunc=True):
     """
@@ -528,14 +539,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         return 1, output
 
     if is_simplex:
-        time.sleep(30)
-        wait_for_ssh_disconnect(ssh=con_ssh, timeout=120)
-        time.sleep(30)
-        con_ssh.connect(retry=True, retry_timeout=HostTimeout.CONTROLLER_UNLOCK)
-        # Give it sometime before openstack cmds enables on after host
-        _wait_for_openstack_cli_enable(con_ssh=con_ssh, fail_ok=False, timeout=HostTimeout.CONTROLLER_UNLOCK,
-                                       check_interval=5, reconnect=True)
-        time.sleep(10)
+        _wait_for_simplex_reconnect(con_ssh=con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK)
 
     if not wait_for_host_states(host, timeout=30, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
                                 fail_ok=fail_ok):
@@ -653,6 +657,8 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
     if len(hosts_to_unlock) != len(hosts):
         LOG.info("Some host(s) already unlocked. Unlocking the rest: {}".format(hosts_to_unlock))
 
+    con_ssh = ControllerClient.get_active_controller()
+    is_simplex = system_helper.is_simplex(con_ssh=con_ssh)
     hosts_to_check = []
     for host in hosts_to_unlock:
         exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
@@ -661,6 +667,9 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
             res[host] = 1, output
         else:
             hosts_to_check.append(host)
+
+    if is_simplex:
+        _wait_for_simplex_reconnect(con_ssh=con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK)
 
     if not wait_for_hosts_states(hosts_to_check, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh):
         LOG.warning("Some host(s) not in unlocked states after 60 seconds.")
