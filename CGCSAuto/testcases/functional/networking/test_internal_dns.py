@@ -59,6 +59,9 @@ def apply_service_parameters(service):
         new_standby_controller = system_helper.get_standby_controller_name()
         host_helper.lock_host(new_standby_controller)
         host_helper.unlock_host(new_standby_controller)
+    elif not computes_list and len(controller_list) == 1:
+        host_helper.lock_host(node_list)
+        host_helper.unlock_host(node_list)
     else:
         for node in node_list:
             host_helper.lock_host(node)
@@ -215,10 +218,10 @@ def test_ping_between_vms_using_hostnames():
     LOG.tc_step("Log into each VM and ping the other VM using the hostname")
     cmd = "ping -c 3 {}".format(vm2_name)
     with vm_helper.ssh_to_vm_from_natbox(vm1_id) as vm_ssh:
-        vm_ssh.exec_cmd(cmd, fail_ok=False)[0]
+        vm_ssh.exec_cmd(cmd, fail_ok=False)
     cmd = "ping -c 3 {}".format(vm1_name)
     with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm_ssh:
-        vm_ssh.exec_cmd(cmd, fail_ok=False)[0]
+        vm_ssh.exec_cmd(cmd, fail_ok=False)
 
     LOG.tc_step("Restore DNS entries for each subnet in the network")
     dns_string = " ".join(dns_servers)
@@ -243,10 +246,12 @@ def test_ping_between_vms_using_hostnames():
     LOG.tc_step("Log into each VM and ping the other VM using the hostname")
     cmd = "ping -c 3 {}".format(vm2_name)
     with vm_helper.ssh_to_vm_from_natbox(vm1_id) as vm_ssh:
-        vm_ssh.exec_cmd(cmd, fail_ok=True)[0]
+        rc, out = vm_ssh.exec_cmd(cmd, fail_ok=True)
+        assert rc == 2, out
     cmd = "ping -c 3 {}".format(vm1_name)
     with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm_ssh:
-        vm_ssh.exec_cmd(cmd, fail_ok=True)[0]
+        rc, out = vm_ssh.exec_cmd(cmd, fail_ok=True)
+        assert rc == 2, out
 
     LOG.tc_step("Cleanup VMs")
     vm_helper.delete_vms()
