@@ -1045,14 +1045,6 @@ class Telnet:
             log.info("Found login prompt. {} installation has completed".format(node.name))
             return 0
 
-
-
-
-
-
-
-
-
         try:
             log.info("Find BIOS type")
             index, match = self.expect(BIOS_TYPES, BOOT_TYPE_TIMEOUT)[:2]
