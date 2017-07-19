@@ -779,7 +779,7 @@ def host_install(host, reboot_required=True, fail_if_locked=True, con_ssh=None):
     else:
         LOG.info('no-reboot-required, install rr={} patch on host={}, no need to lock'.format(reboot_required, host))
 
-    code, output = run_patch_cmd('host-install', args=host, con_ssh=con_ssh, timeout=900)[0:2]
+    code, output = run_patch_cmd('host-install', args=host, con_ssh=con_ssh, timeout=1200)[0:2]
     if 0 != code:
         LOG.warn('host-install returns: code={}, output={}'.format(code, output))
 
