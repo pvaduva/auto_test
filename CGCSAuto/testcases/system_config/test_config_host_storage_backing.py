@@ -3,7 +3,7 @@ from pytest import mark, fixture
 
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import host_helper, system_helper
+from keywords import host_helper, system_helper, nova_helper, vm_helper
 
 
 @fixture(autouse=True)
@@ -56,6 +56,9 @@ def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
     if len(hosts_with_backing) >= number_of_hosts:
         LOG.info("Already have {} hosts in {} backing. Do nothing".format(len(hosts_with_backing), instance_backing))
         return
+
+    LOG.tc_step("Delete vms if any to prepare for system configuration change with best effort")
+    vm_helper.delete_vms(fail_ok=True)
 
     number_to_config = number_of_hosts - len(hosts_with_backing)
     hosts_to_config = list(set(hosts) - set(hosts_with_backing))[0:number_to_config]
@@ -128,6 +131,9 @@ def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
         backing_to_config = 'lvm' if instance_backing == 'image' else 'image'
         number_to_config = len(hosts_with_backing) - number_of_hosts
         hosts_pool = hosts_with_backing
+
+    LOG.tc_step("Delete vms if any to prepare for system configuration change with best effort")
+    vm_helper.delete_vms(fail_ok=True)
 
     hosts_to_config = hosts_pool[0:number_to_config]
     LOG.tc_step("Configure following hosts to {} backing: {}".format(hosts_to_config, backing_to_config))
