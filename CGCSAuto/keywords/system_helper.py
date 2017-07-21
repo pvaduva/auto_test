@@ -51,6 +51,10 @@ def _get_info_non_cli(cmd, con_ssh=None):
     return output
 
 
+def is_storage_system(con_ssh=None):
+    return bool(get_storage_nodes(con_ssh=con_ssh))
+
+
 def is_two_node_cpe(con_ssh=None):
     """
     Whether it is two node CPE system

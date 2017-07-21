@@ -1,9 +1,9 @@
 
-from pytest import mark
+from pytest import mark, skip
 
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import host_helper
+from keywords import host_helper, system_helper
 
 
 @mark.parametrize(('instance_backing', 'number_of_hosts'), [
@@ -31,6 +31,9 @@ def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
         - Check number of hosts in given instance backing is as specified
 
     """
+    if instance_backing == 'remote' and not system_helper.is_storage_system():
+        skip("Not storage system. Skip configure remote backing")
+
     hosts = host_helper.get_nova_hosts()
     hosts_len = len(hosts)
     host_num_mapping = {
@@ -94,6 +97,9 @@ def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
         'two': 2
     }
     number_of_hosts = host_num_mapping[number_of_hosts]
+
+    if instance_backing == 'remote' and number_of_hosts != 0 and not system_helper.is_storage_system():
+        skip("Not storage system. Skip configure remote backing")
 
     LOG.tc_step("Calculate the hosts to be configured based on test params")
     hosts = host_helper.get_nova_hosts()
