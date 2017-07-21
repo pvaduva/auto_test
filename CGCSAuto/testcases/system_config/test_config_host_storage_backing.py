@@ -1,9 +1,14 @@
 
-from pytest import mark, skip
+from pytest import mark, fixture
 
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import host_helper, system_helper
+
+
+@fixture(autouse=True)
+def check_alarms():
+    pass
 
 
 @mark.parametrize(('instance_backing', 'number_of_hosts'), [
