@@ -7,12 +7,15 @@ from keywords import host_helper
 
 
 @mark.parametrize(('instance_backing', 'number_of_hosts'), [
-    ('image', 2),
-    ('image', 1),
+    ('image', 'two'),
+    ('image', 'one'),
     ('image', 'all'),
-    ('lvm', 2),
-    ('lvm', 1),
+    ('lvm', 'two'),
+    ('lvm', 'one'),
     ('lvm', 'all'),
+    ('remote', 'two'),
+    ('remote', 'one'),
+    ('remote', 'all'),
 ])
 def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
     """
@@ -29,10 +32,15 @@ def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
 
     """
     hosts = host_helper.get_nova_hosts()
-    if number_of_hosts == 'all':
-        number_of_hosts = len(hosts)
+    hosts_len = len(hosts)
+    host_num_mapping = {
+        'all': hosts_len,
+        'two': 2,
+        'one': 1
+    }
+    number_of_hosts = host_num_mapping[number_of_hosts]
 
-    assert len(hosts) >= number_of_hosts, "Not enough nova hosts available for configuration."
+    assert hosts_len >= number_of_hosts, "Not enough nova hosts available for configuration."
 
     hosts_with_backing = host_helper.get_hosts_by_storage_aggregate(instance_backing)
     if len(hosts_with_backing) >= number_of_hosts:
@@ -56,12 +64,15 @@ def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
 
 
 @mark.parametrize(('instance_backing', 'number_of_hosts'), [
-    ('image', 2),
-    ('image', 1),
-    ('image', 0),
-    ('lvm', 2),
-    ('lvm', 1),
-    ('lvm', 0),
+    ('image', 'two'),
+    ('image', 'one'),
+    ('image', 'zero'),
+    ('lvm', 'two'),
+    ('lvm', 'one'),
+    ('lvm', 'zero'),
+    ('remote', 'zero'),
+    ('remote', 'one'),
+    ('remote', 'two')
 ])
 def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
     """
@@ -77,6 +88,12 @@ def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
         - Check number of hosts in given instance backing is as specified
 
     """
+    host_num_mapping = {
+        'zero': 0,
+        'one': 1,
+        'two': 2
+    }
+    number_of_hosts = host_num_mapping[number_of_hosts]
 
     LOG.tc_step("Calculate the hosts to be configured based on test params")
     hosts = host_helper.get_nova_hosts()

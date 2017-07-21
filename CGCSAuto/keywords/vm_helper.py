@@ -3237,7 +3237,7 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
     return 0, []
 
 
-def boot_vms_various_types(storage_backing=None, target_host=None, scope='function'):
+def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='function'):
     """
     Boot following 5 vms and ensure they are pingable from NatBox:
         - vm1: ephemeral=0, swap=0, boot_from_volume
@@ -3249,7 +3249,7 @@ def boot_vms_various_types(storage_backing=None, target_host=None, scope='functi
         storage_backing (str|None): storage backing to set in flavor spec. When None, storage backing which used by
             most up hypervisors will be used.
         target_host (str|None): Boot vm on target_host when specified. (admin role has to be added to tenant under test)
-        scope (str|None): Scope for resource cleanup, valid values: 'function', 'class', 'module', None.
+        cleanup (str|None): Scope for resource cleanup, valid values: 'function', 'class', 'module', None.
             When None, vms/volumes/flavors will be kept on system
 
     Returns (list): list of vm ids
@@ -3257,38 +3257,41 @@ def boot_vms_various_types(storage_backing=None, target_host=None, scope='functi
     """
     LOG.info("Create a flavor without ephemeral or swap disks")
     flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing)[1]
-    if scope:
-        ResourceCleanup.add('flavor', flavor_1, scope=scope)
+    if cleanup:
+        ResourceCleanup.add('flavor', flavor_1, scope=cleanup)
 
     LOG.info("Create another flavor with ephemeral and swap disks")
     flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=1, storage_backing=storage_backing)[1]
-    if scope:
-        ResourceCleanup.add('flavor', flavor_2, scope=scope)
+    if cleanup:
+        ResourceCleanup.add('flavor', flavor_2, scope=cleanup)
 
     LOG.info("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
     vm1_name = "vol_root"
-    vm1 = boot_vm(vm1_name, flavor=flavor_1, source='volume', avail_zone='nova', vm_host=target_host, cleanup=scope)[1]
+    vm1 = boot_vm(vm1_name, flavor=flavor_1, source='volume', avail_zone='nova', vm_host=target_host,
+                  cleanup=cleanup)[1]
 
     wait_for_vm_pingable_from_natbox(vm1)
 
     LOG.info("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
     vm2_name = "vol_ephemswap"
-    vm2 = boot_vm(vm2_name, flavor=flavor_2, source='volume', avail_zone='nova', vm_host=target_host, cleanup=scope)[1]
+    vm2 = boot_vm(vm2_name, flavor=flavor_2, source='volume', avail_zone='nova', vm_host=target_host,
+                  cleanup=cleanup)[1]
 
     wait_for_vm_pingable_from_natbox(vm2)
 
     LOG.info("Boot vm3 from image with flavor flv_rootdisk and wait for it pingable from NatBox")
     vm3_name = "image_root"
-    vm3 = boot_vm(vm3_name, flavor=flavor_1, source='image', avail_zone='nova', vm_host=target_host, cleanup=scope)[1]
+    vm3 = boot_vm(vm3_name, flavor=flavor_1, source='image', avail_zone='nova', vm_host=target_host,
+                  cleanup=cleanup)[1]
 
     wait_for_vm_pingable_from_natbox(vm3)
 
     LOG.info("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it pingable from NatBox")
     vm4_name = 'image_root_attachvol'
-    vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone='nova', vm_host=target_host, cleanup=scope)[1]
+    vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone='nova', vm_host=target_host, cleanup=cleanup)[1]
 
     vol = cinder_helper.create_volume(bootable=False)[1]
-    if scope:
+    if cleanup:
         ResourceCleanup.add('volume', vol, scope='class')
     attach_vol_to_vm(vm4, vol_id=vol)
 
@@ -3296,7 +3299,7 @@ def boot_vms_various_types(storage_backing=None, target_host=None, scope='functi
 
     LOG.info("Boot vm5 from image with flavor flv_localdisk and wait for it pingable from NatBox")
     vm5_name = 'image_ephemswap'
-    vm5 = boot_vm(vm5_name, flavor_2, source='image', avail_zone='nova', vm_host=target_host, cleanup=scope)[1]
+    vm5 = boot_vm(vm5_name, flavor_2, source='image', avail_zone='nova', vm_host=target_host, cleanup=cleanup)[1]
 
     wait_for_vm_pingable_from_natbox(vm5)
 
