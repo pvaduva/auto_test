@@ -32,7 +32,9 @@ def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
 
     """
     if instance_backing == 'remote' and not system_helper.is_storage_system():
-        skip("Not storage system. Skip configure remote backing")
+        # Need to fail instead of skip here because pytest returns 0 exit code when test skipped,
+        # which would be considered as a pass by Jenkins
+        assert False, "Not storage system. Skip configure remote backing"
 
     hosts = host_helper.get_nova_hosts()
     hosts_len = len(hosts)
@@ -55,9 +57,9 @@ def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
     LOG.tc_step("Configure following hosts to {} backing: {}".format(hosts_to_config, instance_backing))
 
     for host in hosts_to_config:
+        HostsToRecover.add(host)
         host_helper.set_host_storage_backing(host=host, inst_backing=instance_backing, unlock=False,
                                              wait_for_host_aggregate=False)
-        HostsToRecover.add(host)
 
     host_helper.unlock_hosts(hosts_to_config, check_hypervisor_up=True, fail_ok=False)
 
@@ -99,7 +101,9 @@ def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
     number_of_hosts = host_num_mapping[number_of_hosts]
 
     if instance_backing == 'remote' and number_of_hosts != 0 and not system_helper.is_storage_system():
-        skip("Not storage system. Skip configure remote backing")
+        # Need to fail instead of skip here because pytest returns 0 exit code when test skipped,
+        # which would be considered as a pass by Jenkins
+        assert False, "Not storage system. Skip configure remote backing"
 
     LOG.tc_step("Calculate the hosts to be configured based on test params")
     hosts = host_helper.get_nova_hosts()
