@@ -215,7 +215,7 @@ def get_standby_controller_name(con_ssh=None):
     Args:
         con_ssh:
 
-    Returns: hostname of the active controller
+    Returns (str): hostname of the active controller
         Further info such as ip, uuid can be obtained via System.CONTROLLERS[hostname]['uuid']
     """
     standby = _get_active_standby(controller='standby', con_ssh=con_ssh)
@@ -385,7 +385,7 @@ def unsuppress_all_events(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
         fail_ok:
         auth_info:
 
-    Returns:
+    Returns (tuple): (<code>(int), <msg>(str))
 
     """
     LOG.info("Un-suppress all events")
@@ -785,6 +785,16 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
 
 
 def host_exists(host, field='hostname', con_ssh=None):
+    """
+
+    Args:
+        host:
+        field:
+        con_ssh:
+
+    Returns (bool): whether given host exists in system host-list
+
+    """
     if not field.lower() in ['hostname', 'id']:
         raise ValueError("field has to be either \'hostname\' or \'id\'")
 
@@ -1195,7 +1205,7 @@ def get_host_mem_values(host, headers, proc_id, wait_for_avail_update=True, con_
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns:
+    Returns (list):
 
     """
 
@@ -1238,7 +1248,7 @@ def get_host_used_mem_values(host, proc_id=0, auth_info=Tenant.ADMIN, con_ssh=No
         auth_info:
         con_ssh:
 
-    Returns:
+    Returns (int):
 
     """
     mem_vals = get_host_mem_values(
@@ -1304,28 +1314,28 @@ def create_storage_profile(host, profile_name='', con_ssh=None):
 
     return uuid
 
-
-def to_delete_apply_storage_profile(host, profile=None, con_ssh=None, fail_ok=False):
-    """
-    Apply a storage profile
-
-    Args:
-        host (str): hostname or id
-        profile (str): name or id of storage-profile
-        fail_ok (bool):
-        con_ssh (SSHClient):
-
-    Returns (dict): proc_id(str) and num_of_cores(int) pairs. e.g.,: {'0': 1, '1': 1}
-
-    """
-    if not profile:
-        raise ValueError('Name or uuid must be provided to apply that storage-profile')
-
-    cmd = 'host-apply-storprofile {} {}'.format(host, profile)
-    LOG.debug('cmd={}'.format(cmd))
-    code, output = cli.system(cmd, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True, auth_info=Tenant.ADMIN)
-
-    return code, output
+#
+# def to_delete_apply_storage_profile(host, profile=None, con_ssh=None, fail_ok=False):
+#     """
+#     Apply a storage profile
+#
+#     Args:
+#         host (str): hostname or id
+#         profile (str): name or id of storage-profile
+#         fail_ok (bool):
+#         con_ssh (SSHClient):
+#
+#     Returns (dict): proc_id(str) and num_of_cores(int) pairs. e.g.,: {'0': 1, '1': 1}
+#
+#     """
+#     if not profile:
+#         raise ValueError('Name or uuid must be provided to apply that storage-profile')
+#
+#     cmd = 'host-apply-storprofile {} {}'.format(host, profile)
+#     LOG.debug('cmd={}'.format(cmd))
+#     code, output = cli.system(cmd, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True, auth_info=Tenant.ADMIN)
+#
+#     return code, output
 
 
 def delete_storage_profile(profile='', con_ssh=None):
@@ -1432,7 +1442,7 @@ def get_host_ports_values(host, header='name', if_name=None, pci_addr=None, proc
         auth_info:
         **kwargs:
 
-    Returns:
+    Returns (list):
 
     """
     table_ = table_parser.table(cli.system('host-port-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
@@ -1525,7 +1535,7 @@ def get_host_ports_for_net_type(host, net_type='data', rtn_list=True, con_ssh=No
         con_ssh:
         auth_info:
 
-    Returns:
+    Returns (dict):
 
     """
     table_ = get_host_interfaces_table(host=host, con_ssh=con_ssh, auth_info=auth_info)
@@ -1564,7 +1574,7 @@ def get_host_port_pci_address(host, interface, con_ssh=None, auth_info=Tenant.AD
         con_ssh:
         auth_info:
 
-    Returns: pci address of interface
+    Returns (str): pci address of interface
 
     """
     table_ = table_parser.table(cli.system('host-port-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
@@ -1587,7 +1597,7 @@ def get_host_port_pci_address_for_net_type(host, net_type='mgmt', rtn_list=True,
         con_ssh:
         auth_info:
 
-    Returns:
+    Returns (list):
 
     """
     ports = get_host_ports_for_net_type(host, net_type=net_type, rtn_list=rtn_list, con_ssh=con_ssh,
@@ -1642,7 +1652,7 @@ def get_service_parameter_values(rtn_value='value', service=None, section=None, 
         name (str):
         con_ssh:
 
-    Returns (dict):
+    Returns (list):
 
     """
     kwargs = {}
@@ -1764,7 +1774,7 @@ def delete_service_parameter(uuid, con_ssh=None, fail_ok=False, check_first=True
         fail_ok:
         check_first (bool): Check if the service parameter exists before
 
-    Returns:
+    Returns (tuple):
 
     """
     if check_first:
@@ -2186,8 +2196,7 @@ def get_software_loads(rtn_vals=('sw_id', 'state', 'software_version'), sw_id=No
 
 
 def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False, source_creden_=None):
-    load_id = get_imported_load_id(load_version=load_version, con_ssh=con_ssh, fail_ok=fail_ok,
-                              source_creden_=source_creden_)
+    load_id = get_imported_load_id(load_version=load_version, con_ssh=con_ssh, source_creden_=source_creden_)
 
     rc, output = cli.system('load-delete', load_id, ssh_client=con_ssh,
                             fail_ok=True, source_creden_=source_creden_)
@@ -2328,7 +2337,7 @@ def get_host_device_list_values(host, field='name', con_ssh=None, auth_info=Tena
         regex (bool): whether to use regular expression to search the value in kwargs
         kwargs: key-value pairs to filter the table
 
-    Returns (dict): output of system host-device-list <host> parsed by table_parser
+    Returns (list): output of system host-device-list <host> parsed by table_parser
 
     """
     table_ = table_parser.table(cli.system('host-device-list', host, ssh_client=con_ssh, auth_info=auth_info))
@@ -2485,7 +2494,6 @@ def get_controller_fs_values(con_ssh=None, auth_info=Tenant.ADMIN):
     return values
 
 
-
 def wait_for_services_enable(timeout=300, fail_ok=False, con_ssh=None):
     """
     Wait for services to be enabled-active in system service-list
@@ -2521,6 +2529,7 @@ def is_infra_network_conifgured(con_ssh=None, auth_info=Tenant.ADMIN):
     Whether infra network is configured in the system
     Args:
         con_ssh (SSHClient):
+        auth_info (dict)
 
     Returns:
         (bool): True if infra network is configured, else False
@@ -2537,6 +2546,7 @@ def is_infra_network_conifgured(con_ssh=None, auth_info=Tenant.ADMIN):
     for row in rows:
         values[row[0].strip()] = row[1].strip()
     return True, values
+
 
 def add_infra_network(infra_network_cidr=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """

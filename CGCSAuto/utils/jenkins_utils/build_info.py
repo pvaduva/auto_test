@@ -100,3 +100,26 @@ def __get_latest_build_dir(build_server, build_dir):
 def get_latest_host_build_dir(build_server=DEFAULT_BUILD_SERVER,
                               latest_build_simlink=BuildServerPath.DEFAULT_HOST_BUILD_PATH):
     return __get_latest_build_dir(build_server=build_server, build_dir=latest_build_simlink)
+
+
+def get_latest_green_build(build_server=DEFAULT_BUILD_SERVER, builds_dir=None):
+    """
+    Get the build id of latest green build
+
+    Args:
+        build_server (str): yow-cgts4-lx, etc
+        builds_dir (str|None): e.g, /localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build. Only used if build_path is None
+
+    Returns (str): such as '2017-07-18_22-01-27'
+    """
+    if not builds_dir:
+        builds_dir = BuildServerPath.DEFAULT_HOST_BUILDS_DIR
+
+    green_path = '{}/latest_green_build'.format(builds_dir)
+
+    with host_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
+        output = bld_srv_ssh.exec_cmd('ls -l {}'.format(green_path), fail_ok=False)[1]
+
+    build_id = output.split(sep='->')[-1].split(sep='/')[-1].strip()
+    print("Latest Green Build is: {}. \nFull output: {}".format(build_id, output))
+    return build_id

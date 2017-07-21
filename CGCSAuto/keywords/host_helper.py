@@ -462,6 +462,32 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         raise exceptions.HostPostCheckFailed(msg)
 
 
+def wait_for_ssh_disconnect(ssh=None, timeout=120, fail_ok=False):
+    if ssh is None:
+        ssh = ControllerClient.get_active_controller()
+
+    end_time = time.time() + timeout
+    while ssh._is_connected(fail_ok=True):
+        if time.time() > end_time:
+            if fail_ok:
+                return False
+            raise exceptions.HostTimeout("Timed out waiting {} ssh to disconnect".format(ssh.host))
+
+    LOG.info("ssh to {} disconnected".format(ssh.host))
+    return True
+
+
+def _wait_for_simplex_reconnect(con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK):
+    time.sleep(30)
+    wait_for_ssh_disconnect(ssh=con_ssh, timeout=120)
+    time.sleep(30)
+    con_ssh.connect(retry=True, retry_timeout=timeout)
+    # Give it sometime before openstack cmds enables on after host
+    _wait_for_openstack_cli_enable(con_ssh=con_ssh, fail_ok=False, timeout=timeout, check_interval=5, reconnect=True)
+    time.sleep(10)
+    LOG.info("Re-connected via ssh and openstack CLI enabled")
+
+
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,
                 auth_info=Tenant.ADMIN, check_hypervisor_up=True, check_webservice_up=True, check_subfunc=True):
     """
@@ -504,10 +530,16 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         LOG.info(message)
         return -1, message
 
+    con_ssh = ControllerClient.get_active_controller()
+    is_simplex = system_helper.is_simplex(con_ssh=con_ssh)
+
     exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
                                   fail_ok=fail_ok, timeout=60)
     if exitcode == 1:
         return 1, output
+
+    if is_simplex:
+        _wait_for_simplex_reconnect(con_ssh=con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK)
 
     if not wait_for_host_states(host, timeout=30, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
                                 fail_ok=fail_ok):
@@ -625,6 +657,8 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
     if len(hosts_to_unlock) != len(hosts):
         LOG.info("Some host(s) already unlocked. Unlocking the rest: {}".format(hosts_to_unlock))
 
+    con_ssh = ControllerClient.get_active_controller()
+    is_simplex = system_helper.is_simplex(con_ssh=con_ssh)
     hosts_to_check = []
     for host in hosts_to_unlock:
         exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
@@ -633,6 +667,9 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
             res[host] = 1, output
         else:
             hosts_to_check.append(host)
+
+    if is_simplex:
+        _wait_for_simplex_reconnect(con_ssh=con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK)
 
     if not wait_for_hosts_states(hosts_to_check, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh):
         LOG.warning("Some host(s) not in unlocked states after 60 seconds.")
@@ -744,6 +781,7 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None):
 def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=1,
                                    reconnect=False, reconnect_timeout=60):
     cli_enable_end_time = time.time() + timeout
+    eof_count = 0
     while True:
         try:
             cli.system('show', ssh_client=con_ssh, timeout=timeout)
@@ -754,6 +792,13 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
                 if con_ssh is None:
                     con_ssh = ControllerClient.get_active_controller()
                 con_ssh.connect(retry_timeout=reconnect_timeout)
+            elif eof_count < 3:
+                eof_count += 1
+            elif fail_ok:
+                LOG.warning("3 EOF caught. Connection lost")
+                return False
+            else:
+                raise
 
         except Exception as e:
             if time.time() > cli_enable_end_time:
@@ -862,6 +907,11 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
         res = wait_for_webservice_up(system_helper.get_active_controller_name(), fail_ok=fail_ok, con_ssh=con_ssh)[0]
         if not res:
             return 5, "Web-services for new controller is not active"
+
+    if system_helper.is_two_node_cpe(con_ssh=con_ssh):
+        hypervisor_up_res = wait_for_hypervisors_up(hostname, fail_ok=fail_ok, con_ssh=con_ssh)
+        if not hypervisor_up_res:
+            return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
 
     return rtn
 

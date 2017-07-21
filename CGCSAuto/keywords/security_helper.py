@@ -555,7 +555,7 @@ class LdapUserManager(object, metaclass=Singleton):
                     False   -       keep the logged in session
 
         Returns (tuple):
-            logged_in (bool)    -   True if seccessfully logged into the specified host
+            logged_in (bool)    -   True if successfully logged into the specified host
                                     using the specified user/password
             password (str)      -   the password used to login
             ssh_con (object)    -   the ssh session logged in

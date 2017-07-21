@@ -4,7 +4,7 @@ class Tenant:
 
     ADMIN = {
         'user': 'admin',
-        'password': 'admin',
+        'password': 'Li69nux*',
         'tenant': 'admin',
         'auth_url': __URL,
         'region': __REGION
@@ -12,7 +12,7 @@ class Tenant:
 
     TENANT1 = {
         'user': 'tenant1',
-        'password': 'tenant1',
+        'password': 'Li69nux*',
         'tenant': 'tenant1',
         'auth_url': __URL,
         'region': __REGION
@@ -20,7 +20,7 @@ class Tenant:
 
     TENANT2 = {
         'user': 'tenant2',
-        'password': 'tenant2',
+        'password': 'Li69nux*',
         'tenant': 'tenant2',
         'auth_url': __URL,
         'region': __REGION

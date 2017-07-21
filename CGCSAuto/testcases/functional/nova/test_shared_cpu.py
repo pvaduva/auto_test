@@ -97,9 +97,10 @@ class TestSharedCpuDisabled:
 
     @mark.parametrize(('vcpus', 'cpu_policy', 'numa_nodes', 'numa_node0', 'shared_vcpu'), [
         mark.p1((2, 'dedicated', 1, 1, 1)),
+        mark.p2((2, 'dedicated', 2, None, 1)),
         mark.p1((3, 'dedicated', 1, 1, 0)),
         mark.p3((64, 'dedicated', 1, 1, 2)),
-        mark.p3((64, 'dedicated', 1, 1, 63)),    # Assuming quota for cores for tenant under test is less than 63
+        mark.p3((64, 'dedicated', 1, 1, 63)),   # Assuming quota for cores for tenant under test is less than 63
     ])
     def test_launch_vm_shared_cpu_setting_negative(self, vcpus, cpu_policy, numa_nodes, numa_node0, shared_vcpu,
                                                    remove_shared_cpu):
@@ -128,7 +129,10 @@ class TestSharedCpuDisabled:
         flavor = nova_helper.create_flavor(vcpus=vcpus, storage_backing=remove_shared_cpu)[1]
         ResourceCleanup.add('flavor', flavor, scope='function')
         nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: cpu_policy})
-        nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.NUMA_NODES: numa_nodes, FlavorSpec.NUMA_0: numa_node0})
+        numa_nodes_flv = {FlavorSpec.NUMA_NODES: numa_nodes}
+        if numa_node0 is not None:
+            numa_nodes_flv[FlavorSpec.NUMA_0] = numa_node0
+        nova_helper.set_flavor_extra_specs(flavor, **numa_nodes_flv)
         nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.SHARED_VCPU: shared_vcpu})
 
         code, vm_id, output, vol_id = vm_helper.boot_vm(name='shared_cpu_negative', flavor=flavor, fail_ok=True)

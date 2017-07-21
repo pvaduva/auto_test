@@ -276,6 +276,15 @@ def check_vm_hard_reboot(obj):
     obj.check_numa_affinity(msg_prefx='hard_reboot')
 
 
+def _convert_irqmask_pcialias(irq_mask, pci_alias):
+    if irq_mask is not None:
+        irq_mask = irq_mask.split('irqmask_')[-1]
+    if pci_alias is not None:
+        pci_alias = pci_alias.split('pcialias_')[-1]
+
+    return irq_mask, pci_alias
+
+
 class TestVmPCIOperations:
     @fixture(scope='class')
     def pci_dev_numa_nodes(self, vif_model_check):
@@ -496,9 +505,9 @@ class TestVmPCIOperations:
     @mark.parametrize(('pci_numa_affinity', 'pci_irq_affinity_mask', 'pci_alias'), [
         mark.p1((None, None, None)),
         mark.p1(('strict', None, None)),
-        mark.nightly(('strict', '1,3', None)),
-        mark.p1(('strict', None, '3')),
-        mark.p2(('strict', '1,3', '3')),
+        mark.nightly(('strict', 'irqmask_1,3', None)),
+        mark.p1(('strict', None, 'pcialias_3')),
+        mark.p2(('strict', 'irqmask_1,3', 'pcialias_3')),
         # mark.p3(('prefer', '1,3', '3')),  # TODO: expt behavior on msi_irq > cpulist mapping unknown
         # mark.p3(('prefer', None, None)),  # TODO same as above
     ])
@@ -528,6 +537,7 @@ class TestVmPCIOperations:
         Teardown:
             - Delete created vms and flavor
         """
+        pci_irq_affinity_mask, pci_alias = _convert_irqmask_pcialias(pci_irq_affinity_mask, pci_alias)
         boot_forbidden = False
         migrate_forbidden = False
         if pci_numa_affinity == 'strict' and pci_alias is not None:
