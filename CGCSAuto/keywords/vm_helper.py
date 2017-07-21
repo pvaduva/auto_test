@@ -2509,14 +2509,19 @@ def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True, con_ssh=N
     LOG.info("Initiate sudo reboot from vm")
 
     def _sudo_reboot(vm_ssh_):
-        code, output = vm_ssh_.exec_sudo_cmd('reboot', get_exit_code=False)
+        expt_prompt = 'Rebooting|Broken pipe'
+        code, output = vm_ssh_.exec_sudo_cmd('reboot -f', get_exit_code=False, expt_prompt=expt_prompt)
         expt_string = 'The system is going down for reboot'
+        expt_string2 = 'Broken pipe|{}'.format(expt_string)
         if expt_string in output:
             # Sometimes system rebooting msg will be displayed right after reboot cmd sent
             vm_ssh_.parent.flush()
             return
+
         try:
-            index = vm_ssh_.expect([expt_string, vm_ssh.prompt], timeout=60)
+            time.sleep(10)
+            vm_ssh_.send('')
+            index = vm_ssh_.expect([expt_string2, vm_ssh_.prompt], timeout=60)
             if index == 1:
                 raise exceptions.VMOperationFailed("Unable to reboot vm {}")
             vm_ssh_.parent.flush()
