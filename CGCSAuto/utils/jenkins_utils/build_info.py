@@ -118,7 +118,7 @@ def get_latest_green_build(build_server=DEFAULT_BUILD_SERVER, builds_dir=None):
     green_path = '{}/latest_green_build'.format(builds_dir)
 
     with host_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
-        output = bld_srv_ssh.exec_cmd('ls -l {}'.format(green_path), fail_ok=False)[1]
+        output = bld_srv_ssh.exec_cmd('ls -l {} | cat'.format(green_path), fail_ok=False)[1]
 
     build_id = output.split(sep='->')[-1].split(sep='/')[-1].strip()
     print("Latest Green Build is: {}. \nFull output: {}".format(build_id, output))
