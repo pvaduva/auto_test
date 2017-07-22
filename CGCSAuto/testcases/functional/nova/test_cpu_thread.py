@@ -877,8 +877,8 @@ class TestHTEnabled:
 
         prev_cpus = pre_hosts_cpus[vm_host]
 
-        prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,
-                                          cpu_thr_pol=cpu_thr_pol, vm_host=vm_host)[1]
+        prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus,
+                                                          cpu_pol=cpu_pol, cpu_thr_pol=cpu_thr_pol, vm_host=vm_host)[1]
 
         LOG.tc_step("Perform following nova action(s) on vm {}: {}".format(vm_id, nova_actions))
         if isinstance(nova_actions, str):
@@ -1057,8 +1057,14 @@ class TestHTDisabled:
     @fixture(scope='class', autouse=True)
     def ensure_nonht(self, ht_and_nonht_hosts):
         ht_hosts, non_ht_hosts = ht_and_nonht_hosts
+        if not non_ht_hosts:
+            skip("No host with HT disabled")
+
         if ht_hosts:
-            skip("There are HT enabled hosts")
+            LOG.fixture_step("Locking HT hosts to ensure only non-HT hypervisors available")
+            HostsToRecover.add(ht_hosts, scope='class')
+            for host_ in ht_hosts:
+                host_helper.lock_host(host_, swact=True)
 
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus', 'expt_err'), [
         mark.p1((2, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL')),
@@ -1081,10 +1087,11 @@ class TestHTDisabled:
             expt_err (str|None): expected error message in nova show if any
 
         Skip condition:
-            - no host is hyperthreading enabled on system
+            - All hosts are hyperthreading enabled on system
 
         Setups:
             - Find out HT hosts and non-HT_hosts on system   (module)
+            - Enusre no HT hosts on system
 
         Test Steps:
             - Create a flavor with given number of vcpus
@@ -1092,10 +1099,10 @@ class TestHTDisabled:
             - Get the host vcpu usage before booting vm
             - Attempt to boot a vm with above flavor
                 - if expt_err is None:
-                    - Ensure vm is booted on HT host for 'require' vm
+                    - Ensure vm is booted on non-HT host for 'isolate'/'prefer' vm
                     - Check vm-topology, host side vcpu usage, topology from within the guest to ensure vm
                         is properly booted
-                - else, ensure expected error message is included in nova show
+                - else, ensure expected error message is included in nova show for 'require' vm
 
         Teardown:
             - Delete created vm, volume, flavor
@@ -1125,8 +1132,8 @@ class TestHTDisabled:
             LOG.tc_step("Check expected fault message displayed in nova show")
             fault_msg = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
             flavor_pol = "u'{}'".format(cpu_thread_policy) if cpu_thread_policy is not None else None
-            requsted_thread_pols = '[{}, None]'.format(flavor_pol)
-            assert eval(expt_err).format(requsted_thread_pols) in fault_msg
+            requested_thread_pols = '[{}, None]'.format(flavor_pol)
+            assert eval(expt_err).format(requested_thread_pols) in fault_msg
         else:
             assert 0 == code, "Boot vm with isolate policy was unsuccessful. Details: {}".format(msg)
 
