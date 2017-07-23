@@ -541,7 +541,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
     if is_simplex:
         _wait_for_simplex_reconnect(con_ssh=con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK)
 
-    if not wait_for_host_states(host, timeout=30, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
+    if not wait_for_host_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
                                 fail_ok=fail_ok):
         return 2, "Host is not in unlocked state"
 
@@ -575,7 +575,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         is_compute = 'compute' in string_total
 
         if check_hypervisor_up and is_compute:
-            if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=120)[0]:
+            if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh,
+                                           timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL)[0]:
                 return 6, "Host is not up in nova hypervisor-list"
 
         if check_webservice_up and is_controller:
@@ -703,13 +704,14 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
             computes += controllers
 
         if check_hypervisor_up and computes:
-            hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh, timeout=120)[1]
+            hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh,
+                                                           timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL)[1]
             for host in hosts_hypervisordown:
                 res[host] = 5, "Host is not up in nova hypervisor-list"
                 hosts_avail = list(set(hosts_avail) - set(hosts_hypervisordown))
 
         if check_webservice_up and controllers:
-            hosts_webdown = wait_for_webservice_up(controllers, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[1]
+            hosts_webdown = wait_for_webservice_up(controllers, fail_ok=fail_ok, con_ssh=con_ssh, timeout=180)[1]
             for host in hosts_webdown:
                 res[host] = 6, "Host web-services is not active in system servicegroup-list"
             hosts_avail = list(set(hosts_avail) - set(hosts_webdown))
