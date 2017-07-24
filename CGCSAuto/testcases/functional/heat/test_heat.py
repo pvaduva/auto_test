@@ -339,7 +339,7 @@ def revert_quota(request):
     mark.nightly('OS_Neutron_Router.yaml'),
     mark.nightly('OS_Neutron_RouterGateway.yaml'),
     mark.nightly('OS_Neutron_RouterInterface.yaml'),
-    mark.nightl('OS_Neutron_SecurityGroup.yaml'),
+    mark.nightly('OS_Neutron_SecurityGroup.yaml'),
     mark.nightly('OS_Nova_ServerGroup.yaml'),
     mark.nightly('OS_Nova_KeyPair.yaml'),
     mark.nightly('WR_Neutron_QoSPolicy.yaml'),
@@ -376,6 +376,12 @@ def test_heat_template(template_name, revert_quota):
         for tenant_id, network_quota in tenants_quotas.items():
             network_quota = network_helper.get_quota('network', tenant_id=tenant_id)
             network_helper.update_quotas(tenant_id=tenant_id, network=network_quota + 2)
+
+    # create new image to do update later
+    if template_name == 'OS_Nova_Server.yaml':
+        LOG.tc_step("Creating an Image to be used for heat update later")
+        image_id = glance_helper.create_image(name='tis-centos2')[1]
+        ResourceCleanup.add('image', image_id)
 
     # add test step
     return_code, msg = verify_basic_template(template_name)
