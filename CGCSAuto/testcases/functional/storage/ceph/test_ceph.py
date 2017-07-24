@@ -1048,7 +1048,6 @@ def _test_exceed_size_of_img_pool():
     assert ceph_healthy, msg
 
 
-# TODO: remove '_' before test name after this test is completed.
 @mark.usefixtures('ceph_precheck')
 def test_import_large_images_with_cache_raw():
     """
@@ -1080,6 +1079,8 @@ def test_import_large_images_with_cache_raw():
 
     con_ssh = ControllerClient.get_active_controller()
     img = 'cgcs-guest'
+    glance_helper.get_guest_image(guest_os=img)
+
     base_img = img + '.img'
     qcow2_img = img + '.qcow2'
     new_img = '40GB' + base_img

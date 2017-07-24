@@ -312,7 +312,7 @@ class TestMutiPortsPCI:
 
     @mark.parametrize('vifs', [
         mark.p2(['virtio', 'avp', 'pci-passthrough']),
-        mark.p2(['virtio_x6', 'pci-sriov_x8']),
+        # mark.p2(['virtio_x7', 'pci-sriov_x7']),       This test requires compute configured with 8+ sriov vif
         mark.p2(['virtio_x6', 'avp_x6', 'pci-passthrough']),
         mark.p2([('virtio_x7', '05:03'), ('avp_x5', '00:04'), ('pci-sriov', '05:02')]),
         mark.p3((['pci-sriov', 'pci-passthrough'])),

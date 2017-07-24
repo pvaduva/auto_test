@@ -195,8 +195,6 @@ def mount_attached_volume(vm_id, rootfs, vm_image_name=None):
             return True
 
 
-
-
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
             block_device_mapping=None,  vm_host=None, avail_zone=None, file=None, config_drive=False,

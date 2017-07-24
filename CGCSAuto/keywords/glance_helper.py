@@ -414,7 +414,8 @@ def get_guest_image(guest_os, rm_image=True):
     """
     Get or create a glance image with given guest OS
     Args:
-        guest_os (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11
+        guest_os (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11, tis-centos-guest,
+                cgcs-guest
         rm_image (bool): whether or not to rm image from /home/wrsroot/images after creating glance image
 
     Returns (str): image_id
