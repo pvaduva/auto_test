@@ -15,7 +15,7 @@ from keywords import patching_helper
 from keywords import system_helper
 from utils import local_host
 from utils import table_parser, cli
-from utils.ssh import SSHClient
+from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
 from utils import lab_info
 
@@ -87,6 +87,7 @@ def find_existing_patch_files(file_name_keyword, including_patches_apply_to_all=
 
     matching_files = list(set(matching_files))
 
+    con_ssh = ControllerClient.get_active_controller()
     build_id = lab_info.get_build_id(con_ssh=con_ssh)
     if not build_id:
         LOG.warn('Failed to get build-id')
