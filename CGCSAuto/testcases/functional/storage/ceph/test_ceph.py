@@ -340,9 +340,12 @@ def test_ceph_reboot_storage_node():
         host_helper.wait_for_host_states(host, availability='offline')
         LOG.tc_step("Results: {}".format(results))          # yang TODO log added to keyword, still needed?
 
-        time.sleep(1)
         LOG.tc_step('Check health of CEPH cluster')
-        ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+        end_time = time.time() + 10
+        while time.time() < end_time:
+            ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+            if not ceph_healthy:
+                break
         assert not ceph_healthy, msg
         LOG.info(msg)
 
