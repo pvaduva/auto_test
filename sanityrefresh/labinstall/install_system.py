@@ -283,6 +283,7 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
     TC_17_06_pattern = re.compile(TC_17_06_REGEX)
     TS_16_10_pattern = re.compile(TS_16_10_REGEX)
     TS_15_12_pattern = re.compile(TS_15_12_REGEX)
+
     if TC_17_06_pattern.match(tis_blds_dir):
         prestage_load_path = TC_17_06_WKSPCE
         cmd = "test -d " + prestage_load_path
@@ -297,7 +298,6 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
             msg = "Load path {} not found".format(prestage_load_path)
             log.error(msg)
             wr_exit()._exit(1, msg)
-
     elif TS_15_12_pattern.match(tis_blds_dir):
         prestage_load_path = TS_15_12_WKSPCE
         cmd = "test -d " + prestage_load_path
@@ -316,7 +316,8 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
         msg = "Load path {} not found".format(load_path)
         log.error(msg)
         wr_exit()._exit(1, msg)
-    return load_path,prestage_load_path
+
+    return load_path, prestage_load_path
 
 def verify_custom_lab_cfg_location(lab_cfg_location, tis_on_tis, simplex, barcode_controller, barcode_compute):
     ''' Verify that the correct configuration file is used in setting up the
@@ -380,6 +381,8 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on
     ''' Get the directory path for the configuration file that is used in
         setting up the lab.
     '''
+
+    # Determine where to find configuration files, e.g. TiS_config.ini, etc.
     if load_path == TC_17_06_WKSPCE:
         lab_cfg_rel_path = TC_17_06_LAB_REL_PATH + "/yow/" + lab_cfg_location
         lab_cfg_path = load_path + "/" + lab_cfg_rel_path
@@ -391,14 +394,10 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on
         lab_cfg_path = load_path + "/" + lab_cfg_rel_path
 
     else:
-        if override == "yes":
-            load_path = DEFAULT_WKSPCE + "/" + DEFAULT_REL + "/" + DEFAULT_BLD
-
-        if host_os == "centos" or override == "yes":
+        lab_cfg_path = load_path + "/lab/yow/" + lab_cfg_location
+        cmd = "test -d " + lab_cfg_path
+        if bld_server_conn.exec_cmd(cmd)[0] != 0 or override == "yes":
             lab_cfg_rel_path = CENTOS_LAB_REL_PATH + "/yow/" + lab_cfg_location
-            lab_cfg_path = load_path + "/" + lab_cfg_rel_path
-        else:
-            lab_cfg_rel_path = LAB_YOW_REL_PATH + "/" + lab_cfg_location
             lab_cfg_path = load_path + "/" + lab_cfg_rel_path
 
     cmd = "test -d " + lab_cfg_path
@@ -460,16 +459,6 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on
         msg = 'Guest directory path does not exist on build server: {}'.format(guest_load_path)
         log.error(msg)
         wr_exit()._exit(1, msg)
-
-    # Confirm we have a valid cgcs guest
-    #guest_path = guest_load_path + "/" + DEFAULT_GUEST
-    #cmd = "test -f " + guest_path
-    #if bld_server_conn.exec_cmd(cmd)[0] == 0:
-    #    log.info('Using guest location: {}'.format(guest_path))
-    #else:
-    #    msg = 'Guest {} not found in {}'.format(DEFAULT_GUEST, guest_path)
-    #    log.error(msg)
-    #    wr_exit()._exit(1, msg)
 
     return lab_cfg_path, lab_settings_filepath
 
@@ -1337,44 +1326,32 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
         controller0.telnet_conn.login()
 
         # Think we only need this if we burn/boot from USB
-
-        setupNetworking(host_os)
+        if burn_usb or boot_usb:
+            setupNetworking(host_os)
 
         # Reconnect ssh session
         controller0.ssh_conn.disconnect()
         controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
 
 
-def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
-                           guest_load_path, host_os, override,
-                           small_footprint, lab_cfg_location, simplex,
+def downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, load_path,
+                           guest_load_path, host_os, override, lab_cfg_location,
                            centos_lab_path = CENTOS_LAB_REL_PATH,
                            heat_temp_path = HEAT_TEMPLATES_PATH):
 
-    # Download configuration files
 
     pre_opts = "sshpass -p '{0}'".format(WRSROOT_PASSWORD)
-    bld_server_conn.rsync(LICENSE_FILEPATH, WRSROOT_USERNAME,
-                          controller0.host_ip,
-                          os.path.join(WRSROOT_HOME_DIR, "license.lic"),
-                          pre_opts=pre_opts)
-    if host_os == "centos":
-        if cumulus:
-            scripts_path = os.path.join(DEFAULT_WKSPCE, DEFAULT_REL,
-                                        DEFAULT_BLD, centos_lab_path, "scripts")
-            heat_path = os.path.join(DEFAULT_WKSPCE, DEFAULT_REL,
-                                     DEFAULT_BLD, heat_temp_path)
-        else:
-            scripts_path = load_path + "/" + centos_lab_path + "/scripts/"
-            heat_path = load_path + "/" + heat_temp_path
 
-        bld_server_conn.rsync(os.path.join(scripts_path, "*"),
+    if cumulus:
+        bld_server_conn.rsync(os.path.join(DEFAULT_WKSPCE, DEFAULT_REL,
+                                           DEFAULT_BLD, centos_lab_path,
+                                           "scripts", "*"),
+                                           WRSROOT_USERNAME, controller0.host_ip,
+                                           WRSROOT_HOME_DIR, pre_opts=pre_opts)
+        bld_server_conn.rsync(os.path.join(DEFAULT_WKSPCE, DEFAULT_REL,
+                              DEFAULT_BLD, heat_temp_path, "*"),
                               WRSROOT_USERNAME, controller0.host_ip,
-                              WRSROOT_HOME_DIR, pre_opts=pre_opts)
-        bld_server_conn.rsync(os.path.join(heat_path, "*"),
-                              WRSROOT_USERNAME, controller0.host_ip, \
-                              WRSROOT_HEAT_DIR + "/",\
-                              pre_opts=pre_opts)
+                              WRSROOT_HEAT_DIR, pre_opts=pre_opts)
     else:
         if load_path.find(TS_15_12_WKSPCE) > -1:
             bld_server_conn.rsync(os.path.join(TS_15_12_WKSPCE, TS_15_12_LAB_REL_PATH, "scripts", "*"),
@@ -1384,22 +1361,27 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
             bld_server_conn.rsync(os.path.join(TS_16_10_WKSPCE, TS_16_10_LAB_REL_PATH, "scripts","*"),
                                   WRSROOT_USERNAME, controller0.host_ip,
                                   WRSROOT_HOME_DIR, pre_opts=pre_opts)
-        else:
-            bld_server_conn.rsync(os.path.join(load_path, LAB_SCRIPTS_REL_PATH, "*"),
+        elif load_path.find(TC_17_06_WKSPCE) > -1:
+            bld_server_conn.rsync(os.path.join(TC_17_06_WKSPCE, TC_17_06_LAB_REL_PATH, "scripts","*"),
                                   WRSROOT_USERNAME, controller0.host_ip,
                                   WRSROOT_HOME_DIR, pre_opts=pre_opts)
+        else:
+            scripts_path = lab_cfg_path + "/../../scripts/"
+            bld_server_conn.rsync(os.path.join(scripts_path, "*"),
+                                    WRSROOT_USERNAME, controller0.host_ip,
+                                    WRSROOT_HOME_DIR, pre_opts=pre_opts)
 
-    # If override is set to yes, grab the TiS_config.ini_<host_os> file from
-    # latest release and directory
-    if override == "yes":
-        load_path = "-L " + DEFAULT_WKSPCE + "/" + DEFAULT_REL + "/" + DEFAULT_BLD
-        lab_cfg_rel_path = CENTOS_LAB_REL_PATH + "/yow/" + lab_cfg_location
-        lab_cfg_path = load_path + "/" + lab_cfg_rel_path
+        bld_server_conn.rsync(os.path.join(load_path, heat_temp_path, "*"),
+                                WRSROOT_USERNAME, controller0.host_ip, \
+                                WRSROOT_HEAT_DIR + "/",\
+                                pre_opts=pre_opts)
 
+    # Grab the configuration files, e.g. TiS_config.ini_centos, etc.
     bld_server_conn.rsync(os.path.join(lab_cfg_path, "*"),
                           WRSROOT_USERNAME, controller0.host_ip,
                           WRSROOT_HOME_DIR, pre_opts=pre_opts)
 
+    # Get the appropriate guest image
     bld_server_conn.rsync(os.path.join(guest_load_path, "cgcs-guest.img"),
                           WRSROOT_USERNAME, controller0.host_ip, \
                           WRSROOT_IMAGES_DIR + "/",\
@@ -1410,14 +1392,18 @@ def downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
                           WRSROOT_IMAGES_DIR + "/tis-centos-guest.img",\
                           pre_opts=pre_opts, allow_fail=True)
 
-    if small_footprint:
-        bld_server_conn.rsync(SFP_LICENSE_FILEPATH, WRSROOT_USERNAME,
-                          controller0.host_ip,
-                          os.path.join(WRSROOT_HOME_DIR, "license.lic"),
-                          pre_opts=pre_opts)
+    # Get licenses
+    print("This is load_path: {}".format(load_path))
+    if lab_type == "regular" or lab_type == "storage":
+        license = LICENSE_FILEPATH
+    elif lab_type == "cpe":
+        license = SFP_LICENSE_FILEPATH
+    elif lab_type == "simplex" and "R3" in load_path:
+        license = SFP_LICENSE_FILEPATH
+    else:
+        license = SIMPLEX_LICENSE_FILEPATH
 
-    if simplex:
-        bld_server_conn.rsync(SIMPLEX_LICENSE_FILEPATH, WRSROOT_USERNAME,
+    bld_server_conn.rsync(license, WRSROOT_USERNAME,
                           controller0.host_ip,
                           os.path.join(WRSROOT_HOME_DIR, "license.lic"),
                           pre_opts=pre_opts)
@@ -1962,9 +1948,10 @@ def main():
 
     if tis_on_tis:
         guest_load_path = "{}/{}".format(DEFAULT_WKSPCE, guest_bld_dir)
-    load_path,prestage_load_path = get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
+    load_path, prestage_load_path = get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
                                   tis_bld_dir)
-
+    print("This is load path: {}".format(load_path))
+    print("This is prestage load path: {}".format(prestage_load_path))
 
     if os.path.isdir(lab_cfg_location):
         barcode_controller = args.controller
@@ -2007,11 +1994,6 @@ def main():
 
     # get lab name from config file
     if lab_name is None:
-        if override == "yes":
-            or_load_path = DEFAULT_WKSPCE + "/" + DEFAULT_REL + "/" + DEFAULT_BLD
-            lab_cfg_rel_path = CENTOS_LAB_REL_PATH + "/yow/" + lab_cfg_location
-            lab_cfg_path = or_load_path + "/" + lab_cfg_rel_path
-
         lab_name = get_system_name(bld_server_conn, lab_cfg_path)
         log.info(lab_name)
         args.lab_name = lab_name
@@ -2234,20 +2216,21 @@ def main():
 
     executed = False
     if do_next_install_step(lab_type, lab_install_step):
-        if prestage_load_path.find(TS_16_10_WKSPCE) > -1:
-            downloadLabConfigFiles(bld_server_conn, lab_cfg_path, prestage_load_path,
-                                   guest_load_path, host_os, override, small_footprint,
-                                   lab_cfg_location, simplex, TS_16_10_LAB_REL_PATH,
-                                   TS_16_10_HEAT_TEMPLATE_PATH)
+        if prestage_load_path.find(TC_17_06_WKSPCE) > -1:
+            downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, prestage_load_path,
+                                   guest_load_path, host_os, override, lab_cfg_location,
+                                   TC_17_06_LAB_REL_PATH, TC_17_06_HEAT_TEMPLATE_PATH)
+        elif prestage_load_path.find(TS_16_10_WKSPCE) > -1:
+            downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, prestage_load_path,
+                                   guest_load_path, host_os, override, lab_cfg_location,
+                                   TS_16_10_LAB_REL_PATH, TS_16_10_HEAT_TEMPLATE_PATH)
         elif prestage_load_path.find(TS_15_12_WKSPCE) > -1:
-            downloadLabConfigFiles(bld_server_conn, lab_cfg_path, prestage_load_path,
-                                   guest_load_path, host_os, override, small_footprint,
-                                   lab_cfg_location, simplex, TS_15_12_LAB_REL_PATH,
-                                   TS_15_12_HEAT_TEMPLATE_PATH)
+            downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, prestage_load_path,
+                                   guest_load_path, host_os, override, lab_cfg_location,
+                                   TS_15_12_LAB_REL_PATH, TS_15_12_HEAT_TEMPLATE_PATH)
         else:
-            downloadLabConfigFiles(bld_server_conn, lab_cfg_path, load_path,
-                                   guest_load_path, host_os, override, small_footprint,
-                                   lab_cfg_location, simplex)
+            downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, load_path,
+                                   guest_load_path, host_os, override, lab_cfg_location)
         set_install_step_complete(lab_install_step)
 
     if stop == "2":
