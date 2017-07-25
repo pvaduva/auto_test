@@ -1078,9 +1078,21 @@ def get_vm_boot_info(vm_id, auth_info=None, con_ssh=None):
         volumes = _get_vm_volumes(table_)
         if len(volumes) == 0:
             raise exceptions.VMError("Booted from volume, but no volume id found.")
+        elif len(volumes) == 1:
+            LOG.warning("VM booted from volume. Taking the only volume as boot source")
+            return {'type': 'volume', 'id': volumes[0]}
         elif len(volumes) > 1:
-            LOG.warning("VM booted from volume. Multiple volumes found, taking the first volume as boot source")
-        return {'type': 'volume', 'id': volumes[0]}
+            LOG.warning("VM booted from volume. Multiple volumes found, taking the boot-able volume as boot source")
+            volume_id = ''
+            for volume in volumes:
+                table_ = table_parser.table(cli.cinder('show', volume))
+                bootable = table_parser.get_value_two_col_table(table_, 'bootable')
+                if bootable:
+                    volume_id = volume
+                    break
+            if volume_id == '':
+                raise exceptions.VMError("Booted from volume, but no bootable volume attached.")
+            return {'type': 'volume', 'id': volume_id}
     else:
         match = re.search(UUID, image)
         return {'type': 'image', 'id': match.group(0)}
