@@ -1534,11 +1534,11 @@ def get_logcores_counts(host, proc_ids=(0, 1), thread='0', functions=None, con_s
     Args:
         host:
         proc_ids:
-        thread:
+        thread (str|list): '0' or ['0', '1']
         con_ssh:
         functions (list|str)
 
-    Returns (dict):
+    Returns (list):
 
     """
     table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh))

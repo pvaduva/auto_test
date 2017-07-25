@@ -109,10 +109,22 @@ def get_pci_hosts(vif_model, pnet_name):
     if len(valid_pci_hosts) < 2:
         skip("Less than 2 hosts configured with pci-sriov interface with same provider network")
 
-    if vif_model == 'pci-sriov':
-        valid_pci_hosts = valid_pci_hosts[0:2]
-
     return valid_pci_hosts
+
+
+def get_host_with_min_vm_cores_per_proc(candidate_hosts):
+    # Get initial host with least vcpus
+    min_cores_per_proc = 200
+    min_core_host = None
+    for host_ in candidate_hosts:
+        proc0_cores, proc1_cores = host_helper.get_logcores_counts(host_, proc_ids=(0, 1), thread=['0', '1'],
+                                                                   functions='VMs')
+        min_cores = min(proc0_cores, proc1_cores)
+        if min_cores < min_cores_per_proc:
+            min_cores_per_proc = min_cores
+            min_core_host = host_
+
+    return min_core_host, min_cores_per_proc
 
 
 class TestSriov:
@@ -124,12 +136,22 @@ class TestSriov:
         net_type, pci_net, pci_net_id, pnet_id, pnet_name = get_pci_net(request, vif_model, primary_tenant,
                                                                         primary_tenant_name, other_tenant)
 
+        LOG.fixture_step("Calculate number of vms and number of vcpus for each vm")
         pci_hosts = get_pci_hosts(vif_model, pnet_name)
+        vfs_conf, vfs_use_init = nova_helper.get_pci_interface_stats_for_providernet(
+                pnet_id, fields=('pci_vfs_configured', 'pci_vfs_used'))
 
-        # Get initial host with least vcpus
-        host_cpus = host_helper.get_vcpus_for_computes(hosts=pci_hosts, rtn_val='total')
-        initial_host = min(host_cpus, key=host_cpus.get)
+        # TODO vfs configured per host is inaccurate when hosts are configured differently
+        vfs_conf_per_host = vfs_conf/len(pci_hosts)
+        if vfs_conf_per_host < 4:
+            skip('Less than 4 {} interfaces configured on each host'.format(vif_model))
+        pci_hosts = pci_hosts[:2]
+
+        vm_num = min(4, int(vfs_conf_per_host / 4) * 2)
+
+        initial_host, min_cores_per_proc = get_host_with_min_vm_cores_per_proc(pci_hosts)
         other_host = pci_hosts[0] if initial_host == pci_hosts[1] else pci_hosts[1]
+        vm_vcpus = int(min_cores_per_proc / (vm_num/2))
 
         def remove_host_from_zone():
             LOG.fixture_step("Remove {} hosts from cgcsauto zone".format(vif_model))
@@ -141,7 +163,7 @@ class TestSriov:
 
         nics = get_pci_vm_nics(vif_model, pci_net_id)
 
-        return net_type, pci_net, pci_hosts, pnet_id, nics, initial_host, other_host
+        return net_type, pci_net, pci_hosts, pnet_id, nics, initial_host, other_host, vfs_use_init, vm_num, vm_vcpus
 
     def test_sriov_robustness(self, sriov_prep, add_admin_role_func):
         """
@@ -170,23 +192,18 @@ class TestSriov:
             - Remove cgcsauto aggregate     - class
 
         """
-        net_type, pci_net, pci_hosts, pnet_id, nics, initial_host, other_host = sriov_prep
+        net_type, pci_net, pci_hosts, pnet_id, nics, initial_host, other_host, vfs_use_init, vm_num, vm_vcpus = \
+            sriov_prep
         vif_model = 'pci-sriov'
-        vfs_conf, vfs_use_init = nova_helper.get_pci_interface_stats_for_providernet(
-                pnet_id, fields=('pci_vfs_configured', 'pci_vfs_used'))
-        if vfs_conf < 4:
-            skip('Less than 4 {} interfaces configured on system'.format(vif_model))
 
-        LOG.info("Calculate number of vms and number of vcpus for each vm")
-        vm_num = min(4, int(vfs_conf/4) * 2)
-        proc0_vm, proc1_vm = host_helper.get_logcores_counts(initial_host, functions='VMs')
-        if system_helper.is_hyperthreading_enabled(initial_host):
-            proc0_vm *= 2
-            proc1_vm *= 2
-        vm_vcpus = int(min(proc1_vm, proc0_vm) / (vm_num/2))
+        # proc0_vm, proc1_vm = host_helper.get_logcores_counts(initial_host, functions='VMs')
+        # if system_helper.is_hyperthreading_enabled(initial_host):
+        #     proc0_vm *= 2
+        #     proc1_vm *= 2
+        # vm_vcpus = int(min(proc1_vm, proc0_vm) / (vm_num/2))
 
         # Create flavor with calculated vcpu number
-        LOG.fixture_step("Create a flavor with dedicated cpu policy and {} vcpus".format(vm_vcpus))
+        LOG.tc_step("Create a flavor with dedicated cpu policy and {} vcpus".format(vm_vcpus))
         flavor_id = nova_helper.create_flavor(name='dedicated_{}vcpu'.format(vm_vcpus), ram=1024, vcpus=vm_vcpus)[1]
         ResourceCleanup.add('flavor', flavor_id, scope='module')
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'prefer'}
@@ -239,10 +256,19 @@ class TestPcipt:
         net_type, pci_net_name, pci_net_id, pnet_id, pnet_name, other_pcipt_net_name, other_pcipt_net_id = \
             get_pci_net(request, vif_model, primary_tenant, primary_tenant_name, other_tenant)
         pci_hosts = get_pci_hosts(vif_model, pnet_name)
+        if len(pci_hosts) < 2:
+            skip('Less than 2 hosts with {} interface configured'.format(vif_model))
+
+        pfs_conf, pfs_use_init = nova_helper.get_pci_interface_stats_for_providernet(
+                pnet_id, fields=('pci_pfs_configured', 'pci_pfs_used'))
+        if pfs_conf < 2:
+            skip('Less than 2 {} interfaces configured on system'.format(vif_model))
 
         # Get initial host with least vcpus
-        host_cpus = host_helper.get_vcpus_for_computes(hosts=pci_hosts, rtn_val='total')
-        min_vcpu_host = min(host_cpus, key=host_cpus.get)
+        LOG.fixture_step("Calculate number of vms and number of vcpus for each vm")
+        vm_num = 2
+        min_vcpu_host, min_cores_per_proc = get_host_with_min_vm_cores_per_proc(pci_hosts)
+        vm_vcpus = int(min_cores_per_proc / (vm_num / 2))
 
         LOG.fixture_step("Get seg_id for {} for vlan tagging on pci-passthough device later".format(pci_net_id))
         seg_id = network_helper.get_net_info(net_id=pci_net_id, field='segmentation_id', strict=False,
@@ -258,7 +284,7 @@ class TestPcipt:
 
         nics = get_pci_vm_nics(vif_model, pci_net_id, other_pcipt_net_id)
 
-        return net_type, pci_net_name, pci_hosts, pnet_id, nics, min_vcpu_host, seg_id
+        return net_type, pci_net_name, pci_hosts, pnet_id, nics, min_vcpu_host, seg_id, vm_num, vm_vcpus, pfs_use_init
 
     def test_pcipt_robustness(self, pcipt_prep):
         """
@@ -287,20 +313,9 @@ class TestPcipt:
             - Recover hosts if applicable
         
         """
-        net_type, pci_net_name, pci_hosts, pnet_id, nics, min_vcpu_host, seg_id = pcipt_prep
+        net_type, pci_net_name, pci_hosts, pnet_id, nics, min_vcpu_host, seg_id, vm_num, vm_vcpus, pfs_use_init = \
+            pcipt_prep
         vif_model = 'pci-passthrough'
-        pfs_conf, pfs_use_init = nova_helper.get_pci_interface_stats_for_providernet(
-                pnet_id, fields=('pci_pfs_configured', 'pci_pfs_used'))
-        if pfs_conf < 2:
-            skip('Less than 2 {} interfaces configured on system'.format(vif_model))
-
-        LOG.info("Calculate number of vms and number of vcpus for each vm")
-        vm_num = 2
-        proc0_vm, proc1_vm = host_helper.get_logcores_counts(min_vcpu_host, functions='VMs')
-        if system_helper.is_hyperthreading_enabled(min_vcpu_host):
-            proc0_vm *= 2
-            proc1_vm *= 2
-        vm_vcpus = int(min(proc1_vm, proc0_vm) / (vm_num / 2))
 
         # Create flavor with calculated vcpu number
         LOG.fixture_step("Create a flavor with dedicated cpu policy and {} vcpus".format(vm_vcpus))

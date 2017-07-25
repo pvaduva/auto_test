@@ -67,10 +67,14 @@ def wait_for_vol_attach(vm_id, vol_id, timeout=VMTimeout.VOL_ATTACH, con_ssh=Non
     while time.time() < end_time:
         vols_attached = nova_helper.get_vm_volumes(vm_id=vm_id, con_ssh=con_ssh, auth_info=auth_info)
         if vol_id in vols_attached:
-            return True
+            break
         time.sleep(3)
+    else:
+        LOG.warning("Volume {} is not shown in nova show {} in {} seconds".format(vol_id, vm_id, timeout))
+        return False
 
-    return False
+    return cinder_helper._wait_for_volume_status(vol_id, status='in-use', timeout=timeout,
+                                                  con_ssh=con_ssh, auth_info=auth_info)
 
 
 def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
@@ -91,7 +95,7 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
     LOG.info("Volume {} is attached to vm {}".format(vol_id, vm_id))
     LOG.info("Checking if the attached Volume {} is not auto mounted".format(vol_id))
     guest = nova_helper.get_vm_image_name(vm_id)
-    if guest and guest != 'cgcs_guest':
+    if guest and 'cgcs_guest' not in guest:
 
         LOG.info("Attached Volume {} need to be mounted on vm {}".format(vol_id, vm_id))
         attachment_info = cinder_helper.get_volume_attachments(vol_id, vm_id=vm_id)[0]

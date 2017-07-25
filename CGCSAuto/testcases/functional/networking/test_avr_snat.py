@@ -262,8 +262,6 @@ def test_snat_computes_lock_reboot(snat_setups):
     hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
     if len(hypervisors) > 3:
         skip("More than 3 hypervisors on system. Skip to reduce run time.")
-    if system_helper.is_small_footprint():
-        skip("Skip for CPE system.")
 
     vm_ = snat_setups[0]
     LOG.tc_step("Ping VM {} from NatBox".format(vm_))
@@ -278,8 +276,8 @@ def test_snat_computes_lock_reboot(snat_setups):
     hosts_to_lock = list(hosts_should_lock - hosts_already_locked)
     LOG.tc_step("Lock all compute hosts {} except vm host {}".format(hosts_to_lock, vm_host))
     for host_ in hosts_to_lock:
+        HostsToRecover.add(host_, scope='function')
         host_helper.lock_host(host_, swact=True)
-        HostsToRecover.add(host_, scope='module')
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=60)
     LOG.tc_step("Ping external from vm {}".format(vm_))
