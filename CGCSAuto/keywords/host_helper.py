@@ -1094,7 +1094,7 @@ def wait_for_webservice_up(hosts, timeout=90, check_interval=3, fail_ok=False, c
         hosts = [hosts]
 
     hosts_to_check = list(hosts)
-    LOG.info("Waiting for {} to be active for web-service in system servicegroup-list...".format(hosts))
+    LOG.info("Waiting for {} to be active for web-service in system servicegroup-list...".format(hosts_to_check))
     end_time = time.time() + timeout
 
     while time.time() < end_time:
@@ -1105,7 +1105,7 @@ def wait_for_webservice_up(hosts, timeout=90, check_interval=3, fail_ok=False, c
         active_hosts = table_parser.get_values(table_, 'hostname', state='active', strict=True)
 
         for host in hosts:
-            if host in active_hosts:
+            if host in active_hosts and host in hosts_to_check:
                 hosts_to_check.remove(host)
 
         if not hosts_to_check:
