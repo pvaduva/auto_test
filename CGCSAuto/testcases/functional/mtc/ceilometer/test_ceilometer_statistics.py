@@ -221,5 +221,4 @@ def test_retention_sample():
     ceilometer_helper.delete_samples()
 
     LOG.tc_step("Ensuring the sample isn't listed anymore")
-    samples = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
-    assert 0 == len(samples), "FAIL: The sample was not removed"
+    ceilometer_helper.wait_for_sample_expire(meter='fake_sample', fail_ok=False)
