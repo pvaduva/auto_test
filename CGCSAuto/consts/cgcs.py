@@ -1,5 +1,5 @@
 # output of date. such as: Tue Mar  1 18:20:29 UTC 2016
-DATE_OUTPUT = r'[0-2]\d:[0-5]\d:[0-5]\d\s[A-Z]{3}\s\d{4}$'
+DATE_OUTPUT = r'[0-2]\d:[0-5]\d:[0-5]\d\s[A-Z]{3,}\s\d{4}$'
 
 EXT_IP = '8.8.8.8'
 
@@ -32,10 +32,12 @@ MELLANOX4 = 'MT.*ConnectX-4'
 
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
+    TMP_IMG_DIR = '/opt/backups'
     DEFAULT_GUEST = 'tis-centos-guest'
     TIS_GUEST_PATTERN = 'cgcs-guest|tis-centos-guest'
     GUESTS_NO_RM = ['ubuntu_14', 'tis-centos-guest', 'cgcs-guest']
     # Image files name and size from yow-cgcs-test.wrs.com:/home/svc-cgcsauto/images
+    # <glance_image_name>: <source_file_name>, <root disk size>, <dest_file_name>
     IMAGE_FILES = {
         'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_14.qcow2'),
         'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2'),
@@ -46,8 +48,10 @@ class GuestImages:
         'opensuse_11': ('openSUSE-11.3-x86_64.qcow2', 11, 'opensuse_11.qcow2'),     # OVP img
         'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21, 'opensuse_12.qcow2'),      # OVP img
         'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16, 'opensuse_13.qcow2'),
-        'win_2012': ('win2012r2.qcow2', 36, 'win_2012.qcow2'),   # Service Team img
-        'cgcs-guest': (None, 1, 'cgcs-guest.img'),       # wrl
+        # 'win_2012': ('win2012r2.qcow2', 36, 'win_2012.qcow2'),   # Service Team img
+        # 'win_2012': ('windows_server_2012_r2_standard_eval_kvm_20170321.qcow2', 13, 'win2012r2.qcow2'),  # MattP+ssh
+        'win_2012': ('win2012r2_cygwin_compressed.qcow2', 13, 'win2012r2.qcow2'),  # MattP
+        'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img'),       # wrl-6
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img')
     }
 
@@ -68,6 +72,7 @@ class Networks:
         'mgmt': MGMT_IP,
         'internal': INTERNAL_IP
     }
+    INFRA_NETWORK_CIDR = "192.168.205.0/24"
 
 
 class SystemType:
@@ -126,9 +131,11 @@ class Prompt:
     CONTROLLER_0 = '.*controller\-0\:~\$ '
     CONTROLLER_1 = '.*controller\-1\:~\$ '
     CONTROLLER_PROMPT = '.*controller\-[01]\:~\$ '
+
     ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
     TENANT1_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant1\)\]\$ '
     TENANT2_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant2\)\]\$ '
+
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'
     PASSWORD_PROMPT = '.*assword\:.*'
@@ -138,6 +145,8 @@ class Prompt:
     ROOT_PROMPT = '.*root@.*'
     Y_N_PROMPT = '.*\(y/n\)\?.*'
     YES_N_PROMPT = '.*\[yes/N\]\: ?'
+    CONFIRM_PROMPT = '.*confirm: ?'
+
 
 
 class NovaCLIOutput:
@@ -241,6 +250,7 @@ class EventLogID:
     MTC_MONITORED_PROCESS_FAILURE = '200.006'
     CONFIG_OUT_OF_DATE = '250.001'
     INFRA_NET_FAIL = '200.009'
+    INFRA_PORT_FAIL = '100.110'
     # 200.004	compute-0 experienced a service-affecting failure. Auto-recovery in progress.
     # host=compute-0 	critical 	April 7, 2017, 2:34 p.m.
     HOST_RECOVERY_IN_PROGRESS = '200.004'
@@ -319,4 +329,3 @@ class QoSSpecs:
     READ_IOPS = 'read_iops_sec'
     WRITE_IOPS = 'write_iops_sec'
     TOTAL_IOPS = 'total_iops_sec'
-

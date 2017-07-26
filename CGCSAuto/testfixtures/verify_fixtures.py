@@ -24,6 +24,17 @@ def check_alarms(request):
     __verify_alarms(request=request, scope='function')
 
 
+@fixture(scope='module')
+def check_alarms_module(request):
+    """
+    Check system alarms before and after test session.
+
+    Args:
+        request: caller of this fixture. i.e., test func.
+    """
+    __verify_alarms(request=request, scope='module')
+
+
 # @fixture(scope='session', autouse=True)
 def check_alarms_session(request):
     """

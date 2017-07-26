@@ -108,18 +108,24 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         host_ssh.send(password)
         con_ssh.expect(timeout=30)
 
+    # reconnect to lab and wait for system up if rebooting active controller
     if reboot_con:
         LOG.info("Rebooting active controller: {}".format(controller))
         con_ssh.send('sudo reboot -f')
         index = con_ssh.expect(['.*[pP]assword:.*', 'Rebooting'])
         if index == 0:
             con_ssh.send(password)
+
+        LOG.info("Active controller reboot started. Wait for 20 seconds then attempt to reconnect for "
+                 "maximum {}s".format(timeout))
         time.sleep(20)
         con_ssh.connect(retry=True, retry_timeout=timeout)
+
+        LOG.info("Reconnected via fip. Waiting for system show cli to re-enable")
         _wait_for_openstack_cli_enable(con_ssh=con_ssh)
 
     if not wait_for_reboot_finish:
-        msg = "Reboot hosts command sent."
+        msg = "Hosts reboot -f cmd sent"
         LOG.info(msg)
         return -1, msg
 
@@ -162,6 +168,12 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
                                                          con_ssh=con_ssh, availability=['available', 'degraded'])
 
         if unlocked_hosts_in_states:
+            for host_unlocked in unlocked_hosts:
+                LOG.info("Waiting for task clear for {}".format(host_unlocked))
+                # TODO: check fail_ok?
+                wait_for_host_states(host_unlocked, timeout=HostTimeout.TASK_CLEAR, fail_ok=False, task='')
+
+            LOG.info("Get available hosts after task clear and wait for hypervsior/webservice up")
             hosts_tab = table_parser.table(cli.system('host-list --nowrap', ssh_client=con_ssh))
             hosts_to_check_tab = table_parser.filter_table(hosts_tab, hostname=unlocked_hosts)
             hosts_avail = table_parser.get_values(hosts_to_check_tab, 'hostname',
@@ -293,7 +305,7 @@ def __hosts_stay_in_states(hosts, duration=10, con_ssh=None, **states):
 def wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, duration=3, con_ssh=None, fail_ok=True,
                           **states):
     """
-    Wait for hosts to go in specified states
+    Wait for hosts to go in specified states via system host-list
 
     Args:
         hosts (str|list):
@@ -401,7 +413,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
     if exitcode == 1:
         return 1, output
 
-    wait_for_host_states(host=host, timeout=90, check_interval=0, fail_ok=True, task='Locking')
+    wait_for_host_states(host=host, timeout=30, check_interval=0, fail_ok=True, task='Locking')
 
     # Wait for task complete. If task stucks, fail the test regardless. Perhaps timeout needs to be increased.
     wait_for_host_states(host=host, timeout=lock_timeout, task='', fail_ok=False)
@@ -450,6 +462,32 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         raise exceptions.HostPostCheckFailed(msg)
 
 
+def wait_for_ssh_disconnect(ssh=None, timeout=120, fail_ok=False):
+    if ssh is None:
+        ssh = ControllerClient.get_active_controller()
+
+    end_time = time.time() + timeout
+    while ssh._is_connected(fail_ok=True):
+        if time.time() > end_time:
+            if fail_ok:
+                return False
+            raise exceptions.HostTimeout("Timed out waiting {} ssh to disconnect".format(ssh.host))
+
+    LOG.info("ssh to {} disconnected".format(ssh.host))
+    return True
+
+
+def _wait_for_simplex_reconnect(con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK):
+    time.sleep(30)
+    wait_for_ssh_disconnect(ssh=con_ssh, timeout=120)
+    time.sleep(30)
+    con_ssh.connect(retry=True, retry_timeout=timeout)
+    # Give it sometime before openstack cmds enables on after host
+    _wait_for_openstack_cli_enable(con_ssh=con_ssh, fail_ok=False, timeout=timeout, check_interval=5, reconnect=True)
+    time.sleep(10)
+    LOG.info("Re-connected via ssh and openstack CLI enabled")
+
+
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,
                 auth_info=Tenant.ADMIN, check_hypervisor_up=True, check_webservice_up=True, check_subfunc=True):
     """
@@ -492,12 +530,18 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         LOG.info(message)
         return -1, message
 
+    con_ssh = ControllerClient.get_active_controller()
+    is_simplex = system_helper.is_simplex(con_ssh=con_ssh)
+
     exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
                                   fail_ok=fail_ok, timeout=60)
     if exitcode == 1:
         return 1, output
 
-    if not wait_for_host_states(host, timeout=30, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
+    if is_simplex:
+        _wait_for_simplex_reconnect(con_ssh=con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK)
+
+    if not wait_for_host_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
                                 fail_ok=fail_ok):
         return 2, "Host is not in unlocked state"
 
@@ -531,7 +575,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         is_compute = 'compute' in string_total
 
         if check_hypervisor_up and is_compute:
-            if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=120)[0]:
+            if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh,
+                                           timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL)[0]:
                 return 6, "Host is not up in nova hypervisor-list"
 
         if check_webservice_up and is_controller:
@@ -613,6 +658,8 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
     if len(hosts_to_unlock) != len(hosts):
         LOG.info("Some host(s) already unlocked. Unlocking the rest: {}".format(hosts_to_unlock))
 
+    con_ssh = ControllerClient.get_active_controller()
+    is_simplex = system_helper.is_simplex(con_ssh=con_ssh)
     hosts_to_check = []
     for host in hosts_to_unlock:
         exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
@@ -621,6 +668,9 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
             res[host] = 1, output
         else:
             hosts_to_check.append(host)
+
+    if is_simplex:
+        _wait_for_simplex_reconnect(con_ssh=con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK)
 
     if not wait_for_hosts_states(hosts_to_check, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh):
         LOG.warning("Some host(s) not in unlocked states after 60 seconds.")
@@ -654,13 +704,14 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
             computes += controllers
 
         if check_hypervisor_up and computes:
-            hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh, timeout=120)[1]
+            hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh,
+                                                           timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL)[1]
             for host in hosts_hypervisordown:
                 res[host] = 5, "Host is not up in nova hypervisor-list"
                 hosts_avail = list(set(hosts_avail) - set(hosts_hypervisordown))
 
         if check_webservice_up and controllers:
-            hosts_webdown = wait_for_webservice_up(controllers, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[1]
+            hosts_webdown = wait_for_webservice_up(controllers, fail_ok=fail_ok, con_ssh=con_ssh, timeout=180)[1]
             for host in hosts_webdown:
                 res[host] = 6, "Host web-services is not active in system servicegroup-list"
             hosts_avail = list(set(hosts_avail) - set(hosts_webdown))
@@ -732,6 +783,7 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None):
 def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=1,
                                    reconnect=False, reconnect_timeout=60):
     cli_enable_end_time = time.time() + timeout
+    eof_count = 0
     while True:
         try:
             cli.system('show', ssh_client=con_ssh, timeout=timeout)
@@ -742,6 +794,13 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
                 if con_ssh is None:
                     con_ssh = ControllerClient.get_active_controller()
                 con_ssh.connect(retry_timeout=reconnect_timeout)
+            elif eof_count < 3:
+                eof_count += 1
+            elif fail_ok:
+                LOG.warning("3 EOF caught. Connection lost")
+                return False
+            else:
+                raise
 
         except Exception as e:
             if time.time() > cli_enable_end_time:
@@ -762,6 +821,7 @@ def wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, str
     last_vals = {}
     for field in states:
         last_vals[field] = None
+
     while time.time() < end_time:
         table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
         for field, expt_vals in states.items():
@@ -849,6 +909,11 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
         res = wait_for_webservice_up(system_helper.get_active_controller_name(), fail_ok=fail_ok, con_ssh=con_ssh)[0]
         if not res:
             return 5, "Web-services for new controller is not active"
+
+    if system_helper.is_two_node_cpe(con_ssh=con_ssh):
+        hypervisor_up_res = wait_for_hypervisors_up(hostname, fail_ok=fail_ok, con_ssh=con_ssh)
+        if not hypervisor_up_res:
+            return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
 
     return rtn
 
@@ -1029,7 +1094,7 @@ def wait_for_webservice_up(hosts, timeout=90, check_interval=3, fail_ok=False, c
         hosts = [hosts]
 
     hosts_to_check = list(hosts)
-    LOG.info("Waiting for {} to be active for web-service in system servicegroup-list...".format(hosts))
+    LOG.info("Waiting for {} to be active for web-service in system servicegroup-list...".format(hosts_to_check))
     end_time = time.time() + timeout
 
     while time.time() < end_time:
@@ -1040,7 +1105,7 @@ def wait_for_webservice_up(hosts, timeout=90, check_interval=3, fail_ok=False, c
         active_hosts = table_parser.get_values(table_, 'hostname', state='active', strict=True)
 
         for host in hosts:
-            if host in active_hosts:
+            if host in active_hosts and host in hosts_to_check:
                 hosts_to_check.remove(host)
 
         if not hosts_to_check:
@@ -1469,11 +1534,11 @@ def get_logcores_counts(host, proc_ids=(0, 1), thread='0', functions=None, con_s
     Args:
         host:
         proc_ids:
-        thread:
+        thread (str|list): '0' or ['0', '1']
         con_ssh:
         functions (list|str)
 
-    Returns (dict):
+    Returns (list):
 
     """
     table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh))

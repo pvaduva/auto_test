@@ -622,7 +622,7 @@ class SSHClient:
                 self.expect()
 
     def exec_sudo_cmd(self, cmd, expect_timeout=60, rm_date=True, fail_ok=True, get_exit_code=True,
-                      searchwindowsize=None, strict_passwd_prompt=False):
+                      searchwindowsize=None, strict_passwd_prompt=False, extra_prompt=None):
         """
         Execute a command with sudo.
 
@@ -636,6 +636,7 @@ class SSHClient:
                     to speed up the search, and to avoid matching in the middle of the output.
             strict_passwd_prompt (bool): whether to search output with strict password prompt (Not recommended. Use
                 searchwindowsize instead)
+            extra_prompt (str|None)
 
         Returns (tuple): (exit code (int), command output (str))
 
@@ -643,11 +644,17 @@ class SSHClient:
         cmd = 'sudo ' + cmd
         LOG.debug("Executing sudo command...")
         self.send(cmd)
-        prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
-        index = self.expect([self.prompt, prompt], timeout=expect_timeout, searchwindowsize=searchwindowsize)
-        if index == 1:
+        pw_prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
+        prompts = [self.prompt]
+        if extra_prompt is not None:
+            prompts.append(extra_prompt)
+        prompts.append(pw_prompt)
+
+        index = self.expect(prompts, timeout=expect_timeout, searchwindowsize=searchwindowsize, fail_ok=fail_ok)
+        if index == prompts.index(pw_prompt):
             self.send(self.password)
-            self.expect(timeout=expect_timeout, searchwindowsize=searchwindowsize)
+            prompts.remove(pw_prompt)
+            self.expect(prompts, timeout=expect_timeout, searchwindowsize=searchwindowsize, fail_ok=fail_ok)
 
         code, output = self.__process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
         if code != 0 and not fail_ok:
@@ -1058,7 +1065,7 @@ class NATBoxClient:
     # internal dict that holds the natbox client if set_natbox_client was called
     __natbox_ssh_map = {}
 
-    _PROMPT = r'\@.*\:\~[$#]'  # use user+_PROMPT to differentiate before and after ssh to vm
+    _PROMPT = r'\@.*\:\~[$#] '  # use user+_PROMPT to differentiate before and after ssh to vm
 
     @classmethod
     def get_natbox_client(cls, natbox_ip=None):

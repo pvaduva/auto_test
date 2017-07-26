@@ -901,7 +901,7 @@ class Telnet:
     #TODO: The timeouts in this function need to be tested to see if they
     #      should be increased/decreased
     #TODO: If script returns zero, should check return code, otherwise remove it
-    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', usb=False):
+    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', usb=False, lowlat=False):
         if "wildcat" in node.host_name:
             index = 0
             bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[index]
@@ -941,7 +941,7 @@ class Telnet:
                 #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
                 # Construct regex to work with wildcatpass machines
                 # in legacy and uefi mode
-                regex = re.compile(b"\[\d+(;22H|;15H|;11H)(.*?)\x1b")
+                regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
 
                 log.info("wildcat: compiled regex is: {}".format(regex))
 
@@ -1020,7 +1020,9 @@ class Telnet:
                             selection_menu_option = '1'
 
                     else:
-                        if small_footprint:
+                        if small_footprint and lowlat:
+                            selection_menu_option = '6'
+                        elif small_footprint:
                             selection_menu_option = '4'
                         else:
                             selection_menu_option = '2'
@@ -1157,6 +1159,8 @@ class Telnet:
                         log.info("Enter option for {} Controller and Compute Install".format(host_os))
                         if host_os == 'wrlinux':
                             selection_menu_option = '3'
+                        elif lowlat:
+                            selection_menu_option = '6'
                         else:
                             selection_menu_option = '4'
                     else:
@@ -1183,7 +1187,8 @@ class Telnet:
                 # 2) CentOS Serial Controller Install
                 # 3) WRL Serial CPE Install
                 # 4) CentOS Serial CPE Install
-                self.get_read_until("Boot from hard drive", 30)
+                #self.get_read_until("Boot from hard drive", 30)
+                self.get_read_until("Kickstart Boot Menu", 30)
                 log.info("Enter option for {} Controller Install".format(host_os))
                 if host_os == 'wrlinux':
                     selection_menu_option = '1'
@@ -1260,6 +1265,8 @@ class Telnet:
                     log.info("Enter option for {} Controller and Compute Install".format(host_os))
                     if host_os == 'wrlinux':
                         selection_menu_option = '3'
+                    elif lowlat:
+                        selection_menu_option = '6'
                     else:
                         selection_menu_option = '4'
                 else:

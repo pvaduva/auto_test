@@ -95,6 +95,19 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
 
 
 def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=False, con_ssh=None):
+    """
+    Get storage backing that has the most hypervisors
+    Args:
+        prefer (str): preferred storage_backing. If unset, local_image > local_lvm > remote
+        rtn_down_hosts (bool): whether or not to count down hosts as well. Default is to return up hosts only.
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<storage_backing>(str), <hosts>(list))
+        Examples:
+            Regular/Storage system: ('local_image',['compute-1', 'compute-3'])
+            AIO: ('local_lvm', ['controller-0', 'controller-1'])
+
+    """
 
     hosts_by_backing = {'local_image': host_helper.get_hosts_by_storage_aggregate(con_ssh=con_ssh),
                         'local_lvm': host_helper.get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh),
@@ -802,7 +815,11 @@ def get_vm_storage_type(vm_id, con_ssh=None):
     Returns (str): storage extra spec value. Possible return values: 'local_image', 'local_lvm', or 'remote'
 
     """
-    flavor_output = get_vm_nova_show_value(vm_id=vm_id, field='flavor', strict=True, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+    flavor_output = get_vm_nova_show_value(vm_id=vm_id, field='flavor', strict=True, con_ssh=con_ssh,
+                                           auth_info=Tenant.ADMIN)
+    # extra_specs = eval(flavor_output)['extra_specs']
+    # return extra_specs['aggregate_instance_extra_specs:storage']
+
     flavor_id = re.search(r'\((.*)\)', flavor_output).group(1)
 
     table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
@@ -911,7 +928,7 @@ def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=T
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (str): value of specified field.
+    Returns (str|list): value of specified field. Return list for multi-line value
 
     """
     table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
@@ -1061,9 +1078,19 @@ def get_vm_boot_info(vm_id, auth_info=None, con_ssh=None):
         volumes = _get_vm_volumes(table_)
         if len(volumes) == 0:
             raise exceptions.VMError("Booted from volume, but no volume id found.")
-        elif len(volumes) > 1:
-            LOG.warning("VM booted from volume. Multiple volumes found, taking the first volume as boot source")
-        return {'type': 'volume', 'id': volumes[0]}
+        elif len(volumes) == 1:
+            LOG.info("VM booted from volume.")
+            return {'type': 'volume', 'id': volumes[0]}
+        else:
+            LOG.info("VM booted from volume. Multiple volumes found, taking the first boot-able volume.")
+            for volume in volumes:
+                table_ = table_parser.table(cli.cinder('show', volume, auth_info=auth_info, ssh_client=con_ssh))
+                bootable = table_parser.get_value_two_col_table(table_, 'bootable')
+                if bootable.lower() == 'true':
+                    return {'type': 'volume', 'id': volume}
+
+            raise exceptions.VMError("Booted from volume, but no bootable volume attached.")
+
     else:
         match = re.search(UUID, image)
         return {'type': 'image', 'id': match.group(0)}

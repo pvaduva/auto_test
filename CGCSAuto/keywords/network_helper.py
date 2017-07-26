@@ -579,7 +579,7 @@ def get_neutron_port(name=None, con_ssh=None, auth_info=None):
 
 
 def get_providernets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN,
-                     **kwargs):
+                     merge_lines=False, **kwargs):
     """
     Get the neutron provider net list based on name if given
 
@@ -596,9 +596,10 @@ def get_providernets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=
     """
     table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is None:
-        return table_parser.get_values(table_, rtn_val, **kwargs)
+        return table_parser.get_values(table_, rtn_val, merge_lines=merge_lines,**kwargs)
 
-    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, name=name, **kwargs)
+    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, name=name, merge_lines=merge_lines,
+                                   **kwargs)
 
 
 def get_providernet_ranges(rtn_val='name', range_name=None, providernet_name=None, providernet_type=None, strict=False,
@@ -1859,9 +1860,17 @@ def get_networks_on_providernet(providernet_id, rtn_val='id', con_ssh=None, auth
 
 def get_pci_nets(vif='sriov', rtn_val='name', vlan_id=0, con_ssh=None, auth_info=Tenant.ADMIN):
 
-    pnet_id = get_providernet_for_interface(interface=vif, con_ssh=con_ssh, auth_info=auth_info)
+    pnet_id = get_providernet_for_interface(interface=vif, rtn_val='id', con_ssh=con_ssh, auth_info=auth_info)
 
-    return get_networks_on_providernet(pnet_id, rtn_val, con_ssh=con_ssh, auth_info=auth_info, vlan_id=vlan_id)
+    nets = get_networks_on_providernet(pnet_id, rtn_val, con_ssh=con_ssh, auth_info=auth_info, vlan_id=vlan_id)
+    if 'sriov' in vif:
+        first_seg = get_first_segment_of_providernet(pnet_id, pnet_val='id', con_ssh=con_ssh)
+        untagged_net = get_net_on_segment(pnet_id, seg_id=first_seg, rtn_val='name', con_ssh=con_ssh)
+        if untagged_net in nets:
+            LOG.info("{} is on first segment of {} range with untagged frames. Remove for sriov.".
+                     format(untagged_net, pnet_id))
+            nets.remove(untagged_net)
+    return nets
 
 
 def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_ssh=None):
@@ -2137,7 +2146,7 @@ def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
 
-def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False, vshell=False, interface=None):
+def _ping_server(server, ssh_client, num_pings=5, timeout=30, fail_ok=False, vshell=False, interface=None):
     """
 
     Args:
@@ -2154,14 +2163,20 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=15, fail_ok=False, vsh
     """
     if not vshell:
         cmd = 'ping -c {} {}'.format(num_pings, server)
-        output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
-        packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
+        code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout, fail_ok=True)
+        if code != 0:
+            packet_loss_rate = 100
+        else:
+            packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
     else:
         if not interface:
             interface = _get_interfaces_via_vshell(ssh_client, net_type='internal')[0]
         cmd = 'vshell ping --count {} {} {}'.format(num_pings, server, interface)
-        output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)[1]
-        packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
+        code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)
+        if code != 0:
+            packet_loss_rate = 100
+        else:
+            packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
 
     packet_loss_rate = int(packet_loss_rate)
 
@@ -2187,12 +2202,20 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
                                                                     con_ssh=con_ssh, auth_info=auth_info)
     print("hosts and pnets: {}".format(hosts_and_pnets))
     host = list(hosts_and_pnets.keys())[0]
-    pnet = hosts_and_pnets[host][0]
+    pnet_name = hosts_and_pnets[host][0]
     kwargs = {'vlan_id': vlan_id} if vlan_id is not None else {}
-    nets = list(set(get_networks_on_providernet(pnet, rtn_val='name', **kwargs)))
-    print("pnet: {}; Nets: {}".format(pnet, nets))
+    nets = list(set(get_networks_on_providernet(pnet_name, rtn_val='name', **kwargs)))
+    if pci_type == 'pci-sriov':
+        first_seg = get_first_segment_of_providernet(pnet_name, pnet_val='name', con_ssh=con_ssh)
+        untagged_net = get_net_on_segment(pnet_name, seg_id=first_seg, rtn_val='name', con_ssh=con_ssh)
+        if untagged_net in nets:
+            LOG.info("{} is on first segment of {} range with untagged frames. Remove for sriov.".
+                     format(untagged_net, pnet_name))
+            nets.remove(untagged_net)
+
+    print("pnet: {}; Nets: {}".format(pnet_name, nets))
     final_nets = _get_preferred_nets(nets=nets, net_name=net_name, strict=strict)
-    vm_net = final_nets[0]
+    vm_net = final_nets[-1]
     if pci_type == 'pci-passthrough':
 
         port = system_helper.get_host_interfaces_info(host, rtn_val='ports', net_type=pci_type)[0]
@@ -2201,6 +2224,47 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
             vm_net = final_nets[0:2]
 
     return vm_net
+
+
+def get_first_segment_of_providernet(providernet, pnet_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get first segment id within the range of given providernet
+    Args:
+        providernet (str): pnet name or id
+        pnet_val: 'id' or 'name' based on the value for providernet param
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (int): segment id
+
+    """
+    ranges = get_providernets(rtn_val='ranges', con_ssh=con_ssh, auth_info=auth_info, merge_lines=False,
+                              **{pnet_val: providernet})[0]
+
+    if isinstance(ranges, list):
+        ranges = ranges[0]
+    first_seg = eval(ranges)['minimum']
+    return first_seg
+
+
+def get_net_on_segment(providernet, seg_id, rtn_val='name', con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get network name on given prvidernet with specified segment id
+    Args:
+        providernet (str): pnet name or id
+        seg_id (int): segment id
+        rtn_val (str): 'name' or 'id'
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (str|None): network id/name or None if no network on given seg id
+
+    """
+    nets = get_networks_on_providernet(providernet_id=providernet, rtn_val=rtn_val, con_ssh=con_ssh,
+                                       auth_info=auth_info, **{'segmentation_id': seg_id})
+
+    net = nets[0] if nets else None
+    return net
 
 
 def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only=True, vlan_id=0, net_name=None,
@@ -2984,3 +3048,89 @@ def collect_vswitch_info_on_host(host):
     with host_helper.ssh_to_host(host) as host_ssh:
         host_ssh.exec_sudo_cmd('/etc/collect.d/collect_vswitch', searchwindowsize=50, get_exit_code=False)
         # vswitch log will be saved to /scratch/var/extra/vswitch.info on the compute host
+
+
+def get_pci_device_numa_nodes(hosts):
+    """
+    Get processors of crypto PCI devices for given hosts
+
+    Args:
+        hosts (list): list of hosts to check
+
+    Returns (dict): host, numa_nodes map. e.g., {'compute-0': ['0'], 'compute-1': ['0', '1']}
+
+    """
+    hosts_numa = {}
+    for host in hosts:
+        numa_nodes = system_helper.get_host_device_list_values(host, field='numa_node')
+        hosts_numa[host] = numa_nodes
+
+    LOG.info("Hosts numa_nodes map for PCI devices: {}".format(hosts_numa))
+    return hosts_numa
+
+
+def get_pci_procs(hosts, net_type='pci-sriov'):
+    """
+    Get processors of pci-sriov or pci-passthrough devices for given hosts
+
+    Args:
+        hosts (list): list of hosts to check
+        net_type (str): pci-sriov or pci-passthrough
+
+    Returns (dict): host, procs map. e.g., {'compute-0': ['0'], 'compute-1': ['0', '1']}
+
+    """
+    hosts_procs = {}
+    for host in hosts:
+        ports_list = system_helper.get_host_interfaces_info(host, rtn_val='ports', net_type=net_type)
+
+        ports = []
+        for port in ports_list:
+            ports += port
+        ports = list(set(ports))
+
+        procs = system_helper.get_host_ports_values(host, header='processor', **{'name': ports})
+        hosts_procs[host] = list(set(procs))
+
+    LOG.info("Hosts procs map for {} devices: {}".format(net_type, hosts_procs))
+    return hosts_procs
+
+
+def wait_for_agents_alive(hosts=None, timeout=120, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Wait for neutron agents to be alive
+    Args:
+        hosts (str|list): hostname(s) to check. When None, all nova hypervisors will be checked
+        timeout (int): max wait time in seconds
+        fail_ok (bool): whether to return False or raise exception when non-alive agents exist
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (<res>(bool), <msg>(str))
+        (True, "All agents for <hosts> are alive")
+        (False, "Some agents are not alive: <non_alive_rows>")      Applicable when fail_ok=True
+
+    """
+    if hosts is None:
+        hosts = host_helper.get_hypervisors(con_ssh=con_ssh)
+    elif isinstance(hosts, str):
+        hosts = [hosts]
+
+    LOG.info("Wait for neutron agents to be alive for {}".format(hosts))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        agents_tab = table_parser.table(cli.neutron('agent-list', ssh_client=con_ssh, auth_info=auth_info))
+        agents_tab = table_parser.filter_table(agents_tab, host=hosts)
+        alive_vals = table_parser.get_column(agents_tab, 'alive')
+        if all(alive_val == ':-)' for alive_val in alive_vals):
+            succ_msg = "All agents for {} are alive".format(hosts)
+            LOG.info(succ_msg)
+            return True, succ_msg
+
+    LOG.warning("Some neutron agents are not alive")
+    non_alive_tab = table_parser.filter_table(agents_tab, exclude=True, alive=':-)')
+    non_alive_rows = table_parser.get_all_rows(non_alive_tab)
+    msg = "Some agents are not alive: {}".format(non_alive_rows)
+    if fail_ok:
+        return False, msg
+    raise exceptions.NeutronError(msg)

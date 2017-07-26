@@ -1,8 +1,10 @@
+import time
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient, SSHClient
 from keywords import system_helper, host_helper, install_helper, storage_helper
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import  UpgradeVars
+from consts.cgcs import HostAvailabilityState, HostOperationalState
 
 def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
 
@@ -37,14 +39,23 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     host_helper.unlock_host("controller-1", available_only=True, check_hypervisor_up=False)
     LOG.info("Host controller-1 unlocked after upgrade......")
 
-    # Swact to standby controller-1
+    time.sleep(60)
+      # Before Swacting ensure the controller-1 is in available state
+    if not host_helper.wait_for_host_states("controller-1", timeout=360, fail_ok=True,
+                                            operational=HostOperationalState.ENABLED,
+                                            availability=HostAvailabilityState.AVAILABLE):
+        err_msg = " Swacting to controller-1 is not possible because controller-1 is not in available state " \
+              "within  the specified timeout"
+        assert False, err_msg
+
+    # Swact to standby contime.sleep(60)  troller-1
     LOG.tc_step("Swacting to controller-1 .....")
     rc, output = host_helper.swact_host(hostname="controller-0")
     assert rc == 0, "Failed to swact: {}".format(output)
     LOG.info("Swacted and  controller-1 has become active......")
 
     active_controller = system_helper.get_active_controller_name()
-
+    time.sleep(60)
     # upgrade  controller-0
     LOG.tc_step("Upgrading  controller-0......")
     controller0 = lab['controller-0']

@@ -18,6 +18,7 @@ class NumaErr:
     UNINITIALIZED = '(NUMATopologyFilter) Uninitialized'
     FLV_UNDEVISIBLE = 'ERROR (Conflict): flavor vcpus not evenly divisible by the specified hw:numa_nodes value'
     FLV_CPU_OR_MEM_UNSPECIFIED = 'ERROR (Conflict): CPU and memory allocation must be provided for all NUMA nodes'
+    INSUFFICIENT_CORES = 'Not enough free cores to schedule the instance'
 
 
 class MinCPUErr:

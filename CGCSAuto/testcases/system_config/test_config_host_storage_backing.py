@@ -1,18 +1,26 @@
 
-from pytest import mark
+from pytest import mark, fixture
 
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import host_helper
+from keywords import host_helper, system_helper, nova_helper, vm_helper
+
+
+@fixture(autouse=True)
+def check_alarms():
+    pass
 
 
 @mark.parametrize(('instance_backing', 'number_of_hosts'), [
-    ('image', 2),
-    ('image', 1),
+    ('image', 'two'),
+    ('image', 'one'),
     ('image', 'all'),
-    ('lvm', 2),
-    ('lvm', 1),
+    ('lvm', 'two'),
+    ('lvm', 'one'),
     ('lvm', 'all'),
+    ('remote', 'two'),
+    ('remote', 'one'),
+    ('remote', 'all'),
 ])
 def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
     """
@@ -28,25 +36,38 @@ def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
         - Check number of hosts in given instance backing is as specified
 
     """
-    hosts = host_helper.get_nova_hosts()
-    if number_of_hosts == 'all':
-        number_of_hosts = len(hosts)
+    if instance_backing == 'remote' and not system_helper.is_storage_system():
+        # Need to fail instead of skip here because pytest returns 0 exit code when test skipped,
+        # which would be considered as a pass by Jenkins
+        assert False, "Not storage system. Skip configure remote backing"
 
-    assert len(hosts) >= number_of_hosts, "Not enough nova hosts available for configuration."
+    hosts = host_helper.get_nova_hosts()
+    hosts_len = len(hosts)
+    host_num_mapping = {
+        'all': hosts_len,
+        'two': 2,
+        'one': 1
+    }
+    number_of_hosts = host_num_mapping[number_of_hosts]
+
+    assert hosts_len >= number_of_hosts, "Not enough nova hosts available for configuration."
 
     hosts_with_backing = host_helper.get_hosts_by_storage_aggregate(instance_backing)
     if len(hosts_with_backing) >= number_of_hosts:
         LOG.info("Already have {} hosts in {} backing. Do nothing".format(len(hosts_with_backing), instance_backing))
         return
 
+    LOG.tc_step("Delete vms if any to prepare for system configuration change with best effort")
+    vm_helper.delete_vms(fail_ok=True)
+
     number_to_config = number_of_hosts - len(hosts_with_backing)
     hosts_to_config = list(set(hosts) - set(hosts_with_backing))[0:number_to_config]
     LOG.tc_step("Configure following hosts to {} backing: {}".format(hosts_to_config, instance_backing))
 
     for host in hosts_to_config:
+        HostsToRecover.add(host)
         host_helper.set_host_storage_backing(host=host, inst_backing=instance_backing, unlock=False,
                                              wait_for_host_aggregate=False)
-        HostsToRecover.add(host)
 
     host_helper.unlock_hosts(hosts_to_config, check_hypervisor_up=True, fail_ok=False)
 
@@ -56,12 +77,15 @@ def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
 
 
 @mark.parametrize(('instance_backing', 'number_of_hosts'), [
-    ('image', 2),
-    ('image', 1),
-    ('image', 0),
-    ('lvm', 2),
-    ('lvm', 1),
-    ('lvm', 0),
+    ('image', 'two'),
+    ('image', 'one'),
+    ('image', 'zero'),
+    ('lvm', 'two'),
+    ('lvm', 'one'),
+    ('lvm', 'zero'),
+    ('remote', 'zero'),
+    ('remote', 'one'),
+    ('remote', 'two')
 ])
 def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
     """
@@ -77,6 +101,17 @@ def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
         - Check number of hosts in given instance backing is as specified
 
     """
+    host_num_mapping = {
+        'zero': 0,
+        'one': 1,
+        'two': 2
+    }
+    number_of_hosts = host_num_mapping[number_of_hosts]
+
+    if instance_backing == 'remote' and number_of_hosts != 0 and not system_helper.is_storage_system():
+        # Need to fail instead of skip here because pytest returns 0 exit code when test skipped,
+        # which would be considered as a pass by Jenkins
+        assert False, "Not storage system. Skip configure remote backing"
 
     LOG.tc_step("Calculate the hosts to be configured based on test params")
     hosts = host_helper.get_nova_hosts()
@@ -96,6 +131,9 @@ def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
         backing_to_config = 'lvm' if instance_backing == 'image' else 'image'
         number_to_config = len(hosts_with_backing) - number_of_hosts
         hosts_pool = hosts_with_backing
+
+    LOG.tc_step("Delete vms if any to prepare for system configuration change with best effort")
+    vm_helper.delete_vms(fail_ok=True)
 
     hosts_to_config = hosts_pool[0:number_to_config]
     LOG.tc_step("Configure following hosts to {} backing: {}".format(hosts_to_config, backing_to_config))

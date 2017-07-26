@@ -955,13 +955,10 @@ class MonitoredProcess:
     mark.p1(('nova-compute')),
     mark.p1(('vswitch')),
 
-    # mark.p1(('postgres')),
-    # mark.p1(('rabbitmq-server')), # rabbit in SM
-    # TODO CGTS-6336
-    # TODO CGTS-6391
+    # mark.p1(('postgres')),    # Bin recommend not to test this. Whole system down when kill this.
+    # mark.p1(('rabbitmq-server')), # rabbit in SM don't test as per CGTS-6336
     mark.p1(('rabbit')),
-    # mark.p1(('sysinv-api')),  # sysinv-inv in SM
-    mark.p1(('sysinv-inv')),
+    mark.p1(('sysinv-inv')),    # sysinv-inv in SM
     mark.p1(('sysinv-conductor')),
     mark.p1(('mtc-agent')),
     mark.p1(('hbs-agent')),

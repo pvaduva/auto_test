@@ -201,6 +201,8 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
         actual_siblings = topology_on_numa_node['siblings']
         actual_topology = topology_on_numa_node['topology']
         actual_pcpus = topology_on_numa_node['pcpus']
+        if actual_pcpus:
+            actual_pcpus = sorted(actual_pcpus)
         actual_thread_policy = topology_on_numa_node['thr']
 
         if expt_cpu_pol == 'sha':

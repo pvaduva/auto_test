@@ -399,6 +399,10 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     if index != 0:
         raise exceptions.SSHException("Failed to scp files")
 
+    exit_code = con_ssh.get_exit_code()
+    if not exit_code == 0:
+        raise exceptions.CommonError("scp unsuccessfully")
+
     if not con_ssh.file_exists(file_path=dest_path):
         raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
 
@@ -410,7 +414,8 @@ def get_guest_image(guest_os, rm_image=True):
     """
     Get or create a glance image with given guest OS
     Args:
-        guest_os (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11
+        guest_os (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11, tis-centos-guest,
+                cgcs-guest
         rm_image (bool): whether or not to rm image from /home/wrsroot/images after creating glance image
 
     Returns (str): image_id

@@ -58,6 +58,6 @@ def test_dead_office_recovery(reserve_unreserve_all_hosts_module):
                                   hosts_to_check=hosts_to_check)
 
     LOG.tc_step("Check vms are recovered after dead office recovery")
-    vm_helper._wait_for_vms_values(vms, fail_ok=False, timeout=600)
+    vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
     for vm in vms:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)

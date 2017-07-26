@@ -38,7 +38,7 @@ class Labs:
         'short_name': 'ip_7_12',
         'name': 'cgcs-ironpass-7_12',
         'floating ip': '128.224.151.243',
-        'controller-0 ip': '128.224.150.244',
+        'controller-0 ip': '128.224.151.244',
         'controller-1 ip': '128.224.150.205',
         'controller_nodes': [21786, 21788],
         'compute_nodes': [21789, 21791],
@@ -280,7 +280,6 @@ class Labs:
         'storage_nodes': [23264, 23263, 23266, 23265],
     }
 
-
     WCP_61_62 = {
         'short_name': 'wcp_61_62',
         'name': 'yow-cgcs-wildcat-61_62',
@@ -289,7 +288,6 @@ class Labs:
         'controller-1 ip': '128.224.151.81',
         'controller_nodes': [23280, 23281],
     }
-
 
     WCP_63_66 = {
         'short_name': 'wcp_63_66',
@@ -317,6 +315,15 @@ class Labs:
         'auth_url': 'http://127.168.204.2:5000/v3/',
         'controller-0 ip': '128.224.151.38',
         'controller_nodes': [23287],
+    }
+
+    WCP_69_70 = {
+        'short_name': 'wcp_69_70',
+        'name': 'yow-cgcs-wildcat-69_70',
+        'floating ip': '128.224.151.241',
+        'controller-0 ip': '128.224.151.240',
+        'controller-1 ip': '128.224.151.253',
+        'controller_nodes': [23288, 23289],
     }
 
     WCP_71_75 = {
@@ -470,11 +477,17 @@ def add_lab_entry(floating_ip, dict_name=None, short_name=None, name=None, **kwa
 
 
 class NatBoxes:
+    # NAT_BOX_HW = {
+    #     'name': 'nat_hw',
+    #     'ip': '128.224.150.11',
+    #     'user': 'cgcs',
+    #     'password': 'li69nux'
+    # }
     NAT_BOX_HW = {
         'name': 'nat_hw',
-        'ip': '128.224.150.11',
-        'user': 'cgcs',
-        'password': 'li69nux'
+        'ip': '128.224.186.181',
+        'user': 'svc-cgcsauto',
+        'password': ')OKM0okm'
     }
 
     NAT_BOX_CUMULUS = {

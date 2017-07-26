@@ -209,8 +209,8 @@ class TestMutiPortsBasic:
         HostsToRecover.add(host, scope='function')
 
         LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-        vm_helper._wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
-                                       timeout=120)
+        vm_helper.wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
+                                      timeout=120)
 
         LOG.tc_step("Verify vm is evacuated to other host")
         vm_helper._wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
@@ -244,9 +244,14 @@ class TestMutiPortsPCI:
         pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')
         pci_pthru_nets = network_helper.get_pci_nets(vif='pthru', rtn_val='name')
         avail_nets = list(set(pci_pthru_nets) & set(pci_sriov_nets))
-        internal_net_name = 'internal0-net1'
-        if internal_net_name not in avail_nets:
-            skip("'internal-net1' does not have pci-sriov and/or pci-passthrough interfaces")
+
+        internal_net_name = None
+        for net_ in avail_nets:
+            if 'internal' in net_:
+                internal_net_name = net_
+                break
+        else:
+            skip('No internal network found that has both pcipt and sriov interfaces')
 
         LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
         flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048)[1]
@@ -307,6 +312,8 @@ class TestMutiPortsPCI:
 
     @mark.parametrize('vifs', [
         mark.p2(['virtio', 'avp', 'pci-passthrough']),
+        # mark.p2(['virtio_x7', 'pci-sriov_x7']),       This test requires compute configured with 8+ sriov vif
+        mark.p2(['virtio_x6', 'avp_x6', 'pci-passthrough']),
         mark.p2([('virtio_x7', '05:03'), ('avp_x5', '00:04'), ('pci-sriov', '05:02')]),
         mark.p3((['pci-sriov', 'pci-passthrough'])),
         mark.domain_sanity(([('avp', '00:02'), ('virtio', '02:01'), ('e1000', '08:01'), ('pci-passthrough', '05:1f'), ('pci-sriov', '08:02')])),
@@ -477,8 +484,8 @@ class TestMutiPortsPCI:
         HostsToRecover.add(host, scope='function')
 
         LOG.tc_step("Wait for vm to reach ERROR or REBUILD state with best effort")
-        vm_helper._wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
-                                       timeout=120)
+        vm_helper.wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
+                                      timeout=120)
 
         LOG.tc_step("Verify vm is evacuated to other host")
         vm_helper._wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=120, fail_ok=False)

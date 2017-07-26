@@ -207,14 +207,15 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_list, enable_device_an
 
 
 def _perform_nova_actions(vms_dict, flavors, vfs=None):
-    for vm_name, vm_id in vms_dict:
+    for vm_name, vm_id in vms_dict.items():
         LOG.tc_step("Cold migrate VM {} ....".format(vm_name))
         vm_helper.cold_migrate_vm(vm_id=vm_id)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-        LOG.tc_step("Cold migrate VM {} ....".format(vm_name))
+        LOG.tc_step("Live migrate VM {} ....".format(vm_name))
+        expt_codes = [0] if 'vm_no_crypto' in vm_name else [2, 6]
         code, msg = vm_helper.live_migrate_vm(vm_id=vm_id, fail_ok=True)
-        assert 6 == code, "Expect live migrate to fail for vm with pci device attached. Actual: {}".format(msg)
+        assert code in expt_codes, "Expect live migrate to fail for vm with pci device attached. Actual: {}".format(msg)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
         LOG.tc_step("Suspend/Resume VM {} ....".format(vm_name))
@@ -223,8 +224,8 @@ def _perform_nova_actions(vms_dict, flavors, vfs=None):
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
         if vfs is None:
-            resize_flavor_id = _flavors["flavor_resize_qat_vf_1"] if "no_crypto" not in vm_name else \
-                _flavors["flavor_resize_none"]
+            resize_flavor_id = flavors["flavor_resize_qat_vf_1"] if "no_crypto" not in vm_name else \
+                flavors["flavor_resize_none"]
         else:
             resize_flavor_id = flavors['flavor_resize_qat_vf_{}'.format(vfs)]
 

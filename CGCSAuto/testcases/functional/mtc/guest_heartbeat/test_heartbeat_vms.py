@@ -73,6 +73,10 @@ def _perform_action_on_hb_vm(vm_id, action):
         HostsToRecover.add(vm_host, scope='function')
         host_helper.reboot_hosts(vm_host)
 
+    elif action == 'vm_reboot':
+        LOG.tc_step("'sudo reboot -f' from vm, and check vm stays on same host")
+        vm_helper.sudo_reboot_from_vm(vm_id)
+
     elif action == 'lock':
         vm_host = nova_helper.get_vm_host(vm_id)
 
@@ -95,6 +99,7 @@ def _perform_action_on_hb_vm(vm_id, action):
     ('True', 'pause'),
     mark.domain_sanity(('True', 'migrate')),
     ('True', 'reboot'),   # failed because of CGTS-4911 (cgcs-guest issue)
+    ('True', 'vm_reboot'),
     ('True', 'lock'),
     ('False', 'lock'),
     mark.domain_sanity(('True', 'vim_restart'))
@@ -168,3 +173,4 @@ def test_hb_vm_with_action(hb_enabled, action, heartbeat_flavors):
             else:
                 assert not heartbeat_proc_appear, "Heartbeat set to False, However, heartbeat process is running " \
                                                   "after {}.".format(action)
+

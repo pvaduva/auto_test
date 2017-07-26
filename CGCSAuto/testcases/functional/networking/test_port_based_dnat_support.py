@@ -117,7 +117,7 @@ def test_port_forwarding_rule_create_for_vm(_vms, delete_pfs):
 
         assert rc == 0, "Port forwarding rule create failed for VM {}: {}".format(vm_name, msg)
 
-    LOG.info("rc {}; pf_id {} msg {}".format(rc, pf_id, msg))
+        LOG.info("rc {}; pf_id {} msg {}".format(rc, pf_id, msg))
 
 
 def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from_nat):

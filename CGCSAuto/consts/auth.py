@@ -4,7 +4,7 @@ class Tenant:
 
     ADMIN = {
         'user': 'admin',
-        'password': 'admin',
+        'password': 'Li69nux*',
         'tenant': 'admin',
         'auth_url': __URL,
         'region': __REGION
@@ -12,7 +12,7 @@ class Tenant:
 
     TENANT1 = {
         'user': 'tenant1',
-        'password': 'tenant1',
+        'password': 'Li69nux*',
         'tenant': 'tenant1',
         'auth_url': __URL,
         'region': __REGION
@@ -20,7 +20,7 @@ class Tenant:
 
     TENANT2 = {
         'user': 'tenant2',
-        'password': 'tenant2',
+        'password': 'Li69nux*',
         'tenant': 'tenant2',
         'auth_url': __URL,
         'region': __REGION
@@ -132,7 +132,7 @@ class Guest:
             'password': None
         },
 
-        # OPV image which is has root/root enabled
+        # OPV image has root/root enabled
         'rhel': {
             'user': 'root',
             'password': 'root'
@@ -141,6 +141,11 @@ class Guest:
         'cirros': {
             'user': 'cirros',
             'password': 'cubswin:)'
+        },
+
+        'win_2012': {
+            'user': 'Administrator',
+            'password': 'Li69nux*'
         }
 
     }

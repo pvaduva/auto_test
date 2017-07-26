@@ -4,7 +4,7 @@ import re
 
 from consts.auth import Tenant, HostLinuxCreds
 from consts.timeout import SysInvTimeout
-from consts.cgcs import UUID, Prompt
+from consts.cgcs import UUID, Prompt, Networks
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -49,6 +49,10 @@ def _get_info_non_cli(cmd, con_ssh=None):
         raise exceptions.SSHExecCommandFailed("Command failed to execute.")
 
     return output
+
+
+def is_storage_system(con_ssh=None):
+    return bool(get_storage_nodes(con_ssh=con_ssh))
 
 
 def is_two_node_cpe(con_ssh=None):
@@ -215,7 +219,7 @@ def get_standby_controller_name(con_ssh=None):
     Args:
         con_ssh:
 
-    Returns: hostname of the active controller
+    Returns (str): hostname of the active controller
         Further info such as ip, uuid can be obtained via System.CONTROLLERS[hostname]['uuid']
     """
     standby = _get_active_standby(controller='standby', con_ssh=con_ssh)
@@ -385,7 +389,7 @@ def unsuppress_all_events(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
         fail_ok:
         auth_info:
 
-    Returns:
+    Returns (tuple): (<code>(int), <msg>(str))
 
     """
     LOG.info("Un-suppress all events")
@@ -785,6 +789,16 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
 
 
 def host_exists(host, field='hostname', con_ssh=None):
+    """
+
+    Args:
+        host:
+        field:
+        con_ssh:
+
+    Returns (bool): whether given host exists in system host-list
+
+    """
     if not field.lower() in ['hostname', 'id']:
         raise ValueError("field has to be either \'hostname\' or \'id\'")
 
@@ -1183,8 +1197,43 @@ def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_i
         return 0, "4k memory is modified to {} in pending.".format(smallpage_num)
 
 
-def get_host_mem_values(host, headers, proc_id, con_ssh=None, auth_info=Tenant.ADMIN):
-    table_ = table_parser.table(cli.system('host-memory-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
+def get_host_mem_values(host, headers, proc_id, wait_for_avail_update=True, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get host memory values
+    Args:
+        host (str): hostname
+        headers (list):
+        proc_id (int|str): such as 0, '1'
+        wait_for_avail_update (bool): wait for mem_avail to be smaller than mem_total in case host just unlocked as per
+            CGTS-7499
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (list):
+
+    """
+
+    cmd = 'host-memory-list --nowrap'
+    table_ = table_parser.table(cli.system(cmd, host, ssh_client=con_ssh, auth_info=auth_info))
+
+    if wait_for_avail_update:
+        end_time = time.time() + 240
+        while time.time() < end_time:
+            total_mems = [int(mem) for mem in table_parser.get_column(table_, 'mem_total(MiB)')]
+            avail_mems = [int(mem) for mem in table_parser.get_column(table_, 'mem_avail(MiB)')]
+
+            for i in range(len(total_mems)):
+                if total_mems[i] <= avail_mems[i]:
+                    break
+            else:
+                LOG.debug("mem_total is larger than mem_avail")
+                break
+
+            LOG.info("mem_total is no larger than mem_avail, wait for mem_avail to update")
+            time.sleep(5)
+            table_ = table_parser.table(cli.system(cmd, host, ssh_client=con_ssh, auth_info=auth_info))
+        else:
+            raise SystemError("mem_total is no larger than mem_avail in 4 minutes")
 
     res = []
     for header in headers:
@@ -1203,7 +1252,7 @@ def get_host_used_mem_values(host, proc_id=0, auth_info=Tenant.ADMIN, con_ssh=No
         auth_info:
         con_ssh:
 
-    Returns:
+    Returns (int):
 
     """
     mem_vals = get_host_mem_values(
@@ -1269,28 +1318,28 @@ def create_storage_profile(host, profile_name='', con_ssh=None):
 
     return uuid
 
-
-def to_delete_apply_storage_profile(host, profile=None, con_ssh=None, fail_ok=False):
-    """
-    Apply a storage profile
-
-    Args:
-        host (str): hostname or id
-        profile (str): name or id of storage-profile
-        fail_ok (bool):
-        con_ssh (SSHClient):
-
-    Returns (dict): proc_id(str) and num_of_cores(int) pairs. e.g.,: {'0': 1, '1': 1}
-
-    """
-    if not profile:
-        raise ValueError('Name or uuid must be provided to apply that storage-profile')
-
-    cmd = 'host-apply-storprofile {} {}'.format(host, profile)
-    LOG.debug('cmd={}'.format(cmd))
-    code, output = cli.system(cmd, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True, auth_info=Tenant.ADMIN)
-
-    return code, output
+#
+# def to_delete_apply_storage_profile(host, profile=None, con_ssh=None, fail_ok=False):
+#     """
+#     Apply a storage profile
+#
+#     Args:
+#         host (str): hostname or id
+#         profile (str): name or id of storage-profile
+#         fail_ok (bool):
+#         con_ssh (SSHClient):
+#
+#     Returns (dict): proc_id(str) and num_of_cores(int) pairs. e.g.,: {'0': 1, '1': 1}
+#
+#     """
+#     if not profile:
+#         raise ValueError('Name or uuid must be provided to apply that storage-profile')
+#
+#     cmd = 'host-apply-storprofile {} {}'.format(host, profile)
+#     LOG.debug('cmd={}'.format(cmd))
+#     code, output = cli.system(cmd, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True, auth_info=Tenant.ADMIN)
+#
+#     return code, output
 
 
 def delete_storage_profile(profile='', con_ssh=None):
@@ -1397,7 +1446,7 @@ def get_host_ports_values(host, header='name', if_name=None, pci_addr=None, proc
         auth_info:
         **kwargs:
 
-    Returns:
+    Returns (list):
 
     """
     table_ = table_parser.table(cli.system('host-port-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
@@ -1490,7 +1539,7 @@ def get_host_ports_for_net_type(host, net_type='data', rtn_list=True, con_ssh=No
         con_ssh:
         auth_info:
 
-    Returns:
+    Returns (dict):
 
     """
     table_ = get_host_interfaces_table(host=host, con_ssh=con_ssh, auth_info=auth_info)
@@ -1529,7 +1578,7 @@ def get_host_port_pci_address(host, interface, con_ssh=None, auth_info=Tenant.AD
         con_ssh:
         auth_info:
 
-    Returns: pci address of interface
+    Returns (str): pci address of interface
 
     """
     table_ = table_parser.table(cli.system('host-port-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
@@ -1552,7 +1601,7 @@ def get_host_port_pci_address_for_net_type(host, net_type='mgmt', rtn_list=True,
         con_ssh:
         auth_info:
 
-    Returns:
+    Returns (list):
 
     """
     ports = get_host_ports_for_net_type(host, net_type=net_type, rtn_list=rtn_list, con_ssh=con_ssh,
@@ -1607,7 +1656,7 @@ def get_service_parameter_values(rtn_value='value', service=None, section=None, 
         name (str):
         con_ssh:
 
-    Returns (dict):
+    Returns (list):
 
     """
     kwargs = {}
@@ -1729,7 +1778,7 @@ def delete_service_parameter(uuid, con_ssh=None, fail_ok=False, check_first=True
         fail_ok:
         check_first (bool): Check if the service parameter exists before
 
-    Returns:
+    Returns (tuple):
 
     """
     if check_first:
@@ -1838,6 +1887,8 @@ def get_system_health_query_upgrade(con_ssh=None):
                 ok[k.strip()] = v.strip()
             elif "[Fail]" in v.strip():
                 failed[k.strip()] = v.strip()
+        elif "Missing manifests" in line:
+            failed[line] = line
     if len(failed) > 0:
         return 1, failed
     else:
@@ -2149,8 +2200,7 @@ def get_software_loads(rtn_vals=('sw_id', 'state', 'software_version'), sw_id=No
 
 
 def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False, source_creden_=None):
-    load_id = get_imported_load_id(load_version=load_version, con_ssh=con_ssh, fail_ok=fail_ok,
-                              source_creden_=source_creden_)
+    load_id = get_imported_load_id(load_version=load_version, con_ssh=con_ssh, source_creden_=source_creden_)
 
     rc, output = cli.system('load-delete', load_id, ssh_client=con_ssh,
                             fail_ok=True, source_creden_=source_creden_)
@@ -2248,7 +2298,10 @@ def abort_upgrade(con_ssh=None, timeout=60, fail_ok=False):
         index = con_ssh.expect([con_ssh.prompt,  Prompt.YES_N_PROMPT], timeout=timeout)
         if index == 1:
             con_ssh.send('yes')
-
+            index = con_ssh.expect([con_ssh.prompt, Prompt.CONFIRM_PROMPT], timeout=timeout)
+            if index == 1:
+               con_ssh.send('abort')
+               index = con_ssh.expect([con_ssh.prompt, Prompt.CONFIRM_PROMPT], timeout=timeout)
         if index == 0:
             rc = con_ssh.exec_cmd("echo $?")[0]
             con_ssh.flush()
@@ -2288,7 +2341,7 @@ def get_host_device_list_values(host, field='name', con_ssh=None, auth_info=Tena
         regex (bool): whether to use regular expression to search the value in kwargs
         kwargs: key-value pairs to filter the table
 
-    Returns (dict): output of system host-device-list <host> parsed by table_parser
+    Returns (list): output of system host-device-list <host> parsed by table_parser
 
     """
     table_ = table_parser.table(cli.system('host-device-list', host, ssh_client=con_ssh, auth_info=auth_info))
@@ -2443,4 +2496,86 @@ def get_controller_fs_values(con_ssh=None, auth_info=Tenant.ADMIN):
     for row in rows:
         values[row[0].strip()] = row[1].strip()
     return values
+
+
+def wait_for_services_enable(timeout=300, fail_ok=False, con_ssh=None):
+    """
+    Wait for services to be enabled-active in system service-list
+    Args:
+        timeout (int): max wait time in seconds
+        fail_ok (bool): whether return False or raise exception when some services fail to reach enabled-active state
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<res>(bool), <msg>(str))
+        (True, "All services are enabled-active")
+        (False, "Some services are not enabled-active: <failed_rows>")      Applicable if fail_ok=True
+
+    """
+    LOG.info("Wait for services to be enabled-active in system service-list")
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        service_list_tab = table_parser.table(cli.system('service-list', ssh_client=con_ssh)[1])
+        states = table_parser.get_column(service_list_tab, 'state')
+        if all(state == 'enabled-active' for state in states):
+            LOG.info("All services are enabled-active in system service-list")
+            return True, "All services are enabled-active"
+
+    LOG.warning("Not all services are enabled-ative within {} seconds".format(timeout))
+    inactive_services_tab = table_parser.filter_table(service_list_tab, exclude=True, state='enabled-active')
+    msg = "Some services are not enabled-active: {}".format(table_parser.get_all_rows(inactive_services_tab))
+    if fail_ok:
+        return False, msg
+    raise exceptions.SysinvError(msg)
+
+
+def is_infra_network_conifgured(con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Whether infra network is configured in the system
+    Args:
+        con_ssh (SSHClient):
+        auth_info (dict)
+
+    Returns:
+        (bool): True if infra network is configured, else False
+         value dict:
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+    output = cli.system('infra-show', ssh_client=con_ssh, auth_info=auth_info )
+    if "Infrastructure network not configured" in output:
+        return False,  None
+    table_ = table_parser.table(output)
+    rows = table_parser.get_all_rows(table_)
+    values = {}
+    for row in rows:
+        values[row[0].strip()] = row[1].strip()
+    return True, values
+
+
+def add_infra_network(infra_network_cidr=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Adds infra network to the system
+    Args:
+        infra_network_cidr:
+        con_ssh:
+        auth_info:
+
+    Returns:
+
+    """
+
+    if infra_network_cidr is None:
+        infra_network_cidr = Networks.INFRA_NETWORK_CIDR
+
+    output = cli.system('infra-add', infra_network_cidr,  ssh_client=con_ssh, auth_info=auth_info)
+    if "Infrastructure network not configured" in output:
+        msg = "Infra Network already configured in the system"
+        LOG.info(msg)
+        return False,  None
+    table_ = table_parser.table(output)
+    rows = table_parser.get_all_rows(table_)
+    values = {}
+    for row in rows:
+        values[row[0].strip()] = row[1].strip()
+    return True, values
 

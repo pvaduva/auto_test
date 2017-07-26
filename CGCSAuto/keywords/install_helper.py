@@ -501,29 +501,37 @@ def add_storages(lab, server, load_path, ):
 
 
 def run_lab_setup(con_ssh=None, timeout=3600):
+    return run_setup_script(script="lab_setup", config=True)
+
+
+def run_infra_post_install_setup():
+    return run_setup_script(script="lab_infra_post_install_setup", config=True)
+
+
+def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=3600):
     if con_ssh is None:
-        cons_ssh = ControllerClient.get_active_controller()
+        con_ssh = ControllerClient.get_active_controller()
+    if config:
+        cmd = "test -e {}/{}.conf".format( WRSROOT_HOME, script)
+        rc = con_ssh.exec_cmd(cmd)[0]
 
-    cmd = "test -e {}/lab_setup.conf".format(WRSROOT_HOME )
-    rc = con_ssh.exec_cmd(cmd)[0]
+        if rc != 0:
+            msg = "The {}.conf file missing from active controller".format(script)
+            return rc, msg
 
-    if rc != 0:
-        msg = "The lab_setup.conf file missing from active controller"
-        return rc, msg
-
-    cmd = "test -e {}/lab_setup.sh".format(WRSROOT_HOME )
+    cmd = "test -e {}/{}.sh".format(WRSROOT_HOME, script)
     rc = con_ssh.exec_cmd(cmd, )[0]
 
     if rc != 0:
-        msg = "The lab_setup.sh file missing from active controller"
+        msg = "The {}.sh file missing from active controller".format(script)
         return rc, msg
 
-    cmd = "cd; source /etc/nova/openrc; ./lab_setup.sh"
+    cmd = "cd; source /etc/nova/openrc; ./{}.sh".format(script)
     con_ssh.set_prompt(Prompt.ADMIN_PROMPT)
     rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout)
     if rc != 0:
-        msg = " lab_setup run failed: {}".format(msg)
+        msg = " {} run failed: {}".format(script, msg)
         LOG.warning(msg)
         return rc, msg
     con_ssh.set_prompt()
-    return 0, "Lab_setup run successfully"
+    return 0, "{} run successfully".format(script)

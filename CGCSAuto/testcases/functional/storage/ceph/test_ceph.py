@@ -235,7 +235,7 @@ def _test_ceph_mon_process_kill(monitor):
         assert mon_pid, msg
         proc_killed, msg = storage_helper.kill_process(monitor, mon_pid)
         assert proc_killed, msg
-        for i in range(0, PROC_RESTART_TIME):
+        for j in range(0, PROC_RESTART_TIME):
             mon_pid2, msg = storage_helper.get_mon_pid(monitor)
             if mon_pid2 != mon_pid:
                 time.sleep(5)   # Process might still be initializing
@@ -340,9 +340,12 @@ def test_ceph_reboot_storage_node():
         host_helper.wait_for_host_states(host, availability='offline')
         LOG.tc_step("Results: {}".format(results))          # yang TODO log added to keyword, still needed?
 
-        time.sleep(1)
         LOG.tc_step('Check health of CEPH cluster')
-        ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+        end_time = time.time() + 10
+        while time.time() < end_time:
+            ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+            if not ceph_healthy:
+                break
         assert not ceph_healthy, msg
         LOG.info(msg)
 
@@ -381,9 +384,7 @@ def test_ceph_reboot_storage_node():
 
         assert not all_osds_up, " One or more OSD(s) {}  is(are) up but should be down".format(up_list)
 
-        if not host_helper.wait_for_host_states(host, availability='available', fail_ok=False):   # yang TODO use fail_ok flag?
-            msg = 'Host {} did not come available in the expected time'.format(host)
-            raise exceptions.HostPostCheckFailed(msg)
+        host_helper.wait_for_host_states(host, availability='available', fail_ok=False)
 
         LOG.tc_step('Check that OSDs are up')
         osd_list = storage_helper.get_osds(host, con_ssh)
@@ -410,7 +411,7 @@ def test_ceph_reboot_storage_node():
         end_time = time.time() + 40
         while time.time() < end_time:
             ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-            if ceph_healthy == True:
+            if ceph_healthy is True:
                 break
 
         assert ceph_healthy, msg
@@ -503,8 +504,8 @@ def test_lock_stor_check_osds_down(host):
 
     # 800.001   Storage Alarm Condition: Pgs are degraded/stuck/blocked. Please
     # check 'ceph -s' for more details
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND, fail_ok=True)[0], "Alarm {} not raised"\
-        .format(EventLogID.STORAGE_ALARM_COND)
+    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND, fail_ok=True)[0], \
+        "Alarm {} not raised".format(EventLogID.STORAGE_ALARM_COND)
 
     LOG.tc_step('Unlock storage node')
     rtn_code, out = host_helper.unlock_host(host)
@@ -517,10 +518,9 @@ def test_lock_stor_check_osds_down(host):
     end_time = time.time() + 40
     while time.time() < end_time:
         health = storage_helper.is_ceph_healthy(con_ssh)
-        if health == True:
+        if health is True:
             break
     assert health, "Ceph did not become healthy"
-
 
     # Check that alarms clear
     LOG.tc_step('Check that host lock alarm is cleared when {} is unlocked'.format(host))
@@ -885,8 +885,7 @@ def test_import_with_cache_raw():
         assert flv[0] == 0, flv[1]
 
         LOG.tc_step('Launch VM from created volume')
-        vm_id = vm_helper.boot_vm(name=img_name, flavor=flv[1],
-            source='volume', source_id=volume_id)[1]
+        vm_id = vm_helper.boot_vm(name=img_name, flavor=flv[1], source='volume', source_id=volume_id)[1]
         ResourceCleanup.add('vm', vm_id)
         vm_list.append(vm_id)
 
@@ -1045,7 +1044,6 @@ def _test_exceed_size_of_img_pool():
     assert ceph_healthy, msg
 
 
-# TODO: remove '_' before test name after this test is completed.
 @mark.usefixtures('ceph_precheck')
 def test_import_large_images_with_cache_raw():
     """
@@ -1077,6 +1075,8 @@ def test_import_large_images_with_cache_raw():
 
     con_ssh = ControllerClient.get_active_controller()
     img = 'cgcs-guest'
+    glance_helper.get_guest_image(guest_os=img)
+
     base_img = img + '.img'
     qcow2_img = img + '.qcow2'
     new_img = '40GB' + base_img
@@ -1302,7 +1302,7 @@ def _test_modify_ceph_pool_size_neg():
     glance = str(glance_pool_gib - 10)
     eph = str(ephemeral_pool_gib + 10)
     new_value = glance_pool_gib - 10
-    rtn_code, out = storage_helper.modify_storage_backend('ceph', glance=glance, ephemeral=eph, fail_ok=True)     # TODO for Yang: keyword needed
+    rtn_code, out = storage_helper.modify_storage_backend('ceph', glance=glance, ephemeral=eph, fail_ok=True)
     msg = 'Unexpectedly changed glance storage pool quota from {} to {}'.format(glance_pool_gib,
                                                                                 new_value)
     assert rtn_code != 0, msg

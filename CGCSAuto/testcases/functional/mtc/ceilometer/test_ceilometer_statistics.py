@@ -38,7 +38,7 @@ def test_statistics_for_one_meter(meter):
     for header in headers:
         header_val = eval(table_parser.get_column(stats_tab, header)[0])
 
-        assert 0 < header_val, "Value for {} in {} stats table is not larger than zero".format(header, meter)
+        assert 0 <= header_val, "Value for {} in {} stats table is less than zero".format(header, meter)
 
 
 @mark.sanity
@@ -221,5 +221,4 @@ def test_retention_sample():
     ceilometer_helper.delete_samples()
 
     LOG.tc_step("Ensuring the sample isn't listed anymore")
-    samples = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
-    assert 0 == len(samples), "FAIL: The sample was not removed"
+    ceilometer_helper.wait_for_sample_expire(meter='fake_sample', fail_ok=False)

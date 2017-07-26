@@ -16,7 +16,14 @@ def check_launch_script_exists():
             skip("Lab setup using heat. No VM launch script.")
 
 
-@mark.parametrize('vm_type', ['avp', 'vhost', 'vswitch', 'virtio', 'pcipt', 'sriov'])
+@mark.parametrize('vm_type', [
+    'avp',
+    'vhost',
+    'vswitch',
+    'virtio',
+    # 'pcipt', CGTS-7376
+    'sriov'
+])
 def test_vif_models(vm_type):
     """
     boot avp,e100 and virtio instance

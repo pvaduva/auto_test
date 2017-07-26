@@ -5,7 +5,7 @@ from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
 from utils.ssh import NATBoxClient
-from consts.cgcs import VMStatus
+from consts.cgcs import VMStatus, FlavorSpec
 from keywords import vm_helper, nova_helper, host_helper, network_helper, system_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -114,9 +114,8 @@ def test_snat_vm_actions(snat_setups, snat):
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("wget to VM {}".format(vm_))
-    lab_fip = ProjVar.get_var('LAB')['floating ip']
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_, use_fip=True) as vm_ssh:
-        vm_ssh.exec_cmd('wget {}'.format(lab_fip), fail_ok=False)
+        vm_ssh.exec_cmd('wget google.ca', fail_ok=False)
 
     LOG.tc_step("scp from NatBox to VM {}".format(vm_))
     vm_fip = network_helper.get_mgmt_ips_for_vms(vms=vm_, use_fip=True)[0]
@@ -154,6 +153,15 @@ def test_snat_vm_actions(snat_setups, snat):
 
     LOG.tc_step("Reboot the VM and verify ping from VM")
     vm_helper.reboot_vm(vm_)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
+    vm_helper.ping_ext_from_vm(vm_, use_fip=True)
+
+    LOG.tc_step("Resize the vm to a flavor with 2 dedicated cpus and verify ping from VM")
+    new_flv = nova_helper.create_flavor(name='ded', vcpus=2)[1]
+    ResourceCleanup.add('flavor', new_flv, scope='module')
+    nova_helper.set_flavor_extra_specs(new_flv, **{FlavorSpec.CPU_POLICY: 'dedicated'})
+
+    vm_helper.resize_vm(vm_, new_flv)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
@@ -208,7 +216,7 @@ def test_snat_evacuate_vm(snat_setups, snat):
     host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
 
     LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-    vm_helper._wait_for_vms_values(vm_, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
+    vm_helper.wait_for_vms_values(vm_, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
 
     LOG.tc_step("Verify vm is evacuated to other host")
     vm_helper._wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
@@ -254,8 +262,6 @@ def test_snat_computes_lock_reboot(snat_setups):
     hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
     if len(hypervisors) > 3:
         skip("More than 3 hypervisors on system. Skip to reduce run time.")
-    if system_helper.is_small_footprint():
-        skip("Skip for CPE system.")
 
     vm_ = snat_setups[0]
     LOG.tc_step("Ping VM {} from NatBox".format(vm_))
@@ -270,8 +276,8 @@ def test_snat_computes_lock_reboot(snat_setups):
     hosts_to_lock = list(hosts_should_lock - hosts_already_locked)
     LOG.tc_step("Lock all compute hosts {} except vm host {}".format(hosts_to_lock, vm_host))
     for host_ in hosts_to_lock:
+        HostsToRecover.add(host_, scope='function')
         host_helper.lock_host(host_, swact=True)
-        HostsToRecover.add(host_, scope='module')
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=60)
     LOG.tc_step("Ping external from vm {}".format(vm_))

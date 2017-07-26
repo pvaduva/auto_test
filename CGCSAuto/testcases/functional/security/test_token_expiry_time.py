@@ -56,7 +56,7 @@ def test_token_expiry(service_params):
 
     LOG.info("Expect expiry time to be {}. Token expiry time is {}. Difference is {}."
              .format(token_expire_time, expt_datetime, time_diff))
-    assert -5 < time_diff < 5, "Token expiry time is {}, but token expired {} seconds after expected time.".\
+    assert -150 < time_diff < 150, "Token expiry time is {}, but token expired {} seconds after expected time.".\
         format(expire_time, time_diff)
 
     for expire_time in expire_times:
@@ -80,4 +80,4 @@ def test_token_expiry(service_params):
 
             LOG.info("Expect expiry time to be {}. Token expiry time is {}. Difference is {}."
                      .format(token_expire_time, expt_datetime, time_diff))
-            assert -5 < time_diff < 5, "Token is not set to expire after {} seconds".format(expire_time)
+            assert -150 < time_diff < 150, "Token is not set to expire after {} seconds".format(expire_time)

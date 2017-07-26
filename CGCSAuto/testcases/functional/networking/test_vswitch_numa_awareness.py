@@ -82,6 +82,20 @@ def id_params_cores(val):
         return '_'.join([str(i) for i in val])
 
 
+def _convert_ht_cpe_req(ht_req, cpe_req):
+    if ht_req == 'HT':
+        ht_req = True
+    elif ht_req == 'nonHT':
+        ht_req = False
+
+    if cpe_req == 'AIO':
+        cpe_req = True
+    elif cpe_req == 'nonAIO':
+        cpe_req = False
+
+    return ht_req, cpe_req
+
+
 class TestVSwitchCPUReconfig:
 
     @fixture(scope='class')
@@ -96,14 +110,14 @@ class TestVSwitchCPUReconfig:
     @mark.p3
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required'), [
         # (None, None, None, None),           # Test without reconfig
-        ((1, 0), (1, 1), None, False),      # Standard lab only
-        ((2, 0), (1, 1), None, True),       # CPE only
+        ((1, 0), (1, 1), None, 'nonAIO'),      # Standard lab only
+        ((2, 0), (1, 1), None, 'AIO'),       # CPE only
         ((1, 2), (3, 2), None, None),
         ((1, 2), (2, 2), None, None),
-        ((1, 0), (1, 0), False, False),     # Standard lab only
-        ((2, 0), (1, 0), False, True),      # CPE only
+        ((1, 0), (1, 0), 'nonHT', 'nonAIO'),     # Standard lab only
+        ((2, 0), (1, 0), 'nonHT', 'AIO'),      # CPE only
         # ((2, 0), (2, 0), None, True),       # CPE only    # remove - covered by other test
-        ((1, 0), (2, 0), None, False),      # Standard lab only
+        ((1, 0), (2, 0), None, 'nonAIO'),      # Standard lab only
     ], ids=id_params_cores)
     def test_vswitch_cpu_reconfig_positive(self, host_to_config, flavor_, platform, vswitch, ht_required, cpe_required):
         """
@@ -136,6 +150,7 @@ class TestVSwitchCPUReconfig:
         host, ht_enabled, is_cpe, host_other, storage_backing = host_to_config
         HostsToRecover.add(host, scope='class')
 
+        ht_required, cpe_required = _convert_ht_cpe_req(ht_required, cpe_required)
         if ht_required is not None and ht_required is not ht_enabled:
             skip("Hyper-threading for {} is not {}".format(host, ht_required))
 
@@ -180,9 +195,9 @@ class TestVSwitchCPUReconfig:
         pass
 
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required', 'expt_err'), [
-        mark.p1(((1, 1), (5, 5), False, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
-        mark.p3(((7, 9), (2, 2), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),   # Assume total<=10 cores/per proc & thread
-        mark.p3((('cores-2', 'cores-2'), (2, 2), None, None, "CpuAssignment.NO_VM_CORE")),
+        mark.p1(((1, 1), (5, 5), 'nonHT', None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
+        mark.p3(((7, 6), (2, 5), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),   # Assume total<=10 cores/per proc & thread
+        # mark.p3((('cores-2', 'cores-2'), (2, 2), None, None, "CpuAssignment.NO_VM_CORE")), Removed due to CGTS-5715
         mark.p3(((1, 1), (9, 8), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),   # Assume total <= 10 cores/per proc & thread
         mark.p3(((5, 5), (5, 4), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
         mark.p1(((5, 5), (6, 5), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),  # Assume total<=10core/proc&thread
@@ -216,6 +231,8 @@ class TestVSwitchCPUReconfig:
         host, ht_enabled, is_cpe, host_other, storage_backing = host_to_config
 
         HostsToRecover.add(host, scope='class')
+
+        ht_required, cpe_required = _convert_ht_cpe_req(ht_required, cpe_required)
 
         if ht_required is not None and ht_required is not ht_enabled:
             skip("Hyper-threading for {} is not {}".format(host, ht_required))

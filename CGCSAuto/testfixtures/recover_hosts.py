@@ -89,7 +89,7 @@ class HostsToRecover():
         if unlocked_hosts:
             LOG.fixture_step("({}) Wait for hosts to becomes available or degraded: {}".format(scope, unlocked_hosts))
             res2 = host_helper.wait_for_hosts_states(unlocked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,
-                                                     fail_ok=True, availability=['available', 'degraded'])
+                                                     fail_ok=True, availability=['available'])
             if not res2:
                 err_msg.append("Some host(s) from {} are not available.".format(unlocked_hosts))
 

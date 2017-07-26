@@ -1,16 +1,7 @@
-import time
-import sys
-from pytest import fixture, mark
-import re
-from utils import cli
-from utils import table_parser
-from utils.ssh import NATBoxClient
+from pytest import mark
+
 from utils.tis_log import LOG
-from consts.timeout import VMTimeout, EventLogTimeout
-from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
-from consts.auth import Tenant
-from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from keywords import nova_helper, vm_helper
 
 
 @mark.sanity
@@ -30,7 +21,7 @@ def test_vm_meta_data_retrieval():
         - Pass if the result are the same
 
     Test Teardown:
-        - Delete vms, volumes, flavor created
+        - Delete created vm and flavor
 
 
     """
