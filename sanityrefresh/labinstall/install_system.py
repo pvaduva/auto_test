@@ -1367,9 +1367,17 @@ def downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, load_path,
                                   WRSROOT_HOME_DIR, pre_opts=pre_opts)
         else:
             scripts_path = lab_cfg_path + "/../../scripts/"
-            bld_server_conn.rsync(os.path.join(scripts_path, "*"),
-                                    WRSROOT_USERNAME, controller0.host_ip,
-                                    WRSROOT_HOME_DIR, pre_opts=pre_opts)
+            rc = bld_server_conn.rsync(os.path.join(scripts_path, "*"),
+                                       WRSROOT_USERNAME, controller0.host_ip,
+                                       WRSROOT_HOME_DIR, pre_opts=pre_opts,
+                                       allow_fail=True)
+
+            # For custom config installs
+            if rc != 0:
+                bld_server_conn.rsync(os.path.join(load_path, centos_lab_path, "scripts", "*"),
+                                       WRSROOT_USERNAME, controller0.host_ip,
+                                       WRSROOT_HOME_DIR, pre_opts=pre_opts)
+                                      
 
         bld_server_conn.rsync(os.path.join(load_path, heat_temp_path, "*"),
                                 WRSROOT_USERNAME, controller0.host_ip, \

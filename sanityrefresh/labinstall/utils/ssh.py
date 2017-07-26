@@ -165,11 +165,14 @@ class SSHClient(pxssh.pxssh):
         ssh_opts = '"ssh {}" '.format(" ".join(RSYNC_SSH_OPTIONS))
         cmd = "{} rsync -avre {} {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
-        if self.exec_cmd(cmd, RSYNC_TIMEOUT, show_output=False)[0] != 0:
+        rc = self.exec_cmd(cmd, RSYNC_TIMEOUT, show_output=False)[0]
+        if rc != 0:
             msg = "Rsync failed"
             log.error(msg)
             if not allow_fail:
                 wr_exit()._exit(1, msg)
+
+        return rc
 
     def collect_logs(self):
         cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S collect all"
