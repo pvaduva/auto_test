@@ -258,6 +258,7 @@ class EventLogID:
     CINDER_IO_CONGEST = '800.101'
     PROVIDER_NETWORK_FAILURE = '300.005'
     BMC_SENSOR_ACTION = '200.007'
+    CPU_USAGE_HIGH = '100.101'
 
 
 class NetworkingVmMapping:

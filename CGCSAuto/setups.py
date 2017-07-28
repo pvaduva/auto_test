@@ -4,7 +4,7 @@ import os.path
 import configparser
 
 import setup_consts
-from utils import exceptions, cli
+from utils import exceptions, cli, lab_info
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
 from utils.node import create_node_boot_dict, create_node_dict
@@ -534,3 +534,15 @@ def scp_vswitch_log(con_ssh, hosts, log_path=None):
 
 def list_migration_history(con_ssh):
     nova_helper.run_migration_list(con_ssh=con_ssh)
+
+
+def get_version_and_patch_info(con_ssh):
+    version = lab_info._get_build_info(con_ssh, 'SW_VERSION')[0]
+    info = 'Software Version: {}\n'.format(version)
+
+    patches = lab_info._get_patches(con_ssh=con_ssh, rtn_str=False)
+    if patches:
+        info += 'Patches:\n{}\n'.format('\n'.join(patches))
+
+    LOG.info("SW Version and Patch info: {}".format(info))
+    return info

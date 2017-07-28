@@ -361,7 +361,7 @@ def __hosts_in_states(hosts, con_ssh=None, **states):
 
 
 def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTimeout.ONLINE_AFTER_LOCK, con_ssh=None,
-              fail_ok=False, check_first=True, swact=False):
+              fail_ok=False, check_first=True, swact=False, check_cpe_alarm=True):
     """
     lock a host.
 
@@ -374,6 +374,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         fail_ok (bool):
         check_first (bool):
         swact (bool): whether to check if host is active controller and do a swact before attempt locking
+        check_cpe_alarm (bool): whether to wait for cpu usage alarm gone before locking
 
     Returns: (return_code(int), msg(str))   # 1, 2, 3, 4, 5, 6 only returns when fail_ok=True
         (-1, "Host already locked. Do nothing.")
@@ -400,6 +401,12 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         if is_active_controller(host) and len(system_helper.get_controllers()) > 1:
             LOG.info("{} is active controller, swact first before attempt to lock.")
             swact_host(host, con_ssh=con_ssh)
+
+    if check_cpe_alarm and system_helper.is_two_node_cpe(con_ssh=con_ssh):
+        LOG.info("For AIO-duplex, wait for cpu usage high alarm gone on active controller")
+        active_con = system_helper.get_active_controller_name()
+        system_helper.wait_for_alarms_gone([(EventLogID.CPU_USAGE_HIGH, active_con)], check_interval=10,
+                                           fail_ok=fail_ok, timeout=300)
 
     positional_arg = host
     extra_msg = ''

@@ -16,7 +16,7 @@ REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 <b>Lab: </b>{}
 <b>Load: </b>{}
 <b>Build Server: </b>{}
-<b>Node Config: </b>{}
+<b>Node Config: </b>{}{}{}
 
 <b>Overall Status: {}</b>
 <b>Detailed Test Results Location: </b>{}
@@ -46,6 +46,8 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
     Returns:
 
     """
+    sw_version = patches = ''
+    res_file = 'test_results.log'
     if source.lower() == 'mongo':
         if not tags:
             raise ValueError("tags, start_date, end_date have to be provided when query results from mongoDB")
@@ -59,15 +61,19 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
         lab, build, build_server, overall_status, log_path, summary, testcases_res = \
             _get_results_from_mongo(tags=tags, start_date=start_date, end_date=end_date, logs_dir=logs_dir)
 
+        if logs_dir:
+            res_path = os.path.join(logs_dir, res_file)
+            sw_version, patches = _get_version_and_patch(res_path)
+
     else:
         # get result from test server's from /sandbox/AUTOMATION_LOGS/<lab>/<date>/test_results.log
-        res_file = 'test_results.log'
-        if not res_file in source and not logs_dir:
+        if res_file not in source and not logs_dir:
             raise ValueError("local automation log path has to be specified via logs_dir or source")
 
         source = source if res_file in source else os.path.join(logs_dir, res_file)
         source = os.path.expanduser(source)
-        lab, build, build_server, overall_status, log_path, summary, testcases_res = _get_local_results(source)
+        lab, build, build_server, overall_status, log_path, summary, testcases_res, sw_version, patches = \
+            _get_local_results(source)
 
     log_path = re.sub(TEST_SERVER_FS_AUTOLOG, TEST_SERVER_HTTP_AUTOLOG, log_path, count=1)
 
@@ -84,9 +90,13 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
     summary = summary.replace('Passed: ', '<b>Passed: </b>').replace('Failed: ', '<b>Failed: </b>').\
         replace('Skipped: ', '<b>Skipped: </b>').replace('Total Executed: ', '<b>Total Executed: </b>')
 
+    if patches:
+        patches = "\n<b>Patches: </b>{}".format(patches)
+    if sw_version:
+        sw_version = "\n<b>Software Version: </b>{}".format(sw_version)
     with open(TMP_FILE, mode='w') as f:
-        f.write(REPORT_FORMAT.format(lab, build, build_server, sys_config, overall_status, log_path, summary,
-                                     testcases_res).replace('\n', '<br>'))
+        f.write(REPORT_FORMAT.format(lab, build, build_server, sys_config, sw_version, patches,
+                                     overall_status, log_path, summary, testcases_res).replace('\n', '<br>'))
     if 'RED' in overall_status:
         raw_status = 'RED'
     elif 'GREEN' in overall_status:
@@ -110,6 +120,7 @@ def _get_local_results(res_path):
     lab = re.findall('Lab: (.*)\n', other_info)[0].strip()
     build = re.findall('Build ID: (.*)\n', other_info)[0].strip()
     build_server = re.findall('Build Server: (.*)\n', other_info)[0].strip()
+    sw_version, patches = _get_version_and_patch(raw_res=raw_res)
     log_path = re.findall('Automation LOGs DIR: (.*)\n', other_info)[0].strip()
     hostname = local_host.get_host_name()
     log_path = "{}:{}".format(hostname, log_path)
@@ -117,7 +128,21 @@ def _get_local_results(res_path):
     summary = other_info.split(sep='\nSummary:')[-1].strip()
     overall_status = _get_overall_status(pass_rate)
 
-    return lab, build, build_server, overall_status, log_path, summary, testcases_res
+    return lab, build, build_server, overall_status, log_path, summary, testcases_res, sw_version, patches
+
+
+def _get_version_and_patch(res_path=None, raw_res=None):
+    if not raw_res:
+        with open(res_path, mode='r') as f:
+            raw_res = f.read()
+
+    testcases_res, other_info = raw_res.split(sep='\n\n', maxsplit=1)
+    sw_version = re.findall('Software Version: (.*)\n', other_info)
+    sw_version = sw_version[0].strip() if sw_version else ''
+    patches = re.findall('Patches:((\n.*)+)\n\n', other_info)
+    patches = patches[0][0] if patches else ''
+
+    return sw_version, patches
 
 
 def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, logs_dir=None):

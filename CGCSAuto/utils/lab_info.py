@@ -15,6 +15,44 @@ def get_lab_floating_ip(labname=None):
     return lab_dict['floating ip']
 
 
+def _get_patches(con_ssh, rtn_str=True):
+    code, output = con_ssh.exec_sudo_cmd('sw-patch query', fail_ok=True)
+
+    patches = []
+    if code == 0:
+        output_lines = output.splitlines()
+        patches = list(output_lines)
+        for line in output_lines:
+            patches.remove(line)
+            if line.startswith('========='):
+                break
+        patches = [patch.strip().split(sep=' ', maxsplit=1)[0] for patch in patches if patch.strip()]
+    if rtn_str:
+        patches = ' '.join(patches)
+
+    return patches
+
+
+def _get_build_info(con_ssh, *args):
+    """
+
+    Args:
+        con_ssh (SSHClient):
+        **args: 'SW_VERSION', 'BUILD_TARGET', 'BUILD_ID', 'BUILD_HOST', etc...
+
+    Returns (list):
+
+    """
+    output = con_ssh.exec_cmd('cat /etc/build.info')[1]
+    vals = []
+    for arg in args:
+        val = re.findall('''{}=\"(.*)\"'''.format(arg.upper()), output)
+        val = val[0] if val else ''
+        vals.append(val)
+
+    return vals
+
+
 def get_build_id(labname=None, log_dir=None, con_ssh=None):
     """
 

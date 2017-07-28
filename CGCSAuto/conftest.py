@@ -344,6 +344,15 @@ def pytest_unconfigure():
     except:
         pass
 
+    version_and_patch = ''
+    try:
+        from utils.ssh import ControllerClient
+        con_ssh = ControllerClient.get_active_controller()
+        version_and_patch = setups.get_version_and_patch_info(con_ssh=con_ssh)
+    except Exception as e:
+        LOG.debug(e)
+        pass
+
     try:
         log_dir = ProjVar.get_var('LOG_DIR')
         tc_res_path = log_dir + '/test_results.log'
@@ -351,7 +360,7 @@ def pytest_unconfigure():
         build_server = ProjVar.get_var('BUILD_SERVER')
 
         total_exec = TestRes.PASSNUM + TestRes.FAILNUM
-        pass_rate = fail_rate = '0'
+        # pass_rate = fail_rate = '0'
         if total_exec > 0:
             pass_rate = "{}%".format(round(TestRes.PASSNUM * 100 / total_exec, 2))
             fail_rate = "{}%".format(round(TestRes.FAILNUM * 100 / total_exec, 2))
@@ -360,8 +369,9 @@ def pytest_unconfigure():
                 f.write('\n\nLab: {}\n'
                         'Build ID: {}\n'
                         'Build Server: {}\n'
-                        'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server,
-                                                           ProjVar.get_var('LOG_DIR')))
+                        'Automation LOGs DIR: {}\n'
+                        '{}'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server, ProjVar.get_var('LOG_DIR'),
+                                    version_and_patch))
                 # Add result summary to beginning of the file
                 f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
                         format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
