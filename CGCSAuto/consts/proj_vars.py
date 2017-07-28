@@ -152,7 +152,8 @@ class UpgradeVars:
                          tis_build_dir=None,
                          upgrade_version=None,
                          upgrade_license_path=None,
-                         patch_dir=None):
+                         patch_dir=None,
+                         orchestration_after=None):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
 
@@ -167,6 +168,12 @@ class UpgradeVars:
 
             # Generic
             'UPGRADE_LICENSE': upgrade_license_path,
+            # Orchestration -  the orchestration starting point after certain number of nodes upgraded normally
+            #  eg:  controller -  indicate after controllers are upgraded the remaining are upgraded through
+            #        orchestration.
+            #       compute:1 - indicate orchestrations starts after one compute is upgraded.
+            'ORCHESTRATION_AFTER': orchestration_after,
+
 
             #User/password to build server
             #"USERNAME": getpass.getuser(),

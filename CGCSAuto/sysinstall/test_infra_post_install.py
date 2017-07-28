@@ -73,7 +73,7 @@ def test_infra_add_post_install(pre_infra_install_check):
     This test adds infra network to a lab after initial installation prior to launching any VMs. If VMs are present
     prior to running this test,  the VMs will be in an error state and need to be rebuild to recover the VMS after
     the test.
-    
+
     A script lab_infra_post_install_setup,sh is required to run this testcase. The script is saved in Test Server
     /home/svc-cgcsauto/test_scripts and is downloaded during the test. An  infra interface configuration file
     ( lab_infra_post_install_setup.conf) specific  to a lab is also required and must be saved in wrsroot home

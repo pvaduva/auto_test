@@ -2204,7 +2204,8 @@ def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False, source_
 
     rc, output = cli.system('load-delete', load_id, ssh_client=con_ssh,
                             fail_ok=True, source_creden_=source_creden_)
-    # FIXME: should parse the output to ensure it's rejected due to load is not found
+    if rc == 1:
+        return 1, output
 
     if not wait_for_delete_imported_load(load_id, con_ssh=con_ssh,  fail_ok=True):
         err_msg = "Unable to delete imported load {}".format(load_id)
@@ -2223,8 +2224,8 @@ def wait_for_delete_imported_load(load_id, timeout=120, check_interval=5, fail_o
     while time.time() < end_time:
         table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, auth_info=auth_info))
 
-        table_ = table_parser.filter_table(table_, **{'load_id': load_id})
-        if len(table_parser.get_values(table_, 'load_id')) == 0:
+        table_ = table_parser.filter_table(table_, **{'id': load_id})
+        if len(table_parser.get_values(table_, 'id')) == 0:
             return True
         else:
             if 'deleting' in table_parser.get_column(table_, 'state'):

@@ -1,24 +1,49 @@
 import time
 from utils.tis_log import LOG
-from keywords import system_helper, host_helper, install_helper, storage_helper, upgrade_helper
+from keywords import system_helper, host_helper, install_helper, upgrade_helper
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import UpgradeVars
 from consts.cgcs import HostAvailabilityState, HostOperationalState
 
 
 def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
+    """
+    This test verifies the upgrade system using orchestration or manual (one node at a time) procedures. The system
+    hosts are upgraded  in the order: controller-1, controller-0, storages, computes. Upgrading through orchestration or
+    manual is selected through the argument option --orchestration. The standby controller-1 is always upgraded first
+    using the manual upgrade regardless of the orchestration option. The remaining nodes are upgraded either one at a
+    time or through orchestration depending on the option selected. The default is to use upgrade orchestration.  The
+    --orchestration is specified in form: [<host personality>[:<number of hosts>]],  where:
+        <personality>  is either compute or storage
+        <number of hosts> is the number of hosts that are upgraded manually before using orchestration.
+        e.g:
+          --orchestration compute:1  -  do manual upgrade for controller-0, controller-1, all storages if exist
+                                        and one compute,  the remaining computes are upgraded through orchestration.
+          --orchestration default -  do manual upgrade for controller-1 and use orchestration for the rest of the nodes.
+          --orchestration controller  - do manual upgrade for controller-1 and controller-0, the rest nodes are upgraded
+                                        through orchestration.
+          --orchestration storage:2   - use orchestration after 2 storages are upgraded manually.
+
+    option specified during executing this test,  the system is upgraded
+    Args:
+        upgrade_setup:
+        check_system_health_query_upgrade:
+
+    Returns:
+
+    """
 
     lab = upgrade_setup['lab']
     current_version = upgrade_setup['current_version']
     upgrade_version = upgrade_setup['upgrade_version']
     bld_server = upgrade_setup['build_server']
+    # orchestration = 'upgrade'
+    man_upgrade_nodes = upgrade_setup['man_upgrade_nodes']
+    orchestration_nodes = upgrade_setup['orchestration_nodes']
     missing_manifests = False
     force = False
     controller0 = lab['controller-0']
-    if not host_helper.is_host_provisioned(controller0.name):
-        rc, output = upgrade_helper.upgrade_host_lock_unlock(controller0.name)
-        assert rc == 0, "Failed to lock/unlock host {}: {}".format(controller0.name, output)
-
+    host_helper.ensure_host_provisioned(controller0.name)
     LOG.tc_step("Checking system health for upgrade .....")
     if check_system_health_query_upgrade[0] == 0:
         LOG.info("System health OK for upgrade......")
@@ -53,64 +78,33 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
 
     # upgrade standby controller
     LOG.tc_step("Upgrading controller-1")
-    upgrade_helper.upgrade_host("controller-1", lock=True)
-    LOG.info("Host controller-1 is upgraded successfully......")
-
-    # unlock upgraded controller-1
-    LOG.tc_step("Unlocking controller-1 after upgrade......")
-    host_helper.unlock_host("controller-1", available_only=True, check_hypervisor_up=False)
-    LOG.info("Host controller-1 unlocked after upgrade......")
+    upgrade_helper.upgrade_controller('controller-1')
 
     time.sleep(60)
 
+    # Swact to standby controller-1
+    LOG.tc_step("Swacting to controller-1 .....")
     # Before Swacting ensure the controller-1 is in available state
-    if not host_helper.wait_for_host_states("controller-1", timeout=360, fail_ok=True,
+    if not host_helper.wait_for_host_states("controller-1", timeout=900, fail_ok=True,
                                             operational=HostOperationalState.ENABLED,
                                             availability=HostAvailabilityState.AVAILABLE):
         err_msg = " Swacting to controller-1 is not possible because controller-1 is not in available state " \
               "within  the specified timeout"
         assert False, err_msg
 
-    # Swact to standby contime.sleep(60)  troller-1
-    LOG.tc_step("Swacting to controller-1 .....")
     rc, output = host_helper.swact_host(hostname="controller-0")
     assert rc == 0, "Failed to swact: {}".format(output)
     LOG.info("Swacted and  controller-1 has become active......")
+    # time.sleep(60)
+    # active_controller = system_helper.get_active_controller_name()
 
-    time.sleep(60)
-
-    # upgrade  controller-0
-    LOG.tc_step("Upgrading  controller-0......")
-    controller0 = lab['controller-0']
-
-    # open vlm console for controller-0 for boot through mgmt interface
-    LOG.info("Opening a vlm console for controller-0 .....")
-    install_helper.open_vlm_console_thread("controller-0")
-
-    LOG.info("Starting {} upgrade.....".format(controller0.name))
-    upgrade_helper.upgrade_host(controller0.name, lock=True)
-    LOG.info("controller-0 is upgraded successfully.....")
-
-    # unlock upgraded controller-0
-    LOG.tc_step("Unlocking controller-0 after upgrade......")
-    host_helper.unlock_host(controller0.name, available_only=True)
-    LOG.info("Host {} unlocked after upgrade......".format(controller0.name))
-
-    upgrade_hosts = install_helper.get_non_controller_system_hosts()
-    LOG.info("Starting upgrade of the other system hosts: {}".format(upgrade_hosts))
-
-    for host in upgrade_hosts:
-        LOG.tc_step("Starting {} upgrade.....".format(host))
-        if "storage" in host:
-            # wait for replication  to be healthy
-            storage_helper.wait_for_ceph_health_ok()
-
-        upgrade_helper.upgrade_host(host, lock=True)
-        LOG.info("{} is upgraded successfully.....".format(host))
-        LOG.tc_step("Unlocking {} after upgrade......".format(host))
-        host_helper.unlock_host(host, available_only=True)
-        LOG.info("Host {} unlocked after upgrade......".format(host))
-        LOG.info("Host {} upgrade complete.....".format(host))
+    if 'controller-1' in man_upgrade_nodes:
+        man_upgrade_nodes.remove('controller-1')
+    if len(man_upgrade_nodes) > 0:
+        upgrade_helper.manual_upgrade_hosts(manual_nodes=man_upgrade_nodes)
+    if len(orchestration_nodes) > 0:
+        upgrade_helper.orchestration_upgrade_hosts(upgraded_hosts=man_upgrade_nodes,
+                                                   orchestration_nodes=orchestration_nodes)
 
     # Activate the upgrade
     LOG.tc_step("Activating upgrade....")
@@ -140,7 +134,7 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     install_helper.download_image(lab, bld_server, BuildServerPath.GUEST_IMAGE_PATHS[upgrade_version])
 
     load_path = UpgradeVars.get_upgrade_var('TIS_BUILD_DIR')
-    LOG.tc_step("Downloading heat temples to upgraded {} lab ".format(upgrade_version))
+    LOG.tc_step("Downloading heat templates to upgraded {} lab ".format(upgrade_version))
     install_helper.download_heat_templates(lab, bld_server, load_path)
 
     LOG.tc_step("Downloading lab config scripts to upgraded {} lab ".format(upgrade_version))

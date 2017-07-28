@@ -170,3 +170,9 @@ class VLMError(TiSError):
 class SWiftError(TiSError):
     message = "Swift error."
 
+
+class OrchestrationError(TiSError):
+    message = 'Orchestration error'
+
+class UpgradeError(TiSError):
+    message = 'Upgrade error'

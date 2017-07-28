@@ -39,6 +39,12 @@ def pytest_addoption(parser):
 
     patch_dir_help = "The path to the directory in build server where the patch files are located"
 
+    orchestration_help = "The point in upgrade procedure where we start to use orchestration. Possible options are:" \
+                         "  default - to start orchestration after controller-1 is upgraded; " \
+                         "  storage:<#> - to start orchestration after <#> storage (s) are upgraded normally; " \
+                         "  compute:<#> - start orchestration after <#> compute(s) are upgraded normally; " \
+                         " The default is default. Applicable only for upgrades from R3."
+
     parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
                      action='store', metavar='VERSION', required=True,  help=upgrade_version_help)
     parser.addoption('--build-server', '--build_server',  dest='build_server',
@@ -52,6 +58,9 @@ def pytest_addoption(parser):
     parser.addoption('--patch-dir', '--patch_dir',  dest='patch_dir',
                      action='store', metavar='DIR',  help=patch_dir_help)
 
+    parser.addoption('--orchestration', '--orchestration-after', '--orchestration_after', dest='orchestration_after',
+                     action='store', metavar='HOST_PERSONALITY:NUM', default='default', help=orchestration_help)
+
 
 def pytest_configure(config):
 
@@ -60,13 +69,18 @@ def pytest_configure(config):
     build_server = config.getoption('build_server')
     tis_build_dir = config.getoption('tis_build_dir')
     patch_dir = config.getoption('patch_dir')
-    print(" Pre Configure Install valrs: {}".format(InstallVars.get_install_vars()))
+    orchestration_after = config.getoption('orchestration_after')
+    if upgrade_version == "16.10":
+        orchestration_after = None
+
+    print(" Pre Configure Install vars: {}".format(InstallVars.get_install_vars()))
 
     UpgradeVars.set_upgrade_vars(upgrade_version=upgrade_version,
                                  build_server=build_server,
                                  tis_build_dir=tis_build_dir,
                                  upgrade_license_path=upgrade_license,
-                                 patch_dir=patch_dir)
+                                 patch_dir=patch_dir,
+                                 orchestration_after=orchestration_after)
 
 
 @pytest.fixture(scope='session')
@@ -133,7 +147,7 @@ def upgrade_setup(pre_check_upgrade):
     bld_server_attr = dict()
     bld_server_attr['name'] = bld_server['name']
     bld_server_attr['server_ip'] = bld_server['ip']
-    #bld_server_attr['prompt'] = r'.*yow-cgts[1234]-lx.*$ '
+    # bld_server_attr['prompt'] = r'.*yow-cgts[1234]-lx.*$ '
     bld_server_attr['prompt'] = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', bld_server['name'])
     # '.*yow\-cgts[34]\-lx ?~\]?\$ '
     bld_server_conn = SSHClient(bld_server_attr['name'], user=SvcCgcsAuto.USER,
@@ -146,7 +160,7 @@ def upgrade_setup(pre_check_upgrade):
     bld_server_obj = Server(**bld_server_attr)
 
     # # get upgrade license file for release
-    LOG.info("Dowloading the license {}:{} for target release {}".format(bld_server_obj.name,
+    LOG.info("Downloading the license {}:{} for target release {}".format(bld_server_obj.name,
                                                                          license_path, upgrade_version))
     install_helper.download_upgrade_license(lab, bld_server_obj, license_path)
 
@@ -154,7 +168,6 @@ def upgrade_setup(pre_check_upgrade):
     cmd = "test -e " + os.path.join(WRSROOT_HOME, "upgrade_license.lic")
     assert controller0_conn.exec_cmd(cmd)[0] == 0, "Upgrade license file not present in Controller-0"
     LOG.info("Upgrade  license {} download complete".format(license_path))
-
 
     # Install the license file for release
     LOG.tc_step("Installing the target release {} license file".format(upgrade_version))
@@ -166,23 +179,65 @@ def upgrade_setup(pre_check_upgrade):
     # Check load already imported if not  get upgrade load iso file
     # Run the load_import command to import the new release iso image build
     if not system_helper.get_imported_load_version():
-        LOG.tc_step("Dowloading the {} target release  load iso image file {}:{}".format(
-        upgrade_version, bld_server_obj.name, load_path))
+        LOG.tc_step("Downloading the {} target release  load iso image file {}:{}"
+                    .format(upgrade_version, bld_server_obj.name, load_path))
         install_helper.download_upgrade_load(lab, bld_server_obj, load_path)
         upgrade_load_path = os.path.join(WRSROOT_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
 
         cmd = "test -e {}".format(upgrade_load_path)
-        assert controller0_conn.exec_cmd(cmd)[0] == 0, "Upgrade build iso image file {} not present " \
-                                                   "in Controller-0".format(upgrade_load_path)
+        assert controller0_conn.exec_cmd(cmd)[0] == 0, "Upgrade build iso image file {} not present in Controller-0"\
+            .format(upgrade_load_path)
         LOG.info("Target release load {} download complete.".format(upgrade_load_path))
         LOG.tc_step("Importing Target release  load iso file from".format(upgrade_load_path))
-        output = system_helper.import_load(upgrade_load_path)
+        system_helper.import_load(upgrade_load_path)
 
     # download and apply patches if patches are available in patch directory
         if patch_dir:
             LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
-            apply_patches(lab,
-                      bld_server_obj, patch_dir)
+            apply_patches(lab, bld_server_obj, patch_dir)
+
+    # check which nodes are upgraded using orchestration
+    orchestration_after = UpgradeVars.get_upgrade_var('ORCHESTRATION_AFTER')
+    LOG.info("Upgrade orchestration start option: {}".format(orchestration_after))
+    system_nodes = system_helper.get_hostnames()
+    storage_nodes = [h for h in system_nodes if "storage" in h]
+    compute_nodes = [h for h in system_nodes if "storage" not in h and 'controller' not in h]
+    orchestration_nodes = []
+    cpe = False
+    if len(compute_nodes) == 0:
+        cpe = True
+
+    if not cpe and (orchestration_after == 'default' or 'controller' in orchestration_after):
+        orchestration_nodes.extend(system_nodes)
+        orchestration_nodes.remove('controller-1')
+        if 'controller' in orchestration_after:
+            orchestration_nodes.remove('controller-0')
+
+    elif not cpe and 'storage' in orchestration_after:
+        number_of_storages = len(storage_nodes)
+        num_selected = int(orchestration_after.split(':')[1]) if len(orchestration_after.split(':')) == 2 \
+            else number_of_storages
+        if num_selected > number_of_storages:
+            num_selected = number_of_storages
+        if num_selected > 0:
+            for i in range(num_selected):
+                orchestration_nodes.extend([h for h in storage_nodes if h != 'storage-{}'.format(i)])
+        orchestration_nodes.extend(compute_nodes)
+    elif not cpe and 'compute' in orchestration_after:
+        number_of_computes = len(compute_nodes)
+        num_selected = int(orchestration_after.split(':')[1]) if len(orchestration_after.split(':')) == 2 \
+            else number_of_computes
+        if num_selected > number_of_computes:
+            num_selected = number_of_computes
+
+        orchestration_nodes.extend(compute_nodes[num_selected:])
+    else:
+        LOG.info("System {} will be upgraded though manual procedure without orchestration.".format(lab['name']))
+
+    man_upgrade_nodes = [h for h in system_nodes if h not in orchestration_nodes]
+
+    LOG.info(" Nodes upgraded manually are: {}".format(man_upgrade_nodes))
+    LOG.info(" Nodes upgraded through Orchestration are: {}".format(orchestration_nodes))
 
     _upgrade_setup = {'lab': lab,
                       'cpe': cpe,
@@ -190,6 +245,8 @@ def upgrade_setup(pre_check_upgrade):
                       'current_version': current_version,
                       'upgrade_version': upgrade_version,
                       'build_server': bld_server_obj,
+                      'man_upgrade_nodes': man_upgrade_nodes,
+                      'orchestration_nodes': orchestration_nodes,
                       }
     ver = (system_helper.get_imported_load_version()).pop()
     assert upgrade_version in ver, "Import error. Expected " \
@@ -205,25 +262,54 @@ def check_system_health_query_upgrade():
     LOG.tc_func_start("UPGRADE_TEST")
     LOG.tc_step("Checking if system health is OK to start upgrade......")
     rc, health = system_helper.get_system_health_query_upgrade()
-    print("HEALTH: {}".format(health))
+    print("HEALTH: {}, {}".format(rc, health))
+
     if rc == 0:
         LOG.info("system health is OK to start upgrade......")
         return 0, None
-    elif rc != 0 and len(health) > 2:
-        LOG.error("System health query upgrade failed: {}".format(health))
+
+    alarms = any("No alarms" in h for h in health.keys())
+    manifest = any("Missing manifests" in h for h in health.keys())
+    err_msg = "System health query upgrade failed: {}".format(health)
+    if len(health) > 2:
+        # more than two health check failures
+        LOG.error(err_msg)
         return 1, health
-    elif rc == 1 and len(health) == 1 and 'No alarms' in health:
+
+    if len(health) == 2:
+        # check if the two failures are alarms and manifest,  otherwise return error.
+        if not alarms or not manifest:
+            LOG.error(err_msg)
+            return 1, health
+    else:
+        # Only one health check failure. Return error if not alarm or manifest
+        if not alarms and not manifest:
+            LOG.error(err_msg)
+            return 1, health
+
+    if alarms:
         # Check if it alarm
         table_ = table_parser.table(cli.system('alarm-list'))
         alarm_severity_list = table_parser.get_column(table_, "Severity")
-        if len(alarm_severity_list) > 0 and ("major" not in alarm_severity_list
-                                             and "critical" not in alarm_severity_list):
+        if len(alarm_severity_list) > 0 and \
+                ("major" not in alarm_severity_list and "critical" not in alarm_severity_list):
             # minor alarm present
             LOG.warn("System health query upgrade found minor alarms: {}".format(alarm_severity_list))
-            return 2, health
 
-    LOG.error("System health query upgrade failed: {}".format(health))
-    return 1, health
+        else:
+            # major/critical alarm present
+            LOG.error("System health query upgrade found major or critical alarms: {}".format(alarm_severity_list))
+            return 1, health
+
+    if manifest and alarms:
+        return 2, health
+
+    elif alarms:
+        # only minor alarm
+        return 3, health
+    else:
+        # only missing manifests
+        return 4, health
 
 
 def get_system_active_controller():
@@ -272,9 +358,7 @@ def apply_patches(lab, server, patch_dir):
         patch_dest_dir = WRSROOT_HOME + "/upgrade_patches"
 
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
-        server.ssh_conn.rsync(patch_dir + "/*.patch",
-                          lab['controller-0 ip'],
-                          patch_dest_dir, pre_opts=pre_opts)
+        server.ssh_conn.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)
 
         avail_patches = " ".join(patch_names)
         LOG.info("List of patches:\n {}".format(avail_patches))
@@ -283,12 +367,14 @@ def apply_patches(lab, server, patch_dir):
         assert patching_helper.run_patch_cmd("upload-dir", args=patch_dest_dir)[0] == 0, \
             "Failed to upload  patches : {}".format(avail_patches)
 
-        LOG.info("Quering patches ... ")
+        LOG.info("Querying patches ... ")
         assert patching_helper.run_patch_cmd("query")[0] == 0, "Failed to query patches"
 
         LOG.info("Applying patches ... ")
         rc = patching_helper.run_patch_cmd("apply", args='--all')[0]
         assert rc == 0, "Failed to apply patches"
 
-        LOG.info("Quering patches ... ")
+        LOG.info("Querying patches ... ")
         assert patching_helper.run_patch_cmd("query")[0] == 0, "Failed to query patches"
+
+

@@ -330,3 +330,81 @@ class QoSSpecs:
     READ_IOPS = 'read_iops_sec'
     WRITE_IOPS = 'write_iops_sec'
     TOTAL_IOPS = 'total_iops_sec'
+
+
+
+class OrchestStrategyPhases:
+    INITIAL = 'initial'
+    BUILD = 'build'
+    ABORT = 'abort'
+    APPLY = 'apply'
+
+
+    PHASE_COMPLETION_TIMOUT = {
+        INITIAL: 20,
+        BUILD: 60,
+        ABORT: 7200,
+        APPLY: 7200,
+    }
+
+    @staticmethod
+    def validate(phase):
+        if phase in [OrchestStrategyPhases.BUILD, OrchestStrategyPhases.APPLY, OrchestStrategyPhases.ABORT]:
+            return True
+        else:
+            return False
+
+
+class OrchestStrategyStates:
+    # initial
+    INITIAL = 'initial'
+    # apply phase
+    APPLYING = 'applying'
+    APPLIED = 'applied'
+    APPLY_FAILED = 'apply-failed'
+    APPLY_TIMEOUT = 'apply-timeout'
+
+    # build phase
+    BUILDING = 'building'
+    BUILT = 'ready-to-apply'
+    BUILD_FAILED = 'build-failed'
+    BUILD_TIMEOUT = 'build-timeout'
+
+    # abort phase
+    ABORTING = 'aborting'
+    ABORTED ='aborted'
+    ABORT_FAILED = 'abort-failed'
+    ABORT_TIMEOUT = 'abort-timeout'
+
+    OrchestStrategyPhaseStates = {
+        OrchestStrategyPhases.BUILD : [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT ],
+        OrchestStrategyPhases.ABORT : [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
+        OrchestStrategyPhases.APPLY : [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
+    }
+
+    def validate(self, phase, state):
+        if phase in self.OrchestStrategyPhaseStates.keys():
+            if state in [v for k, v in self.OrchestStrategyPhaseStates.items()]:
+                return True
+        return False
+
+
+class OrchestrationStrategyKeyNames:
+
+    STRATEGY_UUID = 'strategy-uuid'
+    CONTROLLER_APPLY_TYPE = 'controller-apply-type'
+    STORAGE_APPLY_TYPE = 'storage-apply-type'
+    COMPUTE_APPLY_TYPE = 'compute-apply-type'
+    MAX_PARALLEL_COMPUTE_HOSTS = 'max-parallel-compute-hosts'
+    DEFAULT_INSTANCE_ACTION = 'default-instance-action'
+    ALARM_RESTRICTION = 'alarm-restrictions'
+    CURRENT_PHASE = 'current-phase'
+    CURRENT_PHASE_COMPLETION = 'current-phase-completion'
+    STATE = 'state'
+    APPLY_RESULT = 'apply-result'
+    APPLY_REASON = 'apply-reason'
+    ABORT_RESULT = 'abort-result'
+    ABORT_REASON = 'abort-reason'
+    BUILD_RESULT = 'build-result'
+    BUILD_REASON = 'build-reason'
+
