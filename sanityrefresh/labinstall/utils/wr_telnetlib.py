@@ -902,6 +902,7 @@ class Telnet:
     #      should be increased/decreased
     #TODO: If script returns zero, should check return code, otherwise remove it
     def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', usb=False, lowlat=False):
+
         if "wildcat" or "supermicro" in node.host_name:
             if "wildcat" in node.host_name:
                 index = 0
@@ -923,7 +924,7 @@ class Telnet:
 
             boot_device_regex = next(
                 (value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
-            log.info("supermicro boot_device_regex: {}".format(boot_device_regex))
+            log.info("boot_device_regex: {}".format(boot_device_regex))
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 log.error(msg)
@@ -932,7 +933,7 @@ class Telnet:
             else:
                 log.info("Boot device is: " + str(boot_device_regex))
 
-            self.get_read_until("Please select boot device", 30)
+            self.get_read_until("Please select boot device", 60)
 
             count = 0
             down_press_count = 0
@@ -947,21 +948,23 @@ class Telnet:
                 # \x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
                 # Construct regex to work with wildcatpass machines
                 # in legacy and uefi mode
-                #regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
-                regex = re.compile(b"Slot \d{4} v\d+")
+                if "wildcat" in node.host_name:
+                    regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
+                else:
+                    regex = re.compile(b"Slot \d{4} v\d+")
 
-                log.info("supermicro: compiled regex is: {}".format(regex))
+                log.info("compiled regex is: {}".format(regex))
 
                 try:
                     index, match = self.expect([regex], BOOT_MENU_TIMEOUT)[:2]
-                    log.info("supermicro: index: {} match: {} ".format(index, match))
+                    log.info("index: {} match: {} ".format(index, match))
                 except EOFError:
                     msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
                     log.exception(msg)
                     wr_exit()._exit(1, msg)
                 if index == 0:
                     match = match.group(0).decode('utf-8', 'ignore')
-                    log.info("supermicro: Matched: " + match)
+                    log.info("Matched: " + match)
                     if re.search(boot_device_regex, match, re.IGNORECASE):
                         log.info("Found boot device {}".format(boot_device_regex))
                         time.sleep(1)
@@ -1005,7 +1008,7 @@ class Telnet:
                 # If we are performing a UEFI install then we need to use
                 # different logic to select the install option
                 elif "UEFI" in boot_device_regex:
-                    log.info("wildcat boot_device_regex, selecting UEFI boot option 2: {}".format(boot_device_regex))
+                    log.info("boot_device_regex, selecting UEFI boot option 2: {}".format(boot_device_regex))
                     self.get_read_until("UEFI CentOS Serial Controller Install", BOOT_MENU_TIMEOUT)
                     self.write(str.encode(DOWN))
                     log.info("Pressing ENTER key")
