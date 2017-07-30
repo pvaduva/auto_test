@@ -17,12 +17,13 @@ from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.verify_fixtures import check_alarms_module
 
 
+@fixture(autouse=True)
 def check_alarms():
     pass
 
 
 @fixture(scope='module', params=['local_image', 'local_lvm', 'remote'])
-def ensure_sufficient_4k_pages(request, check_alarms_module):
+def ensure_sufficient_4k_pages(request):
     """
     Check if there is enough 4k pages on any compute node on any processors is a bit hassle
 
