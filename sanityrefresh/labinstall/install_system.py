@@ -2439,7 +2439,7 @@ def main():
         set_install_step_complete(lab_install_step)
 
     # Lab-install - run_lab_setup - applicable storage and regular labs
-    lab_install_step = install_step("run_lab_setup", 17, ['regular', 'storage'])
+    lab_install_step = install_step("run_lab_setup", 17, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
         # do run lab setup to add osd
         if run_labsetup()[0] != 0:
