@@ -209,7 +209,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
                                                **{'Event Log ID': EventLogID.REBOOT_VM_ISSUED})
         natbox_ssh = NATBoxClient.get_natbox_client()
         natbox_ssh.send('')
-        index = natbox_ssh.expect(["Power button pressed|Broken pipe"], timeout=60, fail_ok=True)
+        index = natbox_ssh.expect(["Power button pressed|Broken pipe"], timeout=70, fail_ok=True)
 
     if not expt_autorecovery:
         assert not events, "VM reboot is logged even though auto recovery is disabled"
