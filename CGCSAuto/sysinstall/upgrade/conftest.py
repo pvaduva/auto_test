@@ -355,7 +355,7 @@ def apply_patches(lab, server, patch_dir):
             LOG.info("Found patch named: " + patch_name)
             patch_names.append(patch_name)
 
-        patch_dest_dir = WRSROOT_HOME + "/upgrade_patches"
+        patch_dest_dir = WRSROOT_HOME + "upgrade_patches/"
 
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
         server.ssh_conn.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)

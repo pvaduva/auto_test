@@ -7,6 +7,7 @@ import time
 from utils import cli, exceptions
 from utils.tis_log import LOG
 from consts.cgcs import OrchestStrategyPhases, OrchestrationStrategyKeyNames
+from consts.timeout import OrchestrationPhaseTimeout
 
 
 PHASE_COMPLETION_CHECK_INTERVAL = 20
@@ -35,16 +36,16 @@ def create_strategy(orchestration, controller_apply_type="serial", storage_apply
         conn_ssh:
         fail_ok:
 
-    Returns:
+    Returns: tuple (rc, dict/msg)
+        (0, dict) - success
+        (1, output) - CLI reject
+        (2, err_msg) - strategy build completion timeout
+        (3, err_msg) - strtegy build completed but with failed state
+
 
     """
     if orchestration is None:
-        raise exceptions.OrchestrationError("The orchestration type must be specified : "
-                                            "choices are 'patch' or 'upgrade'")
-
-    if max_parallel_computes != 0 and 2 > max_parallel_computes > 10:
-        raise exceptions.OrchestrationError("The max parallel computes {} cannot be less that 2 or greater than 10"
-                                            .format(max_parallel_computes))
+        raise ValueError("The orchestration type must be specified: choices are 'patch' or 'upgrade'")
 
     args_dict = {
         '--storage-apply-type': storage_apply_type,
@@ -81,27 +82,20 @@ def create_strategy(orchestration, controller_apply_type="serial", storage_apply
             raise exceptions.OrchestrationError(msg)
     if wait_for_completion:
         if timeout is None:
-            timeout = OrchestStrategyPhases.PHASE_COMPLETION_TIMOUT[OrchestStrategyPhases.BUILD]
+            #timeout = OrchestStrategyPhases.PHASE_COMPLETION_TIMOUT[OrchestStrategyPhases.BUILD]
+            timeout = OrchestrationPhaseTimeout.BUILD
 
         if not wait_strategy_phase_completion(orchestration, OrchestStrategyPhases.BUILD, timeout,
                                               conn_ssh=conn_ssh)[0]:
             msg = "The {} strategy created failed build: {}".format(orchestration, output)
             LOG.warn(msg)
             if fail_ok:
-                return 1, msg
+                return 2, msg
             else:
                 raise exceptions.OrchestrationError(msg)
 
     # get values of the created strategy
     results = get_current_strategy_values(orchestration)
-
-    if len(results) == 0:
-        msg = "Fail to access the created {} strategy after build completion: {}".format(orchestration, output)
-        LOG.warn(msg)
-        if fail_ok:
-            return 2, msg
-        else:
-            raise exceptions.OrchestrationError(msg)
 
     if OrchestStrategyPhases.BUILD != results['current-phase']:
 
@@ -121,6 +115,7 @@ def create_strategy(orchestration, controller_apply_type="serial", storage_apply
         else:
             raise exceptions.OrchestrationError(msg)
 
+    LOG.info("Create {} strategy completed successfully: {}".format(orchestration, results))
     return 0, results
 
 
@@ -135,73 +130,47 @@ def apply_strategy(orchestration, wait_for_completion=True, timeout=None, conn_s
         conn_ssh:
         fail_ok:
 
-    Returns:
+    Returns (tupble):
+        (0, dict) - success  strategy applied successfully
+        (1, output) - CLI command rejected
+        (2, err_msg) - Timeout before the strategy is fully applied
+        (3, err_msg) - Strategy apply failed
 
     """
     if orchestration is None:
         raise ValueError("The orchestration type (choices are 'patch' or 'upgrade') must be specified")
-    if orchestration is not "patch" and orchestration is not "upgrade":
-        raise ValueError("Invalid orchestration type (choices are 'patch' or 'upgrade') specified:{}"
-                         .format(orchestration))
 
     strategy_values = get_current_strategy_values(orchestration)
-
-    if len(strategy_values) == 0:
-        msg = "No {} strategy available".format(orchestration)
-        LOG.warn(msg)
-        if fail_ok:
-            return 1, msg
-        else:
-            raise exceptions.OrchestrationError(msg)
-
-    strategy_uuid = strategy_values[OrchestrationStrategyKeyNames.STRATEGY_UUID]
-
-    if "failed" in strategy_values[OrchestrationStrategyKeyNames.BUILD_RESULT]:
-        msg = "The {} strategy {} has failed build state; reason = {}"\
-            .format(orchestration, strategy_uuid, strategy_values[OrchestrationStrategyKeyNames.BUILD_REASON])
-        LOG.warn(msg)
-        if fail_ok:
-            return 1, msg
-        else:
-            raise exceptions.OrchestrationError(msg)
-
-    if strategy_values[OrchestrationStrategyKeyNames.CURRENT_PHASE_COMPLETION] != '100%':
-        msg = "The {} strategy {} build is not 100% completed. Current completion is at {}"\
-            .format(orchestration, strategy_uuid, OrchestrationStrategyKeyNames.CURRENT_PHASE_COMPLETION)
-        LOG.warn(msg)
-        if fail_ok:
-            return 1, msg
-        else:
-            raise exceptions.OrchestrationError(msg)
 
     cmd = ''
 
     if orchestration is "patch":
         cmd += "patch-strategy apply"
-    else:
+    elif orchestration is "upgrade":
         cmd += "upgrade-strategy apply"
 
     rc, output = cli.sw_manager(cmd, '', ssh_client=conn_ssh,  fail_ok=True, rtn_list=True)
-    if rc == 1:
-        return rc
-    elif rc != 0:
-        msg = " Fail to apply {} strategy: {}".format(orchestration, output)
+
+    if rc != 0:
+        msg = " CLI command {} rejected: {}".format(cmd, output)
         LOG.warn(msg)
         if fail_ok:
             return 1, msg
         else:
-            raise ValueError(msg)
+            raise exceptions.OrchestrationError(msg)
 
     if wait_for_completion:
         if timeout is None:
-            timeout = OrchestStrategyPhases.PHASE_COMPLETION_TIMOUT[OrchestStrategyPhases.APPLY]
+            #timeout = OrchestStrategyPhases.PHASE_COMPLETION_TIMOUT[OrchestStrategyPhases.APPLY]
+            timeout = OrchestrationPhaseTimeout.APPLY
+
         if not wait_strategy_phase_completion(orchestration, OrchestStrategyPhases.APPLY, timeout=timeout,
                                               conn_ssh=conn_ssh, fail_ok=True)[0]:
             msg = "The {} strategy apply phase failed to complete within the specified timeout={}."\
                 .format(orchestration, timeout)
             LOG.warn(msg)
             if fail_ok:
-                return 1, msg
+                return 2, msg
             else:
                 raise exceptions.OrchestrationError(msg)
 
@@ -235,6 +204,7 @@ def apply_strategy(orchestration, wait_for_completion=True, timeout=None, conn_s
         else:
             raise exceptions.OrchestrationError(msg)
 
+    LOG.info("apply {} strategy completed successfully: {}".format(orchestration, results))
     return 0, results
 
 
@@ -300,25 +270,40 @@ def wait_strategy_phase_completion(orchestration, current_phase, timeout=None, c
         timeout = PHASE_COMPLETION_CHECK_INTERVAL
     else:
         if timeout is None:
-            timeout = OrchestStrategyPhases.PHASE_COMPLETION_TIMOUT[current_phase]
+            # timeout = OrchestStrategyPhases.PHASE_COMPLETION_TIMOUT[current_phase]
+            if current_phase == OrchestStrategyPhases.BUILD:
+                timeout = OrchestrationPhaseTimeout.BUILD
+            elif current_phase == OrchestStrategyPhases.APPLY:
+                timeout = OrchestrationPhaseTimeout.APPLY
+            else:
+                timeout = OrchestrationPhaseTimeout.ABORT
 
-    completed = False
-    number_of_iteration = \
-        int(timeout/PHASE_COMPLETION_CHECK_INTERVAL)
+    end_time = time.time() + timeout
+
     output = None
-    while not completed and number_of_iteration > 0:
+    prev_phase_completion = "0%"
+
+    while time.time() < end_time:
         output = get_current_strategy_values(orchestration, conn_ssh=conn_ssh)
         if len(output) > 0:
+            if output[OrchestrationStrategyKeyNames.CURRENT_PHASE] == OrchestStrategyPhases.ABORT:
+                msg = "{} strategy {} phase was aborted before specified time: {}"\
+                    .format(orchestration, current_phase, output)
+                LOG.warn(msg)
+                if fail_ok:
+                    return False, msg
+                else:
+                    raise exceptions.OrchestrationError(msg)
+
             phase_completion = output['current-phase-completion']
-            LOG.info("Orchestration current phase completion is at {}".format(phase_completion))
+            if phase_completion != prev_phase_completion:
+                LOG.info("Orchestration current phase completion is at {}".format(phase_completion))
+                prev_phase_completion = phase_completion
+
             if phase_completion == '100%':
-                completed = True
+                return True, None
             else:
                 time.sleep(PHASE_COMPLETION_CHECK_INTERVAL)
-                number_of_iteration -= 1
-
-    if completed:
-        return True, None
     else:
         msg = "{} strategy {} phase was not completed in specified time: {}"\
             .format(orchestration, current_phase, output)

@@ -339,13 +339,12 @@ class OrchestStrategyPhases:
     ABORT = 'abort'
     APPLY = 'apply'
 
-
-    PHASE_COMPLETION_TIMOUT = {
-        INITIAL: 20,
-        BUILD: 60,
-        ABORT: 7200,
-        APPLY: 7200,
-    }
+    # PHASE_COMPLETION_TIMOUT = {
+    #     INITIAL: 20,
+    #     BUILD: 60,
+    #     ABORT: 7200,
+    #     APPLY: 7200,
+    # }
 
     @staticmethod
     def validate(phase):

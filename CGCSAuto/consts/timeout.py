@@ -77,3 +77,10 @@ class MTCTimeout:
 
 class CeilTimeout:
     EXPIRE = 300
+
+
+class OrchestrationPhaseTimeout:
+        INITIAL = 20
+        BUILD = 60
+        ABORT = 7200
+        APPLY = 7200

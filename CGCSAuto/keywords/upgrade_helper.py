@@ -596,10 +596,15 @@ def orchestration_upgrade_hosts(upgraded_hosts, orchestration_nodes):
     alarm_restrictions = 'relaxed'
     if orchestration_nodes is None:
         orchestration_nodes = []
+    elif isinstance(orchestration_nodes, str):
+        orchestration_nodes = [orchestration_nodes]
+
     if upgraded_hosts is None:
         upgraded_hosts = []
+    elif isinstance(upgraded_hosts, str):
+        upgraded_hosts = [upgraded_hosts]
 
-    if not isinstance(str, orchestration_nodes) or not isinstance(list, upgraded_hosts):
+    if not isinstance(orchestration_nodes, list) or not isinstance(upgraded_hosts, list):
         raise exceptions.OrchestrationError("Value error: List of upgraded or orchestration nodes expected")
 
     if len(orchestration_nodes) > 0:
