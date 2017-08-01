@@ -1294,7 +1294,7 @@ def _collect_vm_networking_info(vm_ssh):
 
 
 def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
-                     num_pings=5, timeout=15, fail_ok=False, vm_ip=None, use_fip=False):
+                     num_pings=5, timeout=30, fail_ok=False, vm_ip=None, use_fip=False):
 
     if ext_ip is None:
         ext_ip = EXT_IP
