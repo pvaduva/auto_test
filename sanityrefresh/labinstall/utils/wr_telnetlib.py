@@ -903,6 +903,54 @@ class Telnet:
     #TODO: If script returns zero, should check return code, otherwise remove it
     def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', usb=False, lowlat=False):
 
+        if "r430" in node.host_name:
+            boot_menu_name = "Boot Manager"
+            bios_key = '\x1b!'
+            bios_key_hr = 'F11'
+            install_timeout = 2400
+            bios_type = 'dunno'
+            log.info("BIOS type: " + bios_type)
+            log.info("Use BIOS key: " + bios_key_hr)
+            log.info("Installation timeout: " + str(install_timeout))
+
+            self.get_read_until(boot_menu_name, 360)
+            log.info("Enter BIOS key")
+            self.write(str.encode(bios_key))
+            
+            if node.name == CONTROLLER0:
+                self.get_read_until("UEFI", 60)
+                self.write(str.encode(DOWN))
+                log.info("Pressing ENTER key")
+                self.write(str.encode("\r\r"))
+
+                self.get_read_until("UEFI Boot Option Maintenance", 60)
+                self.write(str.encode(DOWN))
+                self.write(str.encode(DOWN))
+                self.write(str.encode(DOWN))
+                log.info("Pressing ENTER key")
+                self.write(str.encode("\r\r"))
+                self.get_read_until("UEFI", 180)
+                print("read UEFI")
+                self.write(str.encode(DOWN))
+                self.write(str.encode(DOWN))
+                self.write(str.encode("\r\r"))
+            else:
+                self.get_read_until("One-shot BIOS", 60)
+                self.write(str.encode(DOWN))
+                log.info("Pressing ENTER key")
+                self.write(str.encode("\r\r"))
+
+                self.get_read_until("Select Legacy Boot Option", 60)
+                time.sleep(2)
+                self.write(str.encode(DOWN))
+                self.write(str.encode(DOWN))
+                log.info("Pressing ENTER key")
+                self.write(str.encode("\r\r"))
+
+            self.get_read_until(LOGIN_PROMPT, install_timeout)
+            log.info("Found login prompt. {} installation has completed".format(node.name))
+            return 0
+
         if "wildcat" or "supermicro" in node.host_name:
             if "wildcat" in node.host_name:
                 index = 0
