@@ -42,7 +42,7 @@ def get_patch_files_downloaded(all_patches=False, con_ssh=None, fail_on_not_foun
 
     files_downloaded = []
     for directory in directories:
-        code, output = patching_helper.run_cmd("ls {} 2>/dev/null".format(
+        code, output = patching_helper.run_cmd("\ls {} 2>/dev/null".format(
                 os.path.join(directory, '*.patch'), con_ssh=con_ssh))
 
         if 0 == code and output.strip():
@@ -54,7 +54,8 @@ def get_patch_files_downloaded(all_patches=False, con_ssh=None, fail_on_not_foun
     return files_downloaded
 
 
-def find_existing_patch_files(file_name_keyword, including_patches_apply_to_all=True, con_ssh=None):
+def find_existing_patch_files(file_name_keyword, including_patches_apply_to_all=False, con_ssh=None):
+
     including_failing_patches = True if 'FAILURE' in file_name_keyword else False
 
     all_files = get_patch_files_downloaded(all_patches=including_failing_patches,
@@ -187,7 +188,8 @@ def get_candidate_patches(expected_states=None,
             candidate_patches.append(patch_id)
 
     if len(candidate_patches) <= 0:
-        LOG.warn('No patches for type: "{}" in states: "{}"'.format(patch_type, expected_states))
+        LOG.warn('No patches for type: "{}" in states: "{}"\npatch_ids:"{}"'.format(
+            patch_type, expected_states, patch_ids))
 
     return candidate_patches, including_all_patches
 
@@ -205,9 +207,9 @@ def is_reboot_required(patch_states):
     return False
 
 
-def install_impacted_hosts(patch_ids, cur_states=None, con_ssh=None, remove=False):
-    patch_states = cur_states['patch_states']
-    host_states = cur_states['host_states']
+def install_impacted_hosts(patch_ids, current_states=None, con_ssh=None, remove=False):
+    patch_states = current_states['patch_states']
+    host_states = current_states['host_states']
     reboot_required = is_reboot_required(patch_states)
 
     pre_states, pre_trace_backs = patching_helper.check_error_states(con_ssh=con_ssh, no_checking=True)
@@ -226,6 +228,10 @@ def install_impacted_hosts(patch_ids, cur_states=None, con_ssh=None, remove=Fals
                 controllers.append(host)
             else:
                 LOG.warn('Unknown personality:{} of host:{}'.format(personality, host))
+
+    if not controllers and not storages and not computes:
+        LOG.info('No hosts to install')
+        return
 
     for host in computes:
         patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
@@ -249,12 +255,14 @@ def install_impacted_hosts(patch_ids, cur_states=None, con_ssh=None, remove=Fals
     if active_controller is not None:
         patching_helper.host_install(active_controller, reboot_required=reboot_required, con_ssh=con_ssh)
 
-    expected_patch_states = ['Applied'] if not remove else ['Removed', 'Available']
+    if patch_ids:
 
-    code, _ = patching_helper.wait_patch_states(
-        patch_ids, expected_states=expected_patch_states, con_ssh=con_ssh, fail_on_nonexisting=True)
+        expected_patch_states = ['Applied'] if not remove else ['Removed', 'Available']
 
-    assert 0 == code, 'Patch failed to reach states:{}'.format(expected_patch_states)
+        code, _ = patching_helper.wait_patch_states(
+            patch_ids, expected_states=expected_patch_states, con_ssh=con_ssh, fail_on_not_found=True)
+
+        assert 0 == code, 'Patch failed to reach states:{}'.format(expected_patch_states)
 
     patching_helper.check_error_states(
         con_ssh=con_ssh, no_checking=False, pre_states=pre_states, pre_trace_backs=pre_trace_backs)
@@ -275,14 +283,14 @@ def remove_patches(patch_ids, con_ssh=None):
     LOG.info('OK, will remove patches:{}'.format(patches))
 
     LOG.tc_step('Remove the patches:{}'.format(patches))
-    patch_ids_removed = patching_helper.remove_patches(patches=patches, con_ssh=con_ssh)
+    patch_ids_removed = patching_helper.remove_patches(patch_ids=patches, con_ssh=con_ssh)
 
     LOG.info('OK, removed patches: "{}"'.format(patch_ids_removed))
 
     LOG.tc_step('Install impacted hosts after removing patch IDs:{}'.format(patch_ids_removed))
     states = patching_helper.get_system_patching_states(con_ssh=con_ssh, fail_ok=False)
 
-    install_impacted_hosts(patch_ids_removed, cur_states=states, con_ssh=con_ssh, remove=True)
+    install_impacted_hosts(patch_ids_removed, current_states=states, con_ssh=con_ssh, remove=True)
 
     LOG.info('OK, successfully removed patches and installed impacted hosts for patch: "{}"'.format(patch_ids))
 
@@ -418,7 +426,7 @@ def download_patch_files(con_ssh=None, single_file_ok=False):
     patching_helper.run_cmd(
         'mv -f {}/*FAILURE*.patch {} &> /dev/null'.format(passing_patch_dir, failing_patch_dir), con_ssh=con_ssh)
 
-    rt_code, output = patching_helper.run_cmd('ls {}/*.patch 2> /dev/null'.format(passing_patch_dir), con_ssh=con_ssh)
+    rt_code, output = patching_helper.run_cmd('\ls {}/*.patch 2> /dev/null'.format(passing_patch_dir), con_ssh=con_ssh)
     assert 0 == rt_code, 'No patch files to test'.format(rt_code, output)
     if not output.strip():
         skip('No patch files to test'.format(rt_code, output))
@@ -433,8 +441,9 @@ def download_patch_files(con_ssh=None, single_file_ok=False):
 
 @fixture(scope='module', autouse=True)
 def check_if_ready_for_patching():
-    assert system_helper.are_hosts_unlocked(), \
-        'Not all hosts are unlocked, skip patch testing'
+    if not system_helper.are_hosts_unlocked():
+        skip('Not all hosts are unlocked, skip patch testing')
+        return
 
     alarm_table = table_parser.table(cli.system('alarm-list'))
     alarm_severity_list = table_parser.get_column(alarm_table, 'Severity')
@@ -452,9 +461,8 @@ def _test_upload_patches_from_dir(patch_dir=None, con_ssh=None, reuse_local_patc
     US99792 Update patching to use matching test patch for specific load by default
     """
 
-    LOG.tc_step('Check if to use local patch files and they exist')
+    LOG.tc_step('Check if to use local patch files and they exist\n')
     if reuse_local_patches:
-        LOG.info('')
         patch_dir = download_patch_files(con_ssh=con_ssh, single_file_ok=True)
         LOG.info('-Patch files are downloaded to directory:{} on the active controller'.format(patch_dir))
 
@@ -466,26 +474,53 @@ def _test_upload_patches_from_dir(patch_dir=None, con_ssh=None, reuse_local_patc
 
 
 def _test_apply_patches(patch_ids=None, con_ssh=None, apply_all=True, fail_if_patched=True):
+    if not patch_ids:
+        return []
+
     apply_all = apply_all or patch_ids is None
 
-    msg = 'Apply ' + 'all' if apply_all else ''
+    msg = 'Apply '
+    msg += 'all' if apply_all else ''
     msg += ' patches'
     msg += '' if apply_all else ' :{}'.format(patch_ids)
+
     LOG.tc_step(msg)
 
     applied_patches = patching_helper.apply_patches(
         patch_ids=patch_ids, apply_all=apply_all, fail_if_patched=fail_if_patched, con_ssh=con_ssh)
 
-    LOG.info('OK, patches are applied:{}'.format(applied_patches))
+    LOG.tc_step('Install impacted hosts after applied patch, IDs:{}'.format(patch_ids))
+    states = patching_helper.get_system_patching_states(con_ssh=con_ssh, fail_ok=False)
+
+    install_impacted_hosts(patch_ids, current_states=states, con_ssh=con_ssh, remove=False)
+
+    LOG.info('OK, patches are applied:{}, impacted host installed'.format(applied_patches))
     return applied_patches
 
 
 def _test_install_impacted_hosts(applied_patches, con_ssh=None):
-    LOG.tc_step('Get patching states of the system')
+
+    LOG.tc_step('Get the current states of the patches and hosts')
     states = patching_helper.get_system_patching_states(con_ssh=con_ssh, fail_ok=False)
 
-    install_impacted_hosts(applied_patches, cur_states=states, con_ssh=con_ssh)
-    LOG.info('-Patches are installed')
+    LOG.tc_step('Check the current states of hosts')
+    all_hosts = states['host_states'].keys()
+    hosts_need_install = [h for h in all_hosts if not states['host_states'][h]['patch-current']]
+
+    if not hosts_need_install:
+        LOG.info('All hosts are "patch-current", no need to install, states:\n"{}"'.format(states))
+        if not applied_patches:
+            LOG.info('OK, test is done, no patches applied hence no hosts need to be installed')
+        else:
+            LOG.warn('No patches applied but there are hosts need to install, hosts:\n"{}"'.format(hosts_need_install))
+    else:
+        if not applied_patches:
+            LOG.warn('No patches applied but there are hosts need to install, hosts:\n"{}"'.format(hosts_need_install))
+
+        LOG.tc_step('Install impacted hosts')
+        install_impacted_hosts(applied_patches, current_states=states, con_ssh=con_ssh)
+
+        LOG.info('OK, hosts are installed')
 
 
 def test_install_impacted_hosts(con_ssh=None):
@@ -511,13 +546,27 @@ def test_install_impacted_hosts(con_ssh=None):
     partial_applied_patches = patching_helper.get_partial_applied(con_ssh=con_ssh)
     partial_applied_patches += patching_helper.get_partial_removed(con_ssh=con_ssh)
 
-    LOG.info('OK, patches in "Partial-Apply/Remove" states: "{}"'.format(partial_applied_patches))
-
     if not partial_applied_patches:
         LOG.warn('No patches in "Partial-Apply" nor "Partial-Remove" states, '
                  'continue to check if any host needs to install')
+    else:
+        LOG.info('OK, found patches in "Partial-Apply/Remove" states: "{}"'.format(partial_applied_patches))
 
+    pre_controller_states = None
+    if any('INSVC_NOVA' in patch for patch in partial_applied_patches):
+        pre_controller_states = patching_helper.get_active_controller_state(action='APPLY',
+                                                                            patch_type='INSVC_NOVA',
+                                                                            including_logs=False, con_ssh=con_ssh)
     _test_install_impacted_hosts(partial_applied_patches, con_ssh=con_ssh)
+
+    if pre_controller_states:
+        # previous_time = datetime.datetime.now()
+        previous_time = lab_time_now()
+        patching_helper.check_active_controller_state(action='APPLY',
+                                                      previous_state=pre_controller_states,
+                                                      patch_type='INSVC_NOVA',
+                                                      start_time=previous_time,
+                                                      con_ssh=con_ssh)
 
 
 @mark.usefixtures('check_alarms')
@@ -527,6 +576,8 @@ def test_install_impacted_hosts(con_ssh=None):
     mark.p1(('controller')),
     mark.p1(('storage')),
     mark.p1(('nova')),
+    mark.p1(('large')),
+    mark.p1(('insvc_nova')),
 ])
 def test_apply_patches(patch_type, con_ssh=None):
     """Apply the specified type of patches
@@ -550,6 +601,9 @@ def test_apply_patches(patch_type, con_ssh=None):
             The directory and server are specified using py.test command line options.
 
         2   Apply all the patches uploaded
+
+    User Story:
+        US100410 TESTAuto: No Reboot Patching for Nova
     """
 
     expected_states = ['Available', 'Partial-Remove']
@@ -563,12 +617,12 @@ def test_apply_patches(patch_type, con_ssh=None):
         skip('No patches ready to apply for type: "{}"'.format(patch_type))
         return
 
-    LOG.info('OK, found patches to apply:{}, (apply all?: {})'.format(patches_to_apply, apply_all))
+    LOG.info('OK, found patches to apply:{}{}'.format(patches_to_apply, ' apply all' if apply_all else ''))
 
     LOG.tc_step('Applying patches:{}'.format(patches_to_apply))
     _test_apply_patches(patch_ids=patches_to_apply, apply_all=apply_all, fail_if_patched=True, con_ssh=con_ssh)
 
-    LOG.info('OK, successfully applied {} type patches:{}'.format(patch_type, patches_to_apply))
+    LOG.info('OK, successfully applied and installed {} type patches:{}'.format(patch_type, patches_to_apply))
 
 
 @mark.parametrize('patch_types', [
@@ -577,6 +631,8 @@ def test_apply_patches(patch_type, con_ssh=None):
     mark.p1(('controller')),
     mark.p1(('storage')),
     mark.p1(('nova')),
+    mark.p1(('large')),
+    mark.p1(('insvc_nova')),
 ])
 def test_upload_patch_files(patch_types, download_if_not_found=True, con_ssh=None):
     """Upload the patch files into the patching system on the lab.
@@ -605,12 +661,15 @@ def test_upload_patch_files(patch_types, download_if_not_found=True, con_ssh=Non
             patch_types, PatchingVars.get_patching_var('patch_build_server')
         ))
 
-    LOG.info('OK, patch files existing (or downloaded)')
+    LOG.info('OK, found patch files (or downloaded): \n{}\n'.format(patch_files))
 
-    LOG.tc_step('Upload the patch files')
-    patching_helper.upload_patch_files(files=patch_files, con_ssh=con_ssh)
+    LOG.tc_step('Uploading the patch files:\n{}\n'.format(patch_files))
+    uploaded_patch_ids = patching_helper.upload_patch_files(files=patch_files, con_ssh=con_ssh)
 
-    LOG.info('Successfully uploaded patch files:{}'.format(patch_files))
+    if uploaded_patch_ids:
+        LOG.info('Successfully uploaded patch files:{}'.format(patch_files))
+    else:
+        LOG.info('No patch files uploaded for: "{}"'.format(patch_types))
 
 
 def test_install_patch_dir_file(con_ssh=None):
@@ -636,7 +695,8 @@ def test_install_patch_dir_file(con_ssh=None):
 
     applied_patches = _test_apply_patches(patch_ids=patch_ids, apply_all=True, fail_if_patched=True, con_ssh=con_ssh)
 
-    _test_install_impacted_hosts(applied_patches, con_ssh=con_ssh)
+    if applied_patches:
+        _test_install_impacted_hosts(applied_patches, con_ssh=con_ssh)
 
 
 @mark.parametrize('patch_type', [
@@ -645,6 +705,8 @@ def test_install_patch_dir_file(con_ssh=None):
     mark.p1(('controller')),
     mark.p1(('storage')),
     mark.p1(('nova')),
+    mark.p1(('large')),
+    mark.p1(('insvc_nova')),
 ])
 def test_remove_patches(patch_type, con_ssh=None):
     """Remove all patches currently applied in the system
@@ -692,6 +754,8 @@ def test_remove_patches(patch_type, con_ssh=None):
     mark.p1(('controller')),
     mark.p1(('storage')),
     mark.p1(('nova')),
+    mark.p1(('large')),
+    mark.p1(('insvc_nova')),
 ])
 def test_delete_patches(patch_type, con_ssh=None):
     """Delete patch(es). Note the patches need to be in Available status before being deleted
@@ -715,11 +779,6 @@ def test_delete_patches(patch_type, con_ssh=None):
 
         patching_helper.delete_patches(to_delete_list)
         LOG.info('OK, successfully deleted all patches:{}'.format(to_delete_list))
-
-        assert patching_helper.check_if_patches_exisit(
-            patch_ids=to_delete_list, expecting_exist=False, con_ssh=con_ssh)
-
-        LOG.info('OK, patches are confirmed deleted')
 
     else:
         skip('No patches in states: "{}" can be deleted for type: "{}"'.format(expected_states, patch_type))
@@ -767,168 +826,3 @@ def wait_host_in_stable_states(host, expected_state, con_ssh=None):
     assert 0 == code, \
         'Host:{} failed to reach states, expected={}, actual={}'.format(host, expected_state, state)
 
-
-@mark.parametrize('operation', [
-     'apply',
-     'remove'
-])
-def test_patch_notapplicable(operation, con_ssh=None):
-
-    """Verify the patching behavior during applying (removing) not-applicable patch(es)
-
-        Because there is no easy way to know which patch(es) is(are) not-applicable for each releases, we choose
-            storage-only patches, which are for sure not-applicable for non-storage lab.
-
-        Due to sw-query and sw-patch query-host do NOT run quickly enough to catch the Partial-Apply, Partial-Remove
-            or Pending states of patches and host, this TC will randomly failed to verify the state.
-            In case it fails, check the log file for further verification.
-
-    Args:
-        operation:
-            apply - will test applying the patches
-            remove - will test removing the patches
-
-        con_ssh:
-
-    Returns:
-
-    User Stories:
-        US100411 US93673 US94532    not in XStudio
-    """
-
-    LOG.tc_step('Check if the lab is a NON-storage lab, because only patches known not applicable '
-                'are storage-only patches')
-    if len(system_helper.get_storage_nodes(con_ssh=con_ssh)) > 0:
-        skip('current patches will impact at least one type of host in a storage-lab')
-        return
-
-    patch_ops = {
-        'apply': {
-            'op': 'apply', 'expected_state': 'Partial-Apply', 'initial_state': 'Available', 'final_state': 'Applied'
-        },
-        'remove': {
-            'op': 'remove', 'expected_state': 'Partial-Remove', 'initial_state': 'Applied', 'final_state': 'Available'
-        }
-    }
-
-    LOG.info('The lab is NON-storage lab and can be tested with storage-only patches')
-
-    LOG.tc_step('Check if there is Storage-only patches in "Available" states')
-    candidate_patches = patching_helper.get_all_patch_ids(
-        con_ssh=con_ssh, expected_states=[patch_ops[operation]['initial_state']])
-
-    if len(candidate_patches) <= 0:
-        skip('no patches in "{}" states'.format(patch_ops[operation]['initial_state']))
-
-    storage_patches = [patch_id for patch_id in candidate_patches if 'STORAGE' in patch_id.upper()]
-    patch_ids = ' '.join(storage_patches)
-
-    LOG.tc_step('{} the Storage-only patches and check the states of both the patches and hosts'.format(operation))
-    cmd = 'date; sudo sw-patch {} {} && sudo sw-patch query && sudo sw-patch query-hosts'.format(
-        patch_ops[operation]['op'], patch_ids)
-
-    _, output = patching_helper.run_sudo_cmd(cmd, fail_ok=False)
-    LOG.debug('output={}'.format(output))
-
-    LOG.info('OK, {} storage-only patches'.format(patch_ops[operation]['op']))
-
-    host_states = get_host_states(output)
-    patch_states = get_patch_states(output)
-
-    expected_host_state = ['Pending']
-    LOG.tc_step('Verify the hosts are in {} state'.format(expected_host_state))
-
-    for host, state in host_states:
-        assert state in expected_host_state, \
-            'Host "{}" is NOT in "{}" as expected, but actually in "{}" state'.format(
-                host, expected_host_state, state)
-
-        LOG.info('OK, Host "{}" is in "{}" as expected'.format(host, expected_host_state))
-
-    expected_patch_state = patch_ops[operation]['expected_state']
-    LOG.tc_step('Verify the patches are in {} state'.format(expected_patch_state))
-    for patch, state in patch_states:
-        if patch not in patch_ids:
-            continue
-        msg = 'Patch "{}" is NOT in "{}" as expected, but actually in "{}" state'.format(
-                patch, expected_patch_state, state)
-
-        assert state in expected_patch_state, msg
-        LOG.info('OK, Patch "{}" is in "{}" as expected'.format(patch, expected_patch_state))
-
-    LOG.tc_step('Verify the hosts reach stable states finally')
-    hosts = [host for host, _ in host_states]
-    wait_hosts_in_stable_states(hosts, con_ssh=con_ssh)
-
-    LOG.tc_step('Verify the patches reach state {} finally'.format(patch_ops[operation]['final_state']))
-
-    patches = [patch for patch, _ in patch_states]
-    patching_helper.wait_for_patch_states(patches, expected=[patch_ops[operation]['final_state']])
-    LOG.info('Successfully patched the system with NON-Applicable patches ')
-
-
-def get_large_available_patch(con_ssh=None):
-    available_patches = patching_helper.get_available_patches(con_ssh=con_ssh)
-    if len(available_patches) > 0:
-        large_patches = [patch for patch in available_patches if 'LARGE' in patch]
-        if len(large_patches) > 0:
-            return large_patches[0]
-
-    return None
-
-
-def select_host(con_ssh):
-    all_hosts = patching_helper.get_hosts_in_idle(con_ssh=con_ssh)
-
-    if len(all_hosts) > 0:
-
-        active_controller = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
-
-        if len(all_hosts) > 1:
-            return active_controller, random.choice([h for h in all_hosts if h != active_controller])
-        elif len(all_hosts) == 1:
-            return active_controller, all_hosts[0]
-
-    return None, None
-
-
-def test_reboot_during_patching(con_ssh):
-    """
-    Verify the expected behavior for state transfer when rebooting a host at the time of the patching operation.
-        - host should go to "Pending" state
-        - host should stay there until the node recovers and replies
-        - host should change to state:? after recovers
-
-    In order to avoid timing issue, will use LARGE PATCH
-
-    Args:
-        con_ssh:
-
-    Returns:
-
-    """
-
-    LOG.tc_step('Check if LARGE PATH existing and in "Available" state')
-    large_patch = get_large_available_patch(con_ssh=con_ssh)
-
-    if not large_patch:
-        skip('no LARGE patch in "Available" status')
-        return
-
-    LOG.info('found large patch {} in "Available" status')
-
-    LOG.tc_step('Chose a host in Patch Current states')
-    active_controller, target_host = select_host(con_ssh)
-
-    if not active_controller or not target_host:
-        skip('no HOST in idle state to patch')
-        return
-
-    LOG.info('Select to test host: {}'.format(target_host))
-    if target_host == active_controller:
-        LOG.info('will test on the active controller, swact first')
-        host_helper.swact_host(active_controller)
-        time.sleep(60)
-
-    LOG.tc_step('Apply the large-path:{} and reboot the host:{}'.format(large_patch, target_host))
-    patching_helper.apply_patches(con_ssh=con_ssh, patch_ids=[large_patch], apply_all=False)
