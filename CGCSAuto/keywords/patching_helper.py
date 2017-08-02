@@ -132,7 +132,6 @@ def get_process_info(names=None, con_ssh=None):
     assert process_info, 'Failed to find nova processes'
 
     unique_names = set(names)
-    LOG.info('TODO: Found process information related with "nova": {}'.format(process_info))
     names_found = set([p[2] for p in process_info])
 
     assert unique_names.issubset(names_found), \
@@ -148,24 +147,20 @@ def get_nova_logs(action='APPLY', names=None, fail_on_not_found=True, start_time
 
     log_pattern = IMPACTS_ON_SYSTEM['INSVC_NOVA']['log_record']
     base_command = '\egrep \'{}\' {} 2>/dev/null | tail -n {}'
-    LOG.info('TODO: pattern=\n{}\nbase_command={}\nnames={}'.format(log_pattern, base_command, names))
+
     log_records = []
     for name in names:
         log_name = os.path.join(BASE_LOG_DIR, 'nova', '{}.log'.format(name))
         command = base_command.format(log_pattern, log_name, max_lines)
 
-        LOG.info('TODO: searching nova log records, cli:\n{}'.format(command))
         output = run_cmd(command, fail_ok=False, con_ssh=con_ssh)[1]
 
-        LOG.info('TODO: get output:\n{}'.format(output))
         for line in output.splitlines():
-            LOG.info('TODO: line:\n{}'.format(line))
-            LOG.info('TODO: log_pattern:\n{}'.format(log_pattern))
             try:
                 log_time = parser.parse(line.split('\.')[0])
-                LOG.info('TODO: log_time:\n{}'.format(log_time))
+
                 service_name = re.search(log_pattern, line).group(1)
-                LOG.info('TODO: service_name:\n{}'.format(service_name))
+
                 if not start_time or start_time < log_name:
                     log_records.append((service_name, log_time))
                 else:
@@ -220,8 +215,6 @@ def get_active_controller_state(action='APPLY',
                                         con_ssh=con_ssh)
             assert not log_records or not fail_on_not_found, 'No log records found for nova'
 
-        LOG.info('TODO: log_records="{}"\nprocess_info="{}"'.format(log_records, process_info))
-
         return process_info, log_records
 
     return {}
@@ -267,7 +260,6 @@ def get_log_records(action='upload', con_ssh=None, start_time=None, max_lines=10
                 r'\|'.join(patterns), log_file, max_lines)
             commands.append(search_command)
 
-        LOG.info('TODO: cmd:\n"{}"\n'.format(commands))
         code, output = run_cmd(';'.join(commands), con_ssh=con_ssh, fail_ok=fail_if_not_found)
         assert 0 == code or not fail_if_not_found, \
             'Failed to find in logs:\n{}\n'.format(record_patterns)
@@ -276,30 +268,20 @@ def get_log_records(action='upload', con_ssh=None, start_time=None, max_lines=10
             LOG.info('No logs found for action: "{}"'.format(action))
             return {}
 
-        LOG.info('TODO: found logs:\n"{}"\n'.format(output))
-
         start_timestamp = parser.parse(start_time) if start_time else None
 
         for line in output.splitlines():
             if not line.strip():
                 continue
             try:
-                LOG.info('\nTODO: line="{}"'.format(line))
                 log_file = os.path.basename(line.split(':')[0])
                 patch_pattern = record_patterns[log_file][0]
-                LOG.info('TODO: patch_pattern={}'.format(patch_pattern))
 
                 patch_files = re.search(patch_pattern, line).group(1).strip().split(',')
-                LOG.info('TODO: patch_files found in log-file:{}'.format(patch_files))
                 patches = [os.path.basename(file).split(os.path.extsep)[0] for file in patch_files]
-                    
-                LOG.info('TODO: patches={}'.format(patches))
 
                 time_stamp = parser.parse(':'.join(line.split(':')[1:4]))
-                LOG.info('TODO: timestamp={}'.format(time_stamp))
                 if time_stamp > start_timestamp:
-                    LOG.info('TODO: found one record:\npatches={}, timestamp={}, log_file={},\n{}'.format(
-                        patches, time_stamp, log_file, line))
                     logs.append((patches, log_file, time_stamp, line))
 
             except IndexError as e:
@@ -339,8 +321,6 @@ def check_log_records(action='upload',
         for log in logs:
             patches_logged += log[0]
 
-        LOG.info('TODO: OK, found patches:{}, expected_patches:{}'.format(patches_logged, expected_patches))
-
         all_logged = True
         if not patches_logged:
             LOG.info('No log records found for: "{}" after: "{}"'.format(action, start_time))
@@ -355,8 +335,6 @@ def check_log_records(action='upload',
         return all_logged, patches_logged
 
     else:
-
-        LOG.info('TODO: Failed to find logs for patches:{}, starting:{}'.format(expected_patches, start_time))
         return False, []
 
 
@@ -1098,7 +1076,7 @@ def wait_for_patch_state(patch_id, expected=('Available',), con_ssh=None):
 
 
 @repeat(times=6, wait_first=True, message='waiting for multiple patches in states:')
-def wait_for_patch_states(patch_ids, expected=('Available',), con_ssh=None):
+def wait_for_patch_states(patch_ids, expected=None, con_ssh=None):
     if not patch_ids:
         return 0, ''
 
@@ -1107,7 +1085,7 @@ def wait_for_patch_states(patch_ids, expected=('Available',), con_ssh=None):
     for pid in states.keys():
         if pid not in patch_ids:
             continue
-        if states[pid]['state'] not in expected:
+        if states[pid]['state'] != expected[pid]:
             LOG.info('Patch not in expected status, expected: "{}", actual: "{}"'.format(
                 expected, states[pid]['state']))
             return 1, states
@@ -1320,7 +1298,6 @@ def remove_patches(patch_ids='', con_ssh=None):
                                                 con_ssh=con_ssh)
 
     code, output, _ = run_patch_cmd('remove', args=patch_ids, con_ssh=con_ssh, fail_ok=False)
-    LOG.info('TODO code: {}, patches:{}, output:{}'.format(code, patch_ids, output))
 
     assert 0 == code, 'Failed to remove patches:{}, \noutput {}'.format(patch_ids, output)
 
@@ -1420,5 +1397,5 @@ def match_patch_node_types(host, patch_id, con_ssh=None):
 
 def lab_time_now(con_ssh=None):
 
-    return run_cmd('date +"%Y-%y-%dT%H:%M:%S"', con_ssh=con_sh, fail_ok=False)[1]
+    return run_cmd('date +"%Y-%m-%dT%H:%M:%S"', con_ssh=con_ssh, fail_ok=False)[1]
 

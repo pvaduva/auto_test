@@ -571,13 +571,13 @@ def test_install_impacted_hosts(con_ssh=None):
 
 @mark.usefixtures('check_alarms')
 @mark.parametrize('patch_type', [
-    mark.p1(('all')),
     mark.p1(('compute')),
     mark.p1(('controller')),
     mark.p1(('storage')),
     mark.p1(('nova')),
     mark.p1(('large')),
     mark.p1(('insvc_nova')),
+    mark.p1(('all')),
 ])
 def test_apply_patches(patch_type, con_ssh=None):
     """Apply the specified type of patches
@@ -626,13 +626,13 @@ def test_apply_patches(patch_type, con_ssh=None):
 
 
 @mark.parametrize('patch_types', [
-    mark.p1(('all')),
     mark.p1(('compute')),
     mark.p1(('controller')),
     mark.p1(('storage')),
     mark.p1(('nova')),
     mark.p1(('large')),
     mark.p1(('insvc_nova')),
+    mark.p1(('all')),
 ])
 def test_upload_patch_files(patch_types, download_if_not_found=True, con_ssh=None):
     """Upload the patch files into the patching system on the lab.
@@ -700,13 +700,13 @@ def test_install_patch_dir_file(con_ssh=None):
 
 
 @mark.parametrize('patch_type', [
-    mark.p1(('all')),
     mark.p1(('compute')),
     mark.p1(('controller')),
     mark.p1(('storage')),
     mark.p1(('nova')),
     mark.p1(('large')),
     mark.p1(('insvc_nova')),
+    mark.p1(('all')),
 ])
 def test_remove_patches(patch_type, con_ssh=None):
     """Remove all patches currently applied in the system
@@ -749,13 +749,13 @@ def test_remove_patches(patch_type, con_ssh=None):
 
 
 @mark.parametrize('patch_type', [
-    mark.p1('all'),
     mark.p1(('compute')),
     mark.p1(('controller')),
     mark.p1(('storage')),
     mark.p1(('nova')),
     mark.p1(('large')),
     mark.p1(('insvc_nova')),
+    mark.p1('all'),
 ])
 def test_delete_patches(patch_type, con_ssh=None):
     """Delete patch(es). Note the patches need to be in Available status before being deleted
