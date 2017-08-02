@@ -878,6 +878,8 @@ def set_retention_period(fail_ok=True, check_first=True, con_ssh=None, auth_info
         (0, "Current retention period is: <retention_period>")
         (1, "Current retention period is still: <retention_period>")
 
+    US100247
+    US99793
     """
 
     if not isinstance(period, int):
@@ -889,7 +891,7 @@ def set_retention_period(fail_ok=True, check_first=True, con_ssh=None, auth_info
             LOG.info(msg)
             return -1, msg
 
-    code, output = cli.system('pm-modify', 'retention_secs={} action=apply'.format(period), auth_info=auth_info,
+    code, output = cli.system('pm-modify', 'retention_secs={}'.format(period), auth_info=auth_info,
                               ssh_client=con_ssh, timeout=SysInvTimeout.RETENTION_PERIOD_MODIFY, fail_ok=fail_ok,
                               rtn_list=True)
 
@@ -934,10 +936,10 @@ def get_dns_servers(con_ssh=None):
 
     """
     table_ = table_parser.table(cli.system('dns-show', ssh_client=con_ssh))
-    return tuple(table_parser.get_value_two_col_table(table_, 'nameservers').strip().split(sep=','))
+    return table_parser.get_value_two_col_table(table_, 'nameservers').strip().split(sep=',')
 
 
-def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, nameservers=None):
+def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, nameservers=None, with_action_option=None):
     """
     Set the DNS servers
 
@@ -947,8 +949,11 @@ def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, nameserv
         con_ssh:
         auth_info:
         nameservers (list): list of IP addresses (in plain text) of new DNS servers to change to
-
-
+        with_action_option: whether invoke the CLI with or without "action" option
+                            - None      no "action" option at all
+                            - apply     system dns-modify <> action=apply
+                            - install   system dns-modify <> action=install
+                            - anystr    system dns-modify <> action=anystring...
     Returns:
 
     Skip Conditions:
@@ -972,7 +977,11 @@ def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, nameserv
     if not nameservers or len(nameservers) < 1:
         raise ValueError("Please specify DNS server(s).")
 
-    args_ = 'nameservers="{}" action=apply'.format(','.join(nameservers))
+    args_ = 'nameservers="{}"'.format(','.join(nameservers))
+
+    # args_ += ' action={}'.format(with_action_option) if with_action_option is not None else ''
+    if with_action_option is not None:
+        args_ += ' action={}'.format(with_action_option)
 
     LOG.info('args_:{}'.format(args_))
     code, output = cli.system('dns-modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
