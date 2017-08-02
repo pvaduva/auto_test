@@ -1,9 +1,12 @@
 ##############################
 # OAM Network Firewall tests #
 ##############################
-from keywords import host_helper, system_helper
+from keywords import host_helper, system_helper, common
 from utils.tis_log import LOG
+from utils import cli
+from consts.cgcs import EventLogID
 from pytest import skip
+from consts.filepaths import TestServerPath, WRSROOT_HOME
 
 
 def test_config_iptables_reboot():
@@ -94,40 +97,72 @@ def test_custom_iptables_rules():
     Test custom iptables rules (ensuring the ports are open)
 
     Skip Condition:
-        - If a custom iptables.rules file is not used
+        - N/A
 
     Test Steps:
         - If controller is not active, swact activity towards the controller being tested
-        - Confirm iptables service is running
+        - Install custom iptables rules
         - Confirm the custom ports are open
+        - Remove custom iptables rules
+        - Confirm the custom ports are closed
     """
     custom_ports = [1111, 1996, 1998, 1545]
-    custom_ports_failed = []
+    custom_ports_failed_to_open = []
+    custom_ports_failed_to_close = []
 
-    with host_helper.ssh_to_host(system_helper.get_active_controller_name()) as con_ssh:
-        LOG.tc_step("Check for custom firewall rules")
-        version = system_helper.get_system_software_version()
-        cmd = 'grep /opt/platform/config/{}/cgcs_config -e "FIREWALL_RULES_FILE="'.format(version)
-        code, output = con_ssh.exec_cmd(cmd)
-        if output is '':
-            skip("No custom firewall rules are used. Cannot test customs rules.")
+    LOG.tc_step("SCP iptables.rules file from the test server")
+    file_name = 'iptables.rules'
+    source = TestServerPath.TEST_SCRIPT + file_name
+    destination = WRSROOT_HOME
+    common.scp_from_test_server_to_active_controller(source_path=source, dest_dir=destination)
 
-    LOG.tc_step("Get the controller(s)")
     controllers = system_helper.get_controllers()
+    out_of_date_alarms = []
     for controller in controllers:
-        LOG.tc_step("Ensure {} is active".format(controller))
+        out_of_date_alarms.append((EventLogID.CONFIG_OUT_OF_DATE, 'host={}'.format(controller)))
+
+    LOG.tc_step("Installing custom firewall rules")
+    iptables_path = WRSROOT_HOME + file_name
+    code, output = cli.system('firewall-rules-install', iptables_path, fail_ok=True)
+    if "Could not open file" in output:
+        skip("Failed to find {}. SCP may have failed.".format(iptables_path))
+    system_helper.wait_for_alarms_gone(out_of_date_alarms)
+
+    LOG.tc_step("Verify custom ports are open")
+    for controller in controllers:
+        LOG.info("Ensure {} is active".format(controller))
         active_con = system_helper.get_active_controller_name()
         if controller != active_con:
-            LOG.tc_step("{} is not active; Swacting {}".format(controller, active_con))
+            LOG.info("{} is not active; Swacting {}".format(controller, active_con))
             host_helper.swact_host(active_con)
         with host_helper.ssh_to_host(controller) as con_ssh:
-            LOG.tc_step("Check to ensure custom ports are open")
+            LOG.info("Verify custom ports are open on the active controller")
             for port in custom_ports:
                 cmd = 'iptables -nvL | grep -w {}'.format(port)
                 code, output = con_ssh.exec_sudo_cmd(cmd)
                 if output is '':
-                    custom_ports_failed.append(port)
+                    custom_ports_failed_to_open.append(port)
 
-        if len(custom_ports_failed) > 0:
-            assert 0, "The following custom ports were closed when they should have been open: {}" \
-                .format(custom_ports_failed)
+    LOG.tc_step("Removing custom firewall rules")
+    empty_iptables_path = WRSROOT_HOME + "iptables-empty.rules"
+    with host_helper.ssh_to_host(system_helper.get_active_controller_name()) as con_ssh:
+        con_ssh.exec_cmd("touch {}".format(empty_iptables_path))
+    cli.system('firewall-rules-install', empty_iptables_path)
+    system_helper.wait_for_alarms_gone(out_of_date_alarms)
+
+    LOG.tc_step("Verify custom ports are no longer open")
+    for controller in controllers:
+        LOG.info("Ensure {} is active".format(controller))
+        active_con = system_helper.get_active_controller_name()
+        if controller != active_con:
+            LOG.info("{} is not active; Swacting {}".format(controller, active_con))
+            host_helper.swact_host(active_con)
+        with host_helper.ssh_to_host(controller) as con_ssh:
+            LOG.info("Verify custom ports are closed on the active controller")
+            for port in custom_ports:
+                cmd = 'iptables -nvL | grep -w {}'.format(port)
+                code, output = con_ssh.exec_sudo_cmd(cmd)
+                if output is '':
+                    custom_ports_failed_to_close.append(port)
+
+    assert not custom_ports_failed_to_open and not custom_ports_failed_to_close
