@@ -405,7 +405,8 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
     if check_cpe_alarm and system_helper.is_two_node_cpe(con_ssh=con_ssh):
         LOG.info("For AIO-duplex, wait for cpu usage high alarm gone on active controller")
         active_con = system_helper.get_active_controller_name()
-        system_helper.wait_for_alarms_gone([(EventLogID.CPU_USAGE_HIGH, active_con)], check_interval=10,
+        entity_id = 'host={}'.format(active_con)
+        system_helper.wait_for_alarms_gone([(EventLogID.CPU_USAGE_HIGH, entity_id)], check_interval=10,
                                            fail_ok=fail_ok, timeout=300)
 
     positional_arg = host

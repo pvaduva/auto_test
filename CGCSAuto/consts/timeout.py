@@ -36,7 +36,7 @@ class VMTimeout:
 
 
 class VolumeTimeout:
-    STATUS_CHANGE = 720
+    STATUS_CHANGE = 1800
     DELETE = 60
 
 

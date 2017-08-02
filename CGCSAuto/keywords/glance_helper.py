@@ -128,6 +128,8 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     name = common.get_unique_name(name_str=name, existing_names=get_images(), resource_type='image')
 
+    LOG.info("Creating glance image: {}".format(name))
+
     optional_args = {
         '--id': image_id,
         '--name': name,

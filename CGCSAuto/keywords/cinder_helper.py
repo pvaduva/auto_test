@@ -283,13 +283,15 @@ def _wait_for_volume_status(vol_id, status='available', timeout=VolumeTimeout.ST
         false if timed out or otherwise
 
     """
-
+    LOG.info("Waiting for cinder volume {} status: {}".format(vol_id, status))
     end_time = time.time() + timeout
     current_status = ''
+    prev_status = 'unknown'
     while time.time() < end_time:
         table_ = table_parser.table(cli.cinder('show', vol_id, ssh_client=con_ssh, auth_info=auth_info))
         current_status = table_parser.get_value_two_col_table(table_, 'status')
         if current_status == status:
+            LOG.info("Volume {} is in {} state".format(vol_id, status))
             return True
         elif current_status == 'error':
             show_vol_tab = table_parser.table(cli.cinder('show', vol_id, ssh_client=con_ssh, auth_info=auth_info))
@@ -298,6 +300,9 @@ def _wait_for_volume_status(vol_id, status='available', timeout=VolumeTimeout.ST
                 LOG.warning("Volume {} is in error state! Details: {}".format(vol_id, error_msg))
                 return False
             raise exceptions.VolumeError(error_msg)
+        elif current_status != prev_status:
+            LOG.info("Volume status reached: {}".format(current_status))
+            prev_status = current_status
 
         time.sleep(check_interval)
     else:

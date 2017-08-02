@@ -72,10 +72,10 @@ class TestVariousGuests:
         ('centos_7', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         # ('opensuse_13', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('opensuse_11', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
-        # ('opensuse_12', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('opensuse_12', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('rhel_7', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('rhel_6', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
+        ('win_2012', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover'])
     ], ids=id_gen)
     def test_nova_actions_various_guest(self, guest_os, cpu_pol, boot_source, actions):
         """
@@ -106,7 +106,7 @@ class TestVariousGuests:
         LOG.tc_step("Get/Create {} glance image".format(guest_os))
         image_id = glance_helper.get_guest_image(guest_os=guest_os)
         if guest_os not in GuestImages.GUESTS_NO_RM:
-            ResourceCleanup.add('image', image_id, scope='module')
+            ResourceCleanup.add('image', image_id, scope='function')
 
         LOG.tc_step("Create a flavor with 2 vcpus")
         flavor_id = nova_helper.create_flavor(name=cpu_pol, vcpus=2, guest_os=guest_os)[1]
@@ -138,7 +138,7 @@ class TestVariousGuests:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         vm_host_origin = nova_helper.get_vm_host(vm_id)
         check_helper.check_topology_of_vm(vm_id, vcpus=2, prev_total_cpus=prev_cpus[vm_host_origin],
-                                          vm_host=vm_host_origin, cpu_pol=cpu_pol)
+                                          vm_host=vm_host_origin, cpu_pol=cpu_pol, guest=guest_os)
 
         for action in actions:
             if action == 'auto_recover':
@@ -156,4 +156,4 @@ class TestVariousGuests:
 
                 vm_host = nova_helper.get_vm_host(vm_id)
                 check_helper.check_topology_of_vm(vm_id, vcpus=2, prev_total_cpus=prev_cpus[vm_host],
-                                                  vm_host=vm_host, cpu_pol=cpu_pol)
+                                                  vm_host=vm_host, cpu_pol=cpu_pol, guest=guest_os)

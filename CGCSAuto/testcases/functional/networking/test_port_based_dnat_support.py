@@ -11,6 +11,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 VMS_COUNT = 4
 
+
 @fixture(scope='module')
 def router_info(request):
     LOG.fixture_step("get router id.")

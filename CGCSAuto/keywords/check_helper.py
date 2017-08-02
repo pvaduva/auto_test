@@ -50,7 +50,8 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
 
 
 def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=None, cpu_pol=None, cpu_thr_pol=None,
-                         expt_increase=None, min_vcpus=None, current_vcpus=None, prev_siblings=None, con_ssh=None):
+                         expt_increase=None, min_vcpus=None, current_vcpus=None, prev_siblings=None, con_ssh=None,
+                         guest=None):
     """
     Check vm has the correct topology based on the number of vcpus, cpu policy, cpu threads policy, number of numa nodes
 
@@ -125,7 +126,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
     LOG.info("{}Check vm vcpus, siblings on vm via /sys/devices/system/cpu/<cpu>/topology/thread_siblings_list".
              format(SEP))
     _check_vm_topology_on_vm(vm_id, vcpus=vcpus, siblings_total=siblings_total, current_vcpus=current_vcpus,
-                             prev_siblings=prev_siblings)
+                             prev_siblings=prev_siblings, guest=guest)
 
     return pcpus_total, siblings_total
 
@@ -364,40 +365,80 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
                                                   'on vm host {}\n{}'.format(vm_host, err_msg)
 
 
-def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_siblings=None):
+def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_siblings=None, guest=None):
     # Check from vm in /proc/cpuinfo and /sys/devices/.../cpu#/topology/thread_siblings_list
+    if not guest:
+        guest = ''
     LOG.tc_step('Check vm topology from within the vm via: /sys/devices/system/cpu')
     actual_sib_list = []
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        LOG.info("{}Check vm present|online|offline cores from inside vm via /sys/devices/system/cpu/".format(SEP))
-        present_cores, online_cores, offline_cores = vm_helper.get_proc_nums_from_vm(vm_ssh)
-        expt_sib_lists = [[[vcpu] for vcpu in range(len(online_cores))]] if not siblings_total else [siblings_total]
-        if prev_siblings:
-            expt_sib_lists.append(prev_siblings)
 
-        assert vcpus == len(present_cores), "Number of vcpus for vm: {}, present cores from " \
-                                            "/sys/devices/system/cpu/present: {}".format(vcpus, len(present_cores))
-        assert current_vcpus == len(online_cores), \
-            "Current vcpus for vm: {}, online cores from /sys/devices/system/cpu/online: {}".\
-            format(current_vcpus, online_cores)
+        if 'win' in guest:
+            LOG.info("{}Check windows guest cores via wmic cpu get cmds".format(SEP))
+            offline_cores_count = 0
+            log_cores_count, log_count_per_sibling = get_procs_and_siblings_on_windows(vm_ssh)
+            online_cores_count = present_cores_count = log_cores_count
+        else:
+            LOG.info("{}Check vm present|online|offline cores from inside vm via /sys/devices/system/cpu/".format(SEP))
+            present_cores, online_cores, offline_cores = vm_helper.get_proc_nums_from_vm(vm_ssh)
+            present_cores_count = len(present_cores)
+            online_cores_count = len(online_cores)
+            offline_cores_count = len(offline_cores)
 
-        expt_total_cores = len(online_cores) + len(offline_cores)
-        assert expt_total_cores in [len(present_cores), 512], \
+        assert vcpus == present_cores_count, "Number of vcpus: {}, present cores: {}".format(vcpus,
+                                                                                             present_cores_count)
+        assert current_vcpus == online_cores_count, \
+            "Current vcpus for vm: {}, online cores: {}".format(current_vcpus, online_cores_count)
+
+        expt_total_cores = online_cores_count + offline_cores_count
+        assert expt_total_cores in [present_cores_count, 512], \
             "Number of present cores: {}. online+offline cores: {}".format(vcpus, expt_total_cores)
 
-        LOG.info("{}Check vm /sys/devices/system/cpu/[cpu#]/topology/thread_siblings_list".format(SEP))
-        for cpu in ['cpu{}'.format(i) for i in range(len(online_cores))]:
-            actual_sib_list_for_cpu = vm_ssh.exec_cmd('cat /sys/devices/system/cpu/{}/topology/thread_siblings_list'.
-                                                      format(cpu), fail_ok=False)[1]
+        if online_cores_count == present_cores_count:
+            expt_sib_lists = [[vcpu] for vcpu in range(present_cores_count)] if not siblings_total \
+                else siblings_total
+            if prev_siblings:
+                expt_sib_lists.append(prev_siblings)
 
-            sib_for_cpu = common._parse_cpus_list(actual_sib_list_for_cpu)
-            if sib_for_cpu not in actual_sib_list:
-                actual_sib_list.append(sib_for_cpu)
+            if 'win' in guest:
+                LOG.info("{}Check windows guest siblings via wmic cpu get cmds".format(SEP))
+                expt_cores_per_sib = [len(vcpus) for vcpus in expt_sib_lists]
+                assert expt_cores_per_sib == log_count_per_sibling, \
+                    "Expected log cores count per sibling: {}, actual: {}".\
+                    format(expt_cores_per_sib, log_count_per_sibling)
 
-        if len(online_cores) == len(present_cores):
-            assert sorted(actual_sib_list) in sorted(expt_sib_lists), "Expt sib lists: {}, actual sib list: {}".\
-                format(sorted(expt_sib_lists), sorted(actual_sib_list))
+            else:
+                LOG.info("{}Check vm /sys/devices/system/cpu/[cpu#]/topology/thread_siblings_list".format(SEP))
+                for cpu in ['cpu{}'.format(i) for i in range(online_cores_count)]:
+                    actual_sib_list_for_cpu = \
+                    vm_ssh.exec_cmd('cat /sys/devices/system/cpu/{}/topology/thread_siblings_list'.
+                                    format(cpu), fail_ok=False)[1]
+
+                    sib_for_cpu = common._parse_cpus_list(actual_sib_list_for_cpu)
+                    if sib_for_cpu not in actual_sib_list:
+                        actual_sib_list.append(sib_for_cpu)
+
+                assert sorted(actual_sib_list) in sorted(expt_sib_lists), \
+                    "Expt sib lists: {}, actual sib list: {}".format(sorted(expt_sib_lists), sorted(actual_sib_list))
+
+
+def get_procs_and_siblings_on_windows(vm_ssh):
+    cmd = 'wmic cpu get {}'
+
+    procs = []
+    for param in ['NumberOfCores', 'NumberOfLogicalProcessors']:
+        output = vm_ssh.exec_cmd(cmd.format(param), fail_ok=False)[1].strip()
+        num_per_proc = [int(line.strip()) for line in output.splitlines() if line.strip()
+                        and not re.search('{}|x'.format(param), line)]
+        procs.append(num_per_proc)
+    procs = zip(procs[0], procs[1])
+    log_procs_per_phy = [nums[0] * nums[1] for nums in procs]
+    total_log_procs = sum(log_procs_per_phy)
+
+    LOG.info("Windows guest total logical cores: {}, logical_cores_per_phy_core: {}".
+             format(total_log_procs, log_procs_per_phy))
+    return total_log_procs, log_procs_per_phy
 
 
 def check_vm_vcpus_via_nova_show(vm_id, min_cpu, current_cpu, max_cpu, con_ssh=None):
