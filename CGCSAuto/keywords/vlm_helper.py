@@ -1,4 +1,3 @@
-import time
 import multiprocessing as mp
 from multiprocessing import Process, Queue
 
@@ -144,7 +143,7 @@ def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconne
 
         if reconnect:
             con_ssh.connect(retry=True, retry_timeout=reconnect_timeout)
-            host_helper._wait_for_openstack_cli_enable(con_ssh=con_ssh, timeout=120, reconnect=True)
+            host_helper._wait_for_openstack_cli_enable(con_ssh=con_ssh, timeout=300, reconnect=True)
 
         if not hosts_to_check:
             hosts_to_check = hosts
