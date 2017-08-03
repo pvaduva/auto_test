@@ -1089,7 +1089,7 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     if isinstance(vm_ids, str):
         vm_ids = [vm_ids]
 
-    valid_net_types = ['mgmt', 'data', 'internal']
+    valid_net_types = ['mgmt', 'data', 'internal', 'external']
     if not set(net_types) <= set(valid_net_types):
         raise ValueError("Invalid net type(s) provided. Valid net_types: {}. net_types given: {}".
                          format(valid_net_types, net_types))
@@ -1100,11 +1100,16 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     vms_ips = []
     vshell_ips = []
     if 'mgmt' in net_types:
-        mgmt_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, use_fip=use_fip,
-                                                       exclude_nets=exclude_nets)
+        mgmt_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
         if not mgmt_ips:
             raise exceptions.VMNetworkError("Management net ip is not found for vms {}".format(vm_ids))
         vms_ips += mgmt_ips
+
+    if 'external' in net_types:
+        ext_ips = network_helper.get_external_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
+        if not ext_ips:
+            raise exceptions.VMNetworkError("No external network ip found for vms {}".format(vm_ids))
+        vms_ips += ext_ips
 
     if 'data' in net_types:
         data_ips = network_helper.get_data_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
@@ -1159,7 +1164,7 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         raise exceptions.VMNetworkError(err_msg)
 
 
-def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False,
+def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_pings=5, timeout=30, fail_ok=False,
                          use_fip=False, retry=0):
     """
 
@@ -1188,8 +1193,9 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
     if not natbox_client:
         natbox_client = NATBoxClient.get_natbox_client()
 
+    net_type = 'external' if use_fip else 'mgmt'
     res_bool, res_dict = _ping_vms(vm_ids=vm_ids, ssh_client=natbox_client, con_ssh=con_ssh, num_pings=num_pings,
-                                   timeout=timeout, fail_ok=True, use_fip=use_fip, net_types='mgmt', retry=retry,
+                                   timeout=timeout, fail_ok=True, use_fip=use_fip, net_types=net_type, retry=retry,
                                    vshell=False)
     if not res_bool and not fail_ok:
         LOG.error("Ping vm(s) from NatBox failed - Collecting networking info")
@@ -1343,7 +1349,10 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
     vm_name = nova_helper.get_vm_name_from_id(vm_id=vm_id)
 
     if vm_ip is None:
-        vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id, use_fip=use_fip)[0]
+        if use_fip:
+            vm_ip = network_helper.get_external_ips_for_vms(vms=vm_id, con_ssh=con_ssh)[0]
+        else:
+            vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id, con_ssh=con_ssh)[0]
 
     if not natbox_client:
         natbox_client = NATBoxClient.get_natbox_client()

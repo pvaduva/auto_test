@@ -55,8 +55,8 @@ def snat_setups(request):
     ResourceCleanup.add('floating_ip', floatingip, scope='module')
     network_helper.associate_floating_ip(floatingip, vm_id, fip_val='ip')
 
-    LOG.fixture_step("Ping vm's private and floating ip from NatBox")
-    vm_helper.ping_vms_from_natbox(vm_id, use_fip=False)
+    LOG.fixture_step("Ping vm's floating ip from NatBox and ensure it's reachable")
+    vm_helper.ping_vms_from_natbox(vm_id, use_fip=True)
 
     return vm_id, floatingip
 
@@ -108,7 +108,7 @@ def test_snat_vm_actions(snat_setups, snat):
     snat = True if snat == 'snat_enabled' else False
     LOG.tc_step("Update tenant router external gateway to set SNAT to {}".format(snat))
     network_helper.update_router_ext_gateway_snat(enable_snat=snat)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
 
     LOG.tc_step("Ping from VM {} to 8.8.8.8".format(vm_))
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
@@ -118,42 +118,42 @@ def test_snat_vm_actions(snat_setups, snat):
         vm_ssh.exec_cmd('wget google.ca', fail_ok=False)
 
     LOG.tc_step("scp from NatBox to VM {}".format(vm_))
-    vm_fip = network_helper.get_mgmt_ips_for_vms(vms=vm_, use_fip=True)[0]
+    vm_fip = network_helper.get_external_ips_for_vms(vms=vm_)[0]
     natbox_ssh = NATBoxClient.get_natbox_client()
     natbox_ssh.scp_files(source_file='test', dest_file='/tmp/', dest_server=vm_fip,
                          dest_password='root', dest_user='root', timeout=30, fail_ok=False)
 
     LOG.tc_step("Live-migrate the VM and verify ping from VM")
     vm_helper.live_migrate_vm(vm_)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Cold-migrate the VM and verify ping from VM")
     vm_helper.cold_migrate_vm(vm_)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Pause and un-pause the VM and verify ping from VM")
     vm_helper.pause_vm(vm_)
     vm_helper.unpause_vm(vm_)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Suspend and resume the VM and verify ping from VM")
     vm_helper.suspend_vm(vm_)
     vm_helper.resume_vm(vm_)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Stop and start the VM and verify ping from VM")
     vm_helper.stop_vms(vm_)
     vm_helper.start_vms(vm_)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Reboot the VM and verify ping from VM")
     vm_helper.reboot_vm(vm_)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Resize the vm to a flavor with 2 dedicated cpus and verify ping from VM")
@@ -162,7 +162,7 @@ def test_snat_vm_actions(snat_setups, snat):
     nova_helper.set_flavor_extra_specs(new_flv, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
     vm_helper.resize_vm(vm_, new_flv)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 
@@ -203,7 +203,7 @@ def test_snat_evacuate_vm(snat_setups, snat):
     snat = True if snat == 'snat_enabled' else False
     LOG.tc_step("Update tenant router external gateway to set SNAT to {}".format(snat))
     network_helper.update_router_ext_gateway_snat(enable_snat=snat)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=True)
 
     host = nova_helper.get_vm_host(vm_)
 
@@ -224,7 +224,7 @@ def test_snat_evacuate_vm(snat_setups, snat):
     assert post_evac_host != host, "VM is on the same host after original host rebooted."
 
     LOG.tc_step("Verify vm can still ping outside")
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 

@@ -852,18 +852,21 @@ def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn
                                 exclude_nets=exclude_nets)
 
 
-def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, use_fip=False,
-                         exclude_nets=None):
+def get_external_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, exclude_nets=None):
+    return _get_net_ips_for_vms(netname_pattern=Networks.MGMT_NET_NAME, ip_pattern=Networks.EXT_IP, vms=vms,
+                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
+
+
+def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, exclude_nets=None):
     """
     This function returns the management IPs for all VMs on the system.
-    We make the assumption that the management IPs start with "192".
+    We make the assumption that the management IP pattern is "192.168.xxx.x(xx)".
     Args:
         vms (str|list|None): vm ids list. If None, management ips for ALL vms with given Tenant(via auth_info) will be
             returned.
         con_ssh (SSHClient): active controller SSHClient object
         auth_info (dict): use admin by default unless specified
         rtn_dict (bool): return list if False, return dict if True
-        use_fip (bool): Whether to return only floating ip(s) if any vm has floating ip(s) associated with it
         exclude_nets (list|str) network name(s) - exclude ips from given network name(s)
 
     Returns (list|dict):
@@ -871,8 +874,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
     return _get_net_ips_for_vms(netname_pattern=Networks.MGMT_NET_NAME, ip_pattern=Networks.MGMT_IP, vms=vms,
-                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, use_fip=use_fip,
-                                exclude_nets=exclude_nets)
+                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
 def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False,
@@ -890,9 +892,9 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
     if not vm_ids:
         raise ValueError("No vm is on the system. Please boot vm(s) first.")
     vms_nets = table_parser.get_column(table_, 'Networks')
-
-    if use_fip:
-        floatingips = get_floating_ips(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
+    #
+    # if use_fip:
+    #     floatingips = get_floating_ips(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
 
     if exclude_nets:
         if isinstance(exclude_nets, str):
@@ -923,15 +925,15 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
             continue
 
         LOG.info('targeted_ip_str: {}, ips for vm: {}'.format(targeted_ips_str, ips_for_vm))
-        if use_fip:
-            vm_fips = []
-            # ping floating ips only if any associated to vm, otherwise ping all the ips
-            if len(ips_for_vm) > 1:
-                for ip in ips_for_vm:
-                    if ip in floatingips:
-                        vm_fips.append(ip)
-                if vm_fips:
-                    ips_for_vm = vm_fips
+        # if use_fip:
+        #     vm_fips = []
+        #     # ping floating ips only if any associated to vm, otherwise ping all the ips
+        #     if len(ips_for_vm) > 1:
+        #         for ip in ips_for_vm:
+        #             if ip in floatingips:
+        #                 vm_fips.append(ip)
+        #         if vm_fips:
+        #             ips_for_vm = vm_fips
 
         all_ips_dict[vm_id] = ips_for_vm
         all_ips += ips_for_vm

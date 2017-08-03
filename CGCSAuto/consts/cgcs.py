@@ -61,7 +61,8 @@ class Networks:
     DATA_NET_NAME = 'tenant\d-net'
     INTERNAL_NET_NAME = 'internal'
     # such as 192.168.11.6
-    MGMT_IP = r'192.168.\d{1,3}.\d{1,3}'
+    MGMT_IP = r'192.168.\d{3}\.\d{1,3}'
+    EXT_IP = r'192.168.\d{1,2}\.\d{1,3}|10.10.\d{1,3}\.\d{1,3}'
     # such as 172.16.1.11
     DATA_IP = r'172.\d{1,3}.\d{1,3}.\d{1,3}'
     # such as 10.1.1.44
@@ -70,7 +71,8 @@ class Networks:
     IP_PATTERN = {
         'data': DATA_IP,
         'mgmt': MGMT_IP,
-        'internal': INTERNAL_IP
+        'internal': INTERNAL_IP,
+        'external': EXT_IP
     }
     INFRA_NETWORK_CIDR = "192.168.205.0/24"
 

@@ -563,8 +563,8 @@ class SSHClient:
         dest_add_prompt = '{}.*\(yes/no\).*'.format(dest_server) if dest_server else unmatchable_str
         sudo_pswd_prompt = 'Password:| password for '
         search_window_size = 300
-        index = self.expect([self.prompt, dest_add_prompt, dest_pswd_prompt,
-                             source_add_prompt, source_pswd_prompt, sudo_pswd_prompt],
+        index = self.expect([self.prompt, dest_pswd_prompt, dest_add_prompt,
+                             source_pswd_prompt, source_add_prompt, sudo_pswd_prompt],
                             timeout=timeout, searchwindowsize=search_window_size)
         if index == 5:
             # sudo password prompt
