@@ -69,11 +69,6 @@ def test_vif_models(vm_type):
     LOG.tc_step("Ping VM's data interface from another vm")
     vm_helper.ping_vms_from_vm(base_vm, vm_under_test, net_types=['mgmt', 'data'], vshell=vshell)
 
-    # vm_actions = [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume'], ['stop', 'start']]
-    # if vm_type not in ['sriov', 'pcipt']:
-    #     # live migration is not supported for pci vm
-    #     vm_actions.append(['live_migrate'])
-
     for vm_action in [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume'],
                       ['stop', 'start']]:
         if vm_action[0] == 'auto_recover':
