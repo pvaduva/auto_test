@@ -69,12 +69,13 @@ def test_vif_models(vm_type):
     LOG.tc_step("Ping VM's data interface from another vm")
     vm_helper.ping_vms_from_vm(base_vm, vm_under_test, net_types=['mgmt', 'data'], vshell=vshell)
 
-    vm_actions = [['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume'], ['stop', 'start']]
-    if vm_type not in ['sriov', 'pcipt']:
-        # live migration is not supported for pci vm
-        vm_actions.append(['live_migrate'])
+    # vm_actions = [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume'], ['stop', 'start']]
+    # if vm_type not in ['sriov', 'pcipt']:
+    #     # live migration is not supported for pci vm
+    #     vm_actions.append(['live_migrate'])
 
-    for vm_action in vm_actions:
+    for vm_action in [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume'],
+                      ['stop', 'start']]:
         if vm_action[0] == 'auto_recover':
             LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from "
                         "base vm over management and data networks")
@@ -83,7 +84,15 @@ def test_vif_models(vm_type):
         else:
             LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_action))
             for action in vm_action:
-                vm_helper.perform_action_on_vm(vm_under_test, action=action)
+                if action is 'live_migrate' and vm_type in ['sriov', 'pcipt']:
+                    kwargs = {'fail_ok': True}
+                else:
+                    kwargs = {}
+
+                code = vm_helper.perform_action_on_vm(vm_under_test, action=action, **kwargs)[0]
+
+                if kwargs != {}:
+                    assert 6 == code, 'Expected {} type vm to fail live-migration. VM migrated.'.format(vm_type)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
 
