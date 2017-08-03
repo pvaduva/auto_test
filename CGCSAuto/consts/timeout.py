@@ -2,16 +2,15 @@ CLI_TIMEOUT = 600
 
 
 class HostTimeout:
-    ONLINE_AFTER_LOCK = 1200
-    COMPUTE_UNLOCK = 840
-    CONTROLLER_UNLOCK = 1360
-    REBOOT = 2000
-    SWACT = 180
-    LOCK = 900
-    TASK_CLEAR = 300
-    FAIL_AFTER_REBOOT = 120
-    HYPERVISOR_UP_AFTER_AVAIL = 180
-    COMPUTE_LOCK = 30
+    ONLINE_AFTER_LOCK = 1200    # Host in online state after locked
+    COMPUTE_UNLOCK = 840    # Compute host reaches enabled/available state after system host-unlock returned
+    CONTROLLER_UNLOCK = 1360    # Host reaches enabled/available state after system host-unlock returned
+    REBOOT = 2000   # Host reaches enabled/available state after sudo reboot -f from host
+    SWACT = 180     # Active controller switched and being able to run openstack CLI after system host-swact returned
+    LOCK = 900      # Host in locked state after system host-lock cli returned
+    TASK_CLEAR = 300    # Task clears in system host-show after host reaches enabled/available state
+    FAIL_AFTER_REBOOT = 120     # Host in offline or failed state via system host-show after sudo reboot -f returned
+    HYPERVISOR_UP_AFTER_AVAIL = 180     # Hypervsior in enabled/up state after host in available state and task clears
     UPGRADE = 7200
     WIPE_DISK_TIMEOUT = 30
     PING_TIMEOUT = 60
