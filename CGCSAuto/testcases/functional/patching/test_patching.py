@@ -557,11 +557,11 @@ def test_install_impacted_hosts(con_ssh=None):
         pre_controller_states = patching_helper.get_active_controller_state(action='APPLY',
                                                                             patch_type='INSVC_NOVA',
                                                                             including_logs=False, con_ssh=con_ssh)
+    previous_time = lab_time_now()
+
     _test_install_impacted_hosts(partial_applied_patches, con_ssh=con_ssh)
 
     if pre_controller_states:
-        # previous_time = datetime.datetime.now()
-        previous_time = lab_time_now()
         patching_helper.check_active_controller_state(action='APPLY',
                                                       previous_state=pre_controller_states,
                                                       patch_type='INSVC_NOVA',

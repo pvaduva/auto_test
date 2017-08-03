@@ -148,6 +148,8 @@ def get_nova_logs(action='APPLY', names=None, fail_on_not_found=True, start_time
     log_pattern = IMPACTS_ON_SYSTEM['INSVC_NOVA']['log_record']
     base_command = '\egrep \'{}\' {} 2>/dev/null | tail -n {}'
 
+    start_time_stamp = parser.parse(start_time) if start_time else None
+
     log_records = []
     for name in names:
         log_name = os.path.join(BASE_LOG_DIR, 'nova', '{}.log'.format(name))
@@ -161,10 +163,8 @@ def get_nova_logs(action='APPLY', names=None, fail_on_not_found=True, start_time
 
                 service_name = re.search(log_pattern, line).group(1)
 
-                if not start_time or start_time < log_name:
+                if not start_time_stamp or start_time_stamp <= log_name:
                     log_records.append((service_name, log_time))
-                else:
-                    pass
 
             except IndexError as e:
                 LOG.warn('Unknown nova log line:"{}"\n{}'.format(line, e))
@@ -273,6 +273,7 @@ def get_log_records(action='upload', con_ssh=None, start_time=None, max_lines=10
         for line in output.splitlines():
             if not line.strip():
                 continue
+
             try:
                 log_file = os.path.basename(line.split(':')[0])
                 patch_pattern = record_patterns[log_file][0]
@@ -281,7 +282,7 @@ def get_log_records(action='upload', con_ssh=None, start_time=None, max_lines=10
                 patches = [os.path.basename(file).split(os.path.extsep)[0] for file in patch_files]
 
                 time_stamp = parser.parse(':'.join(line.split(':')[1:4]))
-                if time_stamp > start_timestamp:
+                if time_stamp >= start_timestamp:
                     logs.append((patches, log_file, time_stamp, line))
 
             except IndexError as e:
@@ -289,12 +290,12 @@ def get_log_records(action='upload', con_ssh=None, start_time=None, max_lines=10
 
             except Exception as e:
                 LOG.warn('unknown log line:\n"{}"\n{}\n'.format(line, e))
-
     else:
         LOG.warn('Not yet support searching log entries for action: "{}"'.format(action))
         return []
 
-    assert logs or not fail_if_not_found, 'Failed to find log records for "{}"'.format(action)
+    assert logs or not fail_if_not_found, \
+        'Failed to find log records for "{}", \nlogs={}, '.format(action, logs)
 
     return logs
 
@@ -303,13 +304,16 @@ def check_log_records(action='upload',
                       expected_patches=None,
                       con_ssh=None,
                       start_time=None,
-                      max_lines=10,
                       fail_if_not_found=False):
 
     if not expected_patches and action != 'host_install':
         LOG.info('No expected log entries to check for "applied" or "removed"')
         return True, []
 
+    max_lines = 100
+    if expected_patches and isinstance(expected_patches, list):
+        max_lines = max(max_lines, len(expected_patches)*10)
+        
     logs = get_log_records(action=action,
                            start_time=start_time,
                            max_lines=max_lines,
@@ -330,6 +334,8 @@ def check_log_records(action='upload',
         if set(patches_logged) < set(expected_patches):
             LOG.warn('No all patches logged, expecting:"{}", actual:"{}"'.format(
                 set(expected_patches), set(patches_logged)))
+            LOG.warn('Missed log files:\n{}\n'.format(set(expected_patches) - set(patches_logged)))
+            LOG.warn('Differences: \n{}\n'.format(set(expected_patches) ^ set(patches_logged)))
             all_logged = False
 
         return all_logged, patches_logged
@@ -437,7 +443,7 @@ def check_error_states(con_ssh=None, pre_states=None, pre_trace_backs=None, no_c
     return states, trace_backs
 
 
-def run_patch_cmd(cmd, args='', con_ssh=None, fail_ok=False, timeout=120):
+def run_patch_cmd(cmd, args='', con_ssh=None, fail_ok=False, timeout=600):
 
     assert cmd in PATCH_CMDS, 'Unknown patch command:<{}>'.format(cmd)
 
