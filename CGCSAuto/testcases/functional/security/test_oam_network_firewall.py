@@ -92,7 +92,7 @@ def test_default_iptables_rules():
                 .format(expected_open_ports_failed)
 
 
-def test_custom_iptables_rules():
+def _test_custom_iptables_rules():
     """
     Test custom iptables rules (ensuring the ports are open)
 
