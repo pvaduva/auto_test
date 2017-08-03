@@ -74,20 +74,19 @@ def test_vif_models(vm_type):
         # live migration is not supported for pci vm
         vm_actions.append(['live_migrate'])
 
-    for vm_actions in [['cold_migrate'], ['live_migrate'],  ['pause', 'unpause'], ['suspend', 'resume'],
-                       ['stop', 'start']]:
-        if vm_actions[0] == 'auto_recover':
+    for vm_action in vm_actions:
+        if vm_action[0] == 'auto_recover':
             LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from "
                         "base vm over management and data networks")
             vm_helper.set_vm_state(vm_id=vm_under_test, error_state=True, fail_ok=False)
             vm_helper.wait_for_vm_values(vm_id=vm_under_test, status=VMStatus.ACTIVE, fail_ok=True, timeout=600)
         else:
-            LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
-            for action in vm_actions:
+            LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_action))
+            for action in vm_action:
                 vm_helper.perform_action_on_vm(vm_under_test, action=action)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
 
         LOG.tc_step("Verify ping from base_vm to vm_under_test over management and data networks still works "
-                    "after {}".format(vm_actions))
+                    "after {}".format(vm_action))
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'], vshell=vshell)
