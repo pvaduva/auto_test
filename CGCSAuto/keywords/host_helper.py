@@ -795,6 +795,8 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
     while True:
         try:
             cli.system('show', ssh_client=con_ssh, timeout=timeout)
+            # give it some time after openstack CLI enable
+            time.sleep(60)
             return True
 
         except pexpect.EOF:

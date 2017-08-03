@@ -419,7 +419,7 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
                     if sib_for_cpu not in actual_sib_list:
                         actual_sib_list.append(sib_for_cpu)
 
-                assert sorted(actual_sib_list) in sorted(expt_sib_lists), \
+                assert sorted(actual_sib_list) == sorted(expt_sib_lists), \
                     "Expt sib lists: {}, actual sib list: {}".format(sorted(expt_sib_lists), sorted(actual_sib_list))
 
 
