@@ -796,6 +796,7 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
         try:
             cli.system('show', ssh_client=con_ssh, timeout=timeout)
             # give it some time after openstack CLI enable
+            LOG.info("'system show' enabled, wait for 60 seconds before continue")
             time.sleep(60)
             return True
 

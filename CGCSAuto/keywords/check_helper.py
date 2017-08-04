@@ -6,6 +6,7 @@
 ###############################################################
 import re
 import time
+import copy
 
 from utils.tis_log import LOG
 from consts.cgcs import MELLANOX_DEVICE
@@ -366,6 +367,7 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
 
 
 def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_siblings=None, guest=None):
+    siblings_total_ = copy.deepcopy(siblings_total)
     # Check from vm in /proc/cpuinfo and /sys/devices/.../cpu#/topology/thread_siblings_list
     if not guest:
         guest = ''
@@ -396,10 +398,13 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
             "Number of present cores: {}. online+offline cores: {}".format(vcpus, expt_total_cores)
 
         if online_cores_count == present_cores_count:
-            expt_sib_lists = [[vcpu] for vcpu in range(present_cores_count)] if not siblings_total \
-                else siblings_total
+            expt_sib_lists = [[vcpu] for vcpu in range(present_cores_count)] if not siblings_total_ \
+                else siblings_total_
             if prev_siblings:
-                expt_sib_lists.append(prev_siblings)
+                # siblings_total may get modified here
+                for sib in prev_siblings:
+                    if sib not in expt_sib_lists:
+                        expt_sib_lists.append(sib)
 
             if 'win' in guest:
                 LOG.info("{}Check windows guest siblings via wmic cpu get cmds".format(SEP))
@@ -419,7 +424,8 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
                     if sib_for_cpu not in actual_sib_list:
                         actual_sib_list.append(sib_for_cpu)
 
-                assert sorted(actual_sib_list) == sorted(expt_sib_lists), \
+                expt_sib_lists_ = copy.deepcopy(expt_sib_lists)
+                assert sorted(expt_sib_lists_) == sorted(actual_sib_list), \
                     "Expt sib lists: {}, actual sib list: {}".format(sorted(expt_sib_lists), sorted(actual_sib_list))
 
 
