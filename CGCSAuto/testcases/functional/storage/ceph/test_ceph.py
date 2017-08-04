@@ -408,10 +408,10 @@ def test_ceph_reboot_storage_node():
     vm_helper.delete_vms()
 
 
-# UNTESTED AFTER MODIFICATION
+# Tested on PV0.  Runtime: 2770.23 seconds sec.  Date: Aug 4, 2017  Status: # Pass
 @mark.parametrize('host', ['any', 'storage-0'])
 @mark.usefixtures('ceph_precheck')
-def _test_lock_stor_check_osds_down(host):
+def test_lock_stor_check_osds_down(host):
     """
     This test is adapted from
     us69932_tc3_ceph_mon_maintenance_operations from us69932_ceph_monitoring.odt
@@ -465,11 +465,13 @@ def _test_lock_stor_check_osds_down(host):
     LOG.tc_step("Boot various VMs")
     vms = vm_helper.boot_vms_various_types(cleanup="function")
 
+    vm_threads = []
     LOG.tc_step("SSH to VMs and write to disk")
-    cmd = "while (true) do date; dd if=/dev/urandom of=output.txt bs=1k count=1 || break ; echo ; sleep 1; done 2>&1 | tee trace.txt &"
     for vm in vms:
-        with vm_helper.ssh_to_vm_from_natbox(vm_id=vm, close_ssh=False) as vm_ssh:
-            vm_ssh.exec_cmd(cmd=cmd)
+        vm_ssh, vm_thread = vm_helper.write_in_vm(vm, end_now_flag=True, expect_timeout=40)
+        vm_thread.end_now = False
+        vm_thread.end_thread()
+        vm_threads.append(vm_thread)
 
     LOG.tc_step('Lock storage node {}'.format(host))
     HostsToRecover.add(host)
@@ -538,6 +540,12 @@ def _test_lock_stor_check_osds_down(host):
         ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
         if ceph_healthy is True:
             break
+
+    for vm_thread in vm_threads:
+        vm_thread.end_now = True
+        vm_thread.wait_for_thread_end(timeout=20)
+
+        assert vm_thread.res is True, "Writing in vm stopped unexpectedly"
 
     LOG.tc_step("Delete existing VMs")
     vm_helper.delete_vms()
