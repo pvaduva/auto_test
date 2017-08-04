@@ -222,7 +222,7 @@ def is_osd_up(osd_id, con_ssh=None):
         (bool) True if OSD is up, False if OSD is down
     """
 
-    cmd = 'ceph osd tree | grep osd.{}'.format(osd_id)
+    cmd = "ceph osd tree | grep 'osd.{}\s'".format(osd_id)
     rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=60)
     if re.search('up', out):
         return True
