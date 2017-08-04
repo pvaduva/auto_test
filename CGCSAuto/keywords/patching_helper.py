@@ -2,9 +2,7 @@ import re
 import os
 import time
 import functools
-from dateutil import parser
 from datetime import datetime
-from pytz import reference as pytmzn
 
 from utils import cli
 from utils.tis_log import LOG
@@ -99,6 +97,8 @@ IMPACTS_ON_SYSTEM = {
     }
 }
 
+LOG_DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S'
+
 
 def get_process_info(names=None, con_ssh=None):
     """
@@ -148,7 +148,7 @@ def get_nova_logs(action='APPLY', names=None, fail_on_not_found=True, start_time
     log_pattern = IMPACTS_ON_SYSTEM['INSVC_NOVA']['log_record']
     base_command = '\egrep \'{}\' {} 2>/dev/null | tail -n {}'
 
-    start_time_stamp = parser.parse(start_time) if start_time else None
+    start_time_stamp = datetime.strptime(start_time, LOG_DATETIME_FORMAT) if start_time else None
 
     log_records = []
     for name in names:
@@ -159,7 +159,7 @@ def get_nova_logs(action='APPLY', names=None, fail_on_not_found=True, start_time
 
         for line in output.splitlines():
             try:
-                log_time = parser.parse(line.split('\.')[0])
+                log_time = datetime.strptime(line.split('\.')[0], LOG_DATETIME_FORMAT)
 
                 service_name = re.search(log_pattern, line).group(1)
 
@@ -268,7 +268,7 @@ def get_log_records(action='upload', con_ssh=None, start_time=None, max_lines=10
             LOG.info('No logs found for action: "{}"'.format(action))
             return {}
 
-        start_timestamp = parser.parse(start_time) if start_time else None
+        start_timestamp = datetime.strptime(start_time, LOG_DATETIME_FORMAT) if start_time else None
 
         for line in output.splitlines():
             if not line.strip():
@@ -281,7 +281,8 @@ def get_log_records(action='upload', con_ssh=None, start_time=None, max_lines=10
                 patch_files = re.search(patch_pattern, line).group(1).strip().split(',')
                 patches = [os.path.basename(file).split(os.path.extsep)[0] for file in patch_files]
 
-                time_stamp = parser.parse(':'.join(line.split(':')[1:4]))
+                time_stamp = datetime.strptime(':'.join(line.split(':')[1:4]), LOG_DATETIME_FORMAT)
+
                 if time_stamp >= start_timestamp:
                     logs.append((patches, log_file, time_stamp, line))
 
