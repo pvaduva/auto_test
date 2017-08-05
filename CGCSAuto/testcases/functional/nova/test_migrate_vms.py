@@ -4,6 +4,7 @@ from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, EventLogID
+from consts.reasons import SkipReason
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -360,6 +361,10 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol):
     ('rhel_7', 1, 'dedicated', 'volume'),
 ])
 def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
+    if guest_os == 'opensuse_12' and boot_source == 'volume':
+        if not cinder_helper.is_volumes_pool_sufficient(min_size=30):
+            skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
+
     LOG.tc_step("Get/Create {} image".format(guest_os))
     img_id = glance_helper.get_guest_image(guest_os)
     if guest_os != 'ubuntu_14':

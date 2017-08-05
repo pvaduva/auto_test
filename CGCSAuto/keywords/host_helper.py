@@ -269,6 +269,9 @@ def wait_for_hosts_ready(hosts, con_ssh=None):
 
 
 def wait_for_subfunction_ready(hosts, fail_ok=False, con_ssh=None, timeout=HostTimeout.SUBFUNC_READY):
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
     hosts_to_check = []
     for host in hosts:
         tab_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh, fail_ok=False))
@@ -281,17 +284,21 @@ def wait_for_subfunction_ready(hosts, fail_ok=False, con_ssh=None, timeout=HostT
         LOG.info("No host to check or host subfunctions already enabled/available")
         return True
 
+    LOG.info("Waiting for subfunctions enable/available for hosts: {}".format(hosts_to_check))
     end_time = time.time() + timeout
     while time.time() < end_time:
-        LOG.info("Waiting for subfunctions enable/available for hosts: {}".format(hosts_to_check))
-        hosts_vals = get_host_show_values_for_hosts(hosts, ['subfunction_avail', 'subfunction_oper'], con_ssh=con_ssh)
+        hosts_vals = get_host_show_values_for_hosts(hosts_to_check, ['subfunction_avail', 'subfunction_oper'],
+                                                    con_ssh=con_ssh)
         for host, vals in hosts_vals.items():
-            if vals == [HostAvailabilityState.AVAILABLE, HostOperationalState.ENABLED]:
+            if vals['subfunction_avail'] == HostAvailabilityState.AVAILABLE and \
+                            vals['subfunction_oper'] == HostOperationalState.ENABLED:
                 hosts_to_check.remove(host)
 
         if not hosts_to_check:
             LOG.info("Hosts {} subfunctions are now in enabled/available states")
             return True
+
+        time.sleep(3)
 
     err_msg = "Host subfunctions are not all in enabled/available states: {}".format(hosts_to_check)
     if fail_ok:
