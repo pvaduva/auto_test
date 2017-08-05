@@ -64,13 +64,7 @@ def __verify_alarms(request, scope):
                 if alarm_id == EventLogID.NTP_ALARM:
                     LOG.fixture_step("NTP alarm found, checking ntpq stats")
                     host = entity_id.split('host=')[1].split('.ntp')[0]
-                    status, msg = host_helper.get_ntpq_status(host)
-                    LOG.info(msg)
-                    if status == 0:
-                        alarm_tab = system_helper.get_alarms_table()
-                        alarms_ = system_helper._get_alarms(alarm_tab)
-                        assert item not in alarms_, "NTP alarm generated when NPPQ return healthy stats"
-
+                    host_helper.wait_for_ntp_sync(host=host, fail_ok=False)
                     continue
 
                 new_alarms.append(item)

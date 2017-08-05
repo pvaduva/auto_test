@@ -15,6 +15,7 @@ class HostTimeout:
     WIPE_DISK_TIMEOUT = 30
     PING_TIMEOUT = 60
     TIMEOUT_BUFFER = 2
+    SUBFUNC_READY = 300     # subfunction go enabled/available after host admin/avail states go enabled/available
 
 
 class VMTimeout:
@@ -83,3 +84,7 @@ class OrchestrationPhaseTimeout:
         BUILD = 60
         ABORT = 7200
         APPLY = 7200
+
+
+class MiscTimeout:
+    NTPQ_UPDATE = 700   # sudo ntpq updates every 10 minutes

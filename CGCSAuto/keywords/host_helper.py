@@ -11,7 +11,7 @@ from utils.tis_log import LOG
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState, Prompt, MELLANOX_DEVICE, \
     Networks, EventLogID
-from consts.timeout import HostTimeout, CMDTimeout
+from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 
 from keywords import system_helper, common
@@ -243,19 +243,21 @@ def wait_for_hosts_ready(hosts, con_ssh=None):
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    expt_online_hosts = get_hosts(hosts, administrative=HostAdminState.LOCKED)
-    expt_avail_hosts = get_hosts(hosts, administrative=HostAdminState.UNLOCKED)
+    expt_online_hosts = get_hosts(hosts, con_ssh=con_ssh, administrative=HostAdminState.LOCKED)
+    expt_avail_hosts = get_hosts(hosts, con_ssh=con_ssh, administrative=HostAdminState.UNLOCKED)
 
     if expt_online_hosts:
         LOG.info("Wait for hosts to be online: {}".format(hosts))
-        wait_for_hosts_states(hosts, availability=HostAvailabilityState.ONLINE, fail_ok=False)
+        wait_for_hosts_states(hosts, availability=HostAvailabilityState.ONLINE, fail_ok=False, con_ssh=con_ssh)
 
     if expt_avail_hosts:
         hypervisors = list(set(get_hypervisors()) & set(hosts))
         controllers = list(set(system_helper.get_controllers()) & set(hosts))
 
         LOG.info("Wait for hosts to be available: {}".format(hosts))
-        wait_for_hosts_states(hosts, availability=HostAvailabilityState.AVAILABLE, fail_ok=False)
+        wait_for_hosts_states(hosts, availability=HostAvailabilityState.AVAILABLE, fail_ok=False, con_ssh=con_ssh)
+
+        wait_for_subfunction_ready(hosts, fail_ok=False, con_ssh=con_ssh)
 
         if controllers:
             LOG.info("Wait for webservices up for hosts: {}".format(controllers))
@@ -264,6 +266,39 @@ def wait_for_hosts_ready(hosts, con_ssh=None):
         if hypervisors:
             LOG.info("Wait for hypervisors up for hosts: {}".format(hypervisors))
             wait_for_hypervisors_up(hypervisors, fail_ok=False, con_ssh=con_ssh, timeout=90)
+
+
+def wait_for_subfunction_ready(hosts, fail_ok=False, con_ssh=None, timeout=HostTimeout.SUBFUNC_READY):
+    hosts_to_check = []
+    for host in hosts:
+        tab_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh, fail_ok=False))
+        if 'subfunctions' in table_parser.get_column(tab_, 'Property'):
+            if table_parser.get_value_two_col_table(tab_, 'subfunction_avail') != HostAvailabilityState.AVAILABLE \
+                    or table_parser.get_value_two_col_table(tab_, 'subfunction_oper') != HostOperationalState.ENABLED:
+                hosts_to_check.append(host)
+
+    if not hosts_to_check:
+        LOG.info("No host to check or host subfunctions already enabled/available")
+        return True
+
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        LOG.info("Waiting for subfunctions enable/available for hosts: {}".format(hosts_to_check))
+        hosts_vals = get_host_show_values_for_hosts(hosts, ['subfunction_avail', 'subfunction_oper'], con_ssh=con_ssh)
+        for host, vals in hosts_vals.items():
+            if vals == [HostAvailabilityState.AVAILABLE, HostOperationalState.ENABLED]:
+                hosts_to_check.remove(host)
+
+        if not hosts_to_check:
+            LOG.info("Hosts {} subfunctions are now in enabled/available states")
+            return True
+
+    err_msg = "Host subfunctions are not all in enabled/available states: {}".format(hosts_to_check)
+    if fail_ok:
+        LOG.warning(err_msg)
+        return False
+
+    raise exceptions.HostError(err_msg)
 
 
 def get_host_show_values_for_hosts(hostnames, fields, merge_lines=False, con_ssh=None):
@@ -3026,3 +3061,30 @@ def get_ntpq_status(host, con_ssh=None):
         return 2, "Some NTP servers are discarded"
 
     return 0, "{} NTPQ is in healthy state".format(host)
+
+
+def wait_for_ntp_sync(host, timeout=MiscTimeout.NTPQ_UPDATE, fail_ok=False, con_ssh=None):
+
+    LOG.info ("Waiting for ntp alarm to clear or sudo ntpq -pn indicate unhealthy server for {}".format(host))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        ntp_alarms = system_helper.get_alarms(alarm_id=EventLogID.NTP_ALARM, entity_id=host, strict=False)
+        status, msg = get_ntpq_status(host)
+        if ntp_alarms and status != 0:
+            LOG.info("Valid NTP alarm")
+            return True
+        elif not ntp_alarms and status == 0:
+            LOG.info("NTP alarm cleared and sudo ntpq shows servers healthy")
+            return True
+
+        LOG.info("NTPQ status: {}; NTP alarms: {}".format(msg, ntp_alarms))
+        time.sleep(10)
+
+    err_msg = "Timed out waiting for NTP alarm to be in sync with ntpq output. NTPQ status: {}; NTP alarms: {}".\
+        format(msg, ntp_alarms)
+    if fail_ok:
+        LOG.warning(err_msg)
+        return False
+
+    raise exceptions.HostTimeout(err_msg)
+
