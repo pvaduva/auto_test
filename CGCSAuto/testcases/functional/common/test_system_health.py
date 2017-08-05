@@ -78,9 +78,3 @@ def test_system_alarms(pre_alarms_session):
         assert False, "New alarms found and not cleared within timeout: {}".format(alarms_to_check)
 
     LOG.info("No new alarms found after test session.")
-
-
-def test_ntp_dummy():
-    host_helper.wait_for_subfunction_ready(hosts=['controller-0', 'controller-1'], timeout=1200)
-    host_helper.wait_for_ntp_sync(host='controller-1', fail_ok=False)
-    host_helper.wait_for_ntp_sync(host='controller-0', fail_ok=False)
