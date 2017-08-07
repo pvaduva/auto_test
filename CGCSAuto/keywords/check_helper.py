@@ -425,8 +425,9 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
                         actual_sib_list.append(sib_for_cpu)
 
                 expt_sib_lists_ = copy.deepcopy(expt_sib_lists)
-                assert sorted(expt_sib_lists_) == sorted(actual_sib_list), \
-                    "Expt sib lists: {}, actual sib list: {}".format(sorted(expt_sib_lists), sorted(actual_sib_list))
+                for sib in actual_sib_list:
+                    assert sib in expt_sib_lists_, "Expt sib lists: {}, actual sib list: {}".\
+                        format(sorted(expt_sib_lists_), sorted(actual_sib_list))
 
 
 def get_procs_and_siblings_on_windows(vm_ssh):
