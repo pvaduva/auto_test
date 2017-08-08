@@ -2262,38 +2262,22 @@ def get_coredumps_and_crashreports():
 def modify_mtu_on_interface(host, interface, mtu_val, network_type='data', lock_unlock=True, fail_ok=False, con_ssh=None):
     mtu_val = int(mtu_val)
 
-    LOG.info("Modify MTU for {} of {} to: {} on {}".format(interface, network_type, mtu_val, host))
+    LOG.info("Modify MTU for IF {} of NET-TYPE {} to: {} on {}".format(interface, network_type, mtu_val, host))
 
     args = "-m {} {} {}".format(mtu_val, host, interface)
 
     code, output = cli.system('host-if-modify', args, fail_ok=fail_ok, rtn_list=True, ssh_client=con_ssh)
 
-    rtn_code = 0
-
     if code != 0:
-        rtn_code = 1
-
-    if lock_unlock:
-        unlock_host(host)
-
-    actual_mtu = ''
-    if code == 0:
-        actual_mtu = int(system_helper.get_host_if_show_values(host,
-                                                               interface=interface,
-                                                               fields=['imtu'],
-                                                               con_ssh=con_ssh)[0])
-        if not actual_mtu == mtu_val:
-            rtn_code = 2
-
-    if rtn_code != 0:
-        msg = "Attempt to change DATA MTU failed or actual MTU value after modify is not as expected. " \
-              "Expected MTU value: {}. Actual [Host, Interface, " \
-              "MTU value]: {}, {}, {}".format(mtu_val, host, interface, actual_mtu)
+        msg = "Attempt to change MTU failed on host:{} for IF:{} to MTU:{}".format(host, interface, mtu_val)
         if fail_ok:
             return 2, msg
         raise exceptions.HostPostCheckFailed(msg)
 
-    return rtn_code, output
+    if lock_unlock:
+        unlock_host(host)
+
+    return code, output
 
 
 def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fail_ok=False, con_ssh=None):

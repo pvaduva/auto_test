@@ -282,11 +282,17 @@ def test_modify_mtu_data_interface(mtu_range):
     for host in hosts:
         interfaces = get_ifs_to_mod(host, net_type, mtu)
         revert_ifs = list(interfaces)
-        revert_ifs.reverse()
+        if not revert_ifs:
+            LOG.info('Skip host:{} because there is no interface to set MTU'.format(host))
+            continue
 
+        host_helper.lock_host(host, swact=True)
+
+        revert_ifs.reverse()
+        changed_ifs = []
         for interface in revert_ifs:
             LOG.tc_step('Checking the max MTU for the IF:{} on host:{}'.format(interface, host))
-            max_mtu = get_max_allowed_mtus(host=host, network_type=net_type, if_name=interface, )[0]
+            max_mtu = get_max_allowed_mtus(host=host, network_type=net_type, if_name=interface)[0]
 
             LOG.info('Checking the max MTU for the IF is: {}'.format(max_mtu or 'NOT SET'))
 
@@ -299,14 +305,14 @@ def test_modify_mtu_data_interface(mtu_range):
             LOG.tc_step('Modify MTU of IF:{} on host:{} to:{}, expeting: {}'.format(
                 interface, host, mtu, 'PASS' if expecting_pass else 'FAIL'))
 
-            host_helper.lock_host(host, swact=True)
-
             code, res = host_helper.modify_mtu_on_interface(host, interface, mtu_val=mtu, network_type=net_type,
-                                                            lock_unlock=True, fail_ok=True)
+                                                            lock_unlock=False, fail_ok=True)
             msg_result = "PASS" if expecting_pass else "FAIL"
             msg = "Failed to modify data MTU, expecting to {}, \nnew MTU:{}, max MTU:{}, old MTU:{}, " \
                   "Return code:{}; Details: {}".format(msg_result, pre_mtu, max_mtu, pre_mtu, code, res)
+
             if 0 == code:
+                changed_ifs.append(interface)
                 HOSTS_IF_MODIFY_ARGS.append((host, pre_mtu, mtu, max_mtu, interface, net_type))
                 assert expecting_pass, msg
             else:
@@ -314,7 +320,15 @@ def test_modify_mtu_data_interface(mtu_range):
 
             LOG.info('OK, modification of MTU of data interface {} as expected: {}'.format(msg_result, msg_result))
 
-            # HOSTS_IF_MODIFY_ARGS.append((host, "-m {} {} {}".format(pre_mtu, host, interface)))
+        host_helper.unlock_host(host)
+        for interface in revert_ifs:
+            if interface in changed_ifs:
+                actual_mtu = int(system_helper.get_host_if_show_values(host,
+                                                                       interface=interface, fields=['imtu'])[0])
+                assert actual_mtu == mtu, \
+                    'Actual MTU after modification did not match expected, expected:{}, actual:{}'.format(
+                        mtu, actual_mtu)
+        changed_ifs[:] = []
 
     if not HOSTS_IF_MODIFY_ARGS:
         skip('No data interface changed!')
@@ -324,6 +338,7 @@ def test_modify_mtu_data_interface(mtu_range):
 
     LOG.tc_step('Restore the MTUs of the data IFs on hosts:{}'.format(hosts))
 
+    prev_host = None
     for host, pre_mtu, mtu, max_mtu, interface, net_type in HOSTS_IF_MODIFY_ARGS:
         host_helper.lock_host(host, swact=True)
 
@@ -332,6 +347,9 @@ def test_modify_mtu_data_interface(mtu_range):
 
         LOG.info('OK, Data MTUs of IF:{} on host:{} are restored, from: {} to:{}'.format(
             interface, host, mtu, pre_mtu))
+
+        if prev_host and prev_host != host:
+            host_helper.unlock_host(host)
 
     LOG.info('OK, all changed MTUs of DATA IFs are restored')
 
