@@ -16,7 +16,7 @@ from utils.tis_log import LOG
 from utils.ssh import SSHClient, ControllerClient
 from consts.proj_vars import ProjVar
 from keywords import mtc_helper, system_helper, host_helper
-
+from consts.auth import HostLinuxCreds
 
 _tested_procs = []
 _final_processes_status = {}
@@ -741,13 +741,16 @@ class MonitoredProcess:
 
         LOG.info('interval={}, debounce={}, wait_each_kill={}'.format(interval, debounce, wait_after_each_kill))
 
-        cmd = '''true; n=1; last_pid=''; pid=''; for((;n<{};)); do pid=$(cat {} 2>/dev/null); date;
-                if [ "x$pid" = "x" -o "$pid" = "$last_pid" ]; then echo "stale or empty PID:$pid, last_pid=$last_pid";
-                usleep 0.05; continue; fi; sudo kill -9 $pid &>/dev/null;
-                if [ $? -eq 0 ]; then echo "OK $n - $pid killed"; ((n++)); last_pid=$pid; pid=''; sleep {};
-                else usleep 0.05; fi; done; echo $pid'''.format(retries+1, pid_file, wait_after_each_kill)
+        cmd = '''true; n=1; last_pid=''; pid=''; for((;n<{};)); do pid=\$(cat {} 2>/dev/null); date;
+                if [ "x\$pid" = "x" -o "\$pid" = "\$last_pid" ]; then echo "stale or empty PID:\$pid, last_pid=\$last_pid";
+                sleep 0.5; continue; fi; echo "{}" | sudo -S kill -9 \$pid &>/dev/null;
+                if [ \$? -eq 0 ]; then echo "OK \$n - \$pid killed"; ((n++)); last_pid=\$pid; pid=''; sleep {};
+                else sleep 0.5; fi; done; echo \$pid'''.format(retries+1, pid_file, HostLinuxCreds.PASSWORD, wait_after_each_kill)
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
+
+        cmd_2 = 'cat >/home/wrsroot/test_process.sh  <<EOL\n{}\nEOL'.format(cmd)
+
 
         wait_time = max(wait_after_each_kill * retries + 60, 60)
 
@@ -755,7 +758,14 @@ class MonitoredProcess:
         for _ in range(2):
             try:
                 with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
-                    code, output = con.exec_sudo_cmd(cmd, fail_ok=True, expect_timeout=wait_time)
+
+                    con.exec_cmd(cmd_2)
+                    con.exec_cmd("chmod 755 ./test_process.sh")
+
+                    full_cmd = "nohup ./test_process.sh > ./results.txt 2>&1 &"
+
+                    code, output = con.exec_cmd(full_cmd, fail_ok=True, expect_timeout=wait_time)
+                    #code, output = con.exec_sudo_cmd( full_cmd, fail_ok=True, expect_timeout=wait_time)
                     if 0 != code:
                         LOG.warn('Failed to kill process:{} on host:{}, cli:\n{}\noutput:\n{}'.format(
                             name, host, cmd, output))
@@ -773,6 +783,8 @@ class MonitoredProcess:
             expected = {'operational': 'enabled', 'availability': 'available'}
 
             wait_time_for_host_status = 90
+
+            time.sleep((retries + 1) * wait_after_each_kill)
 
             if impact in ('log'):
                 check_event = True
