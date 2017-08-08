@@ -275,7 +275,7 @@ def wait_for_subfunction_ready(hosts, fail_ok=False, con_ssh=None, timeout=HostT
     hosts_to_check = []
     for host in hosts:
         tab_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh, fail_ok=False))
-        if 'subfunctions' in table_parser.get_column(tab_, 'Property'):
+        if 'subfunction_avail' in table_parser.get_column(tab_, 'Property'):
             if table_parser.get_value_two_col_table(tab_, 'subfunction_avail') != HostAvailabilityState.AVAILABLE \
                     or table_parser.get_value_two_col_table(tab_, 'subfunction_oper') != HostOperationalState.ENABLED:
                 hosts_to_check.append(host)
