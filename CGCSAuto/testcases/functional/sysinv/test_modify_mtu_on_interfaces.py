@@ -273,7 +273,10 @@ def test_modify_mtu_data_interface(mtu_range):
         for interface in revert_ifs:
             max_mtu = get_max_allowed_mtus(host=host, network_type=net_type, if_name=interface, if_info=if_info)[0]
             pre_mtu = int(system_helper.get_host_if_show_values(host, interface, 'imtu')[0])
-            expecting_fail = max_mtu > 0 and pre_mtu <= max_mtu
+            expecting_fail = max_mtu > 0 and pre_mtu > max_mtu
+            if expecting_fail:
+                LOG.warn('Expecting to fail, mtu:{} is greater the max mtu:{} of underline interface'.format(
+                    pre_mtu, max_mtu))
             HOSTS_IF_MODIFY_ARGS.append("-m {} {} {}".format(pre_mtu, host, interface))
 
     HostsToRecover.add(hypervisors)
