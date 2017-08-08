@@ -137,6 +137,7 @@ class TestVariousGuests:
         'opensuse_11', 'opensuse_12',
         # 'opensuse_13',
         'rhel_6', 'rhel_7',
+        'win_2012'
     ])
     def test_evacuate_vm(self, guest_os, boot_source):
         if guest_os == 'opensuse_12':
