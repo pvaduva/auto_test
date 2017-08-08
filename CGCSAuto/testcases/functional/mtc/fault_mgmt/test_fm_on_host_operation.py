@@ -11,6 +11,7 @@ from pytest import mark, skip
 from utils import table_parser, cli
 from utils.tis_log import LOG
 
+from consts.cgcs import EventLogID
 from keywords import system_helper, host_helper, common
 
 from testfixtures.recover_hosts import HostsToRecover
@@ -71,9 +72,10 @@ def test_system_alarms_and_events_on_lock_unlock_compute():
     - Check host lock 'clear' event logged via system event-list
     """
 
-    # Clear the alarms currently present
-    LOG.tc_step("Clear the alarms table")
-    system_helper.delete_alarms()
+    # Remove following step because it's unnecessary and fails the test when alarm is re-generated
+    # # Clear the alarms currently present
+    # LOG.tc_step("Clear the alarms table")
+    # system_helper.delete_alarms()
 
     # Raise a new alarm by locking a compute node
     # Get the compute
@@ -88,7 +90,7 @@ def test_system_alarms_and_events_on_lock_unlock_compute():
 
     LOG.tc_step("Check host lock alarm is generated")
     post_lock_alarms = system_helper.wait_for_alarm(rtn_val='UUID', entity_id=compute_host, reason=compute_host,
-                                                    strict=False, fail_ok=False)[1]
+                                                    alarm_id=EventLogID.HOST_LOCK, strict=False, fail_ok=False)[1]
 
     LOG.tc_step("Check related fields in system alarm-list and system alarm-show are of the same values")
     post_lock_alarms_tab = system_helper.get_alarms_table(uuid=True)
@@ -96,6 +98,7 @@ def test_system_alarms_and_events_on_lock_unlock_compute():
     alarms_l = ['Alarm ID', 'Entity ID', 'Severity', 'Reason Text']
     alarms_s = ['alarm_id', 'entity_instance_id', 'severity', 'reason_text']
 
+    # Only 1 alarm since we are now checking the specific alarm ID
     for post_alarm in post_lock_alarms:
         LOG.tc_step("Verify {} for alarm {} in alarm-list are in sync with alarm-show".format(alarms_l, post_alarm))
 
@@ -110,19 +113,17 @@ def test_system_alarms_and_events_on_lock_unlock_compute():
                 alarms_l[i], alarm_l_val, alarm_s_val)
 
     LOG.tc_step("Check host lock is logged via system event-list")
-    event_ids = system_helper.wait_for_events(entity_instance_id=compute_host, start=pre_lock_time, fail_ok=False,
-                                              **{'state': 'set'})
+    system_helper.wait_for_events(entity_instance_id=compute_host, start=pre_lock_time,
+                                  event_log_id=EventLogID.HOST_LOCK, fail_ok=False, **{'state': 'set'})
 
     pre_unlock_time = common.get_date_in_format()
     LOG.tc_step("Unlock {}".format(compute_host))
     host_helper.unlock_host(compute_host)
 
-    LOG.tc_step("Check active alarms cleared")
-    alarm_ids = table_parser.get_values(post_lock_alarms_tab, 'Alarm ID', uuid=post_lock_alarms)
-    alarm_sets = [(alarm_id, compute_host) for alarm_id in alarm_ids]
+    LOG.tc_step("Check host lock active alarm cleared")
+    alarm_sets = [(EventLogID.HOST_LOCK, compute_host)]
     system_helper.wait_for_alarms_gone(alarm_sets, fail_ok=False)
 
-    LOG.tc_step("Check clear events logged")
-    for event_id in event_ids:
-        system_helper.wait_for_events(event_log_id=event_id, start=pre_unlock_time, entity_instance_id=compute_host,
-                                      fail_ok=False, **{'state': 'clear'})
+    LOG.tc_step("Check host lock clear event logged")
+    system_helper.wait_for_events(event_log_id=EventLogID.HOST_LOCK, start=pre_unlock_time,
+                                  entity_instance_id=compute_host, fail_ok=False, **{'state': 'clear'})
