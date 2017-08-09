@@ -49,7 +49,7 @@ def get_ip_address_str(ip=None):
 
 def create_network(name=None, shared=False,tenant_name=None,
                    network_type=None, segmentation_id=None,
-                   physical_network=None, vlan_transparent=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                   physical_network=None, vlan_transparent=None, fail_ok=False, auth_info=None, con_ssh=None):
 
     """
     Create a network for given tenant
@@ -72,25 +72,26 @@ def create_network(name=None, shared=False,tenant_name=None,
     """
     if name is None:
         name = common.get_unique_name(name_str='net')
-    if tenant_name is None:
-        tenant_name = Tenant.get_primary()['tenant']
-    tenant_id=keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
-    args=' ' + name
-    args+=' --tenant-id ' + format(tenant_id)
+
+    args = ' ' + name
+    if tenant_name is not None:
+        tenant_id=keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
+        args += ' --tenant-id ' + format(tenant_id)
+
     if shared:
-        args+=' --shared'
+        args += ' --shared'
     if segmentation_id is not None:
-        args+=' --provider:segmentation_id ' + segmentation_id
+        args += ' --provider:segmentation_id ' + segmentation_id
     if network_type is not None:
-        args+= ' --provider:network_type ' + network_type
+        args += ' --provider:network_type ' + network_type
     if physical_network is not None:
-        args+= ' --provider:physical_network ' + physical_network
+        args += ' --provider:physical_network ' + physical_network
     if vlan_transparent is not None:
         args += ' vlan-transparent ' + vlan_transparent
 
-    LOG.info("Creating network: {}. Args: {}".format(tenant_id, args))
+    LOG.info("Creating network: Args: {}".format(args))
     code, output = cli.neutron('net-create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                             rtn_list=True)
+                               rtn_list=True)
     if code == 1:
         return 1, '', output
 
@@ -160,8 +161,8 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
     elif dns_servers is not None:
         args += ' --dns-nameservers {}'.format(dns_servers)
 
-    if no_gateway and gateway is None:
-        args +=' --no-gateway'
+    if no_gateway:
+        args += ' --no-gateway'
     else:
         raise ValueError("Can't have both gateway and no-gateway for subnet.")
 
@@ -3253,15 +3254,15 @@ def create_trunk(port_id, tenant_name=None, name=None,
     if port_id is None:
         raise ValueError("port_id has to be specified for parent port.")
     if name is None:
-        name=common.get_unique_name(name_str='trunk')
+        name = common.get_unique_name(name_str='trunk')
 
     if tenant_name is None:
         tenant_name = Tenant.get_primary()['tenant']
 
     tenant_id=keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
     args = '--parent-port ' + port_id
-    args+= " --project " + format(tenant_id)
-    keys =['port','segmentation-type','segmentation-id']
+    args += " --project " + format(tenant_id)
+    keys = ['port','segmentation-type','segmentation-id']
     if sub_ports is not None:
         for sub_port in sub_ports:
             tmp_list = []
@@ -3269,17 +3270,17 @@ def create_trunk(port_id, tenant_name=None, name=None,
                 val = sub_port.get(key)
                 if val is not None:
                     tmp_list.append('{}={}'.format(key, val))
-            args+=' --subport '+','.join(tmp_list)
+            args += ' --subport '+','.join(tmp_list)
 
     if admin_state_up:
-        args+=' --enable'
+        args += ' --enable'
     else:
-        args+=' --disable'
-    args+= ' '+ name
+        args += ' --disable'
+    args += ' '+ name
 
     LOG.info("Creating port trunk for port: {}. Args: {}".format(port_id, args))
     code, output = cli.openstack('network trunk create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                               rtn_list=True)
+                                 rtn_list=True)
 
     if code == 1:
         return 1, '', output
@@ -3373,7 +3374,7 @@ def add_trunk_subports(trunk_id, sub_ports=None, fail_ok=False, con_ssh=None, au
                                rtn_list=True)
 
     if code == 1:
-        return 1, '', output
+        return 1, output
 
     msg='Subport is added succesfully'
     return 0, msg
@@ -3411,7 +3412,7 @@ def remove_trunk_subports(trunk_id,tenant_name=None, sub_ports=None, fail_ok=Fal
                                rtn_list=True)
 
     if code == 1:
-        return 1, '', output
+        return 1, output
 
     msg = 'Subport is removed succesfully'
     return 0, msg

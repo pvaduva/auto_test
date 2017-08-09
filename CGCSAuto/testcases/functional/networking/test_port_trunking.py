@@ -14,19 +14,22 @@ def _bring_up_vlan_interface(vm_id, eth_name, vlan_ids):
     """
     ip link set <dev> up, and dhclient <dev> to bring up the interface of last nic for given VM
     Args:
-        vm_id (str):
+        vm_id (str): VM to configure the vlan interface
+        eth_name (str): eth interface name to add the vlan if
+        vlan_ids (list): list of vlan ids to add
     """
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         for vlan in vlan_ids:
-            tmp_list=[]
+            tmp_list = []
             tmp_list.append(eth_name)
             tmp_list.append("{}".format(vlan))
-            sub_if='.'.join(tmp_list)
+            sub_if = '.'.join(tmp_list)
             vm_ssh.exec_sudo_cmd('ip link add link {} name {} type vlan id {}'.format(eth_name, sub_if,
                                                                                               vlan))
             vm_ssh.exec_sudo_cmd('dhclient {}'.format(sub_if))
 
         vm_ssh.exec_sudo_cmd('ip addr')
+
 
 @mark.parametrize(('guest_os','vif_model'), [
     ('tis-centos-guest','avp'),
@@ -49,48 +52,53 @@ def test_port_trunking(guest_os, vif_model):
         - Delete vms, ports, subnets, and networks created
 
     """
-    network_name = ['network11', 'network12', 'network13']
-    net_id=[]
-    sub_net=["30.0.0.0/24", "30.0.1.0/24","30.0.2.0/24"]
-    subnet_id=[]
-    #parent ports and sub ports for trunk 1 and trunk 2
+    network_names = ['network11', 'network12', 'network13']
+    net_ids = []
+    sub_nets = ["30.0.0.0/24", "30.0.1.0/24","30.0.2.0/24"]
+    subnet_ids = []
+    # parent ports and sub ports for trunk 1 and trunk 2
     trunk1_parent_port ='vrf10'
-    trunk1_subport_1='vrf11'
-    trunk1_subport_2='vrf12'
+    trunk1_subport_1 = 'vrf11'
+    trunk1_subport_2 = 'vrf12'
 
-    trunk2_parent_port='host10'
-    trunk2_subport_1='host11'
-    trunk2_subport_2='host12'
+    trunk2_parent_port = 'host10'
+    trunk2_subport_1 = 'host11'
+    trunk2_subport_2 = 'host12'
 
-    #vlan id for the subports
-    segment_1=1
-    segment_2=2
+    # vlan id for the subports
+    segment_1 = 1
+    segment_2 = 2
 
     LOG.tc_step("Create Networks to be used by trunk")
-    for net in network_name:
-        net_id.append(network_helper.create_network(name=net)[1])
+    for net in network_names:
+        net_ids.append(network_helper.create_network(name=net)[1])
+        ResourceCleanup.add('network', net_ids[-1])
 
     LOG.tc_step("Create Subnet on the Network Created")
-    for sub, network in zip(sub_net,net_id):
-        subnet_id.append(network_helper.create_subnet(net_id=network,cidr=sub,no_gateway=True)[1])
+    for sub, network in zip(sub_nets,net_ids):
+        subnet_ids.append(network_helper.create_subnet(net_id=network,cidr=sub,no_gateway=True)[1])
+        ResourceCleanup.add('subnet', subnet_ids[-1])
 
-    for sub_id, network_id in zip(subnet_id,net_id):
-        ResourceCleanup.add('network', network_id)
-        ResourceCleanup.add('subnet', sub_id)
+    # for sub_id, network_id in zip(subnet_ids,net_ids):
+    #    ResourceCleanup.add('network', network_id)
+     #   ResourceCleanup.add('subnet', sub_id)
 
     # Create Trunks
     LOG.tc_step("Create Parent port for trunk 1")
-    t1_parent_port_id = network_helper.create_port(net_id[0], trunk1_parent_port)[1]
+    t1_parent_port_id = network_helper.create_port(net_ids[0], trunk1_parent_port)[1]
     ResourceCleanup.add('port', t1_parent_port_id)
+
     t1_parent_port_mac = network_helper.get_ports(rtn_val='mac_address',port_name=trunk1_parent_port)[0]
+
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 1")
-    t1_sub_port1_id = network_helper.create_port(net_id[1], name=trunk1_subport_1,mac_addr=t1_parent_port_mac)[1]
+    t1_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk1_subport_1,mac_addr=t1_parent_port_mac)[1]
     ResourceCleanup.add('port', t1_sub_port1_id)
+
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 1")
-    t1_sub_port2_id = network_helper.create_port(net_id[2], name=trunk1_subport_2,mac_addr=t1_parent_port_mac)[1]
+    t1_sub_port2_id = network_helper.create_port(net_ids[2], name=trunk1_subport_2,mac_addr=t1_parent_port_mac)[1]
     ResourceCleanup.add('port', t1_sub_port2_id)
 
-    t1_sub_ports=[{'port':t1_sub_port1_id,'segmentation-type': 'vlan','segmentation-id':segment_1},
+    t1_sub_ports = [{'port':t1_sub_port1_id,'segmentation-type': 'vlan','segmentation-id':segment_1},
                   {'port':t1_sub_port2_id,'segmentation-type': 'vlan','segmentation-id':segment_2}]
 
     LOG.tc_step("Create port trunk 1")
@@ -106,19 +114,19 @@ def test_port_trunking(guest_os, vif_model):
     LOG.tc_step("Setup Vlan interfaces inside guest")
     _bring_up_vlan_interface(vm_id,'eth1',[segment_1])
 
-    #Create second trunk port and vm
+    # Create second trunk port and vm
     LOG.tc_step("Create Parent port for trunk 2")
-    t2_parent_port_id = network_helper.create_port(net_id[0], trunk2_parent_port)[1]
+    t2_parent_port_id = network_helper.create_port(net_ids[0], trunk2_parent_port)[1]
     ResourceCleanup.add('port', t2_parent_port_id)
     t2_parent_port_mac = network_helper.get_ports(rtn_val='mac_address',port_name=trunk2_parent_port)[0]
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 2")
-    t2_sub_port1_id = network_helper.create_port(net_id[1], name=trunk2_subport_1,mac_addr=t2_parent_port_mac)[1]
+    t2_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk2_subport_1,mac_addr=t2_parent_port_mac)[1]
     ResourceCleanup.add('port', t2_sub_port1_id)
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 2")
-    t2_sub_port2_id = network_helper.create_port(net_id[2], name=trunk2_subport_2,mac_addr=t2_parent_port_mac)[1]
+    t2_sub_port2_id = network_helper.create_port(net_ids[2], name=trunk2_subport_2,mac_addr=t2_parent_port_mac)[1]
     ResourceCleanup.add('port', t2_sub_port2_id)
 
-    t2_sub_ports=[{'port':t2_sub_port1_id,'segmentation-type': 'vlan','segmentation-id':segment_1},
+    t2_sub_ports = [{'port':t2_sub_port1_id,'segmentation-type': 'vlan','segmentation-id':segment_1},
                   {'port':t2_sub_port2_id,'segmentation-type': 'vlan','segmentation-id':segment_2}]
 
     LOG.tc_step("Create port trunk 2")
@@ -136,18 +144,16 @@ def test_port_trunking(guest_os, vif_model):
     LOG.tc_step("Setup Vlan interfaces inside guest")
     _bring_up_vlan_interface(vm2_id,'eth1',[segment_1])
 
-    #ping b/w 2 vms using the vlan interfaces
+    # ping b/w 2 vms using the vlan interfaces
     eth_name='eth1.1'
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-
         ip_addr = network_helper.get_ip_for_eth(eth_name=eth_name, ssh_client=vm_ssh)
-
 
     if ip_addr is not None:
         with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
             LOG.tc_step("Ping on vlan interface from guest")
-            ping= network_helper._ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20,
+            ping = network_helper._ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20,
                                            fail_ok=True)[0]
 
     # VM operation and ping
@@ -155,7 +161,6 @@ def test_port_trunking(guest_os, vif_model):
 
         LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm2_id, vm_actions))
         for action in vm_actions:
-
             vm_helper.perform_action_on_vm(vm2_id, action=action)
 
         LOG.tc_step("Ping vm from natbox")
