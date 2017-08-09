@@ -5,6 +5,7 @@ This file contains CEPH-related storage test cases.
 import random
 import time
 import ast
+import re
 
 from pytest import mark
 from utils import cli, exceptions, table_parser
@@ -736,8 +737,9 @@ def test_storgroup_semantic_checks():
             assert osd_up, msg
 
 
+# Tested on PV0.  Fails due to product issue: CGTS-7694
 @mark.usefixtures('ceph_precheck')
-def test_import_with_cache_raw():
+def _test_import_with_cache_raw():
     """
     Verify that non-RAW format images, e.g. QCOW2, can be imported into glance
     using --cache-raw.
@@ -867,8 +869,9 @@ def test_import_with_cache_raw():
         assert rbd_raw_img_id not in out, msg
 
 
+# Blocked due to product issue CGTS-7694
 @mark.usefixtures('ceph_precheck')
-def test_import_raw_with_cache_raw():
+def _test_import_raw_with_cache_raw():
     """
     Verify that RAW format images can be imported with --cache-raw but there is
     no corresponding _raw image in rbd.
@@ -934,7 +937,7 @@ def test_import_raw_with_cache_raw():
 
 
 # INPROGRESS
-# TODO: remove '_' before test name after this test is completed.
+# Blocked due to product issue CGTS-7694 (uses cache-raw)
 @mark.usefixtures('ceph_precheck', 'ubuntu14_image')
 def _test_exceed_size_of_img_pool():
     """
@@ -957,14 +960,15 @@ def _test_exceed_size_of_img_pool():
 
     con_ssh = ControllerClient.get_active_controller()
 
-    # # Return a list of images of a given type
-    # LOG.tc_step('Determine what qcow2 images we have available')
-    # image_names = storage_helper.find_images(con_ssh)
-    #
-    # if not image_names:
-    #     LOG.info('No qcow2 images were found on the system')
-    #     LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
-    #     image_names = storage_helper.download_images(dload_type='ubuntu', img_dest=GuestImages.IMAGE_DIR, con_ssh=con_ssh)
+    # Return a list of images of a given type
+    LOG.tc_step('Determine what qcow2 images we have available')
+    image_names = storage_helper.find_images(con_ssh)
+    
+    if not image_names:
+        LOG.info('No qcow2 images were found on the system')
+        LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
+        glance_helper._scp_guest_image()
+        image_names = storage_helper.find_images(con_ssh)
 
     LOG.tc_step('Import qcow2 images into glance until pool is full')
     source_img_path = "{}/{}".format(GuestImages.IMAGE_DIR, GuestImages.IMAGE_FILES['ubuntu_14'][2])
@@ -994,8 +998,9 @@ def _test_exceed_size_of_img_pool():
     assert ceph_healthy, msg
 
 
+# Blocked due to product issue CGTS-7694
 @mark.usefixtures('ceph_precheck')
-def test_import_large_images_with_cache_raw():
+def _test_import_large_images_with_cache_raw():
     """
     Verify that system behaviour when we attempt to import large images, i.e.
     20-40GB, with cache-raw enabled.
@@ -1119,9 +1124,9 @@ def test_import_large_images_with_cache_raw():
     glance_helper.delete_images(out[1])
 
 
-# TODO: remove '_' before test name after this test is completed.
+# Tested on PV0.  Runtime: 58.82 seconds.  Status: Pass  Date: Aug 8, 2017
 @mark.usefixtures('ceph_precheck')
-def _test_modify_ceph_pool_size():
+def test_modify_ceph_pool_size():
     """
     Verify that the user can modify the size of the ceph images pool.
 
@@ -1131,69 +1136,116 @@ def _test_modify_ceph_pool_size():
     Args:
     - None
 
+    Assumptions:
+    - Cinder-volumes is the largest pool
+
     Setup:
         - Requires a system with storage nodes
 
     Test Steps:
         1.  Determine the current size of the ceph image pool
-        2.  Increase the ceph image pool size
-        3.  Confirm the pool size has been increased (without having to reboot
-        controllers)
+        2.  Modify the sizes of all ceph pools (object pool only if swift is
+        enabled) 
+        3.  Confirm the pool size has been increased both in sysinv and
+        underlying ceph
     """
+
+    con_ssh = ControllerClient.get_active_controller()
 
     LOG.tc_step('Query the size of the CEPH storage pools')
     table_ = table_parser.table(cli.system('storage-backend-show ceph'))
-    glance_pool_gib = int(table_parser.get_value_two_col_table(table_, 'glance_pool_gib'))
-    cinder_pool_gib = int(table_parser.get_value_two_col_table(table_, 'cinder_pool_gib'))
-    ephemeral_pool_gib = int(table_parser.get_value_two_col_table(table_, 'ephemeral_pool_gib'))
-    ceph_total_space_gib = int(table_parser.get_value_two_col_table(table_, 'ceph_total_space_gib'))
+    glance_pool = int(table_parser.get_value_two_col_table(table_, 'glance_pool_gib'))
+    cinder_pool = int(table_parser.get_value_two_col_table(table_, 'cinder_pool_gib'))
+    ephemeral_pool = int(table_parser.get_value_two_col_table(table_, 'ephemeral_pool_gib'))
+    object_pool = int(table_parser.get_value_two_col_table(table_, 'object_pool_gib'))
+    ceph_total_space = int(table_parser.get_value_two_col_table(table_, 'ceph_total_space_gib'))
+    object_gateway = ast.literal_eval(table_parser.get_value_two_col_table(table_, 'object_gateway'))
+    LOG.tc_step("Current pool values: Glance {}, Cinder {}, Ephemeral {}, Object {}".format(glance_pool, cinder_pool, ephemeral_pool, object_pool))
 
-    LOG.tc_step('Increase the size of the ceph image pool')
-    total_used = glance_pool_gib + cinder_pool_gib + ephemeral_pool_gib
-    if total_used != ceph_total_space_gib:
-        # Check for 800.003 Ceph cluster has free space unused by storage pool quotas
-        assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_POOLQUOTA), "Alarm {} not raised".format(EventLogID.STORAGE_POOLQUOTA)
+    #new_glance_pool = str(glance_pool + 10)
+    #new_ephemeral_pool = str(ephemeral_pool + 10)
+    new_glance_pool = glance_pool + 10
+    new_ephemeral_pool = ephemeral_pool + 10
 
-        # Add the free space to the glance_pool_gib
-        total_available = ceph_total_space_gib - total_used
-        new_value = str(glance_pool_gib + total_available)
-        args = 'glance_pool_gib=' + str(new_value)
-        rtn_code, out = storage_helper.modify_storage_backend('ceph', glance=new_value)
-        msg = 'Unable to change pool quota from {} to {}'.format(glance_pool_gib,
-                                                                 new_value)
-        assert rtn_code == 0, msg
-
-        # Now, let's wait a bit for the free space alarm to clear
-        time.sleep(30)
-
-        msg = "Alarm {} found in alarm-list".format(EventLogID.STORAGE_POOLQUOTA)
-        events = system_helper.wait_for_events(uuid=True, **{'EventLogID': EventLogID.STORAGE_POOLQUOTA})
-        assert events, msg
-
+    if not object_gateway:
+        LOG.info("Swift is disabled so we won't modify the object pool")
+        new_object_pool = 0
+        new_cinder_pool = cinder_pool - 20
+        LOG.tc_step("Modifying pools: Glance {}, Cinder {}, Ephemeral {}".format(new_glance_pool, new_cinder_pool, new_ephemeral_pool))
+        rc, out = storage_helper.modify_storage_backend('ceph', ephemeral=str(new_ephemeral_pool), cinder=str(new_cinder_pool), glance=str(new_glance_pool), lock_unlock=False)
     else:
-        # Else we have used up all the space we have available, so let's take some
-        # space from the other pools.
-        # We check because in some cases ephemeral pool can be set to 0
-        glance = str(glance_pool_gib + 10)
-        new_value = glance_pool_gib + 10
-        if ephemeral_pool_gib > 10:
-            ephemeral = str(ephemeral_pool_gib - 10)
-            rtn_code, out = storage_helper.modify_storage_backend('ceph', ephemeral=ephemeral, glance=glance)
-        else:
-            cinder = str(cinder_pool_gib - 10)
-            rtn_code, out = storage_helper.modify_storage_backend('ceph', cinder=cinder, glance=glance)
-
-        msg = 'Failed to change glance storage pool quota from {} to {}'.format(glance_pool_gib,
-                                                                                new_value)
-        assert rtn_code == 0, msg
+        new_object_pool = object_pool + 10
+        new_cinder_pool = cinder_pool - 30
+        LOG.tc_step("Modifying pools: Glance {}, Cinder {}, Ephemeral {}, Object {}".format(new_glance_pool, new_cinder_pool, new_ephemeral_pool, new_object_pool))
+        rc, out = storage_helper.modify_storage_backend('ceph', ephemeral=str(new_ephemeral_pool), cinder=str(new_cinder_pool), glance=str(new_glance_pool), object_gib=str(new_object_pool), lock_unlock=False)
+    assert rc == 0, msg
 
     LOG.info('Check the ceph images pool is set to the right value')
     table_ = table_parser.table(cli.system('storage-backend-show ceph'))
-    glance_pool_gib = table_parser.get_value_two_col_table(table_, 'glance_pool_gib')
+    glance_pool2 = int(table_parser.get_value_two_col_table(table_, 'glance_pool_gib'))
+    cinder_pool2 = int(table_parser.get_value_two_col_table(table_, 'cinder_pool_gib'))
+    ephemeral_pool2 = int(table_parser.get_value_two_col_table(table_, 'ephemeral_pool_gib'))
+    object_pool2 = int(table_parser.get_value_two_col_table(table_, 'object_pool_gib'))
 
-    msg = 'Glance pool size was supposed to be {} but is {} instead'.format(new_value,
-                                                                            glance_pool_gib)
-    assert int(glance_pool_gib) == new_value, msg
+    assert glance_pool2 == new_glance_pool, "Glance pool should be {} but is {}".format(new_glance_pool, glance_pool2)
+    assert cinder_pool2 == new_cinder_pool, "Cinder pool should be {} but is {}".format(new_cinder_pool, cinder_pool2)
+    assert ephemeral_pool2 == new_ephemeral_pool, "Ephemeral pool should be {} but is {}".format(new_ephemeral_pool, ephemeral_pool2)
+    assert object_pool2 == new_object_pool, "Object pool should be {} but is {}".format(new_object_pool, object_pool2)
+
+    LOG.tc_step("Pool values after modification: Glance {}, Cinder {}, Ephemeral {}, Object {}".format(glance_pool2, cinder_pool2, ephemeral_pool2, object_pool2))
+
+    LOG.tc_step("Check ceph pool information")
+    cmd = "ceph osd pool get-quota {}"
+    max_bytes_regex = "([0-9]*)(.B)$"
+
+    newcmd = cmd.format('images')
+    rc, out = con_ssh.exec_cmd(newcmd)
+    max_bytes = re.search(max_bytes_regex, out)
+    if max_bytes:
+        ceph_glance_pool = int(max_bytes.group(1))
+        if max_bytes.group(2) == 'MB':
+            ceph_glance_pool = ceph_glance_pool / 1000
+
+    newcmd = cmd.format('cinder-volumes')
+    rc, out = con_ssh.exec_cmd(newcmd)
+    max_bytes = re.search(max_bytes_regex, out)
+    if max_bytes:
+        ceph_cinder_pool = int(max_bytes.group(1))
+        if max_bytes.group(2) == 'MB':
+            ceph_cinder_pool = ceph_cinder_pool / 1000
+
+    newcmd = cmd.format('ephemeral')
+    rc, out = con_ssh.exec_cmd(newcmd)
+    max_bytes = re.search(max_bytes_regex, out)
+    if max_bytes:
+        ceph_ephemeral_pool = int(max_bytes.group(1))
+        if max_bytes.group(2) == 'MB':
+            ceph_ephemeral_pool = ceph_ephemeral_pool / 1000
+
+    if object_gateway:
+        newcmd = cmd.format('default.rgw.buckets.data')
+        rc, out = con_ssh.exec_cmd(newcmd)
+        max_bytes = re.search(max_bytes_regex, out)
+        if max_bytes:
+            ceph_object_pool = int(max_bytes.group(1))
+            if max_bytes.group(2) == 'MB':
+                ceph_object_pool = ceph_object_pool / 1000
+
+        LOG.tc_step("Ceph pool values after modification: Glance {}, Cinder {}, Ephemeral {}, Object {}".format(ceph_glance_pool, ceph_cinder_pool, ceph_ephemeral_pool, ceph_object_pool))
+    else:
+        ceph_object_pool = 0
+        LOG.tc_step("Ceph pool values after modification: Glance {}, Cinder {}, Ephemeral {}".format(ceph_glance_pool, ceph_cinder_pool, ceph_ephemeral_pool))
+
+    # Set margin of error to some reasonable value to account for unit
+    # conversion and rounding errors
+    moe = 3
+
+    LOG.info("Margin of error is set to {}".format(moe))
+
+    assert new_glance_pool - moe <= ceph_glance_pool <= new_glance_pool + moe, "Glance pool should be {} but is {}".format(new_glance_pool, ceph_glance_pool)
+    assert new_cinder_pool - moe <= ceph_cinder_pool <= new_cinder_pool + moe, "Cinder pool should be {} but is {}".format(new_cinder_pool, ceph_cinder_pool)
+    assert new_ephemeral_pool - moe <= ceph_ephemeral_pool <= new_ephemeral_pool + moe, "Ephemeral pool should be {} but is {}".format(new_ephemeral_pool, ceph_ephemeral_pool)
+    assert new_object_pool - moe <= ceph_object_pool <= new_object_pool + moe, "Object pool should be {} but is {}".format(new_object_pool, ceph_object_pool)
 
 
 # TODO: remove '_' before test name after this test is completed.
