@@ -24,15 +24,16 @@ def _bring_up_vlan_interface(vm_id, eth_name, vlan_ids):
             sub_if='.'.join(tmp_list)
             vm_ssh.exec_sudo_cmd('ip link add link {} name {} type vlan id {}'.format(eth_name, sub_if,
                                                                                               vlan))
-            vm_ssh.exec_sudo_cmd('dhclient -r {}'.format(sub_if), expect_timeout=180)
             vm_ssh.exec_sudo_cmd('dhclient {}'.format(sub_if))
 
         vm_ssh.exec_sudo_cmd('ip addr')
 
 @mark.parametrize(('guest_os','vif_model'), [
-    ('tis-centos-guest','avp')
+    ('tis-centos-guest','avp'),
+    ('tis-centos-guest', 'virtio'),
+    ('tis-centos-guest', 'e1000')
 ])
-def _test_port_trunking(guest_os, vif_model):
+def test_port_trunking(guest_os, vif_model):
     """
     Ping between two vms with virtio and avp vif models
 
