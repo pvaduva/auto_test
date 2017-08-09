@@ -105,15 +105,14 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2]
     file_path = source_image_file if source_image_file else "{}/{}".format(GuestImages.IMAGE_DIR, default_guest_img)
-    if 'win' in file_path:
-        if not properties:
-            properties = {'os_type': 'windows'}
-        if properties and 'os_type' not in properties:
-            properties['os_type'] = 'windows'
+    if 'win' in file_path and 'os_type' not in properties:
+        properties['os_type'] = 'windows'
+    elif 'ge_edge' in file_path and 'hw_firmware_type' not in properties:
+        properties['hw_firmware_type'] = 'uefi'
 
     source_str = file_path
 
-    known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'tis-centos-guest', 'win', 'edge']
+    known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'tis-centos-guest', 'win', 'ge_edge']
     name = name if name else 'auto'
     for img_str in known_imgs:
         if img_str in name:

@@ -153,7 +153,7 @@ class Guest:
             'password': 'Li69nux*'
         },
 
-        'edge': {
+        'ge_edge': {
             'user': 'root',
             'password': 'root'
         }

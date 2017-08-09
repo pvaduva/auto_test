@@ -274,10 +274,11 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             raise exceptions.NeutronError("Cannot find management network")
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}]
 
-        tenant_net_id = network_helper.get_tenant_net_id(auth_info=auth_info, con_ssh=con_ssh)
-        # tenant_vif = random.choice(['virtio', 'avp'])
-        if tenant_net_id:
-            nics.append({'net-id': tenant_net_id, 'vif-model': 'virtio'})
+        if 'edge' not in guest_os:
+            tenant_net_id = network_helper.get_tenant_net_id(auth_info=auth_info, con_ssh=con_ssh)
+            # tenant_vif = random.choice(['virtio', 'avp'])
+            if tenant_net_id:
+                nics.append({'net-id': tenant_net_id, 'vif-model': 'virtio'})
     
     if isinstance(nics, dict):
         nics = [nics]

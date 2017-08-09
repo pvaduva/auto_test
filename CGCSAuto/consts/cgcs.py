@@ -53,7 +53,7 @@ class GuestImages:
         # 'win_2012': ('windows_server_2012_r2_standard_eval_kvm_20170321.qcow2', 13, 'win2012r2.qcow2'),  # MattP+ssh
         'win_2012': ('win2012r2_cygwin_compressed.qcow2', 13, 'win2012r2.qcow2'),  # MattP
         'win_2016': ('win2016_cygwin_compressed.qcow2', 29, 'win2016.qcow2'),
-        # 'edge': ('edgeOS.hddirect.qcow2', 10, 'edge.qcow2'),      # Pending, need to check with Services team
+        'ge_edge': ('edgeOS.hddirect.qcow2', 5, 'ge_edge.qcow2'),
         'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img'),       # wrl-6
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img')
     }

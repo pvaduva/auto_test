@@ -142,7 +142,8 @@ class TestVariousGuests:
         'rhel_6',
         'rhel_7',
         'win_2012',
-        'win_2016'
+        'win_2016',
+        'ge_edge',
     ])
     def test_evacuate_vm(self, guest_os, boot_source):
         if guest_os in ['opensuse_12', 'win_2016'] and boot_source == 'volume':
