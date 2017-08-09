@@ -133,15 +133,20 @@ class TestVariousGuests:
     @mark.features('guest_os')
     @mark.parametrize('guest_os', [
         'ubuntu_14',
-        'centos_6', 'centos_7',
-        'opensuse_11', 'opensuse_12',
+        'ubuntu_16',
+        'centos_6',
+        'centos_7',
+        'opensuse_11',
+        'opensuse_12',
         # 'opensuse_13',
-        'rhel_6', 'rhel_7',
-        'win_2012'
+        'rhel_6',
+        'rhel_7',
+        'win_2012',
+        'win_2016'
     ])
     def test_evacuate_vm(self, guest_os, boot_source):
-        if guest_os == 'opensuse_12':
-            if not cinder_helper.is_volumes_pool_sufficient(min_size=30):
+        if guest_os in ['opensuse_12', 'win_2016'] and boot_source == 'volume':
+            if not cinder_helper.is_volumes_pool_sufficient(min_size=35):
                 skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
 
         LOG.tc_step("Get/Create {} image".format(guest_os))
@@ -153,7 +158,6 @@ class TestVariousGuests:
         LOG.tc_step("Boot a {} VM from {}".format(guest_os, boot_source))
         vm_id = vm_helper.boot_vm(name="{}_{}".format(guest_os, boot_source), source=boot_source, source_id=source_id,
                                   guest_os=guest_os, cleanup='function')[1]
-        # ResourceCleanup.add('vm', vm_id)
 
         LOG.tc_step("Wait for VM pingable from NATBox")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

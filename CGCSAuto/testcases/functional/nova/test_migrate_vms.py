@@ -346,24 +346,27 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol):
 
 
 @mark.p2
-@mark.parametrize(('guest_os', 'vcpus', 'cpu_pol', 'boot_source'), [
-    ('ubuntu_14', 1, 'shared', 'volume'),
-    ('ubuntu_14', 2, 'dedicated', 'image'),
-    ('centos_6', 3, 'dedicated', 'volume'),
-    ('centos_7', 1, 'dedicated', 'volume'),
-    ('centos_7', 5, None, 'image'),
-    ('opensuse_11', 3, 'dedicated', 'volume'),
-    ('opensuse_12', 4, 'dedicated', 'volume'),
+@mark.parametrize(('guest_os', 'vcpus', 'ram', 'cpu_pol', 'boot_source'), [
+    ('ubuntu_14', 1, 1024, 'shared', 'volume'),
+    ('ubuntu_14', 2, 1024, 'dedicated', 'image'),
+    ('ubuntu_16', 3, 4096, 'dedicated', 'volume'),
+    ('centos_6', 3, 4096, 'dedicated', 'volume'),
+    ('centos_7', 1, 1024, 'dedicated', 'volume'),
+    ('centos_7', 5, 4096, None, 'image'),
+    ('opensuse_11', 3, 1024, 'dedicated', 'volume'),
+    ('opensuse_12', 4, 4096, 'dedicated', 'volume'),
     # ('opensuse_13', 'shared', 'volume'),
     # ('opensuse_13', 'dedicated', 'image'),
-    ('rhel_6', 3, 'dedicated', 'image'),
-    ('rhel_6', 4, None, 'volume'),
-    ('rhel_7', 1, 'dedicated', 'volume'),
-    ('win_2012', 3, 'dedicated', 'image')
+    ('rhel_6', 3, 1024, 'dedicated', 'image'),
+    ('rhel_6', 4, 4096, None, 'volume'),
+    ('rhel_7', 1, 1024, 'dedicated', 'volume'),
+    ('win_2012', 3, 1024, 'dedicated', 'image'),
+    ('win_2016', 4, 4096, 'dedicated', 'volume'),
+    # ('edge', 4, 2048, 'dedicated', 'volume')
 ])
-def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
-    if guest_os == 'opensuse_12' and boot_source == 'volume':
-        if not cinder_helper.is_volumes_pool_sufficient(min_size=30):
+def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source):
+    if guest_os in ['opensuse_12', 'win_2016'] and boot_source == 'volume':
+        if not cinder_helper.is_volumes_pool_sufficient(min_size=35):
             skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
 
     LOG.tc_step("Get/Create {} image".format(guest_os))
@@ -372,7 +375,7 @@ def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
         ResourceCleanup.add('image', img_id)
 
     LOG.tc_step("Create a flavor with 1 vcpu")
-    flavor_id = nova_helper.create_flavor(name='migrate', vcpus=vcpus, guest_os=guest_os)[1]
+    flavor_id = nova_helper.create_flavor(name='migrate', vcpus=vcpus, ram=ram, guest_os=guest_os)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
     if cpu_pol is not None:
@@ -394,7 +397,6 @@ def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
     LOG.tc_step("Boot a {} VM with above flavor from {}".format(guest_os, boot_source))
     vm_id = vm_helper.boot_vm(name='{}-{}-migrate'.format(guest_os, cpu_pol), flavor=flavor_id,
                               source=boot_source, source_id=source_id, guest_os=guest_os, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     vm_host_origin = nova_helper.get_vm_host(vm_id)

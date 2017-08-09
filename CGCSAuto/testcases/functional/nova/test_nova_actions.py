@@ -67,7 +67,8 @@ class TestVariousGuests:
     @mark.features('guest_os')
     @mark.parametrize(('guest_os', 'cpu_pol', 'boot_source', 'actions'), [
         ('cgcs-guest', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
-        ('ubuntu_14', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
+        ('ubuntu_14', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
+        ('ubuntu_16', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('centos_6', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('centos_7', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         # ('opensuse_13', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
@@ -75,7 +76,9 @@ class TestVariousGuests:
         ('opensuse_12', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('rhel_7', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('rhel_6', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
-        ('win_2012', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover'])
+        ('win_2012', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
+        ('win_2016', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
+
     ], ids=id_gen)
     def test_nova_actions_various_guest(self, guest_os, cpu_pol, boot_source, actions):
         """
@@ -99,8 +102,8 @@ class TestVariousGuests:
             - Delete created vm, volume, flavor
 
         """
-        if guest_os == 'opensuse_12' and boot_source == 'volume':
-            if not cinder_helper.is_volumes_pool_sufficient(min_size=40):
+        if guest_os in ['opensuse_12', 'win_2016'] and boot_source == 'volume':
+            if not cinder_helper.is_volumes_pool_sufficient(min_size=35):
                 skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
 
         LOG.tc_step("Get/Create {} glance image".format(guest_os))
