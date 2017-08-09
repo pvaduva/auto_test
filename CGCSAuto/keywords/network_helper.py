@@ -47,11 +47,71 @@ def get_ip_address_str(ip=None):
         return None
 
 
-def create_network(name, admin_state='up', qos_policy=None, vlan_transparent=None, **subnet):
-    raise NotImplementedError
+def create_network(name=None, shared=False,tenant_name=None,
+                   network_type=None, segmentation_id=None,
+                   physical_network=None, vlan_transparent=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+
+    """
+    Create a network for given tenant
+
+    Args:
+        name (str): name of the network
+        tenant_name: such as tenant1, tenant2.
+        network_type (str): The physical mechanism by which the virtual network is
+                        implemented
+        segmentation_id: w VLAN ID for VLAN networks
+        physical_network (str): Name of the physical network over which the virtual
+                        network is implemented
+        vlan_transparent(True/False): Create a VLAN transparent network
+        fail_ok (bool):
+        auth_info (dict): run the neutron subnet-create cli using these authorization info
+        con_ssh (SSHClient):
+
+    Returns (tuple): (rnt_code (int), net_id (str), message (str))
+
+    """
+    if name is None:
+        name = common.get_unique_name(name_str='net')
+    if tenant_name is None:
+        tenant_name = Tenant.get_primary()['tenant']
+    tenant_id=keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
+    args=' ' + name
+    args+=' --tenant-id ' + format(tenant_id)
+    if shared:
+        args+=' --shared'
+    if segmentation_id is not None:
+        args+=' --provider:segmentation_id ' + segmentation_id
+    if network_type is not None:
+        args+= ' --provider:network_type ' + network_type
+    if physical_network is not None:
+        args+= ' --provider:physical_network ' + physical_network
+    if vlan_transparent is not None:
+        args += ' vlan-transparent ' + vlan_transparent
+
+    LOG.info("Creating network: {}. Args: {}".format(tenant_id, args))
+    code, output = cli.neutron('net-create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                             rtn_list=True)
+    if code == 1:
+        return 1, '', output
+
+    table_ = table_parser.table(output)
+    net_tenant_id = table_parser.get_value_two_col_table(table_, 'tenant_id')
+    net_id = table_parser.get_value_two_col_table(table_, 'id')
+
+    expt_tenant_name = tenant_name if tenant_name else common.get_tenant_name(auth_info)
+    if net_tenant_id != keystone_helper.get_tenant_ids(expt_tenant_name)[0]:
+        msg = "Subnet {} is not for tenant: {}".format(net_id, expt_tenant_name)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, net_id, msg
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "Network {} is successfully created for tenant {}".format(net_id, expt_tenant_name)
+    LOG.info(succ_msg)
+    return 0, net_id, succ_msg
 
 
-def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, dns_servers=None,
+def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gateway=False, dns_servers=None,
                   alloc_pool=None, ip_version=None, subnet_pool=None, tenant_name=None, fail_ok=False, auth_info=None,
                   con_ssh=None):
     """
@@ -99,6 +159,11 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, dns_ser
         args += ' --dns-nameservers list=true {}'.format(' '.join(dns_servers))
     elif dns_servers is not None:
         args += ' --dns-nameservers {}'.format(dns_servers)
+
+    if no_gateway and gateway is None:
+        args +=' --no-gateway'
+    else:
+        raise ValueError("Can't have both gateway and no-gateway for subnet.")
 
     args_dict = {
         '--tenant-id': keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0] if tenant_name else None,
@@ -3136,3 +3201,295 @@ def wait_for_agents_alive(hosts=None, timeout=120, fail_ok=False, con_ssh=None, 
     if fail_ok:
         return False, msg
     raise exceptions.NeutronError(msg)
+
+
+def get_trunks(rtn_val='id', trunk_id=None, trunk_name=None, parent_port=None, strict=False,
+              auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Get a list of trunks with given arguments
+    Args:
+        rtn_val (str): any valid header of neutron trunk list table. 'id', 'name', 'mac_address', or 'fixed_ips'
+        trunk_id (str): id of the trunk
+        trunk_name (str): name of the trunk
+        parent_port (str): parent port of the trunk
+        strict (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.openstack('network trunk list', ssh_client=con_ssh, auth_info=auth_info))
+
+    args_dict = {
+        'id': trunk_id,
+        'name': trunk_name,
+        'parent_port': parent_port,
+    }
+    kwargs = {}
+    for key, value in args_dict.items():
+        if value:
+            kwargs[key] = value
+
+    trunks = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=True, **kwargs)
+    return trunks
+
+
+def create_trunk(port_id, tenant_name=None, name=None,
+                 admin_state_up=True, sub_ports=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """Create a trunk via API.
+    Args:
+        port_id: Parent port of trunk.
+        tenant_name: tenant name to create the trunk under.
+        name: Name of the trunk.
+        admin_state_up: Admin state of the trunk.
+        sub_ports: List of subport dictionaries in format
+            [[<ID of neutron port for subport>,
+             segmentation_type(vlan),
+             segmentation_id(<VLAN tag>)] []..]
+
+    Return: List with trunk's data returned from Neutron API.
+    """
+    if port_id is None:
+        raise ValueError("port_id has to be specified for parent port.")
+    if name is None:
+        name=common.get_unique_name(name_str='trunk')
+
+    if tenant_name is None:
+        tenant_name = Tenant.get_primary()['tenant']
+
+    tenant_id=keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
+    args = '--parent-port ' + port_id
+    args+= " --project " + format(tenant_id)
+    keys =['port','segmentation-type','segmentation-id']
+    if sub_ports is not None:
+        for sub_port in sub_ports:
+            tmp_list = []
+            for key in keys:
+                val = sub_port.get(key)
+                if val is not None:
+                    tmp_list.append('{}={}'.format(key, val))
+            args+=' --subport '+','.join(tmp_list)
+
+    if admin_state_up:
+        args+=' --enable'
+    else:
+        args+=' --disable'
+    args+= ' '+ name
+
+    LOG.info("Creating port trunk for port: {}. Args: {}".format(port_id, args))
+    code, output = cli.openstack('network trunk create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                               rtn_list=True)
+
+    if code == 1:
+        return 1, '', output
+
+    table_ = table_parser.table(output)
+    trunk_tenant_id = table_parser.get_value_two_col_table(table_, 'tenant_id')
+    trunk_id = table_parser.get_value_two_col_table(table_, 'id')
+
+    expt_tenant_name = tenant_name if tenant_name else common.get_tenant_name(auth_info)
+    if trunk_tenant_id != keystone_helper.get_tenant_ids(expt_tenant_name)[0]:
+        msg = "Trunk {} is not for tenant: {}".format(trunk_id, expt_tenant_name)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, trunk_id, msg
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "Trunk {} is successfully created for tenant {}".format(trunk_id, expt_tenant_name)
+    LOG.info(succ_msg)
+    return 0, trunk_id, succ_msg
+
+
+def delete_trunk(trunk_id, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Delete given trunk
+    Args:
+        trunk_id (str):
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<rtn_code>, <msg>)
+        (0, "Port <trunk_id> is successfully deleted")
+        (1, <std_err>)  - delete port cli rejected
+        (2, "trunk <trunk_id> still exists after deleting")   - post deletion check failed
+
+    """
+    LOG.info("Deleting trunk: {}".format(trunk_id))
+    if not trunk_id:
+        msg = "No trunk specified"
+        LOG.warning(msg)
+        return -1, msg
+
+    code, output = cli.openstack('network trunk delete', trunk_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
+                               auth_info=auth_info, )
+
+    if code == 1:
+        return 1, output
+
+    existing_trunks = get_trunks(rtn_val='id')
+    if trunk_id in existing_trunks:
+        err_msg = "Trunk {} still exists after deleting".format(trunk_id)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        raise exceptions.NeutronError(err_msg)
+
+    succ_msg = "Trunk {} is successfully deleted".format(trunk_id)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def add_trunk_subports(trunk_id, sub_ports=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """Add subports to a trunk via API.
+    Args:
+        trunk_id: Trunk id to add the subports
+        sub_ports: List of subport dictionaries in format
+            [[<ID of neutron port for subport>,
+             segmentation_type(vlan),
+             segmentation_id(<VLAN tag>)] []..]
+
+    Return: list with return code and msg.
+    """
+
+    args=''
+    if trunk_id is None:
+        raise ValueError("port_id has to be specified for parent port.")
+
+    if sub_ports is None:
+        raise ValueError("port_id has to be specified for parent port.")
+
+    for sub_port in sub_ports:
+        args+=' --subport'
+        for key, val in sub_port.items():
+            if val is not None:
+                args += ' {} {}'.format(key, val)
+
+    args += ' ' + trunk_id
+
+    LOG.info("Adding subport to trunk: {}. Args: {}".format(trunk_id, args))
+    code, output = cli.openstack('network trunk set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                               rtn_list=True)
+
+    if code == 1:
+        return 1, '', output
+
+    msg='Subport is added succesfully'
+    return 0, msg
+
+
+def remove_trunk_subports(trunk_id,tenant_name=None, sub_ports=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """Remove subports from a trunk via API.
+    Args:
+        trunk_id: Trunk id to remove the subports from
+        sub_ports: List of subport dictionaries in format
+            [[<ID of neutron port for subport>,
+             segmentation_type(vlan),
+             segmentation_id(<VLAN tag>)] []..]
+
+    Return: list with return code and msg
+    """
+    args=''
+    if trunk_id is None:
+        raise ValueError("port_id has to be specified for parent port.")
+
+    if sub_ports is None:
+        raise ValueError("port_id has to be specified for parent port.")
+
+    for sub_port in sub_ports:
+        args+=' --subport'
+        for key, val in sub_port.items():
+            if val is not None:
+                args+= ' {} {}'.format(key, val)
+
+    args += ' '
+    args+=trunk_id
+
+    LOG.info("Removing subport from trunk: {}. Args: {}".format(trunk_id, args))
+    code, output = cli.openstack('network trunk unset', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                               rtn_list=True)
+
+    if code == 1:
+        return 1, '', output
+
+    msg = 'Subport is removed succesfully'
+    return 0, msg
+
+
+def get_networks(name=None, cidr=None, strict=True, regex=False, auth_info=None, con_ssh=None):
+    """
+    Get networks ids based on given criteria.
+
+    Args:
+        name (str): name of the network
+        cidr (str): cidr of the network
+        strict (bool): whether to perform strict search on given name and cidr
+        regex (bool): whether to use regext to search
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (list): a list of network ids
+
+    """
+    table_ = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is not None:
+        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, name=name)
+    if cidr is not None:
+        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, cidr=cidr)
+
+    return table_parser.get_column(table_, 'id')
+
+
+def delete_network(network_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+    """
+     Delete given network
+     Args:
+         network_id: network id to be deleted.
+        con_ssh (SSHClient):
+        auth_info (dict):
+        fail_ok (bool): whether to return False or raise exception when non-alive agents exist
+
+     Returns (list):
+
+     """
+    LOG.info("Deleting network {}".format(network_id))
+    code, output = cli.neutron('net-delete', network_id, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                               fail_ok=True)
+
+    if code == 1:
+        return 1, output
+
+    if network_id in get_networks(auth_info=auth_info, con_ssh=con_ssh):
+        msg = "Network {} is still listed in neutron net-list".format(network_id)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, msg
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "Network {} is successfully deleted.".format(network_id)
+    return 0, succ_msg
+
+
+def get_ip_for_eth(ssh_client, eth_name):
+    """
+    Get the IP addr for given eth on the ssh client provided
+    Args:
+        ssh_client (SSHClient): usually a vm_ssh
+        eth_name (str): such as "eth1, eth1.1"
+
+    Returns (str): The first matching ipv4 addr for given eth. such as "30.0.0.2"
+
+    """
+    if eth_name in ssh_client.exec_cmd('ip addr'.format(eth_name))[1]:
+        output = ssh_client.exec_cmd('ip addr show {}'.format(eth_name), fail_ok=False)[1]
+        if re.search('inet {}'.format(Networks.IPV4_IP), output):
+            return re.findall('{}'.format(Networks.IPV4_IP), output)[0]
+        else:
+            LOG.warning("Cannot find ip address for interface{}".format(eth_name))
+            return ''
+
+    else:
+        LOG.warning("Cannot find provided interface{} in 'ip addr'".format(eth_name))
+        return ''
+
