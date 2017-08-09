@@ -36,11 +36,12 @@ class GuestImages:
     DEFAULT_GUEST = 'tis-centos-guest'
     TIS_GUEST_PATTERN = 'cgcs-guest|tis-centos-guest'
     GUESTS_NO_RM = ['ubuntu_14', 'tis-centos-guest', 'cgcs-guest']
-    # Image files name and size from yow-cgcs-test.wrs.com:/home/svc-cgcsauto/images
+    # Image files name and size from yow-cgcs-test.wrs.com:/sandbox/images
     # <glance_image_name>: <source_file_name>, <root disk size>, <dest_file_name>
     IMAGE_FILES = {
         'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_14.qcow2'),
         'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2'),
+        'ubuntu_16': ('ubuntu-16.04-xenial-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_16.qcow2'),
         'centos_6': ('CentOS-6.8-x86_64-GenericCloud-1608.qcow2', 8, 'centos_6.qcow2'),
         'centos_7': ('CentOS-7-x86_64-GenericCloud.qcow2', 8, 'centos_7.qcow2'),
         'rhel_6': ('rhel-6.5-x86_64.qcow2', 11, 'rhel_6.qcow2'),                # OVP img
@@ -51,6 +52,8 @@ class GuestImages:
         # 'win_2012': ('win2012r2.qcow2', 36, 'win_2012.qcow2'),   # Service Team img
         # 'win_2012': ('windows_server_2012_r2_standard_eval_kvm_20170321.qcow2', 13, 'win2012r2.qcow2'),  # MattP+ssh
         'win_2012': ('win2012r2_cygwin_compressed.qcow2', 13, 'win2012r2.qcow2'),  # MattP
+        'win_2016': ('win2016_cygwin_compressed.qcow2', 29, 'win2016.qcow2'),
+        # 'edge': ('edgeOS.hddirect.qcow2', 10, 'edge.qcow2'),      # Pending, need to check with Services team
         'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img'),       # wrl-6
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img')
     }

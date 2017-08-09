@@ -113,7 +113,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     source_str = file_path
 
-    known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'tis-centos-guest', 'win']
+    known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'tis-centos-guest', 'win', 'edge']
     name = name if name else 'auto'
     for img_str in known_imgs:
         if img_str in name:
@@ -385,7 +385,7 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     cmd = 'mkdir -p {}'.format(dest_dir)
     con_ssh.exec_cmd(cmd, fail_ok=False)
 
-    source_path = '{}/images/{}'.format(SvcCgcsAuto.HOME, source_name)
+    source_path = '{}/images/{}'.format(SvcCgcsAuto.SANDBOX, source_name)
     LOG.info('scp image from test server to active controller')
     scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}@{}:{} {}'.format(
             SvcCgcsAuto.USER, SvcCgcsAuto.SERVER, source_path, dest_path)

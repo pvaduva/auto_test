@@ -79,9 +79,11 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     """
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
+
     if isinstance(hostnames, str):
         hostnames = [hostnames]
 
+    hosts = list(hostnames)
     reboot_con = False
     controller = system_helper.get_active_controller_name(con_ssh)
     hostnames = list(set(hostnames))
@@ -125,7 +127,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         _wait_for_openstack_cli_enable(con_ssh=con_ssh)
 
     if not wait_for_reboot_finish:
-        msg = "Hosts reboot -f cmd sent"
+        msg = "reboot -f cmd sent from {}".format(hosts)
         LOG.info(msg)
         return -1, msg
 

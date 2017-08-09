@@ -780,7 +780,7 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
         time.sleep(check_interval)
 
     else:
-        err_msg = "Following alarms_and_events did not clear within {} seconds: {}".format(alarms_to_check, timeout)
+        err_msg = "Following alarms_and_events did not clear within {} seconds: {}".format(timeout, alarms_to_check)
         if fail_ok:
             LOG.warning(err_msg)
             return False, alarms_to_check

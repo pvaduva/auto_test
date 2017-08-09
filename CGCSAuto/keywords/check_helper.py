@@ -372,7 +372,7 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
     if not guest:
         guest = ''
     LOG.tc_step('Check vm topology from within the vm via: /sys/devices/system/cpu')
-    actual_sib_list = []
+    actual_sibs = []
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 
@@ -398,36 +398,37 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
             "Number of present cores: {}. online+offline cores: {}".format(vcpus, expt_total_cores)
 
         if online_cores_count == present_cores_count:
-            expt_sib_lists = [[vcpu] for vcpu in range(present_cores_count)] if not siblings_total_ \
+            expt_sibs_list = [[vcpu] for vcpu in range(present_cores_count)] if not siblings_total_ \
                 else siblings_total_
+
+            expt_sibs_list = [sorted(expt_sibs_list)]
             if prev_siblings:
                 # siblings_total may get modified here
-                for sib in prev_siblings:
-                    if sib not in expt_sib_lists:
-                        expt_sib_lists.append(sib)
+                expt_sibs_list.append(sorted(prev_siblings))
 
             if 'win' in guest:
                 LOG.info("{}Check windows guest siblings via wmic cpu get cmds".format(SEP))
-                expt_cores_per_sib = [len(vcpus) for vcpus in expt_sib_lists]
-                assert expt_cores_per_sib == log_count_per_sibling, \
+                expt_cores_list = []
+                for sib_list in expt_sibs_list:
+                    expt_cores_per_sib = [len(vcpus) for vcpus in sib_list]
+                    expt_cores_list.append(expt_cores_per_sib)
+                assert log_count_per_sibling in expt_cores_list, \
                     "Expected log cores count per sibling: {}, actual: {}".\
                     format(expt_cores_per_sib, log_count_per_sibling)
 
             else:
                 LOG.info("{}Check vm /sys/devices/system/cpu/[cpu#]/topology/thread_siblings_list".format(SEP))
                 for cpu in ['cpu{}'.format(i) for i in range(online_cores_count)]:
-                    actual_sib_list_for_cpu = \
+                    actual_sibs_for_cpu = \
                     vm_ssh.exec_cmd('cat /sys/devices/system/cpu/{}/topology/thread_siblings_list'.
                                     format(cpu), fail_ok=False)[1]
 
-                    sib_for_cpu = common._parse_cpus_list(actual_sib_list_for_cpu)
-                    if sib_for_cpu not in actual_sib_list:
-                        actual_sib_list.append(sib_for_cpu)
+                    sib_for_cpu = common._parse_cpus_list(actual_sibs_for_cpu)
+                    if sib_for_cpu not in actual_sibs:
+                        actual_sibs.append(sib_for_cpu)
 
-                expt_sib_lists_ = copy.deepcopy(expt_sib_lists)
-                for sib in actual_sib_list:
-                    assert sib in expt_sib_lists_, "Expt sib lists: {}, actual sib list: {}".\
-                        format(sorted(expt_sib_lists_), sorted(actual_sib_list))
+                assert sorted(actual_sibs) in expt_sibs_list, "Expt sib lists: {}, actual sib list: {}".\
+                    format(expt_sibs_list, sorted(actual_sibs))
 
 
 def get_procs_and_siblings_on_windows(vm_ssh):

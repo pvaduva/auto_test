@@ -146,6 +146,16 @@ class Guest:
         'win_2012': {
             'user': 'Administrator',
             'password': 'Li69nux*'
+        },
+
+        'win_2016': {
+            'user': 'Administrator',
+            'password': 'Li69nux*'
+        },
+
+        'edge': {
+            'user': 'root',
+            'password': 'root'
         }
 
     }
@@ -164,6 +174,7 @@ class SvcCgcsAuto:
     USER = 'svc-cgcsauto'
     PASSWORD = ')OKM0okm'
     HOME = '/home/svc-cgcsauto'
+    SANDBOX = '/sandbox'
 
 
 class CliAuth:
