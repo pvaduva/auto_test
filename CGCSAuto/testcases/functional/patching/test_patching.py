@@ -2,7 +2,6 @@ import os
 import re
 import time
 import datetime
-import random
 
 from pytest import fixture, skip, mark
 
@@ -557,7 +556,7 @@ def test_install_impacted_hosts(con_ssh=None):
         pre_controller_states = patching_helper.get_active_controller_state(action='APPLY',
                                                                             patch_type='INSVC_NOVA',
                                                                             including_logs=False, con_ssh=con_ssh)
-    previous_time = patching_helper.lab_time_now()
+    previous_time = patching_helper.lab_time_now()[0]
 
     _test_install_impacted_hosts(partial_applied_patches, con_ssh=con_ssh)
 

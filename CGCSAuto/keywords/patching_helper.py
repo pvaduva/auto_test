@@ -283,7 +283,7 @@ def get_log_records(action='upload', con_ssh=None, start_time=None, max_lines=10
 
                 time_stamp = datetime.strptime(':'.join(line.split(':')[1:4]), LOG_DATETIME_FORMAT)
 
-                if time_stamp >= start_timestamp:
+                if not start_timestamp or time_stamp >= start_timestamp:
                     logs.append((patches, log_file, time_stamp, line))
 
             except IndexError as e:
@@ -537,7 +537,7 @@ def upload_patch_dir(patch_dir=None, con_ssh=None):
         return [], patch_states
 
     # time_before = datetime.now()
-    time_before = lab_time_now()
+    time_before = lab_time_now()[0]
 
     run_patch_cmd('upload-dir', args=patch_dir, con_ssh=con_ssh)
 
@@ -589,8 +589,7 @@ def delete_patches(patch_ids=None, con_ssh=None):
     if not patch_ids:
         return []
 
-    # time_before = datetime.now()
-    time_before = lab_time_now()
+    time_before = lab_time_now()[0]
 
     args = ' '.join(patch_ids)
     code, patch_info, _ = run_patch_cmd('delete', args=args, con_ssh=con_ssh)
@@ -676,7 +675,7 @@ def upload_patch_files(files=None, con_ssh=None):
         return None
 
     # time_before = datetime.now()
-    time_before = lab_time_now()
+    time_before = lab_time_now()[0]
 
     return_ids = []
     for patch_id, patch_file in valid_files:
@@ -734,7 +733,7 @@ def get_expected_patch_states(action='upload', patch_ids=None, pre_patches_state
         if 'FAILURE' in patch_id:
             pass
 
-        if not patch_id in patch_ids:
+        if patch_id not in patch_ids:
             continue
 
         elif 'STORAGE' in patch_id and not is_storage_lab:
@@ -1240,7 +1239,8 @@ def check_host_installed(host, reboot_required=True, con_ssh=None):
     return 0, ''
 
 
-def host_install(host, reboot_required=True, fail_if_locked=True, wait_for_state_changed=True, not_unlock=False, con_ssh=None):
+def host_install(host, reboot_required=True, fail_if_locked=True,
+                 wait_for_state_changed=True, not_unlock=False, con_ssh=None):
     if reboot_required:
         code, msg = host_helper.lock_host(host, con_ssh=con_ssh, fail_ok=False, lock_timeout=1800, timeout=2000)
         LOG.info('lock host: rr={} patch on host={}, locking msg={}'.format(reboot_required, host, msg))
@@ -1404,5 +1404,9 @@ def match_patch_node_types(host, patch_id, con_ssh=None):
 
 def lab_time_now(con_ssh=None):
 
-    return run_cmd('date +"%Y-%m-%dT%H:%M:%S"', con_ssh=con_ssh, fail_ok=False)[1]
+    timestamp = run_cmd('date +"%Y-%m-%dT%H:%M:%S.%N"', con_ssh=con_ssh, fail_ok=False)[1]
+    with_milliseconds = timestamp.split('.')[0] + '.{}'.format(int(int(timestamp.split('.')[1]) / 1000))
+    format1 = "%Y-%m-%dT%H:%M:%S.%f"
+    parsed = datetime.strptime(with_milliseconds, format1)
 
+    return with_milliseconds.split('.')[0], parsed
