@@ -2454,6 +2454,7 @@ def main():
         lab_install_step = install_step("check_heat_resources_file", 18, ['cpe', 'regular', 'storage'])
         if do_next_install_step(lab_type, lab_install_step):
             setupHeat(bld_server_conn)
+            wait_state(controller1, AVAILABILITY, AVAILABLE)
             set_install_step_complete(lab_install_step)
 
     #Lab-install - swact and then lock/unlock controller-0 to complete setup
