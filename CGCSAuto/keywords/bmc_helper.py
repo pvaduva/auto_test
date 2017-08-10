@@ -276,10 +276,10 @@ def get_sensorgroup_name(host):
         the sensor group name
     """
 
-    return get_sensor_name(host=host, sensor_group=True)
+    return get_sensor_names(host=host, sensor_group=True)
 
 
-def get_sensor_name(host, sensor_group=False):
+def get_sensor_names(host, sensor_group=False):
     """
 
     Args:
@@ -291,11 +291,8 @@ def get_sensor_name(host, sensor_group=False):
     """
 
     sensor_table = get_sensors_table(host, sensor_group)
-
-    for i in range(len(sensor_table['values'])):
-        row = sensor_table['values'][i]
-        sensor_name = row[1]
-        yield sensor_name
+    names = table_parser.get_column(sensor_table, 'name')
+    return names
 
 
 def get_first_sensor_from_sensorgroup(sensor_groupname, host):
