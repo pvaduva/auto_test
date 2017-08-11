@@ -57,7 +57,7 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
 
 
 def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False, wait_for_reboot_finish=True,
-                 check_hypervisor_up=True, check_webservice_up=True):
+                 check_hypervisor_up=True, check_webservice_up=True, force_reboot=True):
     """
     Reboot one or multiple host(s)
 
@@ -79,11 +79,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     """
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
-
     if isinstance(hostnames, str):
         hostnames = [hostnames]
 
-    hosts = list(hostnames)
     reboot_con = False
     controller = system_helper.get_active_controller_name(con_ssh)
     hostnames = list(set(hostnames))
@@ -96,6 +94,8 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
 
     user, password = LinuxUser.get_current_user_password()
     # reboot hosts other than active controller
+    cmd = 'sudo reboot -f' if force_reboot else 'sudo reboot'
+
     for host in hostnames:
         prompt = '.*' + host + '\:~\$'
         host_ssh = SSHFromSSH(ssh_client=con_ssh, host=host, user=user, password=password, initial_prompt=prompt)
@@ -105,7 +105,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
             raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, host))
 
         LOG.info("Rebooting {}".format(host))
-        host_ssh.send('sudo reboot -f')
+        host_ssh.send(cmd)
         host_ssh.expect(['.*[pP]assword:.*', 'Rebooting'])
         host_ssh.send(password)
         con_ssh.expect(timeout=30)
@@ -127,7 +127,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         _wait_for_openstack_cli_enable(con_ssh=con_ssh)
 
     if not wait_for_reboot_finish:
-        msg = "reboot -f cmd sent from {}".format(hosts)
+        msg = "Hosts reboot -f cmd sent"
         LOG.info(msg)
         return -1, msg
 
@@ -1839,6 +1839,7 @@ def modify_host_lvg(host, lvm='nova-local', inst_backing=None, inst_lv_size=None
         return err_msg
 
     err = ''
+    rtn_code = 0
     if code == 0:
         err = check_host_config(table_parser.table(output))
         if err:
@@ -2256,6 +2257,43 @@ def get_coredumps_and_crashreports():
 
     LOG.info("core dumps and crash reports per host: {}".format(core_dumps_and_reports))
     return core_dumps_and_reports
+
+
+def modify_mtu_on_interface(host, interface, mtu_val, network_type='data', lock_unlock=True, fail_ok=False, con_ssh=None):
+    mtu_val = int(mtu_val)
+
+    LOG.info("Modify MTU for {} of {} to: {} on {}".format(interface, network_type, mtu_val, host))
+
+    args = "-m {} {} {}".format(mtu_val, host, interface)
+
+    code, output = cli.system('host-if-modify', args, fail_ok=fail_ok, rtn_list=True, ssh_client=con_ssh)
+
+    rtn_code = 0
+
+    if code != 0:
+        rtn_code = 1
+
+    if lock_unlock:
+        unlock_host(host)
+
+    actual_mtu = ''
+    if code == 0:
+        actual_mtu = int(system_helper.get_host_if_show_values(host,
+                                                               interface=interface,
+                                                               fields=['imtu'],
+                                                               con_ssh=con_ssh)[0])
+        if not actual_mtu == mtu_val:
+            rtn_code = 2
+
+    if rtn_code != 0:
+        msg = "Attempt to change DATA MTU failed or actual MTU value after modify is not as expected. " \
+              "Expected MTU value: {}. Actual [Host, Interface, " \
+              "MTU value]: {}, {}, {}".format(mtu_val, host, interface, actual_mtu)
+        if fail_ok:
+            return 2, msg
+        raise exceptions.HostPostCheckFailed(msg)
+
+    return rtn_code, output
 
 
 def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fail_ok=False, con_ssh=None):
