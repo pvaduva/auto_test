@@ -17,6 +17,7 @@ from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 from utils import table_parser, cli, exceptions
 from consts.auth import Tenant
+from consts.filepaths import WRSROOT_HOME, BMCPath
 from keywords import system_helper, host_helper
 
 
@@ -387,7 +388,6 @@ def trigger_event(host, sensor_name, sensor_value):
              format(sensor_data_file_name, sensor_name))
 
     sensor_data_file = "/var/run/ipmitool/{}".format(sensor_data_file_name)
-    # sensor_data_file = "/home/wrsroot/nokia_sensor_data_simulator".format(host)
 
     tmp_sensor_datafile = "/tmp/{}".format(sensor_data_file_name)
     print('sensor_data_file: {}'.format(sensor_data_file))
@@ -425,13 +425,36 @@ def clear_events(host):
 
     LOG.info("Restore the sensordata file /var/run/ipmitool/hwmond_{}_sensor_data to original.".format(host))
 
-    # sensor_data_file = "/home/wrsroot/nokia_sensor_data_simulator".format(host)
     sensor_data_file = '/var/run/ipmitool/hwmond_{}_sensor_data'.format(host)
 
     # original_sensor_datafile = "/var/run/ipmitool/nokia_sensor_data.ok"
-    original_sensor_datafile = "/home/wrsroot/hwmond_{}_sensor_data".format(host)
+    original_sensor_datafile = "{}/hwmond_{}_sensor_data".format(WRSROOT_HOME, host)
 
     con_ssh = ControllerClient.get_active_controller()
 
     # Restore the original sensor data file
     con_ssh.exec_sudo_cmd(cmd='cp {} {}'.format(original_sensor_datafile, sensor_data_file), fail_ok=False)
+
+
+def backup_sensor_data_files(hosts=None, con_ssh=None):
+    if hosts is None:
+        hosts = system_helper.get_hostnames()
+    elif isinstance(hosts, str):
+        hosts = [hosts]
+
+    LOG.info("Check and ensure sensor data files for {} are copied to {} if available".format(hosts, WRSROOT_HOME))
+
+    hosts_with_file = []
+    con_ssh = ControllerClient.get_active_controller() if not con_ssh else con_ssh
+    for host in hosts:
+        dest_path = "{}/hwmond_{}_sensor_data".format(WRSROOT_HOME, host)
+        if con_ssh.file_exists(dest_path):
+            hosts_with_file.append(host)
+        else:
+            source_path = BMCPath.SENSOR_DATA_FILE_PATH.format(BMCPath.SENSOR_DATA_DIR, host)
+            if con_ssh.file_exists(source_path):
+                con_ssh.exec_sudo_cmd('cp {} {}'.format(source_path, dest_path), fail_ok=False)
+                hosts_with_file.append(host)
+
+    LOG.info("Sensor data files for {} are copied to {}".format(hosts, WRSROOT_HOME))
+    return hosts

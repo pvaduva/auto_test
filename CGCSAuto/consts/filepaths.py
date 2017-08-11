@@ -64,3 +64,8 @@ class BuildServerPath:
                          '17.00': '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Guest_Build/latest_tis-centos-guest.img',
                          '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Guest/latest_tis-centos-guest.img'
                          }
+
+
+class BMCPath:
+    SENSOR_DATA_DIR = '/var/run/ipmitool/'
+    SENSOR_DATA_FILE_PATH = '{}/hwmond_{}_sensor_data'      # need to provide dir and host
