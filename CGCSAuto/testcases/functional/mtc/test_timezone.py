@@ -35,7 +35,7 @@ def get_out_of_date_alarms():
 def teardown(request, get_out_of_date_alarms):
     def _revert():
         LOG.fixture_step("Reverting timezone to UTC")
-        cli.system('modify', 'timezone=UTC')
+        cli.system('modify', '--timezone=UTC')
         system_helper.wait_for_alarms_gone(get_out_of_date_alarms)
 
     request.addfinalizer(_revert)
@@ -59,7 +59,7 @@ def modify_timezone(timezone, wait_for_change=True, timeout=60):
         True/False
     """
     LOG.info("Setting timezone to {}".format(timezone))
-    cli.system("modify", "timezone={}".format(timezone))
+    cli.system("modify", "--timezone={}".format(timezone))
 
     if wait_for_change:
         timeout = time.time() + timeout

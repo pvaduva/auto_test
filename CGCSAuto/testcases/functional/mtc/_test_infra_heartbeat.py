@@ -13,6 +13,8 @@ from keywords import host_helper, system_helper
 from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.verify_fixtures import check_alarms
 
+# NOTE: This is removed due to CGTS-7651 - ifconfig down or ifdown is not valid procedure for infra failure test
+# Will be reworked via US102236
 
 IF_DOWN_HOSTS = []
 HOST_TYPE_PATTERN = re.compile('compute|storage|standby_controller|active_controller')
