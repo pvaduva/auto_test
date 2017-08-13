@@ -120,6 +120,10 @@ def parse_args():
                          " as small footprint. Not applicable"
                          " for tis-on-tis install")
 
+    lab_grp.add_argument('--security', dest='security', default='',
+                          choices=['', 'standard', 'extended'],
+                          help="Install security profile")
+
     lab_grp.add_argument('--postinstall', choices=['True', 'False'],
                           default=True, help="Run post install scripts")
 
@@ -863,7 +867,7 @@ def get_settings(barcodes_controller, barcodes_compute):
 
     return server_name + last_server_number
 
-def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True, usb=False, lowlat=False):
+def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True, usb=False, lowlat=False, security=False):
     ''' Initiate the boot and installation operation.
     '''
 
@@ -882,7 +886,7 @@ def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_di
 
     vlm_exec_cmd(VLM_TURNON, node.barcode)
     logutils.print_step("Installing {}...".format(node.name))
-    rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os, usb, lowlat)
+    rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os, usb, lowlat, security)
 
     if close_telnet_conn:
         node.telnet_conn.close()
@@ -1268,7 +1272,8 @@ def setupNetworking(host_os):
 
 def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths,
                       host_os, boot_device_dict, small_footprint, burn_usb,
-                      tis_on_tis, boot_usb, iso_path, iso_host, lowlat):
+                      tis_on_tis, boot_usb, iso_path, iso_host, lowlat,
+                      security):
 
     global controller0
     #global cumulus
@@ -1286,7 +1291,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
             usb = False
 
         # Boot up controller0
-        rc = bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False, usb=usb, lowlat=lowlat)
+        rc = bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False, usb=usb, lowlat=lowlat, security=security)
         if rc != 0:
             msg = "Unable to bring up controller-0"
             wr_exit()._exit(1, msg)
@@ -1837,6 +1842,7 @@ def main():
     override = args.override
     banner = args.banner
     wipedisk = args.wipedisk
+    security = args.security
 
     branding = args.branding
 
@@ -1929,6 +1935,7 @@ def main():
     logutils.print_name_value("ISO Host", iso_host)
     logutils.print_name_value("ISO Path", iso_path)
     logutils.print_name_value("Simplex", simplex)
+    logutils.print_name_value("Security", security)
     logutils.print_name_value("Low Lat", lowlat)
     logutils.print_name_value("Run Postinstall Scripts", postinstall)
     logutils.print_name_value("Run config_region instead of config_controller", config_region)
@@ -2208,7 +2215,8 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
         bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths, host_os,
                           boot_device_dict, small_footprint, burn_usb,
-                          tis_on_tis, boot_usb, iso_path, iso_host, lowlat)
+                          tis_on_tis, boot_usb, iso_path, iso_host, lowlat,
+                          security)
         set_install_step_complete(lab_install_step)
 
     if stop == "1":
