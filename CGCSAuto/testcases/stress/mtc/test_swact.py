@@ -35,8 +35,7 @@ def test_swact_20_times():
         assert False, "No standby controller on system"
 
     LOG.tc_step("Boot a vm and ensure it's pingable")
-    vm_base = vm_helper.boot_vm(name='pre_swact')[1]
-    ResourceCleanup.add('vm', vm_base)
+    vm_base = vm_helper.boot_vm(name='pre_swact', cleanup='function')[1]
 
     LOG.tc_step("Start writing from pre-existed vm before swacting")
     vm_ssh, base_vm_thread = vm_helper.write_in_vm(vm_base, end_now_flag=True, expect_timeout=40, thread_timeout=60*100)
@@ -69,8 +68,7 @@ def test_swact_20_times():
                         format(iter_str))
             time.sleep(60)
             for j in range(3):
-                code, vm_new, msg, vol = vm_helper.boot_vm(name='post_swact', fail_ok=True)
-                ResourceCleanup.add('vm', vm_new)
+                code, vm_new, msg, vol = vm_helper.boot_vm(name='post_swact', fail_ok=True, cleanup='function')
 
                 if code == 0:
                     break
