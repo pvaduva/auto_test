@@ -339,6 +339,7 @@ def test_modify_mtu_data_interface(mtu_range):
     LOG.tc_step('Restore the MTUs of the data IFs on hosts:{}'.format(hosts))
 
     prev_host = None
+
     for host, pre_mtu, mtu, max_mtu, interface, net_type in HOSTS_IF_MODIFY_ARGS:
         host_helper.lock_host(host, swact=True)
 

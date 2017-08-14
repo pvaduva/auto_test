@@ -2279,7 +2279,6 @@ def modify_mtu_on_interface(host, interface, mtu_val, network_type='data', lock_
 
     return code, output
 
-
 def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fail_ok=False, con_ssh=None):
 
     if not hosts:
