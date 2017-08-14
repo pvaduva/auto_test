@@ -409,7 +409,7 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
             raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
     except:
         LOG.info("Attempt to remove {} to cleanup the system due to scp failed".format(dest_path))
-        con_ssh.exec_cmd('rm -f {}'.format(dest_path))
+        con_ssh.exec_cmd('rm -f {}'.format(dest_path), fail_ok=True, get_exit_code=False)
         raise
 
     LOG.info("{} image downloaded successfully and saved to {}".format(img_os, dest_path))
@@ -441,6 +441,6 @@ def get_guest_image(guest_os, rm_image=True):
         finally:
             if rm_image and not re.search('cgcs-guest|tis-centos', guest_os):
                 con_ssh = ControllerClient.get_active_controller()
-                con_ssh.exec_cmd('rm {}'.format(image_path), fail_ok=True, get_exit_code=False)
+                con_ssh.exec_cmd('rm -f {}'.format(image_path), fail_ok=True, get_exit_code=False)
 
     return img_id
