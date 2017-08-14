@@ -220,7 +220,7 @@ def verify_compute_evacuation_events():
 
 class TestPrioritizedVMEvacuation:
 
-    quota_expected = {'instances': 5, 'cores': 20, 'volumes':10}
+    quota_expected = {'instances': 5, 'cores': 20, 'volumes': 10}
     quota_origin = dict()
 
     @fixture(scope='class', autouse=True)

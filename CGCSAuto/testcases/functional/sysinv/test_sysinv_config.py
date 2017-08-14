@@ -259,19 +259,6 @@ class TestDnsSettings:
         request.addfinalizer(restore_dns_settings)
 
     @mark.parametrize(
-    #     'new_dns_servers', [
-    #         mark.nightly(('128.224.144.130', '147.11.57.128', '147.11.57.133')),
-    #         ('10.10.10.3', '10.256.0.1', '8.8.8.8'),
-    #         ('fd00:0:0:21::5', '2001:db8::'),
-    #         (3232235521, 333333, 333),
-    #         (3232235521, b'\xC0\xA8\x00\x01'),
-    # ],
-    #     'with_action_option', [
-    #         (None),
-    #         ('apply'),
-    #         ('install'),
-    #         (''.join(random.choice(string.ascii_lowercase) for x in range(6)))
-    #     ],
         ('new_dns_servers', 'with_action_option'),
         [
             (('128.224.144.130', '147.11.57.128', '147.11.57.133'), None),

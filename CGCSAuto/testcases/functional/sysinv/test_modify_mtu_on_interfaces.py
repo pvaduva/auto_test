@@ -133,7 +133,7 @@ def get_max_allowed_mtus(host='controller-0', network_type='oam', if_name='', if
     if uses_ifs:
         min_mtu = min([if_info[nic]['mtu'] for nic in uses_ifs])
 
-    return min_mtu, if_name
+    return min_mtu, if_info[if_name]['mtu'], if_name
 
 
 @mark.p3
@@ -177,7 +177,7 @@ def test_modify_mtu_oam_interface(mtu_range):
     second_host = system_helper.get_active_controller_name()
     HostsToRecover.add([first_host, second_host], scope='function')
 
-    max_mtu, nic_name = get_max_allowed_mtus(host=first_host, network_type='oam')
+    max_mtu, cur_mtu, nic_name = get_max_allowed_mtus(host=first_host, network_type='oam')
     LOG.info('OK, the max MTU for {} is {}'.format(nic_name, max_mtu))
 
     expecting_pass = not max_mtu or mtu <= max_mtu
@@ -191,6 +191,9 @@ def test_modify_mtu_oam_interface(mtu_range):
 
     LOG.tc_step("Modify {} oam interface MTU from {} to {}, and "
                 "ensure it's applied successfully after unlock".format(first_host, pre_oam_mtu, mtu))
+    if mtu == cur_mtu:
+        LOG.info('Setting to same MTU: from:{} to:{}'.format(mtu, cur_mtu))
+
     code, res = host_helper.modify_mtu_on_interfaces(first_host, mtu_val=mtu, network_type='oam',
                                                      lock_unlock=True, fail_ok=True)
 
@@ -228,7 +231,6 @@ def test_modify_mtu_oam_interface(mtu_range):
 @mark.p3
 @mark.parametrize('mtu_range', [
     'middle',
-    'larger'
     ])
 def test_modify_mtu_data_interface(mtu_range):
     """
@@ -293,7 +295,7 @@ def test_modify_mtu_data_interface(mtu_range):
         changed_ifs = []
         for interface in revert_ifs:
             LOG.tc_step('Checking the max MTU for the IF:{} on host:{}'.format(interface, host))
-            max_mtu = get_max_allowed_mtus(host=host, network_type=net_type, if_name=interface)[0]
+            max_mtu, cur_mtu, nic_name = get_max_allowed_mtus(host=host, network_type=net_type, if_name=interface)
 
             LOG.info('Checking the max MTU for the IF is: {}'.format(max_mtu or 'NOT SET'))
 
@@ -313,8 +315,9 @@ def test_modify_mtu_data_interface(mtu_range):
                   "Return code:{}; Details: {}".format(msg_result, pre_mtu, max_mtu, pre_mtu, code, res)
 
             if 0 == code:
-                changed_ifs.append(interface)
-                HOSTS_IF_MODIFY_ARGS.append((host, pre_mtu, mtu, max_mtu, interface, net_type))
+                if mtu != cur_mtu:
+                    changed_ifs.append(interface)
+                    HOSTS_IF_MODIFY_ARGS.append((host, pre_mtu, mtu, max_mtu, interface, net_type))
                 assert expecting_pass, msg
             else:
                 assert not expecting_pass, msg
