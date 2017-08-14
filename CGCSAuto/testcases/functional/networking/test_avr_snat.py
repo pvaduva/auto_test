@@ -108,6 +108,9 @@ def test_snat_vm_actions(snat_setups, snat):
     snat = True if snat == 'snat_enabled' else False
     LOG.tc_step("Update tenant router external gateway to set SNAT to {}".format(snat))
     network_helper.update_router_ext_gateway_snat(enable_snat=snat)
+
+    # Allow router update to complete, since we've seen cases where ping vm pass but ssh fail
+    time.sleep(30)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
 
     LOG.tc_step("Ping from VM {} to 8.8.8.8".format(vm_))
@@ -203,6 +206,8 @@ def test_snat_evacuate_vm(snat_setups, snat):
     snat = True if snat == 'snat_enabled' else False
     LOG.tc_step("Update tenant router external gateway to set SNAT to {}".format(snat))
     network_helper.update_router_ext_gateway_snat(enable_snat=snat)
+
+    time.sleep(30)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=True)
 
     host = nova_helper.get_vm_host(vm_)

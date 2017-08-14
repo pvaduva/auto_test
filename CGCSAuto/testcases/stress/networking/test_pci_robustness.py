@@ -241,7 +241,7 @@ class TestSriov:
         host_helper.unlock_host(initial_host)
 
         LOG.tc_step("Reboot {} and ensure vms are evacuated to {}".format(other_host, initial_host))
-        vm_helper.evacuate_vms(other_host, vms, post_host=initial_host)
+        vm_helper.evacuate_vms(other_host, vms, post_host=initial_host, wait_for_host_up=True)
         check_vm_pci_interface(vms, net_type=net_type)
         vfs_use_post_evac = nova_helper.get_provider_net_info(pnet_id, field='pci_vfs_used')
         assert vfs_use_post_boot == vfs_use_post_evac, "Number of PCI vfs used after evacuation is not as expected"

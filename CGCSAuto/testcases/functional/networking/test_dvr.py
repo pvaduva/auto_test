@@ -1,4 +1,5 @@
 import random
+import time
 from collections import Counter
 
 from pytest import mark, fixture, skip
@@ -89,6 +90,8 @@ def test_dvr_update_router(router_info, _bring_up_router):
         LOG.tc_step("Update router distributed to {}".format(update_to_val))
         network_helper.update_router_distributed(router_id, distributed=update_to_val, post_admin_up_on_failure=False)
 
+        # Wait for 30 seconds to allow the router update completes
+        time.sleep(30)
         LOG.tc_step("Verify router is in active state and vm can be ping'd from NatBox")
         assert RouterStatus.ACTIVE == network_helper.get_router_info(router_id, field='status'), \
             "Router is not in active state after updating distributed to {}.".format(update_to_val)
