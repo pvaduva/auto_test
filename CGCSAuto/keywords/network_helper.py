@@ -1714,7 +1714,7 @@ def update_quotas(tenant_name=None, tenant_id=None, con_ssh=None, auth_info=Tena
     """
     if not tenant_id:
         if tenant_name is None:
-            tenant_name = Tenant.get_primary()['tenant_name']
+            tenant_name = Tenant.get_primary()['tenant']
         tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)[0]
 
     if not kwargs:

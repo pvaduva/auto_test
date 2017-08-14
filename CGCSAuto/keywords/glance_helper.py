@@ -389,23 +389,28 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}@{}:{} {}'.format(
             SvcCgcsAuto.USER, SvcCgcsAuto.SERVER, source_path, dest_path)
 
-    con_ssh.send(scp_cmd)
-    index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=3600)
-    if index == 2:
-        con_ssh.send('yes')
-        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=3600)
-    if index == 1:
-        con_ssh.send(SvcCgcsAuto.PASSWORD)
-        index = con_ssh.expect(timeout=timeout)
-    if index != 0:
-        raise exceptions.SSHException("Failed to scp files")
+    try:
+        con_ssh.send(scp_cmd)
+        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=3600)
+        if index == 2:
+            con_ssh.send('yes')
+            index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=3600)
+        if index == 1:
+            con_ssh.send(SvcCgcsAuto.PASSWORD)
+            index = con_ssh.expect(timeout=timeout)
+        if index != 0:
+            raise exceptions.SSHException("Failed to scp files")
 
-    exit_code = con_ssh.get_exit_code()
-    if not exit_code == 0:
-        raise exceptions.CommonError("scp unsuccessfully")
+        exit_code = con_ssh.get_exit_code()
+        if not exit_code == 0:
+            raise exceptions.CommonError("scp unsuccessfully")
 
-    if not con_ssh.file_exists(file_path=dest_path):
-        raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
+        if not con_ssh.file_exists(file_path=dest_path):
+            raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
+    except:
+        LOG.info("Attempt to remove {} to cleanup the system due to scp failed".format(dest_path))
+        con_ssh.exec_cmd('rm -f {}'.format(dest_path))
+        raise
 
     LOG.info("{} image downloaded successfully and saved to {}".format(img_os, dest_path))
     return dest_path
@@ -428,11 +433,14 @@ def get_guest_image(guest_os, rm_image=True):
     if not img_id:
         image_path = _scp_guest_image(img_os=guest_os)
         disk_format = 'raw' if guest_os == 'cgcs-guest' else 'qcow2'
-        img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
-                              container_format='bare')[1]
-
-        if rm_image and not re.search('cgcs-guest|tis-centos|ubuntu_14', guest_os):
-            con_ssh = ControllerClient.get_active_controller()
-            con_ssh.exec_cmd('rm {}'.format(image_path), fail_ok=True, get_exit_code=False)
+        try:
+            img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
+                                  container_format='bare', fail_ok=False)[1]
+        except:
+            raise
+        finally:
+            if rm_image and not re.search('cgcs-guest|tis-centos', guest_os):
+                con_ssh = ControllerClient.get_active_controller()
+                con_ssh.exec_cmd('rm {}'.format(image_path), fail_ok=True, get_exit_code=False)
 
     return img_id
