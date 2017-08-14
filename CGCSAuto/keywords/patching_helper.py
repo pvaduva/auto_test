@@ -1406,7 +1406,7 @@ def lab_time_now(con_ssh=None):
 
     timestamp = run_cmd('date +"%Y-%m-%dT%H:%M:%S.%N"', con_ssh=con_ssh, fail_ok=False)[1]
     with_milliseconds = timestamp.split('.')[0] + '.{}'.format(int(int(timestamp.split('.')[1]) / 1000))
-    format1 = "%Y-%m-%dT%H:%M:%S.%f"
+    format1 = LOG_DATETIME_FORMAT + '.%f'
     parsed = datetime.strptime(with_milliseconds, format1)
 
     return with_milliseconds.split('.')[0], parsed

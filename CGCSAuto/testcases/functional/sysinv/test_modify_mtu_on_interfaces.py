@@ -277,7 +277,8 @@ def test_modify_mtu_data_interface(mtu_range):
     active_controller = system_helper.get_active_controller_name()
     hosts = hypervisors[:]
     if active_controller in hosts:
-        hosts = hosts.remove(active_controller).append(active_controller)
+        hosts.remove(active_controller)
+        hosts.append(active_controller)
 
     for host in hosts:
         interfaces = get_ifs_to_mod(host, net_type, mtu)
@@ -339,9 +340,9 @@ def test_modify_mtu_data_interface(mtu_range):
     LOG.tc_step('Restore the MTUs of the data IFs on hosts:{}'.format(hosts))
 
     prev_host = None
-
     for host, pre_mtu, mtu, max_mtu, interface, net_type in HOSTS_IF_MODIFY_ARGS:
-        host_helper.lock_host(host, swact=True)
+        if not prev_host or prev_host != host:
+            host_helper.lock_host(host, swact=True)
 
         LOG.info('Restore DATA MTU of IF:{} on host:{} to:{}, current MTU:{}'.format(interface, host, pre_mtu, mtu))
         host_helper.modify_mtu_on_interface(host, interface, pre_mtu, network_type=net_type, lock_unlock=True)
@@ -351,6 +352,8 @@ def test_modify_mtu_data_interface(mtu_range):
 
         if prev_host and prev_host != host:
             host_helper.unlock_host(host)
+
+        prev_host = host
 
     LOG.info('OK, all changed MTUs of DATA IFs are restored')
 
