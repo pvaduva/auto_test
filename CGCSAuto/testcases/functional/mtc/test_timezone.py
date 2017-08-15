@@ -71,7 +71,7 @@ def modify_timezone(timezone, wait_for_change=True, timeout=60):
         return True
 
 
-def test_alarm_timestamps(get_out_of_date_alarms):
+def test_modify_timezone_alarm_timestamps(get_out_of_date_alarms):
     """
     Test alarm timestamps line up with a timezone change
 
@@ -132,7 +132,7 @@ def get_epoch_date(active_controller):
         return system_epoch
 
 
-def test_log_timestamps(get_out_of_date_alarms):
+def test_modify_timezone_log_timestamps(get_out_of_date_alarms):
     """
     Test correct log timestamps after timezone change
 
@@ -228,7 +228,7 @@ def test_log_timestamps(get_out_of_date_alarms):
     assert failed_logs == {}, failed_logs
 
 
-def test_zone_persists(get_out_of_date_alarms):
+def test_timezone_persists_after_swact(get_out_of_date_alarms):
     """
     Test setting the timezone persists after controller swact
 
@@ -273,7 +273,7 @@ def cli_timestamp_teardown(request):
     request.addfinalizer(delete_snmp_trapdest)
 
 
-def test_cli_timestamps(cli_timestamp_teardown, get_out_of_date_alarms):
+def test_modify_timezone_cli_timestamps(cli_timestamp_teardown, get_out_of_date_alarms):
     """
     Test correct timestamps in:
         - ceilometer
