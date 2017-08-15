@@ -51,7 +51,7 @@ class Labs:
         'floating ip': '128.224.150.54',
         'controller-0 ip': '128.224.150.219',
         'controller-1 ip': '128.224.150.212',
-        'controller_nodes': [22349, 22348],
+        'controller_nodes': [23527, 22348],
         'compute_nodes': [22347, 21784],
     }
 
