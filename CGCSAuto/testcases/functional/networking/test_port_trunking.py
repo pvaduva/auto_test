@@ -8,10 +8,12 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 @fixture(scope='module', autouse=True)
 def update_net_quota(request):
+    LOG.fixture_step("Increase network quota")
     network_quota = network_helper.get_quota('network')
-    network_helper.update_quotas(network=network_quota + 2)
+    network_helper.update_quotas(network=network_quota + 5)
 
     def _revert_quota():
+        LOG.fixture_step("Revert network quota to {}".format(network_quota))
         network_helper.update_quotas(network=network_quota)
     request.addfinalizer(_revert_quota)
 
@@ -34,12 +36,13 @@ def _bring_up_vlan_interface(vm_id, eth_name, vlan_ids):
         vm_ssh.exec_sudo_cmd('ip addr')
 
 
+# FIXME: Test removed for now until CGTS-7720 is resolved
 @mark.parametrize('vif_model', [
     'avp',
     'virtio',
     'e1000'
 ])
-def test_port_trunking(vif_model):
+def _test_port_trunking(vif_model):
     """
     Ping between two vms with virtio and avp vif models
 
@@ -150,6 +153,7 @@ def test_port_trunking(vif_model):
     if ip_addr is not None:
         with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
             LOG.tc_step("Ping on vlan interface from guest")
+            # FIXME: if fail_ok=True, then the verification step would never fail
             ping = network_helper._ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=True)[0]
 
     # VM operation and ping
@@ -172,4 +176,5 @@ def test_port_trunking(vif_model):
 
         with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
             LOG.tc_step("Ping on vlan interface from guest after action {}".format(vm_actions))
+            # FIXME: if fail_ok=True, then the verification step would never fail
             ping = network_helper._ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=True)[0]
