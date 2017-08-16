@@ -201,7 +201,7 @@ def mount_attached_volume(vm_id, rootfs, vm_image_name=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            block_device_mapping=None,  vm_host=None, avail_zone=None, file=None, config_drive=False,
+            block_device_mapping=None,  vm_host=None, avail_zone=None, file=None, config_drive=False, meta=None,
             fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True, cleanup=None):
     """
     Boot a vm with given parameters
@@ -233,6 +233,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         hint (dict): key/value pair(s) sent to scheduler for custom use. such as group=<server_group_id>
         file (str): <dst-path=src-path> To store files from local <src-path> to <dst-path> on the new server.
         config_drive (bool): To enable config drive.
+        meta (dict): key/value pairs for vm meta data. e.g., {'sw:wrs:recovery_priority': 1, ...}
         fail_ok (bool):
         reuse_vol (bool): whether or not to reuse the existing volume
         guest_os (str): Valid values: 'cgcs-guest', 'ubuntu_14', 'centos_6', 'centos_7', etc
@@ -368,6 +369,10 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
 
+    if meta:
+        meta_args = [' --meta {}={}'.format(key_, val_) for key_, val_ in meta.items()]
+        args_ += ''.join(meta_args)
+    
     if poll:
         args_ += ' --poll'
 

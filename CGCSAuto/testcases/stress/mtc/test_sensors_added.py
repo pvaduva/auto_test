@@ -43,9 +43,12 @@ def sensor_data_fit(request):
     
     if not bmc_hosts:
         skip("No sensor added for any host in system")
-    
-    LOG.fixture_step("(module) touch /var/run/fit/sensor_data")
+
     con_ssh = ControllerClient.get_active_controller()
+    LOG.fixture_step("(module) Save healthy sensor data files")
+    bmc_helper.backup_sensor_data_files(bmc_hosts, con_ssh=con_ssh)
+
+    LOG.fixture_step("(module) touch /var/run/fit/sensor_data")
     con_ssh.exec_sudo_cmd('mkdir -p /var/run/fit/', fail_ok=False)
     con_ssh.exec_sudo_cmd('touch /var/run/fit/sensor_data', fail_ok=False)
 

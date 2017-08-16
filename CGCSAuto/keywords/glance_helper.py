@@ -2,6 +2,8 @@ import random
 import time
 import re
 
+from pytest import skip
+
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
@@ -67,6 +69,71 @@ def get_image_id_from_name(name=None, strict=False, fail_ok=True, con_ssh=None, 
             raise exceptions.CommonError(msg)
 
     return image_id
+
+
+def get_avail_image_space(con_ssh):
+    """
+    Get available disk space in GB on /opt/cgcs which is where glance images are saved at
+    Args:
+        con_ssh:
+
+    Returns (float): e.g., 9.2
+
+    """
+    size = con_ssh.exec_cmd("df -h | grep '/opt/cgcs' | awk '{{print $4}}'")[1]
+    size = float(size.split(sep='G')[0])
+    return size
+
+
+def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.1, con_ssh=None):
+    """
+    Check if glance image storage disk is sufficient to create new glance image from specified image
+    Args:
+        img_file_path (str): e.g., /home/wrsroot/images/tis-centos-guest.img
+        guest_os (str): used if img_file_path is not provided. e,g., ubuntu_14, ge_edge, cgcs-guest, etc
+        min_diff: minimum difference required between available space and specifiec size. e.g., 0.1G
+        con_ssh:
+
+    Returns (bool):
+
+    """
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    if img_file_path:
+        file_size = con_ssh.exec_cmd("ls -l {} | awk '{{print $5}}'".format(img_file_path))[1]
+        file_size = float(file_size) / (1024 * 1024)
+    elif guest_os is None:
+        raise ValueError("Either img_file_path or guest_os has to be provided")
+    else:
+        img_file_info = GuestImages.IMAGE_FILES.get(guest_os, None)
+        if not img_file_info:
+            raise ValueError("Invalid guest_os provided. Choose from: {}".format(GuestImages.IMAGE_FILES.keys()))
+        file_size = img_file_info[3]
+
+    avail_size = get_avail_image_space(con_ssh=con_ssh)
+
+    return avail_size - file_size >= min_diff
+
+
+def ensure_image_storage_sufficient(guest_os, con_ssh=None):
+    if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh):
+        LOG.info("testtest")
+        return False
+        images_to_del = get_images(exclude=True, Name=GuestImages.DEFAULT_GUEST, con_ssh=con_ssh)
+        if images_to_del:
+            LOG.info("Delete non-default images due to insufficient image storage media to create required image")
+            delete_images(images_to_del, check_first=False, con_ssh=con_ssh)
+            if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh):
+                LOG.info("Insufficient image storage media to create {} image even after deleting non-default "
+                         "glance images".format(guest_os))
+                return False
+        else:
+            LOG.info("Insufficient image storage media to create {} image".format(guest_os))
+            return False
+
+    return True
 
 
 def create_image(name=None, image_id=None, source_image_file=None,
@@ -152,9 +219,15 @@ def create_image(name=None, image_id=None, source_image_file=None,
     for key, value in optional_args.items():
         if value is not None:
             optional_args_str = ' '.join([optional_args_str, key, str(value)])
-
-    code, output = cli.glance('image-create', optional_args_str, ssh_client=con_ssh, fail_ok=fail_ok,
-                              auth_info=auth_info, timeout=timeout, rtn_list=True)
+    try:
+        code, output = cli.glance('image-create', optional_args_str, ssh_client=con_ssh, fail_ok=fail_ok,
+                                  auth_info=auth_info, timeout=timeout, rtn_list=True)
+    except:
+        # This is added to help debugging image-create failure in case of insufficient space
+        if con_ssh is None:
+            con_ssh = ControllerClient.get_active_controller()
+        con_ssh.exec_cmd('df -h', fail_ok=True, get_exit_code=False)
+        raise
 
     table_ = table_parser.table(output)
     actual_id = table_parser.get_value_two_col_table(table_, 'id')
@@ -416,13 +489,14 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     return dest_path
 
 
-def get_guest_image(guest_os, rm_image=True):
+def get_guest_image(guest_os, rm_image=True, check_disk=True):
     """
     Get or create a glance image with given guest OS
     Args:
         guest_os (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11, tis-centos-guest,
                 cgcs-guest
         rm_image (bool): whether or not to rm image from /home/wrsroot/images after creating glance image
+        check_disk (bool): whether to check if image storage disk is sufficient to create new glance image
 
     Returns (str): image_id
 
@@ -431,6 +505,10 @@ def get_guest_image(guest_os, rm_image=True):
     img_id = get_image_id_from_name(guest_os, strict=True)
 
     if not img_id:
+        if check_disk:
+            if not ensure_image_storage_sufficient(guest_os=guest_os):
+                skip("Insufficient image storage space in /opt/cgcs/ to create {} image".format(guest_os))
+
         image_path = _scp_guest_image(img_os=guest_os)
         disk_format = 'raw' if guest_os == 'cgcs-guest' else 'qcow2'
         try:
@@ -439,7 +517,7 @@ def get_guest_image(guest_os, rm_image=True):
         except:
             raise
         finally:
-            if rm_image and not re.search('cgcs-guest|tis-centos', guest_os):
+            if rm_image and not re.search('cgcs-guest|tis-centos|ubuntu_14', guest_os):
                 con_ssh = ControllerClient.get_active_controller()
                 con_ssh.exec_cmd('rm -f {}'.format(image_path), fail_ok=True, get_exit_code=False)
 
