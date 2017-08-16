@@ -2466,7 +2466,7 @@ def main():
             set_install_step_complete(lab_install_step)
 
     #Lab-install - swact and then lock/unlock controller-0 to complete setup
-    lab_install_step = install_step("swact_lockunlock", 19, ['regular', 'storage', 'cpe'])
+    lab_install_step = install_step("swact_lockunlock", 19, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
 
         if host_os == "centos" and len(controller_dict) > 1:
@@ -2520,6 +2520,8 @@ def main():
         # Required due to ip28-30 unsupported config
         elif host_os == "centos" and len(controller_dict) == 1:
             log.info("Skipping this step since we only have one controller")
+    
+    wait_until_alarm_clears(controller0, timeout=1200, check_interval=60, alarm_id="250.001", host_os=host_os)
 
     if postinstall and host_os == "centos":
         run_postinstall(controller0)
