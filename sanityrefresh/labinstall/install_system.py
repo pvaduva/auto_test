@@ -2466,7 +2466,7 @@ def main():
             set_install_step_complete(lab_install_step)
 
     #Lab-install - swact and then lock/unlock controller-0 to complete setup
-    lab_install_step = install_step("swact_lockunlock", 19, ['regular', 'storage'])
+    lab_install_step = install_step("swact_lockunlock", 19, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
 
         if host_os == "centos" and len(controller_dict) > 1:
