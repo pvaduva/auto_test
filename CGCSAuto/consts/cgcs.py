@@ -210,6 +210,10 @@ class ImageMetadata:
     CPU_RT = 'hw_cpu_realtime'
 
 
+class VMMetaData:
+    EVACUATION_PRIORITY = 'sw:wrs:recovery_priority'
+
+
 class ServerGroupMetadata:
     BEST_EFFORT = "wrs-sg:best_effort"
     GROUP_SIZE = "wrs-sg:group_size"
