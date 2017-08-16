@@ -80,12 +80,12 @@ def get_avail_image_space(con_ssh):
     Returns (float): e.g., 9.2
 
     """
-    size = con_ssh.exec_cmd("df -h | grep '/opt/cgcs' | awk '{{print $4}}'")[1]
-    size = float(size.split(sep='G')[0])
+    size = con_ssh.exec_cmd("df | grep '/opt/cgcs' | awk '{{print $4}}'")[1]
+    size = float(size.strip()) / (1024 * 1024)
     return size
 
 
-def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.1, con_ssh=None):
+def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.05, con_ssh=None):
     """
     Check if glance image storage disk is sufficient to create new glance image from specified image
     Args:
@@ -119,8 +119,6 @@ def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.1,
 
 def ensure_image_storage_sufficient(guest_os, con_ssh=None):
     if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh):
-        LOG.info("testtest")
-        return False
         images_to_del = get_images(exclude=True, Name=GuestImages.DEFAULT_GUEST, con_ssh=con_ssh)
         if images_to_del:
             LOG.info("Delete non-default images due to insufficient image storage media to create required image")
@@ -489,7 +487,7 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     return dest_path
 
 
-def get_guest_image(guest_os, rm_image=True, check_disk=True):
+def get_guest_image(guest_os, rm_image=True, check_disk=False):
     """
     Get or create a glance image with given guest OS
     Args:

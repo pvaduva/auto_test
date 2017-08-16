@@ -462,7 +462,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if meta:
         meta_args = [' --meta {}={}'.format(key_, val_) for key_, val_ in meta.items()]
         args_ += ''.join(meta_args)
-    
+
     if poll:
         args_ += ' --poll'
 
