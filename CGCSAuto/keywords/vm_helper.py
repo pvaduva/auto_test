@@ -22,7 +22,8 @@ from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
 
 
-def _set_vm_meta(vm_id, action='set', check_after_set=False, con_ssh=None, fail_ok=False, auth_info=None, **kwargs):
+def _set_vm_meta(vm_id, action='set', meta_data_names=None,
+                 check_after_set=False, con_ssh=None, fail_ok=False, auth_info=None, **kwargs):
     """
 
     Args:
@@ -37,19 +38,25 @@ def _set_vm_meta(vm_id, action='set', check_after_set=False, con_ssh=None, fail_
     if not kwargs:
         return 0, ''
 
+    if action not in ['set', 'delete']:
+        return 1, ''
+
+    if action == 'set':
+        meta_data = ' '.join(['"{}"="{}"'.format(k, v) for k, v in kwargs.items()])
+
+    elif action == 'delete' and meta_data_names:
+        meta_data = ' '.join(['"{}"'.format(k) for k in meta_data_names])
+
+    else:
+        LOG.warn('Unknown meta data operation:{}'.format(action))
+        return 0, ''
+
     command = 'meta {} {}'.format(vm_id, action)
-    LOG.info('TODO: meta data command={}'.format(command))
 
-    meta_data = []
-    for k, v in kwargs.items():
-        meta_data.append('{}={}'.format(k, v))
-
-    args = '--meta '.join(meta_data)
-
-    code, output = cli.nova(command, positional_args=args, fail_ok=fail_ok, rtn_list=True)
+    code, output = cli.nova(command, positional_args=meta_data, fail_ok=fail_ok, rtn_list=True)
 
     assert 0 == code or fail_ok, \
-        'Failed to set meta data to VM:{}, meta data:"{}", output:{}\n'.format(vm_id, args, output)
+        'Failed to set meta data to VM:{}, meta data:"{}", output:{}\n'.format(vm_id, meta_data, output)
 
     if not check_after_set:
         return code, output
@@ -58,7 +65,6 @@ def _set_vm_meta(vm_id, action='set', check_after_set=False, con_ssh=None, fail_
         return code, output
 
     meta_data_set = get_vm_meta_data(vm_id, con_ssh=con_ssh, fail_ok=fail_ok)
-    LOG.info('TODO: meta data actually set={}'.format(meta_data_set))
 
     if action == 'set':
         all_set = True
@@ -76,38 +82,38 @@ def _set_vm_meta(vm_id, action='set', check_after_set=False, con_ssh=None, fail_
             LOG.error(msg)
             assert False, msg
     else:
-        if any(k in meta_data_set for k in kwargs):
-            msg = 'Not all meta data values are deleted,\nexpecting:{}\nactual:{}\n'.format(kwargs, meta_data_set)
-            msg += '\nsome meta data not deleted:{}'.format([item for item in kwargs.items() if item in meta_data_set])
+        if any(k in meta_data_set for k in meta_data_names):
+            msg = 'Not all meta data values are deleted,\nexpecting:{}\nactual:{}\n'.format(
+                meta_data_names, meta_data_set)
+            msg += '\nsome meta data not deleted:{}'.format([name for name in meta_data_names if name in meta_data_set])
             LOG.error(msg)
             assert False, msg
 
-    LOG.info('TODO: code={}, output={}'.format(code, output))
     return code, output
 
 
 def get_vm_meta_data(vm_id, meta_data_names=None, con_ssh=None, fail_ok=False):
-    table_ = table_parser.table(cli.nova('show {}'.format(vm_id), ssh_client=con_ssh, fail_ok=fail_ok))
+    if not meta_data_names:
+        return {}
+
+    table_ = table_parser.table(cli.nova('show {}'.format(vm_id), ssh_client=con_ssh, fail_ok=False))
     meta_data_set = eval(table_parser.get_value_two_col_table(table_, 'metadata'))
 
-    if meta_data_names:
-        not_found = [k for k in meta_data_names if k not in meta_data_set]
-        if not_found:
-            msg = 'No meta data found for keys:{}, found meta datas:{}'.format(not_found, meta_data_set)
-            LOG.warn(msg)
-            assert fail_ok, msg
+    not_found = [k for k in meta_data_names if k not in meta_data_set]
+    if not_found:
+        msg = 'No meta data found for keys:{}, found meta datas:{}'.format(not_found, meta_data_set)
+        LOG.warn(msg)
+        assert fail_ok, msg
 
-        return {k: meta_data_set[k] for k in meta_data_names}
-    else:
-        return meta_data_set
+    return {k: meta_data_set[k] for k in meta_data_names if k in meta_data_set}
 
 
 def set_vm_meta_data(vm_id, con_ssh=None, fail_ok=False, **kwargs):
     return _set_vm_meta(vm_id, action='set', con_ssh=con_ssh, fail_ok=fail_ok, **kwargs)
 
 
-def delete_vm_meta_data(vm_id, con_ssh=None, fail_ok=False, **kwargs):
-    return _set_vm_meta(vm_id, action='delete', con_ssh=con_ssh, fail_ok=fail_ok, **kwargs)
+def delete_vm_meta_data(vm_id, meta_data_names, con_ssh=None, fail_ok=False):
+    return _set_vm_meta(vm_id, action='delete', mata_data_names=meta_data_names, con_ssh=con_ssh, fail_ok=fail_ok)
 
 
 def get_any_vms(count=None, con_ssh=None, auth_info=None, all_tenants=False, rtn_new=False):
