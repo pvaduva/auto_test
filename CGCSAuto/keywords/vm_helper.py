@@ -45,11 +45,8 @@ def _set_vm_meta(vm_id, action='set', check_after_set=False, con_ssh=None, fail_
         meta_data.append('{}={}'.format(k, v))
 
     args = '--meta '.join(meta_data)
-    LOG.info('TODO: meta data args={}'.format(args))
 
     code, output = cli.nova(command, positional_args=args, fail_ok=fail_ok, rtn_list=True)
-
-    LOG.info('TODO: 1 code={}, output={}'.format(code, output))
 
     assert 0 == code or fail_ok, \
         'Failed to set meta data to VM:{}, meta data:"{}", output:{}\n'.format(vm_id, args, output)
@@ -89,17 +86,18 @@ def _set_vm_meta(vm_id, action='set', check_after_set=False, con_ssh=None, fail_
     return code, output
 
 
-def get_vm_meta_data(vm_id, con_ssh=None, fail_ok=False, *args):
-    table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, fail_ok=fail_ok))
+def get_vm_meta_data(vm_id, meta_data_names=None, con_ssh=None, fail_ok=False):
+    table_ = table_parser.table(cli.nova('show {}'.format(vm_id), ssh_client=con_ssh, fail_ok=fail_ok))
     meta_data_set = eval(table_parser.get_value_two_col_table(table_, 'metadata'))
 
-    if args:
-        not_found = (k not in meta_data_set for k in args)
+    if meta_data_names:
+        not_found = [k for k in meta_data_names if k not in meta_data_set]
         if not_found:
-            LOG.warn('No meta data found for key:{}, found meta datas:{}'.format(not_found, meta_data_set))
-            assert fail_ok, 'No meta data found for key:{}, found meta datas:{}'.format(not_found, meta_data_set)
+            msg = 'No meta data found for keys:{}, found meta datas:{}'.format(not_found, meta_data_set)
+            LOG.warn(msg)
+            assert fail_ok, msg
 
-        return {k: meta_data_set[k] for k in args}
+        return {k: meta_data_set[k] for k in meta_data_names}
     else:
         return meta_data_set
 
@@ -462,7 +460,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if meta:
         meta_args = [' --meta {}={}'.format(key_, val_) for key_, val_ in meta.items()]
         args_ += ''.join(meta_args)
-
+    
     if poll:
         args_ += ' --poll'
 
