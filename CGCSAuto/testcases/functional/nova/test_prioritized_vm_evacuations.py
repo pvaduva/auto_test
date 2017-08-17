@@ -3,13 +3,18 @@ import re
 import os
 import random
 from datetime import datetime
+from collections import defaultdict
 
-from pytest import mark, fixture
+from pytest import mark, fixture, skip
 
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
+from utils import cli, table_parser
+from consts.cgcs import VMStatus, VMMetaData
+from consts.reasons import SkipReason
+from consts.auth import Tenant
 
-from keywords import vm_helper, host_helper, nova_helper, patching_helper, system_helper, cinder_helper
+from keywords import vm_helper, host_helper, nova_helper, patching_helper, system_helper, keystone_helper
 
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -19,7 +24,6 @@ DEF_MEM_SIZE = 1
 DEF_DISK_SIZE = 1
 DEF_NUM_VCPU = 2
 
-VM_META_DATA = 'sw:wrs:recovery_priority'
 MIN_PRI = 1
 MAX_PRI = 10
 
@@ -28,19 +32,17 @@ LOG_RECORDS = {
         {
             'host': 'active-controller',
             'log-file': 'nfv-vim-events.log',
-            'patterns': [
-                'event-id [ ]* = (instance-evacuat[^ ]*)',
-            ],
+            'patterns': ['event-id [ ]* = (instance-evacuat[^ ]*)'],
             'checker': 'verify_vim_evacuation_events',
          },
-        # {
-        #     'host': 'compute',
-        #     'log-file': 'nova/nova-compute.log',
-        #     'patterns': [
-        #          'nova.compute.resource_tracker.*Migrat.*change='
-        #     ],
-        #     'checker': 'verify_compute_evacuation_events'
-        #  }
+    ],
+    'force_reboot': [
+        {
+            'host': 'active-controller',
+            'log-file': 'nfv-vim-events.log',
+            'patterns': ['event-id [ ]* = (instance-evacuat[^ ]*)'],
+            'checker': 'verify_vim_evacuation_events',
+        },
     ],
 }
 
@@ -56,20 +58,24 @@ def run_cmd(cmd, **kwargs):
 def verify_vim_evacuation_events():
     self, log_file, patterns = (yield)
 
+    if not self.expected_order:
+        skip('Fail, not expecting any more log entries, while still found more to come')
+        return
+
     start = self.start_time
 
     search = '\grep -E -B2 -A{} \'{}\' {} | tail -n {}'.format(
-        LOG_RECORD_LINES-2, patterns, log_file, LOG_RECORD_LINES * self.num_vms * 30)
+        LOG_RECORD_LINES-2, patterns, log_file, LOG_RECORD_LINES * self.num_vms * 50)
 
-    LOG.info('TODO: vim log: cmd={}\n'.format(search))
     log_entries = run_cmd(search)[1]
 
     search_pattern = r'^=+.*\n^log-id \s*=\s*\d+.*\n^event-id \s*= (instance-evacuat[^\s]+).*\n(.*\n){3}'
     search_pattern += r'^entity \s*= ([^\s]+).*\n'
     search_pattern += r'^reason_text \s*= Evacuat.* instance ([^\s]+) .*\n.*\n*'
-    search_pattern += r'^timestamp \s*= (.*)\n^=+.*\n'
+    search_pattern += r'^timestamp \s*= (.*)\n^=+.*'
 
     evacuation_pattern = re.compile(search_pattern, re.MULTILINE)
+
     records = re.finditer(evacuation_pattern, log_entries)
 
     if not records:
@@ -78,15 +84,12 @@ def verify_vim_evacuation_events():
 
     expected_order = self.expected_order[:]
     vm_priorities = {order[0]: order[1] for order in expected_order}
+    LOG.info('TODO: vm_priorities=\n{}\n'.format(vm_priorities))
 
+    count = 0
     current_record = None
     for record in records:
-        if not expected_order:
-            msg = 'Fail, not expecting any more log entries, while still found more to come'
-            assert False, msg
-
         if len(record.groups()) < 5:
-            LOG.info('TODO: too less info found, record=\n{}\n'.format(record.groups()))
             continue
 
         raw_timestamp = record.group(5).strip()
@@ -98,8 +101,6 @@ def verify_vim_evacuation_events():
         event_type = record.group(1).strip()
         vm_id = record.group(3).split('=')[2].strip()
         vm_name = record.group(4).strip()
-
-        LOG.info('TODO:\n{}, {}, {}, {}\n'.format(vm_id, timestamp, event_type, vm_name))
 
         if event_type == 'instance-evacuate-begin':
             assert not current_record, \
@@ -129,152 +130,184 @@ def verify_vim_evacuation_events():
                 LOG.error(msg)
                 assert False, msg
             else:
-                LOG.warn('TODO: same priority orders, but different VMs \nexpecting:{}, found:{}'.format(
+                LOG.warn('same priority orders, but different VMs \nexpecting:{}, found:{}'.format(
                     expected_vm_id, vm_id))
 
         if event_type == 'instance-evacuated':
             current_record = None
             expected_order.remove((vm_id, expected_priority))
-
-        LOG.info('TODO: OK, record in order:\nvm_id={}, timestamp={}, event_type={}, vm_name\n'.format(
+        count += 1
+        LOG.info('OK, record in order:\nvm_id={}, timestamp={}, event_type={}, vm_name={}\n'.format(
             vm_id, timestamp, event_type, vm_name))
+
+    LOG.info('OK, total matched log records={}'.format(count))
+    yield
 
 
 def verify_compute_evacuation_events():
-    self, log_file, patterns = (yield)
-    search = '\grep -E \'{}\' {} | tail -n {}'.format(
-        patterns, log_file, self.num_vms * 50)
+    while True:
+        self, log_file, patterns = (yield)
 
-    start = self.start_time
+        search = '\grep -E \'{}\' {} | tail -n {}'.format(
+            patterns, log_file, self.num_vms * 50)
 
-    search_results = run_cmd(search)[1]
+        start = self.start_time
 
-    expected_order = self.expected_order[:]
-    LOG.info('TODO: compute log: expected_order:\n{}\n'.format(expected_order))
+        search_results = run_cmd(search)[1]
 
-    vm_priorities = {item[0]: item[1] for item in expected_order}
+        expected_order = self.expected_order[:]
 
-    LOG.info('TODO: vm_priorities=\n{}\n'.format(vm_priorities))
+        vm_priorities = {item[0]: item[1] for item in expected_order}
 
-    previous_record = None
-    for line in search_results.splitlines():
-        search_pattern = r'(\d{4}-\d\d-\d\d \d\d(:\d\d){2}\.\d+).*'
-        search_pattern += r'\[instance: (.+)\].*Migration\((.+)\);.*, name=([^,]+),'
+        previous_record = None
+        for line in search_results.splitlines():
+            search_pattern = r'(\d{4}-\d\d-\d\d \d\d(:\d\d){2}\.\d+).*'
+            search_pattern += r'\[instance: (.+)\].*Migration\((.+)\);.*, name=([^,]+),'
 
-        compiled_pattern = re.compile(search_pattern)
+            compiled_pattern = re.compile(search_pattern)
 
-        record = re.search(compiled_pattern, line)
-        if not record:
-            continue
+            record = re.search(compiled_pattern, line)
+            if not record:
+                continue
 
-        if len(record.groups()) < 5:
-            LOG.info('TODO: unknown compute log format:{}\n'.format(record))
-            continue
+            if len(record.groups()) < 5:
+                continue
 
-        if not expected_order:
-            msg = 'Fail, not expecting any more log entries, while still found more to come'
-            assert False, msg
-
-        raw_timestamp = record.group(1).strip()
-        timestamp = datetime.strptime(raw_timestamp, TIMESTAMP_FORMAT)
-        if timestamp and timestamp < start:
-            # LOG.info('TODO: discard older events:{}\n'.format(record))
-            continue
-        if 'type=evacuation' not in re.split(', ', record.group(4)):
-            # LOG.info('TODO: not evacuation:\n{}\n'.format(record.group(4)))
-            # LOG.info('TODO: not evacuation:groups=\n{}\n'.format(record.groups()))
-            continue
-        event_type = re.split(', ', record.group(4))[2].strip()
-        vm_id = record.group(3)
-        vm_name = record.group(5)
-
-        LOG.info('TODO: compute log:\nvm_name={}, vm_id={}, timestamp={}, event_type\n'.format(
-            vm_name, vm_id, timestamp, event_type))
-
-        expected_vm_id, expected_priority = expected_order[0]
-        if expected_vm_id == vm_id:
-            LOG.info('OK, in order: vm_id={}'.format(vm_id))
-            expected_order.pop(0)
-
-        elif vm_priorities[vm_id] != expected_priority:
-            LOG.info('TODO: \nexpected_vm_id={}, expected_priority={}, vm_id={}\n'.format(
-                expected_vm_id, expected_priority, vm_id
-            ))
-            msg = 'Wrong Evacuation order: expecting priority:{}, actual:{}, vm_id:{}, timestamp:{}\n' \
-                  'prvious record:{}'.format(expected_priority, vm_priorities, vm_id, timestamp, previous_record)
-            assert False, msg
-        else:
-            expected_order.remove((vm_id, expected_priority))
-
-        current_record = (timestamp, vm_id, vm_name, event_type)
-        if previous_record:
-            if previous_record[0] > timestamp:
-                msg = 'Wrong Evacuation order, previous timestamp:{} is newer than current:{},\nprevious:{}' \
-                      '\ncurrent:{}'.format(previous_record[0], timestamp, previous_record, current_record)
+            if not expected_order:
+                msg = 'Fail, not expecting any more log entries, while still found more to come'
                 assert False, msg
 
-        previous_record = current_record
+            raw_timestamp = record.group(1).strip()
+            timestamp = datetime.strptime(raw_timestamp, TIMESTAMP_FORMAT)
+            if timestamp and timestamp < start:
+                continue
+            if 'type=evacuation' not in re.split(', ', record.group(4)):
+                continue
+            event_type = re.split(', ', record.group(4))[2].strip()
+            vm_id = record.group(3)
+            vm_name = record.group(5)
 
-        LOG.info('TODO: OK, compute-log verfied:{}'.format(current_record))
+            expected_vm_id, expected_priority = expected_order[0]
+            if expected_vm_id == vm_id:
+                LOG.info('OK, in order: vm_id={}'.format(vm_id))
+                expected_order.pop(0)
+
+            elif vm_priorities[vm_id] != expected_priority:
+                msg = 'Wrong Evacuation order: expecting priority:{}, actual:{}, vm_id:{}, timestamp:{}\n' \
+                      'prvious record:{}'.format(expected_priority, vm_priorities, vm_id, timestamp, previous_record)
+                assert False, msg
+            else:
+                expected_order.remove((vm_id, expected_priority))
+
+            current_record = (timestamp, vm_id, vm_name, event_type)
+            if previous_record:
+                if previous_record[0] > timestamp:
+                    msg = 'Wrong Evacuation order, previous timestamp:{} is newer than current:{},\nprevious:{}' \
+                          '\ncurrent:{}'.format(previous_record[0], timestamp, previous_record, current_record)
+                    assert False, msg
+
+            previous_record = current_record
+
+            LOG.info('OK, compute-log verfied:{}'.format(current_record))
+
+
+def set_quotas(quotas, project_id=None, auth_info=Tenant.ADMIN):
+    if auth_info is None:
+        auth_info = Tenant.get_primary()
+
+    if not project_id:
+        project_id = keystone_helper.get_tenant_ids(Tenant.get_primary()['tenant'])[0]
+
+    current_quotas = table_parser.table(cli.openstack('quota show {}'.format(project_id),
+                                                      auth_info=auth_info, fail_ok=False))['values']
+    supported_quotas = [v[0] for v in current_quotas]
+
+    if quotas:
+        args = ' '.join(['--{}={}'.format(k, v) for k, v in quotas.items() if k in supported_quotas]).strip()
+        if args:
+            cli.openstack('quota set {} {}'.format(args, project_id), auth_info=auth_info, fail_ok=False)
+    return True
+
+
+def get_quotas(quota_names, project_id=None, auth_info=Tenant.ADMIN):
+    quotas = dict()
+    names = list()
+
+    if quota_names:
+        if auth_info is None:
+            auth_info = Tenant.get_primary()
+
+        if not project_id:
+            project_id = keystone_helper.get_tenant_ids(Tenant.get_primary()['tenant'])[0]
+
+        if isinstance(quota_names, str):
+            names = [quota_names]
+        else:
+            names = list(quota_names)
+
+        table = table_parser.table(cli.openstack('quota show {}'.format(project_id),
+                                                 auth_info=auth_info, fail_ok=False))
+        while names:
+            name = names.pop()
+            value = table_parser.get_value_two_col_table(table, name, strict=True)
+            if value.strip():
+                quotas[name] = value.strip()
+
+        if names:
+            LOG.warn('Quota not found for names:{}'.format(quota_names))
+
+    return quotas, names
 
 
 class TestPrioritizedVMEvacuation:
 
-    quota_expected = {'instances': 5, 'cores': 20, 'volumes': 10}
-    quota_origin = dict()
+    quotas_expected = {'instances': 5, 'cores': 36, 'volumes': 10}
+    quotas_saved = dict()
 
     @fixture(scope='class', autouse=True)
     def change_save_settings(self, request):
-        expected = TestPrioritizedVMEvacuation.quota_expected
-        origin = TestPrioritizedVMEvacuation.quota_origin
-
-        instances, cores = nova_helper.get_quotas(quotas=['instances', 'cores'])
-        volumes = cinder_helper.get_quotas(quotas='volumes')[0]
-
-        new_nova_quota = dict()
-        new_cinder_quota = dict()
-        if instances < expected['instances']:
-            new_nova_quota.update(instances=expected['instances'])
-        if cores < expected['cores']:
-            new_nova_quota.update(instances=expected['instances'])
-
-        if volumes < expected['volumes']:
-            new_cinder_quota.update(volumes=volumes)
-
-        if new_nova_quota:
-            nova_helper.update_quotas(**new_nova_quota)
-            origin.update(instances=instances, cores=cores)
-
-        if new_cinder_quota:
-            cinder_helper.update_quotas(**new_cinder_quota)
-            origin.update(volumes=volumes)
-
         def restore_settings():
-            quota_origin = TestPrioritizedVMEvacuation.quota_origin
-            nova_settings = ['instances', 'cores']
-            if 'instances' in quota_origin or 'cores' in quota_origin:
-                quotas = {k: v for k, v in quota_origin.items() if k in nova_settings}
-                nova_helper.update_quotas(**quotas)
+            set_quotas(TestPrioritizedVMEvacuation.quotas_saved)
 
-            if 'volumes' in quota_origin:
-                nova_helper.update_quotas(volumes=quota_origin['volumes'])
+        expected = TestPrioritizedVMEvacuation.quotas_expected
+        saved = TestPrioritizedVMEvacuation.quotas_saved
 
-        request.addfinalizer(restore_settings)
+        current, unknown_quota_names = get_quotas(list(expected.keys()))
 
-    @mark.parametrize(('operation', 'prioritizing', 'vcpus', 'mem', 'root_disk', 'swap_disk'), [
-        ('reboot', 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
-        # ('reboot', 'same_priority', 'diff_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
-        # ('reboot', 'same_priority', 'same_vcpus', 'diff_mem', 'same_root_disk', 'same_swap_disk'),
-        # ('reboot', 'same_priority', 'same_vcpus', 'diff_mem', 'same_root_disk', 'same_swap_disk'),
-        # ('reboot', 'same_priority', 'same_vcpus', 'same_mem', 'diff_root_disk', 'same_swap_disk'),
-        # ('reboot', 'same_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'diff_swap_disk'),
-        # ('force_reboot', 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
+        if unknown_quota_names:
+            skip('Unknown quotas:{}'.format(unknown_quota_names))
+            return
+
+        new_quotas = dict()
+        for quota_name in expected:
+            if int(current[quota_name]) < expected[quota_name]:
+                saved[quota_name] = current[quota_name]
+                new_quotas[quota_name] = expected[quota_name]
+
+        if new_quotas:
+            if not set_quotas(new_quotas):
+                skip('Unable to adjust quota to:{}'.format(new_quotas))
+            request.addfinalizer(restore_settings)
+
+
+    @mark.parametrize(('operation', 'set_on_boot', 'prioritizing', 'vcpus', 'mem', 'root_disk', 'swap_disk'), [
+        # ('reboot', False, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
+        # ('reboot', False, 'same_priority', 'diff_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
+        # ('reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'diff_root_disk', 'same_swap_disk'),
+        # ('reboot', True, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
+        # ('reboot', True, 'same_priority', 'same_vcpus', 'diff_mem', 'same_root_disk', 'same_swap_disk'),
+        # ('reboot', True, 'same_priority', 'same_vcpus', 'diff_mem', 'same_root_disk', 'same_swap_disk'),
+        # ('reboot', True, 'same_priority', 'same_vcpus', 'same_mem', 'diff_root_disk', 'same_swap_disk'),
+        # ('reboot', True, 'same_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'diff_swap_disk'),
+        ('force_reboot', False, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
+        # ('force_reboot', True, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
     ])
-    def test_prioritized_vm_evacuations(self, operation, prioritizing, vcpus, mem, root_disk, swap_disk):
+    def test_prioritized_vm_evacuations(self, operation, set_on_boot, prioritizing, vcpus, mem, root_disk, swap_disk):
         """
 
         Args:
             operation:      operations to perform on the hosting compute node
+            set_on_boot:    whether to boot VMs with meta data: sw:wrs:recovery_priority
             prioritizing:   whether all VMs have same Evacuation-Priority
             vcpus:          whether all VMs have same number of VCPU
             mem:            whether all VMs have same amount of memory
@@ -290,59 +323,55 @@ class TestPrioritizedVMEvacuation:
             4   reboot the hosting node
             5   checking the evacuation/migration order
         """
-        self.vms_info = {}
-        self.init_vm_settings(operation, prioritizing, vcpus, mem, root_disk, swap_disk)
+        self.vms_info = defaultdict()
+        self.init_vm_settings(operation, set_on_boot, prioritizing, vcpus, mem, root_disk, swap_disk)
         self.check_resource()
         self.create_flavors()
         self.create_vms()
+        self.check_vm_settings()
         self.trigger_evacuation()
+        self.check_vm_status()
         self.check_evaucation_orders()
+        self.check_vm_settings()
 
-    def test_log(self):
-        # vm_priorities = [(vm_info['vm_id'], vm_info['priority']) for vm_info in self.vms_info.values()]
-        vm_priorities = [
-            ('7a1f03c3-ed95-4e93-be71-a0126c9b5f10', 1),
-            ('073620e5-45c6-49a6-81c0-7093815e06c3', 2),
-            ('90769575-a379-4b6c-8fc0-c4eeb749443b', 3),
-            ('a628b005-c441-40e2-91e9-1f99108ee790', 4),
-            ('419643b1-b2bc-4f3b-a625-0798e6be7fa6', 5),
-        ]
-        LOG.info('TODO: vm_priorities:{}'.format(vm_priorities))
+    def check_vm_settings(self):
+        self.check_vm_status()
 
-        self.expected_order = sorted(vm_priorities, key=lambda item: int(item[1]))
+        LOG.tc_step('Check if the evacuation-priority actually set')
+        for vm_info in self.vms_info.values():
+            recovery_priority = vm_helper.get_vm_meta_data(vm_info['vm_id'],
+                                                           meta_data_names=[VMMetaData.EVACUATION_PRIORITY])
+            assert int(recovery_priority[VMMetaData.EVACUATION_PRIORITY]) == vm_info['priority'], \
+                'Evacuation-Priority on VM is not set, expected priority:{}, actual:{}, vm_id:{}'.format(
+                    vm_info['priority'], recovery_priority, vm_info['vm_id'])
+        LOG.info('OK, evacuation-priorities are correctly set')
 
-        LOG.info('\nTODO: expected_orders:{}\n'.format(self.expected_order))
+    def check_vm_status(self):
+        LOG.tc_step('Checking states of VMs')
+        if not self.vms_info:
+            skip('No VMs to check')
+            return
 
-        base_log_dir = '/var/log'
+        for vm_info in self.vms_info.values():
+            vm_helper.wait_for_vm_values(vm_info['vm_id'], timeout=1200, status=[VMStatus.ACTIVE])
 
-        time_string = '2017-08-11 18:49:37.313317'
-        self.start_time = datetime.strptime(time_string, TIMESTAMP_FORMAT)
-        self.operation = 'reboot'
-        self.num_vms = 5
-
-        for log_info in LOG_RECORDS[self.operation]:
-            checker = eval(log_info['checker'] + '()')
-            next(checker)
-            log_file = os.path.join(base_log_dir, log_info['log-file'])
-            patterns = '|'.join(log_info['patterns'])
-            checker.send((self, log_file, patterns))
+        LOG.info('OK, all VMs are in ACTIVE status\n')
 
     def check_evaucation_orders(self):
+        LOG.tc_step('Checking the order of VM evacuation')
+
         vm_priorities = [(vm_info['vm_id'], vm_info['priority']) for vm_info in self.vms_info.values()]
-        LOG.info('TODO: vm_priorities:{}'.format(vm_priorities))
-
         self.expected_order = sorted(vm_priorities, key=lambda item: int(item[1]))
-
-        LOG.info('\nTODO: expected_orders:{}\n'.format(self.expected_order))
 
         base_log_dir = '/var/log'
 
         for log_info in LOG_RECORDS[self.operation]:
             checker = eval(log_info['checker'] + '()')
-            next(checker)
+            checker.send(None)
             log_file = os.path.join(base_log_dir, log_info['log-file'])
             patterns = '|'.join(log_info['patterns'])
             checker.send((self, log_file, patterns))
+        LOG.tc_step('OK, the VMs were evacuated in expected order:\n{}\n'.format(vm_priorities))
 
     def trigger_evacuation(self, fail_ok=False):
         LOG.tc_step('Triggering evacuation on host: {} via action:{}'.format(self.current_host, self.operation))
@@ -350,22 +379,16 @@ class TestPrioritizedVMEvacuation:
 
         self.start_time = patching_helper.lab_time_now()[1]
 
-        LOG.info('TODO: Connecting to host:{}'.format(self.current_host))
         if action in ['reboot', 'force_reboot']:
-            if action == 'reboot':
-                LOG.info('TODO: reboot the host')
-                force_reboot = False
-            else:  # action == 'force_reboot':
-                LOG.info('TODO: force-reboot the host')
-                force_reboot = True
-            code, output = host_helper.reboot_hosts(self.current_host, force_reboot=force_reboot, fail_ok=fail_ok)
+            force_reboot = (action != 'reboot')
+            host_helper.reboot_hosts(self.current_host, force_reboot=force_reboot, fail_ok=False)
         else:
-            code, output = 0, 'Not supported action:{}'.format(action)
+            skip('Not supported action:{}'.format(action))
 
-        LOG.info('TODO: host:{} is rebooted, code={}, output={}'.format(self.current_host, code, output))
+        LOG.info('OK, triggered evacuation by {} host:{}'.format(self.operation, self.current_host))
 
     def set_evacuate_priority(self, vm_id, priority, fail_ok=False):
-        data = {VM_META_DATA: priority}
+        data = {VMMetaData.EVACUATION_PRIORITY: priority}
         self.meta_data = data
         return vm_helper.set_vm_meta_data(vm_id, fail_ok=fail_ok, check_after_set=True, **data)
 
@@ -401,6 +424,11 @@ class TestPrioritizedVMEvacuation:
             LOG.info('OK, attempt to change Evacuation-Priority to:{} on VM:{} failed as expected'.format(
                 priority, vm_id))
 
+        actual_priority = int(vm_helper.get_vm_meta_data(vm_id, VMMetaData.EVACUATION_PRIORITY).values()[0])
+        assert actual_priority == priority, \
+            'Acutally set evacuation-priority differs with the expected, expected:{}, actual:{}'.format(
+                priority, actual_priority)
+
     @staticmethod
     def get_dest_host():
         computes = host_helper.get_up_hypervisors()
@@ -409,19 +437,31 @@ class TestPrioritizedVMEvacuation:
         return random.choice([compute for compute in computes if compute != active_controller])
 
     def create_vms(self):
+        LOG.tc_step('Create VMs')
+
         self.current_host = self.get_dest_host()
         vm_name_format = 'pve_vm_{}'
 
         for sn in range(self.num_vms):
             name = vm_name_format.format(sn)
+            if self.set_on_boot:
+                vm_id = vm_helper.boot_vm(name,
+                                          meta={VMMetaData.EVACUATION_PRIORITY: self.prioritizing[sn]},
+                                          flavor=self.vms_info[sn]['flavor_id'],
+                                          source='volume',
+                                          avail_zone='nova')[1]
+            else:
+                vm_id = vm_helper.boot_vm(name,
+                                          flavor=self.vms_info[sn]['flavor_id'],
+                                          source='volume',
+                                          avail_zone='nova')[1]
+                vm_helper.set_vm_meta_data(vm_id,
+                                           **{VMMetaData.EVACUATION_PRIORITY: self.prioritizing[sn]})
 
-            vm_id = vm_helper.boot_vm(name,
-                                      flavor=self.vms_info[sn]['flavor_id'],
-                                      source='volume',
-                                      avail_zone='nova')[1]
             LOG.info('OK, VM{} created: id={}\n'.format(sn, vm_id))
-            self.vms_info[sn].update(vm_id=vm_id, vm_name=name)
-            # ResourceCleanup.add('vm', vm_id, scope='class')
+            self.vms_info[sn].update(vm_id=vm_id, vm_name=name, priority=self.prioritizing[sn])
+
+            ResourceCleanup.add('vm', vm_id, scope='function')
 
         LOG.info('OK, VMs created:\n{}\n'.format([vm['vm_id'] for vm in self.vms_info.values()]))
 
@@ -430,23 +470,29 @@ class TestPrioritizedVMEvacuation:
             if host != self.current_host:
                 vm_helper.live_migrate_vm(vm_info['vm_id'], destination_host=self.current_host)
 
-            vm_helper.set_vm_meta_data(vm_info['vm_id'],
-                                       **{VM_META_DATA: self.prioritizing[sn]})
-            self.vms_info[sn].update(priority=self.prioritizing[sn])
+        LOG.info('OK, Evacuation-Priorities are set on VMs\n')
 
     def create_flavors(self):
+        LOG.tc_step('Create flavors')
+
         flavor_name_format = 'pve_flavor_{}'
         for sn in range(self.num_vms):
             name = flavor_name_format.format(sn)
             flavor_id = nova_helper.create_flavor(name=name, vcpus=self.vcpus[sn], ram=int(self.mem[sn]) * 1024,
                                                   root_disk=self.root_disk[sn], swap=int(self.swap_disk[sn]) * 1024,
                                                   is_public=True)[1]
-            self.vms_info[sn] = {'flavor_name': name, 'flavor_id': flavor_id}
+            self.vms_info.update({sn: {'flavor_name': name, 'flavor_id': flavor_id}})
+            ResourceCleanup.add('flavor', flavor_id, scope='class')
 
-        LOG.info('TODO: flavors created:\{}'.format([vm['flavor_id'] for vm in self.vms_info.values()]))
+        LOG.info('OK, flavors created:\n{}\n'.format([vm['flavor_id'] for vm in self.vms_info.values()]))
 
-    def init_vm_settings(self, operation, prioritizing, vcpus, mem, root_disk, swap_disk):
+    def init_vm_settings(self, operation, set_on_boot, prioritizing, vcpus, mem, root_disk, swap_disk):
         self.operation = operation
+        self.set_on_boot = set_on_boot
+
+        if operation not in LOG_RECORDS:
+            skip('Unspported operation:{}'.format(operation))
+            return
 
         if 'diff' in prioritizing:
             self.prioritizing = list(range(1, NUM_VM + 1))
@@ -488,10 +534,14 @@ class TestPrioritizedVMEvacuation:
         ))
 
     def check_resource(self):
+        LOG.tc_step('Check if the system supports the test')
+
+        vm_helper.delete_vms()
+
         self.num_vms = NUM_VM
 
         if self.operation == 'reboot':
             if len(host_helper.get_up_hypervisors()) < 2:
-                pass
-                # todo
-                # skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+                skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+
+        LOG.info('OK, system is ready to test')
