@@ -73,7 +73,7 @@ def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False
     return flv_id, code, output
 
 
-def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus):
+def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus, shared_vcpu=None):
     inst_name, vm_host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"], strict=False)
 
     with host_helper.ssh_to_host(hostname=vm_host) as host_ssh:
@@ -112,11 +112,21 @@ def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_
         rt_cpusets = []
         emulator_cpus = []
         for vcpupin in vcpupins:
-            cpuset = vcpupin['cpuset']
+            cpuset = int(vcpupin['cpuset'])
             vcpu_id = int(vcpupin['vcpu'])
-            cpuset_dict[vcpu_id] = cpuset
             if cpuset in emulater_cpusets:
-                emulator_cpus.append(vcpu_id)
+                # Don't include vcpu_id in case of scaled-down vm. Example:
+                # <cputune>
+                #   <shares>3072</shares>
+                #   <vcpupin vcpu='0' cpuset='25'/>
+                #   <vcpupin vcpu='1' cpuset='5'/>
+                #   <vcpupin vcpu='2' cpuset='25'/>
+                #   <emulatorpin cpuset='5,25'/>
+                #   <vcpusched vcpus='2' scheduler='fifo' priority='1'/>
+                # </cputune>
+                if cpuset not in list(cpuset_dict.values()):
+                    emulator_cpus.append(vcpu_id)
+            cpuset_dict[vcpu_id] = cpuset
 
             if vcpu_id in expt_rt_cpus:
                 rt_cpusets.append(cpuset)
@@ -127,7 +137,15 @@ def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_
         LOG.info("cpuset dict: {}".format(cpuset_dict))
         assert sorted(expt_ord_cpus) == sorted(virsh_ord_cpus), \
             "expected ordinary cpus: {}; Actual in virsh vcpupin: {}".format(expt_ord_cpus, virsh_ord_cpus)
-        assert set(emulator_cpus) < set(expt_ord_cpus), "Emulator cpus is not a subset of ordinary cpus"
+
+        if shared_vcpu is not None:
+            assert emulator_cpus == [shared_vcpu], "Emulator cpu is not the shared vcpu"
+        else:
+            if expt_rt_cpus:
+                assert sorted(emulator_cpus) == sorted(expt_ord_cpus), "Emulator cpus is not a subset of ordinary cpus"
+            else:
+                assert emulator_cpus == sorted(expt_ord_cpus)[:1], "Emulator cpu is not the first vcpu when " \
+                                                                   "no realtime cpu or shared cpu set"
 
         comm_pattern = 'CPU [{}]/KVM'
         LOG.tc_step("Check actual vm realtime cpu scheduler via ps")
@@ -193,13 +211,16 @@ def check_hosts():
 
 
 @mark.parametrize(('vcpus', 'cpu_rt', 'rt_mask', 'rt_source', 'shared_vcpu', 'numa_nodes', 'cpu_thread', 'min_vcpus'), [
-    (3, None, '^0', 'flavor', None, None, 'prefer', None),
+    (3, None, '^0', 'flavor', None, None, 'prefer', 1),
     (4, 'yes', '^0', 'favor', None, 2, 'require', None),
-    (6, 'yes', '^2-3', 'flavor', None, 1, 'isolate', 4),
+    #   (6, 'yes', '^2-3', 'flavor', None, 1, 'isolate', 4),
+    (6, 'yes', '^2-3', 'flavor', None, 1, 'isolate', None),     # temp
     (3, 'yes', '^0-1', 'image', None, None, None, 2),
     (4, 'no', '^0-2', 'image', 0, 2, None, None),
-    (3, 'yes', '^1-2', 'image', 2, None, 'isolate', None),
-    (2, 'yes', '^1', 'flavor', 1, 1, None, None)
+    (3, 'yes', '^1-2', 'image', None, None, 'isolate', None),
+    (2, 'yes', '^1', 'flavor', 1, 1, None, None),
+    (4, 'no', '^0-2', 'flavor', 2, None, None, None),
+    (4, 'no', '^0-2', 'image', None, None, None, None),
 ])
 def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu, numa_nodes, cpu_thread, min_vcpus,
                                  check_hosts):
@@ -263,9 +284,11 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
 
     LOG.tc_step("Boot a vm with above flavor")
     vm_id = vm_helper.boot_vm(name=name, flavor=flv_id, cleanup='function', source='volume', source_id=vol_id)[1]
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
     expt_rt_cpus, expt_ord_cpus = parse_rt_and_ord_cpus(vcpus=vcpus, cpu_rt=cpu_rt, cpu_rt_mask=rt_mask)
 
-    check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus)
+    check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus, shared_vcpu=shared_vcpu)
     vm_host = nova_helper.get_vm_host(vm_id)
     if shared_vcpu:
         assert vm_host in hosts_with_shared_cpu
@@ -277,6 +300,7 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
     if min_vcpus is not None:
         LOG.tc_step("Scale down cpu once")
         vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
         LOG.tc_step("Check current vcpus in nova show is reduced after scale down")
         expt_current_cpu -= 1
@@ -290,8 +314,8 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
                 kwargs = {'image_id': image_id}
             vm_helper.perform_action_on_vm(vm_id, action=action, **kwargs)
 
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=True)
-        check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus, shared_vcpu=shared_vcpu)
         vm_host = nova_helper.get_vm_host(vm_id)
         if shared_vcpu:
             assert vm_host in hosts_with_shared_cpu

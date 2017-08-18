@@ -41,8 +41,8 @@ def test_nova_actions(guest_os, cpu_pol, actions):
     ResourceCleanup.add('volume', vol_id)
 
     LOG.tc_step("Boot a vm from above flavor and volume")
-    vm_id = vm_helper.boot_vm('nova_actions', flavor=flavor_id, source='volume', source_id=vol_id, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+    vm_id = vm_helper.boot_vm('nova_actions', flavor=flavor_id, source='volume', source_id=vol_id,
+                              cleanup='function')[1]
 
     LOG.tc_step("Wait for VM pingable from NATBOX")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
@@ -79,7 +79,6 @@ class TestVariousGuests:
         ('win_2012', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('win_2016', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('ge_edge', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
-
     ], ids=id_gen)
     def test_nova_actions_various_guest(self, guest_os, cpu_pol, boot_source, actions):
         """

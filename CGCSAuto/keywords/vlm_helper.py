@@ -2,7 +2,7 @@ import multiprocessing as mp
 from multiprocessing import Process, Queue
 
 from consts.proj_vars import InstallVars
-from consts.vlm import VlmAction
+from consts.vlm import VlmAction, VLM_TOOL
 from consts.timeout import HostTimeout
 
 from keywords import host_helper, system_helper
@@ -247,4 +247,3 @@ def power_off_hosts_simultaneously(hosts=None):
     for node, res in results.items():
         if res[0] != 0:
             raise exceptions.VLMError(res[1])
-

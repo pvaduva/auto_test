@@ -180,6 +180,7 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
 
     pcpus_total = []
     siblings_total = []
+    shared_pcpu_total = 0
 
     if not vcpus_on_numa:
         vcpus_on_numa = {}
@@ -195,10 +196,14 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
         node_id = topology_on_numa_node['node']
         vcpus_per_numa = vcpus_on_numa[node_id]
 
+        shared_pcpu = topology_on_numa_node['shared_pcpu']
+        shared_pcpu_num = 0 if shared_pcpu is None else 1
+        shared_pcpu_total += shared_pcpu_num
+
         assert expt_cpu_pol == topology_on_numa_node['pol'], "CPU policy is {} instead of {} in vm-topology".\
             format(topology_on_numa_node['pol'], expt_cpu_pol)
-        assert vcpus_per_numa == len(actual_vcpus), 'vm vcpus number on numa node {} is {} instead of {}'.\
-            format(node_id, len(actual_vcpus), vcpus_per_numa)
+        assert vcpus_per_numa == len(actual_vcpus) + shared_pcpu_num, 'vm vcpus number on numa node {} is {} ' \
+            'instead of {}'.format(node_id, len(actual_vcpus), vcpus_per_numa)
 
         actual_siblings = topology_on_numa_node['siblings']
         actual_topology = topology_on_numa_node['topology']
@@ -219,7 +224,6 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
             assert actual_pcpus, "pcpus is not included in vm-topology for dedicated vm"
             # comment out topology and sibling checks until Jim Gauld decides on a consistent vm topology
             # TODO assert actual_topology, "vm topology is not included in vm-topology for dedicated vm"
-
             if not cpu_thr_pol:
                 cpu_thr_pol = 'prefer'
 
@@ -237,34 +241,35 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
 
             elif cpu_thr_pol == 'require':
                 # require-4: node:0, 512MB, pgsize:2M, 1s,2c,2t, vcpus:0-3, pcpus:25,5,8,28, siblings:{0,1},{2,3}, pol:ded, thr:req
-                if len(actual_vcpus) % 2 == 0:
+                if len(actual_pcpus) % 2 == 0:
                     assert actual_siblings, "siblings should be included for dedicated vm"
                     # 2 is the host thread number
                     assert '{}c,2t'.format(int(vcpus_per_numa / 2)) in actual_topology, \
                         "Expected topology: {}c,2t; Actual: {}".format(int(vcpus_per_numa / 2), actual_topology)
                 else:
                     assert not actual_siblings, "siblings should not be included for require vm with odd number vcpus"
-                    assert '{}c,1t'.format(vcpus_per_numa) in actual_topology, \
-                        "Expected topology: {}c,1t; Actual: {}".format(vcpus_per_numa, actual_topology)
+                    assert '{}c,1t'.format(len(actual_pcpus)) in actual_topology, \
+                        "Expected topology: {}c,1t; Actual: {}".format(len(actual_pcpus), actual_topology)
 
                 expt_core_len_in_pair = 2
                 # siblings_total += actual_siblings
 
             elif cpu_thr_pol == 'prefer':
-                assert vcpus_per_numa == len(actual_pcpus), "vm pcpus number per numa node is {} instead of {}".format(
+                assert vcpus_per_numa == len(actual_pcpus) + shared_pcpu_num, \
+                    "vm pcpus number per numa node is {} instead of {}".format(
                         len(actual_pcpus), vcpus_per_numa)
                 if is_ht:
                     # Those checks are not guaranteed if vm is migrated from non-HT host to HT host
                     expt_core_len_in_pair = 2
-                    if len(actual_vcpus) % 2 == 0:
+                    if len(actual_pcpus) % 2 == 0:
                         assert '{}c,2t'.format(int(vcpus_per_numa / 2)) in actual_topology, \
                             "Expected topology: {}c,2t; Actual: {}".format(int(vcpus_per_numa / 2), actual_topology)
                         assert actual_siblings, "siblings should be included for prefer vm with even number vcpus " \
                                                 "on HT host"
                     else:
                         assert not actual_siblings, "siblings should not be included for prefer vm with odd number vcpu"
-                        assert '{}c,1t'.format(vcpus_per_numa) in actual_topology, \
-                            "Expected topology: {}c,1t; Actual: {}".format(vcpus_per_numa, actual_topology)
+                        assert '{}c,1t'.format(len(actual_pcpus)) in actual_topology, \
+                            "Expected topology: {}c,1t; Actual: {}".format(len(actual_pcpus), actual_topology)
                 else:
                     expt_core_len_in_pair = 1
                     # Live migrate between ht host and non-ht host would not change vm siblings, so don't check siblings
@@ -297,8 +302,12 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
                 siblings_total += actual_siblings
 
     if pcpus_total:
-        assert max_vcpus == len(pcpus_total), "Max vcpus: {}, pcpus list: {}".format(max_vcpus, pcpus_total)
-        assert current_vcpus == len(set(pcpus_total)), "Current vcpus: {}, pcpus: {}".format(max_vcpus, pcpus_total)
+        assert max_vcpus == len(pcpus_total) + shared_pcpu_total, \
+            "Max vcpus: {}, pcpus list: {}".format(max_vcpus, pcpus_total)
+
+        # if it can scale (current!= max), then shared_pcpu must be 0
+        assert current_vcpus == len(set(pcpus_total)) + shared_pcpu_total, \
+            "Current vcpus: {}, pcpus: {}".format(max_vcpus, pcpus_total)
 
     if not siblings_total:
         siblings_total = [[vcpu_] for vcpu_ in range(current_vcpus)]

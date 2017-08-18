@@ -17,7 +17,7 @@ from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
 
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
-    keystone_helper
+    keystone_helper, vlm_helper
 from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -2342,7 +2342,7 @@ def get_instance_topology(vm_id, con_ssh=None, source='vm-topology'):
                 value_ = item_list[1]
                 if key_ in ['node']:
                     value_ = int(value_)
-                elif key_ in ['vcpus', 'pcpus']:
+                elif key_ in ['vcpus', 'pcpus', 'shared_pcpu']:
                     values = value_.split(sep=',')
                     for val in value_.split(sep=','):
                         # convert '3-6' to [3, 4, 5, 6]
@@ -2369,7 +2369,7 @@ def get_instance_topology(vm_id, con_ssh=None, source='vm-topology'):
                     instance_topology_dict['mem'] = int(value_.split('MB')[0])
 
         # Add as None if item is not displayed in vm-topology
-        all_keys = ['node', 'pgsize', 'vcpus', 'pcpus', 'pol', 'thr', 'siblings', 'topology', 'mem']
+        all_keys = ['node', 'pgsize', 'vcpus', 'pcpus', 'pol', 'thr', 'siblings', 'topology', 'mem', 'shared_pcpu']
         for key in all_keys:
             if key not in instance_topology_dict:
                 instance_topology_dict[key] = None
@@ -3279,7 +3279,8 @@ def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None
     return 0, succ_msg
 
 
-def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up=False, fail_ok=False, post_host=None):
+def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up=False, fail_ok=False, post_host=None,
+                 vlm=False):
     """
     Evacuate given vms by rebooting their host. VMs should be on specified host already when this keyword called.
     Args:
@@ -3289,6 +3290,9 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
         timeout (int): Max time to wait for vms to reach active state after reboot -f initiated on host
         wait_for_host_up (bool): whether to wait for host reboot completes before checking vm status
         fail_ok (bool): whether to return or to fail test when vm(s) failed to evacuate
+        post_host (str): expected host for vms to be evacuated to
+        vlm (False): whether to power-off host via vlm (assume host already reserved). When False, Run 'sudo reboot -f'
+            from host.
 
     Returns (tuple): (<code> (int), <vms_failed_to_evac> (list))
         - (0, [])   all vms evacuated successfully. i.e., active state, host changed, pingable from NatBox
@@ -3299,53 +3303,64 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
     if isinstance(vms_to_check, str):
         vms_to_check = [vms_to_check]
 
-    LOG.info("Evacuate following vms from {}: {}".format(host, vms_to_check))
     HostsToRecover.add(host)
-    host_helper.reboot_hosts(host, wait_for_reboot_finish=wait_for_host_up, con_ssh=con_ssh)
+    if vlm:
+        LOG.tc_step("Power-off {} from vlm".format(host))
+        vlm_helper.power_off_hosts(hosts=host, reserve=False)
+    else:
+        LOG.tc_step("'sudo reboot -f' from {}".format(host))
+        host_helper.reboot_hosts(host, wait_for_reboot_finish=wait_for_host_up, con_ssh=con_ssh)
 
-    if not wait_for_host_up:
-        LOG.info("Wait for vms to reach ERROR or REBUILD state with best effort")
-        wait_for_vms_values(vms_to_check, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120,
-                            con_ssh=con_ssh)
+    try:
+        if vlm or not wait_for_host_up:
+            LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
+            wait_for_vms_values(vms_to_check, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120,
+                                con_ssh=con_ssh)
 
-    LOG.tc_step("Check vms are in Active state and moved to other host(s) after host reboot")
-    res, active_vms, inactive_vms = wait_for_vms_values(vms=vms_to_check, values=VMStatus.ACTIVE, timeout=timeout,
-                                                        con_ssh=con_ssh)
+        LOG.tc_step("Check vms are in Active state and moved to other host(s) after host failure")
+        res, active_vms, inactive_vms = wait_for_vms_values(vms=vms_to_check, values=VMStatus.ACTIVE, timeout=timeout,
+                                                            con_ssh=con_ssh)
 
-    vms_host_err = []
-    for vm in vms_to_check:
-        if post_host:
-            if nova_helper.get_vm_host(vm) != post_host:
-                vms_host_err.append(vm)
-        else:
-            if nova_helper.get_vm_host(vm) == host:
-                vms_host_err.append(vm)
+        vms_host_err = []
+        for vm in vms_to_check:
+            if post_host:
+                if nova_helper.get_vm_host(vm) != post_host:
+                    vms_host_err.append(vm)
+            else:
+                if nova_helper.get_vm_host(vm) == host:
+                    vms_host_err.append(vm)
 
-    if inactive_vms:
-        err_msg = "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
-        if fail_ok:
-            LOG.warning(err_msg)
-            return 1, inactive_vms
-        raise exceptions.VMError(err_msg)
+        if inactive_vms:
+            err_msg = "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
+            if fail_ok:
+                LOG.warning(err_msg)
+                return 1, inactive_vms
+            raise exceptions.VMError(err_msg)
 
-    if vms_host_err:
-        if post_host:
-            err_msg = "Following VMs is not moved to expected host {} from {}: {}\nVMs did not reach Active state: {}".\
-                format(post_host, host, vms_host_err, inactive_vms)
-        else:
-            err_msg = "Following VMs stayed on the same host {}: {}\nVMs did not reach Active state: {}".\
-                format(host, vms_host_err, inactive_vms)
+        if vms_host_err:
+            if post_host:
+                err_msg = "Following VMs is not moved to expected host {} from {}: {}\nVMs did not reach Active " \
+                          "state: {}".format(post_host, host, vms_host_err, inactive_vms)
+            else:
+                err_msg = "Following VMs stayed on the same host {}: {}\nVMs did not reach Active state: {}".\
+                    format(host, vms_host_err, inactive_vms)
 
-        if fail_ok:
-            LOG.warning(err_msg)
-            return 2, vms_host_err
-        raise exceptions.VMError(err_msg)
+            if fail_ok:
+                LOG.warning(err_msg)
+                return 2, vms_host_err
+            raise exceptions.VMError(err_msg)
 
-    LOG.info("All vms are successfully evacuated to other host")
-    return 0, []
+        LOG.info("All vms are successfully evacuated to other host")
+        return 0, []
+    except:
+        raise
+    finally:
+        if vlm:
+            LOG.tc_step("Powering on {} from vlm".format(host))
+            vlm_helper.power_on_hosts(hosts=host, reserve=False, post_check=wait_for_host_up)
 
 
-def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='function'):
+def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='function', avail_zone='nova'):
     """
     Boot following 5 vms and ensure they are pingable from NatBox:
         - vm1: ephemeral=0, swap=0, boot_from_volume
@@ -3359,6 +3374,7 @@ def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='func
         target_host (str|None): Boot vm on target_host when specified. (admin role has to be added to tenant under test)
         cleanup (str|None): Scope for resource cleanup, valid values: 'function', 'class', 'module', None.
             When None, vms/volumes/flavors will be kept on system
+        avail_zone (str): availability zone to boot the vms
 
     Returns (list): list of vm ids
 
@@ -3375,28 +3391,28 @@ def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='func
 
     LOG.info("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
     vm1_name = "vol_root"
-    vm1 = boot_vm(vm1_name, flavor=flavor_1, source='volume', avail_zone='nova', vm_host=target_host,
+    vm1 = boot_vm(vm1_name, flavor=flavor_1, source='volume', avail_zone=avail_zone, vm_host=target_host,
                   cleanup=cleanup)[1]
 
     wait_for_vm_pingable_from_natbox(vm1)
 
     LOG.info("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
     vm2_name = "vol_ephemswap"
-    vm2 = boot_vm(vm2_name, flavor=flavor_2, source='volume', avail_zone='nova', vm_host=target_host,
+    vm2 = boot_vm(vm2_name, flavor=flavor_2, source='volume', avail_zone=avail_zone, vm_host=target_host,
                   cleanup=cleanup)[1]
 
     wait_for_vm_pingable_from_natbox(vm2)
 
     LOG.info("Boot vm3 from image with flavor flv_rootdisk and wait for it pingable from NatBox")
     vm3_name = "image_root"
-    vm3 = boot_vm(vm3_name, flavor=flavor_1, source='image', avail_zone='nova', vm_host=target_host,
+    vm3 = boot_vm(vm3_name, flavor=flavor_1, source='image', avail_zone=avail_zone, vm_host=target_host,
                   cleanup=cleanup)[1]
 
     wait_for_vm_pingable_from_natbox(vm3)
 
     LOG.info("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it pingable from NatBox")
     vm4_name = 'image_root_attachvol'
-    vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone='nova', vm_host=target_host, cleanup=cleanup)[1]
+    vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone=avail_zone, vm_host=target_host, cleanup=cleanup)[1]
 
     vol = cinder_helper.create_volume(bootable=False)[1]
     if cleanup:
@@ -3407,7 +3423,7 @@ def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='func
 
     LOG.info("Boot vm5 from image with flavor flv_localdisk and wait for it pingable from NatBox")
     vm5_name = 'image_ephemswap'
-    vm5 = boot_vm(vm5_name, flavor_2, source='image', avail_zone='nova', vm_host=target_host, cleanup=cleanup)[1]
+    vm5 = boot_vm(vm5_name, flavor_2, source='image', avail_zone=avail_zone, vm_host=target_host, cleanup=cleanup)[1]
 
     wait_for_vm_pingable_from_natbox(vm5)
 
@@ -3421,7 +3437,7 @@ def get_sched_policy_and_priority_for_vcpus(instance_pid, host_ssh, cpusets=None
     Args:
         instance_pid (str): pid from ps aux | grep <instance_name>
         host_ssh (SSHClient): ssh for vm host
-        cpusets (str|list|None): such as '44', or [8, 44], etc. Will be used to grep ps with given cpuset(s) only
+        cpusets (int|list|None): such as 44, or [8, 44], etc. Will be used to grep ps with given cpuset(s) only
         comm (str|None): regex expression, used to search for given pattern in ps output. Such as 'qemu-kvm|CPU.*KVM'
 
     Returns (list of tuples): such as [('FF', '1'), ('TS', '-')]
@@ -3437,7 +3453,7 @@ def get_sched_policy_and_priority_for_vcpus(instance_pid, host_ssh, cpusets=None
     cpuset_filters = []
     cpu_filter = ''
     if cpusets:
-        if isinstance(cpusets, str):
+        if isinstance(cpusets, int):
             cpusets = [cpusets]
 
         for cpuset in cpusets:
