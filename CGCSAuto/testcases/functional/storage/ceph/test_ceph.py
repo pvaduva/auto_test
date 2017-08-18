@@ -608,7 +608,7 @@ def test_lock_cont_check_mon_down():
         LOG.info(msg)
 
     LOG.tc_step('Unlock standby controller node {}'.format(host))
-    rtn_code, out = host_helper.unlock_host(host)
+    rtn_code, out = host_helper.unlock_host(host, available_only=True)
     assert rtn_code == 0, out
 
     LOG.tc_step('Check that the host locked alarm is cleared')
@@ -710,11 +710,11 @@ def test_storgroup_semantic_checks():
         for node in hosts:
             LOG.tc_step('Attempt to lock the {}'.format(node))
             HostsToRecover.add(node)
-            rtn_code, out = host_helper.lock_host(node)
+            rtn_code, out = host_helper.lock_host(node, fail_ok=True)
             assert 1 == rtn_code, out       # yang TODO perhaps should assert 1 here for cli rejection.
 
             LOG.tc_step('Attempt to force lock {}'.format(node))
-            rtn_code, out = host_helper.lock_host(node, force=True)
+            rtn_code, out = host_helper.lock_host(node, force=True, fail_ok=True)
             assert 1 == rtn_code, out
 
         LOG.tc_step('Unlock storage host {}'.format(host))
