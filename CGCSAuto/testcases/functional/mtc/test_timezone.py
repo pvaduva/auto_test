@@ -12,7 +12,6 @@ from pytest import fixture
 
 timezones = [
     "Asia/Hong_Kong",
-    "America/New_York",
     "America/Los_Angeles",
     "Canada/Eastern",
     "Canada/Central",
