@@ -162,6 +162,7 @@ def test_modify_timezone_log_timestamps(get_out_of_date_alarms):
     second_timezone = random.choice(timezones)
     while first_timezone == second_timezone:
         second_timezone = random.choice(timezones)
+    LOG.info("Original timezone was {}".format(first_timezone))
     LOG.info("Timezone used for testing is {}".format(second_timezone))
 
     LOG.tc_step("Ensure the system date is changed when the timezone is changed.")
@@ -309,6 +310,8 @@ def test_modify_timezone_cli_timestamps(cli_timestamp_teardown, get_out_of_date_
     second_timezone = random.choice(timezones)
     while first_timezone == second_timezone:
         second_timezone = random.choice(timezones)
+    LOG.info("Original timezone was {}".format(first_timezone))
+    LOG.info("Timezone used for testing is {}".format(second_timezone))
 
     # CHECK PRE TIMEZONE CHANGE CLI TIMESTAMPS
     LOG.tc_step("Getting timestamps before timezone change")
