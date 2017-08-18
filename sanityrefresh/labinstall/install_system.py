@@ -2474,6 +2474,10 @@ def main():
             cmd = "system alarm-list --nowrap"
             output = controller0.ssh_conn.exec_cmd(cmd)[1]
 
+            # Wait for degrade sysinv set to raise
+            time.sleep(10)
+            wait_until_alarm_clears(controller0, timeout=1200, check_interval=60, alarm_id="400.001", host_os=host_os)
+
             if find_error_msg(output, "250.001"):
                 log.info('Config out-of-date alarm is present')
 
