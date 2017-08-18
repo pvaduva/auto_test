@@ -2623,7 +2623,7 @@ def ensure_host_provisioned(host, con_ssh=None):
         raise exceptions.HostError("Failed to provision host {}")
     # Delay for the alarm to clear . Could be improved.
     time.sleep(120)
-    return 0, "Host {} is provisioned after lock/unlock"
+    return 0, "Host {} is provisioned after lock/unlock".format(host)
 
 
 def is_host_provisioned(host, con_ssh=None):

@@ -3,7 +3,7 @@ import os
 from consts import build_server as build_server_consts
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
-from keywords import install_helper,  patching_helper
+from keywords import install_helper,  patching_helper, upgrade_helper
 from utils.ssh import ControllerClient, SSHClient
 from utils import table_parser, cli
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
@@ -16,7 +16,7 @@ from testfixtures.pre_checks_and_configs import *
 
 natbox_ssh = None
 con_ssh = None
-SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.00'], ['16.10', '17.06']]
+SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.00'], ['16.10', '17.06'], ['17.06', '17.07']]
 
 ########################
 # Command line options #
@@ -44,6 +44,21 @@ def pytest_addoption(parser):
                          "  storage:<#> - to start orchestration after <#> storage (s) are upgraded normally; " \
                          "  compute:<#> - start orchestration after <#> compute(s) are upgraded normally; " \
                          " The default is default. Applicable only for upgrades from R3."
+    apply_strategy_help = "How the orchestration strategy is applied:" \
+                         "  serial - apply orchestration strategy one node  at a time; " \
+                         "  parallel - apply orchestration strategy in parallel; " \
+                         "  ignore - do not apply the orchestration strategy; " \
+                         " If not specified,  the system will choose the option to apply the strategy. " \
+                          "Applicable only for upgrades from R3."
+    max_parallel_compute_help = "The maximum number of compute hosts to upgrade in parallel, if parallel apply type" \
+                                " is selected"
+    alarm_restriction_help = """Inidcates how to handle alarm restrictions based on the management affecting statuses
+                             of any existing alarms.
+                                 relaxed -  orchestration is allowed to proceed if none managment affecting alarms are
+                                            present
+                                 strict -  orchestration is not allowed if alarms are present
+                             """
+
 
     parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
                      action='store', metavar='VERSION', required=True,  help=upgrade_version_help)
@@ -61,6 +76,17 @@ def pytest_addoption(parser):
     parser.addoption('--orchestration', '--orchestration-after', '--orchestration_after', dest='orchestration_after',
                      action='store', metavar='HOST_PERSONALITY:NUM', default='default', help=orchestration_help)
 
+    parser.addoption('--storage-apply-type', '--storage_apply_type', '--sstra',  dest='storage_strategy',
+                     action='store',  help=apply_strategy_help)
+
+    parser.addoption('--compute-apply-type', '--compute_apply_type', '--cstra', dest='compute_strategy',
+                     action='store',  help=apply_strategy_help)
+
+    parser.addoption('--max-parallel-computes', '--max_parallel_computes', dest='max_parallel_computes',
+                     action='store',  help=max_parallel_compute_help)
+
+    parser.addoption('--alarm-restrictions', '--alarm_restrictions', dest='alarm_restrictions',
+                     action='store', default='strict',  help=alarm_restriction_help)
 
 def pytest_configure(config):
 
@@ -70,6 +96,11 @@ def pytest_configure(config):
     tis_build_dir = config.getoption('tis_build_dir')
     patch_dir = config.getoption('patch_dir')
     orchestration_after = config.getoption('orchestration_after')
+    storage_apply_strategy = config.getoption('storage_strategy')
+    compute_apply_strategy = config.getoption('compute_strategy')
+    max_parallel_computes = config.getoption('max_parallel_computes')
+    alarm_restrictions = config.getoption('alarm_restrictions')
+
     if upgrade_version == "16.10":
         orchestration_after = None
 
@@ -80,7 +111,11 @@ def pytest_configure(config):
                                  tis_build_dir=tis_build_dir,
                                  upgrade_license_path=upgrade_license,
                                  patch_dir=patch_dir,
-                                 orchestration_after=orchestration_after)
+                                 orchestration_after=orchestration_after,
+                                 storage_apply_strategy=storage_apply_strategy,
+                                 compute_apply_strategy=compute_apply_strategy,
+                                 max_parallel_computes=max_parallel_computes,
+                                 alarm_restrictions=alarm_restrictions)
 
 
 @pytest.fixture(scope='session')
@@ -191,14 +226,29 @@ def upgrade_setup(pre_check_upgrade):
         LOG.tc_step("Importing Target release  load iso file from".format(upgrade_load_path))
         system_helper.import_load(upgrade_load_path)
 
-    # download and apply patches if patches are available in patch directory
+        # download and apply patches if patches are available in patch directory
         if patch_dir:
             LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
             apply_patches(lab, bld_server_obj, patch_dir)
 
     # check which nodes are upgraded using orchestration
     orchestration_after = UpgradeVars.get_upgrade_var('ORCHESTRATION_AFTER')
-    LOG.info("Upgrade orchestration start option: {}".format(orchestration_after))
+    storage_apply_strategy = UpgradeVars.get_upgrade_var('STORAGE_APPLY_TYPE')
+    compute_apply_strategy = UpgradeVars.get_upgrade_var('COMPUTE_APPLY_TYPE')
+    max_parallel_computes = UpgradeVars.get_upgrade_var('MAX_PARALLEL_COMPUTES')
+    alarm_restrictions = UpgradeVars.get_upgrade_var('ALARM_RESTRICTIONS')
+
+    if orchestration_after:
+        LOG.info("Upgrade orchestration start option: {}".format(orchestration_after))
+    if storage_apply_strategy:
+        LOG.info("Storage apply type: {}".format(storage_apply_strategy))
+    if compute_apply_strategy:
+        LOG.info("Compute apply type: {}".format(compute_apply_strategy))
+    if max_parallel_computes:
+        LOG.info("Maximum parallel computes: {}".format(max_parallel_computes))
+    if alarm_restrictions:
+        LOG.info("Alarm restriction option: {}".format(alarm_restrictions))
+
     system_nodes = system_helper.get_hostnames()
     storage_nodes = [h for h in system_nodes if "storage" in h]
     compute_nodes = [h for h in system_nodes if "storage" not in h and 'controller' not in h]
@@ -207,13 +257,13 @@ def upgrade_setup(pre_check_upgrade):
     if len(compute_nodes) == 0:
         cpe = True
 
-    if not cpe and (orchestration_after == 'default' or 'controller' in orchestration_after):
+    if not cpe and orchestration_after and (orchestration_after == 'default' or 'controller' in orchestration_after):
         orchestration_nodes.extend(system_nodes)
         orchestration_nodes.remove('controller-1')
         if 'controller' in orchestration_after:
             orchestration_nodes.remove('controller-0')
 
-    elif not cpe and 'storage' in orchestration_after:
+    elif not cpe and orchestration_after and 'storage' in orchestration_after:
         number_of_storages = len(storage_nodes)
         num_selected = int(orchestration_after.split(':')[1]) if len(orchestration_after.split(':')) == 2 \
             else number_of_storages
@@ -223,7 +273,7 @@ def upgrade_setup(pre_check_upgrade):
             for i in range(num_selected):
                 orchestration_nodes.extend([h for h in storage_nodes if h != 'storage-{}'.format(i)])
         orchestration_nodes.extend(compute_nodes)
-    elif not cpe and 'compute' in orchestration_after:
+    elif not cpe and orchestration_after and 'compute' in orchestration_after:
         number_of_computes = len(compute_nodes)
         num_selected = int(orchestration_after.split(':')[1]) if len(orchestration_after.split(':')) == 2 \
             else number_of_computes
@@ -247,6 +297,10 @@ def upgrade_setup(pre_check_upgrade):
                       'build_server': bld_server_obj,
                       'man_upgrade_nodes': man_upgrade_nodes,
                       'orchestration_nodes': orchestration_nodes,
+                      'storage_apply_strategy': storage_apply_strategy,
+                      'compute_apply_strategy': compute_apply_strategy,
+                      'max_parallel_computes': max_parallel_computes,
+                      'alarm_restrictions': alarm_restrictions,
                       }
     ver = (system_helper.get_imported_load_version()).pop()
     assert upgrade_version in ver, "Import error. Expected " \
@@ -261,55 +315,9 @@ def check_system_health_query_upgrade():
     # Check system health for upgrade
     LOG.tc_func_start("UPGRADE_TEST")
     LOG.tc_step("Checking if system health is OK to start upgrade......")
-    rc, health = system_helper.get_system_health_query_upgrade()
+    rc, health = upgrade_helper.get_system_health_query_upgrade()
     print("HEALTH: {}, {}".format(rc, health))
-
-    if rc == 0:
-        LOG.info("system health is OK to start upgrade......")
-        return 0, None
-
-    alarms = any("No alarms" in h for h in health.keys())
-    manifest = any("Missing manifests" in h for h in health.keys())
-    err_msg = "System health query upgrade failed: {}".format(health)
-    if len(health) > 2:
-        # more than two health check failures
-        LOG.error(err_msg)
-        return 1, health
-
-    if len(health) == 2:
-        # check if the two failures are alarms and manifest,  otherwise return error.
-        if not alarms or not manifest:
-            LOG.error(err_msg)
-            return 1, health
-    else:
-        # Only one health check failure. Return error if not alarm or manifest
-        if not alarms and not manifest:
-            LOG.error(err_msg)
-            return 1, health
-
-    if alarms:
-        # Check if it alarm
-        table_ = table_parser.table(cli.system('alarm-list'))
-        alarm_severity_list = table_parser.get_column(table_, "Severity")
-        if len(alarm_severity_list) > 0 and \
-                ("major" not in alarm_severity_list and "critical" not in alarm_severity_list):
-            # minor alarm present
-            LOG.warn("System health query upgrade found minor alarms: {}".format(alarm_severity_list))
-
-        else:
-            # major/critical alarm present
-            LOG.error("System health query upgrade found major or critical alarms: {}".format(alarm_severity_list))
-            return 1, health
-
-    if manifest and alarms:
-        return 2, health
-
-    elif alarms:
-        # only minor alarm
-        return 3, health
-    else:
-        # only missing manifests
-        return 4, health
+    return rc, health
 
 
 def get_system_active_controller():

@@ -153,7 +153,11 @@ class UpgradeVars:
                          upgrade_version=None,
                          upgrade_license_path=None,
                          patch_dir=None,
-                         orchestration_after=None):
+                         orchestration_after=None,
+                         storage_apply_strategy=None,
+                         compute_apply_strategy=None,
+                         max_parallel_computes=None,
+                         alarm_restrictions=None ):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
 
@@ -163,8 +167,12 @@ class UpgradeVars:
             # TIS BUILD info
             'BUILD_SERVER': __build_server,
             'TIS_BUILD_DIR': tis_build_dir if tis_build_dir else
-                BuildServerPath.LATEST_HOST_BUILD_PATHS[upgrade_version],
-            'PATCH_DIR': patch_dir if patch_dir else BuildServerPath.PATCH_DIR_PATHS[upgrade_version],
+            (BuildServerPath.LATEST_HOST_BUILD_PATHS[upgrade_version]
+             if upgrade_version in BuildServerPath.LATEST_HOST_BUILD_PATHS else BuildServerPath.DEFAULT_HOST_BUILD_PATH),
+
+            'PATCH_DIR': patch_dir if patch_dir else (BuildServerPath.PATCH_DIR_PATHS[upgrade_version]
+                                                      if upgrade_version in BuildServerPath.PATCH_DIR_PATHS else
+                                                      None),
 
             # Generic
             'UPGRADE_LICENSE': upgrade_license_path,
@@ -173,6 +181,10 @@ class UpgradeVars:
             #        orchestration.
             #       compute:1 - indicate orchestrations starts after one compute is upgraded.
             'ORCHESTRATION_AFTER': orchestration_after,
+            'STORAGE_APPLY_TYPE': storage_apply_strategy,
+            'COMPUTE_APPLY_TYPE': compute_apply_strategy,
+            'MAX_PARALLEL_COMPUTES': max_parallel_computes,
+            'ALARM_RESTRICTIONS': alarm_restrictions,
 
 
             #User/password to build server

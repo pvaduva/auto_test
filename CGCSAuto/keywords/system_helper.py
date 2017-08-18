@@ -650,9 +650,16 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
     """
 
     LOG.info("Waiting for alarm {} to disappear from system alarm-list".format(alarm_id))
+    build_ver = get_system_software_version(con_ssh=con_ssh)
+
+    alarmcmd = 'alarm-list'
+    if build_ver != '15.12':
+        alarmcmd += ' --nowrap'
+
     end_time = time.time() + timeout
     while time.time() < end_time:
-        alarms_tab = table_parser.table(cli.system('alarm-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
+        #alarms_tab = table_parser.table(cli.system('alarm-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
+        alarms_tab = table_parser.table(cli.system(alarmcmd, ssh_client=con_ssh, auth_info=auth_info))
         alarms_tab = _compose_alarm_table(alarms_tab, uuid=False)
 
         alarm_tab = table_parser.filter_table(alarms_tab, **{'Alarm ID': alarm_id})

@@ -71,7 +71,7 @@ def create_strategy(orchestration, controller_apply_type="serial", storage_apply
             args += ' {} {}'.format(key, val)
 
     LOG.info("Creating {} orchestration strategy with arguments: {} {}".format(orchestration, cmd, args))
-    rc, output = cli.sw_manager(cmd, args, ssh_client=conn_ssh,  fail_ok=True, rtn_list=True)
+    rc, output = cli.sw_manager(cmd, args, ssh_client=conn_ssh,  fail_ok=fail_ok, rtn_list=True)
     LOG.info("Verifying if the {} orchestration strategy is created".format(orchestration))
     if rc != 0:
         msg = "Create {} strategy failed: {}".format(orchestration, output)
@@ -149,7 +149,7 @@ def apply_strategy(orchestration, wait_for_completion=True, timeout=None, conn_s
     elif orchestration is "upgrade":
         cmd += "upgrade-strategy apply"
 
-    rc, output = cli.sw_manager(cmd, '', ssh_client=conn_ssh,  fail_ok=True, rtn_list=True)
+    rc, output = cli.sw_manager(cmd, '', ssh_client=conn_ssh,  fail_ok=fail_ok, rtn_list=True)
 
     if rc != 0:
         msg = " CLI command {} rejected: {}".format(cmd, output)
@@ -161,7 +161,6 @@ def apply_strategy(orchestration, wait_for_completion=True, timeout=None, conn_s
 
     if wait_for_completion:
         if timeout is None:
-            #timeout = OrchestStrategyPhases.PHASE_COMPLETION_TIMOUT[OrchestStrategyPhases.APPLY]
             timeout = OrchestrationPhaseTimeout.APPLY
 
         if not wait_strategy_phase_completion(orchestration, OrchestStrategyPhases.APPLY, timeout=timeout,
@@ -270,7 +269,6 @@ def wait_strategy_phase_completion(orchestration, current_phase, timeout=None, c
         timeout = PHASE_COMPLETION_CHECK_INTERVAL
     else:
         if timeout is None:
-            # timeout = OrchestStrategyPhases.PHASE_COMPLETION_TIMOUT[current_phase]
             if current_phase == OrchestStrategyPhases.BUILD:
                 timeout = OrchestrationPhaseTimeout.BUILD
             elif current_phase == OrchestStrategyPhases.APPLY:

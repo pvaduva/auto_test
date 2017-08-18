@@ -40,21 +40,26 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     # orchestration = 'upgrade'
     man_upgrade_nodes = upgrade_setup['man_upgrade_nodes']
     orchestration_nodes = upgrade_setup['orchestration_nodes']
+    system_upgrade_health = list(check_system_health_query_upgrade)
     missing_manifests = False
     force = False
     controller0 = lab['controller-0']
-    host_helper.ensure_host_provisioned(controller0.name)
-    LOG.tc_step("Checking system health for upgrade .....")
-    if check_system_health_query_upgrade[0] == 0:
-        LOG.info("System health OK for upgrade......")
-    if check_system_health_query_upgrade[0] == 1:
-        assert False, "System health query upgrade failed: {}".format(check_system_health_query_upgrade[1])
+    if not host_helper.is_host_provisioned(controller0.name):
+        host_helper.ensure_host_provisioned(controller0.name)
+        # update health query
+        system_upgrade_health = list(upgrade_helper.get_system_health_query_upgrade())
 
-    if check_system_health_query_upgrade[0] == 4 or check_system_health_query_upgrade[0] == 2:
+    LOG.tc_step("Checking system health for upgrade .....")
+    if system_upgrade_health[0] == 0:
+        LOG.info("System health OK for upgrade......")
+    if system_upgrade_health[0] == 1:
+        assert False, "System health query upgrade failed: {}".format(system_upgrade_health[1])
+
+    if system_upgrade_health[0] == 4 or system_upgrade_health[0] == 2:
         LOG.info("System health indicate missing manifests; lock/unlock controller-0 to resolve......")
         missing_manifests = True
 
-    if check_system_health_query_upgrade[0] == 3 or check_system_health_query_upgrade[0] == 2:
+    if system_upgrade_health[0] == 3 or system_upgrade_health[0] == 2:
 
         LOG.info("System health indicate minor alarms; using --force option to start upgrade......")
         force = True
@@ -105,7 +110,6 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     if len(orchestration_nodes) > 0:
         upgrade_helper.orchestration_upgrade_hosts(upgraded_hosts=man_upgrade_nodes,
                                                    orchestration_nodes=orchestration_nodes)
-
     # Activate the upgrade
     LOG.tc_step("Activating upgrade....")
     upgrade_helper.activate_upgrade()

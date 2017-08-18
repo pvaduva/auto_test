@@ -83,7 +83,7 @@ class OrchestrationPhaseTimeout:
         INITIAL = 20
         BUILD = 60
         ABORT = 7200
-        APPLY = 7200
+        APPLY = 86400
 
 
 class MiscTimeout:

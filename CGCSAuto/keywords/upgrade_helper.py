@@ -241,7 +241,10 @@ def get_system_health_query_upgrade(con_ssh=None):
 
     Returns: tuple
         (0, None) - success
-        (1, dict(error msg) ) -  health query reported errors
+        (1, dict(error msg) ) -  health query reported 1 or more failures other than missing manifest and alarm
+        (2, dict(error msg) ) -  health query reported missing manifest and atleast one alarm
+        (3, dict(error msg) ) -  health query reported only minor alarm
+        (4, dict(error msg) ) -  health query reported only missing manifest
 
     """
 
@@ -257,10 +260,53 @@ def get_system_health_query_upgrade(con_ssh=None):
                 failed[k.strip()] = v.strip()
         elif "Missing manifests" in line:
             failed[line] = line
-    if len(failed) > 0:
-        return 1, failed
-    else:
+
+    if len(failed) == 0:
+        LOG.info("system health is OK to start upgrade......")
         return 0, None
+
+    alarms = any("No alarms" in h for h in failed.keys())
+    manifest = any("Missing manifests" in h for h in failed.keys())
+    err_msg = "System health query upgrade failed: {}".format(failed)
+    if len(failed) > 2:
+        # more than two health check failures
+        LOG.error(err_msg)
+        return 1, failed
+
+    if len(failed) == 2:
+        # check if the two failures are alarms and manifest,  otherwise return error.
+        if not alarms or not manifest:
+            LOG.error(err_msg)
+            return 1, failed
+    else:
+        # Only one health check failure. Return error if not alarm or manifest
+        if not alarms and not manifest:
+            LOG.error(err_msg)
+            return 1, failed
+
+    if alarms:
+        # Check if it alarm
+        table_ = table_parser.table(cli.system('alarm-list'))
+        alarm_severity_list = table_parser.get_column(table_, "Severity")
+        if len(alarm_severity_list) > 0 and \
+                ("major" not in alarm_severity_list and "critical" not in alarm_severity_list):
+            # minor alarm present
+            LOG.warn("System health query upgrade found minor alarms: {}".format(alarm_severity_list))
+
+        else:
+            # major/critical alarm present
+            LOG.error("System health query upgrade found major or critical alarms: {}".format(alarm_severity_list))
+            return 1, failed
+
+    if manifest and alarms:
+        return 2, failed
+
+    elif alarms:
+        # only minor alarm
+        return 3, failed
+    else:
+        # only missing manifests
+        return 4, failed
 
 
 def system_upgrade_start(con_ssh=None, force=False, fail_ok=False):
@@ -586,14 +632,13 @@ def upgrade_controller(controller_host, con_ssh=None, fail_ok=False):
     LOG.info("Host {} unlocked after upgrade......".format(controller_host))
 
 
-def orchestration_upgrade_hosts(upgraded_hosts, orchestration_nodes):
+def orchestration_upgrade_hosts(upgraded_hosts, orchestration_nodes, storage_apply_type='serial',
+                                compute_apply_type='serial', maximum_parallel_computes=None,
+                                alarm_restrictions='strict'):
 
     # Create upgrade strategy
     orchestration = 'upgrade'
-    storage_apply_type = ''
-    compute_apply_type = ''
     max_parallel_computes = 0
-    alarm_restrictions = 'relaxed'
     if orchestration_nodes is None:
         orchestration_nodes = []
     elif isinstance(orchestration_nodes, str):
@@ -614,19 +659,19 @@ def orchestration_upgrade_hosts(upgraded_hosts, orchestration_nodes):
         computes_to_upgrade = len([h for h in upgrade_hosts_ if 'storage' not in h and 'controller' not in h])
         storages_to_upgrade = len([h for h in upgrade_hosts_ if 'storage' in h])
 
-        num_parallel_computes = int((computes_to_upgrade + upgraded_computes)/2)\
-                                + (computes_to_upgrade + upgraded_computes) % 2
-        if upgraded_computes > num_parallel_computes:
-            num_parallel_computes = computes_to_upgrade
+        if maximum_parallel_computes:
+            num_parallel_computes = int(maximum_parallel_computes)
+        else:
+            num_parallel_computes = int((computes_to_upgrade + upgraded_computes)/2)\
+                                    + (computes_to_upgrade + upgraded_computes) % 2
 
-        if storages_to_upgrade > 0:
-            storage_apply_type = 'parallel'
+        if upgraded_computes > num_parallel_computes:
+                num_parallel_computes = computes_to_upgrade
+
         if computes_to_upgrade > 0:
             if num_parallel_computes > 1:
-                compute_apply_type = 'parallel'
-                max_parallel_computes = num_parallel_computes
-            else:
-                compute_apply_type = 'serial'
+                if compute_apply_type == 'parallel':
+                    max_parallel_computes = num_parallel_computes
 
         LOG.tc_step("Creating upgrade strategy  ......")
         orchestration_helper.create_strategy(orchestration, storage_apply_type=storage_apply_type,
@@ -662,12 +707,12 @@ def manual_upgrade_hosts(manual_nodes):
                 # wait for replication  to be healthy
                 storage_helper.wait_for_ceph_health_ok()
 
-                upgrade_host(host, lock=True)
-                LOG.info("{} is upgraded successfully.....".format(host))
-                LOG.tc_step("Unlocking {} after upgrade......".format(host))
-                host_helper.unlock_host(host, available_only=True)
-                LOG.info("Host {} unlocked after upgrade......".format(host))
-                LOG.info("Host {} upgrade complete.....".format(host))
+            upgrade_host(host, lock=True)
+            LOG.info("{} is upgraded successfully.....".format(host))
+            LOG.tc_step("Unlocking {} after upgrade......".format(host))
+            host_helper.unlock_host(host, available_only=True)
+            LOG.info("Host {} unlocked after upgrade......".format(host))
+            LOG.info("Host {} upgrade complete.....".format(host))
 
 
 def upgrade_host_lock_unlock(host, con_ssh=None):
