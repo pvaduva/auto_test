@@ -1,12 +1,10 @@
 from pytest import fixture, skip, mark
 
 from utils.tis_log import LOG
-from consts.cgcs import VMStatus
-from consts.reasons import SkipReason
 
 from keywords import vm_helper, host_helper, nova_helper, cinder_helper
-from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
+from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module, unreserve_hosts_module
 
 
 #
