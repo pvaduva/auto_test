@@ -3280,7 +3280,7 @@ def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None
 
 
 def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up=False, fail_ok=False, post_host=None,
-                 vlm=False):
+                 vlm=False, ping_vms=False):
     """
     Evacuate given vms by rebooting their host. VMs should be on specified host already when this keyword called.
     Args:
@@ -3293,6 +3293,7 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
         post_host (str): expected host for vms to be evacuated to
         vlm (False): whether to power-off host via vlm (assume host already reserved). When False, Run 'sudo reboot -f'
             from host.
+        ping_vms (bool): whether to ping vms after evacuation
 
     Returns (tuple): (<code> (int), <vms_failed_to_evac> (list))
         - (0, [])   all vms evacuated successfully. i.e., active state, host changed, pingable from NatBox
@@ -3349,6 +3350,11 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
                 LOG.warning(err_msg)
                 return 2, vms_host_err
             raise exceptions.VMError(err_msg)
+
+        if ping_vms:
+            LOG.tc_step("Ping vms after evacuated")
+            for vm_ in vms_to_check:
+                wait_for_vm_pingable_from_natbox(vm_id=vm_)
 
         LOG.info("All vms are successfully evacuated to other host")
         return 0, []
