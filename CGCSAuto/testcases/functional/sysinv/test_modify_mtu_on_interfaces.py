@@ -344,19 +344,18 @@ def test_modify_mtu_data_interface(mtu_range):
 
     prev_host = None
     for host, pre_mtu, mtu, max_mtu, interface, net_type in HOSTS_IF_MODIFY_ARGS:
-        if not prev_host or prev_host != host:
+        if prev_host != host:
+            if prev_host:
+                host_helper.unlock_host(prev_host)
             host_helper.lock_host(host, swact=True)
+
+            prev_host = host
 
         LOG.info('Restore DATA MTU of IF:{} on host:{} to:{}, current MTU:{}'.format(interface, host, pre_mtu, mtu))
         host_helper.modify_mtu_on_interface(host, interface, pre_mtu, network_type=net_type, lock_unlock=True)
 
         LOG.info('OK, Data MTUs of IF:{} on host:{} are restored, from: {} to:{}'.format(
             interface, host, mtu, pre_mtu))
-
-        if prev_host and prev_host != host:
-            host_helper.unlock_host(host)
-
-        prev_host = host
 
     LOG.info('OK, all changed MTUs of DATA IFs are restored')
 

@@ -2259,7 +2259,8 @@ def get_coredumps_and_crashreports():
     return core_dumps_and_reports
 
 
-def modify_mtu_on_interface(host, interface, mtu_val, network_type='data', lock_unlock=True, fail_ok=False, con_ssh=None):
+def modify_mtu_on_interface(host, interface, mtu_val, network_type='data',
+                            lock_unlock=True, fail_ok=False, con_ssh=None):
     mtu_val = int(mtu_val)
 
     LOG.info("Modify MTU for IF {} of NET-TYPE {} to: {} on {}".format(interface, network_type, mtu_val, host))
