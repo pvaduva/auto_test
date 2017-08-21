@@ -297,7 +297,8 @@ def test_modify_mtu_data_interface(mtu_range):
             LOG.tc_step('Checking the max MTU for the IF:{} on host:{}'.format(interface, host))
             max_mtu, cur_mtu, nic_name = get_max_allowed_mtus(host=host, network_type=net_type, if_name=interface)
 
-            LOG.info('Checking the max MTU for the IF is: {}'.format(max_mtu or 'NOT SET'))
+            LOG.info('Checking the max MTU for the IF:{}, max MTU: {}, host:{}'.format(
+                interface, max_mtu or 'NOT SET', host))
 
             expecting_pass = not max_mtu or mtu <= max_mtu
             if not expecting_pass:
@@ -352,10 +353,12 @@ def test_modify_mtu_data_interface(mtu_range):
             prev_host = host
 
         LOG.info('Restore DATA MTU of IF:{} on host:{} to:{}, current MTU:{}'.format(interface, host, pre_mtu, mtu))
-        host_helper.modify_mtu_on_interface(host, interface, pre_mtu, network_type=net_type, lock_unlock=True)
+        host_helper.modify_mtu_on_interface(host, interface, pre_mtu, network_type=net_type, lock_unlock=False)
 
         LOG.info('OK, Data MTUs of IF:{} on host:{} are restored, from: {} to:{}'.format(
             interface, host, mtu, pre_mtu))
+
+    host_helper.unlock_host(prev_host)
 
     LOG.info('OK, all changed MTUs of DATA IFs are restored')
 

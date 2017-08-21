@@ -109,7 +109,7 @@ def verify_vim_evacuation_events():
 
         if event_type == 'instance-evacuate-begin':
             assert not current_record, \
-                'Found another instance begin evacuate while preivous not finished yet. Previous:\n' \
+                'Found another instance begin evacuate while previous not finished yet. Previous:\n' \
                 'at {}, vm_name={}, event_type:{}, vm_id={}'.format(raw_timestamp, vm_name, event_type, vm_id)
             current_record = [timestamp, vm_name, event_type, vm_id]
 
@@ -297,12 +297,12 @@ class TestPrioritizedVMEvacuation:
     @mark.parametrize(('operation', 'set_on_boot', 'prioritizing', 'vcpus', 'mem', 'root_disk', 'swap_disk'), [
         ('reboot', False, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
         ('reboot', False, 'same_priority', 'diff_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
-        ('reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'diff_root_disk', 'same_swap_disk'),
-        ('reboot', True, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
-        ('reboot', True, 'same_priority', 'same_vcpus', 'diff_mem', 'same_root_disk', 'same_swap_disk'),
         ('reboot', True, 'same_priority', 'same_vcpus', 'diff_mem', 'same_root_disk', 'same_swap_disk'),
         ('reboot', True, 'same_priority', 'same_vcpus', 'same_mem', 'diff_root_disk', 'same_swap_disk'),
         ('reboot', True, 'same_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'diff_swap_disk'),
+        ('reboot', True, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
+        ('reboot', True, 'diff_priority', 'diff_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
+        ('reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'diff_root_disk', 'same_swap_disk'),
         ('force_reboot', False, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
         ('force_reboot', True, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
     ])
