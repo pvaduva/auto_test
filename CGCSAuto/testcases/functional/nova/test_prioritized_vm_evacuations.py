@@ -27,13 +27,13 @@ DEF_NUM_VCPU = 2
 
 MIN_PRI = 1
 MAX_PRI = 10
-
 LOG_RECORDS = {
     'reboot': [
         {
             'host': 'active-controller',
             'log-file': 'nfv-vim-events.log',
-            'patterns': ['event-id [ ]* = (instance-evacuat[^ ]*)'],
+            'patterns': ['event-id [ ]* = (instance-evacuate-begin)'],
+            # 'patterns': ['event-id [ ]* = (instance-evacuat[^ ]*)'],
             'checker': 'verify_vim_evacuation_events',
          },
     ],
@@ -41,11 +41,13 @@ LOG_RECORDS = {
         {
             'host': 'active-controller',
             'log-file': 'nfv-vim-events.log',
-            'patterns': ['event-id [ ]* = (instance-evacuat[^ ]*)'],
+            'patterns': ['event-id [ ]* = (instance-evacuate-begin)'],
+            # 'patterns': ['event-id [ ]* = (instance-evacuat[^ ]*)'],
             'checker': 'verify_vim_evacuation_events',
         },
     ],
 }
+
 
 LOG_RECORD_LINES = 10
 TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
@@ -70,7 +72,7 @@ def verify_vim_evacuation_events():
     start = self.start_time
 
     search = '\grep -E -B2 -A{} \'{}\' {} | tail -n {}'.format(
-        LOG_RECORD_LINES-2, patterns, log_file, LOG_RECORD_LINES * self.num_vms * 10)
+        LOG_RECORD_LINES-2, patterns, log_file, LOG_RECORD_LINES * self.num_vms * 5)
 
     log_entries = run_cmd(search, expect_timeout=120)[1]
 
