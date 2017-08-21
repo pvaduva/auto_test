@@ -151,7 +151,7 @@ class TestVariousGuests:
                 skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
 
         LOG.tc_step("Get/Create {} image".format(guest_os))
-        check_disk = True if 'win' in guest_os and boot_source == 'image' else False
+        check_disk = True if 'win' in guest_os else False
         img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk)
         if guest_os != 'ubuntu_14':
             ResourceCleanup.add('image', img_id)

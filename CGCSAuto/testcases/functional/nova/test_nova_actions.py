@@ -107,7 +107,7 @@ class TestVariousGuests:
                 skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
 
         LOG.tc_step("Get/Create {} glance image".format(guest_os))
-        check_disk = True if 'win' in guest_os and boot_source == 'image' else False
+        check_disk = True if 'win' in guest_os else False
         image_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk)
         if guest_os not in GuestImages.GUESTS_NO_RM:
             ResourceCleanup.add('image', image_id, scope='function')
