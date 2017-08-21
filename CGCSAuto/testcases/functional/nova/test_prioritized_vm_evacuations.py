@@ -70,9 +70,9 @@ def verify_vim_evacuation_events():
     start = self.start_time
 
     search = '\grep -E -B2 -A{} \'{}\' {} | tail -n {}'.format(
-        LOG_RECORD_LINES-2, patterns, log_file, LOG_RECORD_LINES * self.num_vms * 50)
+        LOG_RECORD_LINES-2, patterns, log_file, LOG_RECORD_LINES * self.num_vms * 10)
 
-    log_entries = run_cmd(search)[1]
+    log_entries = run_cmd(search, expect_timeout=120)[1]
 
     search_pattern = r'^=+.*\n^log-id \s*=\s*\d+.*\n^event-id \s*= (instance-evacuat[^\s]+).*\n(.*\n){3}'
     search_pattern += r'^entity \s*= ([^\s]+).*\n'
