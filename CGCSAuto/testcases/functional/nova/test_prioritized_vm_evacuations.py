@@ -110,42 +110,29 @@ def verify_vim_evacuation_events():
         vm_name = record.group(4).strip()
 
         if event_type == 'instance-evacuate-begin':
-            assert not current_record, \
-                'Found another instance begin evacuate while previous not finished yet. Previous:\n' \
-                'at {}, vm_name={}, event_type:{}, vm_id={}'.format(raw_timestamp, vm_name, event_type, vm_id)
+            if current_record:
+                assert timestamp >= current_record[0], 'Timestamp wrong\nprevious log found:{}\nnow:{}\n'.format(
+                    current_record, [timestamp, vm_name, event_type, vm_id])
+
             current_record = [timestamp, vm_name, event_type, vm_id]
 
-        elif not current_record:
-            assert False, \
-                'Log records not starting with "instance-evacuate-begin", Previous:\n' \
-                'at {}, vm_name={}, event_type:{}, vm_id={}'.format(raw_timestamp, vm_name, event_type, vm_id)
+            expected_vm_id, expected_priority = expected_order[0]
+            if expected_vm_id != vm_id:
+                if vm_priorities[vm_id] != expected_priority:
+                    msg = 'Wrong Evacuation Order: expecting Priority:{}, but found: {}' \
+                          '\nexpecting VM:{}, hit VM:{}'.format(expected_priority,
+                                                                vm_priorities[vm_id], expected_vm_id, vm_id)
+                    LOG.error(msg)
+                    assert False, msg
+                else:
+                    LOG.warn('same priority orders, but different VMs \nexpecting:{}, found:{}'.format(
+                        expected_vm_id, vm_id))
 
-        if current_record:
-            msg = 'Log records out of order\nprevious:' \
-                ' {}\ncurrent: {}, vm_name={}, event_type:{}, vm_id={}'.format(
-                    current_record, raw_timestamp, vm_name, event_type, vm_id)
-
-            assert timestamp >= current_record[0], 'Timestamp wrong\n' + msg
-            assert vm_id == current_record[3], 'Another VM started evacuating while previous not finished\n' + msg
-
-        expected_vm_id, expected_priority = expected_order[0]
-        if expected_vm_id != vm_id:
-            if vm_priorities[vm_id] != expected_priority:
-                msg = 'Wrong Evacuation Order: expecting Priority:{}, but found: {}' \
-                      '\nexpecting VM:{}, hit VM:{}'.format(expected_priority,
-                                                            vm_priorities[vm_id], expected_vm_id, vm_id)
-                LOG.error(msg)
-                assert False, msg
-            else:
-                LOG.warn('same priority orders, but different VMs \nexpecting:{}, found:{}'.format(
-                    expected_vm_id, vm_id))
-
-        if event_type == 'instance-evacuated':
-            current_record = None
             expected_order.remove((vm_id, expected_priority))
-        count += 1
-        LOG.info('OK, record in order:\nvm_id={}, timestamp={}, event_type={}, vm_name={}\n'.format(
-            vm_id, timestamp, event_type, vm_name))
+
+            count += 1
+            LOG.info('OK, record in order:\nvm_id={}, timestamp={}, event_type={}, vm_name={}\n'.format(
+                vm_id, timestamp, event_type, vm_name))
 
     LOG.info('OK, total matched log records={}'.format(count))
     yield
@@ -346,9 +333,18 @@ class TestPrioritizedVMEvacuation:
         LOG.tc_step('Check if the evacuation-priority actually set')
         for vm_info in self.vms_info.values():
             recovery_priority = get_evcuation_priority(vm_info['vm_id'], fail_ok=False)
-            assert int(recovery_priority[VMMetaData.EVACUATION_PRIORITY]) == vm_info['priority'], \
-                'Evacuation-Priority on VM is not set, expected priority:{}, actual:{}, vm_id:{}'.format(
-                    vm_info['priority'], recovery_priority, vm_info['vm_id'])
+            if not recovery_priority or not recovery_priority.strip():
+                if 'priority' not in vm_info:
+                    vm_info['priority'] = None
+                else:
+                    assert False, \
+                        'Evacuation-Priority on VM is not set, expected priority:{}, actual:{}, vm_id:{}'.format(
+                            vm_info['priority'], recovery_priority, vm_info['vm_id'])
+            else:
+                assert int(recovery_priority[VMMetaData.EVACUATION_PRIORITY]) == vm_info['priority'], \
+                    'Evacuation-Priority on VM is not set, expected priority:{}, actual:{}, vm_id:{}'.format(
+                        vm_info['priority'], recovery_priority, vm_info['vm_id'])
+
         LOG.info('OK, evacuation-priorities are correctly set')
 
     def check_vm_status(self):
@@ -365,8 +361,11 @@ class TestPrioritizedVMEvacuation:
     def check_evaucation_orders(self):
         LOG.tc_step('Checking the order of VM evacuation')
 
-        vm_priorities = [(vm_info['vm_id'], vm_info['priority']) for vm_info in self.vms_info.values()]
+        vm_priorities = [(vm_info['vm_id'], vm_info['priority'])
+                         for vm_info in self.vms_info.values() if 'priority' in vm_info]
         self.expected_order = sorted(vm_priorities, key=lambda item: int(item[1]))
+        self.expected_order += [(vm_info['vm_id'], None)
+                         for vm_info in self.vms_info.values() if 'priority' not in vm_info]
 
         base_log_dir = '/var/log'
 
@@ -501,9 +500,12 @@ class TestPrioritizedVMEvacuation:
         self.current_host = self.get_dest_host()
         vm_name_format = 'pve_vm_{}'
 
+        num_priorities = len(self.prioritizing)
+
         for sn in range(self.num_vms):
+
             name = vm_name_format.format(sn)
-            if self.set_on_boot:
+            if self.set_on_boot and sn < num_priorities:
                 vm_id = vm_helper.boot_vm(name,
                                           meta={VMMetaData.EVACUATION_PRIORITY: self.prioritizing[sn]},
                                           flavor=self.vms_info[sn]['flavor_id'],
@@ -514,7 +516,8 @@ class TestPrioritizedVMEvacuation:
                                           flavor=self.vms_info[sn]['flavor_id'],
                                           source='volume',
                                           avail_zone='nova')[1]
-                vm_helper.set_vm_meta_data(vm_id,
+                if sn < num_priorities:
+                    vm_helper.set_vm_meta_data(vm_id,
                                            {VMMetaData.EVACUATION_PRIORITY: self.prioritizing[sn]})
 
             LOG.info('OK, VM{} created: id={}\n'.format(sn, vm_id))
