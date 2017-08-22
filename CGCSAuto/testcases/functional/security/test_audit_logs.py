@@ -22,6 +22,33 @@ def exec_sudo_cmd_fail(ssh, cmd):
         ssh.expect(blob_list=[ssh.prompt])
 
 
+def wait_for_log(ssh_client, patterns, log_path, start_time, timeout=30, interval=3):
+
+    LOG.tc_step("Waiting for expected logs in {}: {}".format(log_path, patterns))
+    end_time = time.time() + timeout
+
+    found = []
+    while time.time() < end_time:
+        code, out = ssh_client.exec_cmd("""cat {} | awk '$0 > "{}"'""".format(log_path, start_time))
+        out = out.split('\n')
+        found = []
+
+        for line in out:
+            for i in range(len(patterns)):
+                regex = re.compile(patterns[i])
+                if patterns[i] not in found and re.search(regex, line):
+                    found.append(patterns[i])
+                    LOG.info("Found {}".format(line))
+                    break
+
+        if len(found) == len(patterns):
+            LOG.info("All expected logs found: {}".format(found))
+            break
+        time.sleep(interval)
+
+    return found
+
+
 @mark.p2
 def test_sudo_log():
     """
@@ -35,52 +62,30 @@ def test_sudo_log():
         - Find the log that should be created from the failed sudo command
 
     """
-    ssh = SSHClient(host=html_helper.get_ip_addr())
-    ssh.connect()
+    log_path = '/var/log/auth.log'
+
+    con_ssh = ControllerClient.get_active_controller()
 
     LOG.tc_step("Get timestamp for last line in auth.log")
-    start_time = ssh.exec_cmd("tail -1 /var/log/auth.log | awk '{print $1}'")[1]
+    start_time = con_ssh.exec_cmd("tail -1 {} | awk '{{print $1}}'".format(log_path))[1]
 
-    cmd = 'ls -l'
+    cmd = '-k ls -l'
     LOG.tc_step("Executing sudo command {}".format(cmd))
-    ssh.exec_sudo_cmd(cmd, fail_ok=True)
-    code, out = ssh.exec_cmd("""cat /var/log/auth.log | awk '$0 > "{}"'""".format(start_time))
-    out = out.split('\n')
-    ssh.close()
-    searching_for = ['sudo: notice  wrsroot.*PWD=/home/wrsroot ; USER=root ; COMMAND=/usr/bin/ls -l']
-    found = []
+    con_ssh.exec_sudo_cmd(cmd, fail_ok=True)
 
-    for line in out:
-        for i in range(0, len(searching_for)):
-            LOG.tc_step("Searching for logs containing: {}".format(searching_for[i]))
-            regex = re.compile(searching_for[i])
-            if searching_for[i] not in found and re.search(regex, line):
-                found.append(searching_for[i])
-                LOG.info("Found {}".format(line))
-                break
+    searching_for = ['sudo: notice  wrsroot.*PWD=/home/wrsroot ; USER=root ; COMMAND=/usr/bin/ls -l']
+    found = wait_for_log(log_path=log_path, ssh_client=con_ssh, patterns=searching_for, start_time=start_time)
 
     assert len(searching_for) == len(found), "FAIL: The sudo command was not logged. " \
                                              "Expecting to find: {} found: {}".format(searching_for, found)
 
-    ssh = SSHClient(host=html_helper.get_ip_addr())
-    ssh.connect()
     LOG.tc_step("Executing sudo command {} with wrong password".format(cmd))
-    exec_sudo_cmd_fail(ssh, cmd)
-    code, out = ssh.exec_cmd("tail /var/log/auth.log")
-    out = out.split('\n')
-    ssh.close()
+    start_time = con_ssh.exec_cmd("tail -1 {} | awk '{{print $1}}'".format(log_path))[1]
+    exec_sudo_cmd_fail(con_ssh, cmd)
+
     searching_for = ['sudo: notice pam_unix\(sudo:auth\): authentication failure; logname=wrsroot .* '
                      'ruser=wrsroot rhost=  user=wrsroot']
-    found = []
-
-    for line in out:
-        for i in range(0, len(searching_for)):
-            LOG.tc_step("Searching for logs containing: {}".format(searching_for[i]))
-            regex = re.compile(searching_for[i])
-            if searching_for[i] not in found and re.search(regex, line):
-                found.append(searching_for[i])
-                LOG.info("Found {}".format(line))
-                break
+    found = wait_for_log(log_path=log_path, ssh_client=con_ssh, patterns=searching_for, start_time=start_time)
 
     assert len(searching_for) == len(found), "FAIL: The failed sudo command was not logged. " \
                                              "Expecting to find: {} found: {}".format(searching_for, found)
@@ -96,38 +101,17 @@ def test_postgress():
         - If there were none found, wait 30 seconds for them to be generated then check for the logs again
 
     """
-    ssh = ControllerClient.get_active_controller()
-    LOG.tc_step("Checking the logs for postgress entries. First attempt")
-    code, out = ssh.exec_cmd('tail /var/log/auth.log')
-    logs = out.split('\n')
+    log_path = '/var/log/auth.log'
+    con_ssh = ControllerClient.get_active_controller()
+
+    LOG.tc_step("Checking the logs for postgress entries")
+    start_time = con_ssh.exec_cmd("tail -1 {} | awk '{{print $1}}'".format(log_path))[1]
+
     searching_for = ["notice \(to postgres\) root on none",
                      "info pam_unix\(su:session\): session opened for user postgres by \(uid=0\)",
                      "info pam_unix\(su:session\): session closed for user postgres"]
-    found = []
-    for line in logs:
-        for i in range(0, len(searching_for)):
-            LOG.tc_step("Searching for logs containing: {}".format(searching_for[i]))
-            regex = re.compile(searching_for[i])
-            if searching_for[i] not in found and re.search(regex, line):
-                found.append(searching_for[i])
-                LOG.info("Found {}".format(line))
-                break
 
-    if len(found) != len(searching_for):
-        LOG.info("Not found. Check again in 30 seconds.")
-        time.sleep(30)
-        found = []
-        LOG.tc_step("Checking the logs for postgress entries. Second attempt")
-        code, out = ssh.exec_cmd('tail /var/log/auth.log')
-        logs = out.split('\n')
-        for line in logs:
-            for i in range(0, len(searching_for)):
-                LOG.tc_step("Searching for logs containing: {}".format(searching_for[i]))
-                regex = re.compile(searching_for[i])
-                if searching_for[i] not in found and re.search(regex, line):
-                    found.append(searching_for[i])
-                    LOG.info("Found {}".format(line))
-                    break
+    found = wait_for_log(con_ssh, searching_for, log_path=log_path, start_time=start_time, timeout=45, interval=10)
 
     assert len(searching_for) == len(found), "FAIL: expecting to find {} in the logs. Found {}."\
                                              .format(searching_for, found)
@@ -146,54 +130,30 @@ def test_sudo_su():
         - Check that there are logs created by the failed command
 
     """
-    ip = html_helper.get_ip_addr()
-    ssh = SSHClient(host=ip)
-    ssh.connect()
+    con_ssh = ControllerClient.get_active_controller()
     searching_for = ['sudo: notice  wrsroot.*PWD=/home/wrsroot ; USER=root ; COMMAND=/usr/bin/su \-',
                      'su: notice \(to root\) wrsroot on',
                      #uses su-l:session because login_as_root calls 'sudo su -'
                      'su: info pam_unix\(su-l:session\): session opened for user root by wrsroot\(uid=0\)']
-    found = []
+
+    log_path = '/var/log/auth.log'
+    start_time = con_ssh.exec_cmd("tail -1 {} | awk '{{print $1}}'".format(log_path))[1]
 
     LOG.tc_step("Logging in as su")
-    with ssh.login_as_root() as root:
-        code, out = root.exec_cmd('tail /var/log/auth.log')
-        out = out.split('\n')
-        for line in out:
-            for i in range(0, len(searching_for)):
-                LOG.tc_step("Searching for logs containing: {}".format(searching_for[i]))
-                regex = re.compile(searching_for[i])
-                if searching_for[i] not in found and re.search(regex, line):
-                    found.append(searching_for[i])
-                    LOG.info("Found {}".format(line))
-                    break
+    with con_ssh.login_as_root() as root:
+        LOG.info("Logged in as root")
 
-        assert len(searching_for) == len(found), "FAIL: The sudo su command was not logged. " \
-                                                 "Looking for logs resembling: {} found: {}".format(searching_for,found)
+    found = wait_for_log(con_ssh, patterns=searching_for, log_path=log_path, start_time=start_time)
+    assert len(searching_for) == len(found), "FAIL: The sudo su command was not logged. " \
+                                             "Looking for logs resembling: {} found: {}".format(searching_for,found)
 
-    ssh.close()
-
-    ssh = SSHClient(host=ip)
-    ssh.connect()
-
-    cmd = 'su'
+    cmd = '-k su'
     LOG.tc_step("Executing sudo command {} with wrong password".format(cmd))
-    exec_sudo_cmd_fail(ssh, cmd)
-    code, out = ssh.exec_cmd("tail /var/log/auth.log", fail_ok=True)
-    out = out.split('\n')
-    ssh.close()
     searching_for = ['sudo: notice pam_unix\(sudo:auth\): authentication failure; '
                      'logname=wrsroot.*ruser=wrsroot rhost=  user=wrsroot']
-    found = []
-
-    for line in out:
-        for i in range(0, len(searching_for)):
-            LOG.tc_step("Searching for logs containing: {}".format(searching_for[i]))
-            regex = re.compile(searching_for[i])
-            if searching_for[i] not in found and re.search(regex, line):
-                found.append(searching_for[i])
-                LOG.info("Found {}".format(line))
-                break
+    start_time = con_ssh.exec_cmd("tail -1 {} | awk '{{print $1}}'".format(log_path))[1]
+    exec_sudo_cmd_fail(con_ssh, cmd)
+    found = wait_for_log(con_ssh, searching_for, log_path=log_path, start_time=start_time)
 
     assert len(searching_for) == len(found), "FAIL: The failed sudo su command was not logged. " \
                                              "Looking for logs resembling: {} found: {}".format(searching_for, found)
