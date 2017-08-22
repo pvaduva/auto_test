@@ -120,10 +120,12 @@ def verify_vim_evacuation_events():
             if expected_vm_id != vm_id:
                 if vm_priorities[vm_id] != expected_priority:
                     msg = 'Wrong Evacuation Order: expecting Priority:{}, but found: {}' \
-                          '\nexpecting VM:{}, hit VM:{}'.format(expected_priority,
-                                                                vm_priorities[vm_id], expected_vm_id, vm_id)
+                      '\nexpecting VM:{}, hit VM:{}'.format(expected_priority,
+                                                            vm_priorities[vm_id], expected_vm_id, vm_id)
+                    msg += '\nexpected orders:{}\n'.format(vm_priorities)
+                    msg += '\nactual saw now:{}\n'.format(current_record)
                     LOG.error(msg)
-                    assert False, msg
+                    assert expected_priority in [None, MAX_PRI] and vm_priorities[vm_id] in [None, MAX_PRI], msg
                 else:
                     LOG.warn('same priority orders, but different VMs \nexpecting:{}, found:{}'.format(
                         expected_vm_id, vm_id))
@@ -333,13 +335,10 @@ class TestPrioritizedVMEvacuation:
         LOG.tc_step('Check if the evacuation-priority actually set')
         for vm_info in self.vms_info.values():
             recovery_priority = get_evcuation_priority(vm_info['vm_id'], fail_ok=False)
-            if not recovery_priority or not recovery_priority.strip():
-                if 'priority' not in vm_info:
-                    vm_info['priority'] = None
-                else:
-                    assert False, \
-                        'Evacuation-Priority on VM is not set, expected priority:{}, actual:{}, vm_id:{}'.format(
-                            vm_info['priority'], recovery_priority, vm_info['vm_id'])
+            if not recovery_priority:
+                assert vm_info['priority'] is None, \
+                    'Evacuation-Priority on VM is not set, expected priority:{}, actual:{}, vm_id:{}'.format(
+                        vm_info['priority'], recovery_priority, vm_info['vm_id'])
             else:
                 assert int(recovery_priority[VMMetaData.EVACUATION_PRIORITY]) == vm_info['priority'], \
                     'Evacuation-Priority on VM is not set, expected priority:{}, actual:{}, vm_id:{}'.format(
@@ -497,7 +496,6 @@ class TestPrioritizedVMEvacuation:
     def create_vms(self):
         LOG.tc_step('Create VMs')
 
-        self.current_host = self.get_dest_host()
         vm_name_format = 'pve_vm_{}'
 
         num_priorities = len(self.prioritizing)
@@ -529,8 +527,15 @@ class TestPrioritizedVMEvacuation:
 
         for sn, vm_info in self.vms_info.items():
             host = nova_helper.get_vm_nova_show_value(vm_info['vm_id'], 'OS-EXT-SRV-ATTR:hypervisor_hostname')
+
             if host != self.current_host:
-                vm_helper.live_migrate_vm(vm_info['vm_id'], destination_host=self.current_host)
+                vm_helper.cold_migrate_vm(vm_info['vm_id'], fail_ok=False)
+
+                actual_host = vm_helper.get_vm_host_and_numa_nodes(vm_info['vm_id'])[0]
+
+                assert actual_host == self.current_host, \
+                    'Failed to live-migrate VM:{} to host:{}, actual host:{}'.format(
+                        vm_info['vm_id'], host, actual_host)
 
         LOG.info('OK, Evacuation-Priorities are set on VMs\n')
 
@@ -601,9 +606,31 @@ class TestPrioritizedVMEvacuation:
         vm_helper.delete_vms()
 
         self.num_vms = NUM_VM
+        self.current_host = self.get_dest_host()
+        self.active_controller = system_helper.get_active_controller_name()
 
-        if self.operation == 'reboot':
-            if len(host_helper.get_up_hypervisors()) < 2:
+        if self.operation in ['reboot', 'force-reboot']:
+            hypervisors = host_helper.get_up_hypervisors()
+
+            if len(hypervisors) < 2:
                 skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+
+            elif len(hypervisors) > 2:
+                LOG.info('More than 2 hypervisors, will only leave 2 and lock the rest')
+                to_lock = len(hypervisors) - 2
+                for host in hypervisors:
+                    if to_lock < 1:
+                        break
+
+                    if host in [self.active_controller, self.current_host]:
+                        continue
+                    LOG.info('Locking host:{}'.format(host))
+                    host_helper.lock_host(host, fail_ok=False)
+                    ResourceCleanup.add('host', host, scope='class')
+                    to_lock -= 1
+
+                LOG.info('OK, total locked host:{}'.format(len(hypervisors) - 2))
+                self.hypervisors = host_helper.get_up_hypervisors()
+                LOG.inof('OK, now active hypervisors:{}'.format(self.hypervisors))
 
         LOG.info('OK, system is ready to test')
