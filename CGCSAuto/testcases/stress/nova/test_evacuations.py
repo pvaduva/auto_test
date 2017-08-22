@@ -72,10 +72,12 @@ def test_evacuate_vms_stress(add_hosts_to_zone):
     vms = vm_helper.boot_vms_various_types(storage_backing=storage_backing, target_host=initial_host, avail_zone=zone)
 
     target_host = initial_host
+
     for i in range(100):
-        LOG.info("===============Iteration {}============".format(i+1))
         post_host = hosts[0] if target_host != hosts[0] else hosts[1]
+        LOG.info("===============Iteration {}============".format(i+1))
         vm_helper.evacuate_vms(target_host, vms, wait_for_host_up=True, post_host=post_host, timeout=720, vlm=True)
 
+        target_host = post_host
         LOG.info("Rest for 120 seconds before next evacuation")
         time.sleep(120)
