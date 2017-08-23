@@ -4,7 +4,8 @@ from utils.tis_log import LOG
 from consts.cgcs import VMStatus
 from consts.reasons import SkipReason
 
-from keywords import vm_helper, host_helper, nova_helper, cinder_helper, glance_helper, system_helper, network_helper
+from keywords import vm_helper, host_helper, nova_helper, cinder_helper, glance_helper, system_helper, network_helper, \
+    check_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -146,15 +147,7 @@ class TestVariousGuests:
         'ge_edge',
     ])
     def test_evacuate_vm(self, guest_os, boot_source):
-        if guest_os in ['opensuse_12', 'win_2016'] and boot_source == 'volume':
-            if not cinder_helper.is_volumes_pool_sufficient(min_size=35):
-                skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
-
-        LOG.tc_step("Get/Create {} image".format(guest_os))
-        check_disk = True if 'win' in guest_os else False
-        img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk)
-        if guest_os != 'ubuntu_14':
-            ResourceCleanup.add('image', img_id)
+        img_id = check_helper.check_fs_sufficient(guest_os=guest_os, boot_source=boot_source)
 
         source_id = img_id if boot_source == 'image' else None
         LOG.tc_step("Boot a {} VM from {}".format(guest_os, boot_source))

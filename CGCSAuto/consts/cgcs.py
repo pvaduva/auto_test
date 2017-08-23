@@ -32,6 +32,7 @@ MELLANOX4 = 'MT.*ConnectX-4'
 
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
+    IMAGE_DIR_REMOTE = '/sandbox/images'
     TMP_IMG_DIR = '/opt/backups'
     DEFAULT_GUEST = 'tis-centos-guest'
     TIS_GUEST_PATTERN = 'cgcs-guest|tis-centos-guest'
@@ -146,6 +147,7 @@ class Prompt:
     PASSWORD_PROMPT = '.*assword\:.*'
     SUDO_PASSWORD_PROMPT = 'Password: '
     BUILD_SERVER_PROMPT_BASE = '{}@{}\:~.*'
+    TEST_SERVER_PROMPT_BASE = '\[{}@.*\]\$ '
     ADD_HOST = '.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
     Y_N_PROMPT = '.*\(y/n\)\?.*'

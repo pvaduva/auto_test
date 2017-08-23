@@ -6,6 +6,7 @@ on CEPH-related helper functions.
 import re
 import time
 
+from consts.auth import Tenant
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
@@ -573,3 +574,19 @@ def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ce
     else:
         output = table_parser.table(output)
         return rc, output
+
+
+def get_controllerfs_value(fs_name, rtn_val='Size in GiB', con_ssh=None, auth_info=Tenant.ADMIN, **filters):
+    table_ = table_parser.table(cli.system('controllerfs-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
+
+    filters['FS Name'] = fs_name
+    vals = table_parser.get_values(table_, rtn_val, **filters)
+    if not vals:
+        LOG.warning('No value found via controllerfs-list with: {}'.format(filters))
+        return None
+
+    val = vals[0]
+    if rtn_val.lower() == 'size in gib':
+        val = int(val)
+
+    return val

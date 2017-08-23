@@ -2907,6 +2907,36 @@ def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, pas
         bld_server_conn.close()
 
 
+@contextmanager
+def ssh_to_test_server(test_srv=SvcCgcsAuto.SERVER, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD, prompt=None):
+    """
+    ssh to test server.
+    Usage: Use with context_manager. i.e.,
+        with ssh_to_build_server(bld_srv=cgts-yow3-lx) as bld_srv_ssh:
+            # do something
+        # ssh session will be closed automatically
+
+    Args:
+        test_srv (str): test server ip
+        user (str): svc-cgcsauto if unspecified
+        password (str): password for svc-cgcsauto user if unspecified
+        prompt (str|None): expected prompt. such as: svc-cgcsauto@yow-cgts4-lx.wrs.com$
+
+    Yields (SSHClient): ssh client for given build server and user
+
+    """
+    # Get build_server dict from bld_srv param.
+
+    prompt = prompt if prompt else Prompt.TEST_SERVER_PROMPT_BASE.format(user)
+    test_server_conn = SSHClient(test_srv, user=user, password=password, initial_prompt=prompt)
+    test_server_conn.connect()
+
+    try:
+        yield test_server_conn
+    finally:
+        test_server_conn.close()
+
+
 def get_host_co_processor_pci_list(hostname):
 
     host_pci_info = []

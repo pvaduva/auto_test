@@ -7,10 +7,14 @@
 import re
 import time
 import copy
+from pytest import skip
 
 from utils.tis_log import LOG
 from consts.cgcs import MELLANOX_DEVICE
-from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common
+from consts.reasons import SkipReason
+from testfixtures.resource_mgmt import ResourceCleanup
+from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common, cinder_helper, \
+    glance_helper
 
 SEP = '\n------------------------------------ '
 
@@ -530,3 +534,28 @@ def _check_vm_pci_addr_on_vm(vm_id, nova_show_nics=None):
                 assert pci_addr in output, "Assigned pci address does not match pci info for vm {}. Assigned: {}; " \
                                            "Actual: {}".format(eth_name, pci_addr, output)
 
+
+def check_fs_sufficient(guest_os, boot_source='volume'):
+    """
+    Check if volume pool, image storage, and/or image conversion space is sufficient to launch vm
+    Args:
+        guest_os (str): e.g., tis-centos-guest, win_2016
+        boot_source (str): volume or image
+
+    Returns (str): image id
+
+    """
+    LOG.info("Check if storage fs is sufficient to launch boot-from-{} vm with {}".format(boot_source, guest_os))
+    if guest_os in ['opensuse_12', 'win_2016'] and boot_source == 'volume':
+        if not cinder_helper.is_volumes_pool_sufficient(min_size=35):
+            skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
+
+    if guest_os == 'win_2016' and boot_source == 'volume':
+        if not glance_helper.is_image_conversion_sufficient(guest_os=guest_os):
+            skip(SkipReason.INSUFFICIENT_IMG_CONV.format(guest_os))
+
+    LOG.tc_step("Get/Create {} image".format(guest_os))
+    check_disk = True if 'win' in guest_os else False
+    img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk)
+    if guest_os != 'ubuntu_14':
+        ResourceCleanup.add('image', img_id)

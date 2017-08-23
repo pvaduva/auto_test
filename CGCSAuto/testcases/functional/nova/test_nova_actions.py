@@ -102,15 +102,7 @@ class TestVariousGuests:
             - Delete created vm, volume, flavor
 
         """
-        if guest_os in ['opensuse_12', 'win_2016'] and boot_source == 'volume':
-            if not cinder_helper.is_volumes_pool_sufficient(min_size=35):
-                skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
-
-        LOG.tc_step("Get/Create {} glance image".format(guest_os))
-        check_disk = True if 'win' in guest_os else False
-        image_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk)
-        if guest_os not in GuestImages.GUESTS_NO_RM:
-            ResourceCleanup.add('image', image_id, scope='function')
+        image_id = check_helper.check_fs_sufficient(guest_os=guest_os, boot_source=boot_source)
 
         LOG.tc_step("Create a flavor with 2 vcpus")
         flavor_id = nova_helper.create_flavor(name=cpu_pol, vcpus=2, guest_os=guest_os)[1]

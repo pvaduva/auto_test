@@ -1,6 +1,7 @@
 import random
 import time
 import re
+import json
 
 from pytest import skip
 
@@ -10,7 +11,7 @@ from utils.ssh import ControllerClient
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.timeout import ImageTimeout
 from consts.cgcs import Prompt, GuestImages
-from keywords import common
+from keywords import common, storage_helper, system_helper, host_helper
 
 
 def get_images(images=None, rtn_val='id', auth_info=Tenant.ADMIN, con_ssh=None, strict=True, exclude=False, **kwargs):
@@ -80,19 +81,20 @@ def get_avail_image_space(con_ssh):
     Returns (float): e.g., 9.2
 
     """
-    size = con_ssh.exec_cmd("df | grep '/opt/cgcs' | awk '{{print $4}}'")[1]
+    size = con_ssh.exec_cmd("df | grep '/opt/cgcs' | awk '{{print $4}}'", fail_ok=False)[1]
     size = float(size.strip()) / (1024 * 1024)
     return size
 
 
-def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.05, con_ssh=None):
+def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.05, con_ssh=None, image_host_ssh=None):
     """
     Check if glance image storage disk is sufficient to create new glance image from specified image
     Args:
         img_file_path (str): e.g., /home/wrsroot/images/tis-centos-guest.img
         guest_os (str): used if img_file_path is not provided. e,g., ubuntu_14, ge_edge, cgcs-guest, etc
         min_diff: minimum difference required between available space and specifiec size. e.g., 0.1G
-        con_ssh:
+        con_ssh (SSHClient): tis active controller ssh client
+        image_host_ssh (SSHClient): such as test server ssh where image file was stored
 
     Returns (bool):
 
@@ -100,38 +102,131 @@ def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.05
 
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
+    if image_host_ssh is None:
+        image_host_ssh = con_ssh
 
-    if img_file_path:
-        file_size = con_ssh.exec_cmd("ls -l {} | awk '{{print $5}}'".format(img_file_path))[1]
-        file_size = float(file_size) / (1024 * 1024)
-    elif guest_os is None:
-        raise ValueError("Either img_file_path or guest_os has to be provided")
-    else:
-        img_file_info = GuestImages.IMAGE_FILES.get(guest_os, None)
-        if not img_file_info:
-            raise ValueError("Invalid guest_os provided. Choose from: {}".format(GuestImages.IMAGE_FILES.keys()))
-        file_size = img_file_info[3]
-
+    file_size = get_image_size(img_file_path=img_file_path, guest_os=guest_os, ssh_client=image_host_ssh)
     avail_size = get_avail_image_space(con_ssh=con_ssh)
 
     return avail_size - file_size >= min_diff
 
 
-def ensure_image_storage_sufficient(guest_os, con_ssh=None):
-    if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh):
-        images_to_del = get_images(exclude=True, Name=GuestImages.DEFAULT_GUEST, con_ssh=con_ssh)
-        if images_to_del:
-            LOG.info("Delete non-default images due to insufficient image storage media to create required image")
-            delete_images(images_to_del, check_first=False, con_ssh=con_ssh)
-            if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh):
-                LOG.info("Insufficient image storage media to create {} image even after deleting non-default "
-                         "glance images".format(guest_os))
-                return False
-        else:
-            LOG.info("Insufficient image storage media to create {} image".format(guest_os))
-            return False
+def get_image_file_info(img_file_path=None, guest_os=None, ssh_client=None):
+    """
+    Get image file info as dictionary
+    Args:
+        img_file_path (str): e.g., /home/wrsroot/images/tis-centos-guest.img
+        guest_os (str): has to be specified if img_file_path is unspecified. e.g., 'tis-centos-guest'
+        ssh_client (SSHClient): e.g.,  test server ssh
 
-    return True
+    Returns (dict): image info dict.
+    Examples:
+        {
+            "virtual-size": 688914432,
+            "filename": "images/cgcs-guest.img",
+            "format": "raw",
+            "actual-size": 688918528,
+            "dirty-flag": false
+        }
+
+    """
+    if not img_file_path:
+        if guest_os is None:
+            raise ValueError("Either img_file_path or guest_os has to be provided")
+        else:
+            img_file_info = GuestImages.IMAGE_FILES.get(guest_os, None)
+            if not img_file_info:
+                raise ValueError("Invalid guest_os provided. Choose from: {}".format(GuestImages.IMAGE_FILES.keys()))
+            # Assume ssh_client is test server client and image path is test server path
+            img_file_path = "{}/{}".format(GuestImages.IMAGE_DIR_REMOTE, img_file_info[0])
+
+    def _get_img_dict(ssh_):
+        img_info = ssh_.exec_cmd("qemu-img info --output json {}".format(img_file_path), fail_ok=False)[1]
+        return json.loads(img_info)
+
+    if ssh_client is None:
+        with host_helper.ssh_to_test_server() as ssh_client:
+            img_dict = _get_img_dict(ssh_=ssh_client)
+    else:
+        img_dict = _get_img_dict(ssh_=ssh_client)
+
+    LOG.info("Image {} info: {}".format(img_file_path, img_dict))
+    return img_dict
+
+
+def get_image_size(img_file_path=None, guest_os=None, virtual_size=False, ssh_client=None):
+    """
+    Get image virtual or actual size in GB via qemu-img info
+    Args:
+        img_file_path (str): e.g., /home/wrsroot/images/tis-centos-guest.img
+        guest_os (str): has to be specified if img_file_path is unspecified. e.g., 'tis-centos-guest'
+        virtual_size:
+        ssh_client:
+
+    Returns (float): image size in GB
+    """
+    key = "virtual-size" if virtual_size else "actual-size"
+    img_size = get_image_file_info(img_file_path=img_file_path, guest_os=guest_os, ssh_client=ssh_client)[key]
+    img_size = float(img_size) / (1024 * 1024 * 1024)
+    return img_size
+
+
+def get_avail_image_conversion_space(con_ssh=None):
+    """
+    Get available disk space in GB on /opt/img-conversions
+    Args:
+        con_ssh:
+
+    Returns (float): e.g., 19.2
+
+    """
+    size = con_ssh.exec_cmd("df | grep '/opt/img-conversions' | awk '{{print $4}}'")[1]
+    size = float(size.strip()) / (1024 * 1024)
+    return size
+
+
+def is_image_conversion_sufficient(img_file_path=None, guest_os=None, min_diff=0.05, con_ssh=None, img_host_ssh=None):
+    """
+    Check if image conversion space is sufficient to convert given image to raw format
+    Args:
+        img_file_path (str): e.g., /home/wrsroot/images/tis-centos-guest.img
+        guest_os (str): has to be specified if img_file_path is unspecified. e.g., 'tis-centos-guest'
+        min_diff (int): in GB
+        con_ssh:
+        img_host_ssh
+
+    Returns (bool):
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    if not system_helper.get_storage_nodes(con_ssh=con_ssh):
+        return True
+
+    avail_size = get_avail_image_conversion_space(con_ssh=con_ssh)
+    file_size = get_image_size(img_file_path=img_file_path, guest_os=guest_os, virtual_size=True,
+                               ssh_client=img_host_ssh)
+
+    return avail_size - file_size >= min_diff
+
+
+def ensure_image_storage_sufficient(guest_os, con_ssh=None):
+    with host_helper.ssh_to_test_server() as img_ssh:
+        if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh, image_host_ssh=img_ssh):
+            images_to_del = get_images(exclude=True, Name=GuestImages.DEFAULT_GUEST, con_ssh=con_ssh)
+            if images_to_del:
+                LOG.info("Delete non-default images due to insufficient image storage media to create required image")
+                delete_images(images_to_del, check_first=False, con_ssh=con_ssh)
+                if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh, image_host_ssh=img_ssh):
+                    LOG.info("Insufficient image storage media to create {} image even after deleting non-default "
+                             "glance images".format(guest_os))
+                    return False
+            else:
+                LOG.info("Insufficient image storage media to create {} image".format(guest_os))
+                return False
+
+        return True
 
 
 def create_image(name=None, image_id=None, source_image_file=None,

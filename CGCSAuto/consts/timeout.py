@@ -26,7 +26,7 @@ class VMTimeout:
     BOOT_VM = 600
     DELETE = 180
     VOL_ATTACH = 60
-    SSH_LOGIN = 180
+    SSH_LOGIN = 60
     AUTO_RECOVERY = 600
     REBOOT = 180
     PAUSE = 180
