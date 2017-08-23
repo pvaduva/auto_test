@@ -918,7 +918,7 @@ class Telnet:
                 self.write(str.encode("\n"))
                 return
         else:
-            # Centos 
+            # Centos
             if (small_footprint and lowlat) and not security:
                 log.info("Selecting Centos AIO Low Lat Install")
                 selection_menu_option = '6'  # Centos CPE Low Latency Install
@@ -978,7 +978,7 @@ class Telnet:
                 return
 
             # This is the USB hierarchical menu
-            if security and usb: 
+            if security and usb:
                 for x in range(0, int(selection_menu_option)):
                     log.info("Pressing down key")
                     self.write(str.encode(DOWN))
@@ -1000,7 +1000,7 @@ class Telnet:
                     time.sleep(2)
                     log.info("Pressing ENTER key")
                     self.write(str.encode("\n"))
-                else: 
+                else:
                     log.info("Selecting standard profile")
                     log.info("Pressing ENTER key")
                     self.write(str.encode("\n"))
@@ -1212,15 +1212,20 @@ class Telnet:
                     self.get_read_until("Boot from hard drive", 60)
                     self.menu_selection(host_os, small_footprint, lowlat, usb, security)
 
-        elif bios_type == BIOS_TYPES[1]:
+        elif bios_type == BIOS_TYPES[1] or "r430" in node.host_name:
+            print("Hewlett-Packard BIOS")
             # Hewlett-Packard BIOS
-            self.get_read_until("Network Boot", 120)
-            self.get_read_until("Network Boot", 10)
+            if "r430" in node.host_name:
+                bios_key = '\x1b@'
+                self.get_read_until("PXE Boot", 120)
+            else:
+                self.get_read_until("Network Boot", 120)
+                self.get_read_until("Network Boot", 10)
             log.info("Enter BIOS key")
             self.write(str.encode(bios_key))
 
             if node.name == CONTROLLER0:
-                self.get_read_until("Kickstart Boot Menu", 30)
+                self.get_read_until("Kickstart Boot Menu", 120)
                 self.menu_selection(host_os, small_footprint, lowlat, usb, security)
         elif bios_type == BIOS_TYPES[2]:
             boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
