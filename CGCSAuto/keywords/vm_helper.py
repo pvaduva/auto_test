@@ -1439,8 +1439,6 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
     if vm_image_name is None:
         vm_image_name = nova_helper.get_vm_image_name(vm_id=vm_id, con_ssh=con_ssh).strip().lower()
 
-    vm_name = nova_helper.get_vm_name_from_id(vm_id=vm_id)
-
     if vm_ip is None:
         if use_fip:
             vm_ip = network_helper.get_external_ips_for_vms(vms=vm_id, con_ssh=con_ssh)[0]

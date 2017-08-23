@@ -456,6 +456,8 @@ def is_vm_filesystem_rw(vm_id, rootfs='vda', vm_image_name=None):
 
     """
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    # Give it some time to allow vm initiate
+    time.sleep(30)
     if vm_image_name is None:
         vm_image_name = GuestImages.DEFAULT_GUEST
 

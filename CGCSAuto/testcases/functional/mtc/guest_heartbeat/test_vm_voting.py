@@ -85,9 +85,9 @@ def _perform_action(vm_id, action, expt_fail):
 
     elif action == 'suspend':
         if expt_fail:
-            # TODO check the rejection output or exitcode == 1
             LOG.tc_step("Verify that attempts to pause the VM is not allowed")
             code, out = vm_helper.pause_vm(vm_id, fail_ok=True)
+            assert 1 == code, "pause is not rejected"
             vm_state = nova_helper.get_vm_status(vm_id)
             LOG.info(out)
             assert vm_state == VMStatus.ACTIVE
@@ -95,6 +95,7 @@ def _perform_action(vm_id, action, expt_fail):
 
             LOG.tc_step("Verify that attempts to suspend the VM is not allowed")
             code, out = vm_helper.suspend_vm(vm_id, fail_ok=True)
+            assert 1 == code, "suspend is not rejected"
             vm_state = nova_helper.get_vm_status(vm_id)
             LOG.info(out)
             assert vm_state == VMStatus.ACTIVE
@@ -103,26 +104,18 @@ def _perform_action(vm_id, action, expt_fail):
         else:
             LOG.tc_step("Verify that the vm can be paused and unpaused")
             vm_helper.pause_vm(vm_id)
-            vm_state = nova_helper.get_vm_status(vm_id)
-            assert vm_state == VMStatus.PAUSED
             assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True), \
                 "The vm is still pingable after pause"
 
             vm_helper.unpause_vm(vm_id)
-            vm_state = nova_helper.get_vm_status(vm_id)
-            assert vm_state == VMStatus.ACTIVE
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
             LOG.tc_step("Verify that the vm can be suspended and resumed")
             vm_helper.suspend_vm(vm_id)
-            vm_state = nova_helper.get_vm_status(vm_id)
-            assert vm_state == VMStatus.SUSPENDED
             assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True), \
                 "The vm is still pingable after suspend"
 
             vm_helper.resume_vm(vm_id)
-            vm_state = nova_helper.get_vm_status(vm_id)
-            assert vm_state == VMStatus.ACTIVE
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     elif action == 'reboot':
@@ -219,7 +212,7 @@ def test_vm_voting(action, hb_flavor):
         LOG.tc_step("Set vote_no_to_{} from guest".format(action))
         cmd = 'touch /tmp/vote_no_to_{}'.format(action)
         vm_ssh.exec_cmd(cmd)
-        time.sleep(5)
+        time.sleep(30)
 
     _perform_action(vm_id, action, expt_fail=True)
 
@@ -227,7 +220,7 @@ def test_vm_voting(action, hb_flavor):
     cmd = "rm -f /tmp/vote_no_to_{}".format(action)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         vm_ssh.exec_cmd(cmd)
-        time.sleep(5)
+        time.sleep(30)
 
     _perform_action(vm_id, action, expt_fail=False)
 
