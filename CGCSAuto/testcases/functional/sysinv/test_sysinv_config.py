@@ -213,7 +213,7 @@ class TestDnsSettings:
     DNS_SETTING_FILE = '/etc/resolv.conf'
 
     @repeat_checking(repeat_times=10, wait_time=6)
-    def wait_for_dns_changed(self, expected_ip_addres=None):
+    def wait_for_dns_changed(self, expected_ip_addres):
         ip_addr_list = expected_ip_addres if expected_ip_addres is not None else []
 
         controller_ssh = ControllerClient.get_active_controller()
@@ -223,7 +223,7 @@ class TestDnsSettings:
 
         assert 0 == code, 'Failed to get saved DNS settings: {}'.format(cmd_get_saved_dns)
 
-        LOG.info('Find saved DNS servers:{}'.format(output))
+        LOG.info('Find saved DNS servers:\n{}\n'.format(output))
         saved_dns = []
         for line in output.splitlines():
             if line.strip().startswith('nameserver'):
@@ -304,10 +304,10 @@ class TestDnsSettings:
                 LOG.info('Found invalid IP:{}'.format(server))
                 ip_addr_list.append(server)
                 expect_fail = True
-                break
+                continue
             ip_addr_list.append(ip_addr)
 
-        if not ip_addr:
+        if not ip_addr_list:
             skip('No valid IPs input for DNS servers, skip the test')
             return
 
@@ -332,38 +332,37 @@ class TestDnsSettings:
             LOG.info('OK, attempt was rejected as expected to change DNS to: "{}"\n'.format(ip_addr_list))
 
             LOG.tc_step('Verify DNS servers remain UNCHANGED as old: "{}"'.format(old_dns_servers))
-            code, output = self.wait_for_dns_changed(ip_addr_list)
+            code, output = self.wait_for_dns_changed(old_dns_servers)
             assert code == 0, \
                 'In configuration DNS servers should remain unchanged:\nbefore: "{}"\nnow: "{}"'.format(
                     old_dns_servers, output)
-            return
-
-        assert 0 == code, 'Failed to change DNS servers to: "{}", msg: "{}"'.format(msg, ip_addr_list)
-
-        LOG.tc_step('Verify in DB changed to new servers: {}'.format(ip_addr_list))
-        post_change_servers = system_helper.get_dns_servers()
-
-        assert list(ip_addr_list) == list(post_change_servers), \
-            'DNS servers were not changed, \nexpected:"{}"\nactual:"{}"\n'.format(ip_addr_list, post_change_servers)
-
-        LOG.info('OK, in DB, DNS servers changed to new IPs: "{}"\n'.format(ip_addr_list))
-
-        LOG.tc_step('Verify in configuration, DNS should change after wait {} seconds'.format(
-            SysInvTimeout.DNS_SERVERS_SAVED))
-
-        LOG.info('Check if DNS changed or not in configuration\n')
-
-        if with_action_option is None or with_action_option == 'apply':
-            LOG.info('In this case, configuration should be updated with new DNS:{}'.format(ip_addr_list))
-            code, output = self.wait_for_dns_changed(ip_addr_list)
-            assert code == 0, \
-                'DNS in configuration is different from requested:\ninput:"{}"\n"in config: {}"'.format(
-                    ip_addr_list, output)
         else:
-            LOG.info('In this case, configuration should remain UNCHANGED as old: "{}"'.format(old_dns_servers))
-            code, output = self.wait_for_dns_changed(old_dns_servers)
-            assert code == 0, \
-                'Saved DNS servers should remain unchanged:\nbefore: "{}"\nnow: "{}"'.format(
-                    old_dns_servers, output)
+            assert 0 == code, 'Failed to change DNS servers to: "{}", msg: "{}"'.format(msg, ip_addr_list)
+
+            LOG.tc_step('Verify in DB changed to new servers: {}'.format(ip_addr_list))
+            acutal_dns_servers = system_helper.get_dns_servers()
+
+            assert list(acutal_dns_servers) == list(ip_addr_list), \
+                'DNS servers were not changed, \nexpected:"{}"\nactual:"{}"\n'.format(ip_addr_list, acutal_dns_servers)
+
+            LOG.info('OK, in DB, DNS servers changed to new IPs: "{}"\n'.format(ip_addr_list))
+
+            LOG.tc_step('Verify in configuration, DNS should change after wait {} seconds'.format(
+                SysInvTimeout.DNS_SERVERS_SAVED))
+
+            LOG.info('Check if DNS changed or not in configuration\n')
+
+            if with_action_option is None or with_action_option == 'apply':
+                LOG.info('In this case, configuration should be updated with new DNS:{}'.format(ip_addr_list))
+                code, output = self.wait_for_dns_changed(ip_addr_list)
+                assert code == 0, \
+                    'DNS in configuration is different from requested:\ninput:"{}"\n"in config: {}"'.format(
+                        ip_addr_list, output)
+            else:
+                LOG.info('In this case, configuration should remain UNCHANGED as old: "{}"'.format(old_dns_servers))
+                code, output = self.wait_for_dns_changed(old_dns_servers)
+                assert code == 0, \
+                    'Saved DNS servers should remain unchanged:\nbefore: "{}"\nnow: "{}"'.format(
+                        old_dns_servers, output)
 
         LOG.info('OK, test setting DNS to "{}" passed'.format(ip_addr_list))

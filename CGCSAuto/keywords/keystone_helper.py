@@ -24,7 +24,7 @@ def get_tenant_ids(tenant_name=None, con_ssh=None):
     return table_parser.get_values(table_, 'ID', Name=tenant_name)
 
 
-def get_user_ids(user_name=None, con_ssh=None):
+def get_user_ids(user_name=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Return a list of user id(s) with given user name.
 
@@ -37,7 +37,7 @@ def get_user_ids(user_name=None, con_ssh=None):
     """
     if user_name is None:
         user_name = Tenant.get_primary()['user']
-    table_ = table_parser.table(cli.openstack('user list', ssh_client=con_ssh))
+    table_ = table_parser.table(cli.openstack('user list', ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_, 'ID', Name=user_name)
 
 
