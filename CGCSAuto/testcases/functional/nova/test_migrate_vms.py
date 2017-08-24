@@ -21,11 +21,11 @@ def hosts_per_stor_backing():
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'block_mig'), [
     mark.p1(('local_image', 0, 0, None, 1, 'volume', False)),
     mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume', False)),
-    mark.domain_sanity(('local_image', 0, 0, 'shared', 2, 'image', True)),
-    mark.domain_sanity(('local_image', 1, 1, 'dedicated', 1, 'image', False)),
     ('local_image', 1, 0, 'dedicated', 2, 'volume', False),
     ('local_image', 0, 1, 'shared', 1, 'volume', False),
-    ('local_image', 1, 0, 'dedicated', 2, 'volume', True),     # TODO New matrix from Gerry
+    ('local_image', 1, 1, 'dedicated', 2, 'volume', True),      # Supported from Newton
+    mark.domain_sanity(('local_image', 0, 0, 'shared', 2, 'image', True)),
+    mark.domain_sanity(('local_image', 1, 1, 'dedicated', 1, 'image', False)),
     ('local_image', 0, 0, None, 2, 'image_with_vol', False),
     ('local_image', 0, 0, 'dedicated', 1, 'image_with_vol', True),
     ('local_image', 1, 1, 'dedicated', 2, 'image_with_vol', True),

@@ -796,11 +796,6 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         else:
             LOG.debug("System does not allow live migrating vm {} as expected.".format(vm_id))
             return 1, "Live migration failed as expected"
-        # if fail_ok:
-        #     return 5, "Post action check failed: VM host did not change!"
-        # else:
-        #     raise exceptions.VMPostCheckFailed("VM did not migrate to other host! VM: {}, Status:{}, Host: {}".
-        #                                        format(vm_id, before_status, after_host))
 
     LOG.info("VM {} successfully migrated from {} to {}".format(vm_id, before_host, after_host))
     return 0, "Live migration is successful."
@@ -810,26 +805,27 @@ def _is_live_migration_allowed(vm_id, con_ssh=None, block_migrate=None):
     vm_info = VMInfo.get_vm_info(vm_id, con_ssh=con_ssh)
     storage_backing = vm_info.get_storage_type()
     vm_boot_from = vm_info.boot_info['type']
-    has_volume_attached = vm_info.has_volume_attached()
 
-    if vm_boot_from == 'image' and storage_backing == 'local_image' and not has_volume_attached:
+    if storage_backing == 'local_image':
+        if block_migrate and vm_boot_from == 'volume' and not vm_info.has_local_disks():
+            LOG.warning("Live block migration is not supported for boot-from-volume vm with local_lvm storage")
+            return False
         return True
 
-    elif block_migrate:
-        LOG.warning("Live migration with block is not allowed for vm {}".format(vm_id))
-        return False
-
-    # auto choose block-mig with local disk
-    elif vm_info.has_local_disks():
-        if storage_backing == 'remote':
+    elif storage_backing == 'local_lvm':
+        if (not block_migrate) and vm_boot_from == 'volume' and not vm_info.has_local_disks():
             return True
         else:
-            LOG.warning("Live migration is not allowed for localdisk vm with non-remote storage. vm: {}".format(vm_id))
+            LOG.warning("Live (block) migration is not supported for local_lvm vm with localdisk")
             return False
 
-    # auto choose block-mig without local disk
     else:
-        return True
+        # remote backend
+        if block_migrate:
+            LOG.warning("Live block migration is not supported for vm with remote storage")
+            return False
+        else:
+            return True
 
 
 def get_dest_host_for_live_migrate(vm_id, con_ssh=None):
