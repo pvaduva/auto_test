@@ -529,13 +529,18 @@ class TestPrioritizedVMEvacuation:
             host = nova_helper.get_vm_nova_show_value(vm_info['vm_id'], 'OS-EXT-SRV-ATTR:hypervisor_hostname')
 
             if host != self.current_host:
-                vm_helper.cold_migrate_vm(vm_info['vm_id'], fail_ok=False)
+                vm_id = vm_info['vm_id']
 
-                actual_host = vm_helper.get_vm_host_and_numa_nodes(vm_info['vm_id'])[0]
+                if not vm_helper._is_live_migration_allowed(vm_id):
+                    skip('Cannot Live-migrate vm:{}, skip the test'.format(vm_id))
+
+                vm_helper.live_migrate_vm(vm_id, fail_ok=False)
+
+                actual_host = vm_helper.get_vm_host_and_numa_nodes(vm_id)[0]
 
                 assert actual_host == self.current_host, \
                     'Failed to live-migrate VM:{} to host:{}, actual host:{}'.format(
-                        vm_info['vm_id'], host, actual_host)
+                        vm_id, host, actual_host)
 
         LOG.info('OK, Evacuation-Priorities are set on VMs\n')
 
