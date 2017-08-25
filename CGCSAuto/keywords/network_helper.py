@@ -1769,7 +1769,7 @@ def get_pci_devices_info(con_ssh=None, auth_info=None):
     LOG.info('output of nova device-list:{}'.format(table))
 
     try:
-        # names = table_parser.get_column(table, 'Device Name')
+        # names = table_parser.get_column(table, 'PCI Alias')
         devices = table_parser.get_column(table, 'Device Id')
         # pci_pfs = table_parser.get_column(table, 'pci_pfs_configured')
         # pci_pfs_used = table_parser.get_column(table, 'pci_pfs_used')
@@ -1791,7 +1791,7 @@ def get_pci_devices_info(con_ssh=None, auth_info=None):
         LOG.debug('output from nova device-show for device-id:{}\n{}'.format(id_, table))
 
         try:
-            names = table_parser.get_column(table, 'Device Name')
+            names = table_parser.get_column(table, 'PCI Alias')
             device_ids = table_parser.get_column(table, 'Device Id')
             vendor_ids = table_parser.get_column(table, 'Vendor Id')
             hosts = table_parser.get_column(table, 'Host')
@@ -3011,6 +3011,7 @@ def get_pci_device_vfs_counts_for_host(host, device_id=None, fields=('pci_vfs_co
         counts.append(int(table_parser.get_column(table_, field)[0]))
 
     return counts
+
 
 def get_pci_device_list_values(field='pci_vfs_used', con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     table_ = table_parser.table(cli.nova(cmd='device-list', ssh_client=con_ssh, auth_info=auth_info))
