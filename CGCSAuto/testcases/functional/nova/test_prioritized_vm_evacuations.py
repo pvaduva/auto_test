@@ -1,6 +1,7 @@
 
 import re
 import os
+import time
 import random
 import string
 from datetime import datetime
@@ -450,6 +451,10 @@ class TestPrioritizedVMEvacuation:
             code, output = self.set_evacuate_priority(vm_id, priority, fail_ok=expecting_fail)
 
         else:
+            priorities_set = get_evcuation_priority(vm_id, fail_ok=True)
+            expecting_fail = True if not priorities_set else False
+            LOG.info('Attempt to delete evacuation-priority, expecting {}'.format('PASS' if expecting_fail else 'FAIL'))
+
             code, output = self.delete_evacuate_priority(vm_id, fail_ok=expecting_fail)
 
         if 0 == code:
@@ -534,6 +539,8 @@ class TestPrioritizedVMEvacuation:
                 if not vm_helper._is_live_migration_allowed(vm_id):
                     skip('Cannot Live-migrate vm:{}, skip the test'.format(vm_id))
 
+                LOG.info('Wait 20 seconds to live migrate vm:{} from:{}'.format(vm_id, host))
+                time.sleep(20)
                 vm_helper.live_migrate_vm(vm_id, fail_ok=False)
 
                 actual_host = vm_helper.get_vm_host_and_numa_nodes(vm_id)[0]
