@@ -154,9 +154,18 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
         for tenant_port_id in tenant_port_ids:
             vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id)
 
+        LOG.tc_step("Remove the dhclient leases cache after detach")
+        _remove_dhclient_cache(vm_id=vm_under_test)
         res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, retry=0,
                                          net_types=['data'])[0]
         assert not res, "Ping from base_vm to vm via detached interface still works"
+
+
+def _remove_dhclient_cache(vm_id):
+    dhclient_leases_cache = '/var/lib/dhclient/dhclient.leases'
+    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        if vm_ssh.file_exists(dhclient_leases_cache):
+            vm_ssh.exec_sudo_cmd('rm {}'.format(dhclient_leases_cache))
 
 
 def _bring_up_attached_interface(vm_id, guest_os, num=1):
