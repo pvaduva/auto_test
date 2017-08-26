@@ -148,7 +148,7 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
 
         LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
                     "after {}".format(vm_actions))
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt', 'data'])
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt', 'data'], retry=10)
 
         LOG.tc_step("Detach all the {} interface {}".format(vif_model, tenant_port_ids))
         for tenant_port_id in tenant_port_ids:
