@@ -6,7 +6,7 @@ from consts.auth import Tenant
 from consts.cgcs import EventLogID
 from keywords import host_helper, system_helper, local_storage_helper
 from testfixtures.recover_hosts import HostsToRecover
-from utils import cli
+from utils import cli, table_parser
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 
@@ -50,7 +50,7 @@ def test_reclaim_sda():
     for host in hosts:
         LOG.info("Reclaiming space for {}".format(host))
         pos_args = "{} cgts-vg /dev/sda".format(host)
-        rc, output = cli.system('host-pv-add', positional_args=pos_args)
+        table_ = table_parser.table(cli.system('host-pv-add', positional_args=pos_args))
         system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
                                      entity_id="host={}".format(host))
 
@@ -67,4 +67,14 @@ def test_reclaim_sda():
 
     LOG.info("cgts-vg is currently: {}".format(cgts_vg_val.group(0)))
     assert new_cgts_vg_val <= cgts_vg_val, "cgts-vg size did not increase"
+
+
+#def test_increase_scratch():
+#    """ 
+#    This test increases the size of the scratch filesystem.  The scratch
+#    filesystem is used for activities such as uploading swift object files,
+#    etc.
+#
+#    """
+
 
