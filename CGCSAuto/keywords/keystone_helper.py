@@ -7,6 +7,11 @@ from consts.auth import Tenant
 from keywords import common
 
 
+def get_role_ids(role_name, con_ssh=None):
+    table_ = table_parser.table(cli.openstack('role list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    return table_parser.get_values(table_, 'ID', Name=role_name)
+
+
 def get_tenant_ids(tenant_name=None, con_ssh=None):
     """
     Return a list of tenant id(s) with given tenant name.

@@ -22,7 +22,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 NUM_VM = 5
 DEF_PRIORITY = 3
-DEF_MEM_SIZE = 1
+DEF_MEM_SIZE = 1024
 DEF_DISK_SIZE = 1
 DEF_NUM_VCPU = 2
 
@@ -557,7 +557,7 @@ class TestPrioritizedVMEvacuation:
         flavor_name_format = 'pve_flavor_{}'
         for sn in range(self.num_vms):
             name = flavor_name_format.format(sn)
-            flavor_id = nova_helper.create_flavor(name=name, vcpus=self.vcpus[sn], ram=int(self.mem[sn]) * 1024,
+            flavor_id = nova_helper.create_flavor(name=name, vcpus=self.vcpus[sn], ram=int(self.mem[sn]),
                                                   root_disk=self.root_disk[sn], swap=int(self.swap_disk[sn]) * 1024,
                                                   is_public=True)[1]
             self.vms_info.update({sn: {'flavor_name': name, 'flavor_id': flavor_id}})
@@ -586,9 +586,7 @@ class TestPrioritizedVMEvacuation:
             self.vcpus = [DEF_NUM_VCPU] * NUM_VM
 
         if 'diff' in mem:
-            self.mem = list(range(DEF_MEM_SIZE + NUM_VM + 1,
-                                  DEF_MEM_SIZE,
-                                  -1))
+            self.mem = list(range(DEF_MEM_SIZE + 512 * NUM_VM, DEF_MEM_SIZE, -512))
         else:
             self.mem = [DEF_MEM_SIZE] * NUM_VM
 
