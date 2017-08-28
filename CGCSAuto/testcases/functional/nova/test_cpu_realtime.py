@@ -81,7 +81,9 @@ def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_
         LOG.tc_step("Check vcpusched, emulatorpin, and vcpupin in virsh dumpxml")
         vcpupins, emulatorpins, vcpuscheds = host_helper.get_values_virsh_xmldump(
                 instance_name=inst_name, host_ssh=host_ssh, target_type='dict',
-                tag_path=('cputune/vcpupin', 'cputune/emulatorpin', 'cputune/vcpusched'))
+                tag_paths=('cputune/vcpupin', 'cputune/emulatorpin', 'cputune/vcpusched'))
+        # TODO : REMOVEEEE
+        print("vcpupins: {}, emulatorpins: {}, vcpuscheds: {}".format(vcpupins, emulatorpins, vcpuscheds))
 
         # Each vcpu should have its own vcpupin entry in vish dumpxml
         assert vcpus == len(vcpupins), "vcpupin entries count in virsh dumpxml is not the same as vm vcpus count"
@@ -93,13 +95,16 @@ def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_
 
         else:
             LOG.tc_step("Check vcpusched for realtime cpus")
-            vcpusched = vcpuscheds[0]
-            virsh_scheduler = vcpusched['scheduler']
-            virsh_priority = vcpusched['priority']
-            assert 'fifo' == virsh_scheduler, "Actual shed policy in virsh dumpxml: {}".format(virsh_scheduler)
-            assert '1' == virsh_priority, "Actual priority in virsh dumpxml: {}".format(virsh_scheduler)
+            virsh_rt_cpus = []
+            for vcpusched in vcpuscheds:
+                virsh_scheduler = vcpusched['scheduler']
+                virsh_priority = vcpusched['priority']
+                assert 'fifo' == virsh_scheduler, "Actual shed policy in virsh dumpxml: {}".format(virsh_scheduler)
+                assert '1' == virsh_priority, "Actual priority in virsh dumpxml: {}".format(virsh_scheduler)
 
-            virsh_rt_cpus = common._parse_cpus_list(vcpusched['vcpus'])
+                virsh_rt_cpu = int(vcpusched['vcpus'])
+                virsh_rt_cpus.append(virsh_rt_cpu)
+
             assert sorted(expt_rt_cpus) == sorted(virsh_rt_cpus), \
                 "Expected rt cpus: {}; Actual in virsh vcpusched: {}".format(expt_rt_cpus, virsh_rt_cpus)
 

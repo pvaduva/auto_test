@@ -210,6 +210,7 @@ class ImageMetadata:
     CPU_POLICY = 'hw_cpu_policy'
     CPU_RT_MASK = 'hw_cpu_realtime_mask'
     CPU_RT = 'hw_cpu_realtime'
+    CPU_MODEL = 'hw_cpu_model'
 
 
 class VMMetaData:
@@ -417,4 +418,3 @@ class OrchestrationStrategyKeyNames:
     ABORT_REASON = 'abort-reason'
     BUILD_RESULT = 'build-result'
     BUILD_REASON = 'build-reason'
-

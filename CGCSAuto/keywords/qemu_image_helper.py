@@ -11,6 +11,7 @@ from utils.ssh import ControllerClient
 from keywords import system_helper, host_helper
 from consts.auth import Tenant
 
+
 def image_info(image_filename, conn_ssh=None, fail_ok=False):
     """
     Provides information about the disk image filename, like file format, virtual size and disk size

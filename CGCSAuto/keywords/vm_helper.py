@@ -3484,3 +3484,22 @@ def get_sched_policy_and_priority_for_vcpus(instance_pid, host_ssh, cpusets=None
     LOG.info("CPU policy and priority for cpus with cpuset: {}; comm_pattern: {} - {}".format(cpusets, comm,
                                                                                               cpu_pol_and_prios))
     return cpu_pol_and_prios
+
+
+def get_vcpu_model(vm_id, guest_os=None, con_ssh=None):
+    """
+    Get vcpu model of given vm. e.g., Intel(R) Xeon(R) CPU E5-2680 v2 @ 2.80GHz
+    Args:
+        vm_id (str):
+        guest_os (str):
+        con_ssh (SSHClient):
+
+    Returns (str):
+
+    """
+    with ssh_to_vm_from_natbox(vm_id, vm_image_name=guest_os, con_ssh=con_ssh) as vm_ssh:
+        out = vm_ssh.exec_cmd("cat /proc/cpuinfo | grep --color='never' 'model name'", fail_ok=False)[1]
+        vcpu_model = out.strip().splitlines()[0].split(sep=': ')[1].strip()
+
+    LOG.info("VM {} cpu model: {}".format(vm_id, vcpu_model))
+    return vcpu_model

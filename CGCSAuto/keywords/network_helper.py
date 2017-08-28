@@ -47,7 +47,7 @@ def get_ip_address_str(ip=None):
         return None
 
 
-def create_network(name=None, shared=False,tenant_name=None,
+def create_network(name=None, shared=False, tenant_name=None,
                    network_type=None, segmentation_id=None,
                    physical_network=None, vlan_transparent=None, fail_ok=False, auth_info=None, con_ssh=None):
 
