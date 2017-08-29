@@ -66,8 +66,8 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
             ssh_client.set_prompt(prompt=ssh.ADMIN_PROMPT)
     else:
         if auth_info:
-            auth_args = ('--os-username {} --os-password {} --os-project-name {} --os-auth-url {} --os-region-name {} '
-                         '--os-user-domain-name Default --os-project-domain-name Default'.
+            auth_args = ("--os-username '{}' --os-password '{}' --os-project-name {} --os-auth-url {}"
+                         " --os-region-name {} --os-user-domain-name Default --os-project-domain-name Default".
                          format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url'],
                                 auth_info['region']))
 
