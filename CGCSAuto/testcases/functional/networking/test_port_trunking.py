@@ -32,11 +32,11 @@ def _bring_up_vlan_interface(vm_id, eth_name, vlan_ids):
 
 
 @mark.parametrize(('guest_os','vif_model'), [
-    ('tis-centos-guest','avp')
-    ('tis-centos-guest', 'virtio'),
-    ('tis-centos-guest', 'e1000')
+    ('tis-centos-guest','avp'),
+    ('tis-centos-guest','virtio'),
+    ('tis-centos-guest','e1000')
 ])
-def _test_port_trunking(guest_os, vif_model):
+def test_port_trunking(guest_os, vif_model):
     """
     Port trunking feature test cases
 
