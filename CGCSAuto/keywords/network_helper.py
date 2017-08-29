@@ -3362,17 +3362,20 @@ def add_trunk_subports(trunk_id, sub_ports=None, fail_ok=False, con_ssh=None, au
     if sub_ports is None:
         raise ValueError("port_id has to be specified for parent port.")
 
-    for sub_port in sub_ports:
-        args+=' --subport'
-        for key, val in sub_port.items():
-            if val is not None:
-                args += ' {} {}'.format(key, val)
-
-    args += ' ' + trunk_id
+    keys = ['port', 'segmentation-type', 'segmentation-id']
+    args += trunk_id
+    if sub_ports is not None:
+        for sub_port in sub_ports:
+            tmp_list = []
+            for key in keys:
+                val = sub_port.get(key)
+                if val is not None:
+                    tmp_list.append('{}={}'.format(key, val))
+            args += ' --subport '+','.join(tmp_list)
 
     LOG.info("Adding subport to trunk: {}. Args: {}".format(trunk_id, args))
     code, output = cli.openstack('network trunk set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                               rtn_list=True)
+                                 rtn_list=True)
 
     if code == 1:
         return 1, output
@@ -3385,10 +3388,7 @@ def remove_trunk_subports(trunk_id,tenant_name=None, sub_ports=None, fail_ok=Fal
     """Remove subports from a trunk via API.
     Args:
         trunk_id: Trunk id to remove the subports from
-        sub_ports: List of subport dictionaries in format
-            [[<ID of neutron port for subport>,
-             segmentation_type(vlan),
-             segmentation_id(<VLAN tag>)] []..]
+        sub_ports: List of subport
 
     Return: list with return code and msg
     """
@@ -3399,19 +3399,15 @@ def remove_trunk_subports(trunk_id,tenant_name=None, sub_ports=None, fail_ok=Fal
     if sub_ports is None:
         raise ValueError("port_id has to be specified for parent port.")
 
-    for sub_port in sub_ports:
-        args+=' --subport'
-        for key, val in sub_port.items():
-            if val is not None:
-                args+= ' {} {}'.format(key, val)
+    args += trunk_id
 
-    args += ' '
-    args+=trunk_id
+    for sub_port in sub_ports:
+        args += ' --subport'
+        args += ' ' + sub_port
 
     LOG.info("Removing subport from trunk: {}. Args: {}".format(trunk_id, args))
     code, output = cli.openstack('network trunk unset', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                                rtn_list=True)
-
     if code == 1:
         return 1, output
 
