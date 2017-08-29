@@ -3169,3 +3169,42 @@ def get_host_cpu_model(host, con_ssh=None):
 
     LOG.info("CPU Model for {}: {}".format(host, cpu_model))
     return cpu_model
+
+
+def get_hypersvisors_with_config(hosts=None, up_only=True, hyperthreaded=None, storage_backing=None, con_ssh=None):
+    """
+    Get hypervisors with specified configurations
+    Args:
+        hosts (None|list):
+        up_only (bool):
+        storage_backing (None|str):
+        con_ssh (SSHClient):
+
+    Returns (list): list of hosts meeting the requirements
+
+    """
+    if up_only:
+        hypervisors = get_up_hypervisors(con_ssh=con_ssh)
+    else:
+        hypervisors = get_hypervisors(con_ssh=con_ssh)
+
+    if hosts:
+        candidate_hosts = list(set(hypervisors) & set(hosts))
+    else:
+        candidate_hosts = hypervisors
+
+    if candidate_hosts and storage_backing:
+        hosts_with_backing = get_hosts_by_storage_aggregate(storage_backing=storage_backing, con_ssh=con_ssh)
+        candidate_hosts = list(set(candidate_hosts) & set(hosts_with_backing))
+
+    if hyperthreaded is not None and candidate_hosts:
+        ht_hosts = []
+        non_ht = []
+        for host in candidate_hosts:
+            if system_helper.is_hyperthreading_enabled(host, con_ssh=con_ssh):
+                ht_hosts.append(host)
+            else:
+                non_ht.append(host)
+        candidate_hosts = ht_hosts if hyperthreaded else non_ht
+
+    return candidate_hosts

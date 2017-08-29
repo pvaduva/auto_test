@@ -1,10 +1,10 @@
 import re
-from pytest import fixture, mark
+from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, ImageMetadata, GuestImages
 from consts.cli_errs import VCPUSchedulerErr
-from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper
+from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, check_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -17,14 +17,26 @@ from testfixtures.fixture_resources import ResourceCleanup
     ('Passthrough', 'Passthrough', 'image', None),
     ('SandyBridge', 'SandyBridge', 'volume', None)
 ])
-def test_vcpu_model_image_and_flavor(flv_model, img_model, boot_source, error):
+def test_vcpu_model_flavor_and_image(flv_model, img_model, boot_source, error):
+    """
+    Test when vcpu model is set in both flavor and image
+    Args:
+        flv_model (str): vcpu model flavor extra spec setting
+        img_model (str): vcpu model metadata in image
+        boot_source (str): launch vm from image or volume
+        error (str|None): whether an error is expected with given flavor/image vcpu settings
+
+    Test steps:
+        - Create a flavor and set vcpu model spec as specified
+        - Create an image and set image metadata as specified
+        - Launch a vm from image/volume using above flavor and image
+        - If error is specified, check cpu model conflict error is displayed in nova show
+        - Otherwise check vm is launched successfully and expected cpu model is used
+
+    """
     code, vm, msg = _boot_vm_vcpu_model(flv_model=flv_model, img_model=img_model, boot_source=boot_source)
 
     if error:
-        # if boot_source == 'volume':
-        #     assert 4 == code, "boot vm cli exit code is not 1. Actual fail reason: {}".format(msg)
-        #     assert re.search('Block Device Mapping is Invalid', msg)
-        # else:
         assert 1 == code
         vm_helper.wait_for_vm_values(vm, 10, regex=True, strict=False, status='ERROR', fail_ok=False)
         err = nova_helper.get_vm_fault_message(vm)
@@ -89,16 +101,17 @@ def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source):
         vcpu_source
         boot_source
 
-    Setup:
-        - Create a basic flavor and volume (module level)
     Test Steps:
-        - Set flavor extra spec to given vcpu model
-        - Boot a vm from volume using the flavor
-        - Verify vcpu model specified in flavor is used by vm. Or proper error message is included if host does not
+        - Set flavor extra spec or image metadata with given vcpu model
+        - Boot a vm from volume/image
+        - If vcpu model is supported by host,
+            - Check vcpu model specified in flavor/image is used by vm via virsh, ps aux (and /proc/cpuinfo)
+            - Live migrate vm and check vcpu model again
+            - Cold migrate vm and check vcpu model again
+        - If vcpu model is not supported by host, check proper error message is included if host does not
             support specified vcpu model.
     Teardown:
-        - Delete created vm
-        - Delete created volume and flavor (module level)
+        - Delete created vm, volume, image, flavor
 
     """
     flv_model = vcpu_model if vcpu_source == 'flavor' else None
@@ -145,13 +158,19 @@ def check_vm_cpu_model(vm_id, vcpu_model, expt_arch=None):
         pattern_virsh = 'host-passthrough'
         virsh_tag = 'cpu'
         type_ = 'dict'
-    else:
+    elif vcpu_model:
         virsh_tag = 'cpu/model'
         type_ = 'text'
         if vcpu_model == 'Haswell':
             pattern_ps = pattern_virsh = '(haswell|haswell\-notsx)'
         else:
             pattern_ps = pattern_virsh = vcpu_model.lower()
+    else:
+        # vcpu model is not set
+        pattern_ps = None
+        pattern_virsh = None
+        virsh_tag = 'cpu'
+        type_ = 'dict'
 
     LOG.info("Check vcpu model successfully applied to vm via ps aux and virsh dumpxml on vm host")
     host = nova_helper.get_vm_host(vm_id)
@@ -159,24 +178,126 @@ def check_vm_cpu_model(vm_id, vcpu_model, expt_arch=None):
     with host_helper.ssh_to_host(host) as host_ssh:
         output_ps = host_ssh.exec_cmd("ps aux | grep --color='never' -i {}".format(vm_id), fail_ok=False)[1]
         output_virsh = host_helper.get_values_virsh_xmldump(inst_name, host_ssh, tag_paths=virsh_tag, target_type=type_)
-        print("VIRSH CPU: {}".format(output_virsh))
         output_virsh = output_virsh[0]
 
-    assert re.search('\s-cpu\s{}(\s|,)'.format(pattern_ps), output_ps.lower()), \
-        'cpu_model {} not found for vm {}'.format(pattern_ps, vm_id)
+    if vcpu_model:
+        assert re.search('\s-cpu\s{}(\s|,)'.format(pattern_ps), output_ps.lower()), \
+            'cpu_model {} not found for vm {}'.format(pattern_ps, vm_id)
+    else:
+        assert '-cpu' not in output_ps, "cpu model is specified in ps aux"
 
     if vcpu_model == 'Passthrough':
         assert output_virsh['mode'] == 'host-passthrough', \
             'cpu mode is not passthrough in virsh for vm {}'.format(vm_id)
 
         LOG.info("Check cpu passthrough model from within the vm")
-        vcpu_model = vm_helper.get_vcpu_model(vm_id)
+        vm_vcpu_model = vm_helper.get_vcpu_model(vm_id)
         host_cpu_model = host_helper.get_host_cpu_model(host=host)
-        assert host_cpu_model == vcpu_model, "VM cpu model is different than host cpu model with cpu passthrough"
+        assert host_cpu_model == vm_vcpu_model, "VM cpu model is different than host cpu model with cpu passthrough"
 
         if expt_arch:
-            assert expt_arch == vcpu_model, "VM cpu model changed. Original: {}. Current: {}".format(expt_arch,
-                                                                                                     vcpu_model)
-    else:
+            assert expt_arch == vm_vcpu_model, "VM cpu model changed. Original: {}. Current: {}".\
+                format(expt_arch, vcpu_model)
+    elif vcpu_model:
         assert re.search(pattern_virsh, output_virsh.lower()), \
             'cpu model {} is not found in virsh for vm {}'.format(pattern_virsh, vm_id)
+
+    else:
+        assert output_virsh == {}, "Virsh cpu output: {}".format(output_virsh)
+        vm_vcpu_model = vm_helper.get_vcpu_model(vm_id)
+        assert 'QEMU Virtual CPU' in vm_vcpu_model, "vCPU model is not QEMU Virtual CPU when unspecified"
+
+
+@mark.parametrize(('source_model', 'dest_model'), [
+    ('Nehalem', 'Passthrough'),
+    ('Passthrough', 'Nehalem'),
+    ('Passthrough', None),
+    ('Passthrough', 'Passthrough')
+])
+def test_vcpu_model_resize(source_model, dest_model):
+    """
+
+    Args:
+        source_model:
+        dest_model:
+
+    Test Steps:
+        - Create a source flavor with 4G root disk and vcpu model extra spec as specified in source_model
+        - Create a dest flavor with 5G root disk and vcpu model extra spec as specified in dest_model
+        - Launch a vm from image with source flavor
+        - Check vcpu_model is successfully applied
+        - Resize the vm with dest flavor
+        - Check new vcpu_model is successfully applied
+
+    Teardown:
+        - Delete created vm, image, flavors
+
+    """
+    LOG.tc_step("Create a source flavor with 4G root disk and vcpu model extra spec: {}".format(source_model))
+    source_flv = _create_flavor_vcpu_model(vcpu_model=source_model, root_disk_size=4)
+
+    LOG.tc_step("Create a destination flavor with 5G root disk and vcpu model extra spec: {}".format(source_model))
+    dest_flv = _create_flavor_vcpu_model(vcpu_model=dest_model, root_disk_size=5)
+
+    LOG.tc_step("Launch a vm from image with source flavor {}".format(source_flv))
+    vm_id = vm_helper.boot_vm(flavor=source_flv, source='image', cleanup='function')[1]
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    check_vm_cpu_model(vm_id=vm_id, vcpu_model=source_model)
+
+    expt_arch = None
+    if source_model == dest_model == 'Passthrough':
+        # Ensure vm resize to host with exact same cpu model when vcpu_model is passthrough
+        host = nova_helper.get_vm_host(vm_id)
+        expt_arch = host_helper.get_host_cpu_model(host)
+
+    LOG.tc_step("Resize vm to destination flavor {}".format(dest_flv))
+    vm_helper.resize_vm(vm_id, flavor_id=dest_flv)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    check_vm_cpu_model(vm_id, vcpu_model=dest_model, expt_arch=expt_arch)
+
+
+def _create_flavor_vcpu_model(vcpu_model, root_disk_size=None):
+    flv_id = nova_helper.create_flavor(name='vcpu_model_{}'.format(vcpu_model), root_disk=root_disk_size)[1]
+    ResourceCleanup.add('flavor', flv_id)
+    if vcpu_model:
+        nova_helper.set_flavor_extra_specs(flavor=flv_id, **{FlavorSpec.VCPU_MODEL: vcpu_model})
+
+    return flv_id
+
+
+@mark.parametrize(('vcpu_model', 'thread_policy'), [
+    ('Penryn', 'isolate'),
+    ('Passthrough', 'require'),
+])
+def test_vcpu_model_and_thread_policy(vcpu_model, thread_policy):
+    """
+    Launch vm with vcpu model spec and cpu thread policy both set
+    Args:
+        vcpu_model (str):
+        thread_policy (str):
+
+    Test Steps:
+        - create flavor with vcpu model and cpu thread extra specs set
+        - boot vm from volume with above flavor
+        - if no hyperthreaded host, check vm failed to schedule
+        - otherwise check vcpu model and cpu thread policy both set as expected
+
+    """
+    name = '{}_{}'.format(vcpu_model, thread_policy)
+    flv_id = nova_helper.create_flavor(name=name, vcpus=2)[1]
+    ResourceCleanup.add('flavor', flv_id)
+    nova_helper.set_flavor_extra_specs(flavor=flv_id, **{FlavorSpec.VCPU_MODEL: vcpu_model,
+                                                         FlavorSpec.CPU_POLICY: 'dedicated',
+                                                         FlavorSpec.CPU_THREAD_POLICY: thread_policy})
+
+    code, vm, msg, vol = vm_helper.boot_vm(name=name, flavor=flv_id, fail_ok=True, cleanup='function')
+    ht_hosts = host_helper.get_hypersvisors_with_config(hyperthreaded=True, up_only=True)
+    if thread_policy == 'require' and not ht_hosts:
+        assert 1 == code
+
+    else:
+        assert 0 == code, "VM is not launched successfully"
+        check_vm_cpu_model(vm_id=vm, vcpu_model=vcpu_model)
+        vm_host = nova_helper.get_vm_host(vm)
+        check_helper._check_vm_topology_via_vm_topology(vm_id=vm, vcpus=2, cpu_pol='dedicated',
+                                                        cpu_thr_pol=thread_policy, numa_num=1, vm_host=vm_host)
