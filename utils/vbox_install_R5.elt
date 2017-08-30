@@ -46,15 +46,15 @@ Install VirtualBox on Linux or Windows Host
 .		https=yes                       (default no)
 
 .	e.g. for linux
-.	./vbox_install.elt pull_new_image=yes topology=2only rel2=no
+.	./vbox_install_R4.elt pull_new_image=yes topology=2only rel2=no
 	e.g. for linux with Network Conolidation
 	.	e.g. for linux
-.	./vbox_install.elt pull_new_image=yes topology=2x2x2 rel2=yes con=MI_O str=MI com=MI_D
+.	./vbox_install_R4.elt pull_new_image=yes topology=2x2x2 rel2=yes con=MI_O str=MI com=MI_D
 
 .	e.g. for windows
-.	./vbox_install.elt -r <windows machine IP> pull_new_image=yes topology=2x1 con=MI_O str=MI com=MI_D
+.	./vbox_install_R4.elt -r <windows machine IP> pull_new_image=yes topology=2x1 con=MI_O str=MI com=MI_D
 .	e.g for linux
-	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install.elt pull_new_image=yes topology=1x1 con=MI_O str=MI com=MI_D patch=no https=yes
+	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install_R4.elt pull_new_image=yes topology=1x1 rel2=yes con=MI_O str=MI com=MI_D load=GA2 patch=yes https=no
 .
 . 	Supported topology
 . 		2only 	- controller-0 controller-1
@@ -76,7 +76,7 @@ Install VirtualBox on Linux or Windows Host
 
 .	Network Consolidation Options for controller (con): 
 
-.		 M_O   - Separate Management & OAM Interface 
+.		 M_O   - Separate Management & OAM Interface (Only supported for 2only)
 .                M_O_I - Separate Management, OAM & Infrastructure network
 .	         M_O_TI- Seperate Management, OAM network & Tagged Infrastruture 
 .		 MOI   - Combined Management, OAM, Infrastructure network
@@ -182,6 +182,7 @@ Version 2.0 by senthilkumar
 # assign fail script for debugging
 #*~fail_time.inc
 $load=GA2
+$load=none
 # TiS version  14
 $source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_bootimage.iso
 # TiS version  15
@@ -190,15 +191,17 @@ $source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_2.0_Unified
 $source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Unified_Daily_Build/latest_bootimage.iso
 # Centos Version
 $source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Centos_Build/latest_bootimage.iso
-# Rel-ops Version
-$source_image=svc-cgcsauto@yow-cgts3-lx.wrs.com:/folk/cgts/rel-ops/15.12/Titanium-Server-host-installer-15.12-b11a.iso
+# Centos Version
+$source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Centos_Build/latest_bootimage.iso
+# GA3
+$source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_bootimage.iso
+?if $load == GA2 ?[
+	$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_bootimage.iso
+]
+$source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/latest_bootimage.iso
+$source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_bootimage.iso
 
-
-
-#$source_image=svc-cgcsauto@yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_bootimage.iso
-
-
-$boot_image=/home/tisvbox2/VBox/latest_bootimage.iso
+$boot_image=/home/$USER/VBox/latest_bootimage.iso
 $boot_dir=$boot_image
 =$boot_dir;/.+(\w+)/\w+.iso;\1;
 
@@ -212,7 +215,7 @@ $boot_dir=$boot_image_dir
 
 # default user and password
 $user=wrsroot
-$pass=li69nux
+$pass=Li69nux*
 
 $admin_password=admin
 
@@ -223,7 +226,8 @@ $IP=10.10.10.3
 $pull_new_image=no
 $wipe_disk=yes
 #config controller release2 additional questions
-$rel2=yes
+#$rel2=yes @@@@@@ Changed the code by default to rel2 behaviour
+$rel3=yes
 
 $install_tenant_files=yes
 # Maximum wait loop count
@@ -254,6 +258,16 @@ $str=MI
 # DEFAULT Only Management interface
 $com=MI_D  
 
+# Default ipv6=no
+$ipv6=no
+?if ipv6 == yes ?[
+	## Controller Consolidation Combinations
+	$con=TMI_O
+	# Storage Consolidation Combinations
+	$str=TMI
+	# Compute Consolidation Combinations
+	$com=TMI_D  
+]
 
 # Network consolidation Variables extracted in to readable Variables
 $controller_consolidation=$con
@@ -265,6 +279,7 @@ $infra_name=infra0
 $connection=SSH
 
 $heat_tarball=heat.tgz
+
 
 ### vm start options
 $vbox_opts= --type headless
@@ -278,7 +293,10 @@ $console_win=nc localhost 7000
 $boot_image_win=/drives/c/Users/$USER/VBox/latest_bootimage.iso
 
 ## Patch
-$patch=yes
+$patch=no
+
+## sdn
+$sdn=no
 
 >date +%F_%T#
 +$DATE=\n(.+)#
@@ -378,15 +396,18 @@ $node_list=
 ?if $controller_consolidation == M_O ? [
 	$pxe_network=n
 	$configure_infrastructure_interface=N
+        $management_interface=$eth1
+	$management_interface_MTU=1500
+	$infrastructure_interface_MTU=N/A
+	$OAM_interface_MTU=1500
 	$infrastructure_interface_link_aggregation=N/A
 	$infrastructure_interface=N/A
 	$controller_infra_interface=N/A
 	$configure_infrastructure_VLAN=N/A
 	$infrastructure_VLAN_ID=N/A
-	$infrastructure_interface_MTU=N/A
 	$infrastructure_subnet=N/A
 	$OAM_interface_link_aggregation=N
-	$OAM_interface=eth0
+	$OAM_interface=$eth0
 	$configure_OAM_VLAN=N
 	$OAM_VLAN_ID=N/A
 	$connection=SSH
@@ -397,15 +418,18 @@ $node_list=
 ?if $controller_consolidation == M_O_I ? [
 	$pxe_network=n
         $configure_infrastructure_interface=Y
+        $management_interface=$eth1
         $infrastructure_interface_link_aggregation=N
-        $infrastructure_interface=eth2
-	$controller_infra_interface=eth2
+        $infrastructure_interface=$eth2
+	$controller_infra_interface=$eth2
         $configure_infrastructure_VLAN=N
         $infrastructure_VLAN_ID=N/A
-        $infrastructure_interface_MTU=1500
+	$management_interface_MTU=1500
+	$infrastructure_interface_MTU=1500
+	$OAM_interface_MTU=1500
         $infrastructure_subnet=192.168.205.0/24
         $OAM_interface_link_aggregation=N
-        $OAM_interface=eth0
+        $OAM_interface=$eth0
         $configure_OAM_VLAN=N
         $OAM_VLAN_ID=N/A
 	$connection=SSH
@@ -417,15 +441,18 @@ $node_list=
 ?if $controller_consolidation == M_O_TI ? [
 	$pxe_network=n
         $configure_infrastructure_interface=Y
+        $management_interface=$eth1
         $infrastructure_interface_link_aggregation=N
-        $infrastructure_interface=eth2
-	$controller_infra_interface=eth2
+        $infrastructure_interface=$eth2
+	$controller_infra_interface=$eth2
         $configure_infrastructure_VLAN=Y
         $infrastructure_VLAN_ID=21
-        $infrastructure_interface_MTU=9216
+	$management_interface_MTU=1500
+	$infrastructure_interface_MTU=9216
+	$OAM_interface_MTU=1500
         $infrastructure_subnet=192.168.205.0/24
         $OAM_interface_link_aggregation=N
-        $OAM_interface=eth0
+        $OAM_interface=$eth0
         $configure_OAM_VLAN=N
         $OAM_VLAN_ID=N/A
 	$connection=SSH
@@ -436,15 +463,18 @@ $node_list=
 ?if $controller_consolidation == MOI ? [
 	$pxe_network=n
 	$configure_infrastructure_interface=Y
+        $management_interface=$eth1
 	$infrastructure_interface_link_aggregation=N
-	$infrastructure_interface=eth1
+	$infrastructure_interface=$eth1
 	$controller_infra_interface=mgmt0
 	$configure_infrastructure_VLAN=Y
 	$infrastructure_VLAN_ID=21
+	$management_interface_MTU=1500
 	$infrastructure_interface_MTU=1500
+	$OAM_interface_MTU=1500
 	$infrastructure_subnet=192.168.205.0/24
 	$OAM_interface_link_aggregation=N
-	$OAM_interface=eth1
+	$OAM_interface=$eth1
 	$configure_OAM_VLAN=Y
 	$OAM_VLAN_ID=22
 	$connection=serial
@@ -454,37 +484,65 @@ $node_list=
 
 ?if $controller_consolidation == TMOI ? [
 	$pxe_network=y
-	$management_interface=eth1
+	$management_interface=$eth1
 	$management_VLAN_ID=23
 	$configure_infrastructure_interface=Y
 	$infrastructure_interface_link_aggregation=N
-	$infrastructure_interface=eth1
+	$infrastructure_interface=$eth1
 	$controller_infra_interface=mgmt0
 	$configure_infrastructure_VLAN=Y
 	$infrastructure_VLAN_ID=21
+	$management_interface_MTU=1500
 	$infrastructure_interface_MTU=1500
+	$OAM_interface_MTU=1500
 	$infrastructure_subnet=192.168.205.0/24
 	$OAM_interface_link_aggregation=N
-	$OAM_interface=eth1
+	$OAM_interface=$eth1
 	$configure_OAM_VLAN=Y
 	$OAM_VLAN_ID=22
 	$connection=serial
 ]
 
- Combined Management, OAM and seperate Infrastructure Interface
+# Combined Management, Infrastructure Interface & Seperate OAM
+
+?if $controller_consolidation == TMI_O ? [
+	$pxe_network=y
+	$management_interface=$eth1
+	$management_VLAN_ID=23
+	$configure_infrastructure_interface=Y
+	$infrastructure_interface_link_aggregation=N
+	$infrastructure_interface=$eth1
+	$controller_infra_interface=pxeboot0
+	$configure_infrastructure_VLAN=Y
+	$infrastructure_VLAN_ID=21
+	$management_interface_MTU=1500
+	$infrastructure_interface_MTU=1500
+	$OAM_interface_MTU=1500
+        $infrastructure_subnet=192.168.205.0/24
+        $OAM_interface_link_aggregation=N
+        $OAM_interface=$eth0
+        $configure_OAM_VLAN=N
+        $OAM_VLAN_ID=N/A
+	$connection=serial
+]
+
+#Combined Management, OAM and seperate Infrastructure Interface
 
 ?if $controller_consolidation == MO_I ? [
 	$pxe_network=n
         $configure_infrastructure_interface=Y
         $infrastructure_interface_link_aggregation=N
-        $infrastructure_interface=eth2
-	$controller_infra_interface=eth2
+        $management_interface=$eth1
+        $infrastructure_interface=$eth2
+	$controller_infra_interface=$eth2
         $configure_infrastructure_VLAN=N
         $infrastructure_VLAN_ID=N/A
-        $infrastructure_interface_MTU=1500
+	$management_interface_MTU=1500
+	$infrastructure_interface_MTU=1500
+	$OAM_interface_MTU=1500
         $infrastructure_subnet=192.168.205.0/24
         $OAM_interface_link_aggregation=N
-        $OAM_interface=eth1
+        $OAM_interface=$eth1
         $configure_OAM_VLAN=Y
         $OAM_VLAN_ID=22
 	$connection=serial
@@ -495,15 +553,18 @@ $node_list=
 ?if $controller_consolidation == MO_TI ? [
 	$pxe_network=n
         $configure_infrastructure_interface=Y
+        $management_interface=$eth1
         $infrastructure_interface_link_aggregation=N
-        $infrastructure_interface=eth2
-	$controller_infra_interface=eth2
+        $infrastructure_interface=$eth2
+	$controller_infra_interface=$eth2
         $configure_infrastructure_VLAN=Y
         $infrastructure_VLAN_ID=21
-        $infrastructure_interface_MTU=1500
+	$management_interface_MTU=1500
+	$infrastructure_interface_MTU=1500
+	$OAM_interface_MTU=1500
         $infrastructure_subnet=192.168.205.0/24
         $OAM_interface_link_aggregation=N
-        $OAM_interface=eth1
+        $OAM_interface=$eth1
         $configure_OAM_VLAN=Y
         $OAM_VLAN_ID=22
 	$connection=serial
@@ -514,15 +575,18 @@ $node_list=
 ?if $controller_consolidation == MI_O ? [
 	$pxe_network=n
         $configure_infrastructure_interface=Y
+        $management_interface=$eth1
         $infrastructure_interface_link_aggregation=N
-        $infrastructure_interface=eth1
+        $infrastructure_interface=$eth1
 	$controller_infra_interface=mgmt0
         $configure_infrastructure_VLAN=Y
         $infrastructure_VLAN_ID=21
-        $infrastructure_interface_MTU=1500
+	$management_interface_MTU=1500
+	$infrastructure_interface_MTU=1500
+	$OAM_interface_MTU=1500
         $infrastructure_subnet=192.168.205.0/24
         $OAM_interface_link_aggregation=N
-        $OAM_interface=eth0
+        $OAM_interface=$eth0
         $configure_OAM_VLAN=N
         $OAM_VLAN_ID=N/A
 	$connection=SSH
@@ -533,15 +597,18 @@ $node_list=
 ?if $controller_consolidation == MI_TO ? [
 	$pxe_network=n
         $configure_infrastructure_interface=Y
+        $management_interface=$eth1
         $infrastructure_interface_link_aggregation=N
-        $infrastructure_interface=eth1
+        $infrastructure_interface=$eth1
 	$controller_infra_interface=mgmt0
         $configure_infrastructure_VLAN=Y
         $infrastructure_VLAN_ID=21
-        $infrastructure_interface_MTU=1500
+	$management_interface_MTU=1500
+	$infrastructure_interface_MTU=1500
+	$OAM_interface_MTU=1500
         $infrastructure_subnet=192.168.205.0/24
         $OAM_interface_link_aggregation=N
-        $OAM_interface=eth0
+        $OAM_interface=$eth0
         $configure_OAM_VLAN=Y
         $OAM_VLAN_ID=22
 	$connection=serial
@@ -552,15 +619,18 @@ $node_list=
 ?if $controller_consolidation == M_TOTI ? [
 	$pxe_network=n
         $configure_infrastructure_interface=Y
+        $management_interface=$eth1
         $infrastructure_interface_link_aggregation=N
-        $infrastructure_interface=eth2
-	$controller_infra_interface=eth2
+        $infrastructure_interface=$eth2
+	$controller_infra_interface=$eth2
         $configure_infrastructure_VLAN=Y
         $infrastructure_VLAN_ID=21
-        $infrastructure_interface_MTU=1500
+	$management_interface_MTU=1500
+	$infrastructure_interface_MTU=1500
+	$OAM_interface_MTU=1500
         $infrastructure_subnet=192.168.205.0/24
         $OAM_interface_link_aggregation=N
-        $OAM_interface=eth2
+        $OAM_interface=$eth2
         $configure_OAM_VLAN=Y
         $OAM_VLAN_ID=22
 	$connection=serial
@@ -571,18 +641,21 @@ $node_list=
 ?if $controller_consolidation == M_UOTI ? [
 	$pxe_network=n
         $configure_infrastructure_interface=Y
+        $management_interface=$eth1
         $infrastructure_interface_link_aggregation=N
-        $infrastructure_interface=eth0
+        $infrastructure_interface=$eth0
 	$controller_infra_interface=oam0
         $configure_infrastructure_VLAN=Y
         $infrastructure_VLAN_ID=21
-        $infrastructure_interface_MTU=1500
+	$management_interface_MTU=9000
+	$infrastructure_interface_MTU=1500
+	$OAM_interface_MTU=1500
         $infrastructure_subnet=192.168.205.0/24
         $OAM_interface_link_aggregation=N
-        $OAM_interface=eth0
+        $OAM_interface=$eth0
         $configure_OAM_VLAN=N
         $OAM_VLAN_ID=N/A
-	$connection=SSH
+	$connection=serial
 ]
 
 # separate Management & Combined Tagged OAM,Untagged Infrastructure Interface
@@ -590,15 +663,18 @@ $node_list=
 ?if $controller_consolidation == M_TOUI ? [
 	$pxe_network=n
         $configure_infrastructure_interface=Y
+        $management_interface=$eth1
         $infrastructure_interface_link_aggregation=N
-        $infrastructure_interface=eth2
-	$controller_infra_interface=eth2
+        $infrastructure_interface=$eth2
+	$controller_infra_interface=$eth2
         $configure_infrastructure_VLAN=N
         $infrastructure_VLAN_ID=N/A
-        $infrastructure_interface_MTU=1500
+	$management_interface_MTU=9000
+	$infrastructure_interface_MTU=9000
+	$OAM_interface_MTU=1500
         $infrastructure_subnet=192.168.205.0/24
         $OAM_interface_link_aggregation=N
-        $OAM_interface=eth2
+        $OAM_interface=$eth2
         $configure_OAM_VLAN=Y
         $OAM_VLAN_ID=22
 	$connection=serial
@@ -619,13 +695,13 @@ $node_list=
 # Seperate Management & Infrastructure
 
 ?if $storage_consolidation == M_I ? [
-	$storage_infra_interface=eth2
+	$storage_infra_interface=$eth2
 ]
 
 # Seperate Management & Tagged Infrastructure
 
 ?if $storage_consolidation == M_TI ? [
-	$storage_infra_interface=eth2
+	$storage_infra_interface=$eth2
 ]
 
 ### Compute Consolidation variables for infrastructure interface
@@ -639,12 +715,29 @@ $node_list=
 
 
 ?if $compute_consolidation == M_I_D ? [
-	$compute_infra_interface=eth0
+	$compute_infra_interface=$eth0
 ]
 
 ?if $compute_consolidation == M_TI_D ? [
-	$compute_infra_interface=eth0
+	$compute_infra_interface=$eth0
 ]
+
+
+
+#subnet adddresssing
+
+$management_subnet=192.168.204.0/24
+$infrastructure_subnet=192.168.205.0/24
+$oam_subnet=10.10.10.0/24
+
+?if $ipv6 == yes ? [
+
+$management_subnet=aefd::/64
+$infrastructure_subnet=aced::/64
+$oam_subnet=abcd::/64
+]
+
+
 --------------- Determine OS
 # look at shell to see if it ends in "exe"
 >echo $SHELL
@@ -870,21 +963,19 @@ $part=1
 
 !sleep 2
 
-@1500
+@2000
 *FORK serial
 >>^M
 ; === protect against blue screen of death
 #>socat UNIX-CONNECT:$serial_pipe - | egrep -i 'restarting system'
->$console_connect | egrep -i 'restarting system'
+>$console_connect | egrep -i 'Restarting system'
 #>$console_connect | egrep -i 'booting'
-<Binary file
->$console_connect 
 
 
-#<Restarting system
-#>>^C
-#; === reconnect to serial
-#>$console_connect
+<Restarting system
+>>^C
+; === reconnect to serial
+>$console_connect
 <login: 
 
 @5
@@ -907,17 +998,16 @@ $part=1
 
 ; === set up sudo root access (to make it easier later in the interact session)
 >echo "$pass" | sudo -S id
-<li69nux
+<root
 >export TMOUT=0
 
 ; === setup first IP interface
->sudo /sbin/ip addr add $IP/24 dev eth0
->sudo /sbin/ip link set eth0 up
+>sudo /sbin/ip addr add $IP/24 dev $eth0
+>sudo /sbin/ip link set $eth0 up
 >ping $ping_opt  $IP
 <time=
 >
 >
-
 
 *FORK SSH
 ; === ping controller
@@ -937,7 +1027,7 @@ $part=1
 @3
 ; === set up sudo root access (to make it easier later in the interact session)
 >echo "$pass" | sudo -S id
-<li69nux
+<root
 
 ; === show version
 >cat /etc/build.info
@@ -946,8 +1036,7 @@ $part=1
 
 ; === install tenant files and guest images
 $install_tenant_files=yes
-$directory=R2_files
-
+$directory=R5_files
 ?if $install_sw !=no? [	
 	# get IP address of host (use netstat -an | grep :22)
 	>netstat -an | grep :22
@@ -992,17 +1081,11 @@ $directory=R2_files
 		<Patch installation is complete
 		; === set up sudo root access (to make it easier later in the interact session)
 		>echo "$pass" | sudo -S id
-		###<li69nux####
+		<root
                 >sudo sw-patch query
-		<ssword
-		>$pass
                 >sudo sw-patch query-hosts
-		<ssword
-		>$pass
 		; === Reboot the controller
 		>sudo reboot
-		<ssword
-		>$pass
 		*FORK serial
 		>>^M
 		; === reconnect to serial
@@ -1019,16 +1102,12 @@ $directory=R2_files
 
 		; === set up sudo root access (to make it easier later in the interact session)
 		>echo "$pass" | sudo -S id
-		<li69nux
+		<root
 		>export TMOUT=0
-		@60
+
 		; === setup first IP interface
-		>sudo /sbin/ip addr add $IP/24 dev $eth0
-		<ssword
-		>$pass
-		>sudo /sbin/ip link set $eth0 up
-		<ssword
-		>$pass
+		>sudo /sbin/ip addr add $IP/24 dev eth0
+		>sudo /sbin/ip link set eth0 up
 		>ping $ping_opt  $IP
 		<time=
 		>
@@ -1049,19 +1128,15 @@ $directory=R2_files
 		>
 		>export TMOUT=0
 
-		@30
+		@3
 		; === set up sudo root access (to make it easier later in the interact session)
 		>echo "$pass" | sudo -S id
-		<li69nux
+		<root
 
 		; === show version
 		>cat /etc/build.info
                 >sudo sw-patch query
-		<ssword
-		>li69nux
                 >sudo sw-patch query-hosts
-		<ssword
-		>li69nux
 		
 	]
 ######################## Patching Ends ###############################
@@ -1079,6 +1154,11 @@ $directory=R2_files
 	; === set up ssh keys
 	>ssh-keygen -t dsa -f /home/wrsroot/.ssh/id_rsa -N "" -q
 	#>nova keypair-add --pub_key ~/.ssh/id_rsa.pub controller-0
+	?if $part == 2 ?[
+		<Overwrite
+		>y
+	]	
+
 ]
 
 ; === cp vbox labsetup file
@@ -1091,11 +1171,10 @@ $directory=R2_files
 *EXP_INFO
 *FORK $connection
 ; === Configuring Controller Interface with Scenario $controller_consolidation
+>export TMOUT=0
 >time sudo config_controller
 <time correct
 >y
-<timezone
->^M
 <Cinder storage backend
 >$storage_type
 <Database storage
@@ -1113,6 +1192,18 @@ $directory=R2_files
 	>>^M
 	<Volume storage in GiB
 	>>^M
+]
+<Cinder LVM type
+>>^M
+
+?if $sdn == yes ? [
+	<Enable SDN Network configuration
+	>>y
+]
+
+?if $sdn == no ? [
+	<Enable SDN Network configuration
+	>>n
 ]
 
 <Configure a separate PXEBoot network
@@ -1132,10 +1223,12 @@ $directory=R2_files
 	<Management VLAN Identifier
 	>$management_VLAN_ID
 	<Management subnet
-	>>^M
+	>$management_subnet
 	<Use entire management subnet
 	>>^M
 	<Dynamic IP address allocation
+	>>^M
+	<Management Network Multicast subnet
 	>>^M
 ]
 
@@ -1145,17 +1238,19 @@ $directory=R2_files
 	<Management interface link aggregation
 	>>^M
 	<Management interface
-	>>^M
+	>>$management_interface
 	<Management interface MTU
-	>>^M
+	>$management_interface_MTU
 	<Management interface link capacity Mbps
 	>>^M
 	<Management subnet
-	>>^M
+	>$management_subnet
 	<Use entire management
 	>Y
 	<Dynamic IP address allocation
 	>Y
+	<Management Network Multicast subnet
+	>>^M
 ]
 
 <Configure board management control network
@@ -1171,13 +1266,11 @@ $directory=R2_files
 	>$infrastructure_interface_link_aggregation
 	<Infrastructure interface
 	>$infrastructure_interface
-	?if $rel2 == yes ? [
-		<Configure an infrastructure VLAN
-		>$configure_infrastructure_VLAN
-		?if $configure_infrastructure_VLAN == Y ? [
-			<Infrastructure VLAN Identifier
-			>$infrastructure_VLAN_ID
-		]
+	<Configure an infrastructure VLAN
+	>$configure_infrastructure_VLAN
+	?if $configure_infrastructure_VLAN == Y ? [
+		<Infrastructure VLAN Identifier
+		>$infrastructure_VLAN_ID
 	]
 	<Infrastructure interface MTU
 	>$infrastructure_interface_MTU
@@ -1187,6 +1280,7 @@ $directory=R2_files
 	>$infrastructure_subnet
 	<Use entire infrastructure subnet
 	>y
+
 ]
 
 ; === Configuring OAM Interface 
@@ -1195,21 +1289,18 @@ $directory=R2_files
         >$OAM_interface_link_aggregation
         <External OAM interface
         >$OAM_interface
-        ?if $rel2 == yes ? [
-	        <Configure an external OAM VLAN
-        	>$configure_OAM_VLAN
-		?if $configure_OAM_VLAN == Y ? [
-			<External OAM VLAN Identifier
-			>$OAM_VLAN_ID
-		]	
-	]
+        <Configure an external OAM VLAN
+       	>$configure_OAM_VLAN
+	?if $configure_OAM_VLAN == Y ? [
+		<External OAM VLAN Identifier
+		>$OAM_VLAN_ID
+	]	
 ]
 
 <External OAM interface MTU
->>^M
+>$OAM_interface_MTU
 <External OAM subnet
-
->>^M
+>$oam_subnet
 <External OAM gateway address
 >>^M
 <External OAM floating address
@@ -1220,21 +1311,16 @@ $directory=R2_files
 
 <External OAM address for second controller node
 >>^M
-<Nameserver
->>^M
-<Nameserver
->>^M
-<Nameserver
+<External OAM Network Multicast subnet
 >>^M
 
-<NTP server 1
->>^M
-<NTP server 2
->>^M
-<NTP server 3
->>^M
+
 <License File
 >>^M
+?if $rel3 == yes? [
+	<wrsroot password age
+	>>^M
+]
 ?if $https == no? [ 
 	<Use secure
 	>N
@@ -1329,109 +1415,6 @@ $node_controllers=$node_list
 >
 
 @100
-
-
-?if $topology == 2only ? [
-	?if $node_controllers == controller ? [
-		@60
-		$i=0
-		$controller_node=controller-1
-		>system host-list
-		<$controller_node
-		+$administrative=(locked|unlocked)
-		?if $administrative == locked ? [
-			$state=none
-			>system host-list
-			<$controller_node
-			+$state=(available|online|offline|failed|intest)
-			[ $state != online
-				$state=none
-				[ $state != online
-					; === wait for $controller_node to come online
-					>system host-list
-					<$controller_node
-					+$state=(available|online|offline|failed|intest)
-	
-					!sleep 5
-					+$i
-					?if $i > $max? [
-						;red $controller_node did not become online
-						# break out of while loop
-						$state=online
-						; Giving user the option to recover the lab
-						$i=0
-						*INTERACT
-					]
-				]
-			]
-
-		]
-
-	; === Only controller, run lab_setup
-	>
-	#----------- 1 of 3 Lab_setup
-	@300
-	>time ./lab_setup.sh
-	<real
-	>echo $?
-	+$return=\n(\d)
-	#oops, run lab_setup again
-	?if $return != 0? >time ./lab_setup.sh
-	>
-		$state=none
-		>system host-list
-		<$controller_node
-		+$state=(available|online|offline|failed|intest)
-		?if $state == online		
-			>system host-list
-			<$controller_node
-			+$administrative=(locked|unlocked)
-			?if $administrative == locked ? [
-			    >system host-if-modify -n oam0 -nt oam controller-1 $eth0
-			    >system host-stor-add controller-1 cinder $(system host-disk-list controller-1 | awk '{if ($4 == "/dev/sdb") { print $2;}}')
-        		    ?if $configure_infrastructure_interface == Y ? [
-				    ?if $configure_infrastructure_VLAN == Y ? [
-					>system host-if-add -V $infrastructure_VLAN_ID -nt infra $controller_node $infra_name vlan $controller_infra_interface
-					!sleep 2
-					<created_at
-				    ]
-			            ?if $configure_infrastructure_VLAN == N ? [
-					>system host-if-modify -n $infra_name -nt infra  $controller_node $controller_infra_interface
-					!sleep 2
-					<created_at
-				    ]
-			    ]
-			    ; === Unlock  
-		            >system host-unlock $controller_node
-			    $state=none		
-			    [ $state != available
-				; === wait for $controller_node to come available
-				>system host-list
-				<$controller_node
-				+$state=(available|online|offline|failed|intest)
-				!sleep 5
-				+$i
-				?if $i > $max? [
-					;red $controller_node did not become available
-					# break out of while loop
-					$state=available
-					; Giving user the option to recover the lab
-					*INTERACT
-				]
-			    ]
-		            #----------- 2 of 3 Lab_setup
-			@300
-			>time ./lab_setup.sh
-			<real
-			>echo $?
-			+$return=\n(\d)
-			#oops, run lab_setup again
-			?if $return != 0? >time ./lab_setup.sh
-			>
-		  	]
-		]
-	]
-]
 
 #; === Get the infra interface name from controller-0 
 
@@ -1554,7 +1537,7 @@ $node_storage=$node_list
 			<$controller_node
 			+$administrative=(locked|unlocked)
 			?if $administrative == locked ? [
-		 	    >system host-if-modify -n oam0 -nt oam controller-1 $(system host-if-list -a controller-1 | awk '{if ($4 == "eth0") { print $2;}}')
+		 	    >system host-if-modify -n oam0 -nt oam controller-1 $(system host-if-list -a controller-1 | awk '{if ($4 == "$eth0") { print $2;}}')
 			    >system host-stor-add controller-1 cinder $(system host-disk-list controller-1 | awk '{if ($4 == "/dev/sdb") { print $2;}}')
 
 		            ?if $configure_infrastructure_interface == Y ? [
@@ -1636,9 +1619,8 @@ $node_storage=$node_list
 $node_computes=$node_list
 =$node_computes/.*(compute)-\d.*/\1/
 *INTERACT
+; === Wait for Computes to come Online/ stopped before lab_setup
 ?if $node_computes == compute ? [
-	; === Wait for Computes to come Online/ stopped before lab_setup
-
 	; === Computes present, run lab_setup
 	>
 	#----------- 1 of 3 Lab_setup
@@ -1720,7 +1702,7 @@ $node_computes=$node_list
 			<$controller_node
 			+$administrative=(locked|unlocked)
 			?if $administrative == locked ? [
- 			    >system host-if-modify -n oam0 -nt oam controller-1 $(system host-if-list -a controller-1 | awk '{if ($4 == "eth0") { print $2;}}')
+ 			    >system host-if-modify -n oam0 -nt oam controller-1 $(system host-if-list -a controller-1 | awk '{if ($4 == "$eth0") { print $2;}}')
 			    >system host-stor-add controller-1 cinder $(system host-disk-list controller-1 | awk '{if ($4 == "/dev/sdb") { print $2;}}')
         		    ?if $configure_infrastructure_interface == Y ? [
 				    ?if $configure_infrastructure_VLAN == Y ? [
@@ -1742,8 +1724,6 @@ $node_computes=$node_list
 
 	#----------- 2 of 3 Lab_setup
 	@300
-
-	; === Inside compute setup function
 	>time ./lab_setup.sh
 	<real
 	>echo $?
@@ -1811,13 +1791,9 @@ $node_computes=$node_list
 	# configure computes
 ]
 >
-
-
-
-
 ; === Adding tempest.conf info (in order to run nosetest)
 >echo "$pass" | sudo -S id
-<li69nux
+<root
 $tempest_conf=/etc/tempest/tempest.conf
 >cp $tempest_conf $tempest_conf.bak
 >sudo chmod 666 $tempest_conf
@@ -1845,6 +1821,7 @@ Add to tempest.conf to run tests
 #	;purple NOTE: controller-1 is just completing installation, and will need another few minutes to finish booting
 #	>
 #]
+
 
 ?if $node_controllers == controller ? [
 	@60
@@ -1874,13 +1851,10 @@ Add to tempest.conf to run tests
 		]
 	]
 ]
+
 ?if $patch == yes ?[
         >sudo sw-patch query
-	<ssword
-	>li69nux
         >sudo sw-patch query-hosts
-	<ssword
-	>li69nux
 ]
 
 ; === Install Complete!!
