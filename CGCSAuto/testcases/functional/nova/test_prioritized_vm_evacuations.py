@@ -1,7 +1,6 @@
 
 import re
 import os
-import time
 import random
 import string
 from datetime import datetime
@@ -13,10 +12,9 @@ from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from utils import cli, table_parser
 from consts.cgcs import VMStatus, VMMetaData
-from consts.reasons import SkipReason
 from consts.auth import Tenant
 
-from keywords import vm_helper, host_helper, nova_helper, patching_helper, system_helper, keystone_helper
+from keywords import vm_helper, host_helper, nova_helper, patching_helper, keystone_helper
 
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -118,21 +116,19 @@ def verify_vim_evacuation_events():
 
             current_record = [timestamp, vm_name, event_type, vm_id]
 
-            expected_vm_id, expected_priority = expected_order[0]
-            if expected_vm_id != vm_id:
-                if vm_priorities[vm_id] != expected_priority:
-                    msg = 'Wrong Evacuation Order: expecting Priority:{}, but found: {}' \
-                      '\nexpecting VM:{}, hit VM:{}'.format(expected_priority,
-                                                            vm_priorities[vm_id], expected_vm_id, vm_id)
-                    msg += '\nexpected orders:{}\n'.format(vm_priorities)
-                    msg += '\nactual saw now:{}\n'.format(current_record)
-                    LOG.error(msg)
-                    assert expected_priority in [None, MAX_PRI] and vm_priorities[vm_id] in [None, MAX_PRI], msg
-                else:
-                    LOG.warn('same priority orders, but different VMs \nexpecting:{}, found:{}'.format(
-                        expected_vm_id, vm_id))
+            assert expected_order, \
+                'All testing VMs should already have been processed, '\
+                ' but still find evacuation records\nrecord:{}\n'.format(record)
 
-            expected_order.remove((vm_id, expected_priority))
+            expected_vm_id, expected_priority = expected_order.pop(0)
+
+            if expected_vm_id != vm_id:
+                msg = 'Wrong Evacuation Order: expecting VM-id:{}, actual VM-id:{}'.format(
+                    expected_vm_id, vm_id)
+                msg += '\nexpected orders:{}\n'.format(vm_priorities)
+                msg += '\nactually found record:{}\n'.format(current_record)
+                LOG.error(msg)
+                assert False, msg
 
             count += 1
             LOG.info('OK, record in order:\nvm_id={}, timestamp={}, event_type={}, vm_name={}\n'.format(
@@ -377,11 +373,20 @@ class TestPrioritizedVMEvacuation:
     def check_evaucation_orders(self):
         LOG.tc_step('Checking the order of VM evacuation')
 
-        vm_priorities = [(vm_info['vm_id'], vm_info['priority'])
-                         for vm_info in self.vms_info.values() if 'priority' in vm_info]
-        self.expected_order = sorted(vm_priorities, key=lambda item: int(item[1]))
-        self.expected_order += [(vm_info['vm_id'], None)
-                                for vm_info in self.vms_info.values() if 'priority' not in vm_info]
+        for vm_info in self.vms_info.values():
+            if 'priority' not in vm_info:
+                vm_info['priority'] = MAX_PRI
+
+        vm_infos = [(sn, vm_info) for sn, vm_info in self.vms_info.items()]
+        sorted_vm_infos = sorted(vm_infos, key=lambda x: x[0])
+        sorted_vm_infos = [v[1] for v in sorted_vm_infos]
+
+        vm_attributes = zip(sorted_vm_infos, self.vcpus, self.mem, self.root_disk, self.swap_disk)
+
+        sorted_attributes = sorted(vm_attributes,
+                                   key=lambda x: (x[0]['priority'], x[1], x[2], x[3], x[4]))
+
+        self.expected_order = [(v[0]['vm_id'], v[0]['priority']) for v in sorted_attributes]
 
         base_log_dir = '/var/log'
 
@@ -391,7 +396,7 @@ class TestPrioritizedVMEvacuation:
             log_file = os.path.join(base_log_dir, log_info['log-file'])
             patterns = '|'.join(log_info['patterns'])
             checker.send((self, log_file, patterns))
-        LOG.info('OK, the VMs were evacuated in expected order:\n{}\n'.format(vm_priorities))
+        LOG.info('OK, the VMs were evacuated in expected order:\n{}\n'.format(sorted_attributes))
 
     def trigger_evacuation(self):
         LOG.tc_step('Triggering evacuation on host: {} via action:{}'.format(self.current_host, self.operation))
@@ -412,7 +417,8 @@ class TestPrioritizedVMEvacuation:
         self.meta_data = data
         return vm_helper.set_vm_meta_data(vm_id, data, fail_ok=fail_ok, check_after_set=True)
 
-    def delete_evacuate_priority(self, vm_id, fail_ok=False):
+    @staticmethod
+    def delete_evacuate_priority(vm_id, fail_ok=False):
         return vm_helper.delete_vm_meta_data(vm_id, [VMMetaData.EVACUATION_PRIORITY], fail_ok=fail_ok)
 
     @mark.parametrize(('operation', 'priority', 'expt_error'), [

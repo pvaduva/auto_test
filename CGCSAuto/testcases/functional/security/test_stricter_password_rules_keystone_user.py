@@ -19,13 +19,15 @@ TEST_USER_NAME = 'keystoneuser'
 
 SPECIAL_CHARACTERS = '!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:'
 MIN_PASSWORD_LEN = 7
-MAX_PASSWORD_LEN = 4096
+MAX_PASSWORD_LEN = 15
+# MAX_PASSWORD_LEN = 4095
 NUM_TRACKED_PASSWORD = 2
 # WAIT_BETWEEN_CHANGE = 60
 WAIT_BETWEEN_CHANGE = 6
 
 USER_LOCKED_OUT_TIME = 300
 USERS_INFO = {}
+USER_NUM = 0
 
 PASSWORD_RULE_INFO = {
     'minimum_7_chars': ('length_generator', ''),
@@ -42,6 +44,7 @@ PASSWORD_RULE_INFO = {
     'lockout_5_minute_after_5_tries': ('multiple_attempts_generator', 5),
 }
 
+# use this simple "dictionary" for now, because no english dictionary installed on test server
 SIMPLE_WORD_DICTIONARY = '''
 and is being proof-read and supplemented by volunteers from around the
 world.  This is an unfunded project, and future enhancement of this
@@ -152,7 +155,8 @@ def get_valid_password(user_name=None):
         if len(password) < total_length:
             password += ''.join(random.choice(alphabet) for _ in range(total_length - len(password)+1))
 
-        password = password.replace('\\', '>')
+        password = password.replace('\\', ',')
+        password = password.replace('`', ':')
         password = password.replace('-', '<')
         password = password.replace('{', '{{')
         password = password.replace('}', '}}')
@@ -176,24 +180,23 @@ def multiple_attempts_generator():
     while True:
         (times, user_name, is_admin), _ = yield
 
-        LOG.info('Attempt to set INVALID password {} times, user_name:{}, is_admin\n'.format(
+        LOG.info('Attempt to login with INVALID password {} times, user_name:{}, is_admin\n'.format(
             times, user_name, is_admin))
 
         current_password = USERS_INFO[user_name]['used_passwords'][-1]
+
         for n in range(int(times)):
-            change_user_password(user_name, current_password, invalid_password, expecting_pass=False, by_admin=is_admin)
-            LOG.info('OK, failed to change password to INVALID value as expected, tried:{} times\n'.format(n+1))
+            verify_login(user_name, invalid_password, is_admin=is_admin, expecting_pass=False)
+            LOG.info('OK, failed to login with INVALID password failed as expected, tried:{} times\n'.format(n+1))
             time.sleep(10)
 
         time.sleep(20)
-        valid_password = get_valid_password()
+
         LOG.info('After failed {} times, the account should be locked and even with valid password.'.format(times))
-        LOG.info('password:{}, user:{}, by-admin:{}'.format(valid_password, user_name, is_admin))
+        verify_login(user_name, current_password, is_admin=is_admin, expecting_pass=False)
 
-        change_user_password(user_name, current_password, valid_password, expecting_pass=False, by_admin=is_admin)
-
-        LOG.info('After failed {} consecutive time, the user:{} is locked out as expected, is admin:{}\n'.format(
-            times, user_name, is_admin))
+        LOG.info('OK, as expected, login with VALID password failed, user:{}, is admin:{}, password:{}\n'.format(
+            user_name, is_admin, current_password))
 
         LOG.info('Wait for {} seconds before the user account is unlocked\n'.format(
             USER_LOCKED_OUT_TIME + WAIT_BETWEEN_CHANGE))
@@ -202,7 +205,10 @@ def multiple_attempts_generator():
 
         LOG.info('Check if user is unlocked after waiting for {} seconds, is admin:{}'.format(
             USER_LOCKED_OUT_TIME, is_admin))
-        change_user_password(user_name, current_password, valid_password, expecting_pass=True, by_admin=is_admin)
+
+        verify_login(user_name, current_password, is_admin=is_admin, expecting_pass=True)
+        LOG.info('OK, user is unlocked after waiting for {} seconds, user:{}, passsword:{}, is admin:{}\n'.format(
+            USER_LOCKED_OUT_TIME, user_name, current_password, is_admin))
 
         yield
 
@@ -336,7 +342,11 @@ def run_cmd(cmd, **kwargs):
 
 
 def generate_user_name(prefix=TEST_USER_NAME, length=3):
-    return '{}_{}'.format(prefix, ''.join(random.sample(ascii_lowercase, length)))
+    global USER_NUM
+
+    USER_NUM += 1
+
+    return '{}{:03d}_{}'.format(prefix, USER_NUM, ''.join(random.sample(ascii_lowercase, length)))
 
 
 def check_user_account(user_name, password, expecting_work=True):
@@ -347,7 +357,8 @@ def check_user_account(user_name, password, expecting_work=True):
 
 
 def verify_login(user_name, password, is_admin=True, expecting_pass=True):
-    LOG.info('Attempt to login as user:{}, password:{}, expecting pass:{}'.format(user_name, password, expecting_pass))
+    LOG.info('Attempt to login as user:{}, expecting pass:{}, password:{}\n'.format(
+        user_name, expecting_pass, password))
     auth_info = get_user_auth_info(user_name, password, in_admin_project=is_admin)
 
     if is_admin:
@@ -358,12 +369,16 @@ def verify_login(user_name, password, is_admin=True, expecting_pass=True):
         LOG.info('TODO: command:{}\n'.format(command))
         code, output = openstack('user show {}'.format(user_name), auth_info=auth_info, fail_ok=True)
 
-    assert code == 0, \
-        'Failed to login and execute:\n{}\nas user:{}, password:{}\n' \
-        'auth_info:{}\ncode:{}, output:{}\n'.format(command, user_name, password, auth_info, code, output)
+    message = 'expecting:{}, command=\n{}\nas user:{}, password:{}\nauth_info:{}\ncode:{}, output:{}\n'.format(
+        expecting_pass, command, user_name, password, auth_info, code, output)
 
-    LOG.info('OK, logged in as user:{}, password:{}, expecting pass:{}, \ncomand:{}\noutput:{}\n'.format(
-        user_name, password, expecting_pass, command, output))
+    if 0 == code:
+        assert expecting_pass, 'Acutally logged in, while expecting NOT: ' + message
+    else:
+        assert not expecting_pass, 'Failed to log in, while ' + message
+
+    LOG.info('OK, {} as user:{}, expecting pass:{}, password:{}\ncomand:{}\noutput:{}\n'.format(
+        'logged in' if expecting_pass else 'failed to log in', user_name, expecting_pass, password, command, output))
 
 
 def get_user_auth_info(user_name, password, project=None, in_admin_project=False):
@@ -396,15 +411,6 @@ def add_role(user_name, password, project=Tenant.ADMIN):
 
     command = 'role add --project {} --user {} {}'.format(project_id, user_name, role_id)
     openstack(command, auth_info=Tenant.ADMIN, fail_ok=False)
-
-    command = 'sed -e "s/OS_PASSWORD=.*/OS_PASSWORD={}/"'.format(password)
-    command += ' -e "s/OS_PROJECT_NAME=tenant1/OS_PROJECT_NAME={}/"'.format(project)
-    command += ' -e "s/tenant1/{}/" /home/wrsroot/openrc.tenant1 > /home/wrsroot/{}.rc'.format(user_name, user_name)
-
-    LOG.info('OK, generate rc file: user_name:{}, password:{}, project:{}\ncommand:\{}'.format(
-        user_name, password, project, command))
-
-    run_cmd(command)
 
 
 def create_user(user_name, role, del_if_existing=False, project_name_id=None, project_dommain='default',
@@ -493,7 +499,8 @@ def change_user_password(user_name, original_password, password, by_admin=True, 
     else:
         assert not expecting_pass, 'Fail, expecting pass, but not. {}'.format(message)
 
-    LOG.info('OK, password is changed {} as expected.'.format('accepted' if expecting_pass else 'reject' + message))
+    LOG.info('OK, password is changed {} as expected. length of password:{}'.format(
+        'accepted' if expecting_pass else 'reject' + message, len(password)))
 
     return code, output
 
@@ -523,8 +530,8 @@ def change_user_password(user_name, original_password, password, by_admin=True, 
     # ('non_admin', 'at_least_3_char_diff'),    # not officially supported
     # ('non_admin', 'not_simple_reverse'),      # not officially supported
     # ('non_admin', 'disallow_only_1_case_diff'),   # not officially supported
-    # ('non_admin', 'lockout_5_minute_after_5_tries'),    # not working 2017-08-29 : not locked even right after 5 fail...
-    # ('admin', 'lockout_5_minute_after_5_tries'),    # not working,
+    ('non_admin', 'lockout_5_minute_after_5_tries'),    # not working 2017-08-29 : not locked even right after 5 fail...
+    ('admin', 'lockout_5_minute_after_5_tries'),    # not working,
 ])
 def test_setting_password(role, password_rule):
 
@@ -567,14 +574,14 @@ def test_setting_password(role, password_rule):
         change_user_password(user_name, password, valid_pwd, expecting_pass=True, by_admin=is_admin)
         save_used_password(user_name, valid_pwd)
 
-        LOG.info('OK, VALID password:{} to user:{} was accepted as expected\n'.format(valid_pwd, user_name))
+        LOG.info('OK, VALID password was accepted as expected, user:{}, password:{}\n'.format(user_name, valid_pwd))
 
         verify_login(user_name, valid_pwd, expecting_pass=True, is_admin=is_admin)
 
         next(password_producer)
         invalid_pwd = password_producer.send((send_args, False))
 
-        LOG.info('\nAttempt to set with INVALID password:{} to user:{}, expecting FAIL. current password:{}\n'.format(
+        LOG.info('\nExpecting FAIL, to set with INVALID password:{} to user:{}, current password:{}\n'.format(
             invalid_pwd, user_name, valid_pwd))
 
         wait = WAIT_BETWEEN_CHANGE + 1
