@@ -65,16 +65,45 @@ def test_reclaim_sda():
     rc, out = con_ssh.exec_sudo_cmd(cmd)
     new_cgts_vg_val = re.search(cgts_vg_regex, out)
 
-    LOG.info("cgts-vg is currently: {}".format(cgts_vg_val.group(0)))
+    LOG.info("cgts-vg is currently: {}".format(new_cgts_vg_val.group(1)))
     assert new_cgts_vg_val <= cgts_vg_val, "cgts-vg size did not increase"
 
 
-#def test_increase_scratch():
-#    """ 
-#    This test increases the size of the scratch filesystem.  The scratch
-#    filesystem is used for activities such as uploading swift object files,
-#    etc.
-#
-#    """
+def test_increase_scratch():
+    """ 
+    This test increases the size of the scratch filesystem.  The scratch
+    filesystem is used for activities such as uploading swift object files,
+    etc.
 
+    """
+
+    con_ssh = ControllerClient.get_active_controller()
+
+    table_ = table_parser.table(cli.system('controllerfs-show scratch'))
+    scratch = table_parser.get_value_two_col_table(table_, 'size')
+    LOG.info("scratch is currently: {}".format(scratch))
+
+    LOG.info("Determine the available free space on the system")
+    big_value = "1000000"
+    free_space_regex = "([\-0-9.]*) GiB\.$"
+    cmd = "system controllerfs-modify scratch {}".format(big_value)
+    rc, out = con_ssh.exec_cmd(cmd, fail_ok=True)
+    free_space_match = re.search(free_space_regex, out)
+    free_space = free_space_match.group(1)
+
+    LOG.info("Available free space on the system is: {}".format(free_space))
+
+    if int(free_space) <= 0:
+        skip("Not enough free space to complete test.")
+    else:
+        LOG.tc_step("Increase the size of the scratch filesystem")
+        scratch_total = int(free_space) + int(scratch)
+        cmd = "system controllerfs-modify scratch {}".format(scratch_total)
+        rc, out = con_ssh.exec_cmd(cmd)
+
+    table_ = table_parser.table(cli.system('controllerfs-show scratch'))
+    new_scratch = table_parser.get_value_two_col_table(table_, 'size')
+    LOG.info("scratch is now: {}".format(new_scratch))
+
+    assert int(new_scratch) > int(scratch), "scratch size did not increase"
 
