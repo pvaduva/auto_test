@@ -782,8 +782,8 @@ def row_dict_table(table_, key_header, unique_key=True, eliminate_keys=None):
     Examples: system host-list on 2+2 system
         row_dict_table(table_, 'hostname') will return following table:
             {
-            'controller-0': [{'id': 1, 'hostname': 'controller-0', 'personality': 'controller', ...}]
-            'controller-1': [{'id': 2, 'hostname': 'controller-1', 'personality': 'controller', ...}]
+            'controller-0': {'id': 1, 'hostname': 'controller-0', 'personality': 'controller', ...}
+            'controller-1': {'id': 2, 'hostname': 'controller-1', 'personality': 'controller', ...}
             'compute-0': ...
             'compute-1': ...
             }

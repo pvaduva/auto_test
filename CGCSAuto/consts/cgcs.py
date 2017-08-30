@@ -418,3 +418,8 @@ class OrchestrationStrategyKeyNames:
     ABORT_REASON = 'abort-reason'
     BUILD_RESULT = 'build-result'
     BUILD_REASON = 'build-reason'
+
+
+class DevClassIds:
+    QAT_VF = '0b4000'
+    GPU = '030000'

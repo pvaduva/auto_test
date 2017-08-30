@@ -51,8 +51,8 @@ def get_pv_of_lvg(host=None, lvg_name='nova-local', con_ssh=None):
     table = table_parser.table(cli.system(cmd, ssh_client=con_ssh))
     pv_uuid = table_parser.get_values(table, 'UUID', lvm_vg_name=lvg_name, strict=True)[0]
     lvm_pv_name = table_parser.get_values(table, 'lvm_pv_name', lvm_vg_name=lvg_name, strict=True)[0]
-    idisk_uuid = table_parser.get_values(table, 'idisk_uuid', lvm_vg_name=lvg_name, strict=True)[0]
-    idisk_device_node = table_parser.get_values(table, 'idisk_device_node', lvm_vg_name=lvg_name, strict=True)[0]
+    idisk_uuid = table_parser.get_values(table, 'disk_or_part_uuid', lvm_vg_name=lvg_name, strict=True)[0]
+    idisk_device_node = table_parser.get_values(table, 'disk_or_part_device_node', lvm_vg_name=lvg_name, strict=True)[0]
 
     LOG.debug('pv_uuid={}, lvm_pv_name={}, idisk_uuid={}, idisk_device_node={}'.
               format(pv_uuid, lvm_pv_name, idisk_uuid, idisk_device_node))

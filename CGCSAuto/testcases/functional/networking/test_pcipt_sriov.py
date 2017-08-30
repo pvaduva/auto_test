@@ -7,7 +7,7 @@ from utils import table_parser
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
-from consts.cgcs import FlavorSpec, VMStatus
+from consts.cgcs import FlavorSpec, VMStatus, DevClassIds
 from keywords import vm_helper, nova_helper, network_helper, host_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -485,19 +485,21 @@ class TestVmPCIOperations:
 
     def is_pci_device_supported(self, pci_alias, nova_pci_devices=None):
         if nova_pci_devices is None:
-            nova_pci_devices = network_helper.get_pci_devices_info()
+            # qat-vf devices only
+            nova_pci_devices = network_helper.get_pci_devices_info(class_id=DevClassIds.QAT_VF)
 
-        self.nova_pci_devices = nova_pci_devices
-        if not self.nova_pci_devices:
+        # self.nova_pci_devices = nova_pci_devices
+        if not nova_pci_devices:
             skip('No PCI devices existing! Note, currently "Coleto Creek PCIe Co-processor(0443/8086) is supported"')
         requested_vfs = int(pci_alias)
 
-        free_vfs_num = []
-        for host, dev_info in nova_pci_devices.items():
-            min_vfs_on_host = min([int(v['pci_vfs_configured']) - int(v['pci_vfs_used']) for v in dev_info.values()])
-            free_vfs_num.append((min_vfs_on_host))
+        free_vfs_num = {}
+        for dev, dev_dict in nova_pci_devices.items():
+            for host, dev_info in dev_dict.items():
+                avail_vfs_on_host = int(dev_info['pci_vfs_configured']) - int(dev_info['pci_vfs_used'])
+                free_vfs_num[host] = free_vfs_num.pop(host, 0) + avail_vfs_on_host
 
-        min_vfs = min(free_vfs_num)
+        min_vfs = min(list(free_vfs_num.values()))
 
         if min_vfs < requested_vfs:
             skip('Not enough PCI alias devices exit, only {} supported'.format(min_vfs))

@@ -2958,6 +2958,11 @@ def get_host_co_processor_pci_list(hostname):
 
                 pci_address = ("0000:{}".format(pci_attributes[0])).strip()
                 pci_name = "pci_{}".format(pci_address.replace('.', '_').replace(':', '_').strip())
+                class_id = re.findall("Co-processor\s\[(.*)\]", pci_attributes[1])[0]
+                # Ensure class id is at least 6 digits as displayed in nova device-list and system host-device-list
+                num_zero = 6 - len(class_id)
+                if num_zero > 0:
+                    class_id += ''.join(['0']*num_zero)
                 vendor_name = pci_attributes[2].split(' [')[0]
                 LOG.info("vendor ={} pci_address = {} pci_name= {}".format(vendor_name, pci_address, pci_name))
                 vendor_id = (pci_attributes[2].split(' [')[1]).replace(']', '')
@@ -2967,7 +2972,9 @@ def get_host_co_processor_pci_list(hostname):
                             'pci_name': pci_name,
                             'vendor_name': vendor_name,
                             'vendor_id': vendor_id,
-                            'device_id': device_id
+                            'device_id': device_id,
+                            'class_id': class_id,
+                            'pci-alias': 'qat-vf',
                             }
                 cmd2 = " lspci -nnm | grep Co-processor | grep \"{} Virtual\" | awk 'NR == 1'".format(device_name)
                 rc, vf_line = host_ssh.exec_cmd(cmd2)
