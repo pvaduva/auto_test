@@ -1,4 +1,5 @@
 import re
+import math
 
 from pytest import fixture, skip, mark
 
@@ -14,6 +15,7 @@ from utils.ssh import ControllerClient
 def aio_precheck():
     if not system_helper.is_two_node_cpe() and not system_helper.is_simplex:
         skip("Test only applies to AIO-SX or AIO-DX systems")
+
 
 @mark.usefixtures("aio_precheck")
 def test_reclaim_sda():
@@ -45,7 +47,7 @@ def test_reclaim_sda():
     rc, out = con_ssh.exec_sudo_cmd(cmd)
     cgts_vg_val = re.search(cgts_vg_regex, out)
 
-    LOG.info("cgts-vg is currently: {}".format(cgts_vg_val.group(0)))
+    LOG.info("cgts-vg is currently: {}".format(cgts_vg_val.group(1)))
 
     for host in hosts:
         LOG.info("Reclaiming space for {}".format(host))
@@ -59,14 +61,16 @@ def test_reclaim_sda():
        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
                                          entity_id="host={}".format(host))
 
+    time.sleep(10)
+
     cmd = "pvs -o vg_name,pv_size --noheadings | grep cgts-vg"
     cgts_vg_regex = "([0-9.]*)g$"
 
     rc, out = con_ssh.exec_sudo_cmd(cmd)
     new_cgts_vg_val = re.search(cgts_vg_regex, out)
 
-    LOG.info("cgts-vg is currently: {}".format(new_cgts_vg_val.group(1)))
-    assert new_cgts_vg_val <= cgts_vg_val, "cgts-vg size did not increase"
+    LOG.info("cgts-vg is now: {}".format(new_cgts_vg_val.group(1)))
+    assert float(new_cgts_vg_val.group(1)) > float(cgts_vg_val.group(1)), "cgts-vg size did not increase"
 
 
 def test_increase_scratch():
@@ -74,6 +78,9 @@ def test_increase_scratch():
     This test increases the size of the scratch filesystem.  The scratch
     filesystem is used for activities such as uploading swift object files,
     etc.
+
+    It also attempts to decrease the size of the scratch filesystem (which
+    should fail).
 
     """
 
@@ -97,13 +104,43 @@ def test_increase_scratch():
         skip("Not enough free space to complete test.")
     else:
         LOG.tc_step("Increase the size of the scratch filesystem")
-        scratch_total = int(free_space) + int(scratch)
-        cmd = "system controllerfs-modify scratch {}".format(scratch_total)
+        new_scratch = math.trunc(int(free_space) / 10) + int(scratch)
+        cmd = "system controllerfs-modify scratch {}".format(new_scratch)
         rc, out = con_ssh.exec_cmd(cmd)
 
     table_ = table_parser.table(cli.system('controllerfs-show scratch'))
     new_scratch = table_parser.get_value_two_col_table(table_, 'size')
     LOG.info("scratch is now: {}".format(new_scratch))
-
     assert int(new_scratch) > int(scratch), "scratch size did not increase"
+
+    LOG.info("Wait for alarms to clear")
+    hosts = system_helper.get_controllers()
+    for host in hosts:
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                        entity_id="host={}".format(host))
+
+    LOG.tc_step("Attempt to decrease the size of the scratch filesystem")
+    decreased_scratch = int(new_scratch) - 1
+    cmd = "system controllerfs-modify scratch {}".format(decreased_scratch)
+    rc, out = con_ssh.exec_cmd(cmd, fail_ok=True)
+    table_ = table_parser.table(cli.system('controllerfs-show scratch'))
+    final_scratch = table_parser.get_value_two_col_table(table_, 'size')
+    LOG.info("scratch is currently {}".format(final_scratch))
+    assert int(final_scratch) != int(decreased_scratch), \
+        "scratch was unexpectedly decreased from {} to {}".format(new_scratch, final_scratch)
+
+
+def test_increase_cinder():
+    """
+    Increase the size of the cinder filesystem.  Note, this requires a host
+    reinstall.
+
+    """
+
+
+def test_increase_ceph_mon():
+    """
+    Increase the size of ceph-mon.
+    """
+
 
