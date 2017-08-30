@@ -20,6 +20,7 @@ from keywords import vm_helper, host_helper, nova_helper, patching_helper, syste
 
 from testfixtures.fixture_resources import ResourceCleanup
 
+
 NUM_VM = 5
 DEF_PRIORITY = 3
 DEF_MEM_SIZE = 1024
@@ -73,7 +74,7 @@ def verify_vim_evacuation_events():
     start = self.start_time
 
     search = '\grep -E -B2 -A{} \'{}\' {} | tail -n {}'.format(
-        LOG_RECORD_LINES-2, patterns, log_file, LOG_RECORD_LINES * self.num_vms * 5)
+        LOG_RECORD_LINES-2, patterns, log_file, LOG_RECORD_LINES * NUM_VM * 5)
 
     log_entries = run_cmd(search, expect_timeout=120)[1]
 
@@ -146,7 +147,7 @@ def verify_compute_evacuation_events():
         self, log_file, patterns = (yield)
 
         search = '\grep -E \'{}\' {} | tail -n {}'.format(
-            patterns, log_file, self.num_vms * 50)
+            patterns, log_file, NUM_VM * 50)
 
         start = self.start_time
 
@@ -258,11 +259,11 @@ def get_quotas(quota_names, project_id=None, auth_info=Tenant.ADMIN):
 
 class TestPrioritizedVMEvacuation:
 
-    quotas_expected = {'instances': 5, 'cores': 36, 'volumes': 10}
+    quotas_expected = {'instances': 10, 'cores': 50, 'volumes': 20}
     quotas_saved = dict()
 
     @fixture(scope='class', autouse=True)
-    def change_save_settings(self, request):
+    def change_save_settings(self, request, add_admin_role_class, add_cgcsauto_zone):
         def restore_settings():
             set_quotas(TestPrioritizedVMEvacuation.quotas_saved)
 
@@ -286,19 +287,33 @@ class TestPrioritizedVMEvacuation:
                 skip('Unable to adjust quota to:{}'.format(new_quotas))
             request.addfinalizer(restore_settings)
 
+        storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
+        if len(target_hosts) < 2:
+            skip("Less than two up hosts have same storage backing")
+
+        hosts_to_add = target_hosts[:2]
+        nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=hosts_to_add)
+
+        def remove_hosts_from_zone():
+            nova_helper.remove_hosts_from_aggregate(aggregate='cgcsauto', check_first=False)
+        request.addfinalizer(remove_hosts_from_zone)
+
+        return storage_backing, hosts_to_add
+
     @mark.parametrize(('operation', 'set_on_boot', 'prioritizing', 'vcpus', 'mem', 'root_disk', 'swap_disk'), [
         ('reboot', False, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
-        ('reboot', False, 'same_priority', 'diff_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
-        ('reboot', True, 'same_priority', 'same_vcpus', 'diff_mem', 'same_root_disk', 'same_swap_disk'),
-        ('reboot', True, 'same_priority', 'same_vcpus', 'same_mem', 'diff_root_disk', 'same_swap_disk'),
+        ('reboot', False, 'same_priority', 'diff_vcpus', 'diff_mem', 'same_root_disk', 'no_swap_disk'),
+        ('reboot', True, 'same_priority', 'same_vcpus', 'diff_mem', 'diff_root_disk', 'same_swap_disk'),
+        ('reboot', True, 'same_priority', 'same_vcpus', 'same_mem', 'diff_root_disk', 'diff_swap_disk'),
         ('reboot', True, 'same_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'diff_swap_disk'),
-        ('reboot', True, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
-        ('reboot', True, 'diff_priority', 'diff_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
-        ('reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'diff_root_disk', 'same_swap_disk'),
-        ('force_reboot', False, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
-        ('force_reboot', True, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
+        # ('reboot', True, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
+        ('reboot', True, 'diff_priority', 'diff_vcpus', 'same_mem', 'same_root_disk', 'no_swap_disk'),
+        ('reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'diff_root_disk', 'diff_swap_disk'),
+        ('force_reboot', False, 'same_priority', 'same_vcpus', 'diff_mem', 'diff_root_disk', 'diff_swap_disk'),
+        ('force_reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'same_root_disk', 'same_swap_disk'),
     ])
-    def test_prioritized_vm_evacuations(self, operation, set_on_boot, prioritizing, vcpus, mem, root_disk, swap_disk):
+    def test_prioritized_vm_evacuations(self, operation, set_on_boot, prioritizing, vcpus, mem, root_disk, swap_disk,
+                                        change_save_settings):
         """
 
         Args:
@@ -319,9 +334,10 @@ class TestPrioritizedVMEvacuation:
             4   reboot the hosting node
             5   checking the evacuation/migration order
         """
+        self.storage_backing, self.cgcsauto_hosts = change_save_settings
+        self.current_host = self.cgcsauto_hosts[0]
         self.vms_info = defaultdict()
         self.init_vm_settings(operation, set_on_boot, prioritizing, vcpus, mem, root_disk, swap_disk)
-        self.check_resource()
         self.create_flavors()
         self.create_vms()
         self.check_vm_settings()
@@ -354,7 +370,7 @@ class TestPrioritizedVMEvacuation:
             return
 
         for vm_info in self.vms_info.values():
-            vm_helper.wait_for_vm_values(vm_info['vm_id'], timeout=1200, status=[VMStatus.ACTIVE])
+            vm_helper.wait_for_vm_values(vm_info['vm_id'], timeout=300, status=[VMStatus.ACTIVE])
 
         LOG.info('OK, all VMs are in ACTIVE status\n')
 
@@ -365,7 +381,7 @@ class TestPrioritizedVMEvacuation:
                          for vm_info in self.vms_info.values() if 'priority' in vm_info]
         self.expected_order = sorted(vm_priorities, key=lambda item: int(item[1]))
         self.expected_order += [(vm_info['vm_id'], None)
-                         for vm_info in self.vms_info.values() if 'priority' not in vm_info]
+                                for vm_info in self.vms_info.values() if 'priority' not in vm_info]
 
         base_log_dir = '/var/log'
 
@@ -396,56 +412,30 @@ class TestPrioritizedVMEvacuation:
         self.meta_data = data
         return vm_helper.set_vm_meta_data(vm_id, data, fail_ok=fail_ok, check_after_set=True)
 
-
-    def delete_evacuate_priority(sel, vm_id, fail_ok=False):
+    def delete_evacuate_priority(self, vm_id, fail_ok=False):
         return vm_helper.delete_vm_meta_data(vm_id, [VMMetaData.EVACUATION_PRIORITY], fail_ok=fail_ok)
 
-
-    @mark.parametrize( ('operation, priority'), [
-        ('set', random.randint(-1 * MAX_PRI, MIN_PRI)),
-        ('set', random.randint(MIN_PRI, MAX_PRI+1)),
-        ('set', random.randint(MAX_PRI + 1, 100)),
-        ('set', ''),
-        ('set', 'random'),
-        ('delete', ''),
+    @mark.parametrize(('operation', 'priority', 'expt_error'), [
+        ('set', -2, 'error'),
+        ('set', 10, None),
+        ('set', 11, 'error'),
+        ('set', '', 'error'),
+        ('set', 'random', 'error'),
+        ('delete', '', 'error'),
     ])
-    def test_setting_evacuate_priority(self, operation, priority):
+    def test_setting_evacuate_priority(self, operation, priority, expt_error):
         LOG.tc_step('Luanch VM for test')
 
         if not hasattr(TestPrioritizedVMEvacuation, 'vm_id'):
-            TestPrioritizedVMEvacuation.vm_id = vm_helper.boot_vm()[1]
-            ResourceCleanup.add('vm', TestPrioritizedVMEvacuation.vm_id, scope='class')
-
-        supported_operations = ['set', 'delete']
-        if operation not in supported_operations:
-            skip('Unsupported operation on meta data:{}, \nsupported:{}\n'.format(
-                VMMetaData.EVACUATION_PRIORITY, supported_operations))
-            return
+            TestPrioritizedVMEvacuation.vm_id = vm_helper.boot_vm(avail_zone='cgcsauto', cleanup='class')[1]
 
         vm_id = TestPrioritizedVMEvacuation.vm_id
 
         LOG.info('OK, VM launched (or already existing) for test, vm-id:{}'.format(vm_id))
 
-        expecting_fail = False
-        if not priority or isinstance(priority, str):
-            if operation != 'delete':
-                expecting_fail = True
-
-            if priority == 'random':
-                priority = 'ab' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(3))
-                expecting_fail = True
-        else:
-            try:
-                to_set = int(priority)
-
-            except ValueError:
-                expecting_fail = True if operation == 'set' else False
-
-            else:
-                if to_set not in range(MIN_PRI, MAX_PRI+1):
-                    LOG.info('Expecting the INVALID priority will be rejected, priority:{} on VM:{}'.format(
-                        priority, vm_id))
-                    expecting_fail = True
+        if priority == 'random':
+            priority = 'ab' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(3))
+        expecting_fail = True if expt_error else False
 
         if operation == 'set':
             code, output = self.set_evacuate_priority(vm_id, priority, fail_ok=expecting_fail)
@@ -491,13 +481,6 @@ class TestPrioritizedVMEvacuation:
             assert actual_priority is None, \
                 'Failed, expecting Evacuation-Priority been deleted, but not. actual:{}'.format(actual_priority)
 
-    @staticmethod
-    def get_dest_host():
-        computes = host_helper.get_up_hypervisors()
-        active_controller = system_helper.get_active_controller_name()
-
-        return random.choice([compute for compute in computes if compute != active_controller])
-
     def create_vms(self):
         LOG.tc_step('Create VMs')
 
@@ -505,7 +488,7 @@ class TestPrioritizedVMEvacuation:
 
         num_priorities = len(self.prioritizing)
 
-        for sn in range(self.num_vms):
+        for sn in range(NUM_VM):
 
             name = vm_name_format.format(sn)
             if self.set_on_boot and sn < num_priorities:
@@ -513,56 +496,38 @@ class TestPrioritizedVMEvacuation:
                                           meta={VMMetaData.EVACUATION_PRIORITY: self.prioritizing[sn]},
                                           flavor=self.vms_info[sn]['flavor_id'],
                                           source='volume',
-                                          avail_zone='nova')[1]
+                                          avail_zone='cgcsauto',
+                                          vm_host=self.current_host,
+                                          cleanup='function')[1]
             else:
                 vm_id = vm_helper.boot_vm(name,
                                           flavor=self.vms_info[sn]['flavor_id'],
                                           source='volume',
-                                          avail_zone='nova')[1]
+                                          avail_zone='cgcsauto',
+                                          vm_host=self.current_host,
+                                          cleanup='function')[1]
                 if sn < num_priorities:
-                    vm_helper.set_vm_meta_data(vm_id,
-                                           {VMMetaData.EVACUATION_PRIORITY: self.prioritizing[sn]})
+                    vm_helper.set_vm_meta_data(vm_id, {VMMetaData.EVACUATION_PRIORITY: self.prioritizing[sn]})
 
             LOG.info('OK, VM{} created: id={}\n'.format(sn, vm_id))
             self.vms_info[sn].update(vm_id=vm_id, vm_name=name, priority=self.prioritizing[sn])
 
-            ResourceCleanup.add('vm', vm_id, scope='function')
-
         LOG.info('OK, VMs created:\n{}\n'.format([vm['vm_id'] for vm in self.vms_info.values()]))
-
-        for sn, vm_info in self.vms_info.items():
-            host = nova_helper.get_vm_nova_show_value(vm_info['vm_id'], 'OS-EXT-SRV-ATTR:hypervisor_hostname')
-
-            if host != self.current_host:
-                vm_id = vm_info['vm_id']
-
-                if not vm_helper._is_live_migration_allowed(vm_id):
-                    skip('Cannot Live-migrate vm:{}, skip the test'.format(vm_id))
-
-                LOG.info('Wait 20 seconds to live migrate vm:{} from:{}'.format(vm_id, host))
-                time.sleep(20)
-                vm_helper.live_migrate_vm(vm_id, fail_ok=False)
-
-                actual_host = vm_helper.get_vm_host_and_numa_nodes(vm_id)[0]
-
-                assert actual_host == self.current_host, \
-                    'Failed to live-migrate VM:{} to host:{}, actual host:{}'.format(
-                        vm_id, host, actual_host)
-
-        LOG.info('OK, Evacuation-Priorities are set on VMs\n')
 
     def create_flavors(self):
         LOG.tc_step('Create flavors')
 
         flavor_name_format = 'pve_flavor_{}'
-        for sn in range(self.num_vms):
+        for sn in range(NUM_VM):
             name = flavor_name_format.format(sn)
             flavor_id = nova_helper.create_flavor(name=name, vcpus=self.vcpus[sn], ram=int(self.mem[sn]),
-                                                  root_disk=self.root_disk[sn], swap=int(self.swap_disk[sn]) * 1024,
-                                                  is_public=True)[1]
-            self.vms_info.update({sn: {'flavor_name': name, 'flavor_id': flavor_id}})
+                                                  root_disk=self.root_disk[sn], swap=self.swap_disk[sn],
+                                                  is_public=True, storage_backing=self.storage_backing,
+                                                  check_storage_backing=False)[1]
             ResourceCleanup.add('flavor', flavor_id, scope='function')
+            self.vms_info.update({sn: {'flavor_name': name, 'flavor_id': flavor_id}})
 
+            # TODO create volume
         LOG.info('OK, flavors created:\n{}\n'.format([vm['flavor_id'] for vm in self.vms_info.values()]))
 
     def init_vm_settings(self, operation, set_on_boot, prioritizing, vcpus, mem, root_disk, swap_disk):
@@ -575,6 +540,7 @@ class TestPrioritizedVMEvacuation:
 
         if 'diff' in prioritizing:
             self.prioritizing = list(range(1, NUM_VM + 1))
+            random.shuffle(self.prioritizing, random.random)
         else:
             self.prioritizing = [DEF_PRIORITY] * NUM_VM
 
@@ -582,11 +548,13 @@ class TestPrioritizedVMEvacuation:
             self.vcpus = list(range(NUM_VM * DEF_NUM_VCPU + 1,
                                     DEF_NUM_VCPU,
                                     -1 * DEF_NUM_VCPU))
+            random.shuffle(self.vcpus, random.random)
         else:
             self.vcpus = [DEF_NUM_VCPU] * NUM_VM
 
         if 'diff' in mem:
             self.mem = list(range(DEF_MEM_SIZE + 512 * NUM_VM, DEF_MEM_SIZE, -512))
+            random.shuffle(self.mem, random.random)
         else:
             self.mem = [DEF_MEM_SIZE] * NUM_VM
 
@@ -595,52 +563,21 @@ class TestPrioritizedVMEvacuation:
                 range(DEF_DISK_SIZE * NUM_VM + 1,
                       DEF_DISK_SIZE,
                       -1 * DEF_DISK_SIZE))
+            random.shuffle(self.root_disk, random.random)
         else:
             self.root_disk = [DEF_DISK_SIZE] * NUM_VM
 
         if 'diff' in swap_disk:
-            self.swap_disk = list(
+            self.swap_disk = [size * 1024 for size in list(
                 range(DEF_DISK_SIZE * NUM_VM + 1,
                       DEF_DISK_SIZE,
-                      -1 * DEF_DISK_SIZE))
+                      -1 * DEF_DISK_SIZE))]
+            random.shuffle(self.swap_disk, random.random)
+        elif 'same' in swap_disk:
+            self.swap_disk = [DEF_DISK_SIZE * 1024] * NUM_VM
         else:
-            self.swap_disk = [DEF_DISK_SIZE] * NUM_VM
+            # no swap disk
+            self.swap_disk = [None] * NUM_VM
 
-        LOG.info('OK, will boot VMs with settings:\npriorities={}\nvcpus={}\nmem={}\nroot_disk={}\nswap_dis={}'.format(
-            self.prioritizing, self.vcpus, self.mem, self.root_disk, self.swap_disk
-        ))
-
-    def check_resource(self):
-        LOG.tc_step('Check if the system supports the test')
-
-        vm_helper.delete_vms()
-
-        self.num_vms = NUM_VM
-        self.current_host = self.get_dest_host()
-        self.active_controller = system_helper.get_active_controller_name()
-
-        if self.operation in ['reboot', 'force-reboot']:
-            hypervisors = host_helper.get_up_hypervisors()
-
-            if len(hypervisors) < 2:
-                skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
-
-            elif len(hypervisors) > 2:
-                LOG.info('More than 2 hypervisors, will only leave 2 and lock the rest')
-                to_lock = len(hypervisors) - 2
-                for host in hypervisors:
-                    if to_lock < 1:
-                        break
-
-                    if host in [self.active_controller, self.current_host]:
-                        continue
-                    LOG.info('Locking host:{}'.format(host))
-                    host_helper.lock_host(host, fail_ok=False)
-                    ResourceCleanup.add('host', host, scope='class')
-                    to_lock -= 1
-
-                LOG.info('OK, total locked host:{}'.format(len(hypervisors) - 2))
-                self.hypervisors = host_helper.get_up_hypervisors()
-                LOG.inof('OK, now active hypervisors:{}'.format(self.hypervisors))
-
-        LOG.info('OK, system is ready to test')
+        LOG.info('OK, will boot VMs with settings:\npriorities={}\nvcpus={}\nmem={}\nroot_disk={}\nswap_dis={}'.
+                 format(self.prioritizing, self.vcpus, self.mem, self.root_disk, self.swap_disk))

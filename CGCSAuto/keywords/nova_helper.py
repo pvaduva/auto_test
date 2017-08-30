@@ -24,7 +24,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
         ram (int):
         root_disk (int):
         ephemeral (int):
-        swap (int):
+        swap (int|None):
         is_public (bool):
         rxtx_factor (str):
         fail_ok (bool): whether it's okay to fail to create a flavor. Default to False.

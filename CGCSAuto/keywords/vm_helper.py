@@ -300,7 +300,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         min_count (int):
         max_count (int):
         key_name (str):
-        swap (int):
+        swap (int|None):
         ephemeral (int):
         user_data (str|list):
         vm_host (str): which host to place the vm
