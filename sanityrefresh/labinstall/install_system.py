@@ -2418,6 +2418,7 @@ def main():
 
     # After unlocking storage nodes, wait for ceph to come up
     if lab_type == 'storage':
+        time.sleep(10)
         wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os=host_os)
 
     # Lab-install -  run_lab_setup - applicable storage labs
@@ -2477,6 +2478,7 @@ def main():
             # Wait for degrade sysinv set to raise
             time.sleep(10)
             wait_until_alarm_clears(controller0, timeout=1200, check_interval=60, alarm_id="400.001", host_os=host_os)
+            wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os=host_os)
 
             if find_error_msg(output, "250.001"):
                 log.info('Config out-of-date alarm is present')
