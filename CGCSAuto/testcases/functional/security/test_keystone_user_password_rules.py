@@ -479,8 +479,8 @@ def create_user(user_name, role, del_if_existing=False, project_name_id=None, pr
 
 def change_user_password(user_name, original_password, password, by_admin=True, expecting_pass=True):
     LOG.info('Attempt to change password, expecting-pass:{}'
-             ', user:{}, original-password:{}, new-password:{}, by-admin:{}\n'.format(
-        expecting_pass, user_name, original_password, password, by_admin))
+             ', user:{}, original-password:{}, new-password:{}, by-admin:{}\n'.
+             format(expecting_pass, user_name, original_password, password, by_admin))
 
     if by_admin:
         command = "user set --password '{}' {}".format(password, user_name)
@@ -589,8 +589,8 @@ def test_setting_password(role, password_rule):
         time.sleep(wait)
 
         LOG.info('after wait {} seconds, attempt to change password with an INVALID password:{}\n'
-                 'user_name:{}, current password:{}, is admin:{}, expecting FAIL'.format(
-            wait, invalid_pwd, user_name, valid_pwd, is_admin))
+                 'user_name:{}, current password:{}, is admin:{}, expecting FAIL'.
+                 format(wait, invalid_pwd, user_name, valid_pwd, is_admin))
 
         change_user_password(user_name, valid_pwd, invalid_pwd, expecting_pass=False, by_admin=is_admin)
 

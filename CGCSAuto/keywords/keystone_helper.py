@@ -226,7 +226,7 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
     }
     for key, val in optional_args.items():
         if val is not None:
-            arg += '--{} {} '.format(key, val)
+            arg += "--{} '{}' ".format(key, val)
 
     if enable is not None:
         arg += '--{} '.format('enable' if enable else 'disable')

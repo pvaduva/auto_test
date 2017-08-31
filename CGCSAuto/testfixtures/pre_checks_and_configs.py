@@ -41,8 +41,7 @@ def wait_for_con_drbd_sync_complete():
 def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     more_than_one_controllers = wait_for_con_drbd_sync_complete
     prev_pswd = Tenant.ADMIN['password']
-    post_actual_pswd = '!{}9'.format(prev_pswd)
-    post_pswd = "'{}'".format(post_actual_pswd)
+    post_pswd = '!{}9'.format(prev_pswd)
 
     LOG.fixture_step('(Session) Changing admin password to {}'.format(post_pswd))
     keystone_helper.update_user('admin', password=post_pswd)
@@ -78,6 +77,6 @@ def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     _lock_unlock_controllers()
 
     LOG.fixture_step("(Session) Check admin password is changed to {} in keyring".format(post_pswd))
-    assert post_actual_pswd == security_helper.get_admin_password_in_keyring()
+    assert post_pswd == security_helper.get_admin_password_in_keyring()
 
     return post_pswd
