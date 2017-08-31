@@ -1763,10 +1763,12 @@ def get_pci_devices_info(class_id, con_ssh=None, auth_info=None):
         con_ssh:
         auth_info:
 
-    Returns:
-        dict contains:
-            Device Id: {Device Name, Vendor Id, Host, pci_pfs_configured,
-                    pci_pfs_used, pci_vfs_configured, pci_vfs_used}
+    Returns (dict): nova pci devices dict.
+        Format: {<pci_alias1>: {<host1>: {<nova device-show row dict for host>}, <host2>: {...}},
+                 <pci_alias2>: {...},
+                 ...}
+        Examples:
+            {qat-vf: {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
 
     """
     table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -1784,34 +1786,6 @@ def get_pci_devices_info(class_id, con_ssh=None, auth_info=None):
         table_dict = table_parser.row_dict_table(table_, key_header='Host', unique_key=True)
         nova_pci_devices[alias] = table_dict
         # {qat-vf: {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
-        #
-
-        #
-        #
-        # try:
-        #     names = table_parser.get_column(table_, 'PCI Alias')
-        #     device_ids = table_parser.get_column(table_, 'Device Id')
-        #     vendor_ids = table_parser.get_column(table_, 'Vendor Id')
-        #     hosts = table_parser.get_column(table_, 'Host')
-        #     pci_pfs = table_parser.get_column(table_, 'pci_pfs_configured')
-        #     pci_pfs_used = table_parser.get_column(table_, 'pci_pfs_used')
-        #     pci_vfs = table_parser.get_column(table_, 'pci_vfs_configured')
-        #     pci_vfs_used = table_parser.get_column(table_, 'pci_vfs_used')
-        #
-        #     for name, device_id, vendor_id, host, pci_pf, pci_pf_used, pci_vf, pci_vf_used in \
-        #             zip(names, device_ids, vendor_ids, hosts, pci_pfs, pci_pfs_used, pci_vfs, pci_vfs_used):
-        #
-        #             nova_pci_devices[host] = {device_id: {'vendor_id': vendor_id,
-        #                                                   'class_id': class_id,
-        #                                                   'pci_pfs_configured': pci_pf,
-        #                                                   'pci_pfs_used': pci_pf_used,
-        #                                                   'pci_vfs_configured': pci_vf,
-        #                                                   'pci_vfs_used': pci_pf_used,
-        #                                                   }}
-        # except Exception as e:
-        #     LOG.error('CLI output format error: CLI nova device-show {} changed its format. error message:{}'.format(
-        #         alias, e))
-        #     raise
 
     LOG.info('nova_pci_deivces: {}'.format(nova_pci_devices))
 
