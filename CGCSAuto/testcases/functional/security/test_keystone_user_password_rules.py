@@ -19,8 +19,8 @@ TEST_USER_NAME = 'keystoneuser'
 
 SPECIAL_CHARACTERS = '!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:'
 MIN_PASSWORD_LEN = 7
-MAX_PASSWORD_LEN = 15
-# MAX_PASSWORD_LEN = 4095
+# MAX_PASSWORD_LEN = 15
+MAX_PASSWORD_LEN = 4096
 NUM_TRACKED_PASSWORD = 2
 # WAIT_BETWEEN_CHANGE = 60
 WAIT_BETWEEN_CHANGE = 6
@@ -118,7 +118,6 @@ def is_last_used(password, user_name=None, depth=NUM_TRACKED_PASSWORD):
 
 def get_valid_password(user_name=None):
     total_length = random.randint(MIN_PASSWORD_LEN, MAX_PASSWORD_LEN)
-
     password = None
     frequently_used_words = re.split('\W', SIMPLE_WORD_DICTIONARY.strip())
 
@@ -126,7 +125,7 @@ def get_valid_password(user_name=None):
     while attempt < 60:
         attempt += 1
         left_count = total_length
-        lower_case_len = random.randint(1, 4)
+        lower_case_len = random.randint(1, left_count - 3)
         left_count -= lower_case_len
 
         upper_case_len = random.randint(1, left_count - 2)
@@ -214,7 +213,7 @@ def multiple_attempts_generator():
 
 
 def dictionary_generator():
-    frequently_used_words = re.split('\W', SIMPLE_WORD_DICTIONARY.strip())
+    frequently_used_words = [w for w in re.split('\W', SIMPLE_WORD_DICTIONARY.strip()) if w.strip()]
 
     while True:
         (args, user_name, _), expecting_pass = yield
@@ -304,7 +303,8 @@ def change_history_generator():
                 password = ''.join(new_chars)
 
             elif args == 'reversed':
-                password = ''.join(password[-1::-1])
+                password = ''.join(used_passwords[-1::-1])
+
             else:
                 password = ''
                 skip('Unknown arg:{} for change_history_generator'.format(args))
@@ -479,8 +479,8 @@ def create_user(user_name, role, del_if_existing=False, project_name_id=None, pr
 
 def change_user_password(user_name, original_password, password, by_admin=True, expecting_pass=True):
     LOG.info('Attempt to change password, expecting-pass:{}'
-             ', user:{}, original-password:{}, new-password:{}, by-admin:{}\n'.
-             format(expecting_pass, user_name, original_password, password, by_admin))
+             ', user:{}, original-password:{}, new-password:{}, by-admin:{}\n'.format(
+                expecting_pass, user_name, original_password, password, by_admin))
 
     if by_admin:
         command = "user set --password '{}' {}".format(password, user_name)
@@ -568,29 +568,30 @@ def test_setting_password(role, password_rule):
 
     else:
         valid_pwd = password_producer.send((send_args, True))
-        LOG.info('Attempt to set with valid password:{} to user:{}, expecting PASS, by admin:{}\n'.format(
-            valid_pwd, user_name, is_admin))
+        LOG.info('Attempt to set with valid to user:{}, expecting PASS, by admin:{}, length, password:{}\n'.format(
+            user_name, is_admin, len(valid_pwd), valid_pwd))
 
         change_user_password(user_name, password, valid_pwd, expecting_pass=True, by_admin=is_admin)
         save_used_password(user_name, valid_pwd)
 
-        LOG.info('OK, VALID password was accepted as expected, user:{}, password:{}\n'.format(user_name, valid_pwd))
+        LOG.info('OK, VALID password was accepted as expected, user:{}, length:{} password:{}\n'.format(
+            user_name, len(valid_pwd), valid_pwd))
 
         verify_login(user_name, valid_pwd, expecting_pass=True, is_admin=is_admin)
 
         next(password_producer)
         invalid_pwd = password_producer.send((send_args, False))
 
-        LOG.info('\nExpecting FAIL, to set with INVALID password:{} to user:{}, current password:{}\n'.format(
-            invalid_pwd, user_name, valid_pwd))
+        LOG.info('Expecting FAIL, to set with INVALID user:{}, current password:{}\nnew password:{} \n'.format(
+            user_name, valid_pwd, invalid_pwd))
 
         wait = WAIT_BETWEEN_CHANGE + 1
 
         time.sleep(wait)
 
         LOG.info('after wait {} seconds, attempt to change password with an INVALID password:{}\n'
-                 'user_name:{}, current password:{}, is admin:{}, expecting FAIL'.
-                 format(wait, invalid_pwd, user_name, valid_pwd, is_admin))
+                 'user_name:{}, current password:{}, is admin:{}, expecting FAIL'.format(
+                    wait, invalid_pwd, user_name, valid_pwd, is_admin))
 
         change_user_password(user_name, valid_pwd, invalid_pwd, expecting_pass=False, by_admin=is_admin)
 
