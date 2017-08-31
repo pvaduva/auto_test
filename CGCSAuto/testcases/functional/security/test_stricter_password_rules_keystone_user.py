@@ -485,7 +485,7 @@ def change_user_password(user_name, original_password, password, by_admin=True, 
     if by_admin:
         command = "user set --password '{}' {}".format(password, user_name)
     else:
-        command = 'user password set --original-password "{}" --password "{}"'.format(original_password, password)
+        command = "user password set --original-password '{}' --password '{}'".format(original_password, password)
 
     auth_info = get_user_auth_info(user_name, original_password, in_admin_project=by_admin)
 
