@@ -142,15 +142,18 @@ def test_create_backup(con_ssh=None):
             LOG.tc_step("export in use volumes volumes ")
             snapshot_name = 'snapshot_'+vol_id
             cli_args = '--force True --name '+snapshot_name+' '+vol_id
-            code, output = cli.cinder('snapshot-create', cli_args, auth_info=Tenant.ADMIN)
-
+            table_ = table_parser.table(cli.cinder('snapshot-create', cli_args, auth_info=Tenant.ADMIN))
+            snap_shot_id = table_parser.get_values(table_, 'Value', Property='id')
+            print(snap_shot_id)
             # temp sleep wait for snap-shot creation finish
             time.sleep(120)
             # export in-use volume snapshot to ~/opt/backups
-            code, output = cli.cinder('snapshot-export', snapshot_name, auth_info=Tenant.ADMIN)
-
+            table_ = table_parser.table(cli.cinder('snapshot-export', snap_shot_id, auth_info=Tenant.ADMIN))
+            # temp sleep wait for snap-export to finish
+            time.sleep(120)
             # copy it to the test server
             vol_files = vol_files + '/opt/backups/volume-' + vol_id + '* '
+            # TODO: delete created snapshot after the are in /opt/backups folder
 
     # dest_dir = SvcCgcsAuto.HOME + '/backup_restore'
     dest_path = common.scp_from_active_controller_to_test_server(vol_files, dest_dir, is_dir=False)
@@ -159,7 +162,6 @@ def test_create_backup(con_ssh=None):
     LOG.tc_step("delete volume tgz file from tis server /opt/backups folder ")
     cmd = 'rm -f ' + vol_files
     con_ssh.exec_sudo_cmd(cmd, fail_ok=False)
-
 
 
 
