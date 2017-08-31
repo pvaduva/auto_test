@@ -384,7 +384,7 @@ class TestPrioritizedVMEvacuation:
         vm_attributes = zip(sorted_vm_infos, self.vcpus, self.mem, self.root_disk, self.swap_disk)
 
         sorted_attributes = sorted(vm_attributes,
-                                   key=lambda x: (x[0]['priority'], x[1], x[2], x[3], x[4]))
+                                   key=lambda x: (x[0]['priority'], -1 * x[1], -1 * x[2], -1 * x[3], -1 * x[4]))
 
         self.expected_order = [(v[0]['vm_id'], v[0]['priority']) for v in sorted_attributes]
 
@@ -526,10 +526,19 @@ class TestPrioritizedVMEvacuation:
         flavor_name_format = 'pve_flavor_{}'
         for sn in range(NUM_VM):
             name = flavor_name_format.format(sn)
-            flavor_id = nova_helper.create_flavor(name=name, vcpus=self.vcpus[sn], ram=int(self.mem[sn]),
-                                                  root_disk=self.root_disk[sn], swap=self.swap_disk[sn],
-                                                  is_public=True, storage_backing=self.storage_backing,
-                                                  check_storage_backing=False)[1]
+            options = {
+                'name': name,
+                'vcpus': self.vcpus[sn],
+                'ram': self.mem[sn],
+                'root_disk': self.root_disk[sn],
+                'is_public': True,
+                'storage_backing': self.storage_backing,
+                'check_storage_backing': False,
+            }
+            if self.swap_disk:
+                options['swap'] = self.swap_disk[sn]
+
+            flavor_id = nova_helper.create_flavor(**options)[1]
             ResourceCleanup.add('flavor', flavor_id, scope='function')
             self.vms_info.update({sn: {'flavor_name': name, 'flavor_id': flavor_id}})
 
@@ -545,16 +554,14 @@ class TestPrioritizedVMEvacuation:
             return
 
         if 'diff' in prioritizing:
-            self.prioritizing = list(range(1, NUM_VM + 1))
-            random.shuffle(self.prioritizing, random.random)
+            self.prioritizing = random.sample(range(1, NUM_VM + 1), NUM_VM)
         else:
             self.prioritizing = [DEF_PRIORITY] * NUM_VM
 
         if 'diff' in vcpus:
-            self.vcpus = list(range(NUM_VM * DEF_NUM_VCPU + 1,
+            self.vcpus = random.sample(range(NUM_VM * DEF_NUM_VCPU + 1,
                                     DEF_NUM_VCPU,
-                                    -1 * DEF_NUM_VCPU))
-            random.shuffle(self.vcpus, random.random)
+                                    -1 * DEF_NUM_VCPU), NUM_VM)
         else:
             self.vcpus = [DEF_NUM_VCPU] * NUM_VM
 
@@ -565,11 +572,10 @@ class TestPrioritizedVMEvacuation:
             self.mem = [DEF_MEM_SIZE] * NUM_VM
 
         if 'diff' in root_disk:
-            self.root_disk = list(
-                range(DEF_DISK_SIZE * NUM_VM + 1,
+            self.root_disk = random.sample(
+                range(DEF_DISK_SIZE * (NUM_VM + 1),
                       DEF_DISK_SIZE,
-                      -1 * DEF_DISK_SIZE))
-            random.shuffle(self.root_disk, random.random)
+                      -1 * DEF_DISK_SIZE), NUM_VM)
         else:
             self.root_disk = [DEF_DISK_SIZE] * NUM_VM
 
@@ -583,7 +589,7 @@ class TestPrioritizedVMEvacuation:
             self.swap_disk = [DEF_DISK_SIZE * 1024] * NUM_VM
         else:
             # no swap disk
-            self.swap_disk = [None] * NUM_VM
+            self.swap_disk = [0] * NUM_VM
 
         LOG.info('OK, will boot VMs with settings:\npriorities={}\nvcpus={}\nmem={}\nroot_disk={}\nswap_dis={}'.
                  format(self.prioritizing, self.vcpus, self.mem, self.root_disk, self.swap_disk))
