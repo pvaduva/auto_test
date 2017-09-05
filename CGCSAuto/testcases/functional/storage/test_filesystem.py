@@ -222,6 +222,13 @@ def test_increase_ceph_mon():
     ceph_mon_gib = table_parser.get_values(table_, "ceph_mon_gib", **{"hostname": "controller-0"})[0]
     LOG.info("ceph_mon_gib is currently: {}".format(ceph_mon_gib))
 
+    LOG.tc_step("Attempt to modify ceph-mon to invalid values")
+    invalid_cmg = ['19', '41', 'fds']
+    for value in invalid_cmg:
+        host = "controller-0"
+        cmd = "system ceph-mon-modify {} ceph_mon_gib={}".format(host, value)
+        rc, out = con_ssh.exec_cmd(cmd, fail_ok=True)
+
     if int(ceph_mon_gib) >= 30:
         skip("Insufficient disk space to execute test")
 
@@ -260,4 +267,8 @@ def test_increase_ceph_mon():
     for host in hosts:
         system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
                                           entity_id="host={}".format(host))
+
+    table_ = table_parser.table(cli.system("ceph-mon-list"))
+    ceph_mon_gib = table_parser.get_values(table_, "ceph_mon_gib", **{"hostname": "controller-0"})[0]
+    assert ceph_mon_gib == new_ceph_mon_gib, "ceph-mon did not change"
 
