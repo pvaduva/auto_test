@@ -1,6 +1,7 @@
 import ast
 import re
 import math
+import time
 
 from pytest import fixture, skip, mark
 
@@ -210,37 +211,52 @@ def _test_increase_cinder():
     # ipmitool (wildcat only) or port installer code over.
 
 
-def _test_increase_ceph_mon():
+def test_increase_ceph_mon():
     """
     Increase the size of ceph-mon.  Only applicable to a storage system.
     """
 
-    ceph_mon_gib_max = 40
+    con_ssh = ControllerClient.get_active_controller()
 
-    table_ = table_parser.table(cli.system("system ceph-mon-list"))
-    ceph_mon_gib = table_parser.get_values(table_, "ceph_mon_gib", **{"hostname": "controller-0"})
+    table_ = table_parser.table(cli.system("ceph-mon-list"))
+    ceph_mon_gib = table_parser.get_values(table_, "ceph_mon_gib", **{"hostname": "controller-0"})[0]
     LOG.info("ceph_mon_gib is currently: {}".format(ceph_mon_gib))
 
-    if int(ceph_mon_gib) == 40:
+    if int(ceph_mon_gib) >= 30:
         skip("Insufficient disk space to execute test")
 
-    LOG.tc_step("Increase ceph_mon_gib to maximum value")
+    ceph_mon_gib_avail = 40 - int(ceph_mon_gib)
+    new_ceph_mon_gib = math.trunc(ceph_mon_gib_avail / 10) + int(ceph_mon_gib)
+
+    LOG.tc_step("Increase ceph_mon_gib to {}".format(new_ceph_mon_gib))
     hosts = system_helper.get_controllers()
     for host in hosts:
-        cmd = "system ceph-mon-modify {} ceph_mon_gib={}".format(host, ceph_mon_gib_max)
-        
-    for host in hosts:
+        cmd = "system ceph-mon-modify {} ceph_mon_gib={}".format(host, new_ceph_mon_gib)
+        rc, out = con_ssh.exec_cmd(cmd)
+    
+    LOG.info("Wait for expected alarms to appear")
+    storage_hosts = system_helper.get_storage_nodes()
+    total_hosts = hosts + storage_hosts
+    for host in total_hosts:
         system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
                                      entity_id="host={}".format(host))
 
+    LOG.tc_step("Lock/unlock all affected nodes")
     standby = system_helper.get_standby_controller_name()
     active = system_helper.get_active_controller_name()
     host_helper.lock_host(standby)
     host_helper.unlock_host(standby)
+    time.sleep(10)
     host_helper.swact_host(active)
     host_helper.lock_host(active)
     host_helper.unlock_host(active)
-    
+
+    for host in storage_hosts:
+        host_helper.lock_host(host)
+        host_helper.unlock_host(host)
+        time.sleep(10)
+  
+    total_hosts = hosts.append(storage_hosts)
     for host in hosts:
         system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
                                           entity_id="host={}".format(host))
