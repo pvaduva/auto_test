@@ -175,17 +175,18 @@ def _modify_firewall_rules(firewall_rules_path):
     :param firewall_rules_path: Path to the firewalls rules file (including the file name)
     """
     start_time = common.get_date_in_format()
+    time.sleep(1)
     cli.system('firewall-rules-install', firewall_rules_path)
-    system_helper.wait_for_events(start=start_time, fail_ok=False,
+    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=60,
                                   **{'Entity Instance ID': 'host=controller-0',
                                      'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'set'})
-    system_helper.wait_for_events(start=start_time, fail_ok=False,
+    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=60,
                                   **{'Entity Instance ID': 'host=controller-1',
                                      'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'set'})
-    system_helper.wait_for_events(start=start_time, fail_ok=False,
+    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=120,
                                   **{'Entity Instance ID': 'host=controller-0',
                                      'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'clear'})
-    system_helper.wait_for_events(start=start_time, fail_ok=False,
+    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=120,
                                   **{'Entity Instance ID': 'host=controller-1',
                                      'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'clear'})
     # Ensures iptables has enough time to populate the list with new ports
