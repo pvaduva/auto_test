@@ -730,8 +730,9 @@ class MonitoredProcess:
             LOG.error('No pid-file provided')
             return -1
 
-        if 0 <= interval <= debounce - 1:
-            wait_after_each_kill = max(random.randint(interval, debounce - 1), 1)
+        if 0 <= interval <= debounce:
+            # wait_after_each_kill = max(random.randint(interval, debounce - 1), 1)
+            wait_after_each_kill = debounce
         else:
             msg = 'Debounce time period is smaller than interval? Error in configuration. Skip the test! ' \
                   'interval={} debounce={}'.format(interval, debounce)
@@ -739,18 +740,27 @@ class MonitoredProcess:
             skip(msg)
             return -1
 
+        quorum = int(getattr(self, 'quorum', 0))
+        if quorum > 0:
+            retries = retries * 2 + 1
+            mode = getattr(self, 'mode', 'passive')
+            if 'active' == mode:
+                wait_after_each_kill += 5
+            else:
+                retries += 1
+
         LOG.info('interval={}, debounce={}, wait_each_kill={}'.format(interval, debounce, wait_after_each_kill))
 
         cmd = '''true; n=1; last_pid=''; pid=''; for((;n<{};)); do pid=\$(cat {} 2>/dev/null); date;
                 if [ "x\$pid" = "x" -o "\$pid" = "\$last_pid" ]; then echo "stale or empty PID:\$pid, last_pid=\$last_pid";
                 sleep 0.5; continue; fi; echo "{}" | sudo -S kill -9 \$pid &>/dev/null;
                 if [ \$? -eq 0 ]; then echo "OK \$n - \$pid killed"; ((n++)); last_pid=\$pid; pid=''; sleep {};
-                else sleep 0.5; fi; done; echo \$pid'''.format(retries+1, pid_file, HostLinuxCreds.PASSWORD, wait_after_each_kill)
+                else sleep 0.5; fi; done; echo \$pid'''.format(
+                    retries+1, pid_file, HostLinuxCreds.PASSWORD, wait_after_each_kill)
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
 
         cmd_2 = 'cat >/home/wrsroot/test_process.sh  <<EOL\n{}\nEOL'.format(cmd)
-
 
         wait_time = max(wait_after_each_kill * retries + 60, 60)
 
@@ -773,7 +783,7 @@ class MonitoredProcess:
                         continue
                     if output:
                         LOG.info('Last PID of PMON process is:{}, process:{}'.format(output, name))
-                        self.pid = int(output)
+                        # self.pid = int(output)
             except Exception as e:
                 LOG.warn('Caught exception when running:{}, exception:{}, '
                          'but assuming the process {} was killed'.format(cmd, e, name))
@@ -874,6 +884,16 @@ class MonitoredProcess:
                              'process_type:{}, host:{}'.format(expected, name, process_type, host))
                     return -1
 
+                self.pid = -1
+                try:
+                    with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
+                        raw_pid = con.exec_cmd('tail /home/wrsroot/results.txt | tail -n1', fail_ok=True)[1]
+                        self.pid = int(raw_pid)
+                except ValueError as e:
+                    LOG.warn('Unknown pid:{} from cmd:{}'.format(cmd, e))
+                except Exception as e:
+                    LOG.warn('Unknown error:{}, cmd:{}'.format(e, cmd))
+
                 LOG.debug('OK, either host in expected status or events found for process: {}'.format(name))
                 return 0
 
@@ -881,7 +901,7 @@ class MonitoredProcess:
             time.sleep(debounce)
 
         if -1 == self.pid:
-            LOG.warn('Unkonw-PID from cmd:{}'.format(cmd))
+            LOG.warn('Unknown from cmd:{}'.format(cmd))
 
         return -1
 
