@@ -466,7 +466,8 @@ class SSHClient:
     def get_exit_code(self):
         self.send(EXIT_CODE_CMD)
         self.expect(timeout=30)
-        return int(self.cmd_output.splitlines()[1])
+        matches = re.findall("\n([-+]?[0-9]+)\n", self.cmd_output)
+        return int(matches[-1])
 
     def get_hostname(self):
         return self.exec_cmd('hostname')[1].splitlines()[0]

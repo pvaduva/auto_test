@@ -1,12 +1,14 @@
 from consts.cgcs import GuestImages
+
+
 class Heat:
     OS_Ceilometer_Alarm = {'params': None, 'verify': ['ceilometer_alarm'], 'heat_user': 'tenant'}
     OS_Cinder_Volume = {'params': None, 'verify': ['volume'], 'heat_user': 'tenant', 'vol_name': 'sample_cinder_vol'}
     OS_Cinder_VolumeAttachment = {'params': ['NETWORK', 'IMAGE', 'FLAVOR'], 'verify': ['vm', 'volume'],
-                                  'heat_user':'tenant','vol_name':'cinder_volume_demo','vm_name':'cinder_vm'}
-    OS_Glance_Image = {'params':None,'verify': ['image'],'heat_user':'admin'}
-    OS_Heat_AccessPolicy= {'params': ['NETWORK'],'verify':['neutron_port'],'heat_user':'tenant','port_name':None}
-    OS_Heat_Stack = {'params': None,'verify':['key_pair'],'heat_user':'tenant','key_pair_name':'InlineKP'}
+                                  'heat_user': 'tenant','vol_name': 'cinder_volume_demo', 'vm_name': 'cinder_vm'}
+    OS_Glance_Image = {'params':None, 'verify': ['image'], 'heat_user': 'admin'}
+    OS_Heat_AccessPolicy= {'params': ['NETWORK'], 'verify': ['neutron_port'], 'heat_user': 'tenant', 'port_name': None}
+    OS_Heat_Stack = {'params': None, 'verify': ['key_pair'], 'heat_user': 'tenant', 'key_pair_name': 'InlineKP'}
     OS_Neutron_FloatingIP = {'params': None,'verify':['floating_ip'],'heat_user':'tenant'}
     OS_Neutron_Net = {'params': None,'verify':['neutron_net'],'heat_user':'tenant'}
     OS_Neutron_Port = {'params': None,'verify':['neutron_port'],'heat_user':'tenant','port_name':'sample_port'}

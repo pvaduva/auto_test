@@ -1,4 +1,4 @@
-import time, ast
+import time
 from pytest import fixture, skip, mark
 from keywords import host_helper, system_helper, network_helper
 from utils.tis_log import LOG
