@@ -291,7 +291,10 @@ $console_win=nc localhost 7000
 $boot_image_win=/drives/c/Users/$USER/VBox/latest_bootimage.iso
 
 ## Patch
-$patch=no
+$patch=yes
+
+## cpe
+$cpe=no
 
 >date +%F_%T#
 +$DATE=\n(.+)#
@@ -584,7 +587,7 @@ $node_list=
         $OAM_interface=$eth0
         $configure_OAM_VLAN=N
         $OAM_VLAN_ID=N/A
-	$connection=SSH
+	$connection=serial
 ]
 
 # Combined Management, Infrastructure Interface and seperate Tagged OAM
@@ -951,6 +954,10 @@ $part=1
 >>^J
 >>^I
 
+?if $cpe == yes? [
+    >>^I
+    >>^I
+]
 >>^M
 <Starting Anaconda
 >>^C
@@ -1418,6 +1425,108 @@ $node_controllers=$node_list
 >
 
 @100
+
+?if $topology == 2only ? [
+	?if $node_controllers == controller ? [
+		@60
+		$i=0
+		$controller_node=controller-1
+		>system host-list
+		<$controller_node
+		+$administrative=(locked|unlocked)
+		?if $administrative == locked ? [
+			$state=none
+			>system host-list
+			<$controller_node
+			+$state=(available|online|offline|failed|intest)
+			[ $state != online
+				$state=none
+				[ $state != online
+					; === wait for $controller_node to come online
+					>system host-list
+					<$controller_node
+					+$state=(available|online|offline|failed|intest)
+	
+					!sleep 5
+					+$i
+					?if $i > $max? [
+						;red $controller_node did not become online
+						# break out of while loop
+						$state=online
+						; Giving user the option to recover the lab
+						$i=0
+						*INTERACT
+					]
+				]
+			]
+
+		]
+
+	; === Only controller, run lab_setup
+	>
+	#----------- 1 of 3 Lab_setup
+	@300
+	>time ./lab_setup.sh
+	<real
+	>echo $?
+	+$return=\n(\d)
+	#oops, run lab_setup again
+	?if $return != 0? >time ./lab_setup.sh
+	>
+		$state=none
+		>system host-list
+		<$controller_node
+		+$state=(available|online|offline|failed|intest)
+		?if $state == online		
+			>system host-list
+			<$controller_node
+			+$administrative=(locked|unlocked)
+			?if $administrative == locked ? [
+			    >system host-if-modify -n oam0 -nt oam controller-1 $eth0
+			    >system host-stor-add controller-1 cinder $(system host-disk-list controller-1 | awk '{if ($4 == "/dev/sdb") { print $2;}}')
+        		    ?if $configure_infrastructure_interface == Y ? [
+				    ?if $configure_infrastructure_VLAN == Y ? [
+					>system host-if-add -V $infrastructure_VLAN_ID -nt infra $controller_node $infra_name vlan $controller_infra_interface
+					!sleep 2
+					<created_at
+				    ]
+			            ?if $configure_infrastructure_VLAN == N ? [
+					>system host-if-modify -n $infra_name -nt infra  $controller_node $controller_infra_interface
+					!sleep 2
+					<created_at
+				    ]
+			    ]
+			    ; === Unlock  
+		            >system host-unlock $controller_node
+			    $state=none		
+			    [ $state != available
+				; === wait for $controller_node to come available
+				>system host-list
+				<$controller_node
+				+$state=(available|online|offline|failed|intest)
+				!sleep 5
+				+$i
+				?if $i > $max? [
+					;red $controller_node did not become available
+					# break out of while loop
+					$state=available
+					; Giving user the option to recover the lab
+					*INTERACT
+				]
+			    ]
+		            #----------- 2 of 3 Lab_setup
+			@300
+			>time ./lab_setup.sh
+			<real
+			>echo $?
+			+$return=\n(\d)
+			#oops, run lab_setup again
+			?if $return != 0? >time ./lab_setup.sh
+			>
+		  	]
+		]
+	]
+]
 
 #; === Get the infra interface name from controller-0 
 

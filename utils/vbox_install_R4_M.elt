@@ -183,21 +183,6 @@ Version 2.0 by senthilkumar
 #*~fail_time.inc
 $load=GA2
 $load=none
-# TiS version  14
-$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_bootimage.iso
-# TiS version  15
-$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_2.0_Unified_Daily_Build/latest_bootimage.iso
-# TiS version  16
-$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Unified_Daily_Build/latest_bootimage.iso
-# Centos Version
-$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Centos_Build/latest_bootimage.iso
-# Centos Version
-$source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Centos_Build/latest_bootimage.iso
-# GA3
-$source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_bootimage.iso
-?if $load == GA2 ?[
-	$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_bootimage.iso
-]
 $source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/latest_bootimage.iso
 $source_image=svc-cgcsauto@yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/latest_bootimage.iso
 $source_image=svc-cgcsauto@yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/TC_17.06_Host/latest_bootimage.iso

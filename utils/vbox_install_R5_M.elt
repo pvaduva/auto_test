@@ -49,15 +49,15 @@ Install VirtualBox on Linux or Windows Host
 .		https=yes                       (default no)
 
 .	e.g. for linux
-.	./vbox_install_R4.elt pull_new_image=yes topology=2only rel2=no
+.	./vbox_install_R5.elt pull_new_image=yes topology=2only rel2=no
 	e.g. for linux with Network Conolidation
 	.	e.g. for linux
-.	./vbox_install_R4.elt pull_new_image=yes topology=2x2x2 rel2=yes con=MI_O str=MI com=MI_D
+.	./vbox_install_R5.elt pull_new_image=yes topology=2x2x2 rel2=yes con=MI_O str=MI com=MI_D
 
 .	e.g. for windows
-.	./vbox_install_R4.elt -r <windows machine IP> pull_new_image=yes topology=2x1 con=MI_O str=MI com=MI_D
+.	./vbox_install_R5.elt -r <windows machine IP> pull_new_image=yes topology=2x1 con=MI_O str=MI com=MI_D
 .	e.g for linux
-	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install_R4.elt pull_new_image=yes topology=1x1 rel2=yes con=MI_O str=MI com=MI_D load=GA2 patch=yes https=no
+	~/wassp-repos/testcases/cgcs/utils$ ./vbox_install_R5.elt pull_new_image=yes topology=1x1 rel2=yes con=MI_O str=MI com=MI_D load=GA2 patch=yes https=no
 .
 . 	Supported topology
 . 		2only 	- controller-0 controller-1
@@ -186,7 +186,7 @@ Version 2.0 by senthilkumar
 #*~fail_time.inc
 $load=GA2
 $load=none
-$source_image=svc-cgcsauto@yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_5.0_Centos_Build/latest_bootimage.iso
+$source_image=svc-cgcsauto@yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_bootimage.iso
 
 
 $boot_image=/home/$USER/VBox/latest_bootimage.iso
@@ -205,7 +205,7 @@ $boot_dir=$boot_image_dir
 $user=wrsroot
 $pass=Li69nux*
 
-$admin_password=admin
+$admin_password=Li69nux*
 
 #controller IP
 $IP=10.10.10.3
@@ -940,9 +940,10 @@ $part=1
 >export TERM=tty
 #>socat UNIX-CONNECT:$serial_pipe - 
 >$console_connect
-
 >>^J
 >>^I
+>>^M
+>>^M
 >>^M
 <Starting Anaconda
 >>^C
@@ -1022,7 +1023,7 @@ $part=1
 
 ; === install tenant files and guest images
 $install_tenant_files=yes
-$directory=R4_files
+$directory=R5_files
 ? if $load == GA2 ?[
 	$directory=R2_files
 ]
@@ -1168,34 +1169,25 @@ $directory=R4_files
 >^M
 <Cinder storage backend
 >$storage_type
-<Database storage
->>^M
-?if $storage_type == lvm ? [
-	<Image storage 
-	>>^M
-]
-<Image conversion space
->>^M
-<Backup storage
->>^M
-?if $storage_type == lvm ? [
-	<Volume storage location
-	>>^M
-	<Volume storage in GiB
-	>>^M
-]
-<Cinder LVM type
->>^M
 
-?if $sdn == yes ? [
-	<Enable SDN Network configuration
-	>>y
+?if $storage_type == lvm ? [
+	<storage location
+	>>^M
+	<storage in GiB
+	>>^M
+	<LVM type
+	>>^M
 ]
 
-?if $sdn == no ? [
-	<Enable SDN Network configuration
-	>>n
-]
+#?if $sdn == yes ? [
+#	<Enable SDN Network configuration
+#	>>y
+#]
+
+#?if $sdn == no ? [
+#	<Enable SDN Network configuration
+#	>>n
+#]
 
 <Configure a separate PXEBoot network
 >$pxe_network
@@ -1244,8 +1236,8 @@ $directory=R4_files
 	>>^M
 ]
 
-<Configure board management control network
->>N
+#<Configure board management control network
+#>>N
 
 
 ; === Configuring Infrastructure Interface 
