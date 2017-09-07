@@ -177,6 +177,15 @@ class Labs:
         'compute_nodes': [21763, 21764, 21765],
     }
 
+    R430_1_2 = {
+        'short_name': 'r430_1_2',
+        'name': 'yow-cgcs-r430-1_2',
+        'floating ip': '128.224.150.49 ',
+        'controller-0 ip': '128.224.150.48',
+        'controller-1 ip': '128.224.150.52',
+        'controller_nodes': [23512, 23513],
+    }
+    
     SM_1 = {
         'short_name': 'sm_1',
         'name': 'yow-cgcs-supermicro-1',
