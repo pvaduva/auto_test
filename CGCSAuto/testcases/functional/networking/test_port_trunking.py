@@ -1,13 +1,18 @@
-from pytest import fixture, mark, skip
+from pytest import fixture, mark
 
 from utils.tis_log import LOG
-
-from consts.cgcs import FlavorSpec, VMStatus, GuestImages
-from consts.reasons import SkipReason
-from consts.auth import Tenant
-from keywords import vm_helper, nova_helper, network_helper, host_helper, check_helper, glance_helper, common
+from keywords import vm_helper, network_helper
 from testfixtures.fixture_resources import ResourceCleanup
-from testfixtures.recover_hosts import HostsToRecover
+
+
+@fixture(scope='module', autouse=True)
+def update_net_quota(request):
+    network_quota = network_helper.get_quota('network')
+    network_helper.update_quotas(network=network_quota + 2)
+
+    def _revert_quota():
+        network_helper.update_quotas(network=network_quota)
+    request.addfinalizer(_revert_quota)
 
 
 def _bring_up_vlan_interface(vm_id, eth_name, vlan_ids):
@@ -36,7 +41,7 @@ def _bring_up_vlan_interface(vm_id, eth_name, vlan_ids):
     ('tis-centos-guest','virtio'),
     ('tis-centos-guest','e1000')
 ])
-def test_port_trunking(guest_os, vif_model):
+def _test_port_trunking(guest_os, vif_model):
     """
     Port trunking feature test cases
 
