@@ -1,16 +1,17 @@
 import os
 import telnetlib
 import threading
+import time
 from contextlib import contextmanager
 
-from consts.auth import HostLinuxCreds, SvcCgcsAuto
+from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout
 from consts.cgcs import HostAvailabilityState, Prompt
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.vlm import VlmAction
-from keywords import system_helper, host_helper
+from keywords import system_helper, host_helper, vm_helper
 # from keywords.vlm_helper import bring_node_console_up
 from utils import exceptions, local_host
 from utils import local_host, cli
@@ -535,3 +536,36 @@ def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=360
         return rc, msg
     con_ssh.set_prompt()
     return 0, "{} run successfully".format(script)
+
+
+def launch_vms_post_install():
+    vms = vm_helper.get_any_vms(all_tenants=True)
+    existing_vms_count = len(vms)
+
+    if existing_vms_count > 0:
+        LOG.info("VMs exist; may be already launched as part of install: {} ".format(vms))
+    else:
+        # check if vm launch scripts exist in the lab
+        active_controller = ControllerClient.get_active_controller()
+        cmd = "test -e {}/instances_group0/launch_instances.sh".format(WRSROOT_HOME)
+        rc = active_controller.exec_cmd(cmd)[0]
+        if rc != 0:
+            LOG.info("VM Launching scripts do not exist in lab..... ")
+        else:
+
+            LOG.info("Launching VMs using the launch script .... ")
+
+            tenants = ['tenant1', 'tenant2']
+            for tenant in tenants:
+                LOG.info("Launching {} VMs".format(tenant))
+                cmd = "~/instances_group0/./launch_{}_instances.sh".format(tenant)
+                rc, output = active_controller.exec_cmd(cmd)
+                time.sleep(10)
+
+    vms = vm_helper.get_any_vms(all_tenants=True)
+
+    if len(vms) > 0:
+        LOG.info("Verifying VMs are pingable : {} ".format(vms))
+        vm_helper.ping_vms_from_natbox(vm_ids=vms)
+        LOG.info("VMs launched successfully post install")
+    return vms
