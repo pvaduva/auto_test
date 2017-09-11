@@ -106,11 +106,11 @@ class HostLinuxCreds:
 
     @classmethod
     def set_user(cls, username):
-        cls.USER = username
+        cls.__WRSROOT['user'] = username
 
     @classmethod
     def set_password(cls, password):
-        cls.PASSWORD = password
+        cls.__WRSROOT['password'] = password
 
 
 class Guest:
