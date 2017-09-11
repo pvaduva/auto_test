@@ -2241,6 +2241,9 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
                        auth_info=Tenant.ADMIN):
     hosts_and_pnets = host_helper.get_hosts_and_pnets_with_pci_devs(pci_type=pci_type, up_hosts_only=True,
                                                                     con_ssh=con_ssh, auth_info=auth_info)
+    if not hosts_and_pnets:
+        return None
+
     print("hosts and pnets: {}".format(hosts_and_pnets))
     host = list(hosts_and_pnets.keys())[0]
     pnet_name = hosts_and_pnets[host][0]

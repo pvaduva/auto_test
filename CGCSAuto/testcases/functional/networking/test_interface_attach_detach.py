@@ -22,8 +22,7 @@ def id_gen(val):
 
 @fixture(scope='module')
 def base_vm():
-    internal_net = 'internal0-net1'
-    internal_net_id = network_helper.get_net_id_from_name(internal_net)
+    internal_net_id = network_helper.get_internal_net_id()
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
 
@@ -33,8 +32,7 @@ def base_vm():
             {'net-id': internal_net_id, 'vif-model': 'virtio'},
             {'net-id': tenant_net_id, 'vif-model': 'virtio'}]
 
-    vm_id = vm_helper.boot_vm(name='base_vm', nics=nics)[1]
-    ResourceCleanup.add('vm', vm_id, scope='module')
+    vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='module')[1]
 
     return vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id
 

@@ -40,7 +40,7 @@ class GuestImages:
     # Image files name and size from yow-cgcs-test.wrs.com:/sandbox/images
     # <glance_image_name>: <source_file_name>, <root disk size>, <dest_file_name>
     IMAGE_FILES = {
-        'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_14.qcow2', 0.3),
+        'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 3, 'ubuntu_14.qcow2', 0.3),
         'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2', 0.3),
         'ubuntu_16': ('ubuntu-16.04-xenial-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_16.qcow2', 0.3),
         'centos_6': ('CentOS-6.8-x86_64-GenericCloud-1608.qcow2', 8, 'centos_6.qcow2', 0.7),
