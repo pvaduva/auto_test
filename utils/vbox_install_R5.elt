@@ -956,6 +956,8 @@ $part=1
 >>^J
 >>^I
 >>^M
+>>^M
+>>^M
 <Starting Anaconda
 >>^C
 >
@@ -972,8 +974,8 @@ $part=1
 #>$console_connect | egrep -i 'booting'
 
 
-<Restarting system
->>^C
+#<Restarting system
+#>>^C
 ; === reconnect to serial
 >$console_connect
 <login: 
@@ -1051,12 +1053,12 @@ $directory=R5_files
 #	<real
 
 	; === grab lab_setup files
-	$file_list=lab_setup.conf.hp380 lab_setup.conf.ip1-4 lab_setup.conf.ip20-27 lab_setup.conf.ip7-12 lab_setup.conf.vbox lab_setup.sh lab_cleanup.sh server-with-key-with-passwd.pem server-with-key.pem system_config
+	$file_list=lab_setup.conf.vbox lab_setup.sh lab_cleanup.sh server-with-key-with-passwd.pem server-with-key.pem system_config
 	[ $file=$file_list
 		>wget  http://$url:$proxy_port/files/install/$directory/$file
 	]
 	; === place install files/images on controller
-	$file_list=heat.tgz license.lic cgcs-guest.img precise-server-cloudimg-amd64-disk1.password_enabled.img Titanium-Server-SDK-14.10-b8.tgz
+	$file_list=heat.tgz license.lic cgcs-guest.img tis-centos-guest.img Titanium-Server-SDK-14.10-b8.tgz
 	[ $file=$file_list
 		>wget  http://$url:$proxy_port/files/install/$directory/$file
 		>
@@ -1175,36 +1177,29 @@ $directory=R5_files
 >time sudo config_controller
 <time correct
 >y
+<timezone
+>^M
 <Cinder storage backend
 >$storage_type
-<Database storage
->>^M
-?if $storage_type == lvm ? [
-	<Image storage 
-	>>^M
-]
-<Image conversion space
->>^M
-<Backup storage
->>^M
-?if $storage_type == lvm ? [
-	<Volume storage location
-	>>^M
-	<Volume storage in GiB
-	>>^M
-]
-<Cinder LVM type
->>^M
 
-?if $sdn == yes ? [
-	<Enable SDN Network configuration
-	>>y
+?if $storage_type == lvm ? [
+	<storage location
+	>>^M
+	<storage in GiB
+	>>^M
+	<LVM type
+	>>^M
 ]
 
-?if $sdn == no ? [
-	<Enable SDN Network configuration
-	>>n
-]
+#?if $sdn == yes ? [
+#	<Enable SDN Network configuration
+#	>>y
+#]
+
+#?if $sdn == no ? [
+#	<Enable SDN Network configuration
+#	>>n
+#]
 
 <Configure a separate PXEBoot network
 >$pxe_network
@@ -1253,8 +1248,8 @@ $directory=R5_files
 	>>^M
 ]
 
-<Configure board management control network
->>N
+#<Configure board management control network
+#>>N
 
 
 ; === Configuring Infrastructure Interface 
@@ -1311,8 +1306,8 @@ $directory=R5_files
 
 <External OAM address for second controller node
 >>^M
-<External OAM Network Multicast subnet
->>^M
+#<External OAM Network Multicast subnet
+#>>^M
 
 
 <License File
@@ -1350,6 +1345,8 @@ $directory=R5_files
 >y
 <real
 ; === wait for config controller to do its thing
+*FORK serial
+>>^M
 >
 >
 >
@@ -1362,7 +1359,7 @@ $directory=R5_files
 *NOEXP_INFO
 
 %PART3
-
+*FORK serial
 
 ; ================ install remaining of nodes
 
