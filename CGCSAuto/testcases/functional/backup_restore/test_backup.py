@@ -77,7 +77,6 @@ def test_create_backup(con_ssh=None):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-
     dest_dir = SvcCgcsAuto.HOME + '/backup_restore/'
 
     # execute backup command
@@ -91,7 +90,7 @@ def test_create_backup(con_ssh=None):
     LOG.tc_step("SCP system and image tgz file into testserver /home/svc-cgcsauto/backup_restore")
     source_file = '/opt/backups/titanium_backup_'+date+'_system.tgz /opt/backups/titanium_backup_'+date+'_images.tgz '
 
-    dest_path = common.scp_from_active_controller_to_test_server(source_file, dest_dir, is_dir=False)
+    common.scp_from_active_controller_to_test_server(source_file, dest_dir, is_dir=False, multi_files=True)
 
     # delete backupfiles from ~/opt/backups
     LOG.tc_step("delete system and image tgz file from tis server ~/opt/backups folder ")
@@ -114,7 +113,7 @@ def test_create_backup(con_ssh=None):
             img_file = img_file + '/opt/backups/image_'+img_id+'.tgz '
 
         # copy all image files to test server
-        dest_path = common.scp_from_active_controller_to_test_server(img_file, dest_dir, is_dir=False)
+        common.scp_from_active_controller_to_test_server(img_file, dest_dir, is_dir=False, multi_files=True)
         # delete for storage image file
         cmd = 'rm -f ' + img_file
         con_ssh.exec_sudo_cmd(cmd, fail_ok=False)
@@ -132,7 +131,7 @@ def test_create_backup(con_ssh=None):
 
             # wait for volume copy to complete
             wait_for_volume_state(vol_id, 'volume:backup_status', 'Export completed', timeout=100, fail_ok=True,
-                                  check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN)
+                                  check_interval=3, auth_info=Tenant.ADMIN)
 
             # copy it to the test server
             vol_files = vol_files + '/opt/backups/volume-' + vol_id + '* '
@@ -156,7 +155,7 @@ def test_create_backup(con_ssh=None):
             # TODO: delete created snapshot after the are in /opt/backups folder
 
     # dest_dir = SvcCgcsAuto.HOME + '/backup_restore'
-    dest_path = common.scp_from_active_controller_to_test_server(vol_files, dest_dir, is_dir=False)
+    common.scp_from_active_controller_to_test_server(vol_files, dest_dir, is_dir=False, multi_files=True)
 
     # delete all volumes files from /opt/backups on tis server
     LOG.tc_step("delete volume tgz file from tis server /opt/backups folder ")
