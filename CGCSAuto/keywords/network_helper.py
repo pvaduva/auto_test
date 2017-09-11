@@ -2244,7 +2244,8 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
     if not hosts_and_pnets:
         return None
 
-    print("hosts and pnets: {}".format(hosts_and_pnets))
+    # print("hosts and pnets: {}".format(hosts_and_pnets))
+
     host = list(hosts_and_pnets.keys())[0]
     pnet_name = hosts_and_pnets[host][0]
     kwargs = {'vlan_id': vlan_id} if vlan_id is not None else {}
@@ -2257,7 +2258,7 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
                      format(untagged_net, pnet_name))
             nets.remove(untagged_net)
 
-    print("pnet: {}; Nets: {}".format(pnet_name, nets))
+    # print("pnet: {}; Nets: {}".format(pnet_name, nets))
     final_nets = _get_preferred_nets(nets=nets, net_name=net_name, strict=strict)
     vm_net = final_nets[-1]
     if pci_type == 'pci-passthrough':

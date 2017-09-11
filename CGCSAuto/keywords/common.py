@@ -100,21 +100,10 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
     dest_user = SvcCgcsAuto.USER
     dest_password = SvcCgcsAuto.PASSWORD
 
-    if not multi_files and not is_dir and dest_name is None:
-       dest_name = source_path.split(sep='/')[-1]
-
     dest_path = dest_dir if not dest_name else dest_dir + dest_name
 
     scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{} {}@{}:{}'.format(
         dir_option, source_path, dest_user, dest_server, dest_path)
-
-    if not multi_files and con_ssh.file_exists(file_path=dest_path):
-        LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
-        return dest_path
-
-    LOG.debug('Create destination directory on tis server if not already exists')
-    cmd = 'mkdir -p {}'.format(dest_dir)
-    con_ssh.exec_cmd(cmd, fail_ok=False)
 
     LOG.info("scp file(s) from tis server to test server")
     con_ssh.send(scp_cmd)
@@ -130,10 +119,6 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
 
     exit_code = con_ssh.get_exit_code()
     assert 0 == exit_code, "scp not fully succeeded"
-
-    if not multi_files and con_ssh.file_exists(file_path=dest_path):
-        LOG.error("File path {} does not exist after scp".format(dest_path))
-        return None
 
     return dest_path
 
