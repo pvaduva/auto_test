@@ -64,7 +64,6 @@ class TestLocalStorage:
 
     _cleanup_lists = {
         'profile': [],
-        'locked': [],
         'local_storage_type': []
     }
 
@@ -74,32 +73,40 @@ class TestLocalStorage:
         host = get_target_host
 
         def cleanup():
-            profiles_created = self._get_cleanup_list('profile')
-            computes_locked = self._get_cleanup_list('locked')
-            old_new_types = self._get_cleanup_list('local_storage_type')
+            profiles_created = self._pop_cleanup_list('profile')
+            old_new_types = self._pop_cleanup_list('local_storage_type')
+
+            # Add hosts to module level recovery fixture in case of modify or unlock fail in following class level
+            # recovery attempt.
+            for item in old_new_types:
+                HostsToRecover.add(item[0], scope='module')
+
+            exceptions = []
             try:
                 LOG.fixture_step("(class) Delete created storage profiles")
                 while profiles_created:
                     system_helper.delete_storage_profile(profile=profiles_created.pop())
 
+            except Exception as e:
+                LOG.exception(e)
+                exceptions.append(e)
+
+            try:
                 LOG.fixture_step("(class) Revert local storage backing for {}".format(old_new_types))
                 while old_new_types:
                     host_to_revert, old_type, _ = old_new_types.pop()
-                    HostsToRecover.add(host_to_revert, scope='module')
                     host_helper.lock_host(host_to_revert, swact=True)
                     LOG.info("Modify {} local storage to {}".format(host_to_revert, old_type))
                     cmd = 'host-lvg-modify -b {} {} nova-local'.format(old_type, host_to_revert)
                     cli.system(cmd, fail_ok=False)
                     host_helper.unlock_host(host_to_revert)
 
-                LOG.fixture_step("(class) Ensure {} are unlocked".format(computes_locked))
-                while computes_locked:
-                    host_helper.unlock_host(computes_locked.pop())
+            except exceptions as e:
+                LOG.exception(e)
+                exceptions.append(e)
 
-            except:
-                raise
-            finally:
-                pass
+            assert not exceptions, "Failure occurred. Errors: {}".format(exceptions)
+
         request.addfinalizer(cleanup)
 
         origin_lvg = host_helper.get_local_storage_backing(host)
@@ -111,34 +118,27 @@ class TestLocalStorage:
 
     def _add_to_cleanup_list(self, to_cleanup=None, cleanup_type=''):
         cleanups = TestLocalStorage._cleanup_lists
-        for list_ in cleanups.keys():
-            if cleanup_type == list_:
-                cleanups[list_].append(to_cleanup)
+        for list_type in cleanups.keys():
+            if cleanup_type == list_type:
+                cleanups[list_type].append(to_cleanup)
 
-    def _get_cleanup_list(self, list_type=''):
+    def _pop_cleanup_list(self, list_type):
         cleanups = TestLocalStorage._cleanup_lists
 
-        for type_ in cleanups:
-            if list_type != type_:
-                continue
+        if list_type == 'local_storage_type':
             rtn_list = []
-            if list_type == 'local_storage_type':
-                existing_hosts = []
-                for item in cleanups[type_]:
-                    hostname = item[0]
-                    if hostname not in existing_hosts:
-                        rtn_list.append(item)
-                        existing_hosts.append(hostname)
-            else:
-                rtn_list = list(set(rtn_list))
-            return rtn_list
+            existing_hosts = []
+            for item in cleanups[list_type]:
+                hostname = item[0]
+                if hostname not in existing_hosts:
+                    rtn_list.append(item)
+                    existing_hosts.append(hostname)
+        else:
+            rtn_list = list(set(cleanups[list_type]))
 
-    def _remove_from_cleanup_list(self, to_remove=None, list_type=''):
-        if not to_remove:
-            return
-        list_ = self._get_cleanup_list(list_type=list_type)
-        if list_:
-            list_.remove(to_remove)
+        # reset the list for given type
+        TestLocalStorage._cleanup_lists[list_type] = []
+        return rtn_list
 
     def apply_storage_profile(self, compute_dest, ls_type='image', profile=None, force_change=False):
         if host_helper.check_host_local_backing_type(compute_dest, ls_type) and not force_change:
@@ -151,10 +151,8 @@ class TestLocalStorage:
         old_type = host_helper.get_local_storage_backing(compute_dest)
 
         LOG.tc_step('Lock the host:{} for applying storage-profile'.format(compute_dest))
-        # HostsToRecover.add(compute_dest, scope='function')
-        rtn_code, msg = host_helper.lock_host(compute_dest, fail_ok=False, check_first=True, swact=True)
-        if 0 == rtn_code:
-            self._add_to_cleanup_list(to_cleanup=compute_dest, cleanup_type='locked')
+        HostsToRecover.add(compute_dest, scope='function')
+        host_helper.lock_host(compute_dest, fail_ok=False, check_first=True, swact=True)
 
         LOG.tc_step('Delete the lvg "nova-local" on host:{}'.format(compute_dest))
         cli.system('host-lvg-delete {} nova-local'.format(compute_dest), fail_ok=False)
@@ -176,9 +174,8 @@ class TestLocalStorage:
 
     def set_local_storage_backing(self, compute, to_type='image'):
         LOG.debug('lock compute:{} in order to change to new local-storage-type:{}'.format(compute, to_type))
-        rtn_code, msg = host_helper.lock_host(compute, check_first=True, swact=True)
-        if 0 == rtn_code:
-            self._add_to_cleanup_list(to_cleanup=compute, cleanup_type='locked')
+        HostsToRecover.add(compute, scope='function')
+        host_helper.lock_host(compute, check_first=True, swact=True)
 
         LOG.debug('get the original local-storage-backing-type for compute:{}'.format(compute))
         old_type = host_helper.get_local_storage_backing(compute)
@@ -198,46 +195,13 @@ class TestLocalStorage:
 
         if computes_unlocked_diff_type:
             return random.choice(computes_unlocked_diff_type)
-            # LOG.debug('{} computes unlocked and with local-storage-type:{}'.
-            #           format(len(computes_unlocked_diff_type), ls_type))
-            # LOG.debug('old active is controller:{}'.format(active_controller))
-            #
-            # if active_controller in computes_unlocked_diff_type:
-            #     LOG.debug('is on a CPE system')
-            #     computes_unlocked_diff_type.remove(active_controller)
-            #     if computes_unlocked_diff_type:
-            #         LOG.debug('multiple computes unlocked, different type, randomly select one non-active controller')
-            #         compute_dest = random.choice(computes_unlocked_diff_type)
-            #         LOG.debug('OK, selected {} as the target compute'.format(compute_dest))
-            #         return compute_dest
-            #     else:
-            #         LOG.debug('have to select the active controller as target:{}'.format(active_controller))
-            #         compute_dest = active_controller
-            #         return compute_dest
-            #
-            # else:
-            #     LOG.debug('non-CPE system')
-            #     compute_dest = random.choice(computes_unlocked_diff_type)
-            #     LOG.debug('non-CPE lab, select {} as target compute'.format(compute_dest))
-            #     return compute_dest
 
         return ''
 
     def _get_computes_unlocked_same_type(self, ls_type='image'):
         computes_unlocked = [c for c in host_helper.get_up_hypervisors()
                              if host_helper.check_host_local_backing_type(c, storage_type=ls_type)]
-        # if active_controller in computes_unlocked:
-        #     computes_unlocked.remove(active_controller)
-        #     if computes_unlocked:
-        #         compute_dest = random.choice(computes_unlocked)
-        #     else:
-        #         compute_dest = active_controller
-        #         LOG.debug('-selected old active-controller:{}, same local-storage-type:{}'
-        #                   .format(compute_dest, ls_type))
-        # else:
-        #     compute_dest = random.choice(computes_unlocked)
-        #     LOG.debug('-target compute:{}, unlocked, same local-storage-type'.format(compute_dest))
-        # return compute_dest
+
         return computes_unlocked
 
     def select_target_compute(self, host_exclude='', ls_type='image'):
@@ -417,9 +381,8 @@ class TestLocalStorage:
         compute_dest = random.choice(other_computes)
         LOG.tc_step('Attempt to apply storage-profile from {} to {}'.format(compute_with_max, compute_dest))
 
-        rtn_code, output = host_helper.lock_host(compute_dest, check_first=True, swact=True)
-        if rtn_code == 0:
-            self._add_to_cleanup_list(to_cleanup=compute_dest, cleanup_type='locked')
+        HostsToRecover.add(compute_dest, scope='function')
+        host_helper.lock_host(compute_dest, check_first=True, swact=True)
 
         rtn_code, output = cli.system('host-apply-storprofile {} {}'.format(compute_dest, profile_uuid),
                                       fail_ok=True, rtn_list=True)

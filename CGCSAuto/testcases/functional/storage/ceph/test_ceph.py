@@ -258,10 +258,10 @@ def _test_boot_many_small_volumes():
     max_vol_size = 1
 
     LOG.tc_step("Delete any existing VMs")
-    nova_helper.delete_vms()
+    vm_helper.delete_vms()
 
     LOG.tc_step("Delete any existing volumes")
-    cinder_help.delete_volumes()
+    cinder_helper.delete_volumes()
 
     max_volumes = "100"
     LOG.tc_step("Increase volume quota to {}".format(max_volumes))
@@ -483,7 +483,8 @@ def test_lock_stor_check_osds_down(host):
     LOG.info(msg)
 
     LOG.tc_step('Check that host lock alarm is raised when {} is locked'.format(host))
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_LOCK)[0], "Alarm {} not raised".format(EventLogID.HOST_LOCK)
+    assert system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_LOCK, entity_id=host, strict=False)[0], \
+        "Alarm {} not raised".format(EventLogID.HOST_LOCK)
 
     LOG.tc_step('Check health of CEPH cluster')
     ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
@@ -500,10 +501,12 @@ def test_lock_stor_check_osds_down(host):
         LOG.info(msg)
 
     LOG.tc_step('Check that loss of replication alarm is raised')
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR)[0], "Alarm {} not raised".format(EventLogID.STORAGE_LOR)
+    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR)[0], \
+        "Alarm {} not raised".format(EventLogID.STORAGE_LOR)
 
     LOG.tc_step('Check that ceph is in health warn')
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND)[0], "Alarm {} not raised".format(EventLogID.STORAGE_ALARM_COND)
+    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND)[0], \
+        "Alarm {} not raised".format(EventLogID.STORAGE_ALARM_COND)
 
     # We're waiting 5 minutes for ceph rebalancing to be performed
     # DO NOT REMOVE.  This is part of the test.
@@ -522,12 +525,15 @@ def test_lock_stor_check_osds_down(host):
     assert health, "Ceph did not become healthy"
 
     LOG.tc_step('Check that host lock alarm is cleared when {} is unlocked'.format(host))
-    assert system_helper.wait_for_alarm_gone(EventLogID.HOST_LOCK), "Alarm {} not cleared".format(EventLogID.HOST_LOCK)
+    assert system_helper.wait_for_alarm_gone(EventLogID.HOST_LOCK, entity_id=host, strict=False), \
+        "Alarm {} not cleared".format(EventLogID.HOST_LOCK)
 
     LOG.tc_step('Check that the replication group alarm is cleared')
-    assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_LOR), "Alarm {} not cleared".format(EventLogID.STORAGE_LOR)
+    assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_LOR), \
+        "Alarm {} not cleared".format(EventLogID.STORAGE_LOR)
     LOG.tc_step('Check that the Storage Alarm Condition is cleared')
-    assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_ALARM_COND), "Alarm {} not cleared".format(EventLogID.STORAGE_ALARM_COND)
+    assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_ALARM_COND), \
+        "Alarm {} not cleared".format(EventLogID.STORAGE_ALARM_COND)
 
     LOG.tc_step('Check OSDs are up after unlock')
     for osd_id in osd_list:
@@ -593,10 +599,12 @@ def test_lock_cont_check_mon_down():
     assert rtn_code == 0, out
 
     LOG.tc_step('Check that storage degrade alarm is raised when {} is locked'.format(host))
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND)[0], "Alarm {} not raised".format(EventLogID.STORAGE_ALARM_COND)
+    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND)[0], \
+        "Alarm {} not raised".format(EventLogID.STORAGE_ALARM_COND)
 
     LOG.tc_step('Check that host lock alarm is raised when {} is locked'.format(host))
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_LOCK)[0], "Alarm {} not raised".format(EventLogID.HOST_LOCK)
+    assert system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_LOCK, entity_id=host)[0], \
+        "Alarm {} not raised".format(EventLogID.HOST_LOCK)
 
     LOG.tc_step('Check OSDs are still up after lock')
     osd_list = storage_helper.get_osds(con_ssh=con_ssh)
@@ -612,10 +620,12 @@ def test_lock_cont_check_mon_down():
     assert rtn_code == 0, out
 
     LOG.tc_step('Check that the host locked alarm is cleared')
-    assert system_helper.wait_for_alarm_gone(EventLogID.HOST_LOCK), "Alarm {} not cleared".format(EventLogID.HOST_LOCK)
+    assert system_helper.wait_for_alarm_gone(EventLogID.HOST_LOCK, entity_id=host), \
+        "Alarm {} not cleared".format(EventLogID.HOST_LOCK)
 
     LOG.tc_step('Check that the Storage Alarm Condition is cleared')
-    assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_ALARM_COND), "Alarm {} not cleared".format(EventLogID.STORAGE_ALARM_COND)
+    assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_ALARM_COND), \
+        "Alarm {} not cleared".format(EventLogID.STORAGE_ALARM_COND)
 
     LOG.tc_step('Check health of CEPH cluster')
     health = False
@@ -686,7 +696,8 @@ def test_storgroup_semantic_checks():
         assert not ceph_healthy, msg
 
         LOG.tc_step('Check that alarms are raised when {} is locked'.format(host))
-        assert system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_LOCK)[0], "Alarm {} not raised".format(EventLogID.HOST_LOCK)
+        assert system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_LOCK, entity_id=host)[0], \
+            "Alarm {} not raised".format(EventLogID.HOST_LOCK)
 
         LOG.tc_step('Check that OSDs are down')
         osd_list = storage_helper.get_osds(host, con_ssh)
@@ -698,10 +709,12 @@ def test_storgroup_semantic_checks():
             LOG.info(msg)
 
         LOG.tc_step('Check that loss of replication alarm is raise')
-        assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR)[0], "Alarm {} not raised".format(EventLogID.STORAGE_LOR)
+        assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR)[0], \
+            "Alarm {} not raised".format(EventLogID.STORAGE_LOR)
 
         LOG.tc_step('Check that the ceph health warning alarm is raised')
-        assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND)[0], "Alarm {} not raised".format(EventLogID.STORAGE_ALARM_COND)
+        assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND)[0], \
+            "Alarm {} not raised".format(EventLogID.STORAGE_ALARM_COND)
 
         if host == 'storage-0':
             hosts.append('controller-0')
@@ -711,7 +724,7 @@ def test_storgroup_semantic_checks():
             LOG.tc_step('Attempt to lock the {}'.format(node))
             HostsToRecover.add(node)
             rtn_code, out = host_helper.lock_host(node, fail_ok=True)
-            assert 1 == rtn_code, out       # yang TODO perhaps should assert 1 here for cli rejection.
+            assert 1 == rtn_code, out
 
             LOG.tc_step('Attempt to force lock {}'.format(node))
             rtn_code, out = host_helper.lock_host(node, force=True, fail_ok=True)
@@ -722,9 +735,12 @@ def test_storgroup_semantic_checks():
         assert rtn_code == 0, out
 
         LOG.info("Check if alarms have cleared")
-        assert system_helper.wait_for_alarm_gone(EventLogID.HOST_LOCK), "Alarm {} not cleared".format(EventLogID.HOST_LOCK)
-        assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_LOR), "Alarm {} not cleared".format(EventLogID.STORAGE_LOR)
-        assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_ALARM_COND), "Alarm {} not cleared".format(EventLogID.STORAGE_ALARM_COND)
+        assert system_helper.wait_for_alarm_gone(EventLogID.HOST_LOCK, entity_id=host), \
+            "Alarm {} not cleared".format(EventLogID.HOST_LOCK)
+        assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_LOR), \
+            "Alarm {} not cleared".format(EventLogID.STORAGE_LOR)
+        assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_ALARM_COND), \
+            "Alarm {} not cleared".format(EventLogID.STORAGE_ALARM_COND)
 
         LOG.tc_step('Check health of CEPH cluster')
         ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
@@ -1178,7 +1194,7 @@ def test_modify_ceph_pool_size():
         new_cinder_pool = cinder_pool - 30
         LOG.tc_step("Modifying pools: Glance {}, Cinder {}, Ephemeral {}, Object {}".format(new_glance_pool, new_cinder_pool, new_ephemeral_pool, new_object_pool))
         rc, out = storage_helper.modify_storage_backend('ceph', ephemeral=str(new_ephemeral_pool), cinder=str(new_cinder_pool), glance=str(new_glance_pool), object_gib=str(new_object_pool), lock_unlock=False)
-    assert rc == 0, msg
+    assert rc == 0, out
 
     LOG.info('Check the ceph images pool is set to the right value')
     table_ = table_parser.table(cli.system('storage-backend-show ceph'))
