@@ -36,7 +36,7 @@ class BuildServerPath:
     DEFAULT_BUILD_SERVER = 'yow-cgts4-lx'
     DEFAULT_WORK_SPACE = '/localdisk/loadbuild/jenkins'
     DEFAULT_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/CGCS_5.0_Host'
-    DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_tis-centos-guest.img'
+    DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_build/export/tis-centos-guest.img'
     DEFAULT_HOST_BUILD_PATH = '{}/latest_build/'.format(DEFAULT_HOST_BUILDS_DIR)
     DEFAULT_LICENSE_PATH = '/folk/cgts/lab/license.lic'
     DEFAULT_PATCH_DIR = '/folk/cgts/patches-to-verify/'
@@ -59,13 +59,12 @@ class BuildServerPath:
                        '16.10': DEFAULT_PATCH_DIR + '16.10',
                        '17.00': DEFAULT_PATCH_DIR + '17.06',
                        '17.06': DEFAULT_PATCH_DIR + '17.06',
-                       '17.07': DEFAULT_PATCH_DIR + '17.07'
                        }
 
     GUEST_IMAGE_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',
                          '16.10': '/localdisk/loadbuild/jenkins/CGCS_3.0_Guest_Daily_Build/cgcs-guest.img',
-                         '17.00': '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Guest_Build/latest_tis-centos-guest.img',
-                         '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Guest/latest_tis-centos-guest.img'
+                         '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Guest/latest_build/export/tis-centos-guest.img',
+                         '17.07': '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_build/export/tis-centos-guest.img'
                          }
 
 
