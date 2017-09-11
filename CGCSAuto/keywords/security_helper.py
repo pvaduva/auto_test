@@ -8,7 +8,7 @@ from utils.ssh import ControllerClient, SSHClient
 
 
 class LinuxUser:
-    users = {HostLinuxCreds.USER: HostLinuxCreds.PASSWORD}
+    users = {HostLinuxCreds.get_user(): HostLinuxCreds.get_password()}
     con_ssh = None
 
     def __init__(self, user, password, con_ssh=None):
@@ -72,7 +72,7 @@ class LdapUserManager(object, metaclass=Singleton):
 
     """
 
-    LINUX_ROOT_PASSWORD = HostLinuxCreds.PASSWORD
+    LINUX_ROOT_PASSWORD = HostLinuxCreds.get_password()
     KEYSTONE_USER_NAME = Tenant.ADMIN['user']
     KEYSTONE_USER_DOMAIN_NAME = 'Default'
     KEYSTONE_PASSWORD = Tenant.ADMIN['password']

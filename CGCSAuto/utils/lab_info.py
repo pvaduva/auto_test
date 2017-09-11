@@ -109,7 +109,7 @@ def __get_lab_ssh(labname, log_dir=None):
 
     ProjVar.set_var(lab=lab)
     ProjVar.set_var(source_admin=Tenant.ADMIN)
-    con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.USER, HostLinuxCreds.PASSWORD, CONTROLLER_PROMPT)
+    con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(), CONTROLLER_PROMPT)
     con_ssh.connect()
     # if 'auth_url' in lab:
     #     Tenant._set_url(lab['auth_url'])

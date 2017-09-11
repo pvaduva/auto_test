@@ -855,7 +855,7 @@ def delete_object_file(object_path, rm_dir=False):
         con_ssh.exec_cmd(cmd)
         LOG.info("Files deleted {}: {}".format(object_path, output))
     standby_controller = system_helper.get_standby_controller_name()
-    with host_helper.ssh_to_host(standby_controller, username=HostLinuxCreds.USER, password=HostLinuxCreds.PASSWORD) \
+    with host_helper.ssh_to_host(standby_controller, username=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password()) \
             as standby_ssh:
         cmd = "ls {}".format(object_path)
         rc, output = standby_ssh.exec_cmd(cmd)

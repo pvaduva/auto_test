@@ -87,8 +87,22 @@ class Tenant:
 
 
 class HostLinuxCreds:
-    USER = 'wrsroot'
-    PASSWORD = "Li69nux*"
+
+    __WRSROOT = {
+        'user': 'wrsroot',
+        'password': 'Li69nux*'
+    }
+    #
+    # USER = 'wrsroot'
+    # PASSWORD = "Li69nux*"
+
+    @classmethod
+    def get_user(cls):
+        return cls.__WRSROOT['user']
+
+    @classmethod
+    def get_password(cls):
+        return cls.__WRSROOT['password']
 
     @classmethod
     def set_user(cls, username):

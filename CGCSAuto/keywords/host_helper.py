@@ -3040,9 +3040,9 @@ def scp_files_to_controller(host, file_path, dest_dir, controller=None, dest_use
                             fail_ok=True):
     dest_server = controller if controller else ''
     dest_user = dest_user if dest_user else ''
-    con_ssh.scp_files(source_file=file_path, source_server=host, source_password=HostLinuxCreds.PASSWORD,
-                      source_user=HostLinuxCreds.USER,
-                      dest_file=dest_dir, dest_user=dest_user, dest_password=HostLinuxCreds.PASSWORD,
+    con_ssh.scp_files(source_file=file_path, source_server=host, source_password=HostLinuxCreds.get_password(),
+                      source_user=HostLinuxCreds.get_user(),
+                      dest_file=dest_dir, dest_user=dest_user, dest_password=HostLinuxCreds.get_password(),
                       dest_server=dest_server, sudo=sudo, fail_ok=fail_ok)
 
 

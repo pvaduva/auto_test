@@ -60,7 +60,7 @@ class SSHClient:
             reconnect()         reconnects to session
     """
 
-    def __init__(self, host, user=HostLinuxCreds.USER, password=HostLinuxCreds.PASSWORD, force_password=True,
+    def __init__(self, host, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(), force_password=True,
                  initial_prompt=CONTROLLER_PROMPT, timeout=60, session=None, searchwindownsize=None):
         """
         Initiate an object for connecting to remote host
@@ -475,8 +475,8 @@ class SSHClient:
     def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, extra_opts=None, pre_opts=None,
               timeout=60, fail_ok=False):
 
-        dest_user = dest_user or HostLinuxCreds.USER
-        dest_password = dest_password or HostLinuxCreds.PASSWORD
+        dest_user = dest_user or HostLinuxCreds.get_user()
+        dest_password = dest_password or HostLinuxCreds.get_password()
         if extra_opts:
             extra_opts_str = ' '.join(extra_opts) + ' '
         else:
@@ -1044,7 +1044,7 @@ class VMSSHClient(SSHFromSSH):
 
 
 class FloatingClient(SSHClient):
-    def __init__(self, floating_ip, user=HostLinuxCreds.USER, password=HostLinuxCreds.PASSWORD, initial_prompt=CONTROLLER_PROMPT):
+    def __init__(self, floating_ip, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(), initial_prompt=CONTROLLER_PROMPT):
 
         # get a list of floating ips for all known labs
         __lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith(r'__')]
@@ -1265,7 +1265,7 @@ def ssh_to_controller0(ssh_client=None):
     if ssh_client.get_hostname() == 'controller-0':
         LOG.info("Already on controller-0. Do nothing.")
         return ssh_client
-    con_0_ssh = SSHFromSSH(ssh_client=ssh_client, host='controller-0', user=HostLinuxCreds.USER, password=HostLinuxCreds.PASSWORD,
+    con_0_ssh = SSHFromSSH(ssh_client=ssh_client, host='controller-0', user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(),
                            initial_prompt=Prompt.CONTROLLER_0)
     con_0_ssh.connect()
     return con_0_ssh

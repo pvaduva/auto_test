@@ -405,7 +405,7 @@ def download_patch_files(con_ssh=None, single_file_ok=False):
     LOG.info('Downloading patch files to lab:{} from:{}{}'.format(dest_path, patch_build_server, patch_dir_or_files))
 
     ssh_to_server.rsync(patch_dir_or_files, html_helper.get_ip_addr(), passing_patch_dir,
-                        dest_user=HostLinuxCreds.USER, dest_password=HostLinuxCreds.PASSWORD, timeout=1200)
+                        dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(), timeout=1200)
 
     LOG.info('OK, patch files were downloaded to: {}:{}, from: {} on server: {}'.format(
         html_helper.get_ip_addr(), passing_patch_dir, patch_dir_or_files, patch_build_server))

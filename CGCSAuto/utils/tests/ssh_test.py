@@ -11,8 +11,8 @@ from utils.tis_log import LOG
 
 from consts.auth import HostLinuxCreds
 
-username = HostLinuxCreds.USER
-password = HostLinuxCreds.PASSWORD
+username = HostLinuxCreds.get_user()
+password = HostLinuxCreds.get_password()
 hostname = '10.10.10.3'
 #hostname = '128.224.150.73'
 # hostname = 'yow-cgcs-ironpass-1.wrs.com'

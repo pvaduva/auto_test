@@ -2281,7 +2281,7 @@ def install_upgrade_license(license_path, timeout=30, con_ssh=None):
             con_ssh.send('y')
 
         if index == 1:
-            con_ssh.send(HostLinuxCreds.PASSWORD)
+            con_ssh.send(HostLinuxCreds.get_password())
 
         if index == 0:
             rc = con_ssh.exec_cmd("echo $?")[0]

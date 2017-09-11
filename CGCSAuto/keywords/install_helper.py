@@ -42,7 +42,7 @@ def download_upgrade_license(lab, server, license_path):
     assert server.ssh_conn.exec_cmd(cmd)[0] == 0,  'Upgrade license file not found in {}:{}'.format(
             server.name, license_path)
 
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'],
                           os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
                           pre_opts=pre_opts)
@@ -55,7 +55,7 @@ def download_upgrade_load(lab, server, load_path):
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Upgrade build iso file not found in {}:{}'.format(
             server.name, load_path)
     iso_file_path = os.path.join(load_path, "export", UPGRADE_LOAD_ISO_FILE)
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     #server.ssh_conn.rsync(iso_file_path,
     #                      lab['controller-0 ip'],
     #                      WRSROOT_HOME, pre_opts=pre_opts)
@@ -222,7 +222,7 @@ def wipe_disk(node, install_output_dir, close_telnet_conn=True):
 
     node.telnet_conn.write_line("sudo -k wipedisk")
     node.telnet_conn.get_read_until(Prompt.PASSWORD_PROMPT)
-    node.telnet_conn.write_line(HostLinuxCreds.PASSWORD)
+    node.telnet_conn.write_line(HostLinuxCreds.get_password())
     node.telnet_conn.get_read_until("[y/n]")
     node.telnet_conn.write_line("y")
     node.telnet_conn.get_read_until("confirm")
@@ -355,7 +355,7 @@ def download_image(lab, server, guest_path):
     cmd = "test -e " + guest_path
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Image file not found in {}:{}'.format(
             server.name, guest_path)
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     server.ssh_conn.rsync(guest_path,
                           lab['controller-0 ip'],
                           TiSPath.IMAGES, pre_opts=pre_opts)
@@ -369,7 +369,7 @@ def download_heat_templates(lab, server, load_path):
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Heat template path not found in {}:{}'.format(
             server.name, load_path)
 
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     server.ssh_conn.rsync(heat_path + "/*",
                           lab['controller-0 ip'],
                           TiSPath.HEAT, pre_opts=pre_opts)
@@ -391,7 +391,7 @@ def download_lab_config_files(lab, server, load_path):
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
             server.name, script_path)
 
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     server.ssh_conn.rsync(config_path + "/*",
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
@@ -413,7 +413,7 @@ def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
             server.name, config_path)
 
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     server.ssh_conn.rsync(config_path,
                           lab['floating ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
