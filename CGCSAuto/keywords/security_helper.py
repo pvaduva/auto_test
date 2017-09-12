@@ -1,10 +1,32 @@
 
+import re
 import time
 import random
+
+from string import ascii_lowercase, ascii_uppercase, digits
+
 from pexpect import EOF
 from consts.cgcs import Prompt
 from consts.auth import Tenant, HostLinuxCreds
-from utils.ssh import ControllerClient, SSHClient
+from utils.ssh import ControllerClient, SSHClient, SSHFromSSH
+
+from utils.tis_log import LOG
+
+MIN_LINUX_PASSWORD_LEN = 7
+SPECIAL_CHARACTERS = '!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:'
+
+# use this simple "dictionary" for now, because no english dictionary installed on test server
+SIMPLE_WORD_DICTIONARY = '''
+and is being proof-read and supplemented by volunteers from around the
+world.  This is an unfunded project, and future enhancement of this
+dictionary will depend on the efforts of volunteers willing to help build
+this free resource into a comprehensive body of general information.  New
+definitions for missing words or words senses and longer explanatory notes,
+as well as images to accompany the articles are needed.  More modern
+illustrative quotations giving recent examples of usage of the words in
+their various senses will be very helpful, since most quotations in the
+original 1913 dictionary are now well over 100 years old
+'''
 
 
 class LinuxUser:
@@ -208,9 +230,9 @@ class LdapUserManager(object, metaclass=Singleton):
 
         result = True
         self.ssh_con.flush()
-        for cmd, expected, error in cmd_expected:
+        for cmd, expected, errors in cmd_expected:
             self.ssh_con.send(cmd)
-            index = self.ssh_con.expect(blob_list=list(expected))
+            index = self.ssh_con.expect(blob_list=list(expected) + list(errors))
             if len(expected) <= index:
                 result = False
                 break
@@ -620,6 +642,7 @@ class LdapUserManager(object, metaclass=Singleton):
         self.ssh_con.flush()
         for i in range(len(cmd_expected)):
             cmd, expected, errors = cmd_expected[i]
+            LOG.info('cmd={}\nexpected={}\nerrors={}\n'.format(cmd, expected, errors))
             self.ssh_con.send(cmd)
 
             index = self.ssh_con.expect(blob_list=list(expected) + list(errors))
@@ -743,3 +766,189 @@ def get_admin_password_in_keyring(con_ssh=None):
 
     admin_pswd = con_ssh.exec_cmd('keyring get CGCS admin', fail_ok=False)[1]
     return admin_pswd
+
+
+def change_linux_user_password(password, new_password, user='wrsroot', host=None):
+    LOG.info('Attempt to change password, from password:{}, to new-password:{}, on host:{}'.format(
+        password, new_password, host))
+
+    input_outputs = (
+        (
+            'passwd',
+            (r'\(current\) UNIX password: ',),
+            (),
+        ),
+        (
+            password,
+            ('New password: ',),
+            ('passwd: Authentication token manipulation error', EOF,),
+        ),
+        (
+            new_password,
+            ('Retype new password:',),
+            (
+                'BAD PASSWORD: The password is too similar to the old one',
+                'BAD PASSWORD: No password supplied',
+                'passwd: Have exhausted maximum number of retries for service',
+                EOF,
+            ),
+        ),
+        (
+            new_password,
+            ('passwd: all authentication tokens updated successfully.',),
+            (),
+        ),
+    )
+    conn_to_ac = ControllerClient.get_active_controller()
+    initial_prompt = '.*{}\:~\$ '.format(host)
+    LOG.info('Will login as user:"{}", password:"{}", to host:"{}"'.format(user, password, host))
+
+    conn = SSHFromSSH(conn_to_ac, host, user, password, force_password=True, initial_prompt=initial_prompt)
+    passed = True
+    try:
+        conn.connect(retry=False, use_password=True)
+        for cmd, expected, errors in input_outputs:
+            conn.flush()
+            conn.send(cmd)
+            index = conn.expect(blob_list=list(expected) + list(errors))
+            if len(expected) <= index:
+                passed = False
+                break
+
+    except Exception as e:
+        LOG.warn('Caught exception when connecting to host:{} as user:{} with pasword:{}\n{}\n'.format(
+            host, user, password, e))
+        raise
+
+    finally:
+        pass
+        # TODO: close this connection will lead EOF error in ssh.py if invoked in fixture cleanup handler
+        if user != 'wrsroot':
+            conn.close()
+
+    LOG.info('Successfully changed password from:\n{}\nto:{} for user:{} on host:{}'.format(
+        password, new_password, user, host))
+
+    return passed, new_password
+
+
+def gen_linux_password(exclude_list=None, length=32):
+    if exclude_list is None:
+        exclude_list = []
+
+    if not isinstance(exclude_list, list):
+        exclude_list = [exclude_list]
+
+    if length < MIN_LINUX_PASSWORD_LEN:
+        LOG.warn('Length requested is too small, must longer than {}, requesting {}'.format(
+            MIN_LINUX_PASSWORD_LEN, length))
+        return None
+
+    total = length
+    left = 3
+
+    volcabulary = [ascii_lowercase, ascii_uppercase, digits, SPECIAL_CHARACTERS]
+
+    password = ''
+    while not password:
+        raw_password = []
+        for chars in volcabulary:
+            count = random.randint(1, total - left)
+            raw_password += random.sample(chars, min(count, len(chars)))
+            left -= 1
+            total -= count
+
+        password = ''.join(random.sample(raw_password, min(length, len(raw_password))))
+
+        missing_length = length - len(password)
+        if missing_length > 0:
+            all_chars = ''.join(volcabulary)
+            password += ''.join(random.choice(all_chars) for _ in range(missing_length))
+
+        if password in exclude_list:
+            password = ''
+
+    LOG.debug('generated valid password:{}'.format(password))
+
+    return password
+
+
+def gen_invalid_password(invalid_type='shorter', previous_passwords=None, minimum_length=7):
+
+    if previous_passwords is None:
+        previous_passwords = []
+
+    valid_password = list(gen_linux_password(exclude_list=previous_passwords, length=minimum_length * 4))
+
+    current_length = len(valid_password)
+
+    if invalid_type == 'shorter':
+        invalid_len = random.randint(1, minimum_length - 1)
+        invalid_password = random.sample(valid_password, invalid_len)
+
+    elif invalid_type == '1_lowercase':
+        invalid_password = ''.join(c for c in valid_password if c not in ascii_lowercase)
+        missing_length = current_length - len(invalid_password)
+        invalid_password += ''.join(random.choice(ascii_uppercase) for _ in range(missing_length))
+
+    elif invalid_type == '1_uppercase':
+        invalid_password = ''.join(c for c in valid_password if c not in ascii_uppercase)
+        missing_length = current_length - len(invalid_password)
+        invalid_password += ''.join(random.choice(ascii_lowercase) for _ in range(missing_length))
+
+    elif invalid_type == '1_digit':
+        invalid_password = ''.join(c for c in valid_password if c not in digits)
+        missing_length = current_length - len(invalid_password)
+        invalid_password += ''.join(random.choice(ascii_lowercase) for _ in range(missing_length))
+
+    elif invalid_type == '1_special':
+        invalid_password = ''.join(c for c in valid_password if c not in SPECIAL_CHARACTERS)
+        missing_length = current_length - len(invalid_password)
+        invalid_password += ''.join(random.choice(ascii_lowercase) for _ in range(missing_length))
+
+    elif invalid_type == 'not_in_dictionary':
+        invalid_password = random.choice(re.split('\W', SIMPLE_WORD_DICTIONARY))
+
+    elif invalid_type == 'diff_more_than_3':
+        if not previous_passwords or len(previous_passwords) < 1:
+            return None
+
+        last_password = previous_passwords[-1]
+        len_last_password = len(last_password)
+        count_difference = random.randint(0, 2)
+        for index in random.sample(range(len_last_password), count_difference):
+            cur_char = last_password[index]
+            last_password[index] = random.choice(c for c in last_password if c != cur_char)
+        invalid_password = ''.join(last_password)
+
+    elif invalid_type == 'not_simple_reverse':
+        if not previous_passwords or len(previous_passwords) < 1:
+            return None
+        invalid_password = ''.join(reversed(previous_passwords[-1]))
+
+    elif invalid_type == 'not_only_case_diff':
+        if not previous_passwords or len(previous_passwords) < 1:
+            return None
+        invalid_password = []
+        for ch in valid_password:
+            if ch.islower():
+                invalid_password.append(ch.upper())
+            elif ch.isupper():
+                invalid_password.append(ch.lower())
+            else:
+                invalid_password.append(ch)
+
+        invalid_password = ''.join(invalid_password)
+
+    elif invalid_type == 'not_last_2':
+        if not previous_passwords or len(previous_passwords) < 1:
+            return None
+        invalid_password = random.choice(previous_passwords[-2:])
+
+    elif invalid_type == '5_failed_attempts':
+        invalid_password = ''
+
+    else:
+        assert False, 'Unknown password rule:{}'.format(invalid_type)
+
+    return ''.join(invalid_password)
