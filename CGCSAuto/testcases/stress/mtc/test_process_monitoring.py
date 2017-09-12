@@ -106,7 +106,7 @@ PROCESSES = {
     # Note: name differs from cmd
     'syslog-ng': {
         'cmd': 'syslog', 'impact': 'log', 'severity': 'minor', 'debounce': 20,
-        'interval': 10, 'retries': 10, 'process_type': 'pmon'},
+        'interval': 10, 'retries': 10, 'process_type': 'pmon', 'override': True},
 
     'io-monitor-manager': {
         'cmd': 'io-monitor-manager', 'impact': 'log', 'severity': 'minor', 'debounce': 20,
@@ -378,6 +378,7 @@ class MonitoredProcess:
 
         self.lab_type = kwargs.get('lab_type', 'any')
         self.conf_file = kwargs.get('conf_file', None)
+        self.override = kwargs.get('override', True)
 
         self.prev_stats = None
         self.con_ssh = ControllerClient.get_active_controller()
@@ -456,7 +457,7 @@ class MonitoredProcess:
             for k, v in settings.items():
                 setattr(self, k, v)
 
-            if 'restarts' in settings:
+            if 'restarts' in settings and not self.override:
                 self.retries = int(settings['restarts'].strip())
             else:
                 self.retries = getattr(self, 'retries', None)
