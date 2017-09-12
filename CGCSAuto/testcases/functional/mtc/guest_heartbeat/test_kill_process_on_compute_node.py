@@ -49,7 +49,7 @@ def kill_instance_process(instance_num=None, instance_name=None):
     LOG.info("task_state: %s" % task_state)
 
 
-def test_092_vm_instance_recovery_kill_process_on_compute_node():
+def test_instance_recovery_kill_process_on_compute_node():
     """
     Verification
     1. Boot tis VM
@@ -83,8 +83,3 @@ def test_092_vm_instance_recovery_kill_process_on_compute_node():
     LOG.tc_step("Check that VM has been respawned and responds to pings")
     assert vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     LOG.info("Ping respawned VM result: %s" % res_dict)
-
-
-
-
-

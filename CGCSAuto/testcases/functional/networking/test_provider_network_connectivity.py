@@ -132,7 +132,7 @@ def modify_neutron_config(request):
     _modify()
 
 
-def test_no_connectivity(get_vlan_providernet):
+def test_providernet_connectivity_no_connectivity(get_vlan_providernet):
     """
         US75531 - Provider network connectivity test with no connectivity
 

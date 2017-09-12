@@ -5,8 +5,9 @@ from utils.tis_log import LOG
 from keywords import host_helper, check_helper
 
 
+# Remove since it's covered by test_modify_cpu_unlock_negative
 @mark.p2
-def test_set_cpu_cores_denied_unlocked_host():
+def _test_set_cpu_cores_denied_unlocked_host():
     nova_hosts = host_helper.get_nova_hosts()
 
     assert nova_hosts, "No nova host is up."

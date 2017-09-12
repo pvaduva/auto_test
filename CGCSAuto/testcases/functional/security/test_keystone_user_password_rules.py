@@ -533,7 +533,7 @@ def change_user_password(user_name, original_password, password, by_admin=True, 
     # ('non_admin', 'lockout_5_minute_after_5_tries'),  # not working 2017-08-29 : not locked even right after 5 fail...
     # ('admin', 'lockout_5_minute_after_5_tries'),    # not working,
 ])
-def test_setting_password(role, password_rule):
+def test_keystone_user_password_rules(role, password_rule):
 
     if password_rule not in PASSWORD_RULE_INFO:
         skip('Unknown password rule')

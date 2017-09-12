@@ -7,7 +7,8 @@ from consts.cgcs import UUID
 from keywords import system_helper
 # This test case is  to verify the query alarm and logs using event list.
 # Mainly it starts on with generating alarm alarm id 300.005 Critical major minot and not applicable and query them.
-#US24127,US36505 and US36506 US70391 –FM: Merge Query/Display of Historical Alarms and Customer Logs
+# US24127,US36505 and US36506 US70391 –FM: Merge Query/Display of Historical Alarms and Customer Logs
+
 
 @mark.parametrize(
     ("event_option", "severity"), [
@@ -16,7 +17,7 @@ from keywords import system_helper
         ('alarms', 'minor'),
         ('logs', 'not-applicable'),
         ('logs', 'critical')])
-def test_event_list_vms(event_option, severity):
+def test_event_list(event_option, severity):
     """
        Test logs is to verify log generation of Critical Major Minor of alarms and logs
        Args:

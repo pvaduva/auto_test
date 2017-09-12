@@ -50,7 +50,7 @@ def wait_for_log(ssh_client, patterns, log_path, start_time, timeout=30, interva
 
 
 @mark.p2
-def test_sudo_log():
+def test_auth_log_sudo_cmd():
     """
     TC5202 Test the logs created during successful and failed sudo commands
 
@@ -92,7 +92,7 @@ def test_sudo_log():
 
 
 @mark.p2
-def test_postgress():
+def test_auth_log_postgress():
     """
     TC5204 Test postgres login and logout logs
 
@@ -118,7 +118,7 @@ def test_postgress():
 
 
 @mark.p3
-def test_sudo_su():
+def test_auth_log_sudo_su():
     """
     TC5205 Test logs created by sudo su
 
@@ -133,7 +133,7 @@ def test_sudo_su():
     con_ssh = ControllerClient.get_active_controller()
     searching_for = ['sudo: notice  wrsroot.*PWD=/home/wrsroot ; USER=root ; COMMAND=/usr/bin/su \-',
                      'su: notice \(to root\) wrsroot on',
-                     #uses su-l:session because login_as_root calls 'sudo su -'
+                     # uses su-l:session because login_as_root calls 'sudo su -'
                      'su: info pam_unix\(su-l:session\): session opened for user root by wrsroot\(uid=0\)']
 
     log_path = '/var/log/auth.log'

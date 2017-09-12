@@ -103,7 +103,7 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
     for vm_actions in [['live_migrate'], ['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
         tenant_port_ids = []
         LOG.tc_step("atttach maximum number of vnics to the VM")
-        vnics_attached=len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
+        vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
         LOG.info("current nic no {}".format(vnics_attached))
         expt_vnics = 1
         new_vnics = 0

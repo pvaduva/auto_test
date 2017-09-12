@@ -94,7 +94,7 @@ def check_dir(patch_name):
 
 
 @mark.p3
-def test_upload_dir_log(get_patch_name):
+def test_patch_log_upload_dir(get_patch_name):
     """
     Checks that the correct logs are added when uploading a directory of patches
 
@@ -131,7 +131,7 @@ def test_upload_dir_log(get_patch_name):
 
 
 @mark.p3
-def test_what_requires_log(get_patch_name):
+def test_patch_log_what_requires(get_patch_name):
     """
     Checks that the what_requires query is logged
 
@@ -196,7 +196,7 @@ def check_install(host):
 
 
 @mark.p3
-def test_host_install_log(setup_host_install):
+def test_patch_log_host_install(setup_host_install):
     """
     Checks that host_install produces the correct logs
 

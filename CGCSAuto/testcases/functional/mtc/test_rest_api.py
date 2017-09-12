@@ -106,7 +106,7 @@ def validate_pipelines(data):
     return 0
 
 
-def test_get_extensions():
+def test_restapi_neutron_get_extensions():
     """
     Test that we can REST API query for extensions and that we receive valid data from the query.
 
@@ -123,7 +123,7 @@ def test_get_extensions():
     assert res == 0, "FAIL: The extensions returned are not valid."
 
 
-def test_get_host_pipelines():
+def test_restapi_ceilometer_get_host_pipelines():
     """
     Do a bulk query of all pipelines and see if we get the expected number of pipelines.
     Expect at least 2 pipelines.
@@ -141,7 +141,7 @@ def test_get_host_pipelines():
                                             .format(NUM_PIPELINES, len(pipelines))
 
 
-def test_get_individual_pipelines():
+def test_restapi_ceilometer_get_individual_pipelines():
     """
     Check that Each pipeline's information is in a valid form.
 
@@ -161,9 +161,9 @@ def test_get_individual_pipelines():
         assert res == 0, "FAIL: Pipeline {} has invalid information.".format(item["name"])
 
 
-def test_put_pipelines():
+def test_restapi_ceilometer_put_pipelines():
     """
-    Modify some of the parameters of a pipeline and confirm that they are modifiied correctly.
+    Modify some of the parameters of a pipeline and confirm that they are modified correctly.
 
     Test Steps:
         - Send HTTP GET request to the server (Ceilometer port) to get the pipelines
@@ -203,7 +203,7 @@ def test_put_pipelines():
                                                .format(item["name"])
 
 
-def test_modify_cpu(prepare_modify_cpu):
+def test_restapi_sysinv_modify_cpu(prepare_modify_cpu):
     """
     TC2043
     Modify cpu parameters through API

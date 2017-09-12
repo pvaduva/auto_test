@@ -47,7 +47,7 @@ class Labs:
 
     IP_14_17 = {
         'short_name': 'ip_14_17',
-        'name': 'cgcs-ironpass-14_17',
+        'name': 'yow-cgcs-ironpass-14_17',
         'floating ip': '128.224.150.54',
         'controller-0 ip': '128.224.150.219',
         'controller-1 ip': '128.224.150.212',

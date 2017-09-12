@@ -253,24 +253,24 @@ def pytest_configure(config):
 
     # Add 'iter' to stress test names
     # print("config_options: {}".format(config.option))
-    file_or_dir = config.getoption('file_or_dir')
-    origin_file_dir = list(file_or_dir)
-
-    if stress_iteration > 0:
-        for f_or_d in origin_file_dir:
-            if '[' in f_or_d:
-                # Below setting seems to have no effect. Test did not continue upon collection failure.
-                # config.option.continue_on_collection_errors = True
-                # return
-                file_or_dir.remove(f_or_d)
-                origin_f_or_list = list(f_or_d)
-
-                for i in range(stress_iteration):
-                    extra_str = 'iter{}-'.format(i)
-                    f_or_d_list = list(origin_f_or_list)
-                    f_or_d_list.insert(f_or_d_list.index('[') + 1, extra_str)
-                    new_f_or_d = ''.join(f_or_d_list)
-                    file_or_dir.append(new_f_or_d)
+    # file_or_dir = config.getoption('file_or_dir')
+    # origin_file_dir = list(file_or_dir)
+    #
+    # if stress_iteration > 0:
+    #     for f_or_d in origin_file_dir:
+    #         if '[' in f_or_d:
+    #             # Below setting seems to have no effect. Test did not continue upon collection failure.
+    #             # config.option.continue_on_collection_errors = True
+    #             # return
+    #             file_or_dir.remove(f_or_d)
+    #             origin_f_or_list = list(f_or_d)
+    #
+    #             for i in range(stress_iteration):
+    #                 extra_str = 'iter{}-'.format(i)
+    #                 f_or_d_list = list(origin_f_or_list)
+    #                 f_or_d_list.insert(f_or_d_list.index('[') + 1, extra_str)
+    #                 new_f_or_d = ''.join(f_or_d_list)
+    #                 file_or_dir.append(new_f_or_d)
 
     # print("after modify: {}".format(config.option.file_or_dir))
 
@@ -512,7 +512,7 @@ def pytest_generate_tests(metafunc):
         param_name = 'autorepeat'
 
         count = int(metafunc.config.option.repeat)
-        metafunc.parametrize(param_name, range(count),indirect=True, ids=__params_gen(count))
+        metafunc.parametrize(param_name, range(count), indirect=True, ids=__params_gen)
 
     # print("{}".format(metafunc.fixturenames))
 
@@ -561,7 +561,7 @@ def c2_fixture(config_host_class):
 
 @pytest.fixture(autouse=True)
 def autorepeat(request):
-    return
+    return request.param
 
 
 @pytest.fixture(autouse=True)
@@ -570,12 +570,8 @@ def autostart(request):
         return request.getfuncargvalue('change_admin_password_session')
 
 
-def __params_gen(iterations):
-    ids = []
-    for i in range(iterations):
-        ids.append('iter{}'.format(i))
-
-    return ids
+def __params_gen(index):
+    return 'iter{}'.format(index)
 
 #####################################
 # End of fixture order manipulation #
