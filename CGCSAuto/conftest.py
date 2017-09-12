@@ -561,7 +561,10 @@ def c2_fixture(config_host_class):
 
 @pytest.fixture(autouse=True)
 def autorepeat(request):
-    return request.param
+    try:
+        return request.param
+    except:
+        return None
 
 
 @pytest.fixture(autouse=True)
