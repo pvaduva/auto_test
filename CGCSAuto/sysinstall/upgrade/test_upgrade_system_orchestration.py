@@ -46,8 +46,8 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     controller0 = lab['controller-0']
     if not host_helper.is_host_provisioned(controller0.name):
         host_helper.ensure_host_provisioned(controller0.name)
-        # update health query
-        system_upgrade_health = list(upgrade_helper.get_system_health_query_upgrade())
+    # update health query
+    system_upgrade_health = list(upgrade_helper.get_system_health_query_upgrade())
 
     LOG.tc_step("Checking system health for upgrade .....")
     if system_upgrade_health[0] == 0:
