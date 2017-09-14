@@ -173,7 +173,7 @@ def test_decrease_drbd():
 
 
 # Fails due to product issue
-def _test_modify_drdb():
+def test_modify_drdb():
     """ 
     This test modifies the size of the drbd based filesystems, does an
     immediate swact and then reboots the active controller.
@@ -230,7 +230,8 @@ def _test_modify_drdb():
     hosts = system_helper.get_controllers()
     for host in hosts:
        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                         entity_id="host={}".format(host))
+                                         entity_id="host={}".format(host),
+                                         timeout=600)
     standby_cont = system_helper.get_standby_controller_name()
     host_helper.wait_for_host_states(standby_cont, availability=HostAvailabilityState.AVAILABLE)
     host_helper.swact_host()
