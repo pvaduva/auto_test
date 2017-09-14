@@ -190,28 +190,28 @@ class LdapUserManager(object, metaclass=Singleton):
             (
                 'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name, hostname_ip),
                 ('Are you sure you want to continue connecting (yes/no)?',),
-                'Failed to get "continue connecting" prompt'
+                ('Failed to get "continue connecting" prompt',)
             ),
             (
                 'yes',
                 # ("{}@{}'s password:".format(user_name, hostname_ip),),
                 (".*@.*'s password: ".format(hostname_ip),),
-                'Failed to get password prompt'
+                ('Failed to get password prompt',)
             ),
             (
                 '{}'.format(user_name),
                 ('\(current\) LDAP Password: ',),
-                'Failed to get password prompt for current password'
+                ('Failed to get password prompt for current password',)
             ),
             (
                 '{}'.format(user_name),
                 ('New password: ',),
-                'Failed to get password prompt for new password'
+                ('Failed to get password prompt for new password',)
             ),
             (
                 '{}'.format(password),
                 ('Retype new password: ',),
-                'Failed to get confirmation password prompt for new password'
+                ('Failed to get confirmation password prompt for new password',)
             ),
             (
                 '{}'.format(password),
@@ -219,12 +219,12 @@ class LdapUserManager(object, metaclass=Singleton):
                     'passwd: all authentication tokens updated successfully.',
                     'Connection to controller-1 closed.',
                 ),
-                'Failed to change to new password for current user:{}'.format(user_name)
+                ('Failed to change to new password for current user:{}'.format(user_name),)
             ),
             (
                 '',
                 (Prompt.CONTROLLER_PROMPT,),
-                'Failed in last step of first-time login as LDAP User:{}'.format(user_name)
+                ('Failed in last step of first-time login as LDAP User:{}'.format(user_name),)
             ),
         ]
 
@@ -232,7 +232,7 @@ class LdapUserManager(object, metaclass=Singleton):
         self.ssh_con.flush()
         for cmd, expected, errors in cmd_expected:
             self.ssh_con.send(cmd)
-            index = self.ssh_con.expect(blob_list=list(expected) + list(errors))
+            index = self.ssh_con.expect(blob_list=list(expected + errors))
             if len(expected) <= index:
                 result = False
                 break
@@ -447,7 +447,7 @@ class LdapUserManager(object, metaclass=Singleton):
             (
                 'sudo ldapusersetup',
                 ('Enter username to add to LDAP:',),
-                ''
+                ()
             ),
             (
                 '{}'.format(user_name),
@@ -533,7 +533,7 @@ class LdapUserManager(object, metaclass=Singleton):
         self.ssh_con.flush()
         for cmd, outputs, errors in cmds_expectings:
             self.ssh_con.send(cmd)
-            expected_outputs = list(outputs) + list(errors)
+            expected_outputs = list(outputs + errors)
 
             index = self.ssh_con.expect(blob_list=expected_outputs, fail_ok=True)
             if len(outputs) <= index:
@@ -645,7 +645,7 @@ class LdapUserManager(object, metaclass=Singleton):
             LOG.info('cmd={}\nexpected={}\nerrors={}\n'.format(cmd, expected, errors))
             self.ssh_con.send(cmd)
 
-            index = self.ssh_con.expect(blob_list=list(expected) + list(errors))
+            index = self.ssh_con.expect(blob_list=list(expected + errors))
             if len(expected) <= index:
                 break
             elif 3 == i:
@@ -741,7 +741,7 @@ class LdapUserManager(object, metaclass=Singleton):
         ssh_con.flush()
         for cmd, expected, errors in cmds_expected:
             ssh_con.send(cmd)
-            index = ssh_con.expect(blob_list=list(expected) + list(errors))
+            index = ssh_con.expect(blob_list=list(expected + errors))
             if len(expected) <= index:
                 changed = False
                 break
@@ -847,12 +847,12 @@ def gen_linux_password(exclude_list=None, length=32):
     total = length
     left = 3
 
-    volcabulary = [ascii_lowercase, ascii_uppercase, digits, SPECIAL_CHARACTERS]
+    vocabulary = [ascii_lowercase, ascii_uppercase, digits, SPECIAL_CHARACTERS]
 
     password = ''
     while not password:
         raw_password = []
-        for chars in volcabulary:
+        for chars in vocabulary:
             count = random.randint(1, total - left)
             raw_password += random.sample(chars, min(count, len(chars)))
             left -= 1
@@ -862,7 +862,7 @@ def gen_linux_password(exclude_list=None, length=32):
 
         missing_length = length - len(password)
         if missing_length > 0:
-            all_chars = ''.join(volcabulary)
+            all_chars = ''.join(vocabulary)
             password += ''.join(random.choice(all_chars) for _ in range(missing_length))
 
         if password in exclude_list:
