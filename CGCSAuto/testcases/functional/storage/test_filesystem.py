@@ -6,7 +6,7 @@ import time
 from pytest import fixture, skip, mark
 
 from consts.auth import Tenant
-from consts.cgcs import EventLogID
+from consts.cgcs import EventLogID, HostAvailabilityState
 from keywords import host_helper, system_helper, local_storage_helper, install_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser
@@ -97,7 +97,7 @@ def test_increase_scratch():
     LOG.info("scratch is currently: {}".format(scratch))
 
     LOG.info("Determine the available free space on the system")
-    big_value = "1000000"
+    big_value = "1000000000000"
     free_space_regex = "([\-0-9.]*) GiB\.$"
     cmd = "system controllerfs-modify scratch {}".format(big_value)
     rc, out = con_ssh.exec_cmd(cmd, fail_ok=True)
@@ -134,6 +134,109 @@ def test_increase_scratch():
     LOG.info("scratch is currently {}".format(final_scratch))
     assert int(final_scratch) != int(decreased_scratch), \
         "scratch was unexpectedly decreased from {} to {}".format(new_scratch, final_scratch)
+
+def test_decrease_drbd():
+    """ 
+    This test attempts to decrease the size of the drbd based filesystems.
+    The expectation is that this should be rejected.
+
+    Arguments:
+    - None
+
+    Test Steps:
+
+    1.  Query the value of each drbd partition
+    2.  Attempt to decrease each partition
+
+    Assumptions:
+    - None
+    """
+
+    drbdfs = ['backup', 'cgcs', 'database', 'img-conversions']
+    con_ssh = ControllerClient.get_active_controller()
+
+    drbdfs_val = {} 
+    LOG.tc_step("Determine the space available for each drbd fs")
+    for fs in drbdfs:
+        table_ = table_parser.table(cli.system('controllerfs-show {}'.format(fs)))
+        drbdfs_val[fs] = table_parser.get_value_two_col_table(table_, 'size')
+
+    LOG.info("Current fs values are: {}".format(drbdfs_val))
+
+    for partition_name in drbdfs:
+        LOG.tc_step("Increase the size of the backup and cgcs filesystem")
+        partition_value = drbdfs_val[partition_name]
+        new_partition_value = int(partition_value) - 1
+        cmd = "system controllerfs-modify {} {}".format(partition_name, new_partition_value)
+        rc, out = con_ssh.exec_cmd(cmd, fail_ok=True)
+        assert rc != 0, "Filesystem {} was unexpectedly decreased".format(partition)
+
+
+# Fails due to product issue
+def _test_modify_drdb():
+    """ 
+    This test modifies the size of the drbd based filesystems, does an
+    immediate swact and then reboots the active controller.
+
+    Arguments:
+    - None
+
+    Test Steps:
+    - Determine how much free space we have available
+    - Increase backup
+    - Increase cgcs
+    - Initiate a controller swact
+    - Initate a controller reboot
+
+    Assumptions:
+    - None
+
+    """
+
+    drbdfs = ['backup', 'cgcs', 'database', 'img-conversions']
+    con_ssh = ControllerClient.get_active_controller()
+
+    LOG.tc_step("Determine the available free space on the system")
+    cmd = "vgdisplay -C --noheadings --nosuffix -o vg_free --units g cgts-vg"
+    rc, out = con_ssh.exec_sudo_cmd(cmd)
+    free_space = out.rstrip()
+    LOG.info("Available free space on the system is: {}".format(free_space))
+    if float(free_space) <= 0:
+        skip("Not enough free space to complete test.")
+
+    drbdfs_val = {} 
+    LOG.tc_step("Determine the space available for each drbd fs")
+    for fs in drbdfs:
+        table_ = table_parser.table(cli.system('controllerfs-show {}'.format(fs)))
+        drbdfs_val[fs] = table_parser.get_value_two_col_table(table_, 'size')
+
+    LOG.info("Current fs values are: {}".format(drbdfs_val))
+
+    LOG.tc_step("Increase the size of the backup and cgcs filesystem")
+    partition_name = "backup"
+    partition_value = drbdfs_val[partition_name]
+    backup_freespace = math.trunc(float(free_space) / 10)
+    new_partition_value = backup_freespace + int(partition_value)
+    cmd = "system controllerfs-modify {} {}".format(partition_name, new_partition_value)
+    rc, out = con_ssh.exec_cmd(cmd)
+    partition_name = "cgcs"
+    partition_value = drbdfs_val[partition_name]
+    cgcs_free_space = math.trunc(backup_freespace / 2)
+    new_partition_value = cgcs_free_space + int(partition_value)
+    cmd = "system controllerfs-modify {} {}".format(partition_name, new_partition_value)
+    rc, out = con_ssh.exec_cmd(cmd)
+
+
+    hosts = system_helper.get_controllers()
+    for host in hosts:
+       system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                         entity_id="host={}".format(host))
+    standby_cont = system_helper.get_standby_controller_name()
+    host_helper.wait_for_host_states(standby_cont, availability=HostAvailabilityState.AVAILABLE)
+    host_helper.swact_host()
+
+    act_cont = system_helper.get_active_controller_name()
+    host_helper.reboot_hosts(act_cont)
 
 
 @mark.usefixtures("lvm_precheck")
@@ -270,5 +373,5 @@ def test_increase_ceph_mon():
 
     table_ = table_parser.table(cli.system("ceph-mon-list"))
     ceph_mon_gib = table_parser.get_values(table_, "ceph_mon_gib", **{"hostname": "controller-0"})[0]
-    assert ceph_mon_gib == new_ceph_mon_gib, "ceph-mon did not change"
+    assert ceph_mon_gib != new_ceph_mon_gib, "ceph-mon did not change"
 
