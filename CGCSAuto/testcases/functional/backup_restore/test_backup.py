@@ -154,8 +154,9 @@ def test_create_backup(con_ssh=None):
             vol_files = vol_files + '/opt/backups/volume-' + vol_id + '* '
             # TODO: delete created snapshot after the are in /opt/backups folder
 
-    # dest_dir = SvcCgcsAuto.HOME + '/backup_restore'
-    common.scp_from_active_controller_to_test_server(vol_files, dest_dir, is_dir=False, multi_files=True)
+    # copy vol file if vol_files not empty dest_dir = SvcCgcsAuto.HOME + '/backup_restore'
+    if vol_files:
+        common.scp_from_active_controller_to_test_server(vol_files, dest_dir, is_dir=False, multi_files=True)
 
     # delete all volumes files from /opt/backups on tis server
     LOG.tc_step("delete volume tgz file from tis server /opt/backups folder ")
