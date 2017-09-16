@@ -7,13 +7,14 @@ from pytest import mark, skip
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.pre_checks_and_configs import no_simplex_module
 
 from keywords import host_helper,system_helper, nova_helper, vm_helper
 
 
 @mark.sanity
 @mark.cpe_sanity
-def test_lock_active_controller_reject():
+def test_lock_active_controller_reject(no_simplex_module):
     """
     Verify lock unlock active controller. Expected it to fail
 
@@ -22,9 +23,6 @@ def test_lock_active_controller_reject():
         - Attempt to lock active controller and ensure it's rejected
 
     """
-    if system_helper.is_simplex():
-        skip("Not applicable to Simplex system")
-
     LOG.tc_step('Retrieve the active controller from the lab')
     active_controller = system_helper.get_active_controller_name()
 
@@ -41,7 +39,7 @@ def test_lock_active_controller_reject():
 
 @mark.sanity
 @mark.cpe_sanity
-def test_lock_unlock_standby_controller():
+def test_lock_unlock_standby_controller(no_simplex_module):
     """
     Verify lock unlock standby controller
 

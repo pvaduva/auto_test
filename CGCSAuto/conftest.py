@@ -14,6 +14,7 @@ from utils.tis_log import LOG
 
 
 tc_start_time = None
+tc_end_time = None
 has_fail = False
 stress_iteration = -1
 tracebacks = []
@@ -182,6 +183,8 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
     logging_msg = '\n{}{} {}'.format(separator, msg, nodeid)
     print(print_msg)
     if log_type == 'tc_res':
+        global tc_end_time
+        tc_end_time = strftime("%Y%m%d %H:%M:%S", gmtime())
         LOG.tc_result(msg=msg, tc_name=nodeid)
     elif log_type == 'tc_start':
         LOG.tc_func_start(nodeid)
@@ -253,26 +256,25 @@ def pytest_configure(config):
 
     # Add 'iter' to stress test names
     # print("config_options: {}".format(config.option))
-    # file_or_dir = config.getoption('file_or_dir')
-    # origin_file_dir = list(file_or_dir)
-    #
-    # if stress_iteration > 0:
-    #     for f_or_d in origin_file_dir:
-    #         if '[' in f_or_d:
-    #             # Below setting seems to have no effect. Test did not continue upon collection failure.
-    #             # config.option.continue_on_collection_errors = True
-    #             # return
-    #             file_or_dir.remove(f_or_d)
-    #             origin_f_or_list = list(f_or_d)
-    #
-    #             for i in range(stress_iteration):
-    #                 extra_str = 'iter{}-'.format(i)
-    #                 f_or_d_list = list(origin_f_or_list)
-    #                 f_or_d_list.insert(f_or_d_list.index('[') + 1, extra_str)
-    #                 new_f_or_d = ''.join(f_or_d_list)
-    #                 file_or_dir.append(new_f_or_d)
+    file_or_dir = config.getoption('file_or_dir')
+    origin_file_dir = list(file_or_dir)
+    if stress_iteration > 0:
+        for f_or_d in origin_file_dir:
+            if '[' in f_or_d:
+                # Below setting seems to have no effect. Test did not continue upon collection failure.
+                # config.option.continue_on_collection_errors = True
+                # return
+                file_or_dir.remove(f_or_d)
+                origin_f_or_list = list(f_or_d)
 
-    # print("after modify: {}".format(config.option.file_or_dir))
+                for i in range(stress_iteration):
+                    extra_str = 'iter{}-'.format(i)
+                    f_or_d_list = list(origin_f_or_list)
+                    f_or_d_list.insert(f_or_d_list.index('[') + 1, extra_str)
+                    new_f_or_d = ''.join(f_or_d_list)
+                    file_or_dir.append(new_f_or_d)
+
+        # print("after modify: {}".format(config.option.file_or_dir))
 
 
 def pytest_addoption(parser):
@@ -370,8 +372,9 @@ def pytest_unconfigure():
                         'Build ID: {}\n'
                         'Build Server: {}\n'
                         'Automation LOGs DIR: {}\n'
+                        'Ends at: {}\n'
                         '{}'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server, ProjVar.get_var('LOG_DIR'),
-                                    version_and_patch))
+                                    tc_end_time, version_and_patch))
                 # Add result summary to beginning of the file
                 f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
                         format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
