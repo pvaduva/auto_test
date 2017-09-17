@@ -16,7 +16,7 @@ def check_system():
     if not cinder_helper.is_volumes_pool_sufficient(min_size=80):
         skip("Cinder volume pool size is smaller than 80G")
 
-    if len(host_helper.get_nova_hosts()) < 2:
+    if len(host_helper.get_up_hypervisors()) < 2:
         skip("at least two computes are required")
 
     if len(nova_helper.get_storage_backing_with_max_hosts()[1]) < 2:

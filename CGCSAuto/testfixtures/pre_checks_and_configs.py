@@ -8,6 +8,24 @@ from consts.cgcs import EventLogID, HostAvailabilityState
 from keywords import system_helper, host_helper, keystone_helper, security_helper
 
 
+@fixture(scope='function')
+def no_simplex():
+    if system_helper.is_simplex():
+        skip(SkipReason.SIMPLEX_SYSTEM)
+
+
+@fixture(scope='class')
+def no_simplex_class():
+    if system_helper.is_simplex():
+        skip(SkipReason.SIMPLEX_SYSTEM)
+
+
+@fixture(scope='module')
+def no_simplex_module():
+    if system_helper.is_simplex():
+        skip(SkipReason.SIMPLEX_SYSTEM)
+
+
 @fixture(scope='session')
 def wait_for_con_drbd_sync_complete():
     if len(system_helper.get_controllers()) < 2:
