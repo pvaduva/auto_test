@@ -344,7 +344,6 @@ class QoSSpecs:
     TOTAL_IOPS = 'total_iops_sec'
 
 
-
 class OrchestStrategyPhases:
     INITIAL = 'initial'
     BUILD = 'build'
