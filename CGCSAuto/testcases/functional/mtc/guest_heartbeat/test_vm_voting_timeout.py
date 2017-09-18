@@ -2,7 +2,6 @@
 # from us57002_tc2: Pause/Suspend VM
 ###
 
-
 from pytest import fixture, mark
 from time import sleep
 
@@ -38,6 +37,9 @@ def heartbeat_flavor_vm():
     vm = {'id': vm_id,
           'heartbeat': heartbeat
           }
+
+    LOG.tc_step("Wait for 30 seconds for vm initialization before touching file in /tmp")
+    sleep(30)
 
     # touch the vm_voting_no_timeout file
     cmd = "touch /tmp/event_timeout"
