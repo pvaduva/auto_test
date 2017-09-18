@@ -15,7 +15,7 @@ from utils.ssh import ControllerClient
 
 @fixture()
 def aio_precheck():
-    if not system_helper.is_two_node_cpe() and not system_helper.is_simplex:
+    if not system_helper.is_two_node_cpe() and not system_helper.is_simplex():
         skip("Test only applies to AIO-SX or AIO-DX systems")
 
 @fixture()
@@ -330,8 +330,7 @@ def test_increase_ceph_mon():
     invalid_cmg = ['19', '41', 'fds']
     for value in invalid_cmg:
         host = "controller-0"
-        cmd = "system ceph-mon-modify {} ceph_mon_gib={}".format(host, value)
-        rc, out = con_ssh.exec_cmd(cmd, fail_ok=True)
+        cli.system("ceph-mon-modify {} ceph_mon_gib={}".format(host, value), fail_ok=True)
 
     if int(ceph_mon_gib) >= 30:
         skip("Insufficient disk space to execute test")
