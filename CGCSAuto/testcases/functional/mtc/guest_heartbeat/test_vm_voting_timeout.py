@@ -38,7 +38,7 @@ def heartbeat_flavor_vm():
           'heartbeat': heartbeat
           }
 
-    LOG.tc_step("Wait for 30 seconds for vm initialization before touching file in /tmp")
+    LOG.fixture_step("Wait for 30 seconds for vm initialization before touching file in /tmp")
     sleep(30)
 
     # touch the vm_voting_no_timeout file
