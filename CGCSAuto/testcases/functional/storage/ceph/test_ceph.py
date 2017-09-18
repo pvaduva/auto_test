@@ -23,7 +23,7 @@ PROC_RESTART_TIME = 30          # number of seconds between process restarts
 # Tested on PV1.  Runtime: 278.40  Date: Aug 2nd, 2017.  Status: Pass
 @mark.nightly
 @mark.usefixtures('ceph_precheck')
-def test_ceph_osd_process_kill():
+def _test_ceph_osd_process_kill():
     """
     us69932_tc1_ceph_osd_process_kill from us69932_ceph_monitoring.odt
 
