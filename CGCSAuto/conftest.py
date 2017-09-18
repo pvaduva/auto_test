@@ -213,6 +213,7 @@ def pytest_configure(config):
     report_all = config.getoption('reportall')
     report_tag = config.getoption('report_tag')
     resultlog = config.getoption('resultlog')
+    session_log_dir = config.getoption('logdir')
 
     # Test case params on installed system
     lab_arg = config.getoption('lab')
@@ -235,20 +236,23 @@ def pytest_configure(config):
     report_all = True if report_all else setup_consts.REPORT_ALL
     openstack_cli = True if openstack_cli else False
 
-    # compute directory for all logs based on resultlog arg, lab, and timestamp on local machine
-    resultlog = resultlog if resultlog else os.path.expanduser("~")
-    if '/AUTOMATION_LOGS' in resultlog:
-        resultlog = resultlog.split(sep='/AUTOMATION_LOGS')[0]
-    if not resultlog.endswith('/'):
-        resultlog += '/'
-    log_dir = resultlog + "AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
+    if session_log_dir:
+        log_dir = session_log_dir
+    else:
+        # compute directory for all logs based on resultlog arg, lab, and timestamp on local machine
+        resultlog = resultlog if resultlog else os.path.expanduser("~")
+        if '/AUTOMATION_LOGS' in resultlog:
+            resultlog = resultlog.split(sep='/AUTOMATION_LOGS')[0]
+        if not resultlog.endswith('/'):
+            resultlog += '/'
+        log_dir = resultlog + "AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
+    os.makedirs(log_dir, exist_ok=True)
 
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
                      report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli)
     InstallVars.set_install_var(lab=lab)
 
-    os.makedirs(log_dir, exist_ok=True)
     config_logger(log_dir)
 
     # set resultlog save location
@@ -286,6 +290,7 @@ def pytest_addoption(parser):
     collect_all_help = "Run collect all on TiS server at the end of test session if any test fails."
     report_help = "Upload results and logs to the test results database."
     tag_help = "Tag to be used for uploading logs to the test results database."
+    logdir_help = "Directory to store test session logs. If this is specified, then --resultlog will be ignored."
     openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
     stress_help = "Number of iterations to run specified testcase(s)"
     skiplabsetup_help = "Do not run lab_setup post lab install"
@@ -300,6 +305,8 @@ def pytest_addoption(parser):
     parser.addoption('--reportall', '--report_all', '--report-all', dest='reportall', action='store_true',
                      help=report_help)
     parser.addoption('--report_tag', action='store', dest='report_tag', metavar='tagname', default=None, help=tag_help)
+    parser.addoption('--logdir', '--log_dir', '--log-dir', action='store', dest='logdir', metavar='sessionlogdir',
+                     default=None, help=logdir_help)
 
     # Test session options on installed lab:
     parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
