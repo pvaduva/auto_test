@@ -10,8 +10,11 @@ class ProjVar:
                   'LOG_DIR': None,
                   'SOURCE_CREDENTIAL': None,
                   'VSWITCH_INFO_HOSTS': [],
+                  'SW_VERSION': [],
+                  'PATCH': None,
+                  'SESSION_ID': None,
                   }
-                  # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}
+    # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}
 
     @classmethod
     def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all, report_tag, openstack_cli):
@@ -37,9 +40,12 @@ class ProjVar:
         })
 
     @classmethod
-    def set_var(cls, **kwargs):
+    def set_var(cls, append=False, **kwargs):
         for key, val in kwargs.items():
-            cls.__var_dict[key.upper()] = val
+            if append:
+                cls.__var_dict[key.upper()].append(val)
+            else:
+                cls.__var_dict[key.upper()] = val
 
     @classmethod
     def get_var(cls, var_name):

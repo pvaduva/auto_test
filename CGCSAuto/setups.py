@@ -259,8 +259,9 @@ def get_build_info(con_ssh):
             build_id = build_id[0]
         else:
             build_date = re.findall('''BUILD_DATE=\"(.*)\"''', output)
-            if build_date and build_date[0]:
-                build_id = build_date[0]
+            if build_date and build_date[0] != 'n/a':
+                build_id = build_date[0].rsplit(' ', 1)[0]
+                build_id = str(build_id).replace(' ', '_').replace(':', '_')
             else:
                 build_id = ' '
 
@@ -537,13 +538,42 @@ def list_migration_history(con_ssh):
     nova_helper.run_migration_list(con_ssh=con_ssh)
 
 
-def get_version_and_patch_info(con_ssh):
-    version = lab_info._get_build_info(con_ssh, 'SW_VERSION')[0]
+def get_version_and_patch_info():
+    version = ProjVar.get_var('SW_VERSION')[0]
     info = 'Software Version: {}\n'.format(version)
 
-    patches = lab_info._get_patches(con_ssh=con_ssh, rtn_str=False)
+    patches = ProjVar.get_var('PATCH')
     if patches:
         info += 'Patches:\n{}\n'.format('\n'.join(patches))
 
     LOG.info("SW Version and Patch info: {}".format(info))
     return info
+
+
+def set_session(con_ssh):
+    version = lab_info._get_build_info(con_ssh, 'SW_VERSION')[0]
+    ProjVar.set_var(append=True, SW_VERSION=version)
+
+    patches = lab_info._get_patches(con_ssh=con_ssh, rtn_str=False)
+    if patches:
+        ProjVar.set_var(PATCH=patches)
+
+    patches = '\n'.join(patches)
+    tag = ProjVar.get_var('REPORT_TAG')
+    if tag:
+        try:
+            from utils.cgcs_reporter import upload_results
+            sw_version = '-'.join(ProjVar.get_var('SW_VERSION'))
+            build_id = ProjVar.get_var('BUILD_ID')
+            build_server = ProjVar.get_var('BUILD_SERVER')
+            session_id = upload_results.upload_test_session(lab_name=ProjVar.get_var('LAB')['name'],
+                                                            build_id=build_id,
+                                                            build_server=build_server,
+                                                            sw_version=sw_version,
+                                                            patches=patches,
+                                                            log_dir=ProjVar.get_var('LOG_DIR'),
+                                                            tag=tag)
+            ProjVar.set_var(SESSION_ID=session_id)
+            LOG.info("Test session id: {}".format(session_id))
+        except:
+            LOG.exception("Unable to upload test session")

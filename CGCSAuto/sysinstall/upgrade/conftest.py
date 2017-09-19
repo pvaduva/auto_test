@@ -45,10 +45,10 @@ def pytest_addoption(parser):
                          "  compute:<#> - start orchestration after <#> compute(s) are upgraded normally; " \
                          " The default is default. Applicable only for upgrades from R3."
     apply_strategy_help = "How the orchestration strategy is applied:" \
-                         "  serial - apply orchestration strategy one node  at a time; " \
-                         "  parallel - apply orchestration strategy in parallel; " \
-                         "  ignore - do not apply the orchestration strategy; " \
-                         " If not specified,  the system will choose the option to apply the strategy. " \
+                          "  serial - apply orchestration strategy one node  at a time; " \
+                          "  parallel - apply orchestration strategy in parallel; " \
+                          "  ignore - do not apply the orchestration strategy; " \
+                          " If not specified,  the system will choose the option to apply the strategy. " \
                           "Applicable only for upgrades from R3."
     max_parallel_compute_help = "The maximum number of compute hosts to upgrade in parallel, if parallel apply type" \
                                 " is selected"
@@ -58,7 +58,6 @@ def pytest_addoption(parser):
                                             present
                                  strict -  orchestration is not allowed if alarms are present
                              """
-
 
     parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
                      action='store', metavar='VERSION', required=True,  help=upgrade_version_help)
@@ -87,6 +86,7 @@ def pytest_addoption(parser):
 
     parser.addoption('--alarm-restrictions', '--alarm_restrictions', dest='alarm_restrictions',
                      action='store', default='strict',  help=alarm_restriction_help)
+
 
 def pytest_configure(config):
 
@@ -196,7 +196,7 @@ def upgrade_setup(pre_check_upgrade):
 
     # # get upgrade license file for release
     LOG.info("Downloading the license {}:{} for target release {}".format(bld_server_obj.name,
-                                                                         license_path, upgrade_version))
+                                                                          license_path, upgrade_version))
     install_helper.download_upgrade_license(lab, bld_server_obj, license_path)
 
     LOG.tc_step("Checking if target release license is downloaded......")
@@ -384,5 +384,3 @@ def apply_patches(lab, server, patch_dir):
 
         LOG.info("Querying patches ... ")
         assert patching_helper.run_patch_cmd("query")[0] == 0, "Failed to query patches"
-
-

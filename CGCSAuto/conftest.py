@@ -76,15 +76,29 @@ def _write_results(res_in_tests, test_name):
         f.write('\n{}\t{}\t{}'.format(res_in_tests, tc_start_time, test_name))
 
     # reset tc_start and end time for next test case
-    tc_start_time = None
     build_id = ProjVar.get_var('BUILD_ID')
     build_server = ProjVar.get_var('BUILD_SERVER')
+
     if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
-        upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id,
-                                                build_server=build_server)
-        if not upload_res:
-            with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
-                f.write('\tUPLOAD_UNSUCC')
+        if ProjVar.get_var('SESSION_ID'):
+            try:
+                from utils.cgcs_reporter import upload_results
+                upload_results.upload_test_result(session_id=ProjVar.get_var('SESSION_ID'), test_name=test_name,
+                                                  result=res_in_tests, start_time=tc_start_time, end_time=tc_end_time,
+                                                  parse_name=True)
+            except Exception:
+                LOG.exception("Unable to upload test result to TestHistory db! Test case: {}".format(test_name))
+
+        try:
+            upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id,
+                                                    build_server=build_server)
+            if not upload_res:
+                with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
+                    f.write('\tUPLOAD_UNSUCC')
+        except Exception:
+            LOG.exception("Unable to upload test result to mongoDB! Test case: {}".format(test_name))
+
+    tc_start_time = None
 
 
 def pytest_runtest_makereport(item, call, __multicall__):
@@ -248,6 +262,7 @@ def pytest_configure(config):
         log_dir = resultlog + "AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
     os.makedirs(log_dir, exist_ok=True)
 
+    report_tag = report_tag if report_tag else 'cgcsauto'
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
                      report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli)
@@ -355,9 +370,7 @@ def pytest_unconfigure():
 
     version_and_patch = ''
     try:
-        from utils.ssh import ControllerClient
-        con_ssh = ControllerClient.get_active_controller()
-        version_and_patch = setups.get_version_and_patch_info(con_ssh=con_ssh)
+        version_and_patch = setups.get_version_and_patch_info()
     except Exception as e:
         LOG.debug(e)
         pass
@@ -367,7 +380,9 @@ def pytest_unconfigure():
         tc_res_path = log_dir + '/test_results.log'
         build_id = ProjVar.get_var('BUILD_ID')
         build_server = ProjVar.get_var('BUILD_SERVER')
-
+        session_id = ProjVar.get_var('SESSION_ID')
+        session_tag = ProjVar.get_var('REPORT_TAG')
+        session_str = 'Session ID: {}\n'.format(session_id) if session_id else ''
         total_exec = TestRes.PASSNUM + TestRes.FAILNUM
         # pass_rate = fail_rate = '0'
         if total_exec > 0:
@@ -380,8 +395,10 @@ def pytest_unconfigure():
                         'Build Server: {}\n'
                         'Automation LOGs DIR: {}\n'
                         'Ends at: {}\n'
+                        'Session Tag: {}\n'
+                        '{}'    # test session id and tag
                         '{}'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server, ProjVar.get_var('LOG_DIR'),
-                                    tc_end_time, version_and_patch))
+                                    tc_end_time, session_tag, session_str, version_and_patch))
                 # Add result summary to beginning of the file
                 f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
                         format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
@@ -391,8 +408,8 @@ def pytest_unconfigure():
             LOG.info("Test Results saved to: {}".format(tc_res_path))
             with open(tc_res_path, 'r') as fin:
                 print(fin.read())
-    except Exception:
-        LOG.exception("Failed to add session summary to test_results.py")
+    except Exception as e:
+        LOG.exception("Failed to add session summary to test_results.py. \nDetails: {}".format(e.__str__()))
 
     # Below needs con_ssh to be initialized
     try:
@@ -595,5 +612,5 @@ def pytest_sessionfinish(session):
 
     if stress_iteration > 0 and has_fail:
         # _thread.interrupt_main()
-        print('Printing traceback: \n' + '\n'.join(tracebacks))
+        # print('Printing traceback: \n' + '\n'.join(tracebacks))
         pytest.exit("Abort upon stress test failure")
