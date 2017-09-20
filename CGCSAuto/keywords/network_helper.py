@@ -2187,7 +2187,7 @@ def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
 
-def _ping_server(server, ssh_client, num_pings=5, timeout=30, fail_ok=False, vshell=False, interface=None):
+def _ping_server(server, ssh_client, num_pings=5, timeout=30, fail_ok=False, vshell=False, interface=None, retry=0):
     """
 
     Args:
@@ -2202,36 +2202,41 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=30, fail_ok=False, vsh
     Returns (int): packet loss percentile, such as 100, 0, 25
 
     """
-    if not vshell:
-        cmd = 'ping -c {} {}'.format(num_pings, server)
-        code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout, fail_ok=True)
-        if code != 0:
-            packet_loss_rate = 100
+    for i in range(max(retry + 1, 0)):
+        if not vshell:
+            cmd = 'ping -c {} {}'.format(num_pings, server)
+            code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout, fail_ok=True)
+            if code != 0:
+                packet_loss_rate = 100
+            else:
+                packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
         else:
-            packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
+            if not interface:
+                interface = _get_interfaces_via_vshell(ssh_client, net_type='internal')[0]
+            cmd = 'vshell ping --count {} {} {}'.format(num_pings, server, interface)
+            code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)
+            if code != 0:
+                packet_loss_rate = 100
+            else:
+                packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
+
+        packet_loss_rate = int(packet_loss_rate)
+        if packet_loss_rate < 100:
+            if packet_loss_rate > 0:
+                LOG.warning("Some packets dropped when ping from {} ssh session to {}. Packet loss rate: {}%".
+                            format(ssh_client.host, server, packet_loss_rate))
+            else:
+                LOG.info("All packets received by {}".format(server))
+            break
+
+        LOG.info("retry in 3 seconds")
+        time.sleep(3)
     else:
-        if not interface:
-            interface = _get_interfaces_via_vshell(ssh_client, net_type='internal')[0]
-        cmd = 'vshell ping --count {} {} {}'.format(num_pings, server, interface)
-        code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)
-        if code != 0:
-            packet_loss_rate = 100
-        else:
-            packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
-
-    packet_loss_rate = int(packet_loss_rate)
-
-    if packet_loss_rate == 100:
         msg = "Ping from {} to {} failed.".format(ssh_client.host, server)
         if not fail_ok:
             raise exceptions.VMNetworkError(msg)
         else:
             LOG.warning(msg)
-    elif packet_loss_rate > 0:
-        LOG.warning("Some packets dropped when ping from {} ssh session to {}. Packet loss rate: {}%".
-                    format(ssh_client.host, server, packet_loss_rate))
-    else:
-        LOG.info("All packets received by {}".format(server))
 
     untransmitted_packets = int(num_pings) - int(re.findall("(\d+) packets transmitted,", output)[0])
     return packet_loss_rate, untransmitted_packets
