@@ -140,7 +140,8 @@ class TestRetentionPeriod:
         "new_retention_period", [
             -1,
             MIN_RETENTION_PERIOD - 1,
-            random.randrange(MIN_RETENTION_PERIOD, MAX_RETENTION_PERIOD + 1),
+            #random.randrange(MIN_RETENTION_PERIOD, MAX_RETENTION_PERIOD + 1),
+            24828899,
             MAX_RETENTION_PERIOD + 1,
         ])
     def test_modify_pm_retention_period(self, new_retention_period):

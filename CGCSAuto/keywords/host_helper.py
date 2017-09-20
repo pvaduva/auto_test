@@ -92,6 +92,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     res, out = cli.system('host-list', rtn_list=True)
     LOG.info('\n{}'.format(out))
 
+    is_simplex = system_helper.is_simplex()
     user, password = LinuxUser.get_current_user_password()
     # reboot hosts other than active controller
     cmd = 'sudo reboot -f' if force_reboot else 'sudo reboot'
@@ -118,13 +119,16 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         if index == 0:
             con_ssh.send(password)
 
-        LOG.info("Active controller reboot started. Wait for 20 seconds then attempt to reconnect for "
-                 "maximum {}s".format(timeout))
-        time.sleep(20)
-        con_ssh.connect(retry=True, retry_timeout=timeout)
+        if is_simplex:
+            _wait_for_simplex_reconnect(con_ssh=con_ssh, timeout=timeout)
+        else:
+            LOG.info("Active controller reboot started. Wait for 20 seconds then attempt to reconnect for "
+                     "maximum {}s".format(timeout))
+            time.sleep(20)
+            con_ssh.connect(retry=True, retry_timeout=timeout)
 
-        LOG.info("Reconnected via fip. Waiting for system show cli to re-enable")
-        _wait_for_openstack_cli_enable(con_ssh=con_ssh)
+            LOG.info("Reconnected via fip. Waiting for system show cli to re-enable")
+            _wait_for_openstack_cli_enable(con_ssh=con_ssh)
 
     if not wait_for_reboot_finish:
         msg = "Hosts reboot -f cmd sent"
@@ -529,13 +533,13 @@ def wait_for_ssh_disconnect(ssh=None, timeout=120, fail_ok=False):
     return True
 
 
-def _wait_for_simplex_reconnect(con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK):
+def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNLOCK):
     time.sleep(30)
     wait_for_ssh_disconnect(ssh=con_ssh, timeout=120)
     time.sleep(30)
     con_ssh.connect(retry=True, retry_timeout=timeout)
     # Give it sometime before openstack cmds enables on after host
-    _wait_for_openstack_cli_enable(con_ssh=con_ssh, fail_ok=False, timeout=timeout, check_interval=5, reconnect=True)
+    _wait_for_openstack_cli_enable(con_ssh=con_ssh, fail_ok=False, timeout=timeout, check_interval=10, reconnect=True)
     time.sleep(10)
     LOG.info("Re-connected via ssh and openstack CLI enabled")
 
@@ -832,7 +836,7 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None):
     return rtn
 
 
-def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=1,
+def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=5,
                                    reconnect=False, reconnect_timeout=60):
     cli_enable_end_time = time.time() + timeout
     eof_count = 0

@@ -14,6 +14,7 @@ from utils.tis_log import LOG
 
 
 tc_start_time = None
+tc_end_time = None
 has_fail = False
 stress_iteration = -1
 tracebacks = []
@@ -75,15 +76,29 @@ def _write_results(res_in_tests, test_name):
         f.write('\n{}\t{}\t{}'.format(res_in_tests, tc_start_time, test_name))
 
     # reset tc_start and end time for next test case
-    tc_start_time = None
     build_id = ProjVar.get_var('BUILD_ID')
     build_server = ProjVar.get_var('BUILD_SERVER')
+
     if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
-        upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id,
-                                                build_server=build_server)
-        if not upload_res:
-            with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
-                f.write('\tUPLOAD_UNSUCC')
+        if ProjVar.get_var('SESSION_ID'):
+            try:
+                from utils.cgcs_reporter import upload_results
+                upload_results.upload_test_result(session_id=ProjVar.get_var('SESSION_ID'), test_name=test_name,
+                                                  result=res_in_tests, start_time=tc_start_time, end_time=tc_end_time,
+                                                  parse_name=True)
+            except Exception:
+                LOG.exception("Unable to upload test result to TestHistory db! Test case: {}".format(test_name))
+
+        try:
+            upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id,
+                                                    build_server=build_server)
+            if not upload_res:
+                with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
+                    f.write('\tUPLOAD_UNSUCC')
+        except Exception:
+            LOG.exception("Unable to upload test result to mongoDB! Test case: {}".format(test_name))
+
+    tc_start_time = None
 
 
 def pytest_runtest_makereport(item, call, __multicall__):
@@ -182,6 +197,8 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
     logging_msg = '\n{}{} {}'.format(separator, msg, nodeid)
     print(print_msg)
     if log_type == 'tc_res':
+        global tc_end_time
+        tc_end_time = strftime("%Y%m%d %H:%M:%S", gmtime())
         LOG.tc_result(msg=msg, tc_name=nodeid)
     elif log_type == 'tc_start':
         LOG.tc_func_start(nodeid)
@@ -210,6 +227,7 @@ def pytest_configure(config):
     report_all = config.getoption('reportall')
     report_tag = config.getoption('report_tag')
     resultlog = config.getoption('resultlog')
+    session_log_dir = config.getoption('logdir')
 
     # Test case params on installed system
     lab_arg = config.getoption('lab')
@@ -232,20 +250,24 @@ def pytest_configure(config):
     report_all = True if report_all else setup_consts.REPORT_ALL
     openstack_cli = True if openstack_cli else False
 
-    # compute directory for all logs based on resultlog arg, lab, and timestamp on local machine
-    resultlog = resultlog if resultlog else os.path.expanduser("~")
-    if '/AUTOMATION_LOGS' in resultlog:
-        resultlog = resultlog.split(sep='/AUTOMATION_LOGS')[0]
-    if not resultlog.endswith('/'):
-        resultlog += '/'
-    log_dir = resultlog + "AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
+    if session_log_dir:
+        log_dir = session_log_dir
+    else:
+        # compute directory for all logs based on resultlog arg, lab, and timestamp on local machine
+        resultlog = resultlog if resultlog else os.path.expanduser("~")
+        if '/AUTOMATION_LOGS' in resultlog:
+            resultlog = resultlog.split(sep='/AUTOMATION_LOGS')[0]
+        if not resultlog.endswith('/'):
+            resultlog += '/'
+        log_dir = resultlog + "AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
+    os.makedirs(log_dir, exist_ok=True)
 
+    report_tag = report_tag if report_tag else 'cgcsauto'
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
                      report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli)
     InstallVars.set_install_var(lab=lab)
 
-    os.makedirs(log_dir, exist_ok=True)
     config_logger(log_dir)
 
     # set resultlog save location
@@ -253,26 +275,25 @@ def pytest_configure(config):
 
     # Add 'iter' to stress test names
     # print("config_options: {}".format(config.option))
-    # file_or_dir = config.getoption('file_or_dir')
-    # origin_file_dir = list(file_or_dir)
-    #
-    # if stress_iteration > 0:
-    #     for f_or_d in origin_file_dir:
-    #         if '[' in f_or_d:
-    #             # Below setting seems to have no effect. Test did not continue upon collection failure.
-    #             # config.option.continue_on_collection_errors = True
-    #             # return
-    #             file_or_dir.remove(f_or_d)
-    #             origin_f_or_list = list(f_or_d)
-    #
-    #             for i in range(stress_iteration):
-    #                 extra_str = 'iter{}-'.format(i)
-    #                 f_or_d_list = list(origin_f_or_list)
-    #                 f_or_d_list.insert(f_or_d_list.index('[') + 1, extra_str)
-    #                 new_f_or_d = ''.join(f_or_d_list)
-    #                 file_or_dir.append(new_f_or_d)
+    file_or_dir = config.getoption('file_or_dir')
+    origin_file_dir = list(file_or_dir)
+    if stress_iteration > 0:
+        for f_or_d in origin_file_dir:
+            if '[' in f_or_d:
+                # Below setting seems to have no effect. Test did not continue upon collection failure.
+                # config.option.continue_on_collection_errors = True
+                # return
+                file_or_dir.remove(f_or_d)
+                origin_f_or_list = list(f_or_d)
 
-    # print("after modify: {}".format(config.option.file_or_dir))
+                for i in range(stress_iteration):
+                    extra_str = 'iter{}-'.format(i)
+                    f_or_d_list = list(origin_f_or_list)
+                    f_or_d_list.insert(f_or_d_list.index('[') + 1, extra_str)
+                    new_f_or_d = ''.join(f_or_d_list)
+                    file_or_dir.append(new_f_or_d)
+
+        # print("after modify: {}".format(config.option.file_or_dir))
 
 
 def pytest_addoption(parser):
@@ -284,6 +305,7 @@ def pytest_addoption(parser):
     collect_all_help = "Run collect all on TiS server at the end of test session if any test fails."
     report_help = "Upload results and logs to the test results database."
     tag_help = "Tag to be used for uploading logs to the test results database."
+    logdir_help = "Directory to store test session logs. If this is specified, then --resultlog will be ignored."
     openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
     stress_help = "Number of iterations to run specified testcase(s)"
     skiplabsetup_help = "Do not run lab_setup post lab install"
@@ -298,6 +320,8 @@ def pytest_addoption(parser):
     parser.addoption('--reportall', '--report_all', '--report-all', dest='reportall', action='store_true',
                      help=report_help)
     parser.addoption('--report_tag', action='store', dest='report_tag', metavar='tagname', default=None, help=tag_help)
+    parser.addoption('--logdir', '--log_dir', '--log-dir', action='store', dest='logdir', metavar='sessionlogdir',
+                     default=None, help=logdir_help)
 
     # Test session options on installed lab:
     parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
@@ -346,9 +370,7 @@ def pytest_unconfigure():
 
     version_and_patch = ''
     try:
-        from utils.ssh import ControllerClient
-        con_ssh = ControllerClient.get_active_controller()
-        version_and_patch = setups.get_version_and_patch_info(con_ssh=con_ssh)
+        version_and_patch = setups.get_version_and_patch_info()
     except Exception as e:
         LOG.debug(e)
         pass
@@ -358,7 +380,9 @@ def pytest_unconfigure():
         tc_res_path = log_dir + '/test_results.log'
         build_id = ProjVar.get_var('BUILD_ID')
         build_server = ProjVar.get_var('BUILD_SERVER')
-
+        session_id = ProjVar.get_var('SESSION_ID')
+        session_tag = ProjVar.get_var('REPORT_TAG')
+        session_str = 'Session ID: {}\n'.format(session_id) if session_id else ''
         total_exec = TestRes.PASSNUM + TestRes.FAILNUM
         # pass_rate = fail_rate = '0'
         if total_exec > 0:
@@ -370,8 +394,11 @@ def pytest_unconfigure():
                         'Build ID: {}\n'
                         'Build Server: {}\n'
                         'Automation LOGs DIR: {}\n'
+                        'Ends at: {}\n'
+                        'Session Tag: {}\n'
+                        '{}'    # test session id and tag
                         '{}'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server, ProjVar.get_var('LOG_DIR'),
-                                    version_and_patch))
+                                    tc_end_time, session_tag, session_str, version_and_patch))
                 # Add result summary to beginning of the file
                 f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
                         format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
@@ -381,8 +408,8 @@ def pytest_unconfigure():
             LOG.info("Test Results saved to: {}".format(tc_res_path))
             with open(tc_res_path, 'r') as fin:
                 print(fin.read())
-    except Exception:
-        LOG.exception("Failed to add session summary to test_results.py")
+    except Exception as e:
+        LOG.exception("Failed to add session summary to test_results.py. \nDetails: {}".format(e.__str__()))
 
     # Below needs con_ssh to be initialized
     try:
@@ -585,5 +612,5 @@ def pytest_sessionfinish(session):
 
     if stress_iteration > 0 and has_fail:
         # _thread.interrupt_main()
-        print('Printing traceback: \n' + '\n'.join(tracebacks))
+        # print('Printing traceback: \n' + '\n'.join(tracebacks))
         pytest.exit("Abort upon stress test failure")

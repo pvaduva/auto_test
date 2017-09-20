@@ -38,7 +38,7 @@ def _get_build_info(con_ssh, *args):
 
     Args:
         con_ssh (SSHClient):
-        **args: 'SW_VERSION', 'BUILD_TARGET', 'BUILD_ID', 'BUILD_HOST', etc...
+        **args: 'SW_VERSION', 'BUILD_TARGET', 'BUILD_ID', 'BUILD_SERVER', etc...
 
     Returns (list):
 
@@ -78,8 +78,9 @@ def get_build_id(labname=None, log_dir=None, con_ssh=None):
             build_id = build_id[0]
         else:
             build_date = re.findall('''BUILD_DATE=\"(.*)\"''', output)
-            if build_date and build_date[0]:
-                build_id = build_date[0].replace(' ', '_').replace(':', '-')
+            if build_date and build_date[0] != 'n/a':
+                build_id = build_date[0].rsplit(' ', 1)[0]
+                build_id = str(build_id).replace(' ', '_').replace(':', '_')
             else:
                 build_id = '_'
 

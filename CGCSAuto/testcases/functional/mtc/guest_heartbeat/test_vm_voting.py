@@ -209,10 +209,13 @@ def test_vm_voting(action, hb_flavor):
         vm_helper.wait_for_process('heartbeat', vm_ssh=vm_ssh, timeout=60, time_to_stay=10, check_interval=1,
                                    fail_ok=False)
 
+        LOG.tc_step("Wait for 30 seconds for vm initialization before touching file in /tmp")
+        time.sleep(30)
+
         LOG.tc_step("Set vote_no_to_{} from guest".format(action))
         cmd = 'touch /tmp/vote_no_to_{}'.format(action)
         vm_ssh.exec_cmd(cmd)
-        time.sleep(30)
+        time.sleep(15)
 
     _perform_action(vm_id, action, expt_fail=True)
 
@@ -220,7 +223,7 @@ def test_vm_voting(action, hb_flavor):
     cmd = "rm -f /tmp/vote_no_to_{}".format(action)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         vm_ssh.exec_cmd(cmd)
-        time.sleep(30)
+        time.sleep(15)
 
     _perform_action(vm_id, action, expt_fail=False)
 
@@ -256,6 +259,9 @@ def test_vm_voting_no_hb_migrate():
         LOG.tc_step("Check guest heartbeat process is not running")
         vm_helper.wait_for_process('heartbeat', vm_ssh=vm_ssh, timeout=60, time_to_stay=10, check_interval=1,
                                    fail_ok=False, disappear=True)
+
+        LOG.tc_step("Wait for 30 seconds for vm initialization before touching file in /tmp")
+        time.sleep(30)
 
         LOG.tc_step("Set vote_not_to_migrate from guest")
         vm_ssh.exec_cmd(cmd)

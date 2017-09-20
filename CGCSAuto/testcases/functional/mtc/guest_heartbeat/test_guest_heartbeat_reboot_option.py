@@ -41,10 +41,9 @@ def test_guest_heartbeat_reboot_option(vm_):
 
     Test Steps:
         - Create a flavor with heartbeat set to true, and auto recovery set to given value in extra spec
-        - Create a volume from tis image
-        - Boot a vm with the flavor and the volume
-        - Verify guest heartbeat is established via system event-logs
-        - Set vm to unhealthy state via touch /tmp/unhealthy
+        - Boot a vm from volume with the flavor
+        - Verify guest heartbeat is established via system event-list
+        - Set vm to unhealthy state by 'kill -9 <guest-client_pid>' on vm
         - Verify vm auto recovery behavior is as expected based on auto recovery setting in flavor
 
     Teardown:

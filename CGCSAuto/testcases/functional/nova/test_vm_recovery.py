@@ -1,4 +1,5 @@
 import re
+import time
 
 from pytest import mark
 
@@ -196,6 +197,9 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
+    LOG.tc_step("Wait for 30 seconds for vm initialization before touching file in /tmp")
+    time.sleep(30)
+
     LOG.tc_step("Login to vm via NatBox")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         LOG.tc_step("Run touch /tmp/unhealthy to put vm into unhealthy state.")
@@ -206,7 +210,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
         LOG.tc_step("Verify vm {} with auto recovery set to {}".format(step_str, expt_autorecovery))
         events = system_helper.wait_for_events(timeout=30, num=10, entity_instance_id=vm_id, start=start_time,
                                                fail_ok=True, strict=False,
-                                               **{'Event Log ID': EventLogID.REBOOT_VM_ISSUED})
+                                               **{'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
         natbox_ssh = NATBoxClient.get_natbox_client()
         natbox_ssh.send('')
         index = natbox_ssh.expect(["Power button pressed|Broken pipe"], timeout=70, fail_ok=True)
@@ -218,10 +222,6 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
     else:
         assert events
         assert 0 == index, "Auto recovery to reboot the vm is not kicked off within timeout."
-
-        LOG.tc_step("Verify instance rebooting active alarm is on")
-        system_helper.wait_for_events(timeout=300, num=10, entity_instance_id=vm_id, start=start_time,
-                                      fail_ok=False, **{'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
 
         LOG.tc_step("Wait for VM reach active state")
         vm_helper.wait_for_vm_values(vm_id, timeout=180, status=VMStatus.ACTIVE)
@@ -292,6 +292,9 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
+    LOG.tc_step("Wait for 30 seconds for vm initialization before touching file in /tmp")
+    time.sleep(30)
+
     LOG.tc_step("Login to vm via NatBox and run touch /tmp/unhealthy")
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         vm_ssh.exec_cmd("touch /tmp/unhealthy")
@@ -300,9 +303,9 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
 
     events_2 = system_helper.wait_for_events(timeout=EventLogTimeout.HEALTH_CHECK_FAIL, strict=False, fail_ok=True,
                                              **{'Entity Instance ID': vm_id, 'Event Log ID': [
-                                                EventLogID.REBOOT_VM_ISSUED, EventLogID.HEARTBEAT_CHECK_FAILED]})
+                                                EventLogID.REBOOT_VM_COMPLETE, EventLogID.HEARTBEAT_CHECK_FAILED]})
 
-    assert EventLogID.REBOOT_VM_ISSUED not in events_2, "Auto recovery is triggered even if it's set to false."
+    assert EventLogID.REBOOT_VM_COMPLETE not in events_2, "Auto recovery is triggered even if it's set to false."
 
     if heartbeat_enabled:
         assert EventLogID.HEARTBEAT_CHECK_FAILED in events_2, "VM heartbeat failure is not logged."

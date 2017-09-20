@@ -72,7 +72,7 @@ class Labs:
         'controller-0 ip': '128.224.151.47',
         'controller-1 ip': '128.224.151.48',
         'controller_nodes': [18541, 18542],
-        'compute_nodes': [22417,22418,21762,18537],
+        'compute_nodes': [22417, 22418, 21762, 18537],
         'storage_nodes': [18536, 18551],
     }
 
