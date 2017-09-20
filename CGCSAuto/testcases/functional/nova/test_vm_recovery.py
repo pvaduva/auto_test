@@ -128,8 +128,8 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
 
     LOG.tc_step("Boot a vm from image with auto recovery - {} and using the flavor with auto recovery - {}".format(
                 image_auto_recovery, flavor_auto_recovery))
-    vm_id = vm_helper.boot_vm(name='auto_recov', flavor=flavor_id, source='image', source_id=image_id)[1]
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+    vm_id = vm_helper.boot_vm(name='auto_recov', flavor=flavor_id, source='image', source_id=image_id,
+                              cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     LOG.tc_step("Verify vm auto recovery is {} by setting vm to error state.".format(expt_result))
@@ -188,8 +188,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
     LOG.tc_step("Boot a vm using the flavor with guest heartbeat - true and auto recovery - {}".format(auto_recovery))
-    vm_id = vm_helper.boot_vm(name='test_ar_with_hb', flavor=flavor_id)[1]
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
+    vm_id = vm_helper.boot_vm(name='test_ar_with_hb', flavor=flavor_id, cleanup='function')[1]
 
     LOG.tc_step("Verify vm heartbeat is on via event logs")
     system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=False,
@@ -270,8 +269,7 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
     LOG.tc_step("Boot a vm using flavor with auto recovery - False and guest heartbeat - {}".format(guest_heartbeat))
-    vm_id = vm_helper.boot_vm(name='test_hb_no_ar', flavor=flavor_id)[1]
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
+    vm_id = vm_helper.boot_vm(name='test_hb_no_ar', flavor=flavor_id, cleanup='function')[1]
 
     if heartbeat_enabled:
         step_str = ''
@@ -345,8 +343,7 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat):
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
     LOG.tc_step("Boot a vm with above flavor")
-    vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm(flavor=flavor_id, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     target_host = nova_helper.get_vm_host(vm_id)

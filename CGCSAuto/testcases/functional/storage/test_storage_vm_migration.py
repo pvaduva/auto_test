@@ -112,7 +112,6 @@ def vms_(volumes_):
                 'display_name': instance_name,
              }
         vms.append(vm)
-        # ResourceCleanup.add('vm', vm_id, scope='function')
         index += 1
     return vms
 
@@ -387,7 +386,6 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate():
     LOG.tc_step("Booting instance vm_0...")
 
     rc, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm_0', source='volume', source_id=vol_id_0, cleanup='function')
-    # ResourceCleanup.add('vm', vm_id, scope='function')
     assert rc == 0, "VM vm_0 did not succeed: reason {}".format(msg)
     time.sleep(5)
 

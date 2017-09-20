@@ -16,8 +16,7 @@ def base_vm():
     mgmt_nic = {'net-id': mgmt_net_id, 'vif-model': 'virtio'}
     tenant_net_nic = {'net-id': tenant_net_id, 'vif-model': 'virtio'}
     nics = [mgmt_nic, tenant_net_nic]
-    vm_id = vm_helper.boot_vm(name='base_vm', nics=nics)[1]
-    ResourceCleanup.add('vm', vm_id, scope='module')
+    vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='module')[1]
 
     _assign_ip_to_nic(vm_id)
 

@@ -29,8 +29,8 @@ def test_boot_vm(name, flavor, source, source_name):
 @mark.parametrize(('name', 'swap', 'ephemeral', 'storage', 'cpu_policy'),[
     (None, None, None, 'local_image', 'shared'),
     (None, 0, 1, 'local_image', 'shared'),
-    ('test', 1, 1, 'local_lvm', 'dedicated'),
-    ('test', 1, None, 'local_lvm', 'shared')
+    ('test', 512, 1, 'local_lvm', 'dedicated'),
+    ('test', 512, None, 'local_lvm', 'shared')
 ])
 def test_create_flavor(name, swap, ephemeral, storage, cpu_policy):
     flavor_id = nova_helper.create_flavor(name=name, swap=swap, ephemeral=ephemeral)[1]

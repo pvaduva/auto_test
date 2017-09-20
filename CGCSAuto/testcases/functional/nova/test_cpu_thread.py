@@ -257,8 +257,8 @@ class TestHTEnabled:
         pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=hosts_to_check, rtn_val='used_now')
 
         LOG.tc_step("Boot a vm with above flavor and ensure it's booted on a HT enabled host.")
-        vm_id = vm_helper.boot_vm(name='cpu_thread_{}'.format(cpu_thread_policy), flavor=flavor_id)[1]
-        ResourceCleanup.add('vm', vm_id)
+        vm_id = vm_helper.boot_vm(name='cpu_thread_{}'.format(cpu_thread_policy), flavor=flavor_id,
+                                  cleanup='function')[1]
 
         vm_host = nova_helper.get_vm_host(vm_id)
 
@@ -370,9 +370,7 @@ class TestHTEnabled:
 
         LOG.tc_step("Attempt to boot a vm with above flavor and {}".format(source))
         code, vm_id, msg, ignore = vm_helper.boot_vm(name='cpu_thread_image', flavor=flavor_id, source=source,
-                                                     source_id=source_id, fail_ok=True)
-        if vm_id:
-            ResourceCleanup.add('vm', vm_id)
+                                                     source_id=source_id, fail_ok=True, cleanup='function')
 
         # check for negative tests
         if expt_err is not None:
@@ -501,8 +499,7 @@ class TestHTEnabled:
             pre_boot_used_cpus = host_helper.get_vcpus_for_computes(hosts=ht_host, rtn_val='used_now')[ht_host]
 
             LOG.tc_step("Boot VM_{} with above flavor and ensure it's booted on the HT enabled host.".format(i+1))
-            vm_id = vm_helper.boot_vm(name='cpu_thread_isolate', flavor=flavor_id)[1]
-            ResourceCleanup.add('vm', vm_id)
+            vm_id = vm_helper.boot_vm(name='cpu_thread_isolate', flavor=flavor_id, cleanup='function')[1]
 
             vm_host = nova_helper.get_vm_host(vm_id)
             # TODO: Might need update if isolate vm has no priority to boot on ht host
@@ -552,9 +549,8 @@ class TestHTEnabled:
             format(total_vms_core_pairs, duplicated_pairs)
 
         LOG.tc_step("Boot one more vm, and ensure it does not boot on HT host due to insufficient cores on HT host.")
-        code, vm_id, msg, vol_id = vm_helper.boot_vm(name='insufficient_cores_isolate', flavor=flavor_id, fail_ok=True)
-        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-        ResourceCleanup.add('volume', vol_id)
+        code, vm_id, msg, vol_id = vm_helper.boot_vm(name='insufficient_cores_isolate', flavor=flavor_id, fail_ok=True,
+                                                     cleanup='function')
 
         # if non_ht_hosts:
         #     vm_host_ht_full = nova_helper.get_vm_host(vm_id)
@@ -594,8 +590,8 @@ class TestHTEnabled:
         nova_helper.set_flavor_extra_specs(flavor_id, **specs)
 
         LOG.tc_step("Boot a vm with above flavor and check it booted successfully on a hyperthreaded host.")
-        vm_id = vm_helper.boot_vm(name='vcpu{}_min{}_{}'.format(vcpus, min_vcpus, cpu_thread_pol), flavor=flavor_id)[1]
-        ResourceCleanup.add('vm', vm_id)
+        vm_id = vm_helper.boot_vm(name='vcpu{}_min{}_{}'.format(vcpus, min_vcpus, cpu_thread_pol), flavor=flavor_id,
+                                  cleanup='function')[1]
 
         LOG.tc_step("Wait for vm pingable from NatBox and guest_agent process running on VM")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
@@ -726,8 +722,7 @@ class TestHTEnabled:
 
         LOG.tc_step("Boot a vm with above flavor and ensure it's booted on a HT enabled host.")
         vm_name = 'cpu_thr_{}_{}'.format(cpu_thr_pol, vcpus)
-        vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, source=boot_source)[1]
-        ResourceCleanup.add('vm', vm_id)
+        vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, source=boot_source, cleanup='function')[1]
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
@@ -862,8 +857,8 @@ class TestHTEnabled:
         pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=hosts_to_check, rtn_val='used_now')
 
         LOG.tc_step("Boot a vm from {} with above flavor".format(boot_source))
-        vm_id = vm_helper.boot_vm(name=name_str, flavor=flavor_id, source=boot_source, source_id=source_id)[1]
-        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+        vm_id = vm_helper.boot_vm(name=name_str, flavor=flavor_id, source=boot_source, source_id=source_id,
+                                  cleanup='function')[1]
 
         vm_host = nova_helper.get_vm_host(vm_id)
 
@@ -1022,8 +1017,7 @@ class TestHTEnabled:
         LOG.tc_step("Boot a vm from {} with above flavor and ensure it's booted on HT host.".format(boot_source))
         vm_name = 'cpu_thr_{}_{}_{}'.format(cpu_thr_pol, cpu_thr_source, vcpus)
         vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, source=boot_source, source_id=source_id,
-                                  avail_zone='cgcsauto')[1]
-        ResourceCleanup.add('vm', vm_id)
+                                  avail_zone='cgcsauto', cleanup='function')[1]
 
         vm_host = nova_helper.get_vm_host(vm_id)
         assert vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
@@ -1122,9 +1116,7 @@ class TestHTDisabled:
 
         LOG.tc_step("Attempt to boot a vm with the above flavor.")
         code, vm_id, msg, vol_id = vm_helper.boot_vm(name='cpu_thread_{}'.format(cpu_thread_policy),
-                                                     flavor=flavor_id, fail_ok=True)
-        ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
-        ResourceCleanup.add('volume', vol_id)
+                                                     flavor=flavor_id, fail_ok=True, cleanup='function')
 
         if expt_err:
             assert 1 == code, "Boot vm cli is not rejected. Details: {}".format(msg)
@@ -1232,8 +1224,8 @@ class TestVariousHT:
         nova_helper.set_flavor_extra_specs(flavor_id, **specs)
 
         LOG.tc_step("Boot a vm with above flavor and ensure it's booted on a HT enabled host.")
-        vm_id = vm_helper.boot_vm(name='cpu_thread_{}'.format(cpu_thread_policy), flavor=flavor_id)[1]
-        ResourceCleanup.add('vm', vm_id)
+        vm_id = vm_helper.boot_vm(name='cpu_thread_{}'.format(cpu_thread_policy), flavor=flavor_id,
+                                  cleanup='function')[1]
 
         vm_host = nova_helper.get_vm_host(vm_id)
         if cpu_thread_policy == 'require':

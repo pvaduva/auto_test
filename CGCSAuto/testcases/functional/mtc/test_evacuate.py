@@ -32,31 +32,27 @@ class TestCgcsGuest:
         ResourceCleanup.add('flavor', flavor_1, scope='module')
 
         LOG.fixture_step("Create a flavor with ephemeral and swap disks")
-        flavor_2 = nova_helper.create_flavor('flv_localdisk', ephemeral=1, swap=1)[1]
+        flavor_2 = nova_helper.create_flavor('flv_localdisk', ephemeral=1, swap=512)[1]
         ResourceCleanup.add('flavor', flavor_2, scope='module')
 
         LOG.fixture_step("Boot vm1 from volume with flavor flv_nolocaldisk and wait for it pingable from NatBox")
         vm1_name = "vol_nolocal"
         vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, source='volume', cleanup='module')[1]
-        # ResourceCleanup.add('vm', vm1, scope='module')
         vm_helper.wait_for_vm_pingable_from_natbox(vm1)
 
         LOG.fixture_step("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
         vm2_name = "vol_local"
         vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, source='volume', cleanup='module')[1]
-        # ResourceCleanup.add('vm', vm2, scope='module')
         vm_helper.wait_for_vm_pingable_from_natbox(vm2)
 
         LOG.fixture_step("Boot vm3 from image with flavor flv_nolocaldisk and wait for it pingable from NatBox")
         vm3_name = "image_novol"
         vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, source='image', cleanup='module')[1]
-        # ResourceCleanup.add('vm', vm3, scope='module', del_vm_vols=False)
         vm_helper.wait_for_vm_pingable_from_natbox(vm3)
 
         LOG.fixture_step("Boot vm4 from image with flavor flv_nolocaldisk and wait for it pingable from NatBox")
         vm4_name = 'image_vol'
         vm4 = vm_helper.boot_vm(vm4_name, flavor_1, source='image', cleanup='module')[1]
-        # ResourceCleanup.add('vm', vm4, scope='module', del_vm_vols=True)
         vm_helper.wait_for_vm_pingable_from_natbox(vm4)
 
         return [vm1, vm2, vm3, vm4]

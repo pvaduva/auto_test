@@ -71,7 +71,7 @@ class TestDefaultGuest:
         ResourceCleanup.add('flavor', flavor_1, scope='class')
 
         LOG.tc_step("Create another flavor with ephemeral and swap disks")
-        flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=1, storage_backing=storage_backing,
+        flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512, storage_backing=storage_backing,
                                              check_storage_backing=False)[1]
         ResourceCleanup.add('flavor', flavor_2, scope='class')
 

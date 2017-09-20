@@ -41,6 +41,5 @@ def test_vm_topo_check():
 ])
 def test_boot_and_ping_vm(guest_os, opensuse11_image, opensuse12_image, opensuse13_image, rhel6_image, rhel7_image):
 
-    vm_id = vm_helper.boot_vm(guest_os=guest_os, source='image')[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm(guest_os=guest_os, source='image', cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

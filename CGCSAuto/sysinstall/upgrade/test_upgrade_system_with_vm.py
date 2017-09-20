@@ -42,19 +42,17 @@ def vms_with_upgrade():
     ResourceCleanup.add('flavor', flavor_1)
 
     LOG.fixture_step("Create another flavor with ephemeral and swap disks")
-    flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=1, check_storage_backing=False)[1]
+    flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512, check_storage_backing=False)[1]
     ResourceCleanup.add('flavor', flavor_2)
 
     LOG.fixture_step("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
     vm1_name = "vol_root"
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.TENANT2)
-    vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, auth_info=Tenant.TENANT2)[1]
-    ResourceCleanup.add('vm', vm1, del_vm_vols=True )
+    vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, auth_info=Tenant.TENANT2, cleanup='function')[1]
 
     LOG.fixture_step("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
     vm2_name = "vol_ephemswap"
-    vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, auth_info=Tenant.TENANT2)[1]
-    ResourceCleanup.add('vm', vm2, del_vm_vols=True )
+    vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, auth_info=Tenant.TENANT2, cleanup='function')[1]
 
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     vm_helper.wait_for_vm_pingable_from_natbox(vm1)
@@ -63,14 +61,12 @@ def vms_with_upgrade():
 
     LOG.fixture_step("Boot vm3 from image with flavor flv_rootdisk and wait for it pingable from NatBox")
     vm3_name = "image_root"
-    vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, auth_info=Tenant.TENANT2)[1]
-    ResourceCleanup.add('vm', vm3, del_vm_vols=True)
+    vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, auth_info=Tenant.TENANT2, cleanup='function')[1]
 
     LOG.fixture_step("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it "
                 "pingable from NatBox")
     vm4_name = 'image_root_attachvol'
-    vm4 = vm_helper.boot_vm(vm4_name, flavor_1, auth_info=Tenant.TENANT2)[1]
-    ResourceCleanup.add('vm', vm4, del_vm_vols=True)
+    vm4 = vm_helper.boot_vm(vm4_name, flavor_1, auth_info=Tenant.TENANT2, cleanup='function')[1]
 
     vol = cinder_helper.create_volume(bootable=False)[1]
     ResourceCleanup.add('volume', vol)
@@ -78,8 +74,7 @@ def vms_with_upgrade():
 
     LOG.fixture_step("Boot vm5 from image with flavor flv_localdisk and wait for it pingable from NatBox")
     vm5_name = 'image_ephemswap'
-    vm5 = vm_helper.boot_vm(vm5_name, flavor_2, source='image', auth_info=Tenant.TENANT2)[1]
-    ResourceCleanup.add('vm', vm5, del_vm_vols=True)
+    vm5 = vm_helper.boot_vm(vm5_name, flavor_2, source='image', auth_info=Tenant.TENANT2, cleanup='function')[1]
 
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
 

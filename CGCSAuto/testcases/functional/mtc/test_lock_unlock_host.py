@@ -90,13 +90,11 @@ def _test_lock_unlock_vm_host():
 
     LOG.tc_step("Boot a vm that can be live-migrated")
     vm_id1 = vm_helper.boot_vm(name='lock_unlock_test', cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id1)
 
     LOG.tc_step("Boot a vm that cannot be live-migrated")
-    flavor = nova_helper.create_flavor('swap1', swap=1)[1]
+    flavor = nova_helper.create_flavor('swap512', swap=512)[1]
     ResourceCleanup.add('flavor', flavor)
     vm_id2 = vm_helper.boot_vm(name='volume_swap', flavor=flavor, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id2)
 
     vm_host = nova_helper.get_vm_host(vm_id2)
     HostsToRecover.add(vm_host)

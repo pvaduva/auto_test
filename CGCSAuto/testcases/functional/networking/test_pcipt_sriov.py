@@ -76,7 +76,6 @@ def vif_model_check(request):
         nics.append({'net-id': extra_pcipt_net, 'vif-model': 'virtio'})
 
     base_vm = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='module')[1]
-    # ResourceCleanup.add('vm', base_vm, scope='module')
     vm_helper.wait_for_vm_pingable_from_natbox(base_vm)
     vm_helper.ping_vms_from_vm(base_vm, base_vm, net_types=['mgmt', net_type], vlan_zero_only=True)
 

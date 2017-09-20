@@ -222,16 +222,16 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'boot_source'), [
     ('local_image', 0, 0, 'image'),
     ('local_image', 1, 0, 'volume'),
-    ('local_image', 1, 1, 'volume'),
-    ('local_image', 0, 1, 'image'),
+    ('local_image', 1, 512, 'volume'),
+    ('local_image', 0, 512, 'image'),
     ('local_lvm', 0, 0, 'image'),
     ('local_lvm', 1, 0, 'volume'),
-    ('local_lvm', 0, 1, 'volume'),
-    ('local_lvm', 1, 1, 'image'),
+    ('local_lvm', 0, 512, 'volume'),
+    ('local_lvm', 1, 512, 'image'),
     ('remote', 0, 0, 'image'),
     ('remote', 1, 0, 'volume'),
-    ('remote', 0, 1, 'image'),
-    ('remote', 1, 1, 'volume'),
+    ('remote', 0, 512, 'image'),
+    ('remote', 1, 512, 'volume'),
 ])
 def test_migrate_vm_negative_no_other_host(storage_backing, ephemeral, swap, boot_source, hosts_per_stor_backing):
     """
@@ -288,7 +288,6 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
     boot_source = 'volume' if vm_type == 'volume' else 'image'
     LOG.tc_step("Boot a vm from {}".format(boot_source))
     vm_id = vm_helper.boot_vm('live-mig', flavor=flavor_id, source=boot_source, reuse_vol=False, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id)
 
     if vm_type == 'image_with_vol':
         LOG.tc_step("Attach volume to vm")

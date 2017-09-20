@@ -127,8 +127,7 @@ class TestVariousGuests:
 
         LOG.tc_step("Boot a {} vm with above flavor from {}".format(guest_os, boot_source))
         vm_id = vm_helper.boot_vm('nova_actions-{}-{}'.format(guest_os, boot_source), flavor=flavor_id,
-                                  source=boot_source, source_id=source_id, guest_os=guest_os)[1]
-        ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+                                  source=boot_source, source_id=source_id, guest_os=guest_os, cleanup='function')[1]
 
         LOG.tc_step("Wait for VM pingable from NATBOX")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

@@ -83,7 +83,6 @@ def test_dvr_update_router(router_info, _bring_up_router):
 
     LOG.tc_step("Boot a vm before updating router and ping vm from NatBox")
     vm_id = vm_helper.boot_vm(name='dvr_update', reuse_vol=False, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
     for update_to_val in [False, True]:

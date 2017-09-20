@@ -855,15 +855,15 @@ def _test_import_with_cache_raw():
         assert flv[0] == 0, flv[1]
 
         LOG.tc_step('Launch VM from created volume')
-        vm_id = vm_helper.boot_vm(name=img_name, flavor=flv[1], source='volume', source_id=volume_id)[1]
-        ResourceCleanup.add('vm', vm_id)
+        vm_id = vm_helper.boot_vm(name=img_name, flavor=flv[1], source='volume', source_id=volume_id,
+                                  cleanup='function')[1]
         vm_list.append(vm_id)
 
         # When spawning, make sure we don't download the image
         LOG.tc_step('Launch VM from image')
         img_name2 = img_name + '_fromimage'
-        vm_id2 = vm_helper.boot_vm(name=img_name2, flavor=flv[1], source='image', source_id=rbd_img_id)[1]
-        ResourceCleanup.add('vm', vm_id2)
+        vm_id2 = vm_helper.boot_vm(name=img_name2, flavor=flv[1], source='image', source_id=rbd_img_id,
+                                   cleanup='function')[1]
         vm_list.append(vm_id2)
 
         LOG.tc_step('Delete VMs {}'.format(vm_list))
@@ -1118,15 +1118,14 @@ def _test_import_large_images_with_cache_raw():
     assert flv[0] == 0, flv[1]
 
     LOG.tc_step('Launch VM from created volume')
-    vm_id = vm_helper.boot_vm(name=qcow2_img, flavor=flv[1], source='volume', source_id=volume_id)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm(name=qcow2_img, flavor=flv[1], source='volume', source_id=volume_id,
+                              cleanup='function')[1]
     vm_list.append(vm_id)
 
     # When spawning, make sure we don't download the image
     LOG.tc_step('Launch VM from image')
     img_name2 = qcow2_img + '_fromimage'
-    vm_id2 = vm_helper.boot_vm(name=img_name2, flavor=flv[1], source='image', source_id=out[1])[1]
-    ResourceCleanup.add('vm', vm_id2)
+    vm_id2 = vm_helper.boot_vm(name=img_name2, flavor=flv[1], source='image', source_id=out[1], cleanup='function')[1]
     vm_list.append(vm_id2)
 
     # yang TODO use ResourceCleanup in case of test fail.

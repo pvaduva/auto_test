@@ -137,8 +137,7 @@ def test_boot_vm_vcpu_scheduler(vcpu_num, vcpu_scheduler):
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_spec)
 
     LOG.tc_step("Boot a vm with above flavor.")
-    vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm(flavor=flavor_id, cleanup='function')[1]
 
     instance_name, host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"], strict=False)
 

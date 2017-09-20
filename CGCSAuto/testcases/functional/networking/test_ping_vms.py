@@ -85,7 +85,6 @@ def test_ping_between_two_vms(guest_os, vifs):
         LOG.tc_step("Boot a {} vm with {} vifs from above flavor and volume".format(guest_os, vifs))
         vm_id = vm_helper.boot_vm('{}_vifs'.format(guest_os), flavor=flavor_id, cleanup='function',
                                   source='volume', source_id=vol_id, nics=nics, guest_os=guest_os)[1]
-        # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
         LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)

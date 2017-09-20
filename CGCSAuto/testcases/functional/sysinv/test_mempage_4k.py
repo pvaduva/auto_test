@@ -89,9 +89,9 @@ def ensure_sufficient_4k_pages(request):
 
 @mark.parametrize(('ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type'), [
     mark.p1((0, 0, None, 1, 'volume')),
-    mark.p2((1, 1, 'dedicated', 2, 'volume')),
+    mark.p2((1, 512, 'dedicated', 2, 'volume')),
     mark.p1((0, 0, 'dedicated', 3, 'image')),
-    mark.p2((1, 1, None, 1, 'image')),
+    mark.p2((1, 512, None, 1, 'image')),
 ])
 def test_migrate_4k_vm_positive(ephemeral, swap, cpu_pol, vcpus, vm_type, ensure_sufficient_4k_pages):
     """

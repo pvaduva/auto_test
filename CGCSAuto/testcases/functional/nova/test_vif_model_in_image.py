@@ -43,12 +43,9 @@ def test_attach_cinder_volume_to_instance(vol_vif):
             ]
 
     LOG.tc_step("Boot up VM from default tis image")
-    vm_id = vm_helper.boot_vm(name='vm_attach_vol_{}'.format(vol_vif), source='image', nics=nics)[1]
+    vm_id = vm_helper.boot_vm(name='vm_attach_vol_{}'.format(vol_vif), source='image', nics=nics, cleanup='function')[1]
 
     pre_nics = network_helper.get_vm_nics(vm_id)
-
-    # added to resource mangement for vm teardown
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
     LOG.tc_step("Create an image with vif model metadata set to {}".format(vol_vif))
     img_id = glance_helper.create_image('vif_{}'.format(vol_vif), **{ImageMetadata.VIF_MODEL: vol_vif})[1]
@@ -94,8 +91,8 @@ def test_vif_model_from_image(img_vif):
             ]
 
     LOG.tc_step("Boot a vm from above volume with following nics: {}".format(nics))
-    vm_id = vm_helper.boot_vm(name='vif_img_{}'.format(img_vif), nics=nics, source='volume', source_id=volume_id)[1]
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+    vm_id = vm_helper.boot_vm(name='vif_img_{}'.format(img_vif), nics=nics, source='volume', source_id=volume_id,
+                              cleanup='function')[1]
 
     LOG.tc_step("Verify nics info from nova show to ensure tenant net vif is as specified in image metadata")
     table_ = table_parser.table(cli.nova('show', vm_id, auth_info=Tenant.ADMIN))

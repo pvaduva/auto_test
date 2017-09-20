@@ -27,7 +27,6 @@ def boot_vm_(flavor):
     vm_name = 'vm_with_hb'
     LOG.tc_step("Boot a vm with heartbeat enabled")
     vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='function')
 
     event = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
@@ -245,7 +244,6 @@ def test_vm_voting_no_hb_migrate():
     LOG.tc_step("Boot a vm without guest heartbeat")
     vm_name = 'vm_no_hb_migrate'
     vm_id = vm_helper.boot_vm(name=vm_name, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='function')
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     LOG.tc_step("Check heartbeat event is NOT logged")

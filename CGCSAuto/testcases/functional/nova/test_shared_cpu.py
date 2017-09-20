@@ -135,11 +135,8 @@ class TestSharedCpuDisabled:
         nova_helper.set_flavor_extra_specs(flavor, **numa_nodes_flv)
         nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.SHARED_VCPU: shared_vcpu})
 
-        code, vm_id, output, vol_id = vm_helper.boot_vm(name='shared_cpu_negative', flavor=flavor, fail_ok=True)
-        if vm_id:
-            ResourceCleanup.add('vm', vm_id)
-        if vol_id:
-            ResourceCleanup.add('volume', vol_id)
+        code, vm_id, output, vol_id = vm_helper.boot_vm(name='shared_cpu_negative', flavor=flavor, fail_ok=True,
+                                                        cleanup='function')
 
         cores_quota = int(nova_helper.get_quotas('cores')[0])
         if vcpus >= cores_quota:
@@ -156,8 +153,7 @@ class TestSharedCpuDisabled:
 
     @fixture(scope='class')
     def basic_vm(self):
-        vm_id = vm_helper.boot_vm()[1]
-        ResourceCleanup.add('vm', vm_id, scope='class')
+        vm_id = vm_helper.boot_vm(cleanup='class')[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         return vm_id
 
@@ -280,11 +276,8 @@ class TestSharedCpuEnabled:
         nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.SHARED_VCPU: shared_vcpu})
 
         LOG.tc_step("Boot a vm with above flavor, and ensure vm is booted successfully")
-        code, vm_id, output, vol_id = vm_helper.boot_vm(name='shared_cpu', flavor=flavor, fail_ok=True)
-        if vm_id:
-            ResourceCleanup.add('vm', vm_id)
-        if vol_id:
-            ResourceCleanup.add('volume', vol_id)
+        code, vm_id, output, vol_id = vm_helper.boot_vm(name='shared_cpu', flavor=flavor, fail_ok=True,
+                                                        cleanup='function')
 
         assert 0 == code, "Boot vm failed. Details: {}".format(output)
 

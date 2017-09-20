@@ -286,6 +286,63 @@ def mount_attached_volume(vm_id, rootfs, vm_image_name=None):
             return True
 
 
+def auto_mount_disks(vm_id, rootfs, vm_image_name=None):
+    """
+    Mounts an attached volume on VM
+    Args:
+        vm_id (str): - the vm uuid where the volume is attached to
+        rootfs (str) - the device name of the attached volume like vda, vdb, vdc, ....
+        vm_image_name (str): - the  guest image the vm is booted with
+
+
+    Returns: bool
+
+    """
+    wait_for_vm_pingable_from_natbox(vm_id)
+    if vm_image_name is None:
+        vm_image_name = nova_helper.get_vm_image_name(vm_id)
+
+    with ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name) as vm_ssh:
+
+        if not is_attached_volume_mounted(vm_id, rootfs, vm_image_name=vm_image_name, vm_ssh=vm_ssh):
+            LOG.info("Creating ext4 file system on /dev/{} ".format(rootfs))
+            cmd = "mkfs -t ext4 /dev/{}".format(rootfs)
+            rc, output = vm_ssh.exec_cmd(cmd)
+            if rc != 0:
+                msg = "Failed to create filesystem on /dev/{}: {}".format(rootfs, output)
+                LOG.warning(msg)
+                return False
+            LOG.info("Mounting /dev/{} to /mnt/volume".format(rootfs))
+            cmd = "test -e /mnt/volume"
+            rc, output = vm_ssh.exec_cmd(cmd)
+            mount_cmd = ''
+            if rc == 1:
+                mount_cmd += "mkdir -p /mnt/volume; mount /dev/{} /mnt/volume".format(rootfs)
+            else:
+                mount_cmd += "mount /dev/{} /mnt/volume".format(rootfs)
+
+            rc, output = vm_ssh.exec_cmd(mount_cmd)
+            if rc != 0:
+                msg = "Failed to mount /dev/{}: {}".format(rootfs, output)
+                LOG.warning(msg)
+                return False
+
+            LOG.info("Adding /dev/{} mounting point in /etc/fstab".format(rootfs))
+            cmd = "echo \"/dev/{} /mnt/volume ext4  defaults 0 0\" >> /etc/fstab".format(rootfs)
+
+            rc, output = vm_ssh.exec_cmd(cmd)
+            if rc != 0:
+                msg = "Failed to add /dev/{} mount point to /etc/fstab: {}".format(rootfs, output)
+                LOG.warning(msg)
+
+            LOG.info("/dev/{} is mounted to /mnt/volume".format(rootfs))
+            return True
+        else:
+            LOG.info("/dev/{} is already mounted to /mnt/volume".format(rootfs))
+            return True
+
+
+
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
             block_device_mapping=None,  vm_host=None, avail_zone=None, file=None, config_drive=False, meta=None,
@@ -3385,7 +3442,7 @@ def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='func
         ResourceCleanup.add('flavor', flavor_1, scope=cleanup)
 
     LOG.info("Create another flavor with ephemeral and swap disks")
-    flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=1, storage_backing=storage_backing)[1]
+    flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512, storage_backing=storage_backing)[1]
     if cleanup:
         ResourceCleanup.add('flavor', flavor_2, scope=cleanup)
 

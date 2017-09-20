@@ -41,8 +41,6 @@ def test_boot_vm_with_configurable_pci_addr_negative(unsupported_pci_addr, vif_m
             ]
     code, vm_id, output, vol_id = vm_helper.boot_vm(cleanup='function', name='pci_negative', source='image', nics=nics,
                                                     fail_ok=True)
-    # if vm_id:
-    #     ResourceCleanup.add('vm', vm_id)
 
     assert code in [1, 4], "Boot VM is not rejected"
     assert eval(expt_err) in output, "Expected error message is not found"

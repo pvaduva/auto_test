@@ -17,6 +17,7 @@ tc_start_time = None
 tc_end_time = None
 has_fail = False
 stress_iteration = -1
+no_teardown = False
 tracebacks = []
 
 
@@ -152,6 +153,13 @@ def pytest_runtest_makereport(item, call, __multicall__):
                 TestRes.FAILNUM += 1
                 pytest.exit("Skip rest of the iterations upon stress test failure")
 
+    if no_teardown and report.when == 'call':
+        for key, val in res.items():
+            if val[0] == 'Skipped':
+                break
+        else:
+            pytest.exit("No teardown and skip rest of the tests if any")
+
     return report
 
 #
@@ -239,6 +247,8 @@ def pytest_configure(config):
     change_admin = config.getoption('changeadmin')
     global stress_iteration
     stress_iteration = config.getoption('repeat')
+    global no_teardown
+    no_teardown = config.getoption('noteardown')
     install_conf = config.getoption('installconf')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
@@ -335,6 +345,7 @@ def pytest_addoption(parser):
     parser.addoption('--openstackcli', '--openstack_cli', '--openstack-cli', action='store_true', dest='openstackcli',
                      help=openstackcli_help)
     parser.addoption('--repeat', action='store', metavar='repeat', type=int, default=-1, help=stress_help)
+    parser.addoption('--no-teardown', '--no_teardown', '--noteardown', dest='noteardown', action='store_true')
 
     # Lab install options:
     parser.addoption('--resumeinstall', '--resume-install', dest='resumeinstall', action='store_true',
@@ -615,3 +626,6 @@ def pytest_sessionfinish(session):
         # _thread.interrupt_main()
         # print('Printing traceback: \n' + '\n'.join(tracebacks))
         pytest.exit("Abort upon stress test failure")
+
+    if no_teardown:
+        pytest.exit("Stop session after first test without teardown")
