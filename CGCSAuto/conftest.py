@@ -262,7 +262,9 @@ def pytest_configure(config):
         log_dir = resultlog + "AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
     os.makedirs(log_dir, exist_ok=True)
 
-    report_tag = report_tag if report_tag else 'cgcsauto'
+    if report_all:
+        report_tag = report_tag if report_tag else 'cgcsauto'
+
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
                      report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli)
@@ -382,7 +384,7 @@ def pytest_unconfigure():
         build_server = ProjVar.get_var('BUILD_SERVER')
         session_id = ProjVar.get_var('SESSION_ID')
         session_tag = ProjVar.get_var('REPORT_TAG')
-        session_str = 'Session ID: {}\n'.format(session_id) if session_id else ''
+        session_str = 'Session Tag: {}\nSession ID: {}\n'.format(session_tag, session_id) if session_id else ''
         total_exec = TestRes.PASSNUM + TestRes.FAILNUM
         # pass_rate = fail_rate = '0'
         if total_exec > 0:
@@ -395,10 +397,9 @@ def pytest_unconfigure():
                         'Build Server: {}\n'
                         'Automation LOGs DIR: {}\n'
                         'Ends at: {}\n'
-                        'Session Tag: {}\n'
                         '{}'    # test session id and tag
                         '{}'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server, ProjVar.get_var('LOG_DIR'),
-                                    tc_end_time, session_tag, session_str, version_and_patch))
+                                    tc_end_time, session_str, version_and_patch))
                 # Add result summary to beginning of the file
                 f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
                         format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
