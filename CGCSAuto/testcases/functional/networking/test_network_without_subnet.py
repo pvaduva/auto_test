@@ -27,10 +27,13 @@ def base_vm():
 @fixture(scope='module', autouse=True)
 def update_net_quota(request):
     network_quota = network_helper.get_quota('network')
+    instance_quota = nova_helper.get_quotas('instances')[0]
     network_helper.update_quotas(network=network_quota + 20)
+    nova_helper.update_quotas(instances=instance_quota + 5)
 
     def _revert_quota():
         network_helper.update_quotas(network=network_quota)
+        nova_helper.update_quotas(instances=instance_quota)
     request.addfinalizer(_revert_quota)
 
 
