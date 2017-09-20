@@ -36,9 +36,9 @@ def update_net_quota(request):
 
 @mark.parametrize(('if_attach_arg', 'vif_model'), [
     ('port_id', 'virtio'),
-    ('port_id', 'avp'),
-    ('net-id', 'avp'),
-    ('net-id', 'virtio')
+    #('port_id', 'avp'),
+    ('net-id', 'avp')
+    #('net-id', 'virtio')
 ])
 def test_network_without_subnets(base_vm, if_attach_arg, vif_model):
     """
