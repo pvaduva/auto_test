@@ -139,8 +139,6 @@ def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vi
 
     return tenant_port_id
 
-
-
 def _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, tenant_port_id):
 
     """
@@ -175,13 +173,11 @@ def _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, v
     with vm_helper.ssh_to_vm_from_natbox(vm_id=base_vm_id) as vm_ssh:
         network_helper._ping_server(ip_addr, ssh_client=vm_ssh)
 
-
 def _remove_dhclient_cache(vm_id):
     dhclient_leases_cache = '/var/lib/dhclient/dhclient.leases'
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         if vm_ssh.file_exists(dhclient_leases_cache):
             vm_ssh.exec_sudo_cmd('rm {}'.format(dhclient_leases_cache))
-
 
 def _assign_ip_to_nic(vm_id):
     """
@@ -194,8 +190,6 @@ def _assign_ip_to_nic(vm_id):
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         if vm_ssh.file_exists(dhclient_leases_cache):
             vm_ssh.exec_sudo_cmd('rm {}'.format(dhclient_leases_cache))
-
-        #values = list(range(2, 254))
         values = random.sample(range(2, 255), 5)
         vnic = vm_nics[-1]
         mac_addr = vnic['mac_address']
