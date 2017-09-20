@@ -95,7 +95,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
             runStartDate=reportDate,
             date_modified=reportDate,
             testResult=result,
-            releaseName='Titanium Cloud Program',
+            releaseName='Titanium Cloud R5',
             tcTotal=1,
             testExecutionTimeStamp=reportDate,
             id=tmp_id,
