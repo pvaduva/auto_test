@@ -142,6 +142,7 @@ def insert_test_session(cursor, **session_info):
             tag, tag for filtering and reporting. e.g., weekly_storage, biweekly_mtc, regular_sanity
             name, automation log dir for automated test session or campaign session id for manual session via xstudio
                 e.g., yow-cgcs-test:/sandbox/AUTOMATION_LOGS/wcp_3_6/201709121009/
+            session_notes, system configs, etc
 
     Returns (str): <id> (session uuid)
 
@@ -337,7 +338,7 @@ def upload_test_result(session_id, test_name, result, start_time, end_time, pars
 
 
 def upload_test_session(lab_name, build_id, log_dir, tag=None, build_server=None, sw_version=None, patches=None,
-                        comments=None):
+                        session_notes=None):
     session_info = {
         'build_id': build_id.lower(),
         'name': log_dir,
@@ -347,7 +348,7 @@ def upload_test_session(lab_name, build_id, log_dir, tag=None, build_server=None
         'build_server': build_server.lower() if build_server else None,
         'sw_version': sw_version,
         'patch': patches,
-        'comments': comments,
+        'session_notes': session_notes,
         'tag': tag
     }
 
@@ -390,23 +391,29 @@ def _get_lab_full_name(lab_short_name):
 if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option('-t', '--tag', action='store', type='string', dest='session_tag', help='test session tag')
+    parser.add_option('--lab', '--labs', action='store_true', dest='upload_lab', help='Upload labs to lab_info table')
 
     options, args = parser.parse_args()
-    try:
-        logdir = args[0]
-    except IndexError:
-        raise ValueError("Automation session log directory has to be provided!\n"
-                         "Usage: upload_results.py <log_dir>")
 
-    # labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
+    print(str(options.upload_lab))
 
-    # lab_names = sorted([lab_['name'] for lab_ in labs if isinstance(lab_, dict) and lab_['name'].startswith('yow')])
-    #
-    # with open_conn_and_get_cur(dbname=DB_NAME, user=USER, host=HOST, password=PASSWORD) as cur:
-    #     for lab_name in lab_names:
-    #         insert_lab(lab_name, cursor=cur, check_first=True)
-    #
-    # print("All labs are uploaded!")
+    if options.upload_lab:
+        labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
 
-    with open_conn_and_get_cur(dbname=DB_NAME, user=USER, host=HOST, password=PASSWORD) as cur:
-        upload_test_results(cursor=cur, log_dir=logdir, tag=options.session_tag)
+        lab_names = sorted([lab_['name'] for lab_ in labs if isinstance(lab_, dict) and lab_['name'].startswith('yow')])
+
+        with open_conn_and_get_cur(dbname=DB_NAME, user=USER, host=HOST, password=PASSWORD) as cur:
+            for lab_name in lab_names:
+                insert_lab(lab_name, cursor=cur, check_first=True)
+
+        print("All labs are uploaded!")
+
+    else:
+        try:
+            logdir = args[0]
+        except IndexError:
+            raise ValueError("Automation session log directory has to be provided!\n"
+                             "Usage: upload_results.py <log_dir>")
+
+        with open_conn_and_get_cur(dbname=DB_NAME, user=USER, host=HOST, password=PASSWORD) as cur:
+            upload_test_results(cursor=cur, log_dir=logdir, tag=options.session_tag)
