@@ -235,7 +235,7 @@ def pytest_configure(config):
     report_all = config.getoption('reportall')
     report_tag = config.getoption('report_tag')
     resultlog = config.getoption('resultlog')
-    session_log_dir = config.getoption('logdir')
+    session_log_dir = config.getoption('sessiondir')
 
     # Test case params on installed system
     lab_arg = config.getoption('lab')
@@ -332,8 +332,8 @@ def pytest_addoption(parser):
     parser.addoption('--reportall', '--report_all', '--report-all', dest='reportall', action='store_true',
                      help=report_help)
     parser.addoption('--report_tag', action='store', dest='report_tag', metavar='tagname', default=None, help=tag_help)
-    parser.addoption('--logdir', '--log_dir', '--log-dir', action='store', dest='logdir', metavar='sessionlogdir',
-                     default=None, help=logdir_help)
+    parser.addoption('--sessiondir', '--session_dir', '--session-dir', action='store', dest='sessiondir',
+                     metavar='sessiondir', default=None, help=logdir_help)
 
     # Test session options on installed lab:
     parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
