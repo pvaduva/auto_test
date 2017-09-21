@@ -444,8 +444,11 @@ def execute_cmd(connect, cmd, allow_fail=False, prompt=Prompt.CONTROLLER_PROMPT)
 
     return index, output
 
-
-def test_wrsroot_aging_and_swact():
+@mark.parametrize(('swact'), (
+    ('swact'),
+    ('no-swact'),
+))
+def test_wrsroot_aging_and_swact(swact):
     """
     Test password aging.
 
@@ -481,9 +484,8 @@ def test_wrsroot_aging_and_swact():
     LOG.info('wait for {} seconds after closing the ssh connect to the active-controller'.format(wait_time))
     time.sleep(wait_time)
 
-    # this is tested and working
     # command = 'chage -d 0 -M 0 wrsroot'
-    # this is under testing to see if it's 100% working
+    # this is from the test plan
     command = 'chage -M 0 wrsroot'
     LOG.info('changing password aging using command:\n{}'.format(command))
     connect = log_in_raw(host, user, original_password)
@@ -497,9 +499,10 @@ def test_wrsroot_aging_and_swact():
     LOG.info('wait for {} seconds after aging settings been modified'.format(wait_time))
     time.sleep(wait_time)
 
-    LOG.tc_step('Swact host')
-    swact_host_after_reset_wrsroot_raw(connect, active_controller_name)
-    LOG.info('OK, host swact')
+    if swact == 'swact':
+        LOG.tc_step('Swact host')
+        swact_host_after_reset_wrsroot_raw(connect, active_controller_name)
+        LOG.info('OK, host swact')
 
     LOG.info('Closing raw ssh connection to the active controller\n')
     connect.logout()
@@ -514,8 +517,10 @@ def test_wrsroot_aging_and_swact():
     new_password = security_helper.gen_linux_password(exclude_list=exclude_list)
     set_password = first_login_to_floating_ip(user, original_password, new_password)[1]
     if set_password != new_password:
-        LOG.warn('first time login did not ask for new password:{}, '
-                 'current password should still been in effective\n'.format(new_password, original_password))
+        message = 'first time login did not ask for new password:{}, ' \
+                  'current password should still been in effective\n'.format(new_password, original_password)
+        LOG.warn(message)
+        assert False, message
 
     new_password = set_password
     if new_password != original_password:
@@ -575,7 +580,7 @@ def login_host_first_time(host, user, password, new_password, expect_fail=False,
         (
             password,
             (r'\(current\) UNIX password:',),
-            (TIMEOUT,),
+            (Prompt.CONTROLLER_PROMPT, TIMEOUT),
         ),
         (
             password,
@@ -607,12 +612,14 @@ def login_host_first_time(host, user, password, new_password, expect_fail=False,
             LOG.info('cmd:{}, \nexpected:{}\n'.format(cmd, expected_output))
 
             if first_cmd:
-                options = ' '.join(['-o {}={}'.format(k, v) for k, v in SSH_OPTS.items()])
+                options = ' '.join(['-o "{}={}"'.format(k, v) for k, v in SSH_OPTS.items()])
 
+                # cmd = '{} {} -l {} {}'.format(cmd, options, user, host)
                 cmd = '{} {} -l {} {}'.format(cmd, options, user, host)
                 LOG.info('first time login: sending cmd:{}, \nexpected:{}\n'.format(cmd, expected_output))
 
                 spawn._spawn(connect, cmd)
+                connect.force_password = True
                 first_cmd = False
 
             else:
@@ -673,6 +680,7 @@ def log_in_raw(host, user, password, expect_fail=False):
     # cmd = 'ssh -q -l {} {}'.format(user, host)
     LOG.info('send cmd:{}\n'.format(cmd))
     spawn._spawn(connect, cmd)
+    connect.force_password = True
 
     index = connect.expect(['Are you sure you want to continue connecting (yes/no)?'])
     if index != 0:

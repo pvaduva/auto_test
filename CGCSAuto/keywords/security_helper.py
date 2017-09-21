@@ -781,7 +781,7 @@ def change_linux_user_password(password, new_password, user='wrsroot', host=None
         (
             password,
             ('New password: ',),
-            ('passwd: Authentication token manipulation error', EOF,),
+            (': Authentication token manipulation error', EOF,),
         ),
         (
             new_password,
@@ -795,7 +795,7 @@ def change_linux_user_password(password, new_password, user='wrsroot', host=None
         ),
         (
             new_password,
-            ('passwd: all authentication tokens updated successfully.',),
+            (': all authentication tokens updated successfully.', Prompt.CONTROLLER_PROMPT),
             (),
         ),
     )
@@ -808,9 +808,13 @@ def change_linux_user_password(password, new_password, user='wrsroot', host=None
     try:
         conn.connect(retry=False, use_password=True)
         for cmd, expected, errors in input_outputs:
-            conn.flush()
+            # conn.flush()
+            LOG.info('send cmd:{}\n'.format(cmd))
             conn.send(cmd)
-            index = conn.expect(blob_list=list(expected) + list(errors))
+            blob_list = list(expected) + list(errors)
+            LOG.info('expecting:{}\n'.format(blob_list))
+            index = conn.expect(blob_list=blob_list)
+            LOG.info('returned index:{}\n'.format(index))
             if len(expected) <= index:
                 passed = False
                 break
@@ -818,6 +822,7 @@ def change_linux_user_password(password, new_password, user='wrsroot', host=None
     except Exception as e:
         LOG.warn('Caught exception when connecting to host:{} as user:{} with pasword:{}\n{}\n'.format(
             host, user, password, e))
+
         raise
 
     finally:
