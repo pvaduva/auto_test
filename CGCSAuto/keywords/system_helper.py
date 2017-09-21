@@ -2596,3 +2596,92 @@ def add_infra_network(infra_network_cidr=None, con_ssh=None, auth_info=Tenant.AD
         values[row[0].strip()] = row[1].strip()
     return True, values
 
+
+def enable_murano(con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+    """
+    Enable Murano Services
+    Args:
+        con_ssh:
+        con_ssh (SSHClient):
+        auth_info (dict):
+        fail_ok: whether return False or raise exception when some services fail to reach enabled-active state
+
+    Returns:
+
+    """
+
+    res, output = cli.system('service-enable murano', ssh_client=con_ssh, auth_info=auth_info,
+                             fail_ok=fail_ok, rtn_list=True)
+    if res == 1:
+        return 1, output
+
+    msg = "Enabled Murano Service"
+
+    return 0, msg
+
+
+def disable_murano(con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+    """
+    Disable Murano Services
+    Args:
+        con_ssh (SSHClient):
+        auth_info (dict):
+        fail_ok: whether return False or raise exception when some services fail to reach enabled-active state
+
+    Returns:
+
+    """
+
+    res, output = cli.system('service-disable murano', ssh_client=con_ssh, auth_info=auth_info,
+                             fail_ok=fail_ok, rtn_list=True)
+    if res == 1:
+        return 1, output
+
+    msg = "Enabled Murano Service"
+
+    return 0, msg
+
+
+def enable_murano_agent(con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+    """
+    Enable Murano Agent
+    Args:
+        con_ssh (SSHClient):
+        auth_info (dict):
+        fail_ok: whether return False or raise exception when some services fail to reach enabled-active state
+
+    Returns:
+
+    """
+
+    res, output = cli.system('service-parameter-add murano engine disable_murano_agent=false',
+                        ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+    if res == 1:
+        return 1, output
+
+    msg = "Enabled Murano Agent"
+
+    return 0, msg
+
+
+def disable_murano_agent(con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+    """
+    Disable Murano Agent
+    Args:
+        con_ssh (SSHClient):
+        auth_info (dict):
+        fail_ok: whether return False or raise exception when some services fail to reach enabled-active state
+
+    Returns:
+
+    """
+
+    res, output = cli.system('service-parameter-add murano engine disable_murano_agent=true',
+                             ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+    if res == 1:
+        return 1, output
+
+    msg = "Disale Murano Agent"
+
+    return 0, msg
+
