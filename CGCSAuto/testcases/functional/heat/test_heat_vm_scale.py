@@ -1,7 +1,7 @@
 import os
 import time
 
-from pytest import mark
+from pytest import mark, fixture
 
 from utils import cli
 from utils.tis_log import LOG
@@ -153,9 +153,27 @@ def ssh_vm_and_send_cmd(vm_name=None, vm_image_name=None, cmd=None):
         cmd = 'dd if=/dev/zero of=/dev/null &'
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=vm_image_name, close_ssh=False) as vm_ssh:
+        VM_SSHS.append(vm_ssh)
         vm_ssh.exec_cmd(cmd=cmd, fail_ok=False)
 
     return vm_ssh
+
+
+VM_SSHS = []
+
+
+@fixture(scope='function', autouse=True)
+def aa_close_vm_ssh(request):
+
+    def close_ssh():
+        global VM_SSHS
+        for ssh_client in VM_SSHS:
+            try:
+                ssh_client.close()
+            except Exception as e:
+                LOG.warning('Unable to close ssh - {}'.format(e.__str__()))
+        VM_SSHS = []
+    request.addfinalizer(close_ssh)
 
 
 # Overall skipif condition for the whole test function (multiple test iterations)
@@ -270,6 +288,9 @@ def test_heat_vm_scale(action):
     LOG.tc_step("Checking that the Vm is removed now")
     assert wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=1), "Scale down failed, expect to see 1 vm"
 
+    vm_ssh_1.close()
+    global VM_SSHS
+    VM_SSHS.remove(vm_ssh_1)
     # delete heat stack
     LOG.tc_step("Deleting heat stack{}".format(stack_name))
     return_code, msg = heat_helper.delete_stack(stack_name=stack_name)
@@ -368,6 +389,7 @@ def _test_heat_vm__action_scale_up_down(action):
     if not heat_helper.scale_down_vms(vm_name=vm_name, expected_count=1):
         assert "Scale down failed, expect to see 1 vm"
 
+    vm_ssh_1.close()
     # delete heat stack
     LOG.tc_step("Deleting heat stack{}".format(stack_name))
     return_code, msg = heat_helper.delete_stack(stack_name=stack_name)

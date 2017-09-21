@@ -2243,7 +2243,7 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=60, fail_ok=False, vsh
         untransmitted_packets = int(num_pings) - int(untransmitted_packets[0])
     else:
         untransmitted_packets = num_pings
-    
+
     return packet_loss_rate, untransmitted_packets
 
 
