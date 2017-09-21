@@ -2388,7 +2388,7 @@ def main():
     if lab_type is 'cpe':
         wait_until_alarm_clears(controller0, timeout=840, check_interval=60, alarm_id="400.002", host_os=host_os)
         wait_until_alarm_clears(controller0, timeout=720, check_interval=60, alarm_id="250.010", host_os=host_os)
-        wait_until_alarm_clears(controller0, timeout=14400, check_interval=60, alarm_id="400.001", host_os=host_os)
+        wait_until_alarm_clears(controller0, timeout=25200, check_interval=60, alarm_id="400.001", host_os=host_os)
 
     # For storage lab run lab setup
     executed = False
