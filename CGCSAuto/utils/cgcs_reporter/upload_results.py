@@ -323,7 +323,7 @@ def upload_test_result(session_id, test_name, result, start_time, end_time, pars
     Returns (str|None): exec_id or None if record already exists
     """
     if parse_name:
-        test_name = test_name.split('::test_', 1)[-1]
+        test_name = 'test_{}'.format(test_name.split('::test_', 1)[-1])
 
     with open_conn_and_get_cur(dbname=DB_NAME, user=USER, host=HOST, password=PASSWORD) as cursor:
         test_id = get_test_id(test_name, cursor=cursor)
