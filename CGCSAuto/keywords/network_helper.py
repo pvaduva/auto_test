@@ -2187,7 +2187,7 @@ def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
 
-def _ping_server(server, ssh_client, num_pings=5, timeout=30, fail_ok=False, vshell=False, interface=None, retry=0):
+def _ping_server(server, ssh_client, num_pings=5, timeout=60, fail_ok=False, vshell=False, interface=None, retry=0):
     """
 
     Args:
@@ -2238,7 +2238,12 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=30, fail_ok=False, vsh
         else:
             LOG.warning(msg)
 
-    untransmitted_packets = int(num_pings) - int(re.findall("(\d+) packets transmitted,", output)[0])
+    untransmitted_packets = re.findall("(\d+) packets transmitted,", output)
+    if untransmitted_packets:
+        untransmitted_packets = int(num_pings) - int(untransmitted_packets[0])
+    else:
+        untransmitted_packets = num_pings
+    
     return packet_loss_rate, untransmitted_packets
 
 
