@@ -341,9 +341,8 @@ def test_increase_ceph_mon():
     LOG.tc_step("Increase ceph_mon_gib to {}".format(new_ceph_mon_gib))
     hosts = system_helper.get_controllers()
     for host in hosts:
-        cmd = "system ceph-mon-modify {} ceph_mon_gib={}".format(host, new_ceph_mon_gib)
-        rc, out = con_ssh.exec_cmd(cmd)
-    
+        cli.system("ceph-mon-modify {} ceph_mon_gib={}".format(host, new_ceph_mon_gib))
+
     LOG.info("Wait for expected alarms to appear")
     storage_hosts = system_helper.get_storage_nodes()
     total_hosts = hosts + storage_hosts
