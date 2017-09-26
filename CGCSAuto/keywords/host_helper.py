@@ -3219,3 +3219,39 @@ def get_hypersvisors_with_config(hosts=None, up_only=True, hyperthreaded=None, s
         candidate_hosts = ht_hosts if hyperthreaded else non_ht
 
     return candidate_hosts
+
+
+def lock_unlock_controllers():
+    """
+    lock/unlock both controller to get rid of the config out of date situations
+    Args:
+        none
+
+    Returns (list): return code and msg
+
+    """
+    active, standby = system_helper.get_active_standby_controllers()
+    if standby:
+        LOG.info("(Session) Locking unlocking controllers to complete action")
+        lock_host(standby)
+        unlock_host(standby)
+        drbd_res = system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, entity_id=standby,
+                                                     strict=False, fail_ok=True, timeout=300)
+        if not drbd_res:
+            return 1, "400.001 alarm is not cleared within timeout after unlock standby"
+
+        lock_host(active, swact=True)
+        unlock_host(active)
+        drbd_res = system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, entity_id=active,
+                                                     strict=False, fail_ok=True, timeout=300)
+        if not drbd_res:
+            return 1, "400.001 alarm is not cleared within timeout after unlock standby"
+    elif system_helper.is_simplex():
+        LOG.info("(Session) Simplex lab - lock/unlock controller to complete action")
+        lock_host('controller-0', swact=False)
+        unlock_host('controller-0')
+    else:
+        LOG.warning("Standby controller unavailable. Skip lock unlock controllers.")
+        return 1, "Standby controller unavailable. Skip lock unlock controllers"
+
+    return 0, "Locking unlocking controllers completed"
