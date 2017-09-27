@@ -1,10 +1,23 @@
-import time
 from utils.tis_log import LOG
-from keywords import system_helper, host_helper, murano_helper
-from consts.cgcs import HostAvailabilityState, HostOperationalState
+from keywords import murano_helper
+from pytest import mark, fixture
+
+result_ = None
 
 
-def test_murano():
+@fixture()
+def _disable_murano(request):
+
+    def _disable_murano_service():
+        if result_ is False:
+            ret, out = murano_helper.enable_disable_murano(enable=False, enable_disable_murano_agent=True,
+                                                           fail_ok=True)
+            assert ret == 0, "Murano disable failed"
+    request.addfinalizer(_disable_murano_service)
+
+
+@mark.domain_sanity
+def test_murano(_disable_murano):
     """
         Murano feature test cases
 
@@ -18,16 +31,18 @@ def test_murano():
 
 
         Test Teardown:
-            - None (any vms in bad stage)
+            - None
 
         """
+
+    global result_
+    result_ = True
 
     base_pkgs = ["/var/cache/murano/meta/io.murano.zip", "/var/cache/murano/meta/io.murano.applications.zip"]
 
     # enable Murano and murano agent
-    ret = murano_helper.enable_disable_murano(enable_disable_murano_agent=True)[0]
-    if ret == 1:
-        assert ret == 0, "Murano enable failed"
+    ret, out = murano_helper.enable_disable_murano(enable_disable_murano_agent=True)
+    assert ret == 0, "Murano enable failed"
 
     # import base packages
     pkg_ids=[]
@@ -42,12 +57,10 @@ def test_murano():
     #create Environment
     name = 'Test_env2'
     code, env_id = murano_helper.create_env(name=name)
-    if ret == 1:
-        assert ret == 0, "Murano env create failed"
+    assert code == 0, "Murano env create failed"
 
     ret_code, msg = murano_helper.delete_env(env_id=env_id)
-    if ret == 1:
-        assert ret == 0, "Murano env delete failed"
+    assert ret_code == 0, "Murano env delete failed"
 
     for pkg_id in pkg_ids:
         code,out = murano_helper.delete_package(package_id=pkg_id)
@@ -56,8 +69,4 @@ def test_murano():
         else:
             LOG.info("Murano package delete failed{}".format(pkg_id))
 
-    ret = murano_helper.enable_disable_murano(enable=False, enable_disable_murano_agent=True, fail_ok=True)[0]
-    if ret == 1:
-        assert ret == 0, "Murano disable failed"
-
-
+    result_ = False

@@ -1,7 +1,7 @@
 from consts.auth import Tenant
 from utils.tis_log import LOG
 from keywords import system_helper, host_helper
-from utils import cli, table_parser, exceptions
+from utils import cli, table_parser
 
 
 def enable_disable_murano(enable=True, enable_disable_murano_agent=False, fail_ok=False,
@@ -24,7 +24,7 @@ def enable_disable_murano(enable=True, enable_disable_murano_agent=False, fail_o
 
     if enable:
         msg = "Enabled Murano Service Successfully"
-        ret, out = system_helper.enable_murano(con_ssh=con_ssh, auth_info=auth_info)[0]
+        ret, out = system_helper.enable_murano(con_ssh=con_ssh, auth_info=auth_info)
 
         if ret == 1:
             return 1, out
@@ -37,7 +37,7 @@ def enable_disable_murano(enable=True, enable_disable_murano_agent=False, fail_o
                 return 1, out
     else:
         msg = "Disabled Murano Service Successfully"
-        ret, out = system_helper.disable_murano(con_ssh=con_ssh, auth_info=auth_info)[0]
+        ret, out = system_helper.disable_murano(con_ssh=con_ssh, auth_info=auth_info)
 
         if ret == 1:
             return 1, out
