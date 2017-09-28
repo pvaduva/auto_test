@@ -3,19 +3,16 @@
 # Change the MTU value of the OAM interface using CLI
 ###
 
+import re
 
-from pytest import fixture, mark, skip
-import ast, random
-from time import sleep
+from pytest import mark, skip
+import random
 
-from utils import cli,exceptions
-from utils.ssh import ControllerClient
+from utils import cli
 from utils import table_parser
-from consts.auth import Tenant
-from consts.timeout import CLI_TIMEOUT
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import nova_helper, vm_helper, host_helper, system_helper, network_helper
+from keywords import vm_helper, host_helper, system_helper, network_helper
 
 HOSTS_IF_MODIFY_ARGS = []
 
@@ -50,6 +47,95 @@ def __get_mtu_to_mod(providernet_name, mtu_range='middle'):
     return mtu
 
 
+def get_if_info(host=None):
+    if_info = {}
+
+    try:
+        if_table = system_helper.get_host_interfaces_table(host)
+
+        index_name = if_table['headers'].index('name')
+
+        index_type = if_table['headers'].index('type')
+
+        index_uses_ifs = if_table['headers'].index('uses i/f')
+
+        index_used_by_ifs = if_table['headers'].index('used by i/f')
+
+        index_network_type = if_table['headers'].index('network type')
+
+        index_attributes = if_table['headers'].index('attributes')
+
+        for value in if_table['values']:
+
+            name = value[index_name]
+
+            if_type = value[index_type]
+
+            uses_ifs = eval(value[index_uses_ifs])
+
+            used_by_ifs = eval(value[index_used_by_ifs])
+
+            network_type = value[index_network_type]
+
+            attributes = value[index_attributes].split(',')
+
+            if name in if_info:
+                LOG.warn('NIC {} already appeard! Duplicate of NIC:"{}"'.format(name, if_info[name]))
+            else:
+                if_info[name] = {
+                    'mtu': int(re.split('MTU=', attributes[0])[1]),
+                    'uses_ifs': uses_ifs,
+                    'used_by_ifs': used_by_ifs,
+                    'type': if_type,
+                    'network_type': network_type
+                }
+
+    except IndexError as e:
+        LOG.error('Failed to get oam-interface name/type, error message:{}'.format(e))
+        assert False, 'Failed to get oam-interface name/type, error message:{}'.format(e)
+    except Exception as e:
+        LOG.error('Failed to get oam-interface name/type, error message:{}'.format(e))
+        assert False, 'Failed to get oam-interface name/type, error message:{}'.format(e)
+
+    assert if_info, 'Cannot get interface information'
+
+    return if_info
+
+
+def get_max_allowed_mtus(host='controller-0', network_type='oam', if_name='', if_info=None):
+    if not if_info:
+        if_info = get_if_info(host=host)
+
+    if_names = [name for name in if_info if if_info[name]['network_type'] == network_type]
+    if not if_names:
+        LOG.warn('Cannot find NIC of network_type: "{}" on host: "{}"'.format(network_type, host))
+        return 0, ''
+
+    if not if_name:
+        if len(if_names) > 1:
+            LOG.warn('Multiple NICs found for network_type: "{}" on host:{}, {}'.format(
+                network_type, host, if_names))
+
+        if_name = if_names[0]
+
+        LOG.warn('Will chose the first NIC:{} found for network_type: "{}" on host:{}'.format(
+            if_name, network_type, host))
+    else:
+        if if_name not in if_names:
+            LOG.error('Cannot find NIC with name:{} of network_type: "{}" on host: "{}"'.format(
+                if_name, network_type, host))
+
+            return 0, None
+
+    min_mtu = 0
+
+    uses_ifs = if_info[if_name]['uses_ifs']
+    if uses_ifs:
+        min_mtu = min([if_info[nic]['mtu'] for nic in uses_ifs])
+
+    return min_mtu, if_info[if_name]['mtu'], if_name
+
+
 @mark.p3
 @mark.parametrize('mtu_range', [
     'middle'
@@ -63,7 +149,7 @@ def test_modify_mtu_oam_interface(mtu_range):
     Verify that MTU on oam interfaces on both standby and active controller can be modified by cli
 
     Args:
-        mtu (str): A string that contain the mtu want to be tested
+        mtu_range (str): A string that contain the mtu want to be tested
 
     Setup:
         - Nothing
@@ -91,19 +177,34 @@ def test_modify_mtu_oam_interface(mtu_range):
     second_host = system_helper.get_active_controller_name()
     HostsToRecover.add([first_host, second_host], scope='function')
 
+    max_mtu, cur_mtu, nic_name = get_max_allowed_mtus(host=first_host, network_type='oam')
+    LOG.info('OK, the max MTU for {} is {}'.format(nic_name, max_mtu))
+
+    expecting_pass = not max_mtu or mtu <= max_mtu
+    if not expecting_pass:
+        LOG.warn('Expecting to fail in changing MTU: changing to:{}, max-mtu:{}'.format(mtu, max_mtu))
+
     oam_attributes = system_helper.get_host_interfaces_info(host=first_host, rtn_val='attributes', net_type='oam')
+
     # sample attributes: [MTU=9216,AE_MODE=802.3ad]
     pre_oam_mtu = int(oam_attributes[0].split(',')[0].split('=')[1])
 
     LOG.tc_step("Modify {} oam interface MTU from {} to {}, and "
                 "ensure it's applied successfully after unlock".format(first_host, pre_oam_mtu, mtu))
+    if mtu == cur_mtu:
+        LOG.info('Setting to same MTU: from:{} to:{}'.format(mtu, cur_mtu))
+
     code, res = host_helper.modify_mtu_on_interfaces(first_host, mtu_val=mtu, network_type='oam',
                                                      lock_unlock=True, fail_ok=True)
 
     LOG.tc_step("Revert OAM MTU to original value: {}".format(pre_oam_mtu))
     code_revert, res_revert = host_helper.modify_mtu_on_interfaces(first_host, mtu_val=pre_oam_mtu, network_type='oam',
                                                                    lock_unlock=True, fail_ok=True)
-    assert 0 == code, "OAM MTU is not modified successfully. Result: {}".format(res)
+    if 0 == code:
+        assert expecting_pass, "OAM MTU is not modified successfully. Result: {}".format(res)
+    else:
+        assert not expecting_pass, "OAM MTU WAS modified unexpectedly. Result: {}".format(res)
+
     assert 0 == code_revert, "OAM MTU is not reverted successfully. Result: {}".format(res_revert)
 
     LOG.tc_step("Swact active controller")
@@ -113,13 +214,17 @@ def test_modify_mtu_oam_interface(mtu_range):
     LOG.tc_step("Modify new standby controller {} oam interface MTU to: {}, and "
                 "ensure it's applied successfully after unlock".format(second_host, mtu))
 
-    code, res = host_helper.modify_mtu_on_interfaces(second_host, mtu_val=mtu, network_type='oam',
-                                               lock_unlock=True, fail_ok=True)
+    code, res = host_helper.modify_mtu_on_interfaces(second_host,
+                                                     mtu_val=mtu, network_type='oam', lock_unlock=True, fail_ok=True)
 
     LOG.tc_step("Revert OAM MTU to original value: {}".format(pre_oam_mtu))
     code_revert, res_revert = host_helper.modify_mtu_on_interfaces(second_host, mtu_val=pre_oam_mtu, network_type='oam',
                                                                    lock_unlock=True, fail_ok=True)
-    assert 0 == code, "OAM MTU is not modified successfully for second controller. Result: {}".format(res)
+    if 0 == code:
+        assert expecting_pass, "OAM MTU is not modified successfully. Result: {}".format(res)
+    else:
+        assert not expecting_pass, "OAM MTU WAS modified unexpectedly. Result: {}".format(res)
+
     assert 0 == code_revert, "OAM MTU is not reverted successfully. Result: {}".format(res_revert)
 
 
@@ -133,7 +238,7 @@ def test_modify_mtu_data_interface(mtu_range):
     Verify that MTU on data interfaces on all compute node can be modified by cli
     The min mtu for data interface can be 1500,9000 or 9216, in which case MTU is unchangable. Need to confirm
     Args:
-        mtu (str): A string that contain the mtu want to be tested
+        mtu_range (str): A string that contain the mtu want to be tested
 
     Setup:
         - Nothing
@@ -162,41 +267,100 @@ def test_modify_mtu_data_interface(mtu_range):
         if len(hypervisors) > 4:
             hypervisors = random.sample(hypervisors, 4)
 
-    # To remove
-    # hypervisors = [host_helper.get_nova_host_with_min_or_max_vms(rtn_max=False)]
-
     LOG.tc_step("Delete vms to reduce lock time")
     vm_helper.delete_vms()
 
     mtu = __get_mtu_to_mod(providernet_name='-data', mtu_range=mtu_range)
+
     LOG.tc_step("Modify data MTU to {} for hosts: {}".format(mtu, hypervisors))
-    for host in hypervisors:
-        interfaces = get_ifs_to_mod(host, 'data', mtu)
+
+    net_type = 'data'
+
+    active_controller = system_helper.get_active_controller_name()
+    hosts = hypervisors[:]
+    if active_controller in hosts:
+        hosts.remove(active_controller)
+        hosts.append(active_controller)
+
+    for host in hosts:
+        interfaces = get_ifs_to_mod(host, net_type, mtu)
         revert_ifs = list(interfaces)
+        if not revert_ifs:
+            LOG.info('Skip host:{} because there is no interface to set MTU'.format(host))
+            continue
+
+        host_helper.lock_host(host, swact=True)
+
         revert_ifs.reverse()
-
+        changed_ifs = []
         for interface in revert_ifs:
+            LOG.tc_step('Checking the max MTU for the IF:{} on host:{}'.format(interface, host))
+            max_mtu, cur_mtu, nic_name = get_max_allowed_mtus(host=host, network_type=net_type, if_name=interface)
+
+            LOG.info('Checking the max MTU for the IF:{}, max MTU: {}, host:{}'.format(
+                interface, max_mtu or 'NOT SET', host))
+
+            expecting_pass = not max_mtu or mtu <= max_mtu
+            if not expecting_pass:
+                LOG.warn('Expecting to fail in changing MTU: changing to:{}, max-mtu:{}'.format(mtu, max_mtu))
+
             pre_mtu = int(system_helper.get_host_if_show_values(host, interface, 'imtu')[0])
-            HOSTS_IF_MODIFY_ARGS.append("-m {} {} {}".format(pre_mtu, host, interface))
 
-    HostsToRecover.add(hypervisors)
-    code, res = host_helper.modify_mtu_on_interfaces(hypervisors, mtu_val=mtu, network_type='data',
-                                                     lock_unlock=True, fail_ok=True)
+            LOG.tc_step('Modify MTU of IF:{} on host:{} to:{}, expeting: {}'.format(
+                interface, host, mtu, 'PASS' if expecting_pass else 'FAIL'))
 
-    LOG.tc_step("Revert host data interface MTU to original settings: {}".format(HOSTS_IF_MODIFY_ARGS))
-    for host in hypervisors:
-        host_helper.lock_host(host)
+            code, res = host_helper.modify_mtu_on_interface(host, interface, mtu_val=mtu, network_type=net_type,
+                                                            lock_unlock=False, fail_ok=True)
+            msg_result = "PASS" if expecting_pass else "FAIL"
+            msg = "Failed to modify data MTU, expecting to {}, \nnew MTU:{}, max MTU:{}, old MTU:{}, " \
+                  "Return code:{}; Details: {}".format(msg_result, pre_mtu, max_mtu, pre_mtu, code, res)
 
-    failed_args = []
-    for args in HOSTS_IF_MODIFY_ARGS:
-        code_revert, output = cli.system('host-if-modify', args, fail_ok=True, rtn_list=True)
-        if not code_revert == 0:
-            failed_args.append(args)
+            if 0 == code:
+                if mtu != cur_mtu:
+                    changed_ifs.append(interface)
+                    HOSTS_IF_MODIFY_ARGS.append((host, pre_mtu, mtu, max_mtu, interface, net_type))
+                assert expecting_pass, msg
+            else:
+                assert not expecting_pass, msg
 
-    # Let host recover fixture to unlock the hosts after revert modify to save run time
+            LOG.info('OK, modification of MTU of data interface {} as expected: {}'.format(msg_result, msg_result))
 
-    assert 0 == code, "Failed to modify data MTU. Return code:{}; Details: {}".format(code, res)
-    assert not failed_args, "Host if modify with below args failed: {}".format(failed_args)
+        host_helper.unlock_host(host)
+        for interface in revert_ifs:
+            if interface in changed_ifs:
+                actual_mtu = int(system_helper.get_host_if_show_values(host,
+                                                                       interface=interface, fields=['imtu'])[0])
+                assert actual_mtu == mtu, \
+                    'Actual MTU after modification did not match expected, expected:{}, actual:{}'.format(
+                        mtu, actual_mtu)
+        changed_ifs[:] = []
+
+    if not HOSTS_IF_MODIFY_ARGS:
+        skip('No data interface changed!')
+        return
+
+    HOSTS_IF_MODIFY_ARGS.reverse()
+
+    LOG.tc_step('Restore the MTUs of the data IFs on hosts:{}'.format(hosts))
+
+    prev_host = None
+    for host, pre_mtu, mtu, max_mtu, interface, net_type in HOSTS_IF_MODIFY_ARGS:
+        if prev_host != host:
+            if prev_host:
+                host_helper.unlock_host(prev_host)
+            host_helper.lock_host(host, swact=True)
+
+            prev_host = host
+
+        LOG.info('Restore DATA MTU of IF:{} on host:{} to:{}, current MTU:{}'.format(interface, host, pre_mtu, mtu))
+        host_helper.modify_mtu_on_interface(host, interface, pre_mtu, network_type=net_type, lock_unlock=False)
+
+        LOG.info('OK, Data MTUs of IF:{} on host:{} are restored, from: {} to:{}'.format(
+            interface, host, mtu, pre_mtu))
+
+    host_helper.unlock_host(prev_host)
+
+    LOG.info('OK, all changed MTUs of DATA IFs are restored')
 
 
 def get_ifs_to_mod(host, network_type, mtu_val):

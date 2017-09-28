@@ -9,6 +9,7 @@ from consts.build_server import Server, get_build_server_info
 from utils.ssh import ControllerClient, SSHClient
 from consts.cgcs import Prompt
 from utils.tis_log import LOG
+from utils import lab_info
 #
 #
 # con_ssh = None
@@ -63,6 +64,7 @@ def pytest_addoption(parser):
     parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
                      action='store', metavar='SIZE',  help=ceph_mon_gib_help)
 
+
 def pytest_configure(config):
 
     # Lab install params
@@ -94,6 +96,7 @@ def pytest_configure(config):
 #     with open(tc_res_path, 'r') as fin:
 #         print(fin.read())
 
+
 @pytest.fixture(scope='session', autouse=True)
 def setup_test_session():
     """
@@ -115,12 +118,12 @@ def setup_test_session():
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
     # set build id to be used to upload/write test results
-    build_id, build_host = setups.get_build_info(con_ssh)
+    build_id, build_server = setups.get_build_info(con_ssh)
     ProjVar.set_var(BUILD_ID=build_id)
-    ProjVar.set_var(BUILD_HOST=build_host)
+    ProjVar.set_var(BUILD_SERVER=build_server)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
 
-
+    setups.set_session(con_ssh=con_ssh)
 
 
 @pytest.fixture(scope='function', autouse=True)

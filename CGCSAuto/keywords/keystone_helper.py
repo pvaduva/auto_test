@@ -7,6 +7,11 @@ from consts.auth import Tenant
 from keywords import common
 
 
+def get_role_ids(role_name, con_ssh=None):
+    table_ = table_parser.table(cli.openstack('role list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    return table_parser.get_values(table_, 'ID', Name=role_name)
+
+
 def get_tenant_ids(tenant_name=None, con_ssh=None):
     """
     Return a list of tenant id(s) with given tenant name.
@@ -24,7 +29,7 @@ def get_tenant_ids(tenant_name=None, con_ssh=None):
     return table_parser.get_values(table_, 'ID', Name=tenant_name)
 
 
-def get_user_ids(user_name=None, con_ssh=None):
+def get_user_ids(user_name=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Return a list of user id(s) with given user name.
 
@@ -37,7 +42,7 @@ def get_user_ids(user_name=None, con_ssh=None):
     """
     if user_name is None:
         user_name = Tenant.get_primary()['user']
-    table_ = table_parser.table(cli.openstack('user list', ssh_client=con_ssh))
+    table_ = table_parser.table(cli.openstack('user list', ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_, 'ID', Name=user_name)
 
 
@@ -221,7 +226,7 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
     }
     for key, val in optional_args.items():
         if val is not None:
-            arg += '--{} {} '.format(key, val)
+            arg += "--{} '{}' ".format(key, val)
 
     if enable is not None:
         arg += '--{} '.format('enable' if enable else 'disable')

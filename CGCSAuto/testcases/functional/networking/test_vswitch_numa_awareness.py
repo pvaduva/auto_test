@@ -82,6 +82,20 @@ def id_params_cores(val):
         return '_'.join([str(i) for i in val])
 
 
+def _convert_ht_cpe_req(ht_req, cpe_req):
+    if ht_req == 'HT':
+        ht_req = True
+    elif ht_req == 'nonHT':
+        ht_req = False
+
+    if cpe_req == 'AIO':
+        cpe_req = True
+    elif cpe_req == 'nonAIO':
+        cpe_req = False
+
+    return ht_req, cpe_req
+
+
 class TestVSwitchCPUReconfig:
 
     @fixture(scope='class')
@@ -96,14 +110,14 @@ class TestVSwitchCPUReconfig:
     @mark.p3
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required'), [
         # (None, None, None, None),           # Test without reconfig
-        ((1, 0), (1, 1), None, False),      # Standard lab only
-        ((2, 0), (1, 1), None, True),       # CPE only
+        ((1, 0), (1, 1), None, 'nonAIO'),      # Standard lab only
+        ((2, 0), (1, 1), None, 'AIO'),       # CPE only
         ((1, 2), (3, 2), None, None),
         ((1, 2), (2, 2), None, None),
-        ((1, 0), (1, 0), False, False),     # Standard lab only
-        ((2, 0), (1, 0), False, True),      # CPE only
+        ((1, 0), (1, 0), 'nonHT', 'nonAIO'),     # Standard lab only
+        ((2, 0), (1, 0), 'nonHT', 'AIO'),      # CPE only
         # ((2, 0), (2, 0), None, True),       # CPE only    # remove - covered by other test
-        ((1, 0), (2, 0), None, False),      # Standard lab only
+        ((1, 0), (2, 0), None, 'nonAIO'),      # Standard lab only
     ], ids=id_params_cores)
     def test_vswitch_cpu_reconfig_positive(self, host_to_config, flavor_, platform, vswitch, ht_required, cpe_required):
         """
@@ -136,6 +150,7 @@ class TestVSwitchCPUReconfig:
         host, ht_enabled, is_cpe, host_other, storage_backing = host_to_config
         HostsToRecover.add(host, scope='class')
 
+        ht_required, cpe_required = _convert_ht_cpe_req(ht_required, cpe_required)
         if ht_required is not None and ht_required is not ht_enabled:
             skip("Hyper-threading for {} is not {}".format(host, ht_required))
 
@@ -171,7 +186,6 @@ class TestVSwitchCPUReconfig:
 
         LOG.tc_step("Check vm can be launched on or live migrated to {}.".format(host))
         vm_id = vm_helper.boot_vm(flavor=flavor_, avail_zone='nova', vm_host=host, cleanup='function')[1]
-        # ResourceCleanup.add('vm', vm_id)
 
         assert host == nova_helper.get_vm_host(vm_id), "VM is not booted on configured host"
 
@@ -180,7 +194,7 @@ class TestVSwitchCPUReconfig:
         pass
 
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required', 'expt_err'), [
-        mark.p1(((1, 1), (5, 5), False, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
+        mark.p1(((1, 1), (5, 5), 'nonHT', None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
         mark.p3(((7, 6), (2, 5), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),   # Assume total<=10 cores/per proc & thread
         # mark.p3((('cores-2', 'cores-2'), (2, 2), None, None, "CpuAssignment.NO_VM_CORE")), Removed due to CGTS-5715
         mark.p3(((1, 1), (9, 8), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),   # Assume total <= 10 cores/per proc & thread
@@ -216,6 +230,8 @@ class TestVSwitchCPUReconfig:
         host, ht_enabled, is_cpe, host_other, storage_backing = host_to_config
 
         HostsToRecover.add(host, scope='class')
+
+        ht_required, cpe_required = _convert_ht_cpe_req(ht_required, cpe_required)
 
         if ht_required is not None and ht_required is not ht_enabled:
             skip("Hyper-threading for {} is not {}".format(host, ht_required))
@@ -455,8 +471,6 @@ class TestNovaSchedulerAVS:
         LOG.tc_step("Boot vm from volume using above flavor")
         code, vm_id, err, vol = vm_helper.boot_vm('numa_affinity', flavor=flv_id, cleanup='function',
                                                   avail_zone='cgcsauto', vm_host=expt_host, fail_ok=True)
-        # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-        # ResourceCleanup.add('volume', vol)
 
         if expt_err:
             LOG.tc_step("Check boot vm failed due to conflict in vswtich node affinity and numa nodes requirements")
@@ -561,8 +575,6 @@ class TestNovaSchedulerAVS:
         for i in range(vms_num):
             code, vm_id, err, vol = vm_helper.boot_vm('vswitch_numa', flavor=flv_id, cleanup='function',
                                                       avail_zone='cgcsauto', fail_ok=True)
-            # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-            # ResourceCleanup.add('volume', vol)
 
             assert 0 == code, "VM is not booted successfully. Details: {}".format(err)
             vm_host, vm_numa = vm_helper.get_vm_host_and_numa_nodes(vm_id)
@@ -596,8 +608,6 @@ class TestNovaSchedulerAVS:
         LOG.tc_step("vSwitch nodes are full. Attempt to boot one more vm and ensure it's {}".format(extra_str))
         code, vm_id, err, vol = vm_helper.boot_vm('vswitch_numa', flavor=flv_id, cleanup='function',
                                                   avail_zone='cgcsauto', vm_host=final_host, fail_ok=True)
-        # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-        # ResourceCleanup.add('volume', vol)
 
         if vswitch_numa_affinity == 'strict':
             assert 1 == code, "VM boot is not rejected even though vSwitch node is full. Details: {}".format(err)
@@ -714,9 +724,6 @@ class TestNovaSchedulerAVS:
         for i in range(vm_count):
             code, vm_id, err, vol = vm_helper.boot_vm('vswitch_numa_one_host', flavor=flv_id, cleanup='function',
                                                       avail_zone='cgcsauto', fail_ok=True)
-            # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-            # ResourceCleanup.add('volume', vol)
-
             assert 0 == code, "VM is not booted successfully. Details: {}".format(err)
             vm_host, vm_numa = vm_helper.get_vm_host_and_numa_nodes(vm_id)
             vm_numa = vm_numa[0]
@@ -728,8 +735,6 @@ class TestNovaSchedulerAVS:
         LOG.tc_step("Boot one more vm and ensure it's rejected")
         code, vm_id, err, vol = vm_helper.boot_vm('vswitch_numa', flavor=flv_id, cleanup='function',
                                                   avail_zone='cgcsauto', fail_ok=True)
-        # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-        # ResourceCleanup.add('volume', vol)
         assert 1 == code, "VM boot is not rejected even though vSwitch node is full. Details: {}".format(err)
 
         LOG.tc_step("Attempt to live/cold migrate booted vms and ensure it's rejected")
@@ -828,7 +833,6 @@ class TestNovaSchedulerAVS:
 
         LOG.tc_step("Boot a vm with origin flavor with 2 vcpus")
         vm_id = vm_helper.boot_vm(flavor=pre_flavor, avail_zone='cgcsauto', cleanup='function')[1]
-        # ResourceCleanup.add('vm', resource_id=vm_id)
 
         LOG.tc_step("Check vm is booted on same numa node with vSwitch of {} via vm-topology".format(target_host))
         pre_vm_host, pre_numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
@@ -1017,8 +1021,6 @@ class TestSpanNumaNodes:
         LOG.tc_step("Boot a vm with above flavor")
         code, vm_id, err, vol = vm_helper.boot_vm('span_numa_{}'.format(vswitch_affinity), cleanup='function',
                                                   flavor=flavor, fail_ok=True, avail_zone='cgcsauto')
-        # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-        # ResourceCleanup.add('volume', vol)
 
         expt_numa0 = numa0 if numa0 is not None else 0
         expt_numa1 = numa1 if numa1 is not None else 1

@@ -75,8 +75,8 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
         return dest_path
 
 
-def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=180,
-                                                      is_dir=False, con_ssh=None):
+def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=180, is_dir=False,
+                                              multi_files=False, con_ssh=None):
 
     """
     SCP file or files under a directory from test server to TiS server
@@ -100,21 +100,10 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
     dest_user = SvcCgcsAuto.USER
     dest_password = SvcCgcsAuto.PASSWORD
 
-    #if not is_dir and dest_name is None:
-    #    dest_name = source_path.split(sep='/')[-1]
-
     dest_path = dest_dir if not dest_name else dest_dir + dest_name
 
     scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{} {}@{}:{}'.format(
         dir_option, source_path, dest_user, dest_server, dest_path)
-
-    #if con_ssh.file_exists(file_path=dest_path):
-    #    LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
-    #    return dest_path
-
-    #LOG.debug('Create destination directory on tis server if not already exists')
-    #cmd = 'mkdir -p {}'.format(dest_dir)
-    #con_ssh.exec_cmd(cmd, fail_ok=False)
 
     LOG.info("scp file(s) from tis server to test server")
     con_ssh.send(scp_cmd)
@@ -125,18 +114,17 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
     if index == 1:
         con_ssh.send(dest_password)
         index = con_ssh.expect()
-    if index != 0:
-        LOG.error("Failed to scp files")
 
-    #if not con_ssh.file_exists(file_path=dest_path):
-    #    LOG.error("File path {} does not exist after scp".format(dest_path))
-    #    return None
-    #else:
+    assert index == 0, "Failed to scp files"
+
+    exit_code = con_ssh.get_exit_code()
+    assert 0 == exit_code, "scp not fully succeeded"
+
     return dest_path
 
 
 def scp_to_active_controller(source_path, dest_path='',
-                             dest_user=HostLinuxCreds.USER, dest_password=HostLinuxCreds.PASSWORD,
+                             dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
                              timeout=60, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
@@ -147,7 +135,7 @@ def scp_to_active_controller(source_path, dest_path='',
 
 
 def scp_from_active_controller(source_path, dest_path='',
-                               src_user=HostLinuxCreds.USER, src_password=HostLinuxCreds.PASSWORD,
+                               src_user=HostLinuxCreds.get_user(), src_password=HostLinuxCreds.get_password(),
                                timeout=60, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
@@ -158,7 +146,7 @@ def scp_from_active_controller(source_path, dest_path='',
 
 
 def scp_from_local(source_path, dest_ip, dest_path=WRSROOT_HOME,
-                   dest_user=HostLinuxCreds.USER, dest_password=HostLinuxCreds.PASSWORD,
+                   dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
                    timeout=60, is_dir=False):
     """
     Scp file(s) from localhost (i.e., from where the automated tests are executed).
@@ -182,7 +170,7 @@ def scp_from_local(source_path, dest_ip, dest_path=WRSROOT_HOME,
 
 
 def scp_to_local(dest_path, source_ip, source_path,
-                 source_user=HostLinuxCreds.USER, source_password=HostLinuxCreds.PASSWORD,
+                 source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
                  timeout=60, is_dir=False):
     """
     Scp file(s) to localhost (i.e., to where the automated tests are executed).

@@ -52,8 +52,6 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
     LOG.tc_step("Attempt to boot a vm from above {} with above flavor".format(boot_source))
     code, vm_id, msg, ignore = vm_helper.boot_vm(name='cpu_pol', flavor=flavor_id, source=boot_source,
                                                  source_id=source_id, fail_ok=True, cleanup='function')
-    # if vm_id:
-    #     ResourceCleanup.add('vm', vm_id)
 
     # check for negative tests
     if expt_err is not None:
@@ -113,8 +111,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
 
     LOG.tc_step("Boot a vm from {} with above flavor and check vm topology is as expected".format(boot_source))
     vm_id = vm_helper.boot_vm(name='cpu_pol_{}_{}'.format(cpu_pol, flv_vcpus), flavor=flavor_id, source=boot_source,
-                              source_id=source_id)[1]
-    ResourceCleanup.add('vm', vm_id)
+                              source_id=source_id, cleanup='function')[1]
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     vm_host = nova_helper.get_vm_host(vm_id)
@@ -243,8 +240,7 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
         pre_boot_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
         LOG.tc_step("Booting cpu_pol_{}".format(x))
         vm_id = vm_helper.boot_vm(name='cpu_pol_{}'.format(x), flavor=flavor_id, source=boot_source,
-                                  source_id=source_id, avail_zone='nova', vm_host=target_host)[1]
-        ResourceCleanup.add('vm', vm_id)
+                                  source_id=source_id, avail_zone='nova', vm_host=target_host, cleanup='function')[1]
 
         vm_ids.append(vm_id)
 

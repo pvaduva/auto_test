@@ -10,8 +10,11 @@ class ProjVar:
                   'LOG_DIR': None,
                   'SOURCE_CREDENTIAL': None,
                   'VSWITCH_INFO_HOSTS': [],
+                  'SW_VERSION': [],
+                  'PATCH': None,
+                  'SESSION_ID': None,
                   }
-                  # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}
+    # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}
 
     @classmethod
     def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all, report_tag, openstack_cli):
@@ -37,9 +40,12 @@ class ProjVar:
         })
 
     @classmethod
-    def set_var(cls, **kwargs):
+    def set_var(cls, append=False, **kwargs):
         for key, val in kwargs.items():
-            cls.__var_dict[key.upper()] = val
+            if append:
+                cls.__var_dict[key.upper()].append(val)
+            else:
+                cls.__var_dict[key.upper()] = val
 
     @classmethod
     def get_var(cls, var_name):
@@ -152,7 +158,12 @@ class UpgradeVars:
                          tis_build_dir=None,
                          upgrade_version=None,
                          upgrade_license_path=None,
-                         patch_dir=None):
+                         patch_dir=None,
+                         orchestration_after=None,
+                         storage_apply_strategy=None,
+                         compute_apply_strategy=None,
+                         max_parallel_computes=None,
+                         alarm_restrictions=None ):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
 
@@ -162,11 +173,25 @@ class UpgradeVars:
             # TIS BUILD info
             'BUILD_SERVER': __build_server,
             'TIS_BUILD_DIR': tis_build_dir if tis_build_dir else
-                BuildServerPath.LATEST_HOST_BUILD_PATHS[upgrade_version],
-            'PATCH_DIR': patch_dir if patch_dir else BuildServerPath.PATCH_DIR_PATHS[upgrade_version],
+            (BuildServerPath.LATEST_HOST_BUILD_PATHS[upgrade_version]
+             if upgrade_version in BuildServerPath.LATEST_HOST_BUILD_PATHS else BuildServerPath.DEFAULT_HOST_BUILD_PATH),
+
+            'PATCH_DIR': patch_dir if patch_dir else (BuildServerPath.PATCH_DIR_PATHS[upgrade_version]
+                                                      if upgrade_version in BuildServerPath.PATCH_DIR_PATHS else
+                                                      None),
 
             # Generic
             'UPGRADE_LICENSE': upgrade_license_path,
+            # Orchestration -  the orchestration starting point after certain number of nodes upgraded normally
+            #  eg:  controller -  indicate after controllers are upgraded the remaining are upgraded through
+            #        orchestration.
+            #       compute:1 - indicate orchestrations starts after one compute is upgraded.
+            'ORCHESTRATION_AFTER': orchestration_after,
+            'STORAGE_APPLY_TYPE': storage_apply_strategy,
+            'COMPUTE_APPLY_TYPE': compute_apply_strategy,
+            'MAX_PARALLEL_COMPUTES': max_parallel_computes,
+            'ALARM_RESTRICTIONS': alarm_restrictions,
+
 
             #User/password to build server
             #"USERNAME": getpass.getuser(),
@@ -209,10 +234,10 @@ class UpgradeVars:
 class PatchingVars:
     __var_dict = {
         'DEF_PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
-        'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_4.0_Test_Patch_Build/',
+        'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build',
         'DEF_PATCH_IN_LAB_BASE_DIR': os.path.join(WRSROOT_HOME, 'patch-files'),
-        'DEF_PATCH_DIR': 'latest',
-        'PATCH_DIR': '/localdisk/loadbuild/jenkins/CGCS_4.0_Test_Patch_Build/latest',
+        'DEF_PATCH_DIR': '/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build',
+        'PATCH_DIR': None,
         'PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
         'USERNAME': 'svc-cgcsauto',  # getpass.getuser()
         'PASSWORD': ')OKM0okm',  # getpass.getpass()
@@ -229,17 +254,4 @@ class PatchingVars:
 
     @classmethod
     def set_patching_var(cls, **kwargs):
-        for k, v in kwargs.items():
-            cls.__var_dict[k.upper()] = v
-
-        patch_dir = cls.__var_dict.get('PATCH_DIR')
-
-        if patch_dir and not patch_dir.startswith('/'):
-            patch_dir = os.path.join(cls.__var_dict['DEF_PATCH_BUILD_BASE_DIR'], patch_dir)
-
-        cls.__var_dict['PATCH_DIR'] = patch_dir
-
-        patch_dir_in_lab = cls.__var_dict.get('PATCH_DIR_IN_LAB')
-
-        if not patch_dir_in_lab:
-            cls.__var_dict['PATCH_DIR_IN_LAB'] = cls.__var_dict['DEF_PATCH_IN_LAB_BASE_DIR']
+        cls.__var_dict.update(**kwargs)

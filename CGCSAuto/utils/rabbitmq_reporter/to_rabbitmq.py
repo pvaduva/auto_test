@@ -1,4 +1,3 @@
-
 import json
 import os
 import re
@@ -18,14 +17,14 @@ PUBLISHTO_EXCHANGE = 'testResults'
 PUBLISHTO_ROUTING_KEY = 'xstudio.testresults'
 PUBLISHTO_URL = 'ampq://user:alameda@mq.wrs.com:5672/%2F'
 
-
 TOOL_NAME = 'XSTUDIO'
 TOOL_VERSION = '3.1'
 
 TESTRESULT_LOGGER_NAME = 'TestResultsLogger'
 
 
-def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_name=os.environ['USER'], skip_uploaded=True):
+def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_name=os.environ['USER'],
+                   skip_uploaded=True):
     """
     collect the test environment variables
 	parse the result.log file from the file_path and parse it into JSON format.
@@ -70,7 +69,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
     jira = ''
 
     # Parse common test info from test_results.log
-    lab, build, build_server, testcases_list, log_dir = __parse_common_info(file_path)
+    lab, build, testcases_list, log_dir = __parse_common_info(file_path)
 
     logfile = ','.join([os.path.join(log_dir, 'TIS_AUTOMATION.log'), os.path.join(log_dir, 'pytestlog.log')])
     tester_name = tester_name if tester_name else os.environ['USER']
@@ -85,7 +84,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
             uploaded_tests = upload_f.read().strip().splitlines()
         uploaded_tests = [uploaded_name.strip() for uploaded_name in uploaded_tests]
 
-    #TODO: maybe update tmp_id to something better
+    # TODO: maybe update tmp_id to something better
     tmp_id = 0
     records = []
     for testcase in testcases_list:
@@ -96,7 +95,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
             runStartDate=reportDate,
             date_modified=reportDate,
             testResult=result,
-            releaseName='TITANIUM CLOUD R4',
+            releaseName='Titanium Cloud R5',
             tcTotal=1,
             testExecutionTimeStamp=reportDate,
             id=tmp_id,
@@ -105,7 +104,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
             testName=test_name,
             tcPassed=0,
             project="XSTUDIO 3.1",
-            attributes=[["board_name", "%s" % lab],["build_server", "%s" % build_server]],
+            attributes=[["board_name", "%s" % lab], ["barcode", "%s" % lab]],
             defects=[],
             tags=[tag],
             userStories=[userStory],
@@ -120,25 +119,77 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
 
     result_json = dict(records=records)
 
-    print()
-    #TODO: uncomment _upload_result when ready
+    print(result_json)
+    # TODO: uncomment _upload_result when ready
     __upload_result(result_json=result_json)
-#        if test_name in uploaded_tests:
-#            print("Result for {} already uploaded. Skip uploading.".format(test_name))
-#            continue
-#
-        # Upload result
-#        if not __upload_result(result_ini=result_ini, tag=tag, tester_name=tester_name, test_name=test_name,
-#                               result=result, lab=lab, build=build, userstory=userstory, domain=domain, jira=jira,
-#                               logfile=logfile, release_name=release_name, upload_log=upload_log,
-#                               build_server=build_server):
-#            exit(1)
+    #        if test_name in uploaded_tests:
+    #            print("Result for {} already uploaded. Skip uploading.".format(test_name))
+    #            continue
+    #
+    # Upload result
+    #        if not __upload_result(result_ini=result_ini, tag=tag, tester_name=tester_name, test_name=test_name,
+    #                               result=result, lab=lab, build=build, userstory=userstory, domain=domain, jira=jira,
+    #                               logfile=logfile, release_name=release_name, upload_log=upload_log,
+    #                               build_server=build_server):
+    #            exit(1)
 
     print('All results uploaded successfully from: {}\nTag: {}'.format(file_path, tag))
 
 
 def __upload_result(result_json):
-
+    '''
+        result_json = {"records": [
+                      {
+                        "runStartDate": "2016-11-17T17:45:00",
+                        "userStories": [],
+                        "testResult": "PASS",
+                        "milestone": "",
+                        "tcTotal": 1,
+                        "testExecutionTimeStamp": "2016-11-17T17:45:32",
+                        "id": "582decd2e562904f95913d79",
+                        "execResult": "PASS",
+                        "buildResult": "N/A",
+                        "buildResultDetail": "N/A",
+                        "environmentName": "MYSQL1:4",
+                        "defects": [],
+                        "releaseName": "TITANIUM CLOUD R4",
+                        "bootResult": "PASS",
+                        "testSuiteId": "5491629d98a0a712be964652:5491713a98a0a73ff5ffc0ac",
+                        "testTool":
+                        {
+                             "version": "2.1.2",
+                             "name": "WASSP"
+                        },
+                        "testerName": "helmuth",
+                        "rtcResultDetail": "N/A",
+                        "rtcResult": "N/A",
+                        "environmentId": "MYSQL1:2371::MYSQL1:4",
+                        "testName": "host_test_wil",
+                        "execResultDetail": "PASS",
+                        "tcPassed": 0,
+                        "bootResultDetail": "PASS",
+                        "attributes":
+                            [
+                                 ["barcode", "localhost"],
+                                 ["board_name", "localHost"],
+                                 ["bsp", "none"],
+                                 ["config_label", "localhost"],
+                                 ["config_name", "none"],
+                                 ["hostos", "Ubuntu 14.04.4 LTS-64bit"],
+                                 ["project", "WASSP 2.1"],
+                                 ["tech", "up"],
+                                 ["tool", "none"]
+                            ],
+                        "date_modified": "2016-11-17T17:45:53.045060",
+                        "detailedResult": "exec pass",
+                        "project": "WASSP 2.1",
+                        "tags":[
+                                 "201611171100", "helmuth", "hv202gos"
+                        ]
+                        }
+                 ]
+            }
+    '''
     try:
         rmqLogger = logging.getLogger('rmqlogger')
         rmqLogger.setLevel(logging.INFO)
@@ -154,7 +205,6 @@ def __upload_result(result_json):
         return 1
 
     return 0
-
 
 
 def __parse_testcase_record(record_line):
@@ -211,15 +261,18 @@ def __parse_common_info(test_results_file):
 
     lab = re.findall('Lab: (.*)\n', other_info)[0].strip().upper()
     build = re.findall('Build ID: (.*)\n', other_info)[0].strip()
-    build_server = re.findall('Build Server: (.*)\n', other_info)[0].strip()
+    # build_server = re.findall('Build Server: (.*)\n', other_info)[0].strip()
     log_dir = test_results_file.replace('test_results.log', '')
 
-    return lab, build, build_server, testcases_list, log_dir
+    return lab, build, testcases_list, log_dir
 
 
 if __name__ == '__main__':
-
     # usage (when debugging)
+    # report2json.py inputFile [outputPath]
 
+    # __upload_result('test')
 
-    __upload_result('test')
+    upload_results(file_path='/sandbox/AUTOMATION_LOGS/wcp_80_84/201702231645/test_results.log', lab='',
+                   logs_dir='/sandbox', tags='')
+

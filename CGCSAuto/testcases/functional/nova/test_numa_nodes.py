@@ -1,14 +1,15 @@
 import re
 
-from pytest import fixture, mark
+from pytest import fixture, mark, skip
 
 from utils import table_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, InstanceTopology
 from consts.cli_errs import NumaErr
-from keywords import nova_helper, vm_helper, system_helper
+from keywords import nova_helper, vm_helper, system_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.pre_checks_and_configs import check_numa_num
 
 
 ########################################
@@ -19,7 +20,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 @mark.parametrize(('vcpus', 'vswitch_affinity', 'numa_nodes', 'numa0', 'numa0_cpus', 'numa0_mem', 'numa1', 'numa1_cpus',
                    'numa1_mem', 'expt_err'), [
     (3, 'prefer', 2, 1, None, None, 0, None, None, 'NumaErr.FLV_UNDEVISIBLE'),
-    (4, 'strict', 2, 0, 0, 512, 1, 1, None, 'NumaErr.FLV_CPU_OR_MEM_UNSPECIFIED')
+    (4, 'strict', 2, 0, 0, 512, 1, 1, None, 'NumaErr.FLV_CPU_OR_MEM_UNSPECIFIED'),
 ])
 def test_flavor_setting_numa_negative(vcpus, vswitch_affinity, numa_nodes, numa0, numa0_cpus, numa0_mem,
                                       numa1, numa1_cpus, numa1_mem, expt_err):
@@ -293,13 +294,14 @@ def test_0_node_unset_numa_nodes_reject(flavor_0_node):
 # Test vm NUMA node(s) configs #
 ################################
 
+
 @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'numa_node1'), [
     mark.p2((2, 1, 0, None)),
     mark.nightly((2, 2, 1, 0)),
     mark.p2((1, 1, 1, None)),
 ])
 # @mark.usefixtures('delete_resources_func')    # This fixture is auto-used by nova test cases
-def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
+def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_numa_num):
     """
     Test NUMA nodes settings in flavor extra specs are successfully applied to a vm
 
@@ -320,6 +322,9 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
         - Delete created vm, volume, and flavor
 
     """
+    if check_numa_num < numa_nodes:
+        skip("Number of processors - {} is less than required numa nodes - {}".format(check_numa_num, numa_nodes))
+
     LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
     flavor = nova_helper.create_flavor('numa_vm', vcpus=vcpus)[1]
     ResourceCleanup.add('flavor', flavor, scope='function')
@@ -335,8 +340,7 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1):
     nova_helper.set_flavor_extra_specs(flavor, **extra_specs)
 
     LOG.tc_step("Boot vm with flavor {}.".format(flavor))
-    vm_id = vm_helper.boot_vm(flavor=flavor)[1]
-    ResourceCleanup.add('vm', vm_id, scope='function')
+    vm_id = vm_helper.boot_vm(flavor=flavor, cleanup='function')[1]
 
     LOG.tc_step("Verify cpu info for vm {} via vm-topology.".format(vm_id))
     # con_ssh = ControllerClient.get_active_controller()

@@ -11,3 +11,4 @@ class SkipReason:
     SMALL_CINDER_VOLUMES_POOL = "Cinder Volumes Pool is less than 30G"
     LESS_THAN_TWO_CONTROLLERS = "Less than two controllers on system"
     SIMPLEX_SYSTEM = 'Not applicable for Simplex system'
+    INSUFFICIENT_IMG_CONV = 'Insufficient image-conversion space to convert {} image to raw format'

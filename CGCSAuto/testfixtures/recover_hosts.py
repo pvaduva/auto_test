@@ -89,7 +89,7 @@ class HostsToRecover():
         if unlocked_hosts:
             LOG.fixture_step("({}) Wait for hosts to becomes available or degraded: {}".format(scope, unlocked_hosts))
             res2 = host_helper.wait_for_hosts_states(unlocked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,
-                                                     fail_ok=True, availability=['available', 'degraded'])
+                                                     fail_ok=True, availability=['available'])
             if not res2:
                 err_msg.append("Some host(s) from {} are not available.".format(unlocked_hosts))
 
@@ -97,7 +97,9 @@ class HostsToRecover():
         hypervisors_recovered = list(set(hypervisors) & set(hostnames))
         if hypervisors_recovered:
             LOG.fixture_step("({}) Wait for unlocked hypervisors up: {}".format(scope, hypervisors_recovered))
-            res, down_hosts = host_helper.wait_for_hypervisors_up(hypervisors_recovered, fail_ok=True)
+            # simplex lab requires long time to recover
+            res, down_hosts = host_helper.wait_for_hypervisors_up(hypervisors_recovered, fail_ok=True,
+                                                                  timeout=HostTimeout.REBOOT)
             if not res:
                 err_msg.append("Host(s) {} are not up in hypervisor-list".format(down_hosts))
 

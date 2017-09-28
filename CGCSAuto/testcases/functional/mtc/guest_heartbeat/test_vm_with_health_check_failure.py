@@ -58,6 +58,9 @@ def test_vm_with_health_check_failure(vm_):
     LOG.tc_step("Boot a vm using the flavor with guest heartbeat")
     vm_id = vm_
 
+    LOG.tc_step("Wait for 30 seconds for vm initialization before touching file in /tmp")
+    time.sleep(30)
+
     LOG.tc_step('Determine which compute the vm is on')
     compute_name = nova_helper.get_vm_host(vm_id)
 

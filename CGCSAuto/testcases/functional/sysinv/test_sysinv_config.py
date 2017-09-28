@@ -1,7 +1,8 @@
-from random import randrange
+import random
 import time
+import string
 
-from pytest import mark
+from pytest import mark, skip
 from pytest import fixture
 
 from utils import cli, table_parser
@@ -97,7 +98,7 @@ def test_system_type_is_readonly():
     if cur_system_type == SystemType.CPE:
         change_to_system_type = SystemType.STANDARD
     code, msg = system_helper.set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN,
-                                              system_type='"' + change_to_system_type + '"')
+                                              system_type='"{}"'.format(change_to_system_type))
 
     LOG.tc_step('Verify system rejected to change System Type to {}'.format(change_to_system_type))
     assert 1 == code, msg
@@ -139,10 +140,11 @@ class TestRetentionPeriod:
         "new_retention_period", [
             -1,
             MIN_RETENTION_PERIOD - 1,
-            randrange(MIN_RETENTION_PERIOD, MAX_RETENTION_PERIOD + 1),
+            #random.randrange(MIN_RETENTION_PERIOD, MAX_RETENTION_PERIOD + 1),
+            24828899,
             MAX_RETENTION_PERIOD + 1,
         ])
-    def test_modify_retention_period(self, new_retention_period):
+    def test_modify_pm_retention_period(self, new_retention_period):
         """
         Test change the 'retention period' to new values.
 
@@ -212,7 +214,7 @@ class TestDnsSettings:
     DNS_SETTING_FILE = '/etc/resolv.conf'
 
     @repeat_checking(repeat_times=10, wait_time=6)
-    def wait_for_dns_changed(self, expected_ip_addres=None):
+    def wait_for_dns_changed(self, expected_ip_addres):
         ip_addr_list = expected_ip_addres if expected_ip_addres is not None else []
 
         controller_ssh = ControllerClient.get_active_controller()
@@ -222,11 +224,13 @@ class TestDnsSettings:
 
         assert 0 == code, 'Failed to get saved DNS settings: {}'.format(cmd_get_saved_dns)
 
-        LOG.info('Find saved DNS servers:{}'.format(output))
+        LOG.info('Find saved DNS servers:\n{}\n'.format(output))
         saved_dns = []
         for line in output.splitlines():
             if line.strip().startswith('nameserver'):
-                saved_dns.append(line.strip().split()[1])
+                _, ip = line.strip().split()
+                if ip and not ip.startswith('192.168'):
+                    saved_dns.append(ip)
 
         LOG.info('Verify all input DNS servers are saved, expecting:{}'.format(expected_ip_addres))
         if set(ip_addr_list).issubset(set(saved_dns)):
@@ -256,14 +260,18 @@ class TestDnsSettings:
         request.addfinalizer(restore_dns_settings)
 
     @mark.parametrize(
-        'new_dns_servers', [
-            mark.nightly(('128.224.144.130', '147.11.57.128', '147.11.57.133')),
-            ('10.10.10.3', '10.256.0.1', '8.8.8.8'),
-            ('fd00:0:0:21::5', '2001:db8::'),
-            (3232235521, 333333, 333),
-            (3232235521, b'\xC0\xA8\x00\x01'),
-    ], ids=id_gen)
-    def test_change_dns_settings(self, new_dns_servers):
+        ('new_dns_servers', 'with_action_option'),
+        [
+            (('128.224.144.130', '147.11.57.128', '147.11.57.133'), None),
+            (('8.8.8.8', '8.8.4.4'), 'apply'),
+            (('fd00:0:0:21::5', '2001:db8::'), 'apply'),
+            (('10.10.10.3', '10.256.0.1', '8.8.8.8'), None),
+            (('8.8.8.8', '8.8.4.4'), 'RANDOM'),
+            (('128.224.144.130', '147.11.57.128', '147.11.57.133'), 'apply'),
+        ],
+        ids=id_gen
+    )
+    def test_change_dns_settings(self, new_dns_servers, with_action_option):
         """
         Test changing the DNS servers of the system under test
 
@@ -297,22 +305,65 @@ class TestDnsSettings:
                 LOG.info('Found invalid IP:{}'.format(server))
                 ip_addr_list.append(server)
                 expect_fail = True
-                break
+                continue
             ip_addr_list.append(ip_addr)
 
-        LOG.tc_step('Attempt to change the DNS servers to: {}'.format(new_dns_servers))
-        code, msg = system_helper.set_dns_servers(fail_ok=expect_fail, con_ssh=None, auth_info=Tenant.ADMIN,
-                                                  nameservers=ip_addr_list)
+        if not ip_addr_list:
+            skip('No valid IPs input for DNS servers, skip the test')
+            return
+
+        LOG.tc_step('\nSave the current DNS servers')
+        old_dns_servers = system_helper.get_dns_servers()
+        LOG.info('OK, current DNS servers: "{}" are saved\n'.format(old_dns_servers))
+
+        if with_action_option is not None and with_action_option.upper() == 'RANDOM':
+            with_action_option = ''.join(random.choice(string.ascii_lowercase) for _ in range(6))
+
+        LOG.tc_step('\nAttempt to change the DNS servers to: {}'.format(ip_addr_list))
+        code, msg = system_helper.set_dns_servers(fail_ok=expect_fail,
+                                                  auth_info=Tenant.ADMIN,
+                                                  nameservers=ip_addr_list,
+                                                  with_action_option=with_action_option,
+                                                  con_ssh=None)
 
         if expect_fail:
-            assert 1 == code, msg
-            return
+            assert 1 == code, 'Request to change DNS servers to invalid IP: "{}" should be rejected, msg:"{}"'.format(
+                ip_addr_list, msg)
+
+            LOG.info('OK, attempt was rejected as expected to change DNS to: "{}"\n'.format(ip_addr_list))
+
+            LOG.tc_step('Verify DNS servers remain UNCHANGED as old: "{}"'.format(old_dns_servers))
+            code, output = self.wait_for_dns_changed(old_dns_servers)
+            assert code == 0, \
+                'In configuration DNS servers should remain unchanged:\nbefore: "{}"\nnow: "{}"'.format(
+                    old_dns_servers, output)
         else:
-            assert 0 == code, 'Failed to change DNS setting, msg={}'.format(msg)
+            assert 0 == code, 'Failed to change DNS servers to: "{}", msg: "{}"'.format(msg, ip_addr_list)
 
-        LOG.tc_step('Wait {} seconds'.format(SysInvTimeout.DNS_SERVERS_SAVED))
+            LOG.tc_step('Verify in DB changed to new servers: {}'.format(ip_addr_list))
+            acutal_dns_servers = system_helper.get_dns_servers()
 
-        LOG.tc_step('Check if the changes are saved into persistent storage')
-        code, output = self.wait_for_dns_changed(ip_addr_list)
-        assert code == 0, \
-            'Saved DNS servers are different from the input DNS servers:\n{}'.format(output)
+            assert list(acutal_dns_servers) == list(ip_addr_list), \
+                'DNS servers were not changed, \nexpected:"{}"\nactual:"{}"\n'.format(ip_addr_list, acutal_dns_servers)
+
+            LOG.info('OK, in DB, DNS servers changed to new IPs: "{}"\n'.format(ip_addr_list))
+
+            LOG.tc_step('Verify in configuration, DNS should change after wait {} seconds'.format(
+                SysInvTimeout.DNS_SERVERS_SAVED))
+
+            LOG.info('Check if DNS changed or not in configuration\n')
+
+            if with_action_option is None or with_action_option == 'apply':
+                LOG.info('In this case, configuration should be updated with new DNS:{}'.format(ip_addr_list))
+                code, output = self.wait_for_dns_changed(ip_addr_list)
+                assert code == 0, \
+                    'DNS in configuration is different from requested:\ninput:"{}"\n"in config: {}"'.format(
+                        ip_addr_list, output)
+            else:
+                LOG.info('In this case, configuration should remain UNCHANGED as old: "{}"'.format(old_dns_servers))
+                code, output = self.wait_for_dns_changed(old_dns_servers)
+                assert code == 0, \
+                    'Saved DNS servers should remain unchanged:\nbefore: "{}"\nnow: "{}"'.format(
+                        old_dns_servers, output)
+
+        LOG.info('OK, test setting DNS to "{}" passed'.format(ip_addr_list))

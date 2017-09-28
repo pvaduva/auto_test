@@ -56,8 +56,7 @@ def test_admin_password(scenario, less_than_two_cons, _revert_admin_pw):
 
     # change password
     prev_pswd = Tenant.ADMIN['password']
-    post_actual_pswd = '!{}9'.format(prev_pswd)
-    post_pswd = "'{}'".format(post_actual_pswd)
+    post_pswd = '!{}9'.format(prev_pswd)
 
     LOG.tc_step('Changing admin password to {}'.format(post_pswd))
     keystone_helper.update_user('admin', password=post_pswd)
@@ -66,7 +65,7 @@ def test_admin_password(scenario, less_than_two_cons, _revert_admin_pw):
     time.sleep(120)  # CGTS-6928
 
     LOG.tc_step("Check admin password is updated in keyring")
-    assert post_actual_pswd == security_helper.get_admin_password_in_keyring()
+    assert post_pswd == security_helper.get_admin_password_in_keyring()
 
     if scenario == "change_pswd_swact":
         host_helper.swact_host()
@@ -76,4 +75,4 @@ def test_admin_password(scenario, less_than_two_cons, _revert_admin_pw):
         LOG.info("Unlock hosts result: {}".format(res))
 
     LOG.tc_step("Check admin password is updated in keyring")
-    assert post_actual_pswd == security_helper.get_admin_password_in_keyring()
+    assert post_pswd == security_helper.get_admin_password_in_keyring()

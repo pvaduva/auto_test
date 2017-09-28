@@ -48,10 +48,9 @@ def vms_(request, flavor_):
     flavor_id = flavor_
     vm_ids = []
     for name in inst_names:
-        vm_id = vm_helper.boot_vm(name=name, flavor=flavor_id)[1]
+        vm_id = vm_helper.boot_vm(name=name, flavor=flavor_id, cleanup='module')[1]
         time.sleep(30)
         vm_ids.append(vm_id)
-        ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
 
         event = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                               **{'Entity Instance ID': vm_id, 'Event Log ID': [
@@ -59,10 +58,9 @@ def vms_(request, flavor_):
         assert event, "VM heartbeat is not enabled."
         assert EventLogID.HEARTBEAT_ENABLED == event[0], "VM heartbeat failed to establish."
 
-    vm_id = vm_helper.boot_vm(name=vm_name4)[1]
+    vm_id = vm_helper.boot_vm(name=vm_name4, cleanup='module')[1]
     time.sleep(30)
     vm_ids.append(vm_id)
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
 
     # Teardown to remove the vm and flavor
     def remove_vms():

@@ -40,9 +40,8 @@ def vm_(request, flavor_):
     vm_name = 'vm_with_hb'
     flavor_id = flavor_
 
-    vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id)[1]
+    vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, cleanup='module')[1]
     time.sleep(30)
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=True, scope='module')
 
     event = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [

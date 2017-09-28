@@ -2,20 +2,20 @@ CLI_TIMEOUT = 600
 
 
 class HostTimeout:
-    ONLINE_AFTER_LOCK = 1200
-    COMPUTE_UNLOCK = 840
-    CONTROLLER_UNLOCK = 1360
-    REBOOT = 1600
-    SWACT = 180
-    LOCK = 900
-    TASK_CLEAR = 300
-    FAIL_AFTER_REBOOT = 120
-    HYPERVISOR_UP_AFTER_AVAIL = 180
-    COMPUTE_LOCK = 30
+    ONLINE_AFTER_LOCK = 1200    # Host in online state after locked
+    COMPUTE_UNLOCK = 840    # Compute host reaches enabled/available state after system host-unlock returned
+    CONTROLLER_UNLOCK = 1360    # Host reaches enabled/available state after system host-unlock returned
+    REBOOT = 2000   # Host reaches enabled/available state after sudo reboot -f from host
+    SWACT = 180     # Active controller switched and being able to run openstack CLI after system host-swact returned
+    LOCK = 900      # Host in locked state after system host-lock cli returned
+    TASK_CLEAR = 300    # Task clears in system host-show after host reaches enabled/available state
+    FAIL_AFTER_REBOOT = 120     # Host in offline or failed state via system host-show after sudo reboot -f returned
+    HYPERVISOR_UP_AFTER_AVAIL = 180     # Hypervsior in enabled/up state after host in available state and task clears
     UPGRADE = 7200
     WIPE_DISK_TIMEOUT = 30
     PING_TIMEOUT = 60
     TIMEOUT_BUFFER = 2
+    SUBFUNC_READY = 300     # subfunction go enabled/available after host admin/avail states go enabled/available
 
 
 class VMTimeout:
@@ -26,7 +26,7 @@ class VMTimeout:
     BOOT_VM = 600
     DELETE = 180
     VOL_ATTACH = 60
-    SSH_LOGIN = 20
+    SSH_LOGIN = 60
     AUTO_RECOVERY = 600
     REBOOT = 180
     PAUSE = 180
@@ -36,7 +36,7 @@ class VMTimeout:
 
 
 class VolumeTimeout:
-    STATUS_CHANGE = 720
+    STATUS_CHANGE = 2700  # Windows guest takes a long time
     DELETE = 60
 
 
@@ -66,9 +66,25 @@ class EventLogTimeout:
     VM_REBOOT_EVENT = 60
     NET_AGENT_NOT_RESPOND_CLEAR = 120
 
+
 class MTCTimeout:
     KILL_PROCESS_HOST_CHANGE_STATUS = 40
     KILL_PROCESS_HOST_KEEP_STATUS = 20
     KILL_PROCESS_SWACT_NOT_START = 20
     KILL_PROCESS_SWACT_START = 40
     KILL_PROCESS_SWACT_COMPLETE = 40
+
+
+class CeilTimeout:
+    EXPIRE = 300
+
+
+class OrchestrationPhaseTimeout:
+        INITIAL = 20
+        BUILD = 60
+        ABORT = 7200
+        APPLY = 86400
+
+
+class MiscTimeout:
+    NTPQ_UPDATE = 700   # sudo ntpq updates every 10 minutes

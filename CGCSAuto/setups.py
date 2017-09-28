@@ -4,7 +4,7 @@ import os.path
 import configparser
 
 import setup_consts
-from utils import exceptions, cli
+from utils import exceptions, cli, lab_info
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
 from utils.node import create_node_boot_dict, create_node_dict
@@ -26,7 +26,8 @@ def setup_tis_ssh(lab):
     con_ssh = ControllerClient.get_active_controller(fail_ok=True)
 
     if con_ssh is None:
-        con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.USER, HostLinuxCreds.PASSWORD, CONTROLLER_PROMPT)
+        con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
+                            CONTROLLER_PROMPT)
         con_ssh.connect(retry=True, retry_timeout=30)
         ControllerClient.set_active_controller(con_ssh)
     # if 'auth_url' in lab:
@@ -123,7 +124,7 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh):
                     con_ssh.send('yes')
                     index = con_ssh.expect([Prompt.PASSWORD_PROMPT, Prompt.CONTROLLER_1])
                 if index == 0:
-                    con_ssh.send(HostLinuxCreds.PASSWORD)
+                    con_ssh.send(HostLinuxCreds.get_password())
                     con_ssh.expect()
 
                 con_ssh.exec_sudo_cmd('cp {} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.OPT_PLATFORM), fail_ok=False)
@@ -179,7 +180,7 @@ def get_lab_dict(labname):
                 or labname == lab['floating ip']:
             return lab
     else:
-        if labname.startswith('128.224'):
+        if labname.startswith('128.224') or labname.startswith('10.'):
             return add_lab_entry(labname)
 
         lab_valid_short_names = [lab['short_name'] for lab in labs]
@@ -258,8 +259,9 @@ def get_build_info(con_ssh):
             build_id = build_id[0]
         else:
             build_date = re.findall('''BUILD_DATE=\"(.*)\"''', output)
-            if build_date and build_date[0]:
-                build_id = build_date[0]
+            if build_date and build_date[0] != 'n/a':
+                build_id = build_date[0].rsplit(' ', 1)[0]
+                build_id = str(build_id).replace(' ', '_').replace(':', '_')
             else:
                 build_id = ' '
 
@@ -307,7 +309,7 @@ def copy_files_to_con1():
                 con_0_ssh.send('yes')
 
             if index == 1:
-                con_0_ssh.send(HostLinuxCreds.PASSWORD)
+                con_0_ssh.send(HostLinuxCreds.get_password())
 
             if index == 0:
                 output = int(con_0_ssh.exec_cmd('echo $?')[1])
@@ -520,7 +522,7 @@ def scp_vswitch_log(con_ssh, hosts, log_path=None):
         dest_file = "{}_vswitch.info".format(host)
         dest_file = os.path.join(WRSROOT_HOME, dest_file)
         con_ssh.scp_files(source_file, dest_file, source_server=host, dest_server='controller-0',
-                          source_user=HostLinuxCreds.USER, source_password=HostLinuxCreds.PASSWORD, dest_password=HostLinuxCreds.PASSWORD,
+                          source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(), dest_password=HostLinuxCreds.get_password(),
                           dest_user='', timeout=30, sudo=True, sudo_password=None, fail_ok=True)
 
     LOG.info("SCP vswitch log from lab to automation log dir")
@@ -528,9 +530,50 @@ def scp_vswitch_log(con_ssh, hosts, log_path=None):
         log_path = os.path.join(WRSROOT_HOME, '*_vswitch.info')
     source_ip = ProjVar.get_var('LAB')['controller-0 ip']
     dest_dir = ProjVar.get_var('TEMP_DIR')
-    scp_to_local(dest_path=dest_dir, source_user=HostLinuxCreds.USER, source_password=HostLinuxCreds.PASSWORD, source_path=log_path,
+    scp_to_local(dest_path=dest_dir, source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(), source_path=log_path,
                  source_ip=source_ip, timeout=60)
 
 
 def list_migration_history(con_ssh):
     nova_helper.run_migration_list(con_ssh=con_ssh)
+
+
+def get_version_and_patch_info():
+    version = ProjVar.get_var('SW_VERSION')[0]
+    info = 'Software Version: {}\n'.format(version)
+
+    patches = ProjVar.get_var('PATCH')
+    if patches:
+        info += 'Patches:\n{}\n'.format('\n'.join(patches))
+
+    # LOG.info("SW Version and Patch info: {}".format(info))
+    return info
+
+
+def set_session(con_ssh):
+    version = lab_info._get_build_info(con_ssh, 'SW_VERSION')[0]
+    ProjVar.set_var(append=True, SW_VERSION=version)
+
+    patches = lab_info._get_patches(con_ssh=con_ssh, rtn_str=False)
+    if patches:
+        ProjVar.set_var(PATCH=patches)
+
+    patches = '\n'.join(patches)
+    tag = ProjVar.get_var('REPORT_TAG')
+    if tag:
+        try:
+            from utils.cgcs_reporter import upload_results
+            sw_version = '-'.join(ProjVar.get_var('SW_VERSION'))
+            build_id = ProjVar.get_var('BUILD_ID')
+            build_server = ProjVar.get_var('BUILD_SERVER')
+            session_id = upload_results.upload_test_session(lab_name=ProjVar.get_var('LAB')['name'],
+                                                            build_id=build_id,
+                                                            build_server=build_server,
+                                                            sw_version=sw_version,
+                                                            patches=patches,
+                                                            log_dir=ProjVar.get_var('LOG_DIR'),
+                                                            tag=tag)
+            ProjVar.set_var(SESSION_ID=session_id)
+            LOG.info("Test session id: {}".format(session_id))
+        except:
+            LOG.exception("Unable to upload test session")

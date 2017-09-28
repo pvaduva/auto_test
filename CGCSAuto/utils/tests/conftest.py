@@ -12,7 +12,7 @@ con_ssh = None
 @pytest.fixture(scope='session', autouse=True)
 def setup_tis_ssh():
     global con_ssh
-    con_ssh = SSHClient(Labs.PV0['floating ip'], HostLinuxCreds.USER, HostLinuxCreds.PASSWORD, CONTROLLER_PROMPT)
+    con_ssh = SSHClient(Labs.PV0['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(), CONTROLLER_PROMPT)
     con_ssh.connect()
     ControllerClient.set_active_controller(con_ssh)
 

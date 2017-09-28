@@ -8,6 +8,7 @@ from keywords import vm_helper, nova_helper, network_helper
 
 from testfixtures.fixture_resources import ResourceCleanup
 
+
 def id_params(val):
     if not isinstance(val, str):
         new_val = []
@@ -93,7 +94,6 @@ def test_vif_model_via_port(vif_models, mgmt_port_and_tenant_net):
 #             {'net-id': internal_net_id, 'vif-model': 'virtio'}
 #     ]
 #     base_vm = vm_helper.boot_vm(name='vif', flavor=flavor_id, nics=nics, cleanup='module', reuse_vol=False)[1]
-#     # ResourceCleanup.add('vm', base_vm, scope='module')
 #
 #     return base_vm, mgmt_net_id, tenant_net_id, internal_net_id
 
@@ -133,7 +133,6 @@ def test_vif_model_via_port(vif_models, mgmt_port_and_tenant_net):
 #
 #     LOG.tc_step("Boot vm with vif_model {} for tenant-net".format(vif_model))
 #     vm_under_test = vm_helper.boot_vm(name=vif_model, nics=nics, cleanup='function', reuse_vol=False)[1]
-#     # ResourceCleanup.add('vm', vm_under_test)
 #
 #     LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_under_test))
 #     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)

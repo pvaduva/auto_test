@@ -9,8 +9,8 @@ from keywords import host_helper
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 
-WRSUSER=HostLinuxCreds.USER
-WRSPASS=HostLinuxCreds.PASSWORD
+WRSUSER=HostLinuxCreds.get_user()
+WRSPASS=HostLinuxCreds.get_password()
 WRSDIR=WRSROOT_HOME
 USER=os.environ['USER']
 WASSP_TESTCASE_BASE='/home/{}/wassp-repos/testcases/cgcs'.format(USER)

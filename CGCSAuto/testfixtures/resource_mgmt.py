@@ -126,6 +126,8 @@ def _delete(resources, scope):
     floating_ips = resources['floating_ips']
     heat_stacks = resources['heat_stacks']
     ports = resources['ports']
+    trunks = resources['trunks']
+    networks = resources['networks']
 
     err_msgs = []
     if vms_with_vols:
@@ -184,6 +186,12 @@ def _delete(resources, scope):
             if code > 0:
                 err_msgs.append(msg)
 
+    if trunks:
+        LOG.fixture_step("({}) Attempt to delete following trunks: {}".format(scope, trunks))
+        for trunk in trunks:
+            code, msg = network_helper.delete_trunk(trunk, auth_info=Tenant.ADMIN, fail_ok=True)
+            if code > 0:
+                err_msgs.append(msg)
     if ports:
         LOG.fixture_step("({}) Attempt to delete following ports: {}".format(scope, ports))
         for port in ports:
@@ -202,6 +210,12 @@ def _delete(resources, scope):
         LOG.fixture_step("({}) Attempt to delete following subnets: {}".format(scope, subnets))
         for subnet in subnets:
             code, msg = network_helper.delete_subnet(subnet_id=subnet, fail_ok=True, auth_info=Tenant.ADMIN)
+            if code > 0:
+                err_msgs.append(msg)
+    if networks:
+        LOG.fixture_step("({}) Attempt to delete following networks: {}".format(scope, networks))
+        for network in networks:
+            code, msg = network_helper.delete_network(network_id=network, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
 

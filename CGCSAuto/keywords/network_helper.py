@@ -47,11 +47,72 @@ def get_ip_address_str(ip=None):
         return None
 
 
-def create_network(name, admin_state='up', qos_policy=None, vlan_transparent=None, **subnet):
-    raise NotImplementedError
+def create_network(name=None, shared=False, tenant_name=None,
+                   network_type=None, segmentation_id=None,
+                   physical_network=None, vlan_transparent=None, fail_ok=False, auth_info=None, con_ssh=None):
+
+    """
+    Create a network for given tenant
+
+    Args:
+        name (str): name of the network
+        tenant_name: such as tenant1, tenant2.
+        network_type (str): The physical mechanism by which the virtual network is
+                        implemented
+        segmentation_id: w VLAN ID for VLAN networks
+        physical_network (str): Name of the physical network over which the virtual
+                        network is implemented
+        vlan_transparent(True/False): Create a VLAN transparent network
+        fail_ok (bool):
+        auth_info (dict): run the neutron subnet-create cli using these authorization info
+        con_ssh (SSHClient):
+
+    Returns (tuple): (rnt_code (int), net_id (str), message (str))
+
+    """
+    if name is None:
+        name = common.get_unique_name(name_str='net')
+
+    args = ' ' + name
+    if tenant_name is not None:
+        tenant_id=keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
+        args += ' --tenant-id ' + format(tenant_id)
+
+    if shared:
+        args += ' --shared'
+    if segmentation_id is not None:
+        args += ' --provider:segmentation_id ' + segmentation_id
+    if network_type is not None:
+        args += ' --provider:network_type ' + network_type
+    if physical_network is not None:
+        args += ' --provider:physical_network ' + physical_network
+    if vlan_transparent is not None:
+        args += ' vlan-transparent ' + vlan_transparent
+
+    LOG.info("Creating network: Args: {}".format(args))
+    code, output = cli.neutron('net-create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                               rtn_list=True)
+    if code == 1:
+        return 1, '', output
+
+    table_ = table_parser.table(output)
+    net_tenant_id = table_parser.get_value_two_col_table(table_, 'tenant_id')
+    net_id = table_parser.get_value_two_col_table(table_, 'id')
+
+    expt_tenant_name = tenant_name if tenant_name else common.get_tenant_name(auth_info)
+    if net_tenant_id != keystone_helper.get_tenant_ids(expt_tenant_name)[0]:
+        msg = "Subnet {} is not for tenant: {}".format(net_id, expt_tenant_name)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, net_id, msg
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "Network {} is successfully created for tenant {}".format(net_id, expt_tenant_name)
+    LOG.info(succ_msg)
+    return 0, net_id, succ_msg
 
 
-def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, dns_servers=None,
+def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gateway=False, dns_servers=None,
                   alloc_pool=None, ip_version=None, subnet_pool=None, tenant_name=None, fail_ok=False, auth_info=None,
                   con_ssh=None):
     """
@@ -99,6 +160,11 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, dns_ser
         args += ' --dns-nameservers list=true {}'.format(' '.join(dns_servers))
     elif dns_servers is not None:
         args += ' --dns-nameservers {}'.format(dns_servers)
+
+    if no_gateway:
+        args += ' --no-gateway'
+    else:
+        raise ValueError("Can't have both gateway and no-gateway for subnet.")
 
     args_dict = {
         '--tenant-id': keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0] if tenant_name else None,
@@ -579,7 +645,7 @@ def get_neutron_port(name=None, con_ssh=None, auth_info=None):
 
 
 def get_providernets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN,
-                     **kwargs):
+                     merge_lines=False, **kwargs):
     """
     Get the neutron provider net list based on name if given
 
@@ -596,9 +662,10 @@ def get_providernets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=
     """
     table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is None:
-        return table_parser.get_values(table_, rtn_val, **kwargs)
+        return table_parser.get_values(table_, rtn_val, merge_lines=merge_lines,**kwargs)
 
-    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, name=name, **kwargs)
+    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, name=name, merge_lines=merge_lines,
+                                   **kwargs)
 
 
 def get_providernet_ranges(rtn_val='name', range_name=None, providernet_name=None, providernet_type=None, strict=False,
@@ -851,18 +918,21 @@ def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn
                                 exclude_nets=exclude_nets)
 
 
-def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, use_fip=False,
-                         exclude_nets=None):
+def get_external_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, exclude_nets=None):
+    return _get_net_ips_for_vms(netname_pattern=Networks.MGMT_NET_NAME, ip_pattern=Networks.EXT_IP, vms=vms,
+                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
+
+
+def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, exclude_nets=None):
     """
     This function returns the management IPs for all VMs on the system.
-    We make the assumption that the management IPs start with "192".
+    We make the assumption that the management IP pattern is "192.168.xxx.x(xx)".
     Args:
         vms (str|list|None): vm ids list. If None, management ips for ALL vms with given Tenant(via auth_info) will be
             returned.
         con_ssh (SSHClient): active controller SSHClient object
         auth_info (dict): use admin by default unless specified
         rtn_dict (bool): return list if False, return dict if True
-        use_fip (bool): Whether to return only floating ip(s) if any vm has floating ip(s) associated with it
         exclude_nets (list|str) network name(s) - exclude ips from given network name(s)
 
     Returns (list|dict):
@@ -870,8 +940,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
     return _get_net_ips_for_vms(netname_pattern=Networks.MGMT_NET_NAME, ip_pattern=Networks.MGMT_IP, vms=vms,
-                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, use_fip=use_fip,
-                                exclude_nets=exclude_nets)
+                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
 def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False,
@@ -889,9 +958,9 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
     if not vm_ids:
         raise ValueError("No vm is on the system. Please boot vm(s) first.")
     vms_nets = table_parser.get_column(table_, 'Networks')
-
-    if use_fip:
-        floatingips = get_floating_ips(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
+    #
+    # if use_fip:
+    #     floatingips = get_floating_ips(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
 
     if exclude_nets:
         if isinstance(exclude_nets, str):
@@ -922,15 +991,15 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
             continue
 
         LOG.info('targeted_ip_str: {}, ips for vm: {}'.format(targeted_ips_str, ips_for_vm))
-        if use_fip:
-            vm_fips = []
-            # ping floating ips only if any associated to vm, otherwise ping all the ips
-            if len(ips_for_vm) > 1:
-                for ip in ips_for_vm:
-                    if ip in floatingips:
-                        vm_fips.append(ip)
-                if vm_fips:
-                    ips_for_vm = vm_fips
+        # if use_fip:
+        #     vm_fips = []
+        #     # ping floating ips only if any associated to vm, otherwise ping all the ips
+        #     if len(ips_for_vm) > 1:
+        #         for ip in ips_for_vm:
+        #             if ip in floatingips:
+        #                 vm_fips.append(ip)
+        #         if vm_fips:
+        #             ips_for_vm = vm_fips
 
         all_ips_dict[vm_id] = ips_for_vm
         all_ips += ips_for_vm
@@ -1645,7 +1714,7 @@ def update_quotas(tenant_name=None, tenant_id=None, con_ssh=None, auth_info=Tena
     """
     if not tenant_id:
         if tenant_name is None:
-            tenant_name = Tenant.get_primary()['tenant_name']
+            tenant_name = Tenant.get_primary()['tenant']
         tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)[0]
 
     if not kwargs:
@@ -1679,7 +1748,7 @@ def update_quotas(tenant_name=None, tenant_id=None, con_ssh=None, auth_info=Tena
     return 0, succ_msg
 
 
-def get_pci_devices_info(con_ssh=None, auth_info=None):
+def get_pci_devices_info(class_id, con_ssh=None, auth_info=None):
     """
     Get PCI devices with nova device-list/show.
 
@@ -1687,65 +1756,38 @@ def get_pci_devices_info(con_ssh=None, auth_info=None):
         Coleto Creek PCIe Co-processor  Device Id: 0443 Vendor Id:8086
 
     Args:
+        class_id (str|list): Some possible values:
+            0b4000 (Co-processor),
+            0c0330 (USB controller),
+            030000 (VGA compatible controller)
         con_ssh:
         auth_info:
 
-    Returns:
-        dict contains:
-            Device Id: {Device Name, Vendor Id, Host, pci_pfs_configured,
-                    pci_pfs_used, pci_vfs_configured, pci_vfs_used}
+    Returns (dict): nova pci devices dict.
+        Format: {<pci_alias1>: {<host1>: {<nova device-show row dict for host>}, <host2>: {...}},
+                 <pci_alias2>: {...},
+                 ...}
+        Examples:
+            {qat-vf: {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
 
     """
-    table = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
-    LOG.info('output of nova device-list:{}'.format(table))
+    table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.filter_table(table_, **{'class_id': class_id})
+    LOG.info('output of nova device-list for {}: {}'.format(class_id, table_))
 
-    try:
-        # names = table_parser.get_column(table, 'Device Name')
-        devices = table_parser.get_column(table, 'Device Id')
-        # pci_pfs = table_parser.get_column(table, 'pci_pfs_configured')
-        # pci_pfs_used = table_parser.get_column(table, 'pci_pfs_used')
-        # pci_vfs = table_parser.get_column(table, 'pci_vfs_configured')
-        # pci_vfs_used = table_parser.get_column(table, 'pci_vfs_used')
-        # for id, name, pfs, pfs_used, vfs, vfs_used in zip(
-        #         device_ids, names, pci_pfs, pci_pfs_used, pci_vfs, pci_vfs_used):
-        #     nova_pci_devices[id] = {'name': name, 'pfs': pfs, 'pfs_used': pfs_used, 'vfs': vfs, 'vfs_used': vfs_used}
-
-    except Exception as e:
-        LOG.error('CLI output format error: CLI nova device-list changed its format. error message:{}'.format(e))
-        raise
-
-    LOG.info('device IDs from device-list:{}'.format(devices))
+    devices = table_parser.get_column(table_, 'PCI Alias')
+    LOG.info('PCI Alias from device-list:{}'.format(devices))
 
     nova_pci_devices = {}
-    for id_ in devices:
-        table = table_parser.table(cli.nova('device-show {}'.format(id_)))
-        LOG.debug('output from nova device-show for device-id:{}\n{}'.format(id_, table))
+    for alias in devices:
+        table_ = table_parser.table(cli.nova('device-show {}'.format(alias)))
+        # LOG.debug('output from nova device-show for device-id:{}\n{}'.format(alias, table_))
 
-        try:
-            names = table_parser.get_column(table, 'Device Name')
-            device_ids = table_parser.get_column(table, 'Device Id')
-            vendor_ids = table_parser.get_column(table, 'Vendor Id')
-            hosts = table_parser.get_column(table, 'Host')
-            pci_pfs = table_parser.get_column(table, 'pci_pfs_configured')
-            pci_pfs_used = table_parser.get_column(table, 'pci_pfs_used')
-            pci_vfs = table_parser.get_column(table, 'pci_vfs_configured')
-            pci_vfs_used = table_parser.get_column(table, 'pci_vfs_used')
+        table_dict = table_parser.row_dict_table(table_, key_header='Host', unique_key=True)
+        nova_pci_devices[alias] = table_dict
+        # {qat-vf: {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
 
-            for name, device_id, vendor_id, host, pci_pf, pci_pf_used, pci_vf, pci_vf_used in \
-                    zip(names, device_ids, vendor_ids, hosts, pci_pfs, pci_pfs_used, pci_vfs, pci_vfs_used):
-
-                    nova_pci_devices[host] = {device_id: {'vendor_id': vendor_id,
-                                                          'pci_pfs_configured': pci_pf,
-                                                          'pci_pfs_used': pci_pf_used,
-                                                          'pci_vfs_configured': pci_vf,
-                                                          'pci_vfs_used': pci_pf_used,
-                                                          }}
-        except Exception as e:
-            LOG.error('CLI output format error: CLI nova device-show {} changed its format. error message:{}'.format(
-                id_, e))
-            raise
-
-    LOG.debug('nova_pci_deivces:{}'.format(nova_pci_devices))
+    LOG.info('nova_pci_deivces: {}'.format(nova_pci_devices))
 
     return nova_pci_devices
 
@@ -1859,9 +1901,17 @@ def get_networks_on_providernet(providernet_id, rtn_val='id', con_ssh=None, auth
 
 def get_pci_nets(vif='sriov', rtn_val='name', vlan_id=0, con_ssh=None, auth_info=Tenant.ADMIN):
 
-    pnet_id = get_providernet_for_interface(interface=vif, con_ssh=con_ssh, auth_info=auth_info)
+    pnet_id = get_providernet_for_interface(interface=vif, rtn_val='id', con_ssh=con_ssh, auth_info=auth_info)
 
-    return get_networks_on_providernet(pnet_id, rtn_val, con_ssh=con_ssh, auth_info=auth_info, vlan_id=vlan_id)
+    nets = get_networks_on_providernet(pnet_id, rtn_val, con_ssh=con_ssh, auth_info=auth_info, vlan_id=vlan_id)
+    if 'sriov' in vif:
+        first_seg = get_first_segment_of_providernet(pnet_id, pnet_val='id', con_ssh=con_ssh)
+        untagged_net = get_net_on_segment(pnet_id, seg_id=first_seg, rtn_val='name', con_ssh=con_ssh)
+        if untagged_net in nets:
+            LOG.info("{} is on first segment of {} range with untagged frames. Remove for sriov.".
+                     format(untagged_net, pnet_id))
+            nets.remove(untagged_net)
+    return nets
 
 
 def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_ssh=None):
@@ -2137,7 +2187,7 @@ def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
 
-def _ping_server(server, ssh_client, num_pings=5, timeout=30, fail_ok=False, vshell=False, interface=None):
+def _ping_server(server, ssh_client, num_pings=5, timeout=60, fail_ok=False, vshell=False, interface=None, retry=0):
     """
 
     Args:
@@ -2152,38 +2202,48 @@ def _ping_server(server, ssh_client, num_pings=5, timeout=30, fail_ok=False, vsh
     Returns (int): packet loss percentile, such as 100, 0, 25
 
     """
-    if not vshell:
-        cmd = 'ping -c {} {}'.format(num_pings, server)
-        code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout, fail_ok=True)
-        if code != 0:
-            packet_loss_rate = 100
+    for i in range(max(retry + 1, 0)):
+        if not vshell:
+            cmd = 'ping -c {} {}'.format(num_pings, server)
+            code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout, fail_ok=True)
+            if code != 0:
+                packet_loss_rate = 100
+            else:
+                packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
         else:
-            packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
+            if not interface:
+                interface = _get_interfaces_via_vshell(ssh_client, net_type='internal')[0]
+            cmd = 'vshell ping --count {} {} {}'.format(num_pings, server, interface)
+            code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)
+            if code != 0:
+                packet_loss_rate = 100
+            else:
+                packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
+
+        packet_loss_rate = int(packet_loss_rate)
+        if packet_loss_rate < 100:
+            if packet_loss_rate > 0:
+                LOG.warning("Some packets dropped when ping from {} ssh session to {}. Packet loss rate: {}%".
+                            format(ssh_client.host, server, packet_loss_rate))
+            else:
+                LOG.info("All packets received by {}".format(server))
+            break
+
+        LOG.info("retry in 3 seconds")
+        time.sleep(3)
     else:
-        if not interface:
-            interface = _get_interfaces_via_vshell(ssh_client, net_type='internal')[0]
-        cmd = 'vshell ping --count {} {} {}'.format(num_pings, server, interface)
-        code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)
-        if code != 0:
-            packet_loss_rate = 100
-        else:
-            packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
-
-    packet_loss_rate = int(packet_loss_rate)
-
-    if packet_loss_rate == 100:
         msg = "Ping from {} to {} failed.".format(ssh_client.host, server)
         if not fail_ok:
             raise exceptions.VMNetworkError(msg)
         else:
             LOG.warning(msg)
-    elif packet_loss_rate > 0:
-        LOG.warning("Some packets dropped when ping from {} ssh session to {}. Packet loss rate: {}%".
-                    format(ssh_client.host, server, packet_loss_rate))
-    else:
-        LOG.info("All packets received by {}".format(server))
 
-    untransmitted_packets = int(num_pings) - int(re.findall("(\d+) packets transmitted,", output)[0])
+    untransmitted_packets = re.findall("(\d+) packets transmitted,", output)
+    if untransmitted_packets:
+        untransmitted_packets = int(num_pings) - int(untransmitted_packets[0])
+    else:
+        untransmitted_packets = num_pings
+
     return packet_loss_rate, untransmitted_packets
 
 
@@ -2191,12 +2251,24 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
                        auth_info=Tenant.ADMIN):
     hosts_and_pnets = host_helper.get_hosts_and_pnets_with_pci_devs(pci_type=pci_type, up_hosts_only=True,
                                                                     con_ssh=con_ssh, auth_info=auth_info)
-    print("hosts and pnets: {}".format(hosts_and_pnets))
+    if not hosts_and_pnets:
+        return None
+
+    # print("hosts and pnets: {}".format(hosts_and_pnets))
+
     host = list(hosts_and_pnets.keys())[0]
-    pnet = hosts_and_pnets[host][0]
+    pnet_name = hosts_and_pnets[host][0]
     kwargs = {'vlan_id': vlan_id} if vlan_id is not None else {}
-    nets = list(set(get_networks_on_providernet(pnet, rtn_val='name', **kwargs)))
-    print("pnet: {}; Nets: {}".format(pnet, nets))
+    nets = list(set(get_networks_on_providernet(pnet_name, rtn_val='name', **kwargs)))
+    if pci_type == 'pci-sriov':
+        first_seg = get_first_segment_of_providernet(pnet_name, pnet_val='name', con_ssh=con_ssh)
+        untagged_net = get_net_on_segment(pnet_name, seg_id=first_seg, rtn_val='name', con_ssh=con_ssh)
+        if untagged_net in nets:
+            LOG.info("{} is on first segment of {} range with untagged frames. Remove for sriov.".
+                     format(untagged_net, pnet_name))
+            nets.remove(untagged_net)
+
+    # print("pnet: {}; Nets: {}".format(pnet_name, nets))
     final_nets = _get_preferred_nets(nets=nets, net_name=net_name, strict=strict)
     vm_net = final_nets[-1]
     if pci_type == 'pci-passthrough':
@@ -2207,6 +2279,47 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
             vm_net = final_nets[0:2]
 
     return vm_net
+
+
+def get_first_segment_of_providernet(providernet, pnet_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get first segment id within the range of given providernet
+    Args:
+        providernet (str): pnet name or id
+        pnet_val: 'id' or 'name' based on the value for providernet param
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (int): segment id
+
+    """
+    ranges = get_providernets(rtn_val='ranges', con_ssh=con_ssh, auth_info=auth_info, merge_lines=False,
+                              **{pnet_val: providernet})[0]
+
+    if isinstance(ranges, list):
+        ranges = ranges[0]
+    first_seg = eval(ranges)['minimum']
+    return first_seg
+
+
+def get_net_on_segment(providernet, seg_id, rtn_val='name', con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get network name on given prvidernet with specified segment id
+    Args:
+        providernet (str): pnet name or id
+        seg_id (int): segment id
+        rtn_val (str): 'name' or 'id'
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (str|None): network id/name or None if no network on given seg id
+
+    """
+    nets = get_networks_on_providernet(providernet_id=providernet, rtn_val=rtn_val, con_ssh=con_ssh,
+                                       auth_info=auth_info, **{'segmentation_id': seg_id})
+
+    net = nets[0] if nets else None
+    return net
 
 
 def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only=True, vlan_id=0, net_name=None,
@@ -2886,6 +2999,7 @@ def get_pci_device_vfs_counts_for_host(host, device_id=None, fields=('pci_vfs_co
 
     return counts
 
+
 def get_pci_device_list_values(field='pci_vfs_used', con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     table_ = table_parser.table(cli.nova(cmd='device-list', ssh_client=con_ssh, auth_info=auth_info))
 
@@ -3076,3 +3190,291 @@ def wait_for_agents_alive(hosts=None, timeout=120, fail_ok=False, con_ssh=None, 
     if fail_ok:
         return False, msg
     raise exceptions.NeutronError(msg)
+
+
+def get_trunks(rtn_val='id', trunk_id=None, trunk_name=None, parent_port=None, strict=False,
+              auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Get a list of trunks with given arguments
+    Args:
+        rtn_val (str): any valid header of neutron trunk list table. 'id', 'name', 'mac_address', or 'fixed_ips'
+        trunk_id (str): id of the trunk
+        trunk_name (str): name of the trunk
+        parent_port (str): parent port of the trunk
+        strict (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.openstack('network trunk list', ssh_client=con_ssh, auth_info=auth_info))
+
+    args_dict = {
+        'id': trunk_id,
+        'name': trunk_name,
+        'parent_port': parent_port,
+    }
+    kwargs = {}
+    for key, value in args_dict.items():
+        if value:
+            kwargs[key] = value
+
+    trunks = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=True, **kwargs)
+    return trunks
+
+
+def create_trunk(port_id, tenant_name=None, name=None,
+                 admin_state_up=True, sub_ports=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """Create a trunk via API.
+    Args:
+        port_id: Parent port of trunk.
+        tenant_name: tenant name to create the trunk under.
+        name: Name of the trunk.
+        admin_state_up: Admin state of the trunk.
+        sub_ports: List of subport dictionaries in format
+            [[<ID of neutron port for subport>,
+             segmentation_type(vlan),
+             segmentation_id(<VLAN tag>)] []..]
+
+    Return: List with trunk's data returned from Neutron API.
+    """
+    if port_id is None:
+        raise ValueError("port_id has to be specified for parent port.")
+    if name is None:
+        name = common.get_unique_name(name_str='trunk')
+
+    if tenant_name is None:
+        tenant_name = Tenant.get_primary()['tenant']
+
+    tenant_id=keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
+    args = '--parent-port ' + port_id
+    args += " --project " + format(tenant_id)
+    keys = ['port','segmentation-type','segmentation-id']
+    if sub_ports is not None:
+        for sub_port in sub_ports:
+            tmp_list = []
+            for key in keys:
+                val = sub_port.get(key)
+                if val is not None:
+                    tmp_list.append('{}={}'.format(key, val))
+            args += ' --subport '+','.join(tmp_list)
+
+    if admin_state_up:
+        args += ' --enable'
+    else:
+        args += ' --disable'
+    args += ' '+ name
+
+    LOG.info("Creating port trunk for port: {}. Args: {}".format(port_id, args))
+    code, output = cli.openstack('network trunk create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                                 rtn_list=True)
+
+    if code == 1:
+        return 1, '', output
+
+    table_ = table_parser.table(output)
+    trunk_tenant_id = table_parser.get_value_two_col_table(table_, 'tenant_id')
+    trunk_id = table_parser.get_value_two_col_table(table_, 'id')
+
+    expt_tenant_name = tenant_name if tenant_name else common.get_tenant_name(auth_info)
+    if trunk_tenant_id != keystone_helper.get_tenant_ids(expt_tenant_name)[0]:
+        msg = "Trunk {} is not for tenant: {}".format(trunk_id, expt_tenant_name)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, trunk_id, msg
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "Trunk {} is successfully created for tenant {}".format(trunk_id, expt_tenant_name)
+    LOG.info(succ_msg)
+    return 0, trunk_id, succ_msg
+
+
+def delete_trunk(trunk_id, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Delete given trunk
+    Args:
+        trunk_id (str):
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple): (<rtn_code>, <msg>)
+        (0, "Port <trunk_id> is successfully deleted")
+        (1, <std_err>)  - delete port cli rejected
+        (2, "trunk <trunk_id> still exists after deleting")   - post deletion check failed
+
+    """
+    LOG.info("Deleting trunk: {}".format(trunk_id))
+    if not trunk_id:
+        msg = "No trunk specified"
+        LOG.warning(msg)
+        return -1, msg
+
+    code, output = cli.openstack('network trunk delete', trunk_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
+                               auth_info=auth_info, )
+
+    if code == 1:
+        return 1, output
+
+    existing_trunks = get_trunks(rtn_val='id')
+    if trunk_id in existing_trunks:
+        err_msg = "Trunk {} still exists after deleting".format(trunk_id)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        raise exceptions.NeutronError(err_msg)
+
+    succ_msg = "Trunk {} is successfully deleted".format(trunk_id)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
+def add_trunk_subports(trunk_id, sub_ports=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """Add subports to a trunk via API.
+    Args:
+        trunk_id: Trunk id to add the subports
+        sub_ports: List of subport dictionaries in format
+            [[<ID of neutron port for subport>,
+             segmentation_type(vlan),
+             segmentation_id(<VLAN tag>)] []..]
+
+    Return: list with return code and msg.
+    """
+
+    args=''
+    if trunk_id is None:
+        raise ValueError("port_id has to be specified for parent port.")
+
+    if sub_ports is None:
+        raise ValueError("port_id has to be specified for parent port.")
+
+    keys = ['port', 'segmentation-type', 'segmentation-id']
+    args += trunk_id
+    if sub_ports is not None:
+        for sub_port in sub_ports:
+            tmp_list = []
+            for key in keys:
+                val = sub_port.get(key)
+                if val is not None:
+                    tmp_list.append('{}={}'.format(key, val))
+            args += ' --subport '+','.join(tmp_list)
+
+    LOG.info("Adding subport to trunk: {}. Args: {}".format(trunk_id, args))
+    code, output = cli.openstack('network trunk set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                                 rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    msg='Subport is added succesfully'
+    return 0, msg
+
+
+def remove_trunk_subports(trunk_id,tenant_name=None, sub_ports=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """Remove subports from a trunk via API.
+    Args:
+        trunk_id: Trunk id to remove the subports from
+        sub_ports: List of subport
+
+    Return: list with return code and msg
+    """
+    args=''
+    if trunk_id is None:
+        raise ValueError("port_id has to be specified for parent port.")
+
+    if sub_ports is None:
+        raise ValueError("port_id has to be specified for parent port.")
+
+    args += trunk_id
+
+    for sub_port in sub_ports:
+        args += ' --subport'
+        args += ' ' + sub_port
+
+    LOG.info("Removing subport from trunk: {}. Args: {}".format(trunk_id, args))
+    code, output = cli.openstack('network trunk unset', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                               rtn_list=True)
+    if code == 1:
+        return 1, output
+
+    msg = 'Subport is removed succesfully'
+    return 0, msg
+
+
+def get_networks(name=None, cidr=None, strict=True, regex=False, auth_info=None, con_ssh=None):
+    """
+    Get networks ids based on given criteria.
+
+    Args:
+        name (str): name of the network
+        cidr (str): cidr of the network
+        strict (bool): whether to perform strict search on given name and cidr
+        regex (bool): whether to use regext to search
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (list): a list of network ids
+
+    """
+    table_ = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=auth_info))
+    if name is not None:
+        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, name=name)
+    if cidr is not None:
+        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, cidr=cidr)
+
+    return table_parser.get_column(table_, 'id')
+
+
+def delete_network(network_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+    """
+     Delete given network
+     Args:
+         network_id: network id to be deleted.
+        con_ssh (SSHClient):
+        auth_info (dict):
+        fail_ok (bool): whether to return False or raise exception when non-alive agents exist
+
+     Returns (list):
+
+     """
+    LOG.info("Deleting network {}".format(network_id))
+    code, output = cli.neutron('net-delete', network_id, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                               fail_ok=True)
+
+    if code == 1:
+        return 1, output
+
+    if network_id in get_networks(auth_info=auth_info, con_ssh=con_ssh):
+        msg = "Network {} is still listed in neutron net-list".format(network_id)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, msg
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "Network {} is successfully deleted.".format(network_id)
+    return 0, succ_msg
+
+
+def get_ip_for_eth(ssh_client, eth_name):
+    """
+    Get the IP addr for given eth on the ssh client provided
+    Args:
+        ssh_client (SSHClient): usually a vm_ssh
+        eth_name (str): such as "eth1, eth1.1"
+
+    Returns (str): The first matching ipv4 addr for given eth. such as "30.0.0.2"
+
+    """
+    if eth_name in ssh_client.exec_cmd('ip addr'.format(eth_name))[1]:
+        output = ssh_client.exec_cmd('ip addr show {}'.format(eth_name), fail_ok=False)[1]
+        if re.search('inet {}'.format(Networks.IPV4_IP), output):
+            return re.findall('{}'.format(Networks.IPV4_IP), output)[0]
+        else:
+            LOG.warning("Cannot find ip address for interface{}".format(eth_name))
+            return ''
+
+    else:
+        LOG.warning("Cannot find provided interface{} in 'ip addr'".format(eth_name))
+        return ''
+

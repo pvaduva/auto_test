@@ -50,7 +50,7 @@ def test_vm_with_heartbeat_failure(vm_):
         - Create a volume from tis image
         - Boot a vm with the flavor and the volume
         - Verify guest heartbeat is established via system event-logs
-        - Set vm to unhealthy state via touch /tmp/unhealthy
+        - Set vm to unhealthy state by force kill guest-client pid in vm
         - Verify vm auto recovery behavior is as expected based on auto recovery setting in flavor
 
     Teardown:

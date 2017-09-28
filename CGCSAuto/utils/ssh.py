@@ -60,7 +60,7 @@ class SSHClient:
             reconnect()         reconnects to session
     """
 
-    def __init__(self, host, user=HostLinuxCreds.USER, password=HostLinuxCreds.PASSWORD, force_password=True,
+    def __init__(self, host, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(), force_password=True,
                  initial_prompt=CONTROLLER_PROMPT, timeout=60, session=None, searchwindownsize=None):
         """
         Initiate an object for connecting to remote host
@@ -466,7 +466,8 @@ class SSHClient:
     def get_exit_code(self):
         self.send(EXIT_CODE_CMD)
         self.expect(timeout=30)
-        return int(self.cmd_output.splitlines()[1])
+        matches = re.findall("\n([-+]?[0-9]+)\n", self.cmd_output)
+        return int(matches[-1])
 
     def get_hostname(self):
         return self.exec_cmd('hostname')[1].splitlines()[0]
@@ -474,8 +475,8 @@ class SSHClient:
     def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, extra_opts=None, pre_opts=None,
               timeout=60, fail_ok=False):
 
-        dest_user = dest_user or HostLinuxCreds.USER
-        dest_password = dest_password or HostLinuxCreds.PASSWORD
+        dest_user = dest_user or HostLinuxCreds.get_user()
+        dest_password = dest_password or HostLinuxCreds.get_password()
         if extra_opts:
             extra_opts_str = ' '.join(extra_opts) + ' '
         else:
@@ -563,8 +564,8 @@ class SSHClient:
         dest_add_prompt = '{}.*\(yes/no\).*'.format(dest_server) if dest_server else unmatchable_str
         sudo_pswd_prompt = 'Password:| password for '
         search_window_size = 300
-        index = self.expect([self.prompt, dest_add_prompt, dest_pswd_prompt,
-                             source_add_prompt, source_pswd_prompt, sudo_pswd_prompt],
+        index = self.expect([self.prompt, dest_pswd_prompt, dest_add_prompt,
+                             source_pswd_prompt, source_add_prompt, sudo_pswd_prompt],
                             timeout=timeout, searchwindowsize=search_window_size)
         if index == 5:
             # sudo password prompt
@@ -622,7 +623,7 @@ class SSHClient:
                 self.expect()
 
     def exec_sudo_cmd(self, cmd, expect_timeout=60, rm_date=True, fail_ok=True, get_exit_code=True,
-                      searchwindowsize=None, strict_passwd_prompt=False):
+                      searchwindowsize=None, strict_passwd_prompt=False, extra_prompt=None):
         """
         Execute a command with sudo.
 
@@ -636,6 +637,7 @@ class SSHClient:
                     to speed up the search, and to avoid matching in the middle of the output.
             strict_passwd_prompt (bool): whether to search output with strict password prompt (Not recommended. Use
                 searchwindowsize instead)
+            extra_prompt (str|None)
 
         Returns (tuple): (exit code (int), command output (str))
 
@@ -643,11 +645,17 @@ class SSHClient:
         cmd = 'sudo ' + cmd
         LOG.debug("Executing sudo command...")
         self.send(cmd)
-        prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
-        index = self.expect([self.prompt, prompt], timeout=expect_timeout, searchwindowsize=searchwindowsize)
-        if index == 1:
+        pw_prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
+        prompts = [self.prompt]
+        if extra_prompt is not None:
+            prompts.append(extra_prompt)
+        prompts.append(pw_prompt)
+
+        index = self.expect(prompts, timeout=expect_timeout, searchwindowsize=searchwindowsize, fail_ok=fail_ok)
+        if index == prompts.index(pw_prompt):
             self.send(self.password)
-            self.expect(timeout=expect_timeout, searchwindowsize=searchwindowsize)
+            prompts.remove(pw_prompt)
+            self.expect(prompts, timeout=expect_timeout, searchwindowsize=searchwindowsize, fail_ok=fail_ok)
 
         code, output = self.__process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
         if code != 0 and not fail_ok:
@@ -1036,7 +1044,7 @@ class VMSSHClient(SSHFromSSH):
 
 
 class FloatingClient(SSHClient):
-    def __init__(self, floating_ip, user=HostLinuxCreds.USER, password=HostLinuxCreds.PASSWORD, initial_prompt=CONTROLLER_PROMPT):
+    def __init__(self, floating_ip, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(), initial_prompt=CONTROLLER_PROMPT):
 
         # get a list of floating ips for all known labs
         __lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith(r'__')]
@@ -1257,7 +1265,7 @@ def ssh_to_controller0(ssh_client=None):
     if ssh_client.get_hostname() == 'controller-0':
         LOG.info("Already on controller-0. Do nothing.")
         return ssh_client
-    con_0_ssh = SSHFromSSH(ssh_client=ssh_client, host='controller-0', user=HostLinuxCreds.USER, password=HostLinuxCreds.PASSWORD,
+    con_0_ssh = SSHFromSSH(ssh_client=ssh_client, host='controller-0', user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(),
                            initial_prompt=Prompt.CONTROLLER_0)
     con_0_ssh.connect()
     return con_0_ssh

@@ -4,7 +4,7 @@ class Tenant:
 
     ADMIN = {
         'user': 'admin',
-        'password': 'admin',
+        'password': 'Li69nux*',
         'tenant': 'admin',
         'auth_url': __URL,
         'region': __REGION
@@ -12,7 +12,7 @@ class Tenant:
 
     TENANT1 = {
         'user': 'tenant1',
-        'password': 'tenant1',
+        'password': 'Li69nux*',
         'tenant': 'tenant1',
         'auth_url': __URL,
         'region': __REGION
@@ -20,7 +20,7 @@ class Tenant:
 
     TENANT2 = {
         'user': 'tenant2',
-        'password': 'tenant2',
+        'password': 'Li69nux*',
         'tenant': 'tenant2',
         'auth_url': __URL,
         'region': __REGION
@@ -87,16 +87,30 @@ class Tenant:
 
 
 class HostLinuxCreds:
-    USER = 'wrsroot'
-    PASSWORD = "Li69nux*"
+
+    __WRSROOT = {
+        'user': 'wrsroot',
+        'password': 'Li69nux*'
+    }
+    #
+    # USER = 'wrsroot'
+    # PASSWORD = "Li69nux*"
+
+    @classmethod
+    def get_user(cls):
+        return cls.__WRSROOT['user']
+
+    @classmethod
+    def get_password(cls):
+        return cls.__WRSROOT['password']
 
     @classmethod
     def set_user(cls, username):
-        cls.USER = username
+        cls.__WRSROOT['user'] = username
 
     @classmethod
     def set_password(cls, password):
-        cls.PASSWORD = password
+        cls.__WRSROOT['password'] = password
 
 
 class Guest:
@@ -145,6 +159,16 @@ class Guest:
 
         'win_2012': {
             'user': 'Administrator',
+            'password': 'Li69nux*'
+        },
+
+        'win_2016': {
+            'user': 'Administrator',
+            'password': 'Li69nux*'
+        },
+
+        'ge_edge': {
+            'user': 'root',
             'password': 'root'
         }
 
@@ -164,6 +188,7 @@ class SvcCgcsAuto:
     USER = 'svc-cgcsauto'
     PASSWORD = ')OKM0okm'
     HOME = '/home/svc-cgcsauto'
+    SANDBOX = '/sandbox'
 
 
 class CliAuth:

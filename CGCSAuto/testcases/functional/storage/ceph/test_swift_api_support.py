@@ -204,9 +204,7 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
 
         vm_name = 'vm_swift_api_{}'.format(i)
         LOG.tc_step("Boot a vm {} using flavor  and volume ")
-        vm_id = vm_helper.boot_vm(name=vm_name, nics=nics, source_id=vol_id, guest_os=guest_os)[1]
-        ResourceCleanup.add('vm', vm_id)
-
+        vm_id = vm_helper.boot_vm(name=vm_name, nics=nics, source_id=vol_id, guest_os=guest_os, cleanup='function')[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
         LOG.tc_step("Attempting cold migrate VM {} ....".format(vm_name))
@@ -855,7 +853,7 @@ def delete_object_file(object_path, rm_dir=False):
         con_ssh.exec_cmd(cmd)
         LOG.info("Files deleted {}: {}".format(object_path, output))
     standby_controller = system_helper.get_standby_controller_name()
-    with host_helper.ssh_to_host(standby_controller, username=HostLinuxCreds.USER, password=HostLinuxCreds.PASSWORD) \
+    with host_helper.ssh_to_host(standby_controller, username=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password()) \
             as standby_ssh:
         cmd = "ls {}".format(object_path)
         rc, output = standby_ssh.exec_cmd(cmd)

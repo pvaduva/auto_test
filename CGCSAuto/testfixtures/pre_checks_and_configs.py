@@ -8,6 +8,34 @@ from consts.cgcs import EventLogID, HostAvailabilityState
 from keywords import system_helper, host_helper, keystone_helper, security_helper
 
 
+@fixture(scope='function')
+def no_simplex():
+    if system_helper.is_simplex():
+        skip(SkipReason.SIMPLEX_SYSTEM)
+
+
+@fixture(scope='class')
+def no_simplex_class():
+    if system_helper.is_simplex():
+        skip(SkipReason.SIMPLEX_SYSTEM)
+
+
+@fixture(scope='module')
+def no_simplex_module():
+    if system_helper.is_simplex():
+        skip(SkipReason.SIMPLEX_SYSTEM)
+
+
+@fixture(scope='module')
+def check_numa_num():
+    proc_num = 2
+    if system_helper.is_simplex():
+        procs = host_helper.get_host_procs('controller-0')
+        proc_num = len(procs)
+
+    return proc_num
+
+
 @fixture(scope='session')
 def wait_for_con_drbd_sync_complete():
     if len(system_helper.get_controllers()) < 2:
@@ -41,8 +69,7 @@ def wait_for_con_drbd_sync_complete():
 def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     more_than_one_controllers = wait_for_con_drbd_sync_complete
     prev_pswd = Tenant.ADMIN['password']
-    post_actual_pswd = '!{}9'.format(prev_pswd)
-    post_pswd = "'{}'".format(post_actual_pswd)
+    post_pswd = '!{}9'.format(prev_pswd)
 
     LOG.fixture_step('(Session) Changing admin password to {}'.format(post_pswd))
     keystone_helper.update_user('admin', password=post_pswd)
@@ -78,6 +105,6 @@ def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     _lock_unlock_controllers()
 
     LOG.fixture_step("(Session) Check admin password is changed to {} in keyring".format(post_pswd))
-    assert post_actual_pswd == security_helper.get_admin_password_in_keyring()
+    assert post_pswd == security_helper.get_admin_password_in_keyring()
 
     return post_pswd

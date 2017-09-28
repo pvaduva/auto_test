@@ -1,8 +1,8 @@
 import copy
 import time
 
-from consts import timeout
-from consts.cgcs import HTTPPorts
+from consts.timeout import HostTimeout
+from consts.cgcs import HTTPPorts, HostAdminState
 from pytest import fixture, skip
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import html_helper, host_helper
@@ -106,7 +106,7 @@ def validate_pipelines(data):
     return 0
 
 
-def test_get_extensions():
+def test_restapi_neutron_get_extensions():
     """
     Test that we can REST API query for extensions and that we receive valid data from the query.
 
@@ -123,7 +123,7 @@ def test_get_extensions():
     assert res == 0, "FAIL: The extensions returned are not valid."
 
 
-def test_get_host_pipelines():
+def test_restapi_ceilometer_get_host_pipelines():
     """
     Do a bulk query of all pipelines and see if we get the expected number of pipelines.
     Expect at least 2 pipelines.
@@ -141,7 +141,7 @@ def test_get_host_pipelines():
                                             .format(NUM_PIPELINES, len(pipelines))
 
 
-def test_get_individual_pipelines():
+def test_restapi_ceilometer_get_individual_pipelines():
     """
     Check that Each pipeline's information is in a valid form.
 
@@ -161,9 +161,9 @@ def test_get_individual_pipelines():
         assert res == 0, "FAIL: Pipeline {} has invalid information.".format(item["name"])
 
 
-def test_put_pipelines():
+def test_restapi_ceilometer_put_pipelines():
     """
-    Modify some of the parameters of a pipeline and confirm that they are modifiied correctly.
+    Modify some of the parameters of a pipeline and confirm that they are modified correctly.
 
     Test Steps:
         - Send HTTP GET request to the server (Ceilometer port) to get the pipelines
@@ -203,7 +203,7 @@ def test_put_pipelines():
                                                .format(item["name"])
 
 
-def test_modify_cpu(prepare_modify_cpu):
+def test_restapi_sysinv_modify_cpu(prepare_modify_cpu):
     """
     TC2043
     Modify cpu parameters through API
@@ -218,7 +218,7 @@ def test_modify_cpu(prepare_modify_cpu):
         - Revert cpu changes
 
     """
-    name, uuid, iprofile_uuid = prepare_modify_cpu
+    hostname, uuid, iprofile_uuid = prepare_modify_cpu
     headers = get_headers()
 
     url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER, "ihosts")
@@ -229,19 +229,20 @@ def test_modify_cpu(prepare_modify_cpu):
             found = True
             break
 
-    assert found, "FAIL: {} is not listed in the API".format(name)
+    assert found, "FAIL: {} is not listed in the API".format(hostname)
 
-    LOG.tc_step("Locking {}".format(name))
+    LOG.tc_step("Locking {}".format(hostname))
     url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER, "ihosts/{}".format(uuid))
     lock_data = [{"path": "/action", "value": "lock", "op": "replace"}]
-    HostsToRecover.add(name, scope='function')
+    HostsToRecover.add(hostname, scope='function')
     html_helper.patch_request(url=url, headers=headers, data=lock_data, verify=False)
-    time.sleep(timeout.HostTimeout.COMPUTE_LOCK)
 
-    host = html_helper.get_request(url=url, headers=headers, verify=False)
-    assert 'locked' == host['administrative'], "FAIL: Couldn't lock {}".format(name)
+    host_helper.wait_for_host_states(hostname, timeout=HostTimeout.LOCK, administrative=HostAdminState.LOCKED)
 
-    res, out = host_helper.modify_host_cpu(name, 'shared', p0=1, p1=1)
+    hostinfo = html_helper.get_request(url=url, headers=headers, verify=False)
+    assert 'locked' == hostinfo['administrative'], "FAIL: Couldn't lock {}".format(hostname)
+
+    res, out = host_helper.modify_host_cpu(hostname, 'shared', p0=1, p1=1)
     assert 0 == res, "FAIL: The cpus weren't even modified by cli"
 
     LOG.tc_step("Applying cpu profile")
@@ -249,5 +250,5 @@ def test_modify_cpu(prepare_modify_cpu):
             {"path": "/action", "value": "apply-profile", "op": "replace"}]
     resp = html_helper.patch_request(url=url, headers=headers, data=data, verify=False)
 
-    res, out = host_helper.compare_host_to_cpuprofile(name, iprofile_uuid)
+    res, out = host_helper.compare_host_to_cpuprofile(hostname, iprofile_uuid)
     assert 0 == res, "FAIL: The host doesn't have the same cpu functions as the cpu profile"

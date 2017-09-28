@@ -211,10 +211,8 @@ def test_boot_vm_mem_page_size(flavor_2g, flavor_mem_page_size, image_mempage, i
                 "code is {}.".format(flavor_mem_page_size, image_mem_page_size, expt_code))
 
     actual_code, vm_id, msg, vol_id = vm_helper.boot_vm(name='mem_page_size', flavor=flavor_id, source='image',
-                                                        source_id=image_mempage, fail_ok=True, avail_zone='cgcsauto')
-
-    if vm_id:
-        ResourceCleanup.add('vm', vm_id, scope='function', del_vm_vols=False)
+                                                        source_id=image_mempage, fail_ok=True, avail_zone='cgcsauto',
+                                                        cleanup='function')
 
     assert expt_code == actual_code, "Expect boot vm to return {}; Actual result: {} with msg: {}".format(
             expt_code, actual_code, msg)
@@ -287,8 +285,8 @@ def test_schedule_vm_mempage_config(flavor_2g, mem_page_size):
     LOG.tc_step("Boot a vm with mem page size spec - {}".format(mem_page_size))
 
     host_1g, host_4k = hosts_configured
-    code, vm_id, msg, vo = vm_helper.boot_vm('mempool_configured', flavor_id, fail_ok=True, avail_zone='cgcsauto')
-    ResourceCleanup.add('vm', vm_id)
+    code, vm_id, msg, vo = vm_helper.boot_vm('mempool_configured', flavor_id, fail_ok=True, avail_zone='cgcsauto',
+                                             cleanup='function')
     assert 0 == code, "VM is not successfully booted."
 
     vm_host, vm_node = vm_helper.get_vm_host_and_numa_nodes(vm_id)

@@ -1,3 +1,6 @@
+VLM_TOOL = '/folk/vlm/commandline/vlmTool'
+
+
 class VlmAction:
     VLM_RESERVE = 'reserve'
     VLM_UNRESERVE = 'unreserve'

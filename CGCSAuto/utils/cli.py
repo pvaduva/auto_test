@@ -66,8 +66,8 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
             ssh_client.set_prompt(prompt=ssh.ADMIN_PROMPT)
     else:
         if auth_info:
-            auth_args = ('--os-username {} --os-password {} --os-project-name {} --os-auth-url {} --os-region-name {} '
-                         '--os-user-domain-name Default --os-project-domain-name Default'.
+            auth_args = ("--os-username '{}' --os-password '{}' --os-project-name {} --os-auth-url {}"
+                         " --os-region-name {} --os-user-domain-name Default --os-project-domain-name Default".
                          format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url'],
                                 auth_info['region']))
 
@@ -87,8 +87,10 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
         ssh_client.exec_cmd("export PS1='\\u@\\h:~\\$ '")
 
     if fail_ok:
-        if exit_code in [0, 1]:
-            return exit_code, cmd_output
+        if exit_code == 0:
+            return 0, cmd_output
+        elif exit_code in [1, 2]:
+            return 1, cmd_output
     elif exit_code == 0:
         if rtn_list:
             return exit_code, cmd_output
@@ -238,8 +240,24 @@ def keystone(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, 
 
 
 def qemu_img(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
-          auth_info=Tenant.ADMIN, source_creden_=Tenant.ADMIN, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
+             auth_info=Tenant.ADMIN, source_creden_=Tenant.ADMIN, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
 
     return exec_cli('qemu-img', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
                     source_creden_=source_creden_, err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+
+
+def sw_manager(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='', auth_info=Tenant.ADMIN,
+               source_creden_=Tenant.ADMIN, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
+
+    return exec_cli('sw-manager', sub_cmd=cmd, positional_args=positional_args, flags=flags,
+                    ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
+                    source_creden_=source_creden_, err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+
+
+def murano(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
+           auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
+
+    return exec_cli('murano', sub_cmd=cmd, positional_args=positional_args, flags=flags,
+                    ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list)

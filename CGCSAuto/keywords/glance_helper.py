@@ -1,6 +1,9 @@
 import random
 import time
 import re
+import json
+
+from pytest import skip
 
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
@@ -8,7 +11,7 @@ from utils.ssh import ControllerClient
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.timeout import ImageTimeout
 from consts.cgcs import Prompt, GuestImages
-from keywords import common
+from keywords import common, storage_helper, system_helper, host_helper
 
 
 def get_images(images=None, rtn_val='id', auth_info=Tenant.ADMIN, con_ssh=None, strict=True, exclude=False, **kwargs):
@@ -69,6 +72,163 @@ def get_image_id_from_name(name=None, strict=False, fail_ok=True, con_ssh=None, 
     return image_id
 
 
+def get_avail_image_space(con_ssh):
+    """
+    Get available disk space in GB on /opt/cgcs which is where glance images are saved at
+    Args:
+        con_ssh:
+
+    Returns (float): e.g., 9.2
+
+    """
+    size = con_ssh.exec_cmd("df | grep '/opt/cgcs' | awk '{{print $4}}'", fail_ok=False)[1]
+    size = float(size.strip()) / (1024 * 1024)
+    return size
+
+
+def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.05, con_ssh=None, image_host_ssh=None):
+    """
+    Check if glance image storage disk is sufficient to create new glance image from specified image
+    Args:
+        img_file_path (str): e.g., /home/wrsroot/images/tis-centos-guest.img
+        guest_os (str): used if img_file_path is not provided. e,g., ubuntu_14, ge_edge, cgcs-guest, etc
+        min_diff: minimum difference required between available space and specifiec size. e.g., 0.1G
+        con_ssh (SSHClient): tis active controller ssh client
+        image_host_ssh (SSHClient): such as test server ssh where image file was stored
+
+    Returns (bool):
+
+    """
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+    if image_host_ssh is None:
+        image_host_ssh = con_ssh
+
+    file_size = get_image_size(img_file_path=img_file_path, guest_os=guest_os, ssh_client=image_host_ssh)
+    avail_size = get_avail_image_space(con_ssh=con_ssh)
+
+    return avail_size - file_size >= min_diff
+
+
+def get_image_file_info(img_file_path=None, guest_os=None, ssh_client=None):
+    """
+    Get image file info as dictionary
+    Args:
+        img_file_path (str): e.g., /home/wrsroot/images/tis-centos-guest.img
+        guest_os (str): has to be specified if img_file_path is unspecified. e.g., 'tis-centos-guest'
+        ssh_client (SSHClient): e.g.,  test server ssh
+
+    Returns (dict): image info dict.
+    Examples:
+        {
+            "virtual-size": 688914432,
+            "filename": "images/cgcs-guest.img",
+            "format": "raw",
+            "actual-size": 688918528,
+            "dirty-flag": false
+        }
+
+    """
+    if not img_file_path:
+        if guest_os is None:
+            raise ValueError("Either img_file_path or guest_os has to be provided")
+        else:
+            img_file_info = GuestImages.IMAGE_FILES.get(guest_os, None)
+            if not img_file_info:
+                raise ValueError("Invalid guest_os provided. Choose from: {}".format(GuestImages.IMAGE_FILES.keys()))
+            # Assume ssh_client is test server client and image path is test server path
+            img_file_path = "{}/{}".format(GuestImages.IMAGE_DIR_REMOTE, img_file_info[0])
+
+    def _get_img_dict(ssh_):
+        img_info = ssh_.exec_cmd("qemu-img info --output json {}".format(img_file_path), fail_ok=False)[1]
+        return json.loads(img_info)
+
+    if ssh_client is None:
+        with host_helper.ssh_to_test_server() as ssh_client:
+            img_dict = _get_img_dict(ssh_=ssh_client)
+    else:
+        img_dict = _get_img_dict(ssh_=ssh_client)
+
+    LOG.info("Image {} info: {}".format(img_file_path, img_dict))
+    return img_dict
+
+
+def get_image_size(img_file_path=None, guest_os=None, virtual_size=False, ssh_client=None):
+    """
+    Get image virtual or actual size in GB via qemu-img info
+    Args:
+        img_file_path (str): e.g., /home/wrsroot/images/tis-centos-guest.img
+        guest_os (str): has to be specified if img_file_path is unspecified. e.g., 'tis-centos-guest'
+        virtual_size:
+        ssh_client:
+
+    Returns (float): image size in GB
+    """
+    key = "virtual-size" if virtual_size else "actual-size"
+    img_size = get_image_file_info(img_file_path=img_file_path, guest_os=guest_os, ssh_client=ssh_client)[key]
+    img_size = float(img_size) / (1024 * 1024 * 1024)
+    return img_size
+
+
+def get_avail_image_conversion_space(con_ssh=None):
+    """
+    Get available disk space in GB on /opt/img-conversions
+    Args:
+        con_ssh:
+
+    Returns (float): e.g., 19.2
+
+    """
+    size = con_ssh.exec_cmd("df | grep '/opt/img-conversions' | awk '{{print $4}}'")[1]
+    size = float(size.strip()) / (1024 * 1024)
+    return size
+
+
+def is_image_conversion_sufficient(img_file_path=None, guest_os=None, min_diff=0.05, con_ssh=None, img_host_ssh=None):
+    """
+    Check if image conversion space is sufficient to convert given image to raw format
+    Args:
+        img_file_path (str): e.g., /home/wrsroot/images/tis-centos-guest.img
+        guest_os (str): has to be specified if img_file_path is unspecified. e.g., 'tis-centos-guest'
+        min_diff (int): in GB
+        con_ssh:
+        img_host_ssh
+
+    Returns (bool):
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    if not system_helper.get_storage_nodes(con_ssh=con_ssh):
+        return True
+
+    avail_size = get_avail_image_conversion_space(con_ssh=con_ssh)
+    file_size = get_image_size(img_file_path=img_file_path, guest_os=guest_os, virtual_size=True,
+                               ssh_client=img_host_ssh)
+
+    return avail_size - file_size >= min_diff
+
+
+def ensure_image_storage_sufficient(guest_os, con_ssh=None):
+    with host_helper.ssh_to_test_server() as img_ssh:
+        if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh, image_host_ssh=img_ssh):
+            images_to_del = get_images(exclude=True, Name=GuestImages.DEFAULT_GUEST, con_ssh=con_ssh)
+            if images_to_del:
+                LOG.info("Delete non-default images due to insufficient image storage media to create required image")
+                delete_images(images_to_del, check_first=False, con_ssh=con_ssh)
+                if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh, image_host_ssh=img_ssh):
+                    LOG.info("Insufficient image storage media to create {} image even after deleting non-default "
+                             "glance images".format(guest_os))
+                    return False
+            else:
+                LOG.info("Insufficient image storage media to create {} image".format(guest_os))
+                return False
+
+        return True
+
+
 def create_image(name=None, image_id=None, source_image_file=None,
                  disk_format=None, container_format=None, min_disk=None, min_ram=None, public=None,
                  protected=None, cache_raw=False, store=None, wait=None, timeout=ImageTimeout.CREATE, con_ssh=None,
@@ -105,15 +265,14 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2]
     file_path = source_image_file if source_image_file else "{}/{}".format(GuestImages.IMAGE_DIR, default_guest_img)
-    if 'win' in file_path:
-        if not properties:
-            properties = {'os_type': 'windows'}
-        if properties and 'os_type' not in properties:
-            properties['os_type'] = 'windows'
+    if 'win' in file_path and 'os_type' not in properties:
+        properties['os_type'] = 'windows'
+    elif 'ge_edge' in file_path and 'hw_firmware_type' not in properties:
+        properties['hw_firmware_type'] = 'uefi'
 
     source_str = file_path
 
-    known_imgs = ['cgcs-guest', 'centos', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'tis-centos-guest', 'win']
+    known_imgs = ['cgcs-guest', 'tis-centos-guest', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'centos', 'win', 'ge_edge']
     name = name if name else 'auto'
     for img_str in known_imgs:
         if img_str in name:
@@ -127,6 +286,8 @@ def create_image(name=None, image_id=None, source_image_file=None,
         name = name_prefix + '_' + name
 
     name = common.get_unique_name(name_str=name, existing_names=get_images(), resource_type='image')
+
+    LOG.info("Creating glance image: {}".format(name))
 
     optional_args = {
         '--id': image_id,
@@ -151,9 +312,15 @@ def create_image(name=None, image_id=None, source_image_file=None,
     for key, value in optional_args.items():
         if value is not None:
             optional_args_str = ' '.join([optional_args_str, key, str(value)])
-
-    code, output = cli.glance('image-create', optional_args_str, ssh_client=con_ssh, fail_ok=fail_ok,
-                              auth_info=auth_info, timeout=timeout, rtn_list=True)
+    try:
+        code, output = cli.glance('image-create', optional_args_str, ssh_client=con_ssh, fail_ok=fail_ok,
+                                  auth_info=auth_info, timeout=timeout, rtn_list=True)
+    except:
+        # This is added to help debugging image-create failure in case of insufficient space
+        if con_ssh is None:
+            con_ssh = ControllerClient.get_active_controller()
+        con_ssh.exec_cmd('df -h', fail_ok=True, get_exit_code=False)
+        raise
 
     table_ = table_parser.table(output)
     actual_id = table_parser.get_value_two_col_table(table_, 'id')
@@ -383,39 +550,46 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     cmd = 'mkdir -p {}'.format(dest_dir)
     con_ssh.exec_cmd(cmd, fail_ok=False)
 
-    source_path = '{}/images/{}'.format(SvcCgcsAuto.HOME, source_name)
+    source_path = '{}/images/{}'.format(SvcCgcsAuto.SANDBOX, source_name)
     LOG.info('scp image from test server to active controller')
     scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}@{}:{} {}'.format(
             SvcCgcsAuto.USER, SvcCgcsAuto.SERVER, source_path, dest_path)
 
-    con_ssh.send(scp_cmd)
-    index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=3600)
-    if index == 2:
-        con_ssh.send('yes')
-        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=3600)
-    if index == 1:
-        con_ssh.send(SvcCgcsAuto.PASSWORD)
-        index = con_ssh.expect(timeout=timeout)
-    if index != 0:
-        raise exceptions.SSHException("Failed to scp files")
+    try:
+        con_ssh.send(scp_cmd)
+        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=3600)
+        if index == 2:
+            con_ssh.send('yes')
+            index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=3600)
+        if index == 1:
+            con_ssh.send(SvcCgcsAuto.PASSWORD)
+            index = con_ssh.expect(timeout=timeout)
+        if index != 0:
+            raise exceptions.SSHException("Failed to scp files")
 
-    exit_code = con_ssh.get_exit_code()
-    if not exit_code == 0:
-        raise exceptions.CommonError("scp unsuccessfully")
+        exit_code = con_ssh.get_exit_code()
+        if not exit_code == 0:
+            raise exceptions.CommonError("scp unsuccessfully")
 
-    if not con_ssh.file_exists(file_path=dest_path):
-        raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
+        if not con_ssh.file_exists(file_path=dest_path):
+            raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
+    except:
+        LOG.info("Attempt to remove {} to cleanup the system due to scp failed".format(dest_path))
+        con_ssh.exec_cmd('rm -f {}'.format(dest_path), fail_ok=True, get_exit_code=False)
+        raise
 
     LOG.info("{} image downloaded successfully and saved to {}".format(img_os, dest_path))
     return dest_path
 
 
-def get_guest_image(guest_os, rm_image=True):
+def get_guest_image(guest_os, rm_image=True, check_disk=False):
     """
     Get or create a glance image with given guest OS
     Args:
-        guest_os (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11
+        guest_os (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11, tis-centos-guest,
+                cgcs-guest
         rm_image (bool): whether or not to rm image from /home/wrsroot/images after creating glance image
+        check_disk (bool): whether to check if image storage disk is sufficient to create new glance image
 
     Returns (str): image_id
 
@@ -424,13 +598,20 @@ def get_guest_image(guest_os, rm_image=True):
     img_id = get_image_id_from_name(guest_os, strict=True)
 
     if not img_id:
+        if check_disk:
+            if not ensure_image_storage_sufficient(guest_os=guest_os):
+                skip("Insufficient image storage space in /opt/cgcs/ to create {} image".format(guest_os))
+
         image_path = _scp_guest_image(img_os=guest_os)
         disk_format = 'raw' if guest_os == 'cgcs-guest' else 'qcow2'
-        img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
-                              container_format='bare')[1]
-
-        if rm_image and not re.search('cgcs-guest|tis-centos|ubuntu_14', guest_os):
-            con_ssh = ControllerClient.get_active_controller()
-            con_ssh.exec_cmd('rm {}'.format(image_path), fail_ok=True, get_exit_code=False)
+        try:
+            img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
+                                  container_format='bare', fail_ok=False)[1]
+        except:
+            raise
+        finally:
+            if rm_image and not re.search('cgcs-guest|tis-centos|ubuntu_14', guest_os):
+                con_ssh = ControllerClient.get_active_controller()
+                con_ssh.exec_cmd('rm -f {}'.format(image_path), fail_ok=True, get_exit_code=False)
 
     return img_id

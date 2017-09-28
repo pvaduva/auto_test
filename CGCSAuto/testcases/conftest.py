@@ -12,7 +12,6 @@ from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
 from utils import lab_info
 
-from testfixtures.resource_create import tis_centos_image
 
 natbox_ssh = None
 con_ssh = None
@@ -37,16 +36,11 @@ def setup_test_session():
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
     # set build id to be used to upload/write test results
-    build_id, build_host = setups.get_build_info(con_ssh)
-    ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_host)
+    build_id, build_server = setups.get_build_info(con_ssh)
+    ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_server)
 
+    setups.set_session(con_ssh=con_ssh)
 
-@pytest.fixture(scope='function', autouse=True)
-def reconnect_before_test():
-    """
-    Before each test function start, Reconnect to TIS via ssh if disconnection is detected
-    """
-    con_ssh.flush()
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
     natbox_ssh.flush()
     natbox_ssh.connect(retry=False)

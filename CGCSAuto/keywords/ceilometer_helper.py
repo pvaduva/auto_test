@@ -5,7 +5,8 @@ from consts.auth import Tenant
 from utils import table_parser, cli
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
-from consts.timeout import CMDTimeout
+from utils import exceptions
+from consts.timeout import CMDTimeout, CeilTimeout
 
 
 def get_alarms(name=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
@@ -109,6 +110,34 @@ def delete_samples():
     ssh_client.exec_sudo_cmd('/usr/bin/ceilometer-expirer', fail_ok=False, expect_timeout=90)
 
 
+def wait_for_sample_expire(meter, timeout=CeilTimeout.EXPIRE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Wait for given sample to disappear from 'ceilometer sample-list'
+    Args:
+        meter (str): filter out samples
+        timeout (int): max wait time in seconds
+        fail_ok (bool): whether to raise exception if sample did not expire before timeout reaches
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (bool):
+
+    """
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        samples = get_samples(meter=meter, con_ssh=con_ssh, auth_info=auth_info)
+        if not samples:
+            LOG.info("Sample {} is not listed in 'ceilometer sample-list'".format(meter))
+            return True
+        time.sleep(3)
+
+    err_msg = "Sample {} is still listed after {} seconds".format(meter, timeout)
+    if fail_ok:
+        LOG.warning(err_msg)
+        return False
+    raise exceptions.CeilometerError(err_msg)
+
+
 def get_statistics_table(meter, period=None, groupby=None, aggregate=None, query=None, auth_info=Tenant.ADMIN,
                          con_ssh=None):
     """
@@ -180,3 +209,21 @@ def get_meters_table(limit=None, unique=None, meter=None, resource=None, auth_in
     table_ = table_parser.table(cli.ceilometer('meter-list', args_, auth_info=auth_info, ssh_client=con_ssh))
 
     return table_
+
+
+def alarm_list(header='State', con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get a list of alarms that can be tracked by Ceilometer
+    Args:
+        header (str): the column to get the values from
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (list): a list of all the values in the header column of the returned resources
+
+    """
+    table_ = table_parser.table(cli.ceilometer('alarm-list', auth_info=auth_info, ssh_client=con_ssh))
+
+    values = table_parser.get_values(table_, target_header=header)
+
+    return values

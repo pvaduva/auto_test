@@ -7,7 +7,7 @@ from utils import table_parser
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
-from consts.cgcs import FlavorSpec, VMStatus
+from consts.cgcs import FlavorSpec, VMStatus, DevClassIds
 from keywords import vm_helper, nova_helper, network_helper, host_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -76,7 +76,6 @@ def vif_model_check(request):
         nics.append({'net-id': extra_pcipt_net, 'vif-model': 'virtio'})
 
     base_vm = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='module')[1]
-    # ResourceCleanup.add('vm', base_vm, scope='module')
     vm_helper.wait_for_vm_pingable_from_natbox(base_vm)
     vm_helper.ping_vms_from_vm(base_vm, base_vm, net_types=['mgmt', net_type], vlan_zero_only=True)
 
@@ -274,6 +273,15 @@ def check_vm_set_error_recover(obj):
 
 def check_vm_hard_reboot(obj):
     obj.check_numa_affinity(msg_prefx='hard_reboot')
+
+
+def _convert_irqmask_pcialias(irq_mask, pci_alias):
+    if irq_mask is not None:
+        irq_mask = irq_mask.split('irqmask_')[-1]
+    if pci_alias is not None:
+        pci_alias = pci_alias.split('pcialias_')[-1]
+
+    return irq_mask, pci_alias
 
 
 class TestVmPCIOperations:
@@ -476,19 +484,21 @@ class TestVmPCIOperations:
 
     def is_pci_device_supported(self, pci_alias, nova_pci_devices=None):
         if nova_pci_devices is None:
-            nova_pci_devices = network_helper.get_pci_devices_info()
+            # qat-vf devices only
+            nova_pci_devices = network_helper.get_pci_devices_info(class_id=DevClassIds.QAT_VF)
 
-        self.nova_pci_devices = nova_pci_devices
-        if not self.nova_pci_devices:
+        # self.nova_pci_devices = nova_pci_devices
+        if not nova_pci_devices:
             skip('No PCI devices existing! Note, currently "Coleto Creek PCIe Co-processor(0443/8086) is supported"')
         requested_vfs = int(pci_alias)
 
-        free_vfs_num = []
-        for host, dev_info in nova_pci_devices.items():
-            min_vfs_on_host = min([int(v['pci_vfs_configured']) - int(v['pci_vfs_used']) for v in dev_info.values()])
-            free_vfs_num.append((min_vfs_on_host))
+        free_vfs_num = {}
+        for dev, dev_dict in nova_pci_devices.items():
+            for host, dev_info in dev_dict.items():
+                avail_vfs_on_host = int(dev_info['pci_vfs_configured']) - int(dev_info['pci_vfs_used'])
+                free_vfs_num[host] = free_vfs_num.pop(host, 0) + avail_vfs_on_host
 
-        min_vfs = min(free_vfs_num)
+        min_vfs = min(list(free_vfs_num.values()))
 
         if min_vfs < requested_vfs:
             skip('Not enough PCI alias devices exit, only {} supported'.format(min_vfs))
@@ -496,9 +506,9 @@ class TestVmPCIOperations:
     @mark.parametrize(('pci_numa_affinity', 'pci_irq_affinity_mask', 'pci_alias'), [
         mark.p1((None, None, None)),
         mark.p1(('strict', None, None)),
-        mark.nightly(('strict', '1,3', None)),
-        mark.p1(('strict', None, '3')),
-        mark.p2(('strict', '1,3', '3')),
+        mark.nightly(('strict', 'irqmask_1,3', None)),
+        mark.p1(('strict', None, 'pcialias_3')),
+        mark.p2(('strict', 'irqmask_1,3', 'pcialias_3')),
         # mark.p3(('prefer', '1,3', '3')),  # TODO: expt behavior on msi_irq > cpulist mapping unknown
         # mark.p3(('prefer', None, None)),  # TODO same as above
     ])
@@ -528,6 +538,7 @@ class TestVmPCIOperations:
         Teardown:
             - Delete created vms and flavor
         """
+        pci_irq_affinity_mask, pci_alias = _convert_irqmask_pcialias(pci_irq_affinity_mask, pci_alias)
         boot_forbidden = False
         migrate_forbidden = False
         if pci_numa_affinity == 'strict' and pci_alias is not None:

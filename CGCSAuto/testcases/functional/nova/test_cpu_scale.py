@@ -111,8 +111,8 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
     nova_helper.set_flavor_extra_specs(flavor_id, **specs)
 
     LOG.tc_step("Boot a vm with above flavor")
-    vm_id = vm_helper.boot_vm(name='vcpu{}_min{}_{}'.format(vcpus, min_vcpus, cpu_thread_pol), flavor=flavor_id)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm(name='vcpu{}_min{}_{}'.format(vcpus, min_vcpus, cpu_thread_pol), flavor=flavor_id,
+                              cleanup='function')[1]
 
     LOG.tc_step("Wait for vm pingable from NatBox and guest_agent process running on VM")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

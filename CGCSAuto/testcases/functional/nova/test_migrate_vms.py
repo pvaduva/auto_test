@@ -3,7 +3,8 @@ from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 
-from consts.cgcs import FlavorSpec, EventLogID
+from consts.cgcs import FlavorSpec, EventLogID, GuestImages
+from consts.reasons import SkipReason
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -20,11 +21,11 @@ def hosts_per_stor_backing():
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type', 'block_mig'), [
     mark.p1(('local_image', 0, 0, None, 1, 'volume', False)),
     mark.p1(('local_image', 0, 0, 'dedicated', 2, 'volume', False)),
-    mark.domain_sanity(('local_image', 0, 0, 'shared', 2, 'image', True)),
-    mark.domain_sanity(('local_image', 1, 1, 'dedicated', 1, 'image', False)),
     ('local_image', 1, 0, 'dedicated', 2, 'volume', False),
     ('local_image', 0, 1, 'shared', 1, 'volume', False),
-    ('local_image', 1, 0, 'dedicated', 2, 'volume', True),     # TODO New matrix from Gerry
+    ('local_image', 1, 1, 'dedicated', 2, 'volume', True),      # Supported from Newton
+    mark.domain_sanity(('local_image', 0, 0, 'shared', 2, 'image', True)),
+    mark.domain_sanity(('local_image', 1, 1, 'dedicated', 1, 'image', False)),
     ('local_image', 0, 0, None, 2, 'image_with_vol', False),
     ('local_image', 0, 0, 'dedicated', 1, 'image_with_vol', True),
     ('local_image', 1, 1, 'dedicated', 2, 'image_with_vol', True),
@@ -221,16 +222,16 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'boot_source'), [
     ('local_image', 0, 0, 'image'),
     ('local_image', 1, 0, 'volume'),
-    ('local_image', 1, 1, 'volume'),
-    ('local_image', 0, 1, 'image'),
+    ('local_image', 1, 512, 'volume'),
+    ('local_image', 0, 512, 'image'),
     ('local_lvm', 0, 0, 'image'),
     ('local_lvm', 1, 0, 'volume'),
-    ('local_lvm', 0, 1, 'volume'),
-    ('local_lvm', 1, 1, 'image'),
+    ('local_lvm', 0, 512, 'volume'),
+    ('local_lvm', 1, 512, 'image'),
     ('remote', 0, 0, 'image'),
     ('remote', 1, 0, 'volume'),
-    ('remote', 0, 1, 'image'),
-    ('remote', 1, 1, 'volume'),
+    ('remote', 0, 512, 'image'),
+    ('remote', 1, 512, 'volume'),
 ])
 def test_migrate_vm_negative_no_other_host(storage_backing, ephemeral, swap, boot_source, hosts_per_stor_backing):
     """
@@ -287,7 +288,6 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
     boot_source = 'volume' if vm_type == 'volume' else 'image'
     LOG.tc_step("Boot a vm from {}".format(boot_source))
     vm_id = vm_helper.boot_vm('live-mig', flavor=flavor_id, source=boot_source, reuse_vol=False, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id)
 
     if vm_type == 'image_with_vol':
         LOG.tc_step("Attach volume to vm")
@@ -345,28 +345,30 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol):
 
 
 @mark.p2
-@mark.parametrize(('guest_os', 'vcpus', 'cpu_pol', 'boot_source'), [
-    ('ubuntu_14', 1, 'shared', 'volume'),
-    ('ubuntu_14', 2, 'dedicated', 'image'),
-    ('centos_6', 3, 'dedicated', 'volume'),
-    ('centos_7', 1, 'dedicated', 'volume'),
-    ('centos_7', 5, None, 'image'),
-    ('opensuse_11', 3, 'dedicated', 'volume'),
-    ('opensuse_12', 4, 'dedicated', 'volume'),
+@mark.parametrize(('guest_os', 'vcpus', 'ram', 'cpu_pol', 'boot_source'), [
+    ('ubuntu_14', 1, 1024, 'shared', 'volume'),
+    ('ubuntu_14', 2, 1024, 'dedicated', 'image'),
+    ('ubuntu_16', 3, 4096, 'dedicated', 'volume'),
+    ('centos_6', 3, 4096, 'dedicated', 'volume'),
+    ('centos_7', 1, 1024, 'dedicated', 'volume'),
+    ('centos_7', 5, 4096, None, 'image'),
+    ('opensuse_11', 3, 1024, 'dedicated', 'volume'),
+    ('opensuse_12', 4, 4096, 'dedicated', 'volume'),
     # ('opensuse_13', 'shared', 'volume'),
     # ('opensuse_13', 'dedicated', 'image'),
-    ('rhel_6', 3, 'dedicated', 'image'),
-    ('rhel_6', 4, None, 'volume'),
-    ('rhel_7', 1, 'dedicated', 'volume'),
+    ('rhel_6', 3, 1024, 'dedicated', 'image'),
+    ('rhel_6', 4, 4096, None, 'volume'),
+    ('rhel_7', 1, 1024, 'dedicated', 'volume'),
+    ('win_2012', 3, 1024, 'dedicated', 'image'),
+    ('win_2016', 4, 4096, 'dedicated', 'volume'),
+    ('ge_edge', 1, 1024, 'shared', 'image'),
+    ('ge_edge', 4, 4096, 'dedicated', 'volume')
 ])
-def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
-    LOG.tc_step("Get/Create {} image".format(guest_os))
-    img_id = glance_helper.get_guest_image(guest_os)
-    if guest_os != 'ubuntu_14':
-        ResourceCleanup.add('image', img_id)
+def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source):
+    img_id = check_helper.check_fs_sufficient(guest_os=guest_os, boot_source=boot_source)
 
     LOG.tc_step("Create a flavor with 1 vcpu")
-    flavor_id = nova_helper.create_flavor(name='migrate', vcpus=vcpus, guest_os=guest_os)[1]
+    flavor_id = nova_helper.create_flavor(name='migrate', vcpus=vcpus, ram=ram, guest_os=guest_os)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
     if cpu_pol is not None:
@@ -388,12 +390,11 @@ def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
     LOG.tc_step("Boot a {} VM with above flavor from {}".format(guest_os, boot_source))
     vm_id = vm_helper.boot_vm(name='{}-{}-migrate'.format(guest_os, cpu_pol), flavor=flavor_id,
                               source=boot_source, source_id=source_id, guest_os=guest_os, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     vm_host_origin = nova_helper.get_vm_host(vm_id)
     prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_origin],
-                                                      vm_host=vm_host_origin, cpu_pol=cpu_pol)[1]
+                                                      vm_host=vm_host_origin, cpu_pol=cpu_pol, guest=guest_os)[1]
 
     LOG.tc_step("Live migrate {} VM".format(guest_os))
     vm_helper.live_migrate_vm(vm_id)
@@ -406,8 +407,8 @@ def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
     if not cpu_pol == 'dedicated':
         prev_siblings = None
 
-    check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_live_mig],
-                                      vm_host=vm_host_live_mig, cpu_pol=cpu_pol, prev_siblings=prev_siblings)
+    check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_live_mig], cpu_pol=cpu_pol,
+                                      vm_host=vm_host_live_mig, prev_siblings=prev_siblings, guest=guest_os)
 
     LOG.tc_step("Cold migrate vm and check vm is moved to different host")
     vm_helper.cold_migrate_vm(vm_id)
@@ -417,4 +418,4 @@ def test_migrate_vm_various_guest(guest_os, vcpus, cpu_pol, boot_source):
 
     vm_host_cold_mig = nova_helper.get_vm_host(vm_id)
     check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_cold_mig],
-                                      vm_host=vm_host_cold_mig, cpu_pol=cpu_pol)
+                                      vm_host=vm_host_cold_mig, cpu_pol=cpu_pol, guest=guest_os)

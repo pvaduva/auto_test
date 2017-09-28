@@ -42,7 +42,7 @@ def _boot_migrable_vms(storage_backing):
         vms_to_test.append((vm_2, block_mig_2))
         if storage_backing == 'remote':
             LOG.info("Boot a VM from volume with local disks if storage backing is remote...")
-            ephemeral_swap = random.choice([[0, 1], [1, 1], [1, 0]])
+            ephemeral_swap = random.choice([[0, 512], [1, 512], [1, 0]])
             flavor_with_localdisk = nova_helper.create_flavor(ephemeral=ephemeral_swap[0], swap=ephemeral_swap[1],
                                                               check_storage_backing=False)[1]
             flavors_created.append(flavor_with_localdisk)
@@ -128,7 +128,6 @@ class TestLockWithVMs:
             for host_to_unlock in self.hosts_locked:
                 host_helper.unlock_host(host_to_unlock, check_hypervisor_up=True)
                 host_helper.wait_for_hypervisors_up(host_to_unlock)
-                host_helper.wait_for_hosts_in_nova_compute(host_to_unlock)
         request.addfinalizer(teardown)
 
         return target_hosts, storages_to_test

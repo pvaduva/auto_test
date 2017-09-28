@@ -52,7 +52,6 @@ def _boot_multiports_vm(flavor, mgmt_net_id, vifs, net_id, net_type, base_vm, pc
 
     LOG.tc_step("Boot a test_vm with following nics on same networks as base_vm: {}".format(nics))
     vm_under_test = vm_helper.boot_vm(name='multiports', nics=nics, flavor=flavor, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_under_test)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
     LOG.tc_step("Check vm PCI address is as configured")
@@ -92,7 +91,6 @@ class TestMutiPortsBasic:
         LOG.fixture_step("(class) Boot a base vm with following nics: {}".format(nics))
         base_vm = vm_helper.boot_vm(name='multiports_base', flavor=flavor_id, nics=nics, cleanup='class',
                                     reuse_vol=False)[1]
-        # ResourceCleanup.add('vm', base_vm, scope='class')
 
         vm_helper.wait_for_vm_pingable_from_natbox(base_vm)
         vm_helper.ping_vms_from_vm(base_vm, base_vm, net_types='data')
@@ -244,9 +242,14 @@ class TestMutiPortsPCI:
         pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')
         pci_pthru_nets = network_helper.get_pci_nets(vif='pthru', rtn_val='name')
         avail_nets = list(set(pci_pthru_nets) & set(pci_sriov_nets))
-        internal_net_name = 'internal0-net1'
-        if internal_net_name not in avail_nets:
-            skip("'internal-net1' does not have pci-sriov and/or pci-passthrough interfaces")
+
+        internal_net_name = None
+        for net_ in avail_nets:
+            if 'internal' in net_:
+                internal_net_name = net_
+                break
+        else:
+            skip('No internal network found that has both pcipt and sriov interfaces')
 
         LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
         flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048)[1]
@@ -279,8 +282,6 @@ class TestMutiPortsPCI:
         LOG.fixture_step("(class) Boot a base pci vm with following nics: {}".format(nics))
         base_vm_pci = vm_helper.boot_vm(name='multiports_pci_base', flavor=flavor_id, nics=nics, cleanup='class',
                                         reuse_vol=False)[1]
-        # ResourceCleanup.add('vm', base_vm_pci, scope='class')
-
         LOG.fixture_step("(class) Ping base PCI vm from NatBox over management network.")
         vm_helper.wait_for_vm_pingable_from_natbox(base_vm_pci, fail_ok=False)
 
@@ -307,6 +308,7 @@ class TestMutiPortsPCI:
 
     @mark.parametrize('vifs', [
         mark.p2(['virtio', 'avp', 'pci-passthrough']),
+        # mark.p2(['virtio_x7', 'pci-sriov_x7']),       This test requires compute configured with 8+ sriov vif
         mark.p2(['virtio_x6', 'avp_x6', 'pci-passthrough']),
         mark.p2([('virtio_x7', '05:03'), ('avp_x5', '00:04'), ('pci-sriov', '05:02')]),
         mark.p3((['pci-sriov', 'pci-passthrough'])),
@@ -459,7 +461,6 @@ class TestMutiPortsPCI:
         LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
         vm_under_test = vm_helper.boot_vm(name='multiports_pci_evac', nics=nics, flavor=flavor, cleanup='function',
                                           reuse_vol=False)[1]
-        # ResourceCleanup.add('vm', vm_under_test, scope='function')
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
         LOG.tc_step("Add vlan to pci-passthrough interface.")

@@ -1,6 +1,6 @@
 ###
-# Testcase 58 of the 2016-04-04 sysinv_test_plan.pdf
-# 58) Launch VMs using 4k-memory-pages
+# Testcase of the 2016-04-04 sysinv_test_plan.pdf
+# Launch VMs using 4k-memory-pages, cold and live migrate the vm
 ###
 
 import time
@@ -14,9 +14,15 @@ from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
+from testfixtures.verify_fixtures import check_alarms_module
 
 
-@fixture(scope='module', autouse=True)
+@fixture(autouse=True)
+def check_alarms():
+    pass
+
+
+@fixture(scope='module', params=['local_image', 'local_lvm', 'remote'])
 def ensure_sufficient_4k_pages(request):
     """
     Check if there is enough 4k pages on any compute node on any processors is a bit hassle
@@ -26,14 +32,14 @@ def ensure_sufficient_4k_pages(request):
     """
     # check if any 4k pages greater than 600000 means more than 2G(~536871 4k pages) total.
 
-    hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
+    storage_backing = request.param
+    hypervisors = host_helper.get_hosts_by_storage_aggregate(storage_backing=storage_backing)
+    if len(hypervisors) < 2:
+        skip("Less than two hypersvisors with {} instance backing".format(storage_backing))
+
     is_cpe = system_helper.is_two_node_cpe()
-
-    if is_cpe and len(hypervisors) < 2:
-        skip("Less than two hypersvisors are up for cpe lab.")
-
-    if len(hypervisors) > 4:
-        skip("System has too many compute hosts, reconfigure will take too long")
+    hypervisors = hypervisors[:2]
+    LOG.fixture_step("Configure {} with sufficient 4k pages".format(hypervisors))
 
     revert_dict = {}
 
@@ -78,97 +84,46 @@ def ensure_sufficient_4k_pages(request):
             revert_dict[host] = proc1_num_4k_page
             host_helper.unlock_host(host, check_hypervisor_up=True, check_webservice_up=True)
 
-
-@fixture(scope='module')
-def hosts_per_stor_backing():
-    hosts_per_backing = host_helper.get_hosts_per_storage_backing()
-    LOG.fixture_step("Hosts per storage backing: {}".format(hosts_per_backing))
-
-    if max([len(hosts) for hosts in list(hosts_per_backing.values())]) < 2:
-        skip("No two hosts have the same storage backing")
-
-    return hosts_per_backing
+    return storage_backing, hypervisors
 
 
-@mark.parametrize(
-    "boot_source", [
-        'image',
-        'volume'
-    ])
-def test_boot_4k_vm(boot_source):
+@mark.parametrize(('ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type'), [
+    mark.p1((0, 0, None, 1, 'volume')),
+    mark.p2((1, 512, 'dedicated', 2, 'volume')),
+    mark.p1((0, 0, 'dedicated', 3, 'image')),
+    mark.p2((1, 512, None, 1, 'image')),
+])
+def test_migrate_4k_vm_positive(ephemeral, swap, cpu_pol, vcpus, vm_type, ensure_sufficient_4k_pages):
     """
-    58) Launch VMs using 4k-memory-pages from sysinv_test_plan.pdf
-
-    Verify the version number (or str) exist for the system when execute the "system show" cli
-
+    Test live and cold migrate 4k vm with various vm storage configurations
     Args:
-        - Nothing
+        ephemeral (int):
+        swap (int):
+        cpu_pol (str):
+        vcpus (int):
+        vm_type (str): boot-from image or volume vm
+        ensure_sufficient_4k_pages (tuple): module test fixture to configure 4k pages
 
-    Setup:
-        - Setup flavor with mem_page_size to small
-        - Setup enough 4k page if there isnt enough in any of the compute nodes
-        - Setup vm with 4k page
+    Setups:
+        - Select at least 2 hosts with specified storage backing. e.g., local_image, local_lvm, or remote
+        - Ensure 2 hosts are in nova zone (move rest to cgcsauto zone if more than 2)
+        - Configure the 2 hosts with large amount of 4k pages
 
     Test Steps:
-        -execute "vm-topology" cli
-        -verify the vm from the table generated contain 'pgsize:4K'
-
-    Teardown:
-        - delete created 4k page vm
-        - delete created 4k page flavor
+        - Create flavor with specified ephemeral, swap,
 
     """
-    LOG.tc_step("Create a flavor with mem_page_size set to small")
-    flavor_id = nova_helper.create_flavor()[1]
-    ResourceCleanup.add('flavor', flavor_id, scope='function')
-    pagesize_spec = {'hw:mem_page_size': 'small'}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **pagesize_spec)
-
-    LOG.tc_step("Boot a 4k vm from {} with above flavor".format(boot_source))
-    vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
-    __check_pagesize(vm_id)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
-
-
-@mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type'), [
-    mark.p2(('local_image', 0, 0, None, 1, 'volume')),
-    mark.p1(('local_image', 0, 0, None, 1, 'image')),
-    mark.p1(('local_image', 0, 0, None, 3, 'image')),
-    mark.p2(('local_lvm', 0, 0, None, 1, 'volume')),
-    mark.p2(('local_lvm', 0, 0, None, 1, 'image')),
-    mark.p2(('remote', 1, 1, None, 1, 'volume')),
-    mark.p2(('remote', 0, 0, None, 2, 'image')),
-])
-def test_live_migrate_4k_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, hosts_per_stor_backing):
-    if len(hosts_per_stor_backing[storage_backing]) < 2:
-        skip("Less than two hosts have {} storage backing".format(storage_backing))
+    storage_backing, hosts = ensure_sufficient_4k_pages
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type)
-
-    LOG.tc_step("Attempt to live migrate VM")
-    vm_helper.live_migrate_vm(vm_id)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-    __check_pagesize(vm_id)
-
-
-@mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type'), [
-    mark.p2(('local_image', 0, 0, None, 1, 'volume')),
-    mark.p2(('local_lvm', 0, 1, None, 1, 'volume')),
-    mark.p2(('remote', 1, 0, None, 2, 'volume')),
-    mark.p1(('local_image', 1, 0, None, 1, 'image')),
-    mark.p2(('local_lvm', 0, 0, None, 1, 'image')),
-    mark.p2(('remote', 0, 1, None, 2, 'image')),
-])
-def test_cold_migrate_4k_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, hosts_per_stor_backing):
-    if len(hosts_per_stor_backing[storage_backing]) < 2:
-        skip("Less than two hosts have {} storage backing".format(storage_backing))
-
-    vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type)
-    ResourceCleanup.add('vm', vm_id)
 
     LOG.tc_step("Cold migrate VM and ensure it succeeded")
     vm_helper.cold_migrate_vm(vm_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    __check_pagesize(vm_id)
+
+    LOG.tc_step("Attempt to live migrate VM")
+    vm_helper.live_migrate_vm(vm_id)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     __check_pagesize(vm_id)
 
@@ -178,11 +133,10 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
     LOG.tc_step("Create a flavor with {} vcpus, {} ephemera disk, {} swap disk".format(vcpus, ephemeral, swap))
 
     flavor_id = nova_helper.create_flavor(name='flv_4k', ephemeral=ephemeral, swap=swap, vcpus=vcpus,
-                                          check_storage_backing=True)[1]
+                                          storage_backing=storage_backing, check_storage_backing=False)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
-    specs = {FlavorSpec.STORAGE_BACKING: storage_backing,
-             FlavorSpec.MEM_PAGE_SIZE: 'small'}
+    specs = {FlavorSpec.MEM_PAGE_SIZE: 'small'}
 
     if cpu_pol is not None:
         specs[FlavorSpec.CPU_POLICY] = cpu_pol
@@ -192,9 +146,7 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 
     boot_source = 'volume' if vm_type == 'volume' else 'image'
     LOG.tc_step("Boot a vm from {}".format(boot_source))
-    vm_id = vm_helper.boot_vm('4k_vm', flavor=flavor_id, source=boot_source)[1]
-    ResourceCleanup.add('vm', vm_id)
-
+    vm_id = vm_helper.boot_vm('4k_vm', flavor=flavor_id, source=boot_source, cleanup='function')[1]
     __check_pagesize(vm_id)
 
     if vm_type == 'image_with_vol':
@@ -211,7 +163,7 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 def __check_pagesize(vm_id):
     LOG.tc_step("Check pagesize is 4k for vm {} via vm-topology.".format(vm_id))
     con_ssh = ControllerClient.get_active_controller()
-    nova_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers',expect_timeout=30)[1],
+    nova_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers', expect_timeout=30)[1],
                                    combine_multiline_entry=False)[0]
 
     vm_row = [row for row in nova_tab['values'] if row[1] == vm_id][0]

@@ -85,7 +85,6 @@ def test_ping_between_two_vms(guest_os, vifs):
         LOG.tc_step("Boot a {} vm with {} vifs from above flavor and volume".format(guest_os, vifs))
         vm_id = vm_helper.boot_vm('{}_vifs'.format(guest_os), flavor=flavor_id, cleanup='function',
                                   source='volume', source_id=vol_id, nics=nics, guest_os=guest_os)[1]
-        # ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
 
         LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
@@ -101,46 +100,3 @@ def test_ping_between_two_vms(guest_os, vifs):
     LOG.tc_step("Ping between two vms over management, data, and internal networks")
     vm_helper.ping_vms_from_vm(to_vms=vms[0], from_vm=vms[1], net_types=['mgmt', 'data', 'internal'])
     vm_helper.ping_vms_from_vm(to_vms=vms[1], from_vm=vms[0], net_types=['mgmt', 'data', 'internal'])
-
-
-# Remove following test from regression due to ping is tested in other guest os test cases.
-@mark.p3
-@mark.features('guest_os')
-@mark.usefixtures('centos7_image',
-                  'centos6_image',
-                  'ubuntu14_image',
-                  'opensuse12_image',
-                  'opensuse11_image',
-                  'rhel7_image')
-@mark.parametrize('guest_os', [
-    'centos_7',
-    'centos_6',
-    'ubuntu_14',
-    'opensuse_12',
-    'opensuse_11',
-    'rhel_7',
-])
-def _test_ping_vm_basic(guest_os):
-    """
-    Args:
-    guest_os (str): guest os to test
-
-    Setups:
-        - scp various guest images from test server to /home/wrsroot/images     (session)
-        - create glance image from it    (session)
-
-    Test Steps:
-        - create a flavor with dedicated cpu policy
-        - Boot two vms from volume/image with above flavor and specified guest os
-        - Ping vm from NatBox
-        - Ping vm from the other vm
-
-     Teardown:
-        - Delete created vm, volume, flavor
-
-    """
-    vm_id = vm_helper.boot_vm(name=guest_os, guest_os=guest_os, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
-
-    vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['mgmt'])

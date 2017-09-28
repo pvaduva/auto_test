@@ -24,7 +24,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
         ram (int):
         root_disk (int):
         ephemeral (int):
-        swap (int):
+        swap (int|None):
         is_public (bool):
         rxtx_factor (str):
         fail_ok (bool): whether it's okay to fail to create a flavor. Default to False.
@@ -1078,9 +1078,19 @@ def get_vm_boot_info(vm_id, auth_info=None, con_ssh=None):
         volumes = _get_vm_volumes(table_)
         if len(volumes) == 0:
             raise exceptions.VMError("Booted from volume, but no volume id found.")
-        elif len(volumes) > 1:
-            LOG.warning("VM booted from volume. Multiple volumes found, taking the first volume as boot source")
-        return {'type': 'volume', 'id': volumes[0]}
+        elif len(volumes) == 1:
+            LOG.info("VM booted from volume.")
+            return {'type': 'volume', 'id': volumes[0]}
+        else:
+            LOG.info("VM booted from volume. Multiple volumes found, taking the first boot-able volume.")
+            for volume in volumes:
+                table_ = table_parser.table(cli.cinder('show', volume, auth_info=auth_info, ssh_client=con_ssh))
+                bootable = table_parser.get_value_two_col_table(table_, 'bootable')
+                if bootable.lower() == 'true':
+                    return {'type': 'volume', 'id': volume}
+
+            raise exceptions.VMError("Booted from volume, but no bootable volume attached.")
+
     else:
         match = re.search(UUID, image)
         return {'type': 'image', 'id': match.group(0)}

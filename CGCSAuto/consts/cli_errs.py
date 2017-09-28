@@ -10,6 +10,7 @@ class VCPUSchedulerErr:
     TOO_MANY_PARAMETERS = "too many parameters"
     VCPU_MULTIPLE_ASSIGNMENT = "specified multiple times, specification is ambiguous"
     CPU_MODEL_UNAVAIL = "No valid host was found.*Host VCPU model.*required.*"
+    CPU_MODEL_CONFLICT = "Image vCPU model is not permitted to override configuration set against the flavor"
 
 
 class NumaErr:
@@ -18,6 +19,7 @@ class NumaErr:
     UNINITIALIZED = '(NUMATopologyFilter) Uninitialized'
     FLV_UNDEVISIBLE = 'ERROR (Conflict): flavor vcpus not evenly divisible by the specified hw:numa_nodes value'
     FLV_CPU_OR_MEM_UNSPECIFIED = 'ERROR (Conflict): CPU and memory allocation must be provided for all NUMA nodes'
+    INSUFFICIENT_CORES = 'Not enough free cores to schedule the instance'
 
 
 class MinCPUErr:
@@ -91,7 +93,7 @@ class NetworkingErr:
     INVALID_VXLAN_VNI_RANGE = "exceeds 16777215"
     INVALID_MULTICAST_IP_ADDRESS = "is not a valid multicast IP address."
     INVALID_VXLAN_PROVISION_PORTS = "is not in [4789, 8472]."
-    VXLAN_TTL_RANGE_MISSING = "VXLAN time-to-live attributes missing"
+    VXLAN_TTL_RANGE_MISSING = "VXLAN time-to-live attribute missing"
     VXLAN_TTL_RANGE_TOO_LARGE = "is too large - must be no larger than '255'."
     VXLAN_TTL_RANGE_TOO_SMALL = "is too small - must be at least '1'."
     OVERLAP_SEGMENTATION_RANGE = "segmentation id range overlaps with"

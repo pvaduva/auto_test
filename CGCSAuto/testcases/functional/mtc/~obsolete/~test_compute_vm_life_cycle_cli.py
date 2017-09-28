@@ -76,8 +76,8 @@ def launch_instance_on_compute(network_name=None,
     vm_ids = []
     for name in instance_names:
 
-        vm_id = vm_helper.boot_vm(name=instance_names[name], flavor=flavor_id, guest_os=image_name, cleanup='function')[1]
-        # ResourceCleanup.add('vm', vm_id)
+        vm_id = vm_helper.boot_vm(name=instance_names[name], flavor=flavor_id, guest_os=image_name,
+                                  cleanup='function')[1]
         vm_ids.append(vm_id)
 
     LOG.tc_step('Verify instances are running')

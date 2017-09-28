@@ -6,8 +6,7 @@ from keywords import vm_helper, network_helper
 
 
 def test_fip():
-    vm_id = vm_helper.boot_vm(name='snat', reuse_vol=False)[1]
-    ResourceCleanup.add('vm', vm_id, scope='module')
+    vm_id = vm_helper.boot_vm(name='snat', reuse_vol=False, cleanup='module')[1]
 
     LOG.tc_step("Ping from NatBox")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False, use_fip=False)

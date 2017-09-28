@@ -105,7 +105,7 @@ def reset_retention(request):
     request.addfinalizer(reset)
 
 
-def test_retention_period():
+def test_ceilometer_retention_period():
     """
     TC1996
     Verify that the retention period can be changed to specified values
@@ -135,7 +135,7 @@ def test_retention_period():
         assert interval != int(ret_per) and 0 != res, "FAIL: the retention period was changed"
 
 
-def test_retention_sample():
+def test_ceilometer_retention_sample():
     """
     TC1998
     Check that a sample can't be removed until after retention period
@@ -221,5 +221,4 @@ def test_retention_sample():
     ceilometer_helper.delete_samples()
 
     LOG.tc_step("Ensuring the sample isn't listed anymore")
-    samples = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
-    assert 0 == len(samples), "FAIL: The sample was not removed"
+    ceilometer_helper.wait_for_sample_expire(meter='fake_sample', fail_ok=False)

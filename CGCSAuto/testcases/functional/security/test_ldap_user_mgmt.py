@@ -3,7 +3,6 @@ import uuid
 from pytest import mark, skip
 
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient
 from keywords import security_helper
 
 
@@ -234,8 +233,6 @@ def test_ldap_create_user(user_name, shell, sudoer, secondary_group, expiry_days
             -3  -- failed to create a LDAP User (the CLI failed)
 
     """
-
-    ssh = ControllerClient.get_active_controller()
 
     LOG.tc_step('Check if any LDAP User with name:{} existing'.format(user_name))
     existing, user_info = theLdapUserManager.find_ldap_user(user_name)

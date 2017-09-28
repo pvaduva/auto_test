@@ -7,13 +7,14 @@ from pytest import mark, skip
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.pre_checks_and_configs import no_simplex_module
 
 from keywords import host_helper,system_helper, nova_helper, vm_helper
 
 
 @mark.sanity
 @mark.cpe_sanity
-def test_lock_active_controller_reject():
+def test_lock_active_controller_reject(no_simplex_module):
     """
     Verify lock unlock active controller. Expected it to fail
 
@@ -22,9 +23,6 @@ def test_lock_active_controller_reject():
         - Attempt to lock active controller and ensure it's rejected
 
     """
-    if system_helper.is_simplex():
-        skip("Not applicable to Simplex system")
-
     LOG.tc_step('Retrieve the active controller from the lab')
     active_controller = system_helper.get_active_controller_name()
 
@@ -41,7 +39,7 @@ def test_lock_active_controller_reject():
 
 @mark.sanity
 @mark.cpe_sanity
-def test_lock_unlock_standby_controller():
+def test_lock_unlock_standby_controller(no_simplex_module):
     """
     Verify lock unlock standby controller
 
@@ -92,13 +90,11 @@ def _test_lock_unlock_vm_host():
 
     LOG.tc_step("Boot a vm that can be live-migrated")
     vm_id1 = vm_helper.boot_vm(name='lock_unlock_test', cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id1)
 
     LOG.tc_step("Boot a vm that cannot be live-migrated")
-    flavor = nova_helper.create_flavor('swap1', swap=1)[1]
+    flavor = nova_helper.create_flavor('swap512', swap=512)[1]
     ResourceCleanup.add('flavor', flavor)
     vm_id2 = vm_helper.boot_vm(name='volume_swap', flavor=flavor, cleanup='function')[1]
-    # ResourceCleanup.add('vm', vm_id2)
 
     vm_host = nova_helper.get_vm_host(vm_id2)
     HostsToRecover.add(vm_host)

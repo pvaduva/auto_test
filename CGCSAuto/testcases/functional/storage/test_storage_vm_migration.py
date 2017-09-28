@@ -16,7 +16,7 @@ def check_system():
     if not cinder_helper.is_volumes_pool_sufficient(min_size=80):
         skip("Cinder volume pool size is smaller than 80G")
 
-    if len(host_helper.get_nova_hosts()) < 2:
+    if len(host_helper.get_up_hypervisors()) < 2:
         skip("at least two computes are required")
 
     if len(nova_helper.get_storage_backing_with_max_hosts()[1]) < 2:
@@ -112,7 +112,6 @@ def vms_(volumes_):
                 'display_name': instance_name,
              }
         vms.append(vm)
-        # ResourceCleanup.add('vm', vm_id, scope='function')
         index += 1
     return vms
 
@@ -387,7 +386,6 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate():
     LOG.tc_step("Booting instance vm_0...")
 
     rc, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm_0', source='volume', source_id=vol_id_0, cleanup='function')
-    # ResourceCleanup.add('vm', vm_id, scope='function')
     assert rc == 0, "VM vm_0 did not succeed: reason {}".format(msg)
     time.sleep(5)
 
@@ -456,6 +454,8 @@ def is_vm_filesystem_rw(vm_id, rootfs='vda', vm_image_name=None):
 
     """
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    # Give it some time to allow vm initiate
+    time.sleep(30)
     if vm_image_name is None:
         vm_image_name = GuestImages.DEFAULT_GUEST
 

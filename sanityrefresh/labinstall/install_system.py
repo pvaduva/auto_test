@@ -1382,7 +1382,6 @@ def downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, load_path,
                 bld_server_conn.rsync(os.path.join(load_path, centos_lab_path, "scripts", "*"),
                                        WRSROOT_USERNAME, controller0.host_ip,
                                        WRSROOT_HOME_DIR, pre_opts=pre_opts)
-                                      
 
         bld_server_conn.rsync(os.path.join(load_path, heat_temp_path, "*"),
                                 WRSROOT_USERNAME, controller0.host_ip, \

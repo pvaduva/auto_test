@@ -15,6 +15,44 @@ def get_lab_floating_ip(labname=None):
     return lab_dict['floating ip']
 
 
+def _get_patches(con_ssh, rtn_str=True):
+    code, output = con_ssh.exec_sudo_cmd('sw-patch query', fail_ok=True)
+
+    patches = []
+    if code == 0:
+        output_lines = output.splitlines()
+        patches = list(output_lines)
+        for line in output_lines:
+            patches.remove(line)
+            if line.startswith('========='):
+                break
+        patches = [patch.strip().split(sep=' ', maxsplit=1)[0] for patch in patches if patch.strip()]
+    if rtn_str:
+        patches = ' '.join(patches)
+
+    return patches
+
+
+def _get_build_info(con_ssh, *args):
+    """
+
+    Args:
+        con_ssh (SSHClient):
+        **args: 'SW_VERSION', 'BUILD_TARGET', 'BUILD_ID', 'BUILD_SERVER', etc...
+
+    Returns (list):
+
+    """
+    output = con_ssh.exec_cmd('cat /etc/build.info')[1]
+    vals = []
+    for arg in args:
+        val = re.findall('''{}=\"(.*)\"'''.format(arg.upper()), output)
+        val = val[0] if val else ''
+        vals.append(val)
+
+    return vals
+
+
 def get_build_id(labname=None, log_dir=None, con_ssh=None):
     """
 
@@ -40,8 +78,9 @@ def get_build_id(labname=None, log_dir=None, con_ssh=None):
             build_id = build_id[0]
         else:
             build_date = re.findall('''BUILD_DATE=\"(.*)\"''', output)
-            if build_date and build_date[0]:
-                build_id = build_date[0].replace(' ', '_').replace(':', '-')
+            if build_date and build_date[0] != 'n/a':
+                build_id = build_date[0].rsplit(' ', 1)[0]
+                build_id = str(build_id).replace(' ', '_').replace(':', '_')
             else:
                 build_id = '_'
 
@@ -66,10 +105,12 @@ def __get_lab_ssh(labname, log_dir=None):
     # Doesn't have to save logs
     # if log_dir is None:
     #     log_dir = temp_dir = "/tmp/CGCSAUTO/"
-    ProjVar.set_var(log_dir=log_dir)
+    if log_dir is not None:
+        ProjVar.set_var(log_dir=log_dir)
+
     ProjVar.set_var(lab=lab)
     ProjVar.set_var(source_admin=Tenant.ADMIN)
-    con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.USER, HostLinuxCreds.PASSWORD, CONTROLLER_PROMPT)
+    con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(), CONTROLLER_PROMPT)
     con_ssh.connect()
     # if 'auth_url' in lab:
     #     Tenant._set_url(lab['auth_url'])
@@ -129,7 +170,7 @@ def _get_sys_type(labname=None, log_dir=None, con_ssh=None):
     sys_type = "{}+{}+{}".format(len(controllers), len(computes), len(storages)).replace('+0', '')
 
     if '+' not in sys_type:
-        sys_type = 'CPE - {} nodes'.format(sys_type)
+        sys_type = 'AIO-DX' if sys_type == '2' else 'AIO-SX'
 
     if close:
         con_ssh.close()

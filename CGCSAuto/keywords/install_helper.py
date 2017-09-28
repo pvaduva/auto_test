@@ -1,16 +1,17 @@
 import os
 import telnetlib
 import threading
+import time
 from contextlib import contextmanager
 
-from consts.auth import HostLinuxCreds, SvcCgcsAuto
+from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout
 from consts.cgcs import HostAvailabilityState, Prompt
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.vlm import VlmAction
-from keywords import system_helper, host_helper
+from keywords import system_helper, host_helper, vm_helper
 # from keywords.vlm_helper import bring_node_console_up
 from utils import exceptions, local_host
 from utils import local_host, cli
@@ -41,7 +42,7 @@ def download_upgrade_license(lab, server, license_path):
     assert server.ssh_conn.exec_cmd(cmd)[0] == 0,  'Upgrade license file not found in {}:{}'.format(
             server.name, license_path)
 
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'],
                           os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
                           pre_opts=pre_opts)
@@ -54,7 +55,7 @@ def download_upgrade_load(lab, server, load_path):
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Upgrade build iso file not found in {}:{}'.format(
             server.name, load_path)
     iso_file_path = os.path.join(load_path, "export", UPGRADE_LOAD_ISO_FILE)
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     #server.ssh_conn.rsync(iso_file_path,
     #                      lab['controller-0 ip'],
     #                      WRSROOT_HOME, pre_opts=pre_opts)
@@ -221,7 +222,7 @@ def wipe_disk(node, install_output_dir, close_telnet_conn=True):
 
     node.telnet_conn.write_line("sudo -k wipedisk")
     node.telnet_conn.get_read_until(Prompt.PASSWORD_PROMPT)
-    node.telnet_conn.write_line(HostLinuxCreds.PASSWORD)
+    node.telnet_conn.write_line(HostLinuxCreds.get_password())
     node.telnet_conn.get_read_until("[y/n]")
     node.telnet_conn.write_line("y")
     node.telnet_conn.get_read_until("confirm")
@@ -354,7 +355,7 @@ def download_image(lab, server, guest_path):
     cmd = "test -e " + guest_path
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Image file not found in {}:{}'.format(
             server.name, guest_path)
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     server.ssh_conn.rsync(guest_path,
                           lab['controller-0 ip'],
                           TiSPath.IMAGES, pre_opts=pre_opts)
@@ -368,7 +369,7 @@ def download_heat_templates(lab, server, load_path):
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Heat template path not found in {}:{}'.format(
             server.name, load_path)
 
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     server.ssh_conn.rsync(heat_path + "/*",
                           lab['controller-0 ip'],
                           TiSPath.HEAT, pre_opts=pre_opts)
@@ -390,7 +391,7 @@ def download_lab_config_files(lab, server, load_path):
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
             server.name, script_path)
 
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     server.ssh_conn.rsync(config_path + "/*",
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
@@ -412,7 +413,7 @@ def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
             server.name, config_path)
 
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     server.ssh_conn.rsync(config_path,
                           lab['floating ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
@@ -501,29 +502,70 @@ def add_storages(lab, server, load_path, ):
 
 
 def run_lab_setup(con_ssh=None, timeout=3600):
+    return run_setup_script(script="lab_setup", config=True)
+
+
+def run_infra_post_install_setup():
+    return run_setup_script(script="lab_infra_post_install_setup", config=True)
+
+
+def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=3600):
     if con_ssh is None:
-        cons_ssh = ControllerClient.get_active_controller()
+        con_ssh = ControllerClient.get_active_controller()
+    if config:
+        cmd = "test -e {}/{}.conf".format( WRSROOT_HOME, script)
+        rc = con_ssh.exec_cmd(cmd)[0]
 
-    cmd = "test -e {}/lab_setup.conf".format(WRSROOT_HOME )
-    rc = con_ssh.exec_cmd(cmd)[0]
+        if rc != 0:
+            msg = "The {}.conf file missing from active controller".format(script)
+            return rc, msg
 
-    if rc != 0:
-        msg = "The lab_setup.conf file missing from active controller"
-        return rc, msg
-
-    cmd = "test -e {}/lab_setup.sh".format(WRSROOT_HOME )
+    cmd = "test -e {}/{}.sh".format(WRSROOT_HOME, script)
     rc = con_ssh.exec_cmd(cmd, )[0]
 
     if rc != 0:
-        msg = "The lab_setup.sh file missing from active controller"
+        msg = "The {}.sh file missing from active controller".format(script)
         return rc, msg
 
-    cmd = "cd; source /etc/nova/openrc; ./lab_setup.sh"
+    cmd = "cd; source /etc/nova/openrc; ./{}.sh".format(script)
     con_ssh.set_prompt(Prompt.ADMIN_PROMPT)
     rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout)
     if rc != 0:
-        msg = " lab_setup run failed: {}".format(msg)
+        msg = " {} run failed: {}".format(script, msg)
         LOG.warning(msg)
         return rc, msg
     con_ssh.set_prompt()
-    return 0, "Lab_setup run successfully"
+    return 0, "{} run successfully".format(script)
+
+
+def launch_vms_post_install():
+    vms = vm_helper.get_any_vms(all_tenants=True)
+    existing_vms_count = len(vms)
+
+    if existing_vms_count > 0:
+        LOG.info("VMs exist; may be already launched as part of install: {} ".format(vms))
+    else:
+        # check if vm launch scripts exist in the lab
+        active_controller = ControllerClient.get_active_controller()
+        cmd = "test -e {}/instances_group0/launch_instances.sh".format(WRSROOT_HOME)
+        rc = active_controller.exec_cmd(cmd)[0]
+        if rc != 0:
+            LOG.info("VM Launching scripts do not exist in lab..... ")
+        else:
+
+            LOG.info("Launching VMs using the launch script .... ")
+
+            tenants = ['tenant1', 'tenant2']
+            for tenant in tenants:
+                LOG.info("Launching {} VMs".format(tenant))
+                cmd = "~/instances_group0/./launch_{}_instances.sh".format(tenant)
+                rc, output = active_controller.exec_cmd(cmd)
+                time.sleep(10)
+
+    vms = vm_helper.get_any_vms(all_tenants=True)
+
+    if len(vms) > 0:
+        LOG.info("Verifying VMs are pingable : {} ".format(vms))
+        vm_helper.ping_vms_from_natbox(vm_ids=vms)
+        LOG.info("VMs launched successfully post install")
+    return vms

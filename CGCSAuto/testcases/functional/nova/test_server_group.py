@@ -300,7 +300,6 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
     code, vms, msg = vm_helper.boot_vm(name='srv_grp_parallel', flavor=flavor_id, hint={'group': srv_grp_id},
                                        avail_zone='cgcsauto', fail_ok=True, min_count=min_count, max_count=max_count,
                                        cleanup='function')
-    # ResourceCleanup.add('vm', vms)
 
     if max_count is None:
         max_count = min_count

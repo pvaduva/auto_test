@@ -11,7 +11,7 @@ from utils.tis_log import LOG
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState, Prompt, MELLANOX_DEVICE, \
     Networks, EventLogID
-from consts.timeout import HostTimeout, CMDTimeout
+from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 
 from keywords import system_helper, common
@@ -57,7 +57,7 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
 
 
 def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False, wait_for_reboot_finish=True,
-                 check_hypervisor_up=True, check_webservice_up=True):
+                 check_hypervisor_up=True, check_webservice_up=True, force_reboot=True):
     """
     Reboot one or multiple host(s)
 
@@ -92,8 +92,11 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     res, out = cli.system('host-list', rtn_list=True)
     LOG.info('\n{}'.format(out))
 
+    is_simplex = system_helper.is_simplex()
     user, password = LinuxUser.get_current_user_password()
     # reboot hosts other than active controller
+    cmd = 'sudo reboot -f' if force_reboot else 'sudo reboot'
+
     for host in hostnames:
         prompt = '.*' + host + '\:~\$'
         host_ssh = SSHFromSSH(ssh_client=con_ssh, host=host, user=user, password=password, initial_prompt=prompt)
@@ -103,7 +106,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
             raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, host))
 
         LOG.info("Rebooting {}".format(host))
-        host_ssh.send('sudo reboot -f')
+        host_ssh.send(cmd)
         host_ssh.expect(['.*[pP]assword:.*', 'Rebooting'])
         host_ssh.send(password)
         con_ssh.expect(timeout=30)
@@ -116,13 +119,16 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         if index == 0:
             con_ssh.send(password)
 
-        LOG.info("Active controller reboot started. Wait for 20 seconds then attempt to reconnect for "
-                 "maximum {}s".format(timeout))
-        time.sleep(20)
-        con_ssh.connect(retry=True, retry_timeout=timeout)
+        if is_simplex:
+            _wait_for_simplex_reconnect(con_ssh=con_ssh, timeout=timeout)
+        else:
+            LOG.info("Active controller reboot started. Wait for 20 seconds then attempt to reconnect for "
+                     "maximum {}s".format(timeout))
+            time.sleep(20)
+            con_ssh.connect(retry=True, retry_timeout=timeout)
 
-        LOG.info("Reconnected via fip. Waiting for system show cli to re-enable")
-        _wait_for_openstack_cli_enable(con_ssh=con_ssh)
+            LOG.info("Reconnected via fip. Waiting for system show cli to re-enable")
+            _wait_for_openstack_cli_enable(con_ssh=con_ssh)
 
     if not wait_for_reboot_finish:
         msg = "Hosts reboot -f cmd sent"
@@ -243,19 +249,21 @@ def wait_for_hosts_ready(hosts, con_ssh=None):
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    expt_online_hosts = get_hosts(hosts, administrative=HostAdminState.LOCKED)
-    expt_avail_hosts = get_hosts(hosts, administrative=HostAdminState.UNLOCKED)
+    expt_online_hosts = get_hosts(hosts, con_ssh=con_ssh, administrative=HostAdminState.LOCKED)
+    expt_avail_hosts = get_hosts(hosts, con_ssh=con_ssh, administrative=HostAdminState.UNLOCKED)
 
     if expt_online_hosts:
         LOG.info("Wait for hosts to be online: {}".format(hosts))
-        wait_for_hosts_states(hosts, availability=HostAvailabilityState.ONLINE, fail_ok=False)
+        wait_for_hosts_states(hosts, availability=HostAvailabilityState.ONLINE, fail_ok=False, con_ssh=con_ssh)
 
     if expt_avail_hosts:
         hypervisors = list(set(get_hypervisors()) & set(hosts))
         controllers = list(set(system_helper.get_controllers()) & set(hosts))
 
         LOG.info("Wait for hosts to be available: {}".format(hosts))
-        wait_for_hosts_states(hosts, availability=HostAvailabilityState.AVAILABLE, fail_ok=False)
+        wait_for_hosts_states(hosts, availability=HostAvailabilityState.AVAILABLE, fail_ok=False, con_ssh=con_ssh)
+
+        wait_for_subfunction_ready(hosts, fail_ok=False, con_ssh=con_ssh)
 
         if controllers:
             LOG.info("Wait for webservices up for hosts: {}".format(controllers))
@@ -264,6 +272,46 @@ def wait_for_hosts_ready(hosts, con_ssh=None):
         if hypervisors:
             LOG.info("Wait for hypervisors up for hosts: {}".format(hypervisors))
             wait_for_hypervisors_up(hypervisors, fail_ok=False, con_ssh=con_ssh, timeout=90)
+
+
+def wait_for_subfunction_ready(hosts, fail_ok=False, con_ssh=None, timeout=HostTimeout.SUBFUNC_READY):
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    hosts_to_check = []
+    for host in hosts:
+        tab_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh, fail_ok=False))
+        if 'subfunction_avail' in table_parser.get_column(tab_, 'Property'):
+            if table_parser.get_value_two_col_table(tab_, 'subfunction_avail') != HostAvailabilityState.AVAILABLE \
+                    or table_parser.get_value_two_col_table(tab_, 'subfunction_oper') != HostOperationalState.ENABLED:
+                hosts_to_check.append(host)
+
+    if not hosts_to_check:
+        LOG.info("No host to check or host subfunctions already enabled/available")
+        return True
+
+    LOG.info("Waiting for subfunctions enable/available for hosts: {}".format(hosts_to_check))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        hosts_vals = get_host_show_values_for_hosts(hosts_to_check, ['subfunction_avail', 'subfunction_oper'],
+                                                    con_ssh=con_ssh)
+        for host, vals in hosts_vals.items():
+            if vals['subfunction_avail'] == HostAvailabilityState.AVAILABLE and \
+                            vals['subfunction_oper'] == HostOperationalState.ENABLED:
+                hosts_to_check.remove(host)
+
+        if not hosts_to_check:
+            LOG.info("Hosts {} subfunctions are now in enabled/available states")
+            return True
+
+        time.sleep(3)
+
+    err_msg = "Host subfunctions are not all in enabled/available states: {}".format(hosts_to_check)
+    if fail_ok:
+        LOG.warning(err_msg)
+        return False
+
+    raise exceptions.HostError(err_msg)
 
 
 def get_host_show_values_for_hosts(hostnames, fields, merge_lines=False, con_ssh=None):
@@ -361,7 +409,7 @@ def __hosts_in_states(hosts, con_ssh=None, **states):
 
 
 def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTimeout.ONLINE_AFTER_LOCK, con_ssh=None,
-              fail_ok=False, check_first=True, swact=False):
+              fail_ok=False, check_first=True, swact=False, check_cpe_alarm=True):
     """
     lock a host.
 
@@ -374,6 +422,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         fail_ok (bool):
         check_first (bool):
         swact (bool): whether to check if host is active controller and do a swact before attempt locking
+        check_cpe_alarm (bool): whether to wait for cpu usage alarm gone before locking
 
     Returns: (return_code(int), msg(str))   # 1, 2, 3, 4, 5, 6 only returns when fail_ok=True
         (-1, "Host already locked. Do nothing.")
@@ -401,6 +450,13 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
             LOG.info("{} is active controller, swact first before attempt to lock.")
             swact_host(host, con_ssh=con_ssh)
 
+    if check_cpe_alarm and system_helper.is_two_node_cpe(con_ssh=con_ssh):
+        LOG.info("For AIO-duplex, wait for cpu usage high alarm gone on active controller")
+        active_con = system_helper.get_active_controller_name()
+        entity_id = 'host={}'.format(active_con)
+        system_helper.wait_for_alarms_gone([(EventLogID.CPU_USAGE_HIGH, entity_id)], check_interval=10,
+                                           fail_ok=fail_ok, timeout=300)
+
     positional_arg = host
     extra_msg = ''
     if force:
@@ -413,7 +469,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
     if exitcode == 1:
         return 1, output
 
-    wait_for_host_states(host=host, timeout=90, check_interval=0, fail_ok=True, task='Locking')
+    wait_for_host_states(host=host, timeout=30, check_interval=0, fail_ok=True, task='Locking')
 
     # Wait for task complete. If task stucks, fail the test regardless. Perhaps timeout needs to be increased.
     wait_for_host_states(host=host, timeout=lock_timeout, task='', fail_ok=False)
@@ -462,6 +518,32 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         raise exceptions.HostPostCheckFailed(msg)
 
 
+def wait_for_ssh_disconnect(ssh=None, timeout=120, fail_ok=False):
+    if ssh is None:
+        ssh = ControllerClient.get_active_controller()
+
+    end_time = time.time() + timeout
+    while ssh._is_connected(fail_ok=True):
+        if time.time() > end_time:
+            if fail_ok:
+                return False
+            raise exceptions.HostTimeout("Timed out waiting {} ssh to disconnect".format(ssh.host))
+
+    LOG.info("ssh to {} disconnected".format(ssh.host))
+    return True
+
+
+def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNLOCK):
+    time.sleep(30)
+    wait_for_ssh_disconnect(ssh=con_ssh, timeout=120)
+    time.sleep(30)
+    con_ssh.connect(retry=True, retry_timeout=timeout)
+    # Give it sometime before openstack cmds enables on after host
+    _wait_for_openstack_cli_enable(con_ssh=con_ssh, fail_ok=False, timeout=timeout, check_interval=10, reconnect=True)
+    time.sleep(10)
+    LOG.info("Re-connected via ssh and openstack CLI enabled")
+
+
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,
                 auth_info=Tenant.ADMIN, check_hypervisor_up=True, check_webservice_up=True, check_subfunc=True):
     """
@@ -504,12 +586,18 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         LOG.info(message)
         return -1, message
 
+    con_ssh = ControllerClient.get_active_controller()
+    is_simplex = system_helper.is_simplex(con_ssh=con_ssh)
+
     exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
                                   fail_ok=fail_ok, timeout=60)
     if exitcode == 1:
         return 1, output
 
-    if not wait_for_host_states(host, timeout=30, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
+    if is_simplex:
+        _wait_for_simplex_reconnect(con_ssh=con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK)
+
+    if not wait_for_host_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
                                 fail_ok=fail_ok):
         return 2, "Host is not in unlocked state"
 
@@ -543,7 +631,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         is_compute = 'compute' in string_total
 
         if check_hypervisor_up and is_compute:
-            if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh, timeout=120)[0]:
+            if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh,
+                                           timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL)[0]:
                 return 6, "Host is not up in nova hypervisor-list"
 
         if check_webservice_up and is_controller:
@@ -625,6 +714,8 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
     if len(hosts_to_unlock) != len(hosts):
         LOG.info("Some host(s) already unlocked. Unlocking the rest: {}".format(hosts_to_unlock))
 
+    con_ssh = ControllerClient.get_active_controller()
+    is_simplex = system_helper.is_simplex(con_ssh=con_ssh)
     hosts_to_check = []
     for host in hosts_to_unlock:
         exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
@@ -633,6 +724,9 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
             res[host] = 1, output
         else:
             hosts_to_check.append(host)
+
+    if is_simplex:
+        _wait_for_simplex_reconnect(con_ssh=con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK)
 
     if not wait_for_hosts_states(hosts_to_check, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh):
         LOG.warning("Some host(s) not in unlocked states after 60 seconds.")
@@ -666,13 +760,14 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
             computes += controllers
 
         if check_hypervisor_up and computes:
-            hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh, timeout=120)[1]
+            hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh,
+                                                           timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL)[1]
             for host in hosts_hypervisordown:
                 res[host] = 5, "Host is not up in nova hypervisor-list"
                 hosts_avail = list(set(hosts_avail) - set(hosts_hypervisordown))
 
         if check_webservice_up and controllers:
-            hosts_webdown = wait_for_webservice_up(controllers, fail_ok=fail_ok, con_ssh=con_ssh, timeout=90)[1]
+            hosts_webdown = wait_for_webservice_up(controllers, fail_ok=fail_ok, con_ssh=con_ssh, timeout=180)[1]
             for host in hosts_webdown:
                 res[host] = 6, "Host web-services is not active in system servicegroup-list"
             hosts_avail = list(set(hosts_avail) - set(hosts_webdown))
@@ -741,12 +836,16 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None):
     return rtn
 
 
-def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=1,
+def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=5,
                                    reconnect=False, reconnect_timeout=60):
     cli_enable_end_time = time.time() + timeout
+    eof_count = 0
     while True:
         try:
             cli.system('show', ssh_client=con_ssh, timeout=timeout)
+            # give it some time after openstack CLI enable
+            LOG.info("'system show' enabled, wait for 60 seconds before continue")
+            time.sleep(60)
             return True
 
         except pexpect.EOF:
@@ -754,6 +853,13 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
                 if con_ssh is None:
                     con_ssh = ControllerClient.get_active_controller()
                 con_ssh.connect(retry_timeout=reconnect_timeout)
+            elif eof_count < 3:
+                eof_count += 1
+            elif fail_ok:
+                LOG.warning("3 EOF caught. Connection lost")
+                return False
+            else:
+                raise
 
         except Exception as e:
             if time.time() > cli_enable_end_time:
@@ -862,6 +968,11 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
         res = wait_for_webservice_up(system_helper.get_active_controller_name(), fail_ok=fail_ok, con_ssh=con_ssh)[0]
         if not res:
             return 5, "Web-services for new controller is not active"
+
+    if system_helper.is_two_node_cpe(con_ssh=con_ssh):
+        hypervisor_up_res = wait_for_hypervisors_up(hostname, fail_ok=fail_ok, con_ssh=con_ssh)
+        if not hypervisor_up_res:
+            return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
 
     return rtn
 
@@ -1042,7 +1153,7 @@ def wait_for_webservice_up(hosts, timeout=90, check_interval=3, fail_ok=False, c
         hosts = [hosts]
 
     hosts_to_check = list(hosts)
-    LOG.info("Waiting for {} to be active for web-service in system servicegroup-list...".format(hosts))
+    LOG.info("Waiting for {} to be active for web-service in system servicegroup-list...".format(hosts_to_check))
     end_time = time.time() + timeout
 
     while time.time() < end_time:
@@ -1053,7 +1164,7 @@ def wait_for_webservice_up(hosts, timeout=90, check_interval=3, fail_ok=False, c
         active_hosts = table_parser.get_values(table_, 'hostname', state='active', strict=True)
 
         for host in hosts:
-            if host in active_hosts:
+            if host in active_hosts and host in hosts_to_check:
                 hosts_to_check.remove(host)
 
         if not hosts_to_check:
@@ -1204,13 +1315,13 @@ def _get_element_tree_virsh_xmldump(instance_name, host_ssh):
     return element_tree
 
 
-def get_values_virsh_xmldump(instance_name, host_ssh, tag_path, target_type='element'):
+def get_values_virsh_xmldump(instance_name, host_ssh, tag_paths, target_type='element'):
     """
 
     Args:
         instance_name (str): instance_name of a vm. Such as 'instance-00000002'
         host_ssh (SSHFromSSH): ssh of the host that hosting the given instance
-        tag_path (str|list|tuple): the tag path to reach to the target element. such as 'memoryBacking/hugepages/page'
+        tag_paths (str|list|tuple): the tag path to reach to the target element. such as 'memoryBacking/hugepages/page'
         target_type (str): 'element', 'dict', 'text'
 
     Returns (list): list of Elements, dictionaries, or strings based on the target_type param.
@@ -1218,36 +1329,40 @@ def get_values_virsh_xmldump(instance_name, host_ssh, tag_path, target_type='ele
     """
     target_type = target_type.lower().strip()
     root_element = _get_element_tree_virsh_xmldump(instance_name, host_ssh)
+
+    is_str = False
+    if isinstance(tag_paths, str):
+        is_str = True
+        tag_paths = [tag_paths]
+
     values_list = []
-    if isinstance(tag_path, (tuple, list)):
-        tag_paths = tag_path
-        for tag_path_ in tag_paths:
-            elements = root_element.findall(tag_path_)
+    for tag_path_ in tag_paths:
+        elements = root_element.findall(tag_path_)
 
-            if 'dict' in target_type:
-                dics = []
-                for element in elements:
-                    dics.append(element.attrib)
-                values_list.append(dics)
+        if 'dict' in target_type:
+            dics = []
+            for element in elements:
+                dics.append(element.attrib)
+            values_list.append(dics)
 
-            elif 'text' in target_type:
-                texts = []
-                for element in elements:
-                    text_list = element.itertext()
-                    if not text_list:
-                        LOG.warning("No text found under tag: {}.".format(tag_path_))
-                    else:
-                        texts.append(text_list[0])
-                        if len(text_list) > 1:
-                            LOG.warning(("More than one text found under tag: {}, returning the first one.".
-                                         format(tag_path_)))
+        elif 'text' in target_type:
+            texts = []
+            for element in elements:
+                text_list = list(element.itertext())
+                if not text_list:
+                    LOG.warning("No text found under tag: {}.".format(tag_path_))
+                else:
+                    texts.append(text_list[0])
+                    if len(text_list) > 1:
+                        LOG.warning(("More than one text found under tag: {}, returning the first one.".
+                                     format(tag_path_)))
 
-                values_list.append(texts)
+            values_list.append(texts)
 
-            else:
-                values_list.append(elements)
+        else:
+            values_list.append(elements)
 
-    if isinstance(tag_path, str):
+    if is_str:
         return values_list[0]
     else:
         return values_list
@@ -1482,11 +1597,11 @@ def get_logcores_counts(host, proc_ids=(0, 1), thread='0', functions=None, con_s
     Args:
         host:
         proc_ids:
-        thread:
+        thread (str|list): '0' or ['0', '1']
         con_ssh:
         functions (list|str)
 
-    Returns (dict):
+    Returns (list):
 
     """
     table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh))
@@ -1732,6 +1847,7 @@ def modify_host_lvg(host, lvm='nova-local', inst_backing=None, inst_lv_size=None
         return err_msg
 
     err = ''
+    rtn_code = 0
     if code == 0:
         err = check_host_config(table_parser.table(output))
         if err:
@@ -2151,6 +2267,28 @@ def get_coredumps_and_crashreports():
     return core_dumps_and_reports
 
 
+def modify_mtu_on_interface(host, interface, mtu_val, network_type='data',
+                            lock_unlock=True, fail_ok=False, con_ssh=None):
+    mtu_val = int(mtu_val)
+
+    LOG.info("Modify MTU for IF {} of NET-TYPE {} to: {} on {}".format(interface, network_type, mtu_val, host))
+
+    args = "-m {} {} {}".format(mtu_val, host, interface)
+
+    code, output = cli.system('host-if-modify', args, fail_ok=fail_ok, rtn_list=True, ssh_client=con_ssh)
+
+    if code != 0:
+        msg = "Attempt to change MTU failed on host:{} for IF:{} to MTU:{}".format(host, interface, mtu_val)
+        if fail_ok:
+            return 2, msg
+        raise exceptions.HostPostCheckFailed(msg)
+
+    if lock_unlock:
+        unlock_host(host)
+
+    return code, output
+
+
 def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fail_ok=False, con_ssh=None):
 
     if not hosts:
@@ -2494,7 +2632,7 @@ def ensure_host_provisioned(host, con_ssh=None):
         raise exceptions.HostError("Failed to provision host {}")
     # Delay for the alarm to clear . Could be improved.
     time.sleep(120)
-    return 0, "Host {} is provisioned after lock/unlock"
+    return 0, "Host {} is provisioned after lock/unlock".format(host)
 
 
 def is_host_provisioned(host, con_ssh=None):
@@ -2777,6 +2915,36 @@ def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, pas
         bld_server_conn.close()
 
 
+@contextmanager
+def ssh_to_test_server(test_srv=SvcCgcsAuto.SERVER, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD, prompt=None):
+    """
+    ssh to test server.
+    Usage: Use with context_manager. i.e.,
+        with ssh_to_build_server(bld_srv=cgts-yow3-lx) as bld_srv_ssh:
+            # do something
+        # ssh session will be closed automatically
+
+    Args:
+        test_srv (str): test server ip
+        user (str): svc-cgcsauto if unspecified
+        password (str): password for svc-cgcsauto user if unspecified
+        prompt (str|None): expected prompt. such as: svc-cgcsauto@yow-cgts4-lx.wrs.com$
+
+    Yields (SSHClient): ssh client for given build server and user
+
+    """
+    # Get build_server dict from bld_srv param.
+
+    prompt = prompt if prompt else Prompt.TEST_SERVER_PROMPT_BASE.format(user)
+    test_server_conn = SSHClient(test_srv, user=user, password=password, initial_prompt=prompt)
+    test_server_conn.connect()
+
+    try:
+        yield test_server_conn
+    finally:
+        test_server_conn.close()
+
+
 def get_host_co_processor_pci_list(hostname):
 
     host_pci_info = []
@@ -2794,6 +2962,11 @@ def get_host_co_processor_pci_list(hostname):
 
                 pci_address = ("0000:{}".format(pci_attributes[0])).strip()
                 pci_name = "pci_{}".format(pci_address.replace('.', '_').replace(':', '_').strip())
+                class_id = re.findall("Co-processor\s\[(.*)\]", pci_attributes[1])[0]
+                # Ensure class id is at least 6 digits as displayed in nova device-list and system host-device-list
+                num_zero = 6 - len(class_id)
+                if num_zero > 0:
+                    class_id += ''.join(['0']*num_zero)
                 vendor_name = pci_attributes[2].split(' [')[0]
                 LOG.info("vendor ={} pci_address = {} pci_name= {}".format(vendor_name, pci_address, pci_name))
                 vendor_id = (pci_attributes[2].split(' [')[1]).replace(']', '')
@@ -2803,7 +2976,9 @@ def get_host_co_processor_pci_list(hostname):
                             'pci_name': pci_name,
                             'vendor_name': vendor_name,
                             'vendor_id': vendor_id,
-                            'device_id': device_id
+                            'device_id': device_id,
+                            'class_id': class_id,
+                            'pci-alias': 'qat-vf',
                             }
                 cmd2 = " lspci -nnm | grep Co-processor | grep \"{} Virtual\" | awk 'NR == 1'".format(device_name)
                 rc, vf_line = host_ssh.exec_cmd(cmd2)
@@ -2869,9 +3044,9 @@ def scp_files_to_controller(host, file_path, dest_dir, controller=None, dest_use
                             fail_ok=True):
     dest_server = controller if controller else ''
     dest_user = dest_user if dest_user else ''
-    con_ssh.scp_files(source_file=file_path, source_server=host, source_password=HostLinuxCreds.PASSWORD,
-                      source_user=HostLinuxCreds.USER,
-                      dest_file=dest_dir, dest_user=dest_user, dest_password=HostLinuxCreds.PASSWORD,
+    con_ssh.scp_files(source_file=file_path, source_server=host, source_password=HostLinuxCreds.get_password(),
+                      source_user=HostLinuxCreds.get_user(),
+                      dest_file=dest_dir, dest_user=dest_user, dest_password=HostLinuxCreds.get_password(),
                       dest_server=dest_server, sudo=sudo, fail_ok=fail_ok)
 
 
@@ -2963,3 +3138,120 @@ def get_ntpq_status(host, con_ssh=None):
         return 2, "Some NTP servers are discarded"
 
     return 0, "{} NTPQ is in healthy state".format(host)
+
+
+def wait_for_ntp_sync(host, timeout=MiscTimeout.NTPQ_UPDATE, fail_ok=False, con_ssh=None):
+
+    LOG.info ("Waiting for ntp alarm to clear or sudo ntpq -pn indicate unhealthy server for {}".format(host))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        ntp_alarms = system_helper.get_alarms(alarm_id=EventLogID.NTP_ALARM, entity_id=host, strict=False)
+        status, msg = get_ntpq_status(host)
+        if ntp_alarms and status != 0:
+            LOG.info("Valid NTP alarm")
+            return True
+        elif not ntp_alarms and status == 0:
+            LOG.info("NTP alarm cleared and sudo ntpq shows servers healthy")
+            return True
+
+        LOG.info("NTPQ status: {}; NTP alarms: {}".format(msg, ntp_alarms))
+        time.sleep(10)
+
+    err_msg = "Timed out waiting for NTP alarm to be in sync with ntpq output. NTPQ status: {}; NTP alarms: {}".\
+        format(msg, ntp_alarms)
+    if fail_ok:
+        LOG.warning(err_msg)
+        return False
+
+    raise exceptions.HostTimeout(err_msg)
+
+
+def get_host_cpu_model(host, con_ssh=None):
+    """
+    Get cpu model for a given host. e.g., Intel(R) Xeon(R) CPU E5-2680 v2 @ 2.80GHz
+    Args:
+        host (str): e.g., compute-0
+        con_ssh (SSHClient):
+
+    Returns (str):
+    """
+    table_ = table_parser.table(cli.system('host-cpu-list --nowrap', host, ssh_client=con_ssh))
+    cpu_model = table_parser.get_column(table_, 'processor_model')[0]
+
+    LOG.info("CPU Model for {}: {}".format(host, cpu_model))
+    return cpu_model
+
+
+def get_hypersvisors_with_config(hosts=None, up_only=True, hyperthreaded=None, storage_backing=None, con_ssh=None):
+    """
+    Get hypervisors with specified configurations
+    Args:
+        hosts (None|list):
+        up_only (bool):
+        storage_backing (None|str):
+        con_ssh (SSHClient):
+
+    Returns (list): list of hosts meeting the requirements
+
+    """
+    if up_only:
+        hypervisors = get_up_hypervisors(con_ssh=con_ssh)
+    else:
+        hypervisors = get_hypervisors(con_ssh=con_ssh)
+
+    if hosts:
+        candidate_hosts = list(set(hypervisors) & set(hosts))
+    else:
+        candidate_hosts = hypervisors
+
+    if candidate_hosts and storage_backing:
+        hosts_with_backing = get_hosts_by_storage_aggregate(storage_backing=storage_backing, con_ssh=con_ssh)
+        candidate_hosts = list(set(candidate_hosts) & set(hosts_with_backing))
+
+    if hyperthreaded is not None and candidate_hosts:
+        ht_hosts = []
+        non_ht = []
+        for host in candidate_hosts:
+            if system_helper.is_hyperthreading_enabled(host, con_ssh=con_ssh):
+                ht_hosts.append(host)
+            else:
+                non_ht.append(host)
+        candidate_hosts = ht_hosts if hyperthreaded else non_ht
+
+    return candidate_hosts
+
+
+def lock_unlock_controllers():
+    """
+    lock/unlock both controller to get rid of the config out of date situations
+    Args:
+        none
+
+    Returns (list): return code and msg
+
+    """
+    active, standby = system_helper.get_active_standby_controllers()
+    if standby:
+        LOG.info("(Session) Locking unlocking controllers to complete action")
+        lock_host(standby)
+        unlock_host(standby)
+        drbd_res = system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, entity_id=standby,
+                                                     strict=False, fail_ok=True, timeout=300)
+        if not drbd_res:
+            return 1, "400.001 alarm is not cleared within timeout after unlock standby"
+
+        lock_host(active, swact=True)
+        unlock_host(active)
+        drbd_res = system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, entity_id=active,
+                                                     strict=False, fail_ok=True, timeout=300)
+        if not drbd_res:
+            return 1, "400.001 alarm is not cleared within timeout after unlock standby"
+    elif system_helper.is_simplex():
+        LOG.info("(Session) Simplex lab - lock/unlock controller to complete action")
+        lock_host('controller-0', swact=False)
+        unlock_host('controller-0')
+    else:
+        LOG.warning("Standby controller unavailable. Skip lock unlock controllers.")
+        return 1, "Standby controller unavailable. Skip lock unlock controllers"
+
+    return 0, "Locking unlocking controllers completed"

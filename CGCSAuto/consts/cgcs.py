@@ -1,5 +1,5 @@
 # output of date. such as: Tue Mar  1 18:20:29 UTC 2016
-DATE_OUTPUT = r'[0-2]\d:[0-5]\d:[0-5]\d\s[A-Z]{3}\s\d{4}$'
+DATE_OUTPUT = r'[0-2]\d:[0-5]\d:[0-5]\d\s[A-Z]{3,}\s\d{4}$'
 
 EXT_IP = '8.8.8.8'
 
@@ -32,26 +32,31 @@ MELLANOX4 = 'MT.*ConnectX-4'
 
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
+    IMAGE_DIR_REMOTE = '/sandbox/images'
     TMP_IMG_DIR = '/opt/backups'
     DEFAULT_GUEST = 'tis-centos-guest'
     TIS_GUEST_PATTERN = 'cgcs-guest|tis-centos-guest'
     GUESTS_NO_RM = ['ubuntu_14', 'tis-centos-guest', 'cgcs-guest']
-    # Image files name and size from yow-cgcs-test.wrs.com:/home/svc-cgcsauto/images
+    # Image files name and size from yow-cgcs-test.wrs.com:/sandbox/images
     # <glance_image_name>: <source_file_name>, <root disk size>, <dest_file_name>
     IMAGE_FILES = {
-        'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_14.qcow2'),
-        'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2'),
-        'centos_6': ('CentOS-6.8-x86_64-GenericCloud-1608.qcow2', 8, 'centos_6.qcow2'),
-        'centos_7': ('CentOS-7-x86_64-GenericCloud.qcow2', 8, 'centos_7.qcow2'),
-        'rhel_6': ('rhel-6.5-x86_64.qcow2', 11, 'rhel_6.qcow2'),                # OVP img
-        'rhel_7': ('rhel-7.2-x86_64.qcow2', 11, 'rhel_7.qcow2'),               # OVP img
-        'opensuse_11': ('openSUSE-11.3-x86_64.qcow2', 11, 'opensuse_11.qcow2'),     # OVP img
-        'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21, 'opensuse_12.qcow2'),      # OVP img
-        'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16, 'opensuse_13.qcow2'),
+        'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 3, 'ubuntu_14.qcow2', 0.3),
+        'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2', 0.3),
+        'ubuntu_16': ('ubuntu-16.04-xenial-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_16.qcow2', 0.3),
+        'centos_6': ('CentOS-6.8-x86_64-GenericCloud-1608.qcow2', 8, 'centos_6.qcow2', 0.7),
+        'centos_7': ('CentOS-7-x86_64-GenericCloud.qcow2', 8, 'centos_7.qcow2', 0.9),
+        'rhel_6': ('rhel-6.5-x86_64.qcow2', 11, 'rhel_6.qcow2', 1.5),                # OVP img
+        'rhel_7': ('rhel-7.2-x86_64.qcow2', 11, 'rhel_7.qcow2', 1.1),               # OVP img
+        'opensuse_11': ('openSUSE-11.3-x86_64.qcow2', 11, 'opensuse_11.qcow2', 1.2),     # OVP img
+        'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21, 'opensuse_12.qcow2', 1.6),      # OVP img
+        'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16, 'opensuse_13.qcow2', 0.3),
         # 'win_2012': ('win2012r2.qcow2', 36, 'win_2012.qcow2'),   # Service Team img
-        'win_2012': ('windows_server_2012_r2_standard_eval_kvm_20170321.qcow2', 13, 'win2012r2.qcow2'),  # MattP
-        'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img'),       # wrl-6
-        'tis-centos-guest': (None, 2, 'tis-centos-guest.img')
+        # 'win_2012': ('windows_server_2012_r2_standard_eval_kvm_20170321.qcow2', 13, 'win2012r2.qcow2'),  # MattP+ssh
+        'win_2012': ('win2012r2_cygwin_compressed.qcow2', 13, 'win2012r2.qcow2', 6.6),  # MattP
+        'win_2016': ('win2016_cygwin_compressed.qcow2', 29, 'win2016.qcow2', 7.5),
+        'ge_edge': ('edgeOS.hddirect.qcow2', 5, 'ge_edge.qcow2', 0.3),
+        'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img', 0.7),       # wrl-6
+        'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5)
     }
 
 
@@ -60,7 +65,8 @@ class Networks:
     DATA_NET_NAME = 'tenant\d-net'
     INTERNAL_NET_NAME = 'internal'
     # such as 192.168.11.6
-    MGMT_IP = r'192.168.\d{1,3}.\d{1,3}'
+    MGMT_IP = r'192.168.\d{3}\.\d{1,3}|192.168.9\d\.\d{1,3}'
+    EXT_IP = r'192.168.\d\.\d{1,3}|192.168.[1-8]\d\.\d{1,3}|10.10.\d{1,3}\.\d{1,3}'
     # such as 172.16.1.11
     DATA_IP = r'172.\d{1,3}.\d{1,3}.\d{1,3}'
     # such as 10.1.1.44
@@ -69,8 +75,10 @@ class Networks:
     IP_PATTERN = {
         'data': DATA_IP,
         'mgmt': MGMT_IP,
-        'internal': INTERNAL_IP
+        'internal': INTERNAL_IP,
+        'external': EXT_IP
     }
+    INFRA_NETWORK_CIDR = "192.168.205.0/24"
 
 
 class SystemType:
@@ -139,10 +147,13 @@ class Prompt:
     PASSWORD_PROMPT = '.*assword\:.*'
     SUDO_PASSWORD_PROMPT = 'Password: '
     BUILD_SERVER_PROMPT_BASE = '{}@{}\:~.*'
+    TEST_SERVER_PROMPT_BASE = '\[{}@.*\]\$ '
     ADD_HOST = '.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
     Y_N_PROMPT = '.*\(y/n\)\?.*'
     YES_N_PROMPT = '.*\[yes/N\]\: ?'
+    CONFIRM_PROMPT = '.*confirm: ?'
+
 
 
 class NovaCLIOutput:
@@ -199,6 +210,11 @@ class ImageMetadata:
     CPU_POLICY = 'hw_cpu_policy'
     CPU_RT_MASK = 'hw_cpu_realtime_mask'
     CPU_RT = 'hw_cpu_realtime'
+    CPU_MODEL = 'hw_cpu_model'
+
+
+class VMMetaData:
+    EVACUATION_PRIORITY = 'sw:wrs:recovery_priority'
 
 
 class ServerGroupMetadata:
@@ -254,6 +270,7 @@ class EventLogID:
     CINDER_IO_CONGEST = '800.101'
     PROVIDER_NETWORK_FAILURE = '300.005'
     BMC_SENSOR_ACTION = '200.007'
+    CPU_USAGE_HIGH = '100.101'
 
 
 class NetworkingVmMapping:
@@ -325,3 +342,83 @@ class QoSSpecs:
     READ_IOPS = 'read_iops_sec'
     WRITE_IOPS = 'write_iops_sec'
     TOTAL_IOPS = 'total_iops_sec'
+
+
+class OrchestStrategyPhases:
+    INITIAL = 'initial'
+    BUILD = 'build'
+    ABORT = 'abort'
+    APPLY = 'apply'
+
+    # PHASE_COMPLETION_TIMOUT = {
+    #     INITIAL: 20,
+    #     BUILD: 60,
+    #     ABORT: 7200,
+    #     APPLY: 7200,
+    # }
+
+    @staticmethod
+    def validate(phase):
+        if phase in [OrchestStrategyPhases.BUILD, OrchestStrategyPhases.APPLY, OrchestStrategyPhases.ABORT]:
+            return True
+        else:
+            return False
+
+
+class OrchestStrategyStates:
+    # initial
+    INITIAL = 'initial'
+    # apply phase
+    APPLYING = 'applying'
+    APPLIED = 'applied'
+    APPLY_FAILED = 'apply-failed'
+    APPLY_TIMEOUT = 'apply-timeout'
+
+    # build phase
+    BUILDING = 'building'
+    BUILT = 'ready-to-apply'
+    BUILD_FAILED = 'build-failed'
+    BUILD_TIMEOUT = 'build-timeout'
+
+    # abort phase
+    ABORTING = 'aborting'
+    ABORTED ='aborted'
+    ABORT_FAILED = 'abort-failed'
+    ABORT_TIMEOUT = 'abort-timeout'
+
+    OrchestStrategyPhaseStates = {
+        OrchestStrategyPhases.BUILD : [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT ],
+        OrchestStrategyPhases.ABORT : [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
+        OrchestStrategyPhases.APPLY : [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
+    }
+
+    def validate(self, phase, state):
+        if phase in self.OrchestStrategyPhaseStates.keys():
+            if state in [v for k, v in self.OrchestStrategyPhaseStates.items()]:
+                return True
+        return False
+
+
+class OrchestrationStrategyKeyNames:
+
+    STRATEGY_UUID = 'strategy-uuid'
+    CONTROLLER_APPLY_TYPE = 'controller-apply-type'
+    STORAGE_APPLY_TYPE = 'storage-apply-type'
+    COMPUTE_APPLY_TYPE = 'compute-apply-type'
+    MAX_PARALLEL_COMPUTE_HOSTS = 'max-parallel-compute-hosts'
+    DEFAULT_INSTANCE_ACTION = 'default-instance-action'
+    ALARM_RESTRICTION = 'alarm-restrictions'
+    CURRENT_PHASE = 'current-phase'
+    CURRENT_PHASE_COMPLETION = 'current-phase-completion'
+    STATE = 'state'
+    APPLY_RESULT = 'apply-result'
+    APPLY_REASON = 'apply-reason'
+    ABORT_RESULT = 'abort-result'
+    ABORT_REASON = 'abort-reason'
+    BUILD_RESULT = 'build-result'
+    BUILD_REASON = 'build-reason'
+
+
+class DevClassIds:
+    QAT_VF = '0b4000'
+    GPU = '030000'

@@ -4,7 +4,7 @@
 class Labs:
     HP380 = {
         'short_name': 'hp380',
-        'name': 'cgcs-hp380-1_4',
+        'name': 'yow-cgcs-hp380-1_4',
         'floating ip': '128.224.150.189',
         'controller-0 ip': '128.224.150.199',
         'controller-1 ip': '128.224.150.129',
@@ -15,7 +15,7 @@ class Labs:
 
     IP_1_4 = {
         'short_name': 'ip_1_4',
-        'name': 'cgcs-ironpass-1_4',
+        'name': 'yow-cgcs-ironpass-1_4',
         'floating ip': '128.224.151.212',
         'controller-0 ip': '128.224.151.192',
         'controller-1 ip': '128.224.151.193',
@@ -26,7 +26,7 @@ class Labs:
 
     IP_5_6 = {
         'short_name': 'ip_5_6',
-        'name': 'cgcs-ironpass-5_6',
+        'name': 'yow-cgcs-ironpass-5_6',
         'floating ip': '128.224.151.216',
         'controller-0 ip': '128.224.151.196',
         'controller-1 ip': '128.224.151.197',
@@ -36,7 +36,7 @@ class Labs:
 
     IP_7_12 = {
         'short_name': 'ip_7_12',
-        'name': 'cgcs-ironpass-7_12',
+        'name': 'yow-cgcs-ironpass-7_12',
         'floating ip': '128.224.151.243',
         'controller-0 ip': '128.224.151.244',
         'controller-1 ip': '128.224.150.205',
@@ -47,17 +47,17 @@ class Labs:
 
     IP_14_17 = {
         'short_name': 'ip_14_17',
-        'name': 'cgcs-ironpass-14_17',
+        'name': 'yow-cgcs-ironpass-14_17',
         'floating ip': '128.224.150.54',
         'controller-0 ip': '128.224.150.219',
         'controller-1 ip': '128.224.150.212',
-        'controller_nodes': [22349, 22348],
+        'controller_nodes': [23527, 22348],
         'compute_nodes': [22347, 21784],
     }
 
     IP_18_19 = {
         'short_name': 'ip_18_19',
-        'name': 'cgcs-ironpass-18_19',
+        'name': 'yow-cgcs-ironpass-18_19',
         'floating ip': '128.224.150.158',
         'controller-0 ip': '128.224.150.168',
         'controller-1 ip': '128.224.150.169',
@@ -67,18 +67,18 @@ class Labs:
 
     IP_20_27 = {
         'short_name': 'ip_20_27',
-        'name': 'cgcs-ironpass-20_27',
+        'name': 'yow-cgcs-ironpass-20_27',
         'floating ip': '128.224.151.49',
         'controller-0 ip': '128.224.151.47',
         'controller-1 ip': '128.224.151.48',
         'controller_nodes': [18541, 18542],
-        'compute_nodes': [22417,22418,21762,18537],
+        'compute_nodes': [22417, 22418, 21762, 18537],
         'storage_nodes': [18536, 18551],
     }
 
     IP_28_30 = {
         'short_name': 'ip_28_30',
-        'name': 'cgcs-ironpass-28_30',
+        'name': 'yow-cgcs-ironpass-28_30',
         'floating ip': '128.224.150.188',
         'controller-0 ip': '128.224.150.223',
         'controller-1 ip': '128.224.150.179',
@@ -88,7 +88,7 @@ class Labs:
 
     IP_31_32 = {
         'short_name': 'ip_31_32',
-        'name': 'cgcs-ironpass-31_32',
+        'name': 'yow-cgcs-ironpass-31_32',
         'floating ip': '128.224.150.96',
         'controller-0 ip': '128.224.150.92',
         'controller-1 ip': '128.224.150.22',
@@ -98,7 +98,7 @@ class Labs:
 
     IP_33_36 = {
         'short_name': 'ip_33_36',
-        'name': 'cgcs-ironpass-33_36',
+        'name': 'yow-cgcs-ironpass-33_36',
         'floating ip': '128.224.150.215',
         'controller-0 ip': '128.224.150.32',
         'controller-1 ip': '128.224.151.148',
@@ -108,7 +108,7 @@ class Labs:
 
     IP_37_40 = {
         'short_name': 'ip_37_40',
-        'name': 'cgcs-ironpass-37_40',
+        'name': 'yow-cgcs-ironpass-37_40',
         'floating ip': '128.224.150.89',
         'controller-0 ip': '128.224.150.175',
         'controller-1 ip': '128.224.150.93',
@@ -139,6 +139,16 @@ class Labs:
         'storage_nodes': [23146, 23147],
     }
 
+    PV1_2 = {
+        'short_name': 'pv1_2',
+        'name': 'yow-cgcs-pv-1_2',
+        'floating ip': '128.224.151.182',
+        'controller-0 ip': '128.224.151.198',
+        'controller-1 ip': '128.224.151.199',
+        'controller_nodes': [23136, 23138],
+        'compute_nodes': [23135, 23137, 23140, 23143, 23139, 23141, 23142, 23146, 23147, 23096]
+    }
+
     PV2 = {
         'short_name': 'pv2',
         'name': 'yow-cgcs-pv-2',
@@ -167,6 +177,15 @@ class Labs:
         'compute_nodes': [21763, 21764, 21765],
     }
 
+    R430_1_2 = {
+        'short_name': 'r430_1_2',
+        'name': 'yow-cgcs-r430-1_2',
+        'floating ip': '128.224.150.49 ',
+        'controller-0 ip': '128.224.150.48',
+        'controller-1 ip': '128.224.150.52',
+        'controller_nodes': [23512, 23513],
+    }
+    
     SM_1 = {
         'short_name': 'sm_1',
         'name': 'yow-cgcs-supermicro-1',
@@ -210,7 +229,7 @@ class Labs:
 
     WCP_3_6 = {
         'short_name': 'wcp_3_6',
-        'name': 'yow-cgcs-wildcat-3-6',
+        'name': 'yow-cgcs-wildcat-3_6',
         'floating ip': '128.224.151.227',
         'controller-0 ip': '128.224.150.69',
         'controller-1 ip': '128.224.150.70',

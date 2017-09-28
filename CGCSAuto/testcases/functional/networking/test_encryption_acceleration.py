@@ -1,7 +1,7 @@
 from pytest import mark, fixture, skip
 from utils import cli, table_parser
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec
+from consts.cgcs import FlavorSpec, DevClassIds
 from keywords import network_helper, vm_helper, nova_helper, system_helper, host_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -418,33 +418,30 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_list):
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id_)
 
 
-def check_device_list_against_pci_list(pci_list_info, device_table_list):
+def check_device_list_against_pci_list(lspci_list_info, sysinv_device_list_tab):
     """
     Checks the host pci info against the output of cli system host-device-list
     Args:
-        pci_list_info: host's pci co-processor list from lspci command
-        device_table_list: pci list from cli system host-device-list
+        lspci_list_info: host's pci co-processor list from lspci command
+        sysinv_device_list_tab: pci list from cli system host-device-list
 
     Returns:
 
     """
 
     LOG.info("Checking all devices are included in the list")
-    assert len(pci_list_info) == len(device_table_list['values']), "host devices list:{} and pci list:{} mismatch".\
-        format(device_table_list['values'], pci_list_info)
+    sysinv_device_list_tab = table_parser.filter_table(sysinv_device_list_tab, **{'class id': DevClassIds.QAT_VF})
+
+    assert len(lspci_list_info) == len(sysinv_device_list_tab['values']), \
+        "host devices list:{} and pci list:{} mismatch".format(sysinv_device_list_tab['values'], lspci_list_info)
 
     # check if pci attribute values are the identical
-    for pci in pci_list_info:
-        values_index = [index for (index, item) in enumerate(device_table_list['values']) if pci['pci_address'] in item]
-        assert len(values_index) > 0, "PCI address {} not listed in  host device list {}"\
-            .format(pci['pci_address'], device_table_list['values'])
-        l = values_index.pop()
-        assert pci['vendor_name'] in device_table_list['values'][l], \
-            "Vendor name {} not listed in host device list {}"\
-            .format(pci['vendor_name'], device_table_list['values'][l])
-        assert pci['vendor_id'] in device_table_list['values'][l], "Vendor id {} not listed in host device list {}"\
-            .format(pci['vendor_id'], device_table_list['values'][l])
-        assert pci['device_id'] in device_table_list['values'][l], "Device id {} not listed in host device list {}"\
-            .format(pci['device_id'], device_table_list['values'][l])
+    for pci in lspci_list_info:
+        sysinv_tab = table_parser.filter_table(sysinv_device_list_tab, **{'name': pci['pci_name']})
+        assert pci['vendor_name'] == table_parser.get_column(sysinv_tab, 'vendor name')[0]
+        assert pci['vendor_id'] == table_parser.get_column(sysinv_tab, 'vendor id')[0]
+        assert pci['device_id'] == table_parser.get_column(sysinv_tab, 'device id')[0]
+        assert pci['class_id'] == table_parser.get_column(sysinv_tab, 'class id')[0]
+        assert pci['pci_address'] == table_parser.get_column(sysinv_tab, 'address')[0]
 
     LOG.info("All host devices are listed")

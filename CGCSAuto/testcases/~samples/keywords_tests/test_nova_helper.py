@@ -20,8 +20,7 @@ def add_host_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
 def test_boot_vm_on_host(add_host_to_zone):
     target_host = add_host_to_zone
 
-    vm_id = vm_helper.boot_vm(name='cgcsauto_zone', avail_zone='cgcsauto', vm_host=target_host)[1]
-    ResourceCleanup.add('vm', vm_id)
+    vm_id = vm_helper.boot_vm(name='cgcsauto_zone', avail_zone='cgcsauto', vm_host=target_host, cleanup='function')[1]
 
     assert target_host == nova_helper.get_vm_host(vm_id=vm_id)
 

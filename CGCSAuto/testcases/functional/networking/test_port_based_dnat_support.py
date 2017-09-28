@@ -9,7 +9,9 @@ from consts.cgcs import FlavorSpec, Prompt
 from keywords import network_helper, vm_helper, nova_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
+GUEST_OS = 'ubuntu_14'
 VMS_COUNT = 4
+
 
 @fixture(scope='module')
 def router_info(request):
@@ -50,37 +52,33 @@ def delete_pfs(request):
     return None
 
 
-@fixture(scope='function')
-@mark.usefixtures('ubuntu14_image')
-def _vms(ubuntu14_image):
-    """
-
-    Args:
-        ubuntu14_image:
-
-    Returns:
-
-    """
-
-    image_id = ubuntu14_image
-    guest_os = 'ubuntu_14'
-    size = 5
-
-    LOG.fixture_step("Create a favor with {}G root disk and dedicated cpu policy".format(size))
-    flavor_id = nova_helper.create_flavor(name='dedicated-{}g'.format(size), root_disk=size)[1]
+@fixture(scope='module')
+def get_vms_args():
+    LOG.fixture_step("Create a favor with dedicated cpu policy")
+    flavor_id = nova_helper.create_flavor(name='dedicated-ubuntu', guest_os=GUEST_OS)[1]
     ResourceCleanup.add('flavor', flavor_id, scope='module')
 
     nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_ids = network_helper.get_tenant_net_ids()
+    if len(tenant_net_ids) < VMS_COUNT:
+        tenant_net_ids += tenant_net_ids
+    assert len(tenant_net_ids) >= VMS_COUNT
+
     internal_net_id = network_helper.get_internal_net_id()
     vm_names = ['virtio1_vm', 'avp1_vm', 'avp2_vm', 'vswitch1_vm']
     vm_vif_models = {'virtio1_vm': 'virtio',
                      'avp1_vm': 'avp',
                      'avp2_vm': 'avp',
                      'vswitch1_vm': 'avp'}
+    return flavor_id, vm_names, mgmt_net_id, tenant_net_ids, internal_net_id, vm_vif_models
 
+
+@fixture(scope='function')
+@mark.usefixtures('ubuntu14_image')
+def _vms(get_vms_args):
+    flavor_id, vm_names, mgmt_net_id, tenant_net_ids, internal_net_id, vm_vif_models = get_vms_args
     vms = []
 
     for (vm, i) in zip(vm_names, range(0, VMS_COUNT)):
@@ -88,17 +86,10 @@ def _vms(ubuntu14_image):
                 {'net-id': tenant_net_ids[i], 'vif-model': vm_vif_models[vm]},
                 {'net-id': internal_net_id, 'vif-model': vm_vif_models[vm]}]
 
-        # LOG.fixture_step("Create a {}G volume from {} image".format(size, image_id))
-        # vol_id = cinder_helper.create_volume(name='vol-{}'.format(vm), image_id=image_id, size=size)[1]
-        # ResourceCleanup.add('volume', vol_id)
-
         LOG.fixture_step("Boot a ubuntu14 vm with {} nics from above flavor and volume".format(vm_vif_models[vm]))
         vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=flavor_id, source='volume', cleanup='function',
-                                  nics=nics, guest_os=guest_os)[1]
-        # vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=flavor_id, source='volume', cleanup='function',
-        #                           source_id=image_id, nics=nics, guest_os=guest_os)[1]
+                                  nics=nics, guest_os=GUEST_OS)[1]
 
-        # ResourceCleanup.add('vm', vm_id, del_vm_vols=True)
         vms.append(vm_id)
 
     return vms
@@ -112,12 +103,12 @@ def test_port_forwarding_rule_create_for_vm(_vms, delete_pfs):
         LOG.info("Creating  port forwarding rule for VM: {}: outside_port={}.".format(vm_name, public_port))
 
         rc, pf_id, msg = network_helper.create_port_forwarding_rule_for_vm(vm_id,
-                                                                    inside_port=str(90),
-                                                                    outside_port=public_port)
+                                                                           inside_port=str(90),
+                                                                           outside_port=public_port)
 
         assert rc == 0, "Port forwarding rule create failed for VM {}: {}".format(vm_name, msg)
 
-    LOG.info("rc {}; pf_id {} msg {}".format(rc, pf_id, msg))
+        LOG.info("rc {}; pf_id {} msg {}".format(rc, pf_id, msg))
 
 
 def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from_nat):
@@ -156,7 +147,6 @@ def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from
         thread_vm = MThread(check_ssh_to_vm_and_wait_for_packets, k, ext_ip_address, ssh_public_port, greeting)
         vm_threads[index] = thread_vm
         index += 1
-
 
     LOG.info("Starting VM ssh session threads .... ")
 
@@ -397,7 +387,7 @@ def test_dnat_ubuntu_vm_udp(_vms, router_info):
         LOG.info("Result rc= {}; Output = {}".format(rc, output))
 
     LOG.info("Checking non-udp packets are not received by vms......")
-    for i in range(0,VMS_COUNT):
+    for i in range(0, VMS_COUNT):
         assert outputs[i] is None or outputs[i][1] not in outputs[i][0], "VM received UDP packets on TCP port " \
                                                                          "forwarding rules {}".format(outputs[i][1])
     LOG.info("Non-udp packets not received as expected .... ")
@@ -409,7 +399,8 @@ def test_dnat_ubuntu_vm_udp(_vms, router_info):
 def check_ssh_to_vm_and_wait_for_packets(vm_id, vm_ip, vm_ext_port, expect_output, protocol='tcp'):
     ssh_nat = NATBoxClient.set_natbox_client()
     with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name='ubuntu_14', username='ubuntu',
-                                         password='ubuntu', natbox_client=ssh_nat, vm_ip=vm_ip, vm_ext_port=vm_ext_port, retry=False) as vm_ssh:
+                                         password='ubuntu', natbox_client=ssh_nat, vm_ip=vm_ip,
+                                         vm_ext_port=vm_ext_port, retry=False) as vm_ssh:
         if protocol == 'udp':
             cmd = "nc -luw 1 80"
         else:
@@ -504,7 +495,7 @@ def create_portforwarding_rules_for_vms(vm_mgmt_ips, router_id, protocol, for_ss
         code, dict  { vm_id: { 'pf_id': <pf_id>, 'public_port': <public_port>} }
 
     """
-    if vm_mgmt_ips is None or  not isinstance(vm_mgmt_ips, dict) or len(vm_mgmt_ips) == 0 or router_id is None \
+    if vm_mgmt_ips is None or not isinstance(vm_mgmt_ips, dict) or len(vm_mgmt_ips) == 0 or router_id is None \
             or protocol is None:
         msg = "Value for vm_mgmt_ips, router_id, and protocol must be specified "
         LOG.warn(msg)
@@ -529,7 +520,7 @@ def create_portforwarding_rules_for_vms(vm_mgmt_ips, router_id, protocol, for_ss
     for key, i in zip(vm_mgmt_ips, range(0, 10)):
         vm_name = nova_helper.get_vm_name_from_id(key)
         public_port = str(base_port + i)
-        LOG.info("Creating  port forwarding rule for VM: {}: protocol={}, inside_address={}, inside_port={},"
+        LOG.info("Creating port forwarding rule for VM: {}: protocol={}, inside_address={}, inside_port={},"
                  "outside_port={}.".format(vm_name, protocol,  vm_mgmt_ips[key][0], inside_port, public_port))
 
         rc, pf_id, msg = network_helper.create_port_forwarding_rule(router_id, inside_addr=vm_mgmt_ips[key][0],

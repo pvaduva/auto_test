@@ -17,15 +17,11 @@ from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_
 from testfixtures.fixture_resources import ResourceCleanup
 
 
-@fixture(scope='module', params=['local_image', 'local_lvm'])
-def hosts_with_backing(request):
-    storage_backing = request.param
+@fixture(scope='module')
+def hosts_with_backing():
+    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
 
-    LOG.fixture_step("Get hosts with {} backing".format(storage_backing))
-    hosts = host_helper.get_hosts_by_storage_aggregate(storage_backing=storage_backing)
-    if not hosts:
-        skip(SkipReason.NO_HOST_WITH_BACKING.format(storage_backing))
-
+    LOG.fixture_step("Hosts with {} backing: {}".format(storage_backing, hosts))
     return storage_backing, hosts
 
 
@@ -102,7 +98,6 @@ class TestQoS:
 
         LOG.tc_step("Boot vm from above volume that has the disk QoS info")
         vm_id = vm_helper.boot_vm(name_str, flavor=flavor, source='volume', source_id=volume_id, cleanup='function')[1]
-        # ResourceCleanup.add('vm', vm_id)
 
         vm_host = nova_helper.get_vm_host(vm_id)
         assert vm_host in expt_hosts
@@ -180,7 +175,6 @@ class TestFlavor:
         # TODO: why has to boot from image?
         boot_source = 'image'
         vm_id = vm_helper.boot_vm(name_str, flavor=flavor_id, source=boot_source, cleanup='function')[1]
-        # ResourceCleanup.add('vm', vm_id)
 
         vm_host = nova_helper.get_vm_host(vm_id)
         assert vm_host in expt_hosts, "VM host is not on {} host".format(storage_backing)

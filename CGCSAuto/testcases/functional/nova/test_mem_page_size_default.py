@@ -86,8 +86,7 @@ def test_vm_mem_pool(flavor_1g, mem_page_size, volume_):
 
     LOG.tc_step("Boot a vm with mem page size spec - {}".format(mem_page_size))
     code, vm_id, msg, vol_id = vm_helper.boot_vm('mempool_'+mem_page_size, flavor_1g, source='volume',
-                                                 source_id=volume_, fail_ok=True)
-    ResourceCleanup.add('vm', vm_id, del_vm_vols=False)
+                                                 source_id=volume_, fail_ok=True, cleanup='function')
 
     assert code in [0, 1], "Actual result for booting vm: {}".format(msg)
 
