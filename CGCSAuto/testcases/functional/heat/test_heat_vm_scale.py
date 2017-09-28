@@ -10,7 +10,7 @@ from utils.ssh import SSHClient, ControllerClient
 
 from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages
 from consts.filepaths import WRSROOT_HOME
-from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper
+from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper, ceilometer_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -120,7 +120,7 @@ def launch_vm_scaling_stack(con_ssh=None, auth_info=None):
     return 0, stack_name
 
 
-def wait_for_scale_up_down_vm(vm_name=None, expected_count=0, time_out=600, check_interval=5):
+def wait_for_scale_up_down_vm(vm_name=None, expected_count=0, time_out=900, check_interval=5):
     if vm_name is None:
         vm_name = "NestedAutoScale_vm"
 
@@ -132,7 +132,7 @@ def wait_for_scale_up_down_vm(vm_name=None, expected_count=0, time_out=600, chec
         LOG.info("length of vmid is {}".format(len(vm_ids)))
         if len(vm_ids) is expected_count:
             return True
-
+        val = ceilometer_helper.alarm_list()
         time.sleep(check_interval)
 
     msg = "Heat stack {} did not go to vm count {} within timeout".format(vm_name, expected_count)
