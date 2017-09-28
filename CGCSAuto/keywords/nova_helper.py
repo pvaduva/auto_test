@@ -1055,7 +1055,7 @@ def vm_exists(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
 
     Returns (bool):
     """
-    exit_code, output = cli.nova('show', vm_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
+    exit_code, output = cli.nova('show', vm_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
     return exit_code == 0
 
 

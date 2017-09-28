@@ -180,7 +180,7 @@ def get_lab_dict(labname):
                 or labname == lab['floating ip']:
             return lab
     else:
-        if labname.startswith('128.224'):
+        if labname.startswith('128.224') or labname.startswith('10.'):
             return add_lab_entry(labname)
 
         lab_valid_short_names = [lab['short_name'] for lab in labs]
@@ -546,7 +546,7 @@ def get_version_and_patch_info():
     if patches:
         info += 'Patches:\n{}\n'.format('\n'.join(patches))
 
-    LOG.info("SW Version and Patch info: {}".format(info))
+    # LOG.info("SW Version and Patch info: {}".format(info))
     return info
 
 

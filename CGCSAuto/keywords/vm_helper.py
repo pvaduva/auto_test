@@ -1,6 +1,7 @@
 import random
 import re
 import time
+import copy
 from contextlib import contextmanager
 
 from pexpect import TIMEOUT as ExpectTimeout
@@ -17,7 +18,7 @@ from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
 
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
-    keystone_helper, vlm_helper
+    keystone_helper, vlm_helper, storage_helper
 from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -164,7 +165,7 @@ def wait_for_vol_attach(vm_id, vol_id, timeout=VMTimeout.VOL_ATTACH, con_ssh=Non
                                                   con_ssh=con_ssh, auth_info=auth_info)
 
 
-def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
+def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None, mount=True):
     if vol_id is None:
         vols = cinder_helper.get_volumes(auth_info=auth_info, con_ssh=con_ssh, status='available')
         if vols:
@@ -179,19 +180,20 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
         raise exceptions.VMPostCheckFailed("Volume {} is not attached to vm {} within {} seconds".
                                            format(vol_id, vm_id, VMTimeout.VOL_ATTACH))
 
-    LOG.info("Volume {} is attached to vm {}".format(vol_id, vm_id))
-    LOG.info("Checking if the attached Volume {} is not auto mounted".format(vol_id))
-    guest = nova_helper.get_vm_image_name(vm_id)
-    if guest and 'cgcs_guest' not in guest:
+    if mount:
+        LOG.info("Volume {} is attached to vm {}".format(vol_id, vm_id))
+        LOG.info("Checking if the attached Volume {} is not auto mounted".format(vol_id))
+        guest = nova_helper.get_vm_image_name(vm_id)
+        if guest and 'cgcs_guest' not in guest:
 
-        LOG.info("Attached Volume {} need to be mounted on vm {}".format(vol_id, vm_id))
-        attachment_info = cinder_helper.get_volume_attachments(vol_id, vm_id=vm_id)[0]
-        if attachment_info:
-            attached_device_name = attachment_info['device']
-            device = attached_device_name.split('/')[-1]
-            LOG.info("Volume {} is attached to VM {} as {}".format(vol_id, vm_id, attached_device_name))
-            if not mount_attached_volume(vm_id, device, vm_image_name=guest):
-                LOG.info("Failed to mount the attached Volume {} on VM {} filesystem".format(vol_id, vm_id))
+            LOG.info("Attached Volume {} need to be mounted on vm {}".format(vol_id, vm_id))
+            attachment_info = cinder_helper.get_volume_attachments(vol_id, vm_id=vm_id)[0]
+            if attachment_info:
+                attached_device_name = attachment_info['device']
+                device = attached_device_name.split('/')[-1]
+                LOG.info("Volume {} is attached to VM {} as {}".format(vol_id, vm_id, attached_device_name))
+                if not mount_attached_volume(vm_id, device, vm_image_name=guest):
+                    LOG.info("Failed to mount the attached Volume {} on VM {} filesystem".format(vol_id, vm_id))
 
 
 def is_attached_volume_mounted(vm_id, rootfs, vm_image_name=None, vm_ssh=None):
@@ -230,6 +232,7 @@ def is_attached_volume_mounted(vm_id, rootfs, vm_image_name=None, vm_ssh=None):
         LOG.info(not_mount_msg)
         return False
 
+
 def mount_attached_volume(vm_id, rootfs, vm_image_name=None):
     """
     Mounts an attached volume on VM
@@ -238,7 +241,6 @@ def mount_attached_volume(vm_id, rootfs, vm_image_name=None):
         rootfs (str) - the device name of the attached volume like vda, vdb, vdc, ....
         vm_image_name (str): - the  guest image the vm is booted with
 
-
     Returns: bool
 
     """
@@ -286,61 +288,177 @@ def mount_attached_volume(vm_id, rootfs, vm_image_name=None):
             return True
 
 
-def auto_mount_disks(vm_id, rootfs, vm_image_name=None):
+def get_vm_devices_via_virsh(vm_id, con_ssh=None):
     """
-    Mounts an attached volume on VM
+    Get vm disks in dict format via 'virsh domblklist <instance_name>'
+    Args:
+        vm_id (str):
+        con_ssh:
+
+    Returns (dict): vm disks per type.
+    Examples:
+    {'root_img': {'vda': '/dev/nova-local/a746beb9-08e4-4b08-af2a-000c8ca72851_disk'},
+     'attached_vol': {'vdb': '/dev/disk/by-path/ip-192.168.205.106:3260-iscsi-iqn.2010-10.org.openstack:volume-...'},
+     'swap': {},
+     'eph': {}}
+
+    """
+    vm_host = nova_helper.get_vm_host(vm_id=vm_id, con_ssh=con_ssh)
+    inst_name = nova_helper.get_vm_instance_name(vm_id=vm_id,  con_ssh=con_ssh)
+
+    with host_helper.ssh_to_host(vm_host, con_ssh=con_ssh) as host_ssh:
+        output = host_ssh.exec_sudo_cmd('virsh domblklist {}'.format(inst_name), fail_ok=False)[1]
+        disk_lines = output.split('-------------------------------\n', 1)[-1].splitlines()
+
+        disks = {}
+        root_line = disk_lines.pop(0)
+        root_dev, root_source = root_line.split()
+        if re.search('openstack:volume', root_source):
+            disk_type = 'root_vol'
+        else:
+            disk_type = 'root_img'
+        disks[disk_type] = {root_dev: root_source}
+        LOG.info("Root disk: {}".format(disks))
+
+        disks.update({'eph': {}, 'swap': {}, 'attached_vol': {}})
+        for line in disk_lines:
+            dev, source = line.split()
+            if re.search('disk.swap', source):
+                disk_type = 'swap'
+            elif re.search('openstack:volume', source):
+                disk_type = 'attached_vol'
+            elif re.search('disk.eph|disk.local', source):
+                disk_type = 'eph'
+            else:
+                raise exceptions.CommonError("Unknown disk in virsh: {}. Automation update required.".format(line))
+            disks[disk_type][dev] = source
+
+    LOG.info("disks for vm {}: {}".format(vm_id, disks))
+    return disks
+
+
+def get_vm_boot_volume_via_virsh(vm_id, con_ssh=None):
+    """
+    Get cinder volume id where the vm is booted from via virsh cmd.
+    Args:
+        vm_id (str):
+        con_ssh (SSHClient):
+
+    Returns (str|None): vol_id or None if vm is not booted from cinder volume
+
+    """
+    disks = get_vm_devices_via_virsh(vm_id=vm_id, con_ssh=con_ssh)
+    root_vol = disks.get('root_vol', {})
+    if not root_vol:
+        LOG.info("VM is not booted from volume. Return None")
+        return
+
+    root_vol = list(root_vol.values())[0]
+    root_vol = re.findall('openstack:volume-(.*)-lun', root_vol)[0]
+    LOG.info("vm {} is booted from cinder volume {}".format(vm_id, root_vol))
+    return root_vol
+
+
+def auto_mount_vm_devices(vm_id, devices, guest_os=None, check_first=True, vm_ssh=None):
+    """
+    Mount and auto mount devices on vm
     Args:
         vm_id (str): - the vm uuid where the volume is attached to
-        rootfs (str) - the device name of the attached volume like vda, vdb, vdc, ....
-        vm_image_name (str): - the  guest image the vm is booted with
+        devices (str|list) - the device name(s). such as vdc or [vda, vdb]
+        guest_os (str): - the guest image the vm is booted with. such as tis-centos-guest
+        check_first (bool): where to check if the device is already mounted and auto mounted before mount and automount
+        vm_ssh (VMSSHClient):
+    """
+    if isinstance(devices, str):
+        devices = [devices]
+
+    def _auto_mount(vm_ssh_):
+        _mounts = []
+        for disk in devices:
+            fs = '/dev/{}'.format(disk)
+            mount_on, fs_type = storage_helper.mount_partition(ssh_client=vm_ssh_, disk=disk, partition=fs)
+            storage_helper.auto_mount_fs(ssh_client=vm_ssh_, fs=fs, mount_on=mount_on, fs_type=fs_type,
+                                         check_first=check_first)
+            _mounts.append(mount_on)
+        return _mounts
+
+    if vm_ssh:
+        mounts = _auto_mount(vm_ssh_=vm_ssh)
+    else:
+        with ssh_to_vm_from_natbox(vm_id, vm_image_name=guest_os) as vm_ssh:
+            mounts = _auto_mount(vm_ssh_=vm_ssh)
+
+    return mounts
 
 
-    Returns: bool
+def touch_files(vm_id, file_dirs, file_name=None, content=None, guest_os=None):
+    """
+    touch files from vm in specified dirs,and adds same content to all touched files.
+    Args:
+        vm_id (str):
+        file_dirs (list): e.g., ['/', '/mnt/vdb']
+        file_name (str|None): defaults to 'test_file.txt' if set to None
+        content (str|None): defaults to "I'm a test file" if set to None
+        guest_os (str|None): default guest assumed to set to None
+
+    Returns (tuple): (<file_paths_for_touched_files>, <file_content>)
 
     """
-    wait_for_vm_pingable_from_natbox(vm_id)
-    if vm_image_name is None:
-        vm_image_name = nova_helper.get_vm_image_name(vm_id)
+    if not file_name:
+        file_name = 'test_file.txt'
+    if not content:
+        content = "I'm a test file"
 
-    with ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name) as vm_ssh:
+    if isinstance(file_dirs, str):
+        file_dirs = [file_dirs]
+    file_paths = []
+    with ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=guest_os) as vm_ssh:
+        for file_dir in file_dirs:
+            file_path = "{}/{}".format(file_dir, file_name)
+            file_path = file_path.replace('//', '/')
+            vm_ssh.exec_sudo_cmd('mkdir -p {}; touch {}'.format(file_dir, file_path), fail_ok=False)
+            vm_ssh.exec_sudo_cmd('echo "{}" >> {}'.format(content, file_path), fail_ok=False)
+            output = vm_ssh.exec_sudo_cmd('cat {}'.format(file_path), fail_ok=False)[1]
+            assert content in output, "Expected content {} is not in {}. Actual content: {}".\
+                format(content, file_path, output)
+            file_paths.append(file_path)
 
-        if not is_attached_volume_mounted(vm_id, rootfs, vm_image_name=vm_image_name, vm_ssh=vm_ssh):
-            LOG.info("Creating ext4 file system on /dev/{} ".format(rootfs))
-            cmd = "mkfs -t ext4 /dev/{}".format(rootfs)
-            rc, output = vm_ssh.exec_cmd(cmd)
-            if rc != 0:
-                msg = "Failed to create filesystem on /dev/{}: {}".format(rootfs, output)
-                LOG.warning(msg)
-                return False
-            LOG.info("Mounting /dev/{} to /mnt/volume".format(rootfs))
-            cmd = "test -e /mnt/volume"
-            rc, output = vm_ssh.exec_cmd(cmd)
-            mount_cmd = ''
-            if rc == 1:
-                mount_cmd += "mkdir -p /mnt/volume; mount /dev/{} /mnt/volume".format(rootfs)
-            else:
-                mount_cmd += "mount /dev/{} /mnt/volume".format(rootfs)
+    return file_paths, content
 
-            rc, output = vm_ssh.exec_cmd(mount_cmd)
-            if rc != 0:
-                msg = "Failed to mount /dev/{}: {}".format(rootfs, output)
-                LOG.warning(msg)
-                return False
 
-            LOG.info("Adding /dev/{} mounting point in /etc/fstab".format(rootfs))
-            cmd = "echo \"/dev/{} /mnt/volume ext4  defaults 0 0\" >> /etc/fstab".format(rootfs)
+def auto_mount_vm_disks(vm_id, disks=None, guest_os=None):
+    """
+    Auto mount non-root vm disks and return all the mount points including root dir
+    Args:
+        vm_id (str):
+        disks (dict|None): disks returned by  get_vm_devices_via_virsh()
+        guest_os (str|None): when None, default guest is assumed.
 
-            rc, output = vm_ssh.exec_cmd(cmd)
-            if rc != 0:
-                msg = "Failed to add /dev/{} mount point to /etc/fstab: {}".format(rootfs, output)
-                LOG.warning(msg)
+    Returns (list): list of mount points. e.g., ['/', '/mnt/vdb']
 
-            LOG.info("/dev/{} is mounted to /mnt/volume".format(rootfs))
-            return True
-        else:
-            LOG.info("/dev/{} is already mounted to /mnt/volume".format(rootfs))
-            return True
+    """
+    if not disks:
+        disks_to_check = get_vm_devices_via_virsh(vm_id=vm_id)
+    else:
+        disks_to_check = copy.deepcopy(disks)
 
+    root_disk = disks_to_check.pop('root_vol', {})
+    if not root_disk:
+        disks_to_check.pop('root_img')
+
+    # add root dir
+    mounted_on = ['/']
+    devs_to_mount = []
+    for val in disks_to_check.values():
+        devs_to_mount += list(val.keys())
+
+    LOG.info("Devices to mount: {}".format(devs_to_mount))
+    if devs_to_mount:
+        mounted_on += auto_mount_vm_devices(vm_id=vm_id, devices=devs_to_mount, guest_os=guest_os)
+    else:
+        LOG.info("No non-root disks to mount for vm {}".format(vm_id))
+
+    return mounted_on
 
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
@@ -625,6 +743,7 @@ def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=
             return False
         else:
             network_helper.collect_networking_info(vms=vm_id)
+            get_console_logs(vm_ids=vm_id)
             raise exceptions.VMNetworkError(msg)
 
 
@@ -1346,8 +1465,28 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
     if not res_bool and not fail_ok:
         LOG.error("Ping vm(s) from NatBox failed - Collecting networking info")
         network_helper.collect_networking_info(vms=vm_ids)
+        get_console_logs(vm_ids=vm_ids)
+        raise exceptions.VMNetworkError("Ping failed from NatBox. Details: {}".format(res_dict))
 
     return res_bool, res_dict
+
+
+def get_console_logs(vm_ids, con_ssh=None):
+    """
+    Get console logs for given vm(s)
+    Args:
+        vm_ids (str|list):
+        con_ssh:
+
+    Returns (dict): {<vm1_id>: <vm1_console>, <vm2_id>: <vm2_console>, ...}
+    """
+    if isinstance(vm_ids, str):
+        vm_ids = [vm_ids]
+    console_logs = {}
+    for vm_id in vm_ids:
+        output = cli.nova('console-log', vm_id, ssh_client=con_ssh)[1]
+        console_logs[vm_id] = output
+    return console_logs
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
@@ -1427,6 +1566,8 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
     except:
         LOG.error("Ping vm(s) from vm failed - Collecting networking info")
         network_helper.collect_networking_info(vms=to_vms)
+        get_console_logs(vm_ids=to_vms)
+        get_console_logs(vm_ids=from_vm)
 
         try:
             LOG.warning("Ping vm(s) from vm failed - Attempt to ssh to to_vms and collect vm networking info")
@@ -1575,6 +1716,9 @@ class VMInfo:
 
     def __get_nics(self):
         raw_nics = table_parser.get_value_two_col_table(self.initial_table_, 'wrs-if:nics')
+        if isinstance(raw_nics, str):
+            raw_nics = [raw_nics]
+        print("raw_nics: {}".format(raw_nics))
         nics = [eval(nic) for nic in raw_nics]
         return nics
 

@@ -87,8 +87,10 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
         ssh_client.exec_cmd("export PS1='\\u@\\h:~\\$ '")
 
     if fail_ok:
-        if exit_code in [0, 1]:
-            return exit_code, cmd_output
+        if exit_code == 0:
+            return 0, cmd_output
+        elif exit_code in [1, 2]:
+            return 1, cmd_output
     elif exit_code == 0:
         if rtn_list:
             return exit_code, cmd_output

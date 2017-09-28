@@ -130,7 +130,7 @@ def test_migrate_4k_vm_positive(ephemeral, swap, cpu_pol, vcpus, vm_type, ensure
 
 def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type):
 
-    LOG.tc_step("Create a flavor with {} vcpus, {} ephemera disk, {} swap disk".format(vcpus, ephemeral, swap))
+    LOG.tc_step("Create a flavor with {} vcpus, {}G ephemera disk, {}M swap disk".format(vcpus, ephemeral, swap))
 
     flavor_id = nova_helper.create_flavor(name='flv_4k', ephemeral=ephemeral, swap=swap, vcpus=vcpus,
                                           storage_backing=storage_backing, check_storage_backing=False)[1]

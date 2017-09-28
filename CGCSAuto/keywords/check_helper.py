@@ -14,7 +14,7 @@ from consts.cgcs import MELLANOX_DEVICE
 from consts.reasons import SkipReason
 from testfixtures.resource_mgmt import ResourceCleanup
 from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common, cinder_helper, \
-    glance_helper
+    glance_helper, storage_helper
 
 SEP = '\n------------------------------------ '
 
@@ -559,3 +559,156 @@ def check_fs_sufficient(guest_os, boot_source='volume'):
     img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk)
     if guest_os != 'ubuntu_14':
         ResourceCleanup.add('image', img_id)
+
+
+def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths, content, root=None, vm_action=None,
+                   prev_host=None, post_host=None, disks=None, post_disks=None, guest_os=None):
+    """
+    Check the files on vm after specified action. This is to check the disks in the basic nova matrix table.
+    Args:
+        vm_id (str): 
+        storage_backing (str): local_image, local_lvm, or remote
+        root (int): root disk size in flavor. e.g., 2, 5
+        ephemeral (int): e.g., 0, 1 
+        swap (int): e.g., 0, 512
+        vm_type (str): image, volume, image_with_vol, vol_with_vol 
+        file_paths (list): list of file paths to check 
+        content (str): content of the files (assume all files have the same content) 
+        vm_action (str|None): live_migrate, cold_migrate, resize, evacuate, None (expect no data loss)
+        prev_host (None|str): vm host prior to vm_action. This is used to check if vm host has changed when needed.
+        post_host (None|str): vm host after vm_action.
+        disks (dict): disks that are returned from vm_helper.get_vm_devices_via_virsh()
+        post_disks (dict): only used in resize case
+        guest_os (str|None): default guest assumed for None. e,g., ubuntu_16
+
+    Returns:
+
+    """
+    final_disks = post_disks if post_disks else disks
+    final_paths = list(file_paths)
+    if not disks:
+        disks = vm_helper.get_vm_devices_via_virsh(vm_id=vm_id)
+
+    eph_disk = disks.get('eph', {})
+    if not eph_disk:
+        if post_disks:
+            eph_disk = post_disks.get('eph', {})
+    swap_disk = disks.get('swap', {})
+    if not swap_disk:
+        if post_disks:
+            swap_disk = post_disks.get('swap', {})
+
+    disk_check = 'no_loss'
+    if vm_action in [None, 'live_migrate']:
+        disk_check = 'no_loss'
+    elif vm_type == 'volume':
+        # boot-from-vol, non-live migrate actions
+        disk_check = 'no_loss'
+        if storage_backing == 'local_lvm' and (eph_disk or swap_disk):
+            disk_check = 'eph_swap_loss'
+        elif storage_backing == 'local_image' and vm_action == 'evacuate' and (eph_disk or swap_disk):
+            disk_check = 'eph_swap_loss'
+    elif storage_backing == 'local_image':
+        # local_image, boot-from-image, non-live migrate actions
+        disk_check = 'no_loss'
+        if vm_action == 'evacuate':
+            disk_check = 'local_loss'
+    elif storage_backing == 'local_lvm':
+        # local_lvm, boot-from-image, non-live migrate actions
+        disk_check = 'local_loss'
+        if vm_action == 'resize':
+            post_host = post_host if post_host else nova_helper.get_vm_host(vm_id)
+            if post_host == prev_host:
+                disk_check = 'eph_swap_loss'
+
+    LOG.info("disk check type: {}".format(disk_check))
+    loss_paths = []
+    # if post_disks and post_disks != disks:
+    #     post_swaps = post_disks.get('swap', {})
+    #     pre_swaps = disks.get('swap', {})
+    #     # Don't check swap disk if it was removed in resize
+    #     for swap in pre_swaps:
+    #         if swap not in post_swaps:
+    #             for path in file_paths:
+    #                 if swap in path:
+    #                     final_paths.remove(path)
+
+    if disk_check == 'no_loss':
+        no_loss_paths = final_paths
+    else:
+        disks_to_check = disks.get('eph', {})
+        # swap_disks = disks.get('swap', {})
+        # disks_to_check.update(swap_disks)
+
+        for disk in disks_to_check:
+            for path in final_paths:
+                if disk in path:
+                    loss_paths.append(path)
+                    break
+
+        if disk_check == 'local_loss':
+            # if vm booted from image, then the root disk is also local disk
+            root_img = disks.get('root_img', {})
+            if root_img:
+                LOG.info("Auto mount vm disks again since root disk was local with data loss expected")
+                vm_helper.auto_mount_vm_disks(vm_id=vm_id, disks=final_disks)
+                file_name = final_paths[0].rsplit('/')[-1]
+                root_path = '/{}'.format(file_name)
+                loss_paths.append(root_path)
+                assert root_path in final_paths, "root_path:{}, file_paths:{}".format(root_path, final_paths)
+
+        no_loss_paths = list(set(final_paths) - set(loss_paths))
+
+    LOG.info("loss_paths: {}, no_loss_paths: {}, total_file_pahts: {}".format(loss_paths, no_loss_paths, final_paths))
+    res_files = {}
+    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=guest_os) as vm_ssh:
+
+        for file_path in loss_paths:
+            vm_ssh.exec_sudo_cmd('touch {}2'.format(file_path), fail_ok=False)
+            vm_ssh.exec_sudo_cmd('echo "{}" >> {}2'.format(content, file_path), fail_ok=False)
+
+        for file_path in no_loss_paths:
+            output = vm_ssh.exec_sudo_cmd('cat {}'.format(file_path), fail_ok=False)[1]
+            res = '' if content in output else 'content mismatch'
+            res_files[file_path] = res
+
+        for file, error in res_files.items():
+            assert not error, "Check {} failed: {}".format(file, error)
+
+        swap_disk = final_disks.get('swap', {})
+        if swap_disk:
+            disk_name = list(swap_disk.keys())[0]
+            partition = '/dev/{}'.format(disk_name)
+            if disk_check != 'local_loss' and not disks.get('swap', {}):
+                mount_on, fs_type = storage_helper.mount_partition(ssh_client=vm_ssh, disk=disk_name,
+                                                                   partition=partition, fs_type='swap')
+                storage_helper.auto_mount_fs(ssh_client=vm_ssh, fs=partition, mount_on=mount_on, fs_type=fs_type)
+
+            LOG.info("Check swap disk is on")
+            swap_output = vm_ssh.exec_sudo_cmd('cat /proc/swaps | grep --color=never {}'.format(partition))[1]
+            assert swap_output, "Expect swapon for {}. Actual output: {}".\
+                format(partition, vm_ssh.exec_sudo_cmd('cat /proc/swaps')[1])
+
+            LOG.info("Check swap disk size")
+            _check_disk_size(vm_ssh, disk_name=disk_name, expt_size=swap)
+
+        eph_disk = final_disks.get('eph', {})
+        if eph_disk:
+            LOG.info("Check ephemeral disk size")
+            eph_name = list(eph_disk.keys())[0]
+            LOG.info("Check ephemeral disk size")
+            _check_disk_size(vm_ssh, eph_name, expt_size=ephemeral*1024)
+
+        if root:
+            root_disk = final_disks.get('root_img', {})
+            if root_disk:
+                root_name = list(root_disk.keys())[0]
+                LOG.info("Check root disk size when vm is booted from image")
+                _check_disk_size(vm_ssh, disk_name=root_name, expt_size=root*1024)
+
+
+def _check_disk_size(vm_ssh, disk_name, expt_size):
+    partition = vm_ssh.exec_sudo_cmd('cat /proc/partitions | grep --color=never "{}$"'.format(disk_name))[1]
+    actual_size = int(int(partition.split()[-2].strip())/1024) if partition else 0
+    expt_size = int(expt_size)
+    assert actual_size == expt_size, "Expected disk size: {}M. Actual: {}M".format(expt_size, actual_size)

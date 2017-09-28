@@ -590,3 +590,93 @@ def get_controllerfs_value(fs_name, rtn_val='Size in GiB', con_ssh=None, auth_in
         val = int(val)
 
     return val
+
+
+def get_fs_mount_path(ssh_client, fs):
+    mount_cmd = 'mount | grep --color=never {}'.format(fs)
+    exit_code, output = ssh_client.exec_sudo_cmd(mount_cmd, fail_ok=True)
+
+    mounted_on = fs_type = None
+    msg = "Filesystem {} is not mounted".format(fs)
+    is_mounted = exit_code == 0
+    if is_mounted:
+        # Get the first mount point
+        mounted_on, fs_type = re.findall('{} on ([^ ]*) type ([^ ]*) '.format(fs), output)[0]
+        msg = "Filesystem {} is mounted on {}".format(fs, mounted_on)
+
+    LOG.info(msg)
+    return mounted_on, fs_type
+
+
+def is_fs_auto_mounted(ssh_client, fs):
+    auto_cmd = 'cat /etc/fstab | grep --color=never {}'.format(fs)
+    exit_code, output = ssh_client.exec_sudo_cmd(auto_cmd, fail_ok=True)
+
+    is_auto_mounted = exit_code == 0
+    LOG.info("Filesystem {} is {}auto mounted".format(fs, '' if is_auto_mounted else 'not '))
+    return is_auto_mounted
+
+
+def mount_partition(ssh_client, disk, partition=None, fs_type=None):
+    if not partition:
+        partition = '/dev/{}'.format(disk)
+
+    disk_id = ssh_client.exec_sudo_cmd('blkid | grep --color=never "{}:"'.format(partition))[1]
+    if disk_id:
+        mount_on, fs_type_ = get_fs_mount_path(ssh_client=ssh_client, fs=partition)
+        if mount_on:
+            return mount_on, fs_type_
+
+        fs_type = re.findall('TYPE="([^ ]*)"', disk_id)[0]
+        if 'swap' == fs_type:
+            fs_type = 'swap'
+            turn_on_swap(ssh_client=ssh_client, disk=disk, partition=partition)
+            mount_on = 'none'
+    else:
+        mount_on = None
+        if not fs_type:
+            fs_type = 'ext4'
+
+        LOG.info("mkfs for {}".format(partition))
+
+        cmd = "mkfs -t {} {}".format(fs_type, partition)
+        ssh_client.exec_sudo_cmd(cmd, fail_ok=False)
+
+    if not mount_on:
+        mount_on = '/mnt/{}'.format(disk)
+        LOG.info("mount {} to {}".format(partition, mount_on))
+        ssh_client.exec_sudo_cmd('mkdir -p {}; mount {} {}'.format(mount_on, partition, mount_on), fail_ok=False)
+        LOG.info("{} successfully mounted to {}".format(partition, mount_on))
+
+    return mount_on, fs_type
+
+
+def turn_on_swap(ssh_client, disk, partition=None):
+    if not partition:
+        partition = '/dev/{}'.format(disk)
+    swap_info = ssh_client.exec_sudo_cmd('blkid | grep --color=never "{}:"'.format(partition))[1]
+    swap_uuid = re.findall('UUID="(.*)" TYPE="swap"', swap_info)[0]
+    LOG.info('swapon for {}'.format(partition))
+    ssh_client.exec_sudo_cmd('swapon {}'.format(partition))
+    proc_swap = ssh_client.exec_sudo_cmd('cat /proc/swaps | grep --color=never "{} "'.format(partition))[1]
+    assert proc_swap, "swap partition is not shown in /proc/swaps after swapon"
+
+    return swap_uuid
+
+
+def auto_mount_fs(ssh_client, fs, mount_on=None, fs_type=None, check_first=True):
+    if check_first:
+        if is_fs_auto_mounted(ssh_client=ssh_client, fs=fs):
+            return
+
+    if fs_type == 'swap' and not mount_on:
+        raise ValueError("swap uuid required via mount_on")
+
+    if not mount_on:
+        mount_on = '/mnt/{}'.format(fs.rsplit('/', maxsplit=1)[-1])
+
+    if not fs_type:
+        fs_type = 'ext4'
+    cmd = 'echo "{} {} {}  defaults 0 0" >> /etc/fstab'.format(fs, mount_on, fs_type)
+    ssh_client.exec_sudo_cmd(cmd, fail_ok=False)
+    ssh_client.exec_sudo_cmd('cat /etc/fstab', get_exit_code=False)

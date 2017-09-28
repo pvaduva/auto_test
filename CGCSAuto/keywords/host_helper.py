@@ -2980,7 +2980,7 @@ def get_host_co_processor_pci_list(hostname):
                             'class_id': class_id,
                             'pci-alias': 'qat-vf',
                             }
-                cmd2 = " lspci -nnm | grep Co-processor | grep \"{} Virtual\" | awk 'NR == 1'".format(device_name)
+                cmd2 = " lspci -nnm | grep Co-processor | grep \"{}\" | awk 'NR == 1'".format(device_name)
                 rc, vf_line = host_ssh.exec_cmd(cmd2)
 
                 if rc == 0:
