@@ -1,7 +1,9 @@
+import re
+
 from pytest import fixture, mark
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
-from keywords import nova_helper
+from keywords import nova_helper, host_helper, vm_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -82,6 +84,8 @@ def test_create_flavor_with_excessive_vcpu_negative():
 
     LOG.tc_step("Create flavor with over 128 vCPUs (129).")
     exitcode, output = nova_helper.create_flavor(vcpus=129, fail_ok=True)
+    if exitcode == 0:
+        ResourceCleanup.add('vm', output)
 
     # Check if create_flavor returns erroneous exit code and error output is a proper human-readable message
 
@@ -91,4 +95,3 @@ def test_create_flavor_with_excessive_vcpu_negative():
 
     assert 1 == exitcode
     assert re.search(expt_err, output), "Actual: {}".format(output)
-
