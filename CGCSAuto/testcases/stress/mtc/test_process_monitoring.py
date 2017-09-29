@@ -757,7 +757,7 @@ class MonitoredProcess:
                 sleep 0.5; continue; fi; echo "{}" | sudo -S kill -9 \$pid &>/dev/null;
                 if [ \$? -eq 0 ]; then echo "OK \$n - \$pid killed"; ((n++)); last_pid=\$pid; pid=''; sleep {};
                 else sleep 0.5; fi; done; echo \$pid'''.format(
-                    retries+1, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
+                    retries+2, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
 
