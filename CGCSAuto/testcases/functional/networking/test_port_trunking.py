@@ -8,7 +8,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 @fixture(scope='module', autouse=True)
 def update_net_quota(request):
     network_quota = network_helper.get_quota('network')
-    network_helper.update_quotas(network=network_quota + 2)
+    network_helper.update_quotas(network=network_quota + 6)
 
     def _revert_quota():
         network_helper.update_quotas(network=network_quota)
