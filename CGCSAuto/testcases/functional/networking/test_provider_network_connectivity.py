@@ -1,4 +1,4 @@
-import time
+import time, re
 from pytest import fixture, skip, mark
 from keywords import host_helper, system_helper, network_helper
 from utils.tis_log import LOG
@@ -337,30 +337,60 @@ def test_vlan_providernet_connectivity_cli_filters(get_vlan_providernet):
         elif param_filter == '--host_name':
             header = 'host_name'
             value = host_helper.get_up_hypervisors()[0]
-
         elif param_filter == '--segmentation_id':
             header = 'segmentation_ids'
             cmd = cli.neutron("providernet-range-list", auth_info=Tenant.ADMIN)
             table_ = table_parser.table(cmd)
             filtered_table = table_parser.filter_table(table_, **{'type': 'vlan'})
             value = table_parser.get_values(filtered_table, 'minimum')[0]
-
         LOG.tc_step("Verify output of providernet-connectivity-test-list using the {} filter".format(param_filter))
         cmd = cli.neutron('providernet-connectivity-test-list {} {}'.format(param_filter, value),
                           auth_info=Tenant.ADMIN)
         queried_table = table_parser.table(cmd)
         columns = ['status', 'message', 'segmentation_ids']
         queried_table = table_parser.remove_columns(queried_table, columns)
-
         cmd = cli.neutron('providernet-connectivity-test-list', auth_info=Tenant.ADMIN)
         kwargs = {header: value}
-        table_ = table_parser.table(cmd)
-        filtered_with_keyword_table = table_parser.filter_table(table_, strict=False, **kwargs)
+        table_ = table_parser.table(cmd, combine_multiline_entry=True)
+
+        if param_filter == '--segmentation_id':
+            filtered_table = table_parser.filter_table(table_, **{'type': 'vlan'})
+            filtered_with_keyword_table = table_segment_id_filter(filtered_table, value)
+        else:
+            filtered_with_keyword_table = table_parser.filter_table(table_, strict=False, **kwargs)
         columns = ['status', 'message', 'segmentation_ids']
         filtered_with_keyword_table = table_parser.remove_columns(filtered_with_keyword_table, columns)
-
         result, error = table_parser.compare_tables(queried_table, filtered_with_keyword_table)
         assert result == 0, "Tables are not the same. Filtered using: {}. Error: {}".format(param_filter, error)
+
+
+def table_segment_id_filter(table_, value):
+
+    # filter out the number of rows in the table that match value or the number range contain value
+
+    if not table_['headers']:
+        LOG.warning("Empty table supplied")
+        return table_
+
+    column = table_parser.get_column(table_, 'segmentation_ids')
+
+    # create new table
+    new_table = dict()
+    new_table['headers'] = table_['headers']
+    new_table['values'] = []
+    for i in range(len(column)):
+        item = column[i]
+        # check for number set such as 1,1-2,3,4-5
+        number_obj = item.split(',')
+        for num_pair in number_obj:
+            num = num_pair.split('-')
+            # check if the value is between any number pair
+            if int(num[0]) <= int(value) <= int(num[-1]):
+                new_table['values'].append(table_['values'][i])
+                # only need one match per row
+                break
+
+    return new_table
 
 
 def test_vlan_providernet_connectivity_different_mtu(get_vlan_providernet):
