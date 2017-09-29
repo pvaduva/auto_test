@@ -910,6 +910,38 @@ def get_qos(name=None, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
+def get_qos_from_network(network_id):
+    """
+
+    Args:
+        network_id (str): network that has QoS
+
+    Returns (str): QoS id of the network
+
+    """
+    table_ = table_parser.table(cli.neutron("net-show", network_id, auth_info=Tenant.ADMIN))
+    qos = table_parser.get_value_two_col_table(table_, "wrs-tm:qos")
+    return qos
+
+
+def update_qos(network_id, qos_id=None):
+    """
+
+    Args:
+        qos_id(str): QoS id that the network QoS wll be updated to. If None current QoS will be removed.
+        network_id(str): Network that requires updating.
+
+    Returns(str): Output of the CLI command
+
+    """
+    if qos_id is None:
+        output = cli.neutron("net-update", "--no-qos {}".format(network_id), auth_info=Tenant.ADMIN)
+    else:
+        output = cli.neutron("net-update", "--wrs-tm:qos {} {}".format(qos_id, network_id), auth_info=Tenant.ADMIN)
+
+    return output
+
+
 def get_internal_net_id(net_name=None, strict=False, con_ssh=None, auth_info=None):
     """
     Get internal network id that matches the given net_name of a specific tenant.
