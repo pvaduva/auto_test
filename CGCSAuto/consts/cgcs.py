@@ -29,6 +29,13 @@ HEAT_FLAVORS = ['small_ded', 'small_float']
 MELLANOX_DEVICE = 'MT27500|MT27710'
 MELLANOX4 = 'MT.*ConnectX-4'
 
+PREFIX_BACKUP_FILE  = 'titanium_backup_'
+TITANIUM_BACKUP_FILE_PATTERN = PREFIX_BACKUP_FILE + '[0-9]{8}\-[0-9]{6}_(.*)_(system|images)\.tgz'
+IMAGE_BACKUP_FILE_PATTERN = 'image_' + UUID + '(.*)\.tgz'
+CINDER_VOLUME_BACKUP_FILE_PATTERN = 'volume\-' + UUID + '(.*)\.tgz'
+BACKUP_FILE_DATE_STR = "%Y%m%d-%H%M%S"
+TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
+
 
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
@@ -138,6 +145,7 @@ class Prompt:
     CONTROLLER_1 = '.*controller\-1\:~\$ '
     CONTROLLER_PROMPT = '.*controller\-[01]\:~\$ '
 
+
     ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
     TENANT1_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant1\)\]\$ '
     TENANT2_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant2\)\]\$ '
@@ -145,9 +153,11 @@ class Prompt:
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'
     PASSWORD_PROMPT = '.*assword\:.*'
+    LOGIN_PROMPT = "ogin:"
     SUDO_PASSWORD_PROMPT = 'Password: '
     BUILD_SERVER_PROMPT_BASE = '{}@{}\:~.*'
     TEST_SERVER_PROMPT_BASE = '\[{}@.*\]\$ '
+    TIS_NODE_PROMPT_BASE = '{}\:~\$ '
     ADD_HOST = '.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
     Y_N_PROMPT = '.*\(y/n\)\?.*'
@@ -259,6 +269,7 @@ class EventLogID:
     NETWORK_AGENT_NOT_RESPOND = '300.003'
     CON_DRBD_SYNC = '400.001'
     SERVICE_GROUP_STATE_CHANGE = '400.001'
+    LOSS_OF_REDUNDANCY = '400.002'
     MTC_MONITORED_PROCESS_FAILURE = '200.006'
     CONFIG_OUT_OF_DATE = '250.001'
     INFRA_NET_FAIL = '200.009'

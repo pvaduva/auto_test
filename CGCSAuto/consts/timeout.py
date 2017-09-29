@@ -17,6 +17,9 @@ class HostTimeout:
     PING_TIMEOUT = 60
     TIMEOUT_BUFFER = 2
     SUBFUNC_READY = 300     # subfunction go enabled/available after host admin/avail states go enabled/available
+    SYSTEM_RESTORE = 3600   # System restore complete
+    SYSTEM_BACKUP = 1800    # system backup complete
+    BACKUP_COPY_USB = 600
 
 
 class VMTimeout:

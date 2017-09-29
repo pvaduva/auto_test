@@ -870,7 +870,7 @@ class Telnet:
                     LOG.info("Found login prompt. Login as {}".format(username))
                     #self.write_line(username)
                     self.write(str.encode(username + '\r\n'))
-                    self.get_read_until(PASSWORD_PROMPT, TELNET_EXPECT_TIMEOUT)
+                    #self.get_read_until(PASSWORD_PROMPT, TELNET_EXPECT_TIMEOUT)
                     #self.write_line(password)
                     self.write(str.encode(password + '\r\n'))
                     break
@@ -919,29 +919,42 @@ class Telnet:
                 LOG.error(msg)
                 raise exceptions.TelnetException(msg)
             LOG.info("Boot device is: " + str(boot_device_regex))
+            if usb:
+                LOG.info("Boot device is: USB")
+            else:
+                LOG.info("Boot device is: " + str(boot_device_regex))
+
 
             self.get_read_until("Please select boot device", 60)
 
             count = 0
             down_press_count = 0
             while count < MAX_SEARCH_ATTEMPTS:
+
+                # GENERIC USB
+                if usb and node.name == CONTROLLER0:
+                    LOG.info("Looking for USB device")
+                    boot_device_regex = "USB|Kingston|JetFlash"
+
                 LOG.info("Searching boot device menu for {}...".format(boot_device_regex))
                 #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
                 # Construct regex to work with wildcatpass machines
                 # in legacy and uefi mode
                 #regex = re.compile(b"\[\d+(;22H|;15H|;11H)(.*?)\x1b")
-                regex = re.compile(b"\[\d+(.*?)\x1b")
+                #regex = re.compile(b"\[\d+(.*?)\x1b")
+                regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
 
                 LOG.info("wildcat: compiled regex is: {}".format(regex))
 
                 try:
                     index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
+                    LOG.info("wildcat: index: {} match: {} ".format(index, match))
                 except EOFError:
                     msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
 
                     raise exceptions.TelnetException(msg)
                 if index == 0:
-                    match = match.group(1).decode('utf-8','ignore')
+                    match = match.group(2).decode('utf-8','ignore')
                     LOG.info("Matched: " + match)
                     if re.search(boot_device_regex, match, re.IGNORECASE):
                         LOG.info("Found boot device {}".format(boot_device_regex))
@@ -963,7 +976,7 @@ class Telnet:
 
             LOG.info("Waiting for ESC to exit")
             if node.name == CONTROLLER0 and not upgrade:
-                if boot_device_regex == 'USB':
+                if usb:
                     self.get_read_until("Select kernel options and boot kernel", 120)
                     if small_footprint:
                         LOG.info("Selecting Serial Controller+Compute Node Install")
@@ -1050,7 +1063,10 @@ class Telnet:
                 msg = "Failed to determine boot device for: " + node.name
                 LOG.error(msg)
                 raise exceptions.TelnetException(msg)
-            LOG.info("Boot device is: " + str(boot_device_regex))
+            if usb:
+                LOG.info("Boot device is: USB")
+            else:
+                LOG.info("Boot device is: " + str(boot_device_regex))
 
             self.get_read_until("Boot Menu", 200)
             LOG.info("Pressing BIOS key " + bios_key_hr)
@@ -1067,7 +1083,7 @@ class Telnet:
             while count < MAX_SEARCH_ATTEMPTS:
 
                 # GENERIC USB
-                if boot_device_regex == 'USB' and node.name == CONTROLLER0:
+                if usb and node.name == CONTROLLER0:
                     LOG.info("Looking for USB device")
                     boot_device_regex = "USB|Kingston|JetFlash"
 
@@ -1103,7 +1119,7 @@ class Telnet:
 
             if node.name == CONTROLLER0 and not upgrade:
                 # booting device = USB tested only for Ironpass-31_32
-                if boot_device_regex == 'USB':
+                if usb:
                     self.get_read_until("Select kernel options and boot kernel", 120)
                     if small_footprint:
                         LOG.info("Selecting Serial Controller+Compute Node Install")
@@ -1181,8 +1197,16 @@ class Telnet:
                 msg = "Failed to determine boot device for: " + node.name
                 LOG.error(msg)
                 raise exceptions.TelnetException(msg)
-            LOG.info("Boot device is: " + str(boot_device_regex))
 
+            if usb:
+                LOG.info("Boot device is: USB")
+            else:
+                LOG.info("Boot device is: " + str(boot_device_regex))
+
+            # GENERIC USB
+            if usb and node.name == CONTROLLER0:
+                LOG.info("Looking for USB device")
+                boot_device_regex = "USB|Kingston|JetFlash"
 
             # Read until we are prompted for the boot type
             self.get_read_until("PXE")

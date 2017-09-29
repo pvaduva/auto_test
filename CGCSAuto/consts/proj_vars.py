@@ -75,6 +75,7 @@ class InstallVars:
                          heat_templates=None,
                          license_path=None,
                          out_put_dir=None,
+                         boot_server=None,
                          controller0_ceph_mon_device=None,
                          controller1_ceph_mon_device=None,
                          ceph_mon_gib=None):
@@ -96,6 +97,8 @@ class InstallVars:
             'FILES_SERVER': files_server if files_server else __build_server,
             'DEFAULT_LAB_FILES_DIR': "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(
                     host_build_dir, lab['name']),
+            # Default tuxlab for boot
+            'BOOT_SERVER' :  boot_server if boot_server else 'yow-tuxlab2',
 
             # Default path is <DEFAULT_LAB_FILES_DIR>/TiS_config.ini_centos|hosts_bulk_add.xml|lab_setup.conf if
             # Unspecified. This needs to be parsed/converted when rsync/scp files.
@@ -255,3 +258,62 @@ class PatchingVars:
     @classmethod
     def set_patching_var(cls, **kwargs):
         cls.__var_dict.update(**kwargs)
+
+class RestoreVars:
+
+    __var_dict = {}
+
+    @classmethod
+    def set_restore_vars(cls, backup_src=None,
+                         backup_build_id=None,
+                         backup_builds_dir=None):
+
+        cls.__var_dict = {
+            'BACKUP_SRC': backup_src if backup_src else "USB",
+            'BACKUP_BUILD_ID': backup_build_id if backup_build_id else None,
+
+            'BACKUP_BUILDS_DIR': backup_builds_dir if backup_builds_dir
+            else os.path.basename(BuildServerPath.DEFAULT_HOST_BUILDS_DIR),
+        }
+
+    @classmethod
+    def get_restore_var(cls, var_name):
+        var_name = var_name.upper()
+
+        if var_name not in cls.__var_dict:
+            raise ValueError("Invalid var_name. Valid vars: {}".format(var_name))
+
+        return cls.__var_dict[var_name]
+
+    @classmethod
+    def set_restore_var(cls, **kwargs):
+        for key, val in kwargs.items():
+            print("Key: {} Value: {}".format(key, val))
+            cls.__var_dict[key.upper()] = val
+
+class BackupVars:
+
+    __var_dict = {}
+
+    @classmethod
+    def set_backup_vars(cls, backup_dest=None, delete_backups=True):
+
+        cls.__var_dict = {
+            'BACKUP_DEST': backup_dest if backup_dest else "USB",
+            'DELETE_BUCKUPS': delete_backups,
+        }
+
+    @classmethod
+    def get_backup_var(cls, var_name):
+        var_name = var_name.upper()
+
+        if var_name not in cls.__var_dict:
+            raise ValueError("Invalid var_name. Valid vars: {}".format(var_name))
+
+        return cls.__var_dict[var_name]
+
+    @classmethod
+    def set_backup_var(cls, **kwargs):
+        for key, val in kwargs.items():
+            print("Key: {} Value: {}".format(key, val))
+            cls.__var_dict[key.upper()] = val
