@@ -69,6 +69,8 @@ def pytest_runtest_teardown(item):
     # testcase_log(message, item.nodeid, log_type='tc_teardown')
     con_ssh.flush()
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
+    natbox_ssh.flush()
+    natbox_ssh.connect(retry=False)
 
 #
 # def pytest_unconfigure():
