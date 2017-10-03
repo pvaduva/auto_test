@@ -17,7 +17,7 @@ MSG = 'HELLO SRV GRP MEMBERS!'
 
 
 @fixture(scope='module', autouse=True)
-def check_system(add_cgcsauto_zone, add_admin_role_module):
+def check_system(add_cgcsauto_zone, add_admin_role_module, request):
     storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
 
     is_simplex = system_helper.is_simplex()
@@ -35,6 +35,7 @@ def check_system(add_cgcsauto_zone, add_admin_role_module):
     def remove_():
         LOG.fixture_step("Remove hosts from cgcsauto aggregate: {}".format(hosts_to_add))
         nova_helper.remove_hosts_from_aggregate('cgcsauto', hosts_to_add)
+    request.addfinalizer(remove_)
 
     return is_simplex, hosts_to_add, storage_backing
 
