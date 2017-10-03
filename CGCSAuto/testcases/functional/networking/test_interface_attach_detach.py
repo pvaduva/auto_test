@@ -41,8 +41,9 @@ def base_vm():
     ('tis-centos-guest', 'net_id', [('virtio', 1)]),
     ('tis-centos-guest', 'net_id', [('avp', 1)]),
     #('tis-centos-guest', 'net_id', [('rtl8139', 8), ('virtio', 7)]),
-    ('tis-centos-guest', 'net_id', [('avp', 4), ('virtio', 4), ('rtl8139', 4), ('e1000', 3)])
+    ('tis-centos-guest', 'net_id', [('avp', 4), ('virtio', 4), ('rtl8139', 4), ('e1000', 3)]),
     #('tis-centos-guest', 'net_id', [('virtio', 6), ('avp', 2), ('virtio', 4), ('rtl8139', 3)])
+    ('vxworks-guest', 'net_id', [('e1000', 1)])
 ], ids=id_gen)
 def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vifs):
     """
