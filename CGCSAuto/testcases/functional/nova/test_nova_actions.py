@@ -14,11 +14,11 @@ def id_gen(val):
 
 
 @mark.parametrize(('guest_os', 'cpu_pol', 'actions'), [
-    mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'dedicated', ['pause', 'unpause'])),
+    mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')(('tis-centos-guest', 'dedicated', ['pause', 'unpause'])),
     mark.sanity(('ubuntu_14', 'shared', ['stop', 'start'])),
     mark.sanity(('ubuntu_14', 'dedicated', ['auto_recover'])),
     # mark.priorities('sanity', 'cpe_sanity')(('cgcs-guest', 'dedicated', ['suspend', 'resume'])),
-    mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'dedicated', ['suspend', 'resume'])),
+    mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')(('tis-centos-guest', 'dedicated', ['suspend', 'resume'])),
 ], ids=id_gen)
 def test_nova_actions(guest_os, cpu_pol, actions):
     if guest_os == 'opensuse_12':

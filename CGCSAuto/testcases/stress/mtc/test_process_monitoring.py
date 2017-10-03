@@ -958,7 +958,7 @@ class MonitoredProcess:
     # TODO CGTS-6451
     mark.p1(('rmond')),
     mark.p1(('fsmond')),
-    mark.p1(('hbsClient')),
+    mark.priorities('p1', 'sx_nightly')('hbsClient'),
     mark.p1(('mtcClient')),
     mark.p1(('mtcalarmd')),
     mark.p1(('sm-api')),
@@ -1025,7 +1025,7 @@ class MonitoredProcess:
     mark.p1(('heat-engine')),
 
     # TODO CGTS-6396
-    mark.p1(('heat-api')),
+    mark.priorities('p1', 'sx_nightly')('heat-api'),
     mark.p1(('heat-api-cfn')),
     mark.p1(('heat-api-cloudwatch')),
     #

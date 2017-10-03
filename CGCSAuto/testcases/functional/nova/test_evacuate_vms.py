@@ -157,6 +157,7 @@ class TestOneHostAvail:
             nova_helper.remove_hosts_from_aggregate(aggregate='cgcsauto', check_first=False)
         request.addfinalizer(remove_hosts_from_zone)
 
+    @mark.sx_sanity
     def test_reboot_only_host(self):
         zone = 'nova' if system_helper.is_simplex() else 'cgcsauto'
 

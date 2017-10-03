@@ -3,6 +3,9 @@ import random
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
+from consts.reasons import SkipReason
+from consts.cgcs import VMStatus, MaxVmsSupported
+from testfixtures.recover_hosts import HostsToRecover
 from keywords import vm_helper, nova_helper, host_helper, system_helper
 
 
@@ -188,6 +191,32 @@ class TestLockWithVMs:
             LOG.tc_step("Verify lock succeeded and vms status unchanged.")
             assert lock_code == 0, "Failed to lock {}. Details: {}".format(host, lock_output)
             assert pre_vms_status == post_vms_status, "VM(s) status has changed after host-lock {}".format(host)
+
+    @mark.sx_nightly
+    def test_lock_with_max_vms_simplex(self):
+        if not system_helper.is_simplex():
+            skip(SkipReason.SIMPLEX_ONLY)
+
+        vms_num = MaxVmsSupported.SX
+        vm_helper.ensure_vms_quotas(vms_num=vms_num)
+
+        LOG.tc_step("Boot {} vms with various storage settings".format(vms_num))
+        vms = vm_helper.boot_vms_various_types(cleanup='function', vms_num=vms_num)
+
+        LOG.tc_step("Lock vm host on simplex system")
+        HostsToRecover.add('controller-0')
+        host_helper.lock_host('controller-0')
+
+        LOG.tc_step("Ensure vms are in {} state after locked host come online".format(VMStatus.STOPPED))
+        vm_helper.wait_for_vms_values(vms, values=VMStatus.STOPPED, fail_ok=False)
+
+        LOG.tc_step("Unlock host on simplex system")
+        host_helper.unlock_host(host='controller-0')
+
+        LOG.tc_step("Ensure vms are Active and Pingable from NatBox")
+        vm_helper.wait_for_vms_values(vms, values=VMStatus.ACTIVE, fail_ok=False, timeout=600)
+        for vm in vms:
+            vm_helper.wait_for_vm_pingable_from_natbox(vm)
 
 
 @mark.p2

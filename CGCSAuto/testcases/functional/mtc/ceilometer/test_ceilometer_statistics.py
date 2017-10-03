@@ -18,6 +18,7 @@ from keywords import common, host_helper, ceilometer_helper, network_helper, gla
 
 @mark.cpe_sanity
 @mark.sanity
+@mark.sx_nightly
 @mark.parametrize('meter', [
     'image.size'
 ])

@@ -189,7 +189,7 @@ class Labs:
     SM_1 = {
         'short_name': 'sm_1',
         'name': 'yow-cgcs-supermicro-1',
-        'floating ip': '128.224.150.235',
+        'floating ip': '128.224.150.221',
         'controller-0 ip': '128.224.150.221',
         'controller_nodes': [46808],
     }
@@ -197,7 +197,7 @@ class Labs:
     SM_2 = {
         'short_name': 'sm_2',
         'name': 'yow-cgcs-supermicro-2',
-        'floating ip': '128.224.150.240',
+        'floating ip': '128.224.150.222',
         'controller-0 ip': '128.224.150.222',
         'controller_nodes': [23907],
     }

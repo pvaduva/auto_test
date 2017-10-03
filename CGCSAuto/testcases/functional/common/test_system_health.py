@@ -21,6 +21,7 @@ class TestCoreDumpsAndCrashes:
     @mark.abslast
     @mark.sanity
     @mark.cpe_sanity
+    @mark.sx_sanity
     @mark.parametrize('report_type', [
         'core_dumps',
         'crash_reports',
@@ -42,6 +43,7 @@ class TestCoreDumpsAndCrashes:
 @mark.abslast
 @mark.sanity
 @mark.cpe_sanity
+@mark.sx_sanity
 def test_system_alarms(pre_alarms_session):
     LOG.tc_step("Gathering system alarms at the end of test session")
     post_alarms = system_helper.get_alarms()

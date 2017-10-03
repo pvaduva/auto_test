@@ -422,3 +422,8 @@ class OrchestrationStrategyKeyNames:
 class DevClassIds:
     QAT_VF = '0b4000'
     GPU = '030000'
+
+
+class MaxVmsSupported:
+    SX = 10
+    DX = 10
