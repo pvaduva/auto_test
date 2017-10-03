@@ -2,22 +2,21 @@ import re
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
-from consts.reasons import SkipReason
 from consts.cgcs import VMStatus
 from consts.cgcs import FlavorSpec, ImageMetadata, GuestImages
 from consts.cli_errs import VCPUSchedulerErr
 
-from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, check_helper
+from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
 @mark.parametrize(('flv_model', 'img_model', 'boot_source', 'error'), [
-    #('Conroe', 'Nehalem', 'volume', 'error'),
-    #('Penryn', 'Westmere', 'image', 'error'),
-    #('Broadwell-noTSX', 'Broadwell', 'image', 'error'),
-    #('SandyBridge', 'Passthrough', 'volume', 'error'),
-    #('Passthrough', 'Haswell', 'image', 'error'),
+    ('Conroe', 'Nehalem', 'volume', 'error'),
+    ('Penryn', 'Westmere', 'image', 'error'),
+    ('Broadwell-noTSX', 'Broadwell', 'image', 'error'),
+    ('SandyBridge', 'Passthrough', 'volume', 'error'),
+    ('Passthrough', 'Haswell', 'image', 'error'),
     ('Passthrough', 'Passthrough', 'image', None),
     ('SandyBridge', 'SandyBridge', 'volume', None)
 ])
@@ -314,32 +313,30 @@ def test_vcpu_model_evacuation(add_admin_role_func):
     Skip if:
         - lab has < 2 hosts
 
-
     Test Steps:
-        - boots vm on a host with specified cpu model
-        - wait for it to be pingable from natbox
-        - Run "cat /proc/cpuinfo" in guest and check it got the right model
-        - sudo reboot -f on vm host
-        - Ensure evacuation for vm is successful (vm host changed, active state, pingable from NatBox)
+        - Boots a set of 5 vms on a host with named cpu models and varying boot sources and check that their models
+        are correct
+            - 4 of them will have the four latest supported named models and one of them with be a Passthrough model
+            - In the event that the host supports less than 4 models, the test will proceed with a lower number of vms
+            as long as at least one vcpu model is supported
+        - Reboot the host hosting all of the vms to trigger an evacuation
+        - Ensure evacuation for all vms is successful (vm host changed, active state, pingable from NatBox)
+        - Following the evacuation, check to make sure that all of the VMs retained their correct cpu models
 
     Teardown:
             - Delete created vms
             - Remove admin role from primary tenant (module)
     """
 
-    # hosts = host_helper.get_hosts_by_storage_aggregate()
-    # if len(hosts) < 2:
-    #    skip(SkipReason.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(''))
-
-    newest_cpu_found = False
+    if len(host_helper.get_up_hypervisors()) < 2:
+        skip('Less than 2 computes hosts available')
 
     working_vcpu_model_list = ["Skylake-Client", "Broadwell", "Broadwell-noTSX", "Haswell", "IvyBridge", "SandyBridge",
-                               "Westmere", "Nehalem", "Penryn", "Conroe"]
-    boot_source_list = ["image", "volume", "image"]
-    vm_list = []
+                              "Westmere", "Nehalem", "Penryn", "Conroe"]
+    vm_dict = {}
 
     LOG.tc_step("Find the newest vm that will be supported by at least 2 hosts and create vm")
-    while (not newest_cpu_found) and working_vcpu_model_list:
+    while working_vcpu_model_list:
         vcpu_model = working_vcpu_model_list[0]
         code, vm, msg = _boot_vm_vcpu_model(vcpu_model, vcpu_model, "volume", avail_zone='nova')
 
@@ -356,103 +353,82 @@ def test_vcpu_model_evacuation(add_admin_role_func):
             assert res_bool, "VM did not reach expected error state. Actual: {}".format(vals)
             assert re.search(expt_fault, err), "Incorrect fault reported. Expected: {} Actual: {}" \
                 .format(expt_fault, err)
+            vm_helper.delete_vms(vm)
+
         else:
-            assert 0 == code, "Boot vm failed when cpu model in flavor and image both set to: {}".format(vcpu_model)
-            target_host = nova_helper.get_vm_host(vm)
             LOG.tc_step("Ping vm from NatBox after successful creation")
             vm_helper.wait_for_vm_pingable_from_natbox(vm)
             check_vm_cpu_model(vm_id=vm, vcpu_model=vcpu_model)
 
             LOG.tc_step("Perform a live migration to see if another host can support the CPU model")
             exit_code = vm_helper.live_migrate_vm(vm)[0]
+            target_host = nova_helper.get_vm_host(vm)
 
             LOG.tc_step("Check if migration is blocked or if live migrate fails")
-            assert exit_code not in [3, 4, 5, 6], "Live migrate failed for reasons not related to vCPU support"
 
-            ResourceCleanup.add('vm', vm)
-
-            if exit_code in [1, 2]:
-                del working_vcpu_model_list[0]
-            else:
-                assert exit_code == 0, "Live migrate failed. Unknown reasons"
+            if exit_code == 0:
                 LOG.tc_step("Ping vm from NatBox after successful live migration")
                 vm_helper.wait_for_vm_pingable_from_natbox(vm, timeout=30)
-
-                host_found = True
                 target_host = nova_helper.get_vm_host(vm)
-                vm_list.append(vm)
+                vm_dict[vm] = vcpu_model
+                del working_vcpu_model_list[0]
+                break
+            elif exit_code in [1, 2]:
+                del working_vcpu_model_list[0]
+                vm_helper.delete_vms(vm)
+            else:
+                assert False, "Live migrate failed for reasons not related to vCPU support"
 
-    if not vm_list:
-        assert False, "None of the tested vCPU models are supposed by the hosts"
+    assert vm_dict, "None of the tested vCPU models are supported by the hosts"
 
-    LOG.tc_step("create remaining vms")
-    if len(working_vcpu_model_list) < 2:
-        remaining_vcpu_list = []
-    else:
-        remaining_vcpu_list = working_vcpu_model_list[1:]
-        if len(remaining_vcpu_list) > 2:
-            remaining_vcpu_list = remaining_vcpu_list[:3]
+    LOG.tc_step("Create remaining vms")
+    vm_count = 1
+    boot_source = 'image' # Second non-passthrough vm will boot from image
 
-    for cpu, boot in zip(remaining_vcpu_list, boot_source_list):
-        vm = _boot_vm_vcpu_model(cpu, cpu, boot, avail_zone='nova', vm_host=target_host)[1]
+    for cpu in working_vcpu_model_list:
+        LOG.tc_step("creating vm for {}, {}".format(cpu, boot_source))
+        if boot_source == 'volume':
+            vm = _boot_vm_vcpu_model(cpu, None, boot_source, avail_zone='nova', vm_host=target_host)[1]
+            boot_source = 'image'
+        else:
+            vm = _boot_vm_vcpu_model(cpu, cpu, boot_source, avail_zone='nova', vm_host=target_host)[1]
+            boot_source = 'volume'
+
         check_vm_cpu_model(vm_id=vm, vcpu_model=cpu)
         vm_helper.wait_for_vm_pingable_from_natbox(vm)
-        vm_list.append(vm)
+        vm_dict[vm] = cpu
+        vm_count += 1
+        if vm_count == 4:
+            break
 
-    code, vm, msg = _boot_vm_vcpu_model("Passthrough", "Passthrough", "volume", avail_zone='nova', vm_host=target_host)
+    LOG.tc_step("Create passthrough VM")
+    code, vm, msg = _boot_vm_vcpu_model("Passthrough", None, "volume", avail_zone='nova', vm_host=target_host)
     vm_helper.wait_for_vm_pingable_from_natbox(vm)
     expt_arch = host_helper.get_host_cpu_model(target_host)
     check_vm_cpu_model(vm_id=vm, vcpu_model="Passthrough", expt_arch=expt_arch)
-    vm_list.append(vm)
+    vm_dict[vm] = "Passthrough"
 
-    LOG.tc_step("Check all VMs are booted on {}".format(target_host))
-    vms_on_host = nova_helper.get_vms_on_hypervisor(hostname=target_host)
-    assert set(vm_list) <= set(vms_on_host), "VMs booted on host: {}. Current vms on host: {}".format(vm_list, vms_on_host)
-
-    LOG.tc_step("Reboot target host {}".format(target_host))
-    host_helper.reboot_hosts(target_host, wait_for_reboot_finish=False)
-    HostsToRecover.add(target_host)
-
-    LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-    vm_helper.wait_for_vms_values(vm_list, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
-
-    LOG.tc_step("Check vms are in Active state and moved to other host(s) after host reboot")
-    res, active_vms, inactive_vms = vm_helper.wait_for_vms_values(vms=vm_list, values=VMStatus.ACTIVE, timeout=600)
-
-    vms_host_err = []
-    for vm in vm_list:
-        if nova_helper.get_vm_host(vm) == target_host:
-            vms_host_err.append(vm)
-
-    assert not vms_host_err, "Following VMs stayed on the same host {}: {}\nVMs did not reach Active state: {}". \
-        format(target_host, vms_host_err, inactive_vms)
-
-    assert not inactive_vms, "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
-
-    LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
-    vm_helper.ping_vms_from_natbox(vm_list)
+    LOG.tc_step("Reboot target host {} to start evacuation".format(target_host))
+    vm_helper.evacuate_vms(target_host, list(vm_dict.keys()))
 
     LOG.tc_step("Check the vcpu models are still correct after transfer")
-    non_passthru_vms = len(vm_list) - 3
+    for vm, cpu in vm_dict.items():
+        post_evac_expt_arch = None
+        LOG.tc_step("check that vm {} has model {}".format(vm, cpu))
 
-    for vm, cpu in zip(vm_list[:non_passthru_vms], working_vcpu_model_list[:non_passthru_vms]):
-        LOG.tc_step(vm)
-        LOG.tc_step(cpu)
-        check_vm_cpu_model(vm_id=vm, vcpu_model=cpu)
-
-    host = nova_helper.get_vm_host(vm_list[non_passthru_vms])
-    expt_arch = host_helper.get_host_cpu_model(host)
-    check_vm_cpu_model(vm_id=vm_list[non_passthru_vms], vcpu_model="Passthrough", expt_arch=expt_arch)
+        if cpu == "Passthrough":
+            post_evac_expt_arch = expt_arch
+        check_vm_cpu_model(vm_id=vm, vcpu_model=cpu, expt_arch=post_evac_expt_arch)
 
 
-def test_vmx_flag(add_admin_role_func):
+def test_vmx_setting():
     """
-    Test that flavor creation fails and sends a human-readable error message if a flavor with >128 vCPUs is attempted
-    to be created
+    Test that vmx feature can be set in guest VM
 
     Test Steps:
-       - Create a new flavor with 129 vCPUs
-       - Check that create_flavor returns an error exit code and a proper readable output message is generated
+       - Create a flavor with extra specs hw:wrs:nested_vmx=True and hw:cpu_model=<a cpu model supported by the host>
+       - Instantiate a VM with the flavor and check that vm has correct vcpu model
+       - ssh into the VM and execute "grep vmx /proc/cpuinfo" and verify that vmx feature is set
     """
 
     # Create a flavor with specs: hw:wrs:nested_vmx=True and extraspec hw:cpu_model=<compute host cpu model>
@@ -469,9 +445,11 @@ def test_vmx_flag(add_admin_role_func):
     LOG.tc_step("Create VM for vcpu model {}".format(host_cpu_model))
     code, vm, msg, vol = vm_helper.boot_vm(flavor=flavor_id, cleanup='function', fail_ok=False)
     ResourceCleanup.add('vm', vm)
+    LOG.tc_step("Check vcpu model is correct")
+    host = nova_helper.get_vm_host(vm)
+    expt_arch = host_helper.get_host_cpu_model(host)
+    check_vm_cpu_model(vm_id=vm, vcpu_model="Passthrough", expt_arch=expt_arch)
 
     LOG.tc_step("Checking to see if 'vmx' is in /proc/cpuinfo")
     with vm_helper.ssh_to_vm_from_natbox(vm) as vm_ssh:
-        out = vm_ssh.exec_cmd("grep vmx /proc/cpuinfo", fail_ok=False)[1]
-        print(out)
-        assert out, "vmx flag not set"
+        vm_ssh.exec_cmd("grep vmx /proc/cpuinfo", fail_ok=False)

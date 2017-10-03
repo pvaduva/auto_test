@@ -214,6 +214,9 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
         assert prev_vm_host == post_vm_host, "vm host changed after cold migrate revert"
     else:
         assert prev_vm_host != post_vm_host, "vm host did not change after cold migrate"
+        LOG.tc_step("Check that source host no longer has instance files")
+        with host_helper.ssh_to_host(prev_vm_host) as prev_ssh:
+            assert prev_ssh.file_exists('/etc/nova/instances/{}'.format(vm_id)), "Instance file found, cleanup failed"
 
     LOG.tc_step("Ensure vm is pingable from NatBox after cold migration {}".format(resize))
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
