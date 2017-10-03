@@ -4,11 +4,15 @@ from pytest import fixture
 
 from utils import exceptions
 from utils.tis_log import LOG
+from utils.ssh import ControllerClient
 
 from consts.auth import Tenant
 from consts.heat import Heat
-from keywords import nova_helper, vm_helper, cinder_helper, glance_helper, network_helper, heat_helper
+from keywords import nova_helper, vm_helper, cinder_helper, glance_helper, network_helper, heat_helper, \
+    system_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
+
+# SIMPLEX_RECOVERED = False
 
 
 @fixture(scope='function', autouse=True)
@@ -112,6 +116,11 @@ def flavor_id_module():
 
 
 def _delete(resources, scope):
+    # global SIMPLEX_RECOVERED
+    # if not SIMPLEX_RECOVERED and system_helper.is_simplex():
+    #     LOG.fixture_step('{} Ensure simplex host is up before cleaning up'.format(scope))
+    #     host_helper.recover_simplex(fail_ok=True)
+    #     SIMPLEX_RECOVERED = True
 
     vms_with_vols = resources['vms_with_vols']
     vms_no_vols = resources['vms_no_vols']

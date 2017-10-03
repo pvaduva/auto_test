@@ -193,23 +193,23 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
                 if system_helper.is_small_footprint(con_ssh):
                     computes += controllers
 
-                if check_hypervisor_up and computes:
-                    res, hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh,
-                                                                        timeout=120)
-                    if not res:
-                        err_msg = "Hosts not up in nova hypervisor-list: {}".format(hosts_hypervisordown)
-                        if fail_ok:
-                            return 2, err_msg
-                        else:
-                            raise exceptions.HostPostCheckFailed(err_msg)
-
                 if check_webservice_up and controllers:
                     res, hosts_webdown = wait_for_webservice_up(controllers, fail_ok=fail_ok, con_ssh=con_ssh,
-                                                                timeout=90)
+                                                                timeout=HostTimeout.WEB_SERVICE_UP)
                     if not res:
                         err_msg = "Hosts web-services not active in system servicegroup-list: {}".format(hosts_webdown)
                         if fail_ok:
                             return 3, err_msg
+                        else:
+                            raise exceptions.HostPostCheckFailed(err_msg)
+
+                if check_hypervisor_up and computes:
+                    res, hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh,
+                                                                        timeout=HostTimeout.HYPERVISOR_UP)
+                    if not res:
+                        err_msg = "Hosts not up in nova hypervisor-list: {}".format(hosts_hypervisordown)
+                        if fail_ok:
+                            return 2, err_msg
                         else:
                             raise exceptions.HostPostCheckFailed(err_msg)
 
@@ -236,11 +236,38 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         raise exceptions.HostPostCheckFailed(err_msg)
 
 
-def wait_for_hosts_ready(hosts, con_ssh=None):
+def recover_simplex(con_ssh=None, fail_ok=False):
+    """
+    Ensure simplex host is unlocked, available, and hypervisor up
+    This function should only be called for simplex system
+
+    Args:
+        con_ssh (SSHClient):
+        fail_ok (bool)
+    """
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    stay = 0
+    if not con_ssh._is_connected():
+        con_ssh.connect(retry=True, retry_timeout=HostTimeout.REBOOT)
+        stay = 60
+    _wait_for_openstack_cli_enable(con_ssh=con_ssh, stay=stay)
+
+    host = 'controller-0'
+    is_unlocked = (get_hostshow_value(host=host, field='administrative') == HostAdminState.UNLOCKED)
+    if not is_unlocked:
+        unlock_host(host=host, available_only=True, fail_ok=fail_ok)
+    else:
+        wait_for_hosts_ready(host, fail_ok=fail_ok)
+
+
+def wait_for_hosts_ready(hosts, fail_ok=False, con_ssh=None):
     """
     Wait for hosts to be in online state is locked, and available and hypervisor/webservice up if unlocked
     Args:
         hosts:
+        fail_ok: whether to raise exception when fail
         con_ssh:
 
     Returns:
@@ -252,26 +279,36 @@ def wait_for_hosts_ready(hosts, con_ssh=None):
     expt_online_hosts = get_hosts(hosts, con_ssh=con_ssh, administrative=HostAdminState.LOCKED)
     expt_avail_hosts = get_hosts(hosts, con_ssh=con_ssh, administrative=HostAdminState.UNLOCKED)
 
+    res_lock = res_unlock = True
     if expt_online_hosts:
         LOG.info("Wait for hosts to be online: {}".format(hosts))
-        wait_for_hosts_states(hosts, availability=HostAvailabilityState.ONLINE, fail_ok=False, con_ssh=con_ssh)
+        res_lock = wait_for_hosts_states(hosts, availability=HostAvailabilityState.ONLINE, fail_ok=fail_ok,
+                                         con_ssh=con_ssh)
 
     if expt_avail_hosts:
         hypervisors = list(set(get_hypervisors()) & set(hosts))
         controllers = list(set(system_helper.get_controllers()) & set(hosts))
 
         LOG.info("Wait for hosts to be available: {}".format(hosts))
-        wait_for_hosts_states(hosts, availability=HostAvailabilityState.AVAILABLE, fail_ok=False, con_ssh=con_ssh)
+        res_unlock = wait_for_hosts_states(hosts, availability=HostAvailabilityState.AVAILABLE, fail_ok=fail_ok,
+                                           con_ssh=con_ssh)
 
-        wait_for_subfunction_ready(hosts, fail_ok=False, con_ssh=con_ssh)
+        if res_unlock:
+            res_1 = wait_for_subfunction_ready(hosts, fail_ok=fail_ok, con_ssh=con_ssh)
+            res_unlock = res_unlock and res_1
 
         if controllers:
             LOG.info("Wait for webservices up for hosts: {}".format(controllers))
-            wait_for_webservice_up(controllers, fail_ok=False, con_ssh=con_ssh, timeout=90)
-
+            res_2 = wait_for_webservice_up(controllers, fail_ok=fail_ok, con_ssh=con_ssh,
+                                           timeout=HostTimeout.WEB_SERVICE_UP)
+            res_unlock = res_unlock and res_2
         if hypervisors:
             LOG.info("Wait for hypervisors up for hosts: {}".format(hypervisors))
-            wait_for_hypervisors_up(hypervisors, fail_ok=False, con_ssh=con_ssh, timeout=90)
+            res_3 = wait_for_hypervisors_up(hypervisors, fail_ok=fail_ok, con_ssh=con_ssh,
+                                            timeout=HostTimeout.HYPERVISOR_UP)
+            res_unlock = res_unlock and res_3
+
+    return res_lock and res_unlock
 
 
 def wait_for_subfunction_ready(hosts, fail_ok=False, con_ssh=None, timeout=HostTimeout.SUBFUNC_READY):
@@ -632,7 +669,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
 
         if check_hypervisor_up and is_compute:
             if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh,
-                                           timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL)[0]:
+                                           timeout=HostTimeout.HYPERVISOR_UP)[0]:
                 return 6, "Host is not up in nova hypervisor-list"
 
         if check_webservice_up and is_controller:
@@ -761,7 +798,7 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
 
         if check_hypervisor_up and computes:
             hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh,
-                                                           timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL)[1]
+                                                           timeout=HostTimeout.HYPERVISOR_UP)[1]
             for host in hosts_hypervisordown:
                 res[host] = 5, "Host is not up in nova hypervisor-list"
                 hosts_avail = list(set(hosts_avail) - set(hosts_hypervisordown))
@@ -837,15 +874,25 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None):
 
 
 def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=5,
-                                   reconnect=False, reconnect_timeout=60):
+                                   reconnect=False, reconnect_timeout=60, stay=60):
     cli_enable_end_time = time.time() + timeout
     eof_count = 0
+
+    def check_sysinv_cli():
+        cli.system('show', ssh_client=con_ssh, timeout=timeout)
+        # give it some time after openstack CLI enable
+        LOG.info("'system show' enabled, check system host-show in 5 seconds")
+        time.sleep(5)
+        cli.system('host-show', 'controller-0', ssh_client=con_ssh, timeout=timeout)
+        LOG.info("'system host-show controller-0' enabled, wait for 60 seconds before continue")
+
     while True:
         try:
-            cli.system('show', ssh_client=con_ssh, timeout=timeout)
-            # give it some time after openstack CLI enable
-            LOG.info("'system show' enabled, wait for 60 seconds before continue")
-            time.sleep(60)
+            check_sysinv_cli()
+            end_time = time.time() + stay
+            while time.time() < end_time:
+                time.sleep(check_interval)
+                check_sysinv_cli()
             return True
 
         except pexpect.EOF:
@@ -1070,7 +1117,7 @@ def get_nova_hosts(zone='nova', con_ssh=None, auth_info=Tenant.ADMIN):
     return table_parser.get_values(table_, 'host_name', service='compute', zone=zone)
 
 
-def wait_for_hypervisors_up(hosts, timeout=HostTimeout.HYPERVISOR_UP_AFTER_AVAIL, check_interval=3, fail_ok=False,
+def wait_for_hypervisors_up(hosts, timeout=HostTimeout.HYPERVISOR_UP, check_interval=3, fail_ok=False,
                             con_ssh=None):
     """
     Wait for given hypervisors to be up and enabled in nova hypervisor-list
@@ -1147,7 +1194,7 @@ def wait_for_hosts_in_nova_compute(hosts, timeout=90, check_interval=3, fail_ok=
         raise exceptions.HostTimeout(msg)
 
 
-def wait_for_webservice_up(hosts, timeout=90, check_interval=3, fail_ok=False, con_ssh=None):
+def wait_for_webservice_up(hosts, timeout=HostTimeout.WEB_SERVICE_UP, check_interval=3, fail_ok=False, con_ssh=None):
 
     if isinstance(hosts, str):
         hosts = [hosts]

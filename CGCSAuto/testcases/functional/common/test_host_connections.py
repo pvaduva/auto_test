@@ -31,6 +31,7 @@ def test_ping_hosts():
 
 @mark.sanity
 @mark.cpe_sanity
+@mark.sx_sanity
 def test_ssh_to_hosts():
     hosts_to_ssh = host_helper.get_hosts(availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.ONLINE])
     failed_list = []

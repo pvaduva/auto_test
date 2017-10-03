@@ -1,6 +1,7 @@
 import random
 import re
 import time
+import math
 from contextlib import contextmanager
 
 from pexpect import TIMEOUT as ExpectTimeout
@@ -3417,7 +3418,7 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
             vlm_helper.power_on_hosts(hosts=host, reserve=False, post_check=wait_for_host_up)
 
 
-def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='function', avail_zone='nova'):
+def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='function', avail_zone='nova', vms_num=5):
     """
     Boot following 5 vms and ensure they are pingable from NatBox:
         - vm1: ephemeral=0, swap=0, boot_from_volume
@@ -3446,46 +3447,63 @@ def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='func
     if cleanup:
         ResourceCleanup.add('flavor', flavor_2, scope=cleanup)
 
-    LOG.info("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
-    vm1_name = "vol_root"
-    vm1 = boot_vm(vm1_name, flavor=flavor_1, source='volume', avail_zone=avail_zone, vm_host=target_host,
-                  cleanup=cleanup)[1]
+    launched_vms = []
+    for i in range(int(math.ceil(vms_num/5.0))):
+        LOG.info("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
+        vm1_name = "vol_root"
+        vm1 = boot_vm(vm1_name, flavor=flavor_1, source='volume', avail_zone=avail_zone, vm_host=target_host,
+                      cleanup=cleanup)[1]
 
-    wait_for_vm_pingable_from_natbox(vm1)
+        wait_for_vm_pingable_from_natbox(vm1)
+        launched_vms.append(vm1)
+        if len(launched_vms) == vms_num:
+            break
 
-    LOG.info("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
-    vm2_name = "vol_ephemswap"
-    vm2 = boot_vm(vm2_name, flavor=flavor_2, source='volume', avail_zone=avail_zone, vm_host=target_host,
-                  cleanup=cleanup)[1]
+        LOG.info("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
+        vm2_name = "vol_ephemswap"
+        vm2 = boot_vm(vm2_name, flavor=flavor_2, source='volume', avail_zone=avail_zone, vm_host=target_host,
+                      cleanup=cleanup)[1]
 
-    wait_for_vm_pingable_from_natbox(vm2)
+        wait_for_vm_pingable_from_natbox(vm2)
+        launched_vms.append(vm2)
+        if len(launched_vms) == vms_num:
+            break
 
-    LOG.info("Boot vm3 from image with flavor flv_rootdisk and wait for it pingable from NatBox")
-    vm3_name = "image_root"
-    vm3 = boot_vm(vm3_name, flavor=flavor_1, source='image', avail_zone=avail_zone, vm_host=target_host,
-                  cleanup=cleanup)[1]
+        LOG.info("Boot vm3 from image with flavor flv_rootdisk and wait for it pingable from NatBox")
+        vm3_name = "image_root"
+        vm3 = boot_vm(vm3_name, flavor=flavor_1, source='image', avail_zone=avail_zone, vm_host=target_host,
+                      cleanup=cleanup)[1]
 
-    wait_for_vm_pingable_from_natbox(vm3)
+        wait_for_vm_pingable_from_natbox(vm3)
+        launched_vms.append(vm3)
+        if len(launched_vms) == vms_num:
+            break
 
-    LOG.info("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it pingable from NatBox")
-    vm4_name = 'image_root_attachvol'
-    vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone=avail_zone, vm_host=target_host, cleanup=cleanup)[1]
+        LOG.info("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it pingable from NatBox")
+        vm4_name = 'image_root_attachvol'
+        vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone=avail_zone, vm_host=target_host, cleanup=cleanup)[1]
 
-    vol = cinder_helper.create_volume(bootable=False)[1]
-    if cleanup:
-        ResourceCleanup.add('volume', vol, scope='class')
-    attach_vol_to_vm(vm4, vol_id=vol)
+        vol = cinder_helper.create_volume(bootable=False)[1]
+        if cleanup:
+            ResourceCleanup.add('volume', vol, scope='class')
+        attach_vol_to_vm(vm4, vol_id=vol)
 
-    wait_for_vm_pingable_from_natbox(vm4)
+        wait_for_vm_pingable_from_natbox(vm4)
+        launched_vms.append(vm4)
+        if len(launched_vms) == vms_num:
+            break
 
-    LOG.info("Boot vm5 from image with flavor flv_localdisk and wait for it pingable from NatBox")
-    vm5_name = 'image_ephemswap'
-    vm5 = boot_vm(vm5_name, flavor_2, source='image', avail_zone=avail_zone, vm_host=target_host, cleanup=cleanup)[1]
+        LOG.info("Boot vm5 from image with flavor flv_localdisk and wait for it pingable from NatBox")
+        vm5_name = 'image_ephemswap'
+        vm5 = boot_vm(vm5_name, flavor_2, source='image', avail_zone=avail_zone, vm_host=target_host, cleanup=cleanup)[1]
 
-    wait_for_vm_pingable_from_natbox(vm5)
+        wait_for_vm_pingable_from_natbox(vm5)
+        launched_vms.append(vm5)
+        if len(launched_vms) == vms_num:
+            break
 
-    vms = [vm1, vm2, vm3, vm4, vm5]
-    return vms
+    assert len(launched_vms) == vms_num
+    return launched_vms
 
 
 def get_sched_policy_and_priority_for_vcpus(instance_pid, host_ssh, cpusets=None, comm=None):
@@ -3560,3 +3578,24 @@ def get_vcpu_model(vm_id, guest_os=None, con_ssh=None):
 
     LOG.info("VM {} cpu model: {}".format(vm_id, vcpu_model))
     return vcpu_model
+
+
+def ensure_vms_quotas(vms_num=10, cores_num=None, vols_num=None, tenant=None, con_ssh=None):
+    """
+    Update instances, cores, volumes quotas to given numbers
+    Args:
+        vms_num (int): max number of instances allowed for given tenant
+        cores_num (int|None): twice of the vms quota when None
+        vols_num (int|None): twice of the vms quota when None
+        tenant (None|str): such as 'tenant1', 'tenant2'. Default tenant when None
+        con_ssh (SSHClient):
+
+    Returns:
+
+    """
+    if not vols_num:
+        vols_num = 2 * vms_num
+    if not cores_num:
+        cores_num = 2 * vms_num
+    cinder_helper.update_quotas(volumes=vols_num, con_ssh=con_ssh, tenant=tenant)
+    nova_helper.update_quotas(instances=vms_num, cores=cores_num, con_ssh=con_ssh, tenant=tenant)

@@ -25,12 +25,9 @@ def _bring_up_vlan_interface(vm_id, eth_name, vlan_ids):
     """
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         for vlan in vlan_ids:
-            tmp_list = []
-            tmp_list.append(eth_name)
-            tmp_list.append("{}".format(vlan))
+            tmp_list = [eth_name, str(vlan)]
             sub_if = '.'.join(tmp_list)
-            vm_ssh.exec_sudo_cmd('ip link add link {} name {} type vlan id {}'.format(eth_name, sub_if,
-                                                                                              vlan))
+            vm_ssh.exec_sudo_cmd('ip link add link {} name {} type vlan id {}'.format(eth_name, sub_if, vlan))
             vm_ssh.exec_sudo_cmd('dhclient {}'.format(sub_if))
 
         vm_ssh.exec_sudo_cmd('ip addr')

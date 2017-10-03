@@ -145,44 +145,45 @@ class TestDefaultGuest:
         vm_helper.ping_vms_from_natbox(vms)
 
 
-@fixture(scope='function', autouse=not system_helper.is_simplex())
-def add_hosts_to_zone(request, add_cgcsauto_zone):
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
-    host = hosts[0]
-    LOG.fixture_step('Select host {} with backing {}'.format(host, storage_backing))
-    nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=[host])
+class TestOneHostAvail:
+    @fixture(scope='class', autouse=not system_helper.is_simplex())
+    def add_hosts_to_zone(self, request, add_cgcsauto_zone):
+        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        host = hosts[0]
+        LOG.fixture_step('Select host {} with backing {}'.format(host, storage_backing))
+        nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=[host])
 
-    def remove_hosts_from_zone():
-        nova_helper.remove_hosts_from_aggregate(aggregate='cgcsauto', check_first=False)
-    request.addfinalizer(remove_hosts_from_zone)
+        def remove_hosts_from_zone():
+            nova_helper.remove_hosts_from_aggregate(aggregate='cgcsauto', check_first=False)
+        request.addfinalizer(remove_hosts_from_zone)
 
+    @mark.sx_sanity
+    def test_reboot_only_host(self):
+        zone = 'nova' if system_helper.is_simplex() else 'cgcsauto'
 
-def test_reboot_only_host():
-    zone = 'nova' if system_helper.is_simplex() else 'cgcsauto'
+        LOG.tc_step("Launch 5 vms in {} zone".format(zone))
+        vms = vm_helper.boot_vms_various_types(avail_zone=zone, cleanup='function')
+        target_host = nova_helper.get_vm_host(vm_id=vms[0])
+        for vm in vms[1:]:
+            vm_host = nova_helper.get_vm_host(vm)
+            assert target_host == vm_host, "VMs are not booted on same host"
 
-    LOG.tc_step("Launch 5 vms in {} zone".format(zone))
-    vms = vm_helper.boot_vms_various_types(avail_zone=zone, cleanup='function')
-    target_host = nova_helper.get_vm_host(vm_id=vms[0])
-    for vm in vms[1:]:
-        vm_host = nova_helper.get_vm_host(vm)
-        assert target_host == vm_host, "VMs are not booted on same host"
+        LOG.tc_step("Reboot -f from target host {}".format(target_host))
+        HostsToRecover.add(target_host)
+        host_helper.reboot_hosts(target_host, wait_for_reboot_finish=True)
 
-    LOG.tc_step("Reboot -f from target host {}".format(target_host))
-    HostsToRecover.add(target_host)
-    host_helper.reboot_hosts(target_host, wait_for_reboot_finish=True)
+        LOG.tc_step("Check vms are in Active state after host come back up")
+        res, active_vms, inactive_vms = vm_helper.wait_for_vms_values(vms=vms, values=VMStatus.ACTIVE, timeout=600)
 
-    LOG.tc_step("Check vms are in Active state after host come back up")
-    res, active_vms, inactive_vms = vm_helper.wait_for_vms_values(vms=vms, values=VMStatus.ACTIVE, timeout=600)
+        vms_host_err = []
+        for vm in vms:
+            if nova_helper.get_vm_host(vm) != target_host:
+                vms_host_err.append(vm)
 
-    vms_host_err = []
-    for vm in vms:
-        if nova_helper.get_vm_host(vm) != target_host:
-            vms_host_err.append(vm)
+        assert not vms_host_err, "Following VMs are not on the same host {}: {}\nVMs did not reach Active state: {}". \
+            format(target_host, vms_host_err, inactive_vms)
 
-    assert not vms_host_err, "Following VMs are not on the same host {}: {}\nVMs did not reach Active state: {}". \
-        format(target_host, vms_host_err, inactive_vms)
+        assert not inactive_vms, "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
 
-    assert not inactive_vms, "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
-
-    LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
-    vm_helper.ping_vms_from_natbox(vms)
+        LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
+        vm_helper.ping_vms_from_natbox(vms)

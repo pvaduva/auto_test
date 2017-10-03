@@ -7,14 +7,14 @@ from pytest import mark, skip
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
-from testfixtures.pre_checks_and_configs import no_simplex_module
+from testfixtures.pre_checks_and_configs import no_simplex
 
 from keywords import host_helper,system_helper, nova_helper, vm_helper
 
 
 @mark.sanity
 @mark.cpe_sanity
-def test_lock_active_controller_reject(no_simplex_module):
+def test_lock_active_controller_reject(no_simplex):
     """
     Verify lock unlock active controller. Expected it to fail
 
@@ -39,7 +39,7 @@ def test_lock_active_controller_reject(no_simplex_module):
 
 @mark.sanity
 @mark.cpe_sanity
-def test_lock_unlock_standby_controller(no_simplex_module):
+def test_lock_unlock_standby_controller(no_simplex):
     """
     Verify lock unlock standby controller
 

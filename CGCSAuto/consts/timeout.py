@@ -10,7 +10,8 @@ class HostTimeout:
     LOCK = 900      # Host in locked state after system host-lock cli returned
     TASK_CLEAR = 300    # Task clears in system host-show after host reaches enabled/available state
     FAIL_AFTER_REBOOT = 120     # Host in offline or failed state via system host-show after sudo reboot -f returned
-    HYPERVISOR_UP_AFTER_AVAIL = 180     # Hypervsior in enabled/up state after host in available state and task clears
+    HYPERVISOR_UP = 300     # Hypervsior in enabled/up state after host in available state and task clears
+    WEB_SERVICE_UP = 180    # Web service up in sudo sm-dump after host in available state and task clears
     UPGRADE = 7200
     WIPE_DISK_TIMEOUT = 30
     PING_TIMEOUT = 60
@@ -19,7 +20,7 @@ class HostTimeout:
 
 
 class VMTimeout:
-    STATUS_CHANGE = 120
+    STATUS_CHANGE = 300
     STATUS_VERIFY_RESIZE = 30
     LIVE_MIGRATE_COMPLETE = 120
     COLD_MIGRATE_CONFIRM = 600

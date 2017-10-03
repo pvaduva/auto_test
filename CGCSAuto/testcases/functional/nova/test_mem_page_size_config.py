@@ -124,6 +124,14 @@ def add_1g_and_4k_pages(config_host_module, add_hosts_to_zone):
     return hosts, storage_backing
 
 
+@fixture(scope='function', autouse=True)
+def print_hosts_memories(add_1g_and_4k_pages):
+    hosts, storage_backing = add_1g_and_4k_pages
+    for host in hosts:
+        cli.system('host-memory-list', host)
+        cli.nova('hypervisor-show', host)
+
+
 @fixture(scope='module')
 def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
     storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
