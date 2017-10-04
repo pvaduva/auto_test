@@ -159,7 +159,7 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
     if isinstance(dns_servers, list):
         args += ' --dns-nameservers list=true {}'.format(' '.join(dns_servers))
     elif dns_servers is not None:
-        args += ' --dns-nameservers {}'.format(dns_servers)
+        args += ' --dns-nameserver {}'.format(dns_servers)
 
     if no_gateway:
         args += ' --no-gateway'
@@ -171,7 +171,9 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
         '--gateway': gateway,
         '--ip-version': ip_version,
         '--subnetpool': subnet_pool,
-        'allocation-pool': "start={},end={}".format(alloc_pool['start'], alloc_pool['end']) if alloc_pool else None
+        'allocation-pool': "start={},end={}".format(alloc_pool['start'], alloc_pool['end']) if alloc_pool else None,
+        '--ipv6-ra-mode': "dhcpv6-stateful " if ip_version == 6 else None,
+        '--ipv6-address-mode': "dhcpv6-stateful " if ip_version == 6 else None
     }
 
     for key, value in args_dict.items():
@@ -3627,4 +3629,5 @@ def get_ip_for_eth(ssh_client, eth_name):
     else:
         LOG.warning("Cannot find provided interface{} in 'ip addr'".format(eth_name))
         return ''
+
 
