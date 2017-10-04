@@ -269,6 +269,156 @@ def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.ADMIN, co
     return value
 
 
+def get_net_show_values(net_id, fields, strict=True, rtn_dict=False, con_ssh=None):
+    if isinstance(fields, str):
+        fields = [fields]
+    table_ = table_parser.table(cli.openstack('network show', net_id, ssh_client=con_ssh))
+    res = {}
+    for field in fields:
+        val = table_parser.get_value_two_col_table(table_, field, strict=strict, merge_lines=True)
+        if field == 'subnets':
+            val = val.split(',')
+            val = [val_.strip() for val_ in val]
+        res[field] = val
+
+    if rtn_dict:
+        return res
+    else:
+        return list(res.values())
+
+
+def set_network(net_id, name=None, enable=None, share=None, enable_port_security=None, external=None, default=None,
+                provider_net_type=None, provider_phy_net=None, provider_segment=None, transparent_vlan=None,
+                auth_info=Tenant.ADMIN, fail_ok=False, con_ssh=None, **kwargs):
+    """
+    Update network with given parameters
+    Args:
+        net_id (str):
+        name (str|None): name to update to. Don't update name when None.
+        enable (bool|None): True to add --enable. False to add --disable. Don't update enable/disable when None.
+        share (bool|None):
+        enable_port_security (bool|None):
+        external (bool|None):
+        default (bool|None):
+        provider_net_type (str|None):
+        provider_phy_net (str|None):
+        provider_segment (str|int|None):
+        transparent_vlan (bool|None):
+        auth_info (dict):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        **kwargs: additional key/val pairs that are not listed in 'openstack network update -h'.
+            e,g.,{'wrs-tm:qos': <qos_id>}
+
+    Returns (tuple): (code, msg)
+        (0, "Network <net_id> is successfully updated")   Network updated successfully
+        (1, <std_err>)    'openstack network update' cli is rejected
+
+    """
+    args_dict = {
+        '--name': (name, {'name': name}),
+        '--enable': ('store_true' if enable is True else None, {'admin_state_up': 'UP'}),
+        '--disable': ('store_true' if enable is False else None, {'admin_state_up': 'DOWN'}),
+        '--share': ('store_true' if share is True else None, {'shared': 'True'}),
+        '--no-share': ('store_true' if share is False else None, {'shared': 'False'}),
+        '--enable-port-security': ('store_true' if enable_port_security is True else None, {}),
+        '--disable-port-security': ('store_true' if enable_port_security is False else None, {}),
+        '--external': ('store_true' if external is True else None, {'router:external': 'External'}),
+        '--internal': ('store_true' if external is False else None, {'router:external': 'Internal'}),
+        '--default': ('store_true' if default is True else None, {'is_default': 'True'}),
+        '--no-default': ('store_true' if default is False else None, {'is_default': 'False'}),
+        '--transparent-vlan': ('store_true' if transparent_vlan is True else None, {'vlan_transparent': 'True'}),
+        '--no-transparent-vlan': ('store_true' if transparent_vlan is False else None, {'vlan_transparent': 'False'}),
+        '--provider-network-type': (provider_net_type, {'provider:network_type': provider_net_type}),
+        '--provider-physical-network': (provider_phy_net, {'provider:physical_network': provider_phy_net}),
+        '--provider-segment': (provider_segment, {'provider:segmentation_id': provider_segment}),
+    }
+    checks = {}
+    args_str = ''
+    for arg in args_dict:
+        val, check = args_dict[arg]
+        if val is not None:
+            set_val = '' if val == 'store_true' else ' {}'.format(val)
+            args_str += ' {}{}'.format(arg, set_val)
+            if check:
+                checks.update(**check)
+            else:
+                LOG.info("Unknown check field in 'openstack network show' for arg {}".format(arg))
+
+    for key, val_ in kwargs.items():
+        val_ = ' {}'.format(val_) if val_ else ''
+        field_name = key.split('--', 1)[-1]
+        arg = '--{}'.format(field_name)
+        args_str += ' {}{}'.format(arg, val_)
+        if val_:
+            checks.update(**kwargs)
+        else:
+            LOG.info("Unknown check field in 'openstack network show' for arg {}".format(arg))
+
+    if not args_str:
+        raise ValueError("Nothing to update. Please specify at least one None value")
+
+    LOG.info("Attempt to update network {} with following args: {}".format(net_id, args_str))
+    code, out = cli.openstack('network set', '{} {}'.format(args_str, net_id), ssh_client=con_ssh, rtn_list=True,
+                              fail_ok=fail_ok, auth_info=auth_info)
+    if code > 0:
+        return 1, out
+
+    if checks:
+        LOG.info("Check the values are updated to following in network show: {}".format(checks))
+        actual_res = get_net_show_values(net_id, fields=list(checks.keys()), rtn_dict=True)
+        failed = {}
+        for field in checks:
+            expt_val = checks[field]
+            actual_val = actual_res[field]
+            if expt_val != actual_val:
+                failed[field] = (expt_val, actual_val)
+
+        # Fail directly. If a field is not allowed to be updated, the cli should be rejected
+        assert not failed, "Actual value is different than set value in following fields: {}".format(failed)
+
+    msg = "Network {} is successfully updated".format(net_id)
+    return 0, msg
+
+
+def update_net_qos(net_id, qos_id=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Update network qos to given value
+    Args:
+        net_id (str): network to update
+        qos_id (str|None): when None, remove the qos from network
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple): (code, msg)
+        (0, "Network <net_id> qos is successfully updated to <qos_id>")
+        (1, <std_err>)  openstack network update cli rejected
+
+    """
+    if qos_id:
+        kwargs = {'--wrs-tm:qos': qos_id}
+        arg_str = '--wrs-tm:qos {}'.format(qos_id)
+    else:
+        kwargs = {'--no-qos': None}
+        arg_str = '--no-qos'
+
+    # code, msg = update_network(net_id=net_id, fail_ok=fail_ok, auth_info=auth_info, con_ssh=con_ssh, **kwargs)
+
+    code, msg = cli.neutron('net-update', '{} {}'.format(arg_str, net_id), fail_ok=fail_ok, ssh_client=con_ssh,
+                            auth_info=auth_info, rtn_list=True)
+    if code > 0:
+        return code, msg
+
+    if '--no-qos' in kwargs:
+        actual_qos = get_net_info(net_id, field='wrs-tm:qos', auto_info=auth_info, con_ssh=con_ssh)
+        assert not actual_qos, "Qos {} is not removed from {}".format(actual_qos, net_id)
+
+    msg = "Network {} qos is successfully updated to {}".format(net_id, qos_id)
+    LOG.info(msg)
+    return 0, msg
+
+
 def _get_net_ids(net_name, con_ssh=None, auth_info=None):
     table_ = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_, 'id', name=net_name)
