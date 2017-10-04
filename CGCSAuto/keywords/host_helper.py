@@ -252,7 +252,7 @@ def recover_simplex(con_ssh=None, fail_ok=False):
     if not con_ssh._is_connected():
         con_ssh.connect(retry=True, retry_timeout=HostTimeout.REBOOT)
         stay = 60
-    _wait_for_openstack_cli_enable(con_ssh=con_ssh, stay=stay)
+    _wait_for_openstack_cli_enable(con_ssh=con_ssh, stay=stay, timeout=HostTimeout.REBOOT)
 
     host = 'controller-0'
     is_unlocked = (get_hostshow_value(host=host, field='administrative') == HostAdminState.UNLOCKED)
@@ -880,14 +880,13 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
 
     def check_sysinv_cli():
         cli.system('show', ssh_client=con_ssh, timeout=timeout)
-        # give it some time after openstack CLI enable
-        LOG.info("'system show' enabled, check system host-show in 5 seconds")
         time.sleep(5)
         cli.system('host-show', 'controller-0', ssh_client=con_ssh, timeout=timeout)
-        LOG.info("'system host-show controller-0' enabled, wait for 60 seconds before continue")
+        LOG.info("'system cli enabled")
 
     while True:
         try:
+            LOG.info("Wait for system cli to be enabled for at least {} seconds".format(stay))
             check_sysinv_cli()
             end_time = time.time() + stay
             while time.time() < end_time:
