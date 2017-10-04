@@ -221,7 +221,7 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
 
 @mark.p3
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'boot_source'), [
-    mark.priorities('sx_nightly')('local_image', 0, 0, 'volume'),
+    mark.priorities('sx_nightly')(('local_image', 0, 0, 'volume')),
     ('local_image', 0, 0, 'image'),
     ('local_image', 1, 0, 'volume'),
     ('local_image', 1, 512, 'volume'),
