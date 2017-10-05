@@ -787,3 +787,36 @@ def get_upgraded_hosts(upgrade_version, con_ssh=None, fail_ok=False, source_cred
     table_ = table_parser.filter_table(table_, **{'running_release': upgrade_version})
     return table_parser.get_values(table_, 'hostname')
 
+
+def wait_for_upgrade_states(states, timeout=60, check_interval=6,fail_ok=False):
+    """
+     Waits for the  upgrade state to be changed.
+
+     Args:
+         state:
+         timeout:
+         check_interval
+         fail_ok
+
+     Returns:
+
+     """
+    end_time = time.time() + timeout
+    if not states:
+        raise ValueError("Expected host state(s) has to be specified via keyword argument states")
+    state_match=False
+    while time.time() < end_time:
+        table_ = system_upgrade_show()[1]
+        act_state = table_parser.get_value_two_col_table(table_, "state")
+        if act_state == states:
+            state_match = True
+            break
+        time.sleep(check_interval)
+    msg = "{} state was not reached ".format(states)
+    if state_match:
+        return True
+    if fail_ok:
+       LOG.warning(msg)
+       return False
+    raise exceptions.TimeoutException(msg)
+

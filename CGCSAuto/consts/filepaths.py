@@ -53,13 +53,15 @@ class BuildServerPath:
                          '16.10': ['/folk/cgts/lab/TiS16-full.lic', '/folk/cgts/lab/TiS16-CPE-full.lic'],
                          '17.00': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
                          '17.06': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
-                         '17.07': ['/folk/cgts/lab/license.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
+                         '17.07': ['/folk/cgts/lab/license.lic', '/folk/cgts/lab/TiS17-CPE-full.lic', \
+                                   'wrslicense-AIO-SX-17.06-full-jan2018.lic']
                          }
 
     PATCH_DIR_PATHS = {'15.12': DEFAULT_PATCH_DIR + '15.12',
                        '16.10': DEFAULT_PATCH_DIR + '16.10',
                        '17.00': DEFAULT_PATCH_DIR + '17.06',
                        '17.06': DEFAULT_PATCH_DIR + '17.06',
+                       '17.07': DEFAULT_PATCH_DIR + '17.07'
                        }
 
     GUEST_IMAGE_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',
