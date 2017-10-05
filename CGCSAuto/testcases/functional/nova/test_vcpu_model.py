@@ -338,7 +338,7 @@ def test_vcpu_model_evacuation(add_admin_role_func):
     LOG.tc_step("Find the newest vm that will be supported by at least 2 hosts and create vm")
     while working_vcpu_model_list:
         vcpu_model = working_vcpu_model_list[0]
-        code, vm, msg = _boot_vm_vcpu_model(vcpu_model, vcpu_model, "volume", avail_zone='nova')
+        code, vm, msg = _boot_vm_vcpu_model(vcpu_model, None, "volume", avail_zone='nova')
 
         # if _boot_vm is unsuccessful
         if code != 0:
