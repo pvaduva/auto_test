@@ -14,6 +14,7 @@ class ProjVar:
                   'SW_VERSION': [],
                   'PATCH': None,
                   'SESSION_ID': None,
+                  'CGCS_DB': True,
                   }
     # 'LOG_DIR': os.path.expanduser("~") + '/AUTOMATION_LOGS/Unknown'}
 
