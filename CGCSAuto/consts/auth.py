@@ -189,6 +189,7 @@ class SvcCgcsAuto:
     PASSWORD = ')OKM0okm'
     HOME = '/home/svc-cgcsauto'
     SANDBOX = '/sandbox'
+    HOSTNAME = 'yow-cgcs-test.wrs.com'
 
 
 class CliAuth:

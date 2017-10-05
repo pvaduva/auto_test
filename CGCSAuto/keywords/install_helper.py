@@ -8,14 +8,15 @@ from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout
 from consts.cgcs import HostAvailabilityState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
-    IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, TIS_BLD_DIR_REGEX
+    IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.vlm import VlmAction
-from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper
+from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common
 from CGCSAuto.utils import telnet as telnetlib, exceptions, local_host, cli
 from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
+from CGCSAuto.utils import local_host
 
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
@@ -1185,8 +1186,15 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
     # Checking first if reboot is required
 
     if "This controller has been patched. A reboot is required." in output:
-        # controller reboot is required
-        rc, output = host_helper.reboot_hosts("controller-0")
+        # controller reboot is required. Reboot controller from telnet session ( console)
+        cmd = "echo " + HostLinuxCreds.get_password() + " | sudo -S reboot"
+        rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.REBOOT)
+
+        controller0_node.telnet_conn.get_read_until(Prompt.LOGIN_PROMPT, HostTimeout.REBOOT)
+        LOG.info("Found login prompt. {} reboot has completed".format(controller0_node.name))
+
+        # reconnect SSh connection:
+        con_ssh.connect(retry=True, retry_timeout=60)
 
         # verifying  patches were applied
         patch_ids = patching_helper.get_all_patch_ids(con_ssh=con_ssh)
@@ -1319,6 +1327,41 @@ def get_backup_files_from_usb(pattern, usb_device=None, con_ssh=None):
     return found_backup_files
 
 
+def get_backup_files(pattern, backup_src_path, src_conn_ssh):
+    """
+
+    Args:
+        pattern:
+        src_path:
+        src_con_ssh:
+
+    Returns:
+
+    """
+
+    if pattern is None or backup_src_path is None or src_conn_ssh is None:
+        raise ValueError("pattern, backup_src_path and src_conn_ssh must be specified; cannot be None.")
+
+    src_host = src_conn_ssh.exec_cmd("hostname")[1]
+    LOG.info("Getting backup files with pattern {} from src {}: {}".format(pattern, src_host, backup_src_path))
+
+    found_backup_files = []
+    cmd = 'test -e {}'.format(backup_src_path)
+    if src_conn_ssh.exec_cmd(cmd)[0] == 0:
+        rc, backup_files = src_conn_ssh.exec_cmd("\ls {}/*.tgz".format(backup_src_path))
+        if rc == 0:
+            files_list = backup_files.split()
+            for file in files_list:
+                file = os.path.basename(file.strip())
+                if re.match(pattern, file):
+                    LOG.info("Found matching backup file: {}".format(file))
+                    found_backup_files.append(file)
+    else:
+        LOG.warn("The path {} does not exist in source {}".format(backup_src_path, src_host))
+
+    return found_backup_files
+
+
 def get_titanium_backup_filenames_usb(pattern=None, usb_device=None, con_ssh=None):
     """
     Gets the titanium system backup files from USB
@@ -1387,12 +1430,13 @@ def import_image_from_backup(image_backup_files, con_ssh=None, fail_ok=False):
     cmd = 'image-backup import '
     for file in image_backup_files:
         if not os.path.abspath(file):
-            msg = "Full path of the image backup file must be provided: {}".format(file)
-            LOG.info(msg)
-            if fail_ok:
-                return 1, msg
-            else:
-                raise ValueError(msg)
+            # msg = "Full path of the image backup file must be provided: {}".format(file)
+            # LOG.info(msg)
+            # if fail_ok:
+            #     return 1, msg
+            # else:
+            #     raise ValueError(msg)
+            file = TiSPath.BACKUPS + '/' + file
         rc, output = con_ssh.exec_sudo_cmd(cmd + file, expect_timeout=300)
         if rc != 0:
             msg = "Image import not successfull for image file: {}".format(file)
@@ -1419,12 +1463,11 @@ def get_cinder_volume_backup_filenames_usb(pattern=None, con_ssh=None):
     return get_backup_files_from_usb(pattern=pattern, con_ssh=con_ssh)
 
 
-def restore_cinder_volumes_from_backup(src_drive='usb',  con_ssh=None, fail_ok=False):
+def restore_cinder_volumes_from_backup( con_ssh=None, fail_ok=False):
     """
     Restores cinder volumes from backup files for system restore. If volume snaphot exist for a volume, it will be
     deleted before restoring the volume
     Args:
-        src_drive(bool): is the source where the backup files are retrieved. Default is USB.
         con_ssh:
         fail_ok:
 
@@ -1434,10 +1477,13 @@ def restore_cinder_volumes_from_backup(src_drive='usb',  con_ssh=None, fail_ok=F
     """
 
     # get the cinder volume backup files from source drive; assuming all backup files are available from usb drive
-    cinder_volume_backups = get_cinder_volume_backup_filenames_usb(pattern=CINDER_VOLUME_BACKUP_FILE_PATTERN,
-                                                                   con_ssh=con_ssh)
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    cinder_volume_backups = get_backup_files(CINDER_VOLUME_BACKUP_FILE_PATTERN, TiSPath.BACKUPS, con_ssh)
+
     if len(cinder_volume_backups) == 0:
-        msg = "No cinder volume backup files found from the {} drive".format(src_drive)
+        msg = "No cinder volume backup files found from the {} drive".format(TiSPath.BACKUPS)
         LOG.info(msg)
         return 1, None
     else:
@@ -1471,7 +1517,7 @@ def restore_cinder_volumes_from_backup(src_drive='usb',  con_ssh=None, fail_ok=F
 
 def import_volumes_from_backup(cinder_volume_backups, con_ssh=None):
     """
-    Imports cinder volumes from backup files for system restore.
+    Imports cinder volumes from backup files in /opt/backups for system restore.
     Args:
         cinder_volume_backups(list): List of cinder volume backup files to restore
         con_ssh:
@@ -1491,18 +1537,6 @@ def import_volumes_from_backup(cinder_volume_backups, con_ssh=None):
         msg = "The cinder volume backup file list specified is empty".format(cinder_volume_backups)
         LOG.info(msg)
     else:
-        # import volumes
-        LOG.info("Starting cinder volumes import: {}".format(volumes))
-        # copy the cinder volume backup files to /opt/backups folder
-        cmd = "cp /media/wrsroot/backups/volume-* /opt/backups"
-        rc, output = con_ssh.exec_sudo_cmd(cmd, expect_timeout=HostTimeout.SYSTEM_RESTORE)
-        if rc != 0:
-            err_msg = "Fail to copy cinder volume backup files from USB to backup folder /opt/backups: {}".format(output)
-            LOG.error(err_msg)
-            raise exceptions.CommonError(err_msg)
-
-        LOG.info(" Cinder volume backups copied to /opt/backups successfully")
-
         for volume_backup_path in cinder_volume_backups:
             volume_backup = os.path.basename(volume_backup_path)
             vol_id = volume_backup[7:-20]
@@ -1521,15 +1555,20 @@ def import_volumes_from_backup(cinder_volume_backups, con_ssh=None):
                 raise exceptions.CinderError(err_msg)
 
             imported_volumes.append(vol_id)
-            LOG.info("Volume id={} imported successfully".format(vol_id))
+            LOG.info("Volume id={} imported successfully\n".format(vol_id))
 
     return imported_volumes
 
 
-def export_cinder_volumes(copy_to_usb=None, delete_backup_file=True, con_ssh=None):
+def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_BACKUP_PATH, dest_server=None, copy_to_usb=None,
+                          delete_backup_file=True, con_ssh=None, fail_ok=False):
     """
     Exports all available and in-use cinder volumes for system backup.
     Args:
+        backup_file_prefix(str): The prefix to the generated system backup files. The default is "titanium_backup_"
+        backup_dest(str): usb or local - the destination of backup files; choices are usb or local (test server)
+        backup_dest_path(str): is the path at destination where the backup files are saved. The defaults are:
+            /media/wrsroot/backups for backup_dest=usb and /sandbox/backups for backup_dest=local.
         copy_to_usb(str): usb_device name where the volume backup files are transferred. Default is None
         delete_backup_file(bool): if enabled, deletes the volume backup files after transfer to USB. Default is enabled
         con_ssh:
@@ -1537,6 +1576,11 @@ def export_cinder_volumes(copy_to_usb=None, delete_backup_file=True, con_ssh=Non
     Returns(list): list of exported volume ids
 
     """
+    if backup_dest == 'usb' and backup_dest_path != BackupRestore.USB_BACKUP_PATH:
+        raise ValueError("If backup file destination is usb then the path must be {}".
+                         format(BackupRestore.USB_BACKUP_PATH))
+    if backup_dest != 'usb' and backup_dest != "local":
+        raise ValueError("Invalid destination {} specified; Valid options are 'usb' and 'local'".format(backup_dest))
 
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
@@ -1553,7 +1597,40 @@ def export_cinder_volumes(copy_to_usb=None, delete_backup_file=True, con_ssh=Non
             if len(current_volumes) > len(volumes_exported):
                 LOG.warn("Not all current cinder volumes are  exported; Unexported volumes: {}"
                          .format(set(current_volumes) - set(volumes_exported)))
-            if copy_to_usb is not None:
+
+            src_files = "/opt/backups/volume-*.tgz"
+
+            if backup_dest == 'local':
+                if dest_server:
+                    if dest_server.ssh_conn.exec_cmd("test -e  {}".format(backup_dest_path))[0] != 0:
+                        dest_server.ssh_conn.exec_cmd("mkdir -p {}".format(backup_dest_path))
+                else:
+                    if local_host.exec_cmd(["test", '-e',  "{}".format(backup_dest_path)])[0] != 0:
+                        local_host.exec_cmd(["mkdir -p {}".format(backup_dest_path)])
+
+                common.scp_from_active_controller_to_test_server(src_files, backup_dest_path, is_dir=False, multi_files=True)
+
+                LOG.info("Verifying if backup files are copied to destination")
+                if dest_server:
+                    rc, output = dest_server.ssh_conn.exec_cmd("ls {}".format(backup_dest_path))
+                else:
+                    rc, output = local_host.exec_cmd(["ls {}".format(backup_dest_path)])
+
+                if rc != 0:
+                    err_msg = "Failed to scp cinder backup files {} to local destination: {}".format(backup_dest_path, output)
+                    LOG.info(err_msg)
+                    if fail_ok:
+                        return 2, err_msg
+                    else:
+                        raise exceptions.BackupSystem(err_msg)
+
+                LOG.info("Cinder volume backup files {} are copied to local destination successfully".format(output))
+
+            else:
+                # copy backup files to USB
+                if copy_to_usb is None:
+                    raise ValueError("USB device name must be provided, if destination is USB")
+
                 LOG.tc_step("Transfer volume tgz file to usb flash drive" )
                 results = mount_usb(usb_device=copy_to_usb)
                 mount_pt = get_usb_mount_point(copy_to_usb)
@@ -1576,26 +1653,40 @@ def export_cinder_volumes(copy_to_usb=None, delete_backup_file=True, con_ssh=Non
                     if len(not_list) > 0:
                         LOG.warn("Following list not copied to usb: {}".format(not_list))
 
-                    if delete_backup_file:
-                        LOG.info("delete volume tgz file from tis server /opt/backups folder ")
-                        con_ssh.exec_sudo_cmd("rm -f /opt/backups/volume-*.tgz")
+                else:
+                    err_msg = "USB {} does not have mount point; cannot copy  backup files {} to USB"\
+                        .format(copy_to_usb, src_files)
+                    LOG.info(err_msg)
+                    if fail_ok:
+                        return 2, err_msg
+                    else:
+                        raise exceptions.BackupSystem(err_msg)
+
+            if delete_backup_file:
+                LOG.info("delete volume tgz file from tis server /opt/backups folder ")
+                con_ssh.exec_sudo_cmd("rm -f /opt/backups/volume-*.tgz")
 
             LOG.info("Volumes exported successfully")
 
     return volumes_exported
 
 
-def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, lab_system_name=None, timeout=HostTimeout.SYSTEM_BACKUP,
-                  copy_to_usb=None, delete_backup_file=True, con_ssh=None, fail_ok=False):
+def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, backup_dest='usb',
+                  backup_dest_path=BackupRestore.USB_BACKUP_PATH, dest_server=None, lab_system_name=None,
+                  timeout=HostTimeout.SYSTEM_BACKUP, copy_to_usb=None, delete_backup_file=True,
+                  con_ssh=None, fail_ok=False):
     """
     Performs system backup  with option to transfer the backup files to USB.
     Args:
         backup_file_prefix(str): The prefix to the generated system backup files. The default is "titanium_backup_"
+        backup_dest(str): usb or local - the destination of backup files; choices are usb or local (test server)
+        backup_dest_path(str): is the path at destination where the backup files are saved. The defaults are:
+            /media/wrsroot/backups for backup_dest=usb and /sandbox/backups for backup_dest=local.
         lab_system_name(str): is the lab system name
         timeout(inst): is the timeout value the system backup is expected to finish.
-        copy_to_usb(str): if usb device name, the backup files are copied to,
-        delete_backup_file(bool): if USB is available, the baackup files are deleted from system to save disk space. Default is
-         enabled
+        copy_to_usb(str): usb device name, if specified,the backup files are copied to. Applicable when backup_dest=usb
+        delete_backup_file(bool): if USB is available, the backup files are deleted from system to save disk space.
+         Default is enabled
         con_ssh:
         fail_ok:
 
@@ -1607,6 +1698,12 @@ def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, lab_system_name=None, t
 
     """
 
+    if backup_dest == 'usb' and backup_dest_path != BackupRestore.USB_BACKUP_PATH:
+        raise ValueError("If backup file destination is usb then the path must be {}".
+                         format(BackupRestore.USB_BACKUP_PATH))
+    if backup_dest != 'usb' and backup_dest != "local":
+        raise ValueError("Invalid destination {} specified; Valid options are 'usb' and 'local'".format(backup_dest))
+
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
     lab = InstallVars.get_install_var("LAB")
@@ -1614,7 +1711,7 @@ def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, lab_system_name=None, t
         lab_system_name = lab['name']
 
     # execute backup command
-    LOG.info("Create backup system and image tgz file under /opt/backups")
+    LOG.info("Create backup system and image tgz files under /opt/backups")
     if copy_to_usb:
         LOG.info("The backup system and image tgz file will be copied to {}:{}"
                  .format(copy_to_usb, get_usb_mount_point(usb_device=copy_to_usb)))
@@ -1636,13 +1733,48 @@ def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, lab_system_name=None, t
             raise exceptions.BackupSystem(err_msg)
     backup_files = output.split()
     LOG.info("System backup files are created in /opt/backups folder: {} ".format(backup_files))
+    if backup_dest == 'local':
+        if os.path.basename(backup_dest_path) != lab['short_name']:
+            backup_dest_path = backup_dest_path + "/{}".format(lab['short_name'])
 
-    # copy backup file to usb
-    if copy_to_usb is not None:
+        if dest_server:
+            if dest_server.ssh_conn.exec_cmd("test -e {}".format(backup_dest_path))[0] != 0:
+                dest_server.ssh_conn.exec_cmd("mkdir -p {}".format(backup_dest_path))
+        else:
+            if local_host.exec_cmd(["test", '-e',  "{}".format(backup_dest_path)])[0] != 0:
+                local_host.exec_cmd(["mkdir -p {}".format(backup_dest_path)])
+
+        src_files = "{} {}".format(backup_files[0].strip(), backup_files[1].strip())
+        common.scp_from_active_controller_to_test_server(src_files, backup_dest_path, is_dir=False, multi_files=True)
+
+        LOG.info("Verifying if backup files are copied to destination")
+        if dest_server:
+            rc, output = dest_server.ssh_conn.exec_cmd("ls {}/{}*.tgz".format(backup_dest_path, backup_file_name ))
+        else:
+            rc, output = local_host.exec_cmd(["ls {}/{}*.tgz".format(backup_dest_path, backup_file_name)])
+
+        if rc != 0:
+            err_msg = "Failed to scp system backup files {} to local destination: {}".format(backup_files, output)
+            LOG.info(err_msg)
+            if fail_ok:
+                return 2, err_msg
+            else:
+                raise exceptions.BackupSystem(err_msg)
+
+        LOG.info("The system backup files {} are copied to local destination successfully".format(output))
+
+    else:
+        # copy backup file to usb
+        if copy_to_usb is None:
+            raise ValueError("USB device name must be provided, if destination is USB")
+
         LOG.tc_step("Transfer system and image tgz file to usb flash drive" )
         result = mount_usb(copy_to_usb)
         mount_pt = get_usb_mount_point(usb_device=copy_to_usb)
         if mount_pt:
+            if mount_pt not in backup_dest_path:
+                raise ValueError("If USB is specified as destination, the destination path must be {}"
+                                 .format(BackupRestore.USB_BACKUP_PATH))
 
             LOG.info("USB is plugged and is mounted to {}".format(mount_pt))
             if con_ssh.exec_cmd("test -e {}/backups".format(mount_pt))[0] != 0:
@@ -1650,7 +1782,8 @@ def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, lab_system_name=None, t
 
             cp_cmd = "cp {} {} {}/backups/".format(backup_files[0].strip(), backup_files[1].strip(), mount_pt)
             con_ssh.exec_sudo_cmd(cp_cmd,expect_timeout=HostTimeout.BACKUP_COPY_USB)
-            LOG.info("Verifying if backup files are copied to USB")
+
+            LOG.info("Verifying if backup files are copied to destination")
             rc, output = con_ssh.exec_cmd("ls {}/backups/{}*.tgz".format(mount_pt, backup_file_name ))
             if rc != 0:
                 err_msg = "Failed to copy system backup files {} to USB: {}".format(backup_files, output)
@@ -1660,22 +1793,35 @@ def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, lab_system_name=None, t
                 else:
                     raise exceptions.BackupSystem(err_msg)
             LOG.info("The system backup files {} are copied to USB successfully".format(output))
-            if delete_backup_file:
-                LOG.info("Deleting system and image tgz file from tis server /opt/backups folder ")
-                con_ssh.exec_sudo_cmd("rm -f /opt/backups/{}*.tgz".format(backup_file_name))
+        else:
+            err_msg = "USB {} does not have mount point; cannot copy  backup files {} to USB"\
+                .format(copy_to_usb, backup_files)
+            LOG.info(err_msg)
+            if fail_ok:
+                return 2, err_msg
+            else:
+                raise exceptions.BackupSystem(err_msg)
+
+    if delete_backup_file:
+        LOG.info("Deleting system and image tgz file from tis server /opt/backups folder ")
+        con_ssh.exec_sudo_cmd("rm -f /opt/backups/{}*.tgz".format(backup_file_name))
 
     LOG.info("Backup completed successfully")
     return 0, None
 
 
-def export_image(image_id, copy_to_usb=None, delete_backup_file=True, con_ssh=None, fail_ok=False):
+def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB_BACKUP_PATH, dest_server=None,
+                 copy_to_usb=None,  delete_backup_file=True, con_ssh=None, fail_ok=False):
     """
     Exports image for backup/restore and copies the image backup file  to USB flash drive if present. T
     he generated image file is deleted from /opt/backups to save disk space after transferring the file to USB.
     Args:
         image_id (str): the image id to be backuped up.
-        copy_to_usb(str): usb device to copy the backups. if specified,
-        Default is None
+        backup_dest(str): usb or local - the destination of backup files; choices are usb or local (test server)
+        backup_dest_path(str): is the path at destination where the backup files are saved. The defaults are:
+            /media/wrsroot/backups for backup_dest=usb and /sandbox/backups for backup_dest=local.
+        copy_to_usb(str): usb device to copy the backups. if specified, the backup_dest_path is compared with the usb
+        mount point. This is applicable when usb is specified for backup_dest.   Default is None
         delete_backup_file(bool): if set, deletes the image backup file from /opt/backups after transferring the file
         to USB.
         con_ssh:
@@ -1687,9 +1833,16 @@ def export_image(image_id, copy_to_usb=None, delete_backup_file=True, con_ssh=No
 
 
     """
+    if backup_dest == 'usb' and backup_dest_path != BackupRestore.USB_BACKUP_PATH:
+        raise ValueError("If backup file destination is usb then the path must be {}".
+                         format(BackupRestore.USB_BACKUP_PATH))
+    if backup_dest != 'usb' and backup_dest != "local":
+        raise ValueError("Invalid destination {} specified; Valid options are 'usb' and 'local'".format(backup_dest))
 
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
+
+    lab = InstallVars.get_install_var("LAB")
 
     if not image_id:
         raise ValueError("Image Id must be provided")
@@ -1697,12 +1850,45 @@ def export_image(image_id, copy_to_usb=None, delete_backup_file=True, con_ssh=No
     img_backup_cmd = 'image-backup export ' + image_id
     # temp sleep wait for image-backup to complete
     con_ssh.exec_sudo_cmd(img_backup_cmd, expect_timeout=300)
+    src_files = "/opt/backups/image_{}*.tgz".format(image_id)
+    if backup_dest == 'local':
+        if dest_server:
+            if dest_server.ssh_conn.exec_cmd(["test -e {}".format(backup_dest_path)])[0] != 0:
+                dest_server.ssh_conn.exec_cmd("mkdir -p {}".format(backup_dest_path))
+        else:
+            if local_host.exec_cmd(["test", '-e',  "{}".format(backup_dest_path)])[0] != 0:
+                local_host.exec_cmd("mkdir -p {}".format(backup_dest_path))
 
-    if copy_to_usb is not None:
+        common.scp_from_active_controller_to_test_server(src_files, backup_dest_path, is_dir=False, multi_files=True)
+
+        LOG.info("Verifying if image backup files are copied to destination")
+        if dest_server:
+            rc, output = dest_server.ssh_conn.exec_cmd("ls {}/{}*.tgz".format(backup_dest_path, src_files ))
+        else:
+            rc, output = local_host.exec_cmd(["ls {}/{}*.tgz".format(backup_dest_path, src_files)])
+
+        if rc != 0:
+            err_msg = "Failed to scp image backup files {} to local destination: {}".format(src_files, output)
+            LOG.info(err_msg)
+            if fail_ok:
+                return 2, err_msg
+            else:
+                raise exceptions.BackupSystem(err_msg)
+
+        LOG.info("The image backup files {} are copied to local destination successfully".format(output))
+    else:
+        # copy to usb
+        if copy_to_usb is None:
+            raise ValueError("USB device name must be provided, if destination is USB")
+
         LOG.tc_step("Transfer image tgz file to usb flash drive" )
         result = mount_usb(copy_to_usb)
         mount_pt = get_usb_mount_point(usb_device=copy_to_usb)
         if mount_pt:
+            if mount_pt not in backup_dest_path:
+                raise ValueError("If USB is specified as destination, the destination path must be {}"
+                                 .format(BackupRestore.USB_BACKUP_PATH))
+
             LOG.info("USB is plugged and is mounted to {}".format(mount_pt))
             if con_ssh.exec_cmd("test -e {}/backups".format(mount_pt))[0] != 0:
                 con_ssh.exec_sudo_cmd("mkdir -p {}/backups".format(mount_pt))
@@ -1717,10 +1903,18 @@ def export_image(image_id, copy_to_usb=None, delete_backup_file=True, con_ssh=No
                     return 2, err_msg
                 else:
                     raise exceptions.CommonError(err_msg)
+        else:
+            err_msg = "USB {} does not have mount point; cannot copy  backup files {} to USB"\
+                .format(copy_to_usb, src_files)
+            LOG.info(err_msg)
+            if fail_ok:
+                return 2, err_msg
+            else:
+                raise exceptions.BackupSystem(err_msg)
 
-            if delete_backup_file:
-                LOG.info("delete image tgz file from tis server /opt/backups folder ")
-                con_ssh.exec_sudo_cmd("rm -f /opt/backups/image_{}*.tgz".format(image_id))
+    if delete_backup_file:
+        LOG.info("delete image tgz file from tis server /opt/backups folder ")
+        con_ssh.exec_sudo_cmd("rm -f /opt/backups/image_{}*.tgz".format(image_id))
 
     LOG.info("Image export completed successfully")
     return 0, None

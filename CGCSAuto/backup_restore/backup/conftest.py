@@ -1,7 +1,6 @@
 
 import pytest
 
-
 import setups
 from consts.auth import CliAuth, Tenant
 from consts.proj_vars import ProjVar, BackupVars, InstallVars
@@ -13,14 +12,21 @@ from consts.proj_vars import ProjVar, BackupVars, InstallVars
 
 def pytest_addoption(parser):
 
-    backup_destination_help = "The destination to scp the backupfiles. Choices are usb ( 16G USB  or above must be " \
-                              "plugged to controller-0) or Test server. Default is usb"
+    backup_server_destination_help = "The external destination  where the backupfiles are copied too. Choices are USB  ( 16G USB  or above must be " \
+                              "plugged to controller-0) or local (Test server). Default is USB"
+    backup_destination_path_help = "The path the backup files are copied to if destination is not a USB. If destination is  USB,  " \
+                                   " by default, the backup files are copied to mount point: /media/wrsroot/backups.  For local (Test Server)" \
+                                   "the default is /sandbox/backups."
 
     delete_backups = "Whether to delete the backupfiles from controller-0:/opt/backups after transfer " \
                      "to the specified destination. Default is True."
 
-    parser.addoption('--backup-dest', '--backup_dest',  dest='backup_dest',
-                     action='store', default='usb',  help=backup_destination_help)
+    parser.addoption('--destination', '--dest',  dest='destination',
+                     action='store', default='usb',  help=backup_server_destination_help)
+
+    parser.addoption('--dest-path', '--dest_path',  dest='dest_path',
+                     action='store', metavar='DIR', help=backup_destination_path_help)
+
     parser.addoption('--delete-backups', '--delete_backups',  dest='delete_backups',
                      action='store', default=True,  help=delete_backups)
 
@@ -29,11 +35,13 @@ def pytest_configure(config):
 
     # Lab install params
     lab_arg = config.getoption('lab')
-    backup_dest = config.getoption('backup_dest')
+    backup_dest = config.getoption('destination')
+    backup_dest_path = config.getoption('dest_path')
     delete_backups = config.getoption('delete_backups')
+
     setups.set_install_params(lab=lab_arg, skip_labsetup=None, resume=None, installconf_path=None,
                               controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None)
-    BackupVars.set_backup_vars(backup_dest=backup_dest, delete_backups=delete_backups)
+    BackupVars.set_backup_vars(backup_dest=backup_dest, backup_dest_path=backup_dest_path, delete_backups=delete_backups)
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -42,7 +50,7 @@ def setup_test_session():
     Setup primary tenant  before the first test gets executed.
     TIS ssh was already set up at collecting phase.
     """
-    # os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
+
     ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
@@ -67,6 +75,7 @@ def reconnect_before_test():
     """
     con_ssh.flush()
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
+
 
 
 def pytest_collectstart():

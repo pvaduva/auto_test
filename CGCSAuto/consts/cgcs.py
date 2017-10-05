@@ -438,3 +438,10 @@ class DevClassIds:
 class MaxVmsSupported:
     SX = 10
     DX = 10
+
+
+class BackupRestore:
+    USB_MOUNT_POINT = '/media/wrsroot'
+    USB_BACKUP_PATH = '{}/backups'.format(USB_MOUNT_POINT)
+    LOCAL_BACKUP_PATH = '/sandbox/backups'
+

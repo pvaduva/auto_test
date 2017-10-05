@@ -1,6 +1,7 @@
 import getpass
 import os
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.cgcs import BackupRestore
 
 
 class ProjVar:
@@ -265,15 +266,29 @@ class RestoreVars:
 
     @classmethod
     def set_restore_vars(cls, backup_src=None,
+                         backup_src_path=None,
                          backup_build_id=None,
                          backup_builds_dir=None):
 
+
+        if backup_src.lower() == 'usb':
+            if backup_src_path is None or \
+                    (backup_src_path is not None and BackupRestore.USB_MOUNT_POINT not in backup_src_path):
+                backup_src_path = BackupRestore.USB_BACKUP_PATH
+
+        elif backup_src.lower() == 'local':
+            if backup_src_path is None:
+                backup_src_path = BackupRestore.LOCAL_BACKUP_PATH
+
+
         cls.__var_dict = {
             'BACKUP_SRC': backup_src if backup_src else "USB",
+            'BACKUP_SRC_PATH': backup_src_path,
             'BACKUP_BUILD_ID': backup_build_id if backup_build_id else None,
 
             'BACKUP_BUILDS_DIR': backup_builds_dir if backup_builds_dir
             else os.path.basename(BuildServerPath.DEFAULT_HOST_BUILDS_DIR),
+            'BACKUP_SRC_SERVER': None,
         }
 
     @classmethod
@@ -295,12 +310,24 @@ class BackupVars:
 
     __var_dict = {}
 
+
     @classmethod
-    def set_backup_vars(cls, backup_dest=None, delete_backups=True):
+    def set_backup_vars(cls, backup_dest=None, backup_dest_path=None, delete_backups=True):
+
+        if backup_dest.lower() == 'usb':
+            if backup_dest_path  is None or \
+                    (backup_dest_path is not None and BackupRestore.USB_MOUNT_POINT not in backup_dest_path):
+                backup_dest_path = BackupRestore.USB_BACKUP_PATH
+
+        elif backup_dest.lower() == 'local':
+            if backup_dest_path is None:
+                backup_dest_path = BackupRestore.LOCAL_BACKUP_PATH
 
         cls.__var_dict = {
-            'BACKUP_DEST': backup_dest if backup_dest else "USB",
+            'BACKUP_DEST': backup_dest.lower() if backup_dest else "usb",
+            'BACKUP_DEST_PATH': backup_dest_path,
             'DELETE_BUCKUPS': delete_backups,
+            'BACKUP_DEST_SERVER': None,
         }
 
     @classmethod

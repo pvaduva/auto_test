@@ -8,6 +8,7 @@ class TiSPath:
     IMAGES = '/home/wrsroot/images/'
     INSTALL_STATUS = 'home/wrsroot/autoinstall_status.log'
     HEAT = '/home/wrsroot/heat/'
+    BACKUPS = '/opt/backups'
 
 
 class VMPath:

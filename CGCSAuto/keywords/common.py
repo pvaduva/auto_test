@@ -113,7 +113,7 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
         index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=timeout)
     if index == 1:
         con_ssh.send(dest_password)
-        index = con_ssh.expect()
+        index = con_ssh.expect(timeout=timeout)
 
     assert index == 0, "Failed to scp files"
 
