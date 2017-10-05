@@ -104,7 +104,9 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
 
     node_thread = threading.Thread(target=bring_node_console_up,
                                    name=node.name,
-                                   args=(node, boot_device, output_dir, upgrade, vlm_power_on, close_telnet_conn ))
+                                   args=(node, boot_device, output_dir),
+                                   kwargs={'upgrade': upgrade, 'vlm_power_on': vlm_power_on,
+                                           'close_telnet_conn': close_telnet_conn})
 
     LOG.info("Starting thread for {}".format(node_thread.name))
     node_thread.start()

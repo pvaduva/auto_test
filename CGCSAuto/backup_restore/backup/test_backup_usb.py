@@ -66,36 +66,26 @@ def pre_system_backup():
         # save backup files in Test Server which local
         backup_dest_path = BackupVars.get_backup_var('BACKUP_DEST_PATH')
         backup_dest_full_path = '{}/{}'.format(backup_dest_path, lab['short_name'])
-        local_host_name = socket.gethostname()
-        local_host_module = None
-        if local_host_name != SvcCgcsAuto.HOSTNAME:
-            # ssh to test server
-            test_server_attr = dict()
-            test_server_attr['name'] = SvcCgcsAuto.HOSTNAME.split('.')[0]
-            test_server_attr['server_ip'] = SvcCgcsAuto.SERVER
-            test_server_attr['prompt'] = r'\[{}@{} {}\]\$ '\
-                .format(SvcCgcsAuto.USER, test_server_attr['name'], SvcCgcsAuto.USER)
+         # ssh to test server
+        test_server_attr = dict()
+        test_server_attr['name'] = SvcCgcsAuto.HOSTNAME.split('.')[0]
+        test_server_attr['server_ip'] = SvcCgcsAuto.SERVER
+        test_server_attr['prompt'] = r'\[{}@{} {}\]\$ '\
+            .format(SvcCgcsAuto.USER, test_server_attr['name'], SvcCgcsAuto.USER)
 
-            test_server_conn = install_helper.establish_ssh_connection(test_server_attr['name'], user=SvcCgcsAuto.USER,
-                                        password=SvcCgcsAuto.PASSWORD, initial_prompt=test_server_attr['prompt'])
+        test_server_conn = install_helper.establish_ssh_connection(test_server_attr['name'], user=SvcCgcsAuto.USER,
+                                    password=SvcCgcsAuto.PASSWORD, initial_prompt=test_server_attr['prompt'])
 
-            test_server_conn.set_prompt(test_server_attr['prompt'])
-            test_server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
-            test_server_attr['ssh_conn'] = test_server_conn
-            test_server_obj = Server(**test_server_attr)
-            _backup_info['dest_server'] = test_server_obj
-            # test if backup path for the lab exist in Test server
-            if test_server_conn.exec_cmd("test -e {}".format(backup_dest_full_path))[0]:
-                test_server_conn.exec_cmd("mkdir -p {}".format(backup_dest_full_path))
-                # delete any existing files
-            test_server_conn.exec_cmd("rm -rf {}/*".format(backup_dest_full_path))
-
-        else:
-            # test if backup path for the lab exist in Test server
-            if local_host.exec_cmd(["test", '-e', '{}'.format(backup_dest_full_path)])[0]:
-                local_host.exec_cmd(["mkdir -p {}".format(backup_dest_full_path)])
+        test_server_conn.set_prompt(test_server_attr['prompt'])
+        test_server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
+        test_server_attr['ssh_conn'] = test_server_conn
+        test_server_obj = Server(**test_server_attr)
+        _backup_info['dest_server'] = test_server_obj
+        # test if backup path for the lab exist in Test server
+        if test_server_conn.exec_cmd("test -e {}".format(backup_dest_full_path))[0]:
+            test_server_conn.exec_cmd("mkdir -p {}".format(backup_dest_full_path))
             # delete any existing files
-            local_host.exec_cmd(["rm -rf {}/*".format(backup_dest_full_path)])
+        test_server_conn.exec_cmd("rm -rf {}/*".format(backup_dest_full_path))
 
         _backup_info['usb_parts_info'] = None
         _backup_info['backup_dest_full_path'] = backup_dest_full_path
