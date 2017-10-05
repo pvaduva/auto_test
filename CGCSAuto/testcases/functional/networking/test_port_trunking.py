@@ -34,11 +34,13 @@ def _bring_up_vlan_interface(vm_id, eth_name, vlan_ids):
 
 
 @mark.parametrize(('guest_os','vif_model'), [
-    ('tis-centos-guest','avp'),
-    ('tis-centos-guest','virtio'),
-    ('tis-centos-guest','e1000')
+    ('tis-centos-guest','avp')
+    #('tis-centos-guest','virtio'),
+   # ('tis-centos-guest','e1000')
 ])
-def _test_port_trunking(guest_os, vif_model):
+
+
+def test_port_trunking(guest_os, vif_model):
     """
     Port trunking feature test cases
 
@@ -91,17 +93,19 @@ def _test_port_trunking(guest_os, vif_model):
 
     # Create Trunks
     LOG.tc_step("Create Parent port for trunk 1")
-    t1_parent_port_id = network_helper.create_port(net_ids[0], trunk1_parent_port)[1]
+    t1_parent_port_id = network_helper.create_port(net_ids[0], trunk1_parent_port, wrs_vif=vif_model)[1]
     ResourceCleanup.add('port', t1_parent_port_id)
 
     t1_parent_port_mac = network_helper.get_ports(rtn_val='mac_address',port_name=trunk1_parent_port)[0]
 
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 1")
-    t1_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk1_subport_1,mac_addr=t1_parent_port_mac)[1]
+    t1_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk1_subport_1,mac_addr=t1_parent_port_mac,
+                                                 wrs_vif=vif_model)[1]
     ResourceCleanup.add('port', t1_sub_port1_id)
 
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 1")
-    t1_sub_port2_id = network_helper.create_port(net_ids[2], name=trunk1_subport_2,mac_addr=t1_parent_port_mac)[1]
+    t1_sub_port2_id = network_helper.create_port(net_ids[2], name=trunk1_subport_2,mac_addr=t1_parent_port_mac,
+                                                 wrs_vif=vif_model)[1]
     ResourceCleanup.add('port', t1_sub_port2_id)
 
     t1_sub_ports = [{'port':t1_sub_port1_id,'segmentation-type': 'vlan','segmentation-id':segment_1},
@@ -114,7 +118,7 @@ def _test_port_trunking(guest_os, vif_model):
     LOG.tc_step("Boot a VM with mgmt net and trunk port")
     mgmt_net_id = network_helper.get_mgmt_net_id()
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}]
-    nics.append({'port-id': t1_parent_port_id, 'vif-model': vif_model})
+    nics.append({'port-id': t1_parent_port_id})
     LOG.tc_step("Boot a vm with created ports")
     vm_id = vm_helper.boot_vm(name='vm-with-trunk1-port', nics=nics, cleanup='function')[1]
     LOG.tc_step("Setup Vlan interfaces inside guest")
@@ -122,14 +126,16 @@ def _test_port_trunking(guest_os, vif_model):
 
     # Create second trunk port  with out the subports and vm
     LOG.tc_step("Create Parent port for trunk 2")
-    t2_parent_port_id = network_helper.create_port(net_ids[0], trunk2_parent_port)[1]
+    t2_parent_port_id = network_helper.create_port(net_ids[0], trunk2_parent_port, wrs_vif=vif_model)[1]
     ResourceCleanup.add('port', t2_parent_port_id)
     t2_parent_port_mac = network_helper.get_ports(rtn_val='mac_address',port_name=trunk2_parent_port)[0]
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 2")
-    t2_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk2_subport_1,mac_addr=t2_parent_port_mac)[1]
+    t2_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk2_subport_1,mac_addr=t2_parent_port_mac,
+                                                 wrs_vif=vif_model)[1]
     ResourceCleanup.add('port', t2_sub_port1_id)
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 2")
-    t2_sub_port2_id = network_helper.create_port(net_ids[2], name=trunk2_subport_2,mac_addr=t2_parent_port_mac)[1]
+    t2_sub_port2_id = network_helper.create_port(net_ids[2], name=trunk2_subport_2,mac_addr=t2_parent_port_mac,
+                                                 wrs_vif=vif_model)[1]
     ResourceCleanup.add('port', t2_sub_port2_id)
 
     t2_sub_ports = [{'port':t2_sub_port1_id,'segmentation-type': 'vlan','segmentation-id':segment_1},
@@ -142,7 +148,7 @@ def _test_port_trunking(guest_os, vif_model):
     LOG.tc_step("Boot a VM with mgmt net and trunk port")
     mgmt_net_id = network_helper.get_mgmt_net_id()
     nics_2 = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}]
-    nics_2.append({'port-id': t2_parent_port_id, 'vif-model': vif_model})
+    nics_2.append({'port-id': t2_parent_port_id})
 
     LOG.tc_step("Boot a vm with created ports")
     vm2_id = vm_helper.boot_vm(name='vm-with-trunk2-port', nics=nics_2, cleanup='function')[1]
