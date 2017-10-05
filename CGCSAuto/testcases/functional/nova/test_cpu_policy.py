@@ -78,7 +78,7 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
     mark.domain_sanity((2, 'dedicated', 'flavor', 'volume')),
     mark.p2((3, 'shared', 'flavor', 'volume')),
     mark.p1((1, 'dedicated', 'flavor', 'image')),
-    mark.nightly((2, 'dedicated', 'image', 'volume')),
+    mark.priorities('nightly')((2, 'dedicated', 'image', 'volume')),
     mark.p2((3, 'shared', 'image', 'volume')),
     mark.domain_sanity((1, 'dedicated', 'image', 'image')),
 ])
@@ -157,7 +157,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
     mark.p1((2, 1, 'flavor', 'image')),
     mark.p1((1, 3, 'image', 'image')),
     mark.p1((2, 4, 'image', 'volume')),
-    mark.nightly((3, 2, 'flavor', 'volume')),
+    mark.priorities('nightly', 'sx_nightly')((3, 2, 'flavor', 'volume')),
 ])
 def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_source, boot_source):
     """

@@ -101,7 +101,7 @@ def test_dvr_update_router(router_info, _bring_up_router):
 
 @mark.parametrize(('vms_num', 'srv_grp_policy'), [
     mark.p2((2, 'affinity')),
-    mark.nightly((2, 'anti-affinity')),
+    mark.priorities('nightly', 'sx_nightly')((2, 'anti-affinity')),
     mark.p2((3, 'affinity')),
     mark.p2((3, 'anti-affinity')),
 ])

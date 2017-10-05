@@ -78,7 +78,7 @@ def ht_and_nonht_hosts():
     mark.p2((2, 'prefer', 1, 0)),
     mark.p2((3, None, 2, 1)),  # should default to prefer behaviour
     mark.p2((4, 'isolate', 2, None)),
-    mark.nightly((5, 'prefer', 3, None)),
+    mark.priorities('nightly', 'sx_nightly')((5, 'prefer', 3, None)),
 ])
 def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, ht_and_nonht_hosts):
     """

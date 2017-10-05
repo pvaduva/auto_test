@@ -43,12 +43,12 @@ def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
     ('local_lvm',   (4, 0, 0), (2, 1, 512), 'volume'),
     ('local_lvm',   (4, 1, 512), (5, 2, 1024), 'volume'),
     ('local_lvm',   (4, 1, 512), (0, 1, 0), 'volume'),
-    mark.nightly(('local_image', (4, 0, 0), (5, 1, 512), 'image')),
+    mark.priorities('nightly', 'sx_nightly')(('local_image', (4, 0, 0), (5, 1, 512), 'image')),
     ('local_image', (4, 1, 512), (5, 2, 1024), 'image'),
-    mark.nightly(('local_image', (5, 1, 512), (5, 1, 0), 'image')),
+    mark.priorities('nightly', 'sx_nightly')(('local_image', (5, 1, 512), (5, 1, 0), 'image')),
     ('local_image', (4, 0, 0), (5, 1, 512), 'volume'),
-    mark.nightly(('local_image', (4, 1, 512), (0, 2, 1024), 'volume')),
-    mark.nightly(('local_image', (4, 1, 512), (1, 1, 0), 'volume')),
+    mark.priorities('nightly', 'sx_nightly')(('local_image', (4, 1, 512), (0, 2, 1024), 'volume')),
+    mark.priorities('nightly', 'sx_nightly')(('local_image', (4, 1, 512), (1, 1, 0), 'volume')),
     ], ids=id_gen)
 def test_resize_vm_positive(add_hosts_to_zone, storage_backing, origin_flavor, dest_flavor, boot_source):
     """

@@ -20,6 +20,7 @@ def hosts_per_stor_backing():
 
 
 @mark.nightly
+@mark.sx_nightly
 def test_vm_with_config_drive(hosts_per_stor_backing):
     """
     Skip Condition:
@@ -40,8 +41,9 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
     guest_os = 'cgcs-guest'
     # guest_os = 'tis-centos-guest'  # CGTS-6782
     img_id = glance_helper.get_guest_image(guest_os)
-    if len(hosts_per_stor_backing['local_image']) < 2:
-        skip("Less than two hosts have local_image storage backing")
+    hosts_num = len(hosts_per_stor_backing['local_image'])
+    if hosts_num < 1:
+        skip("No host with local_image storage backing")
 
     volume_id = cinder_helper.create_volume(name='vol_inst1', guest_image=guest_os, image_id=img_id)[1]
     ResourceCleanup.add('volume', volume_id, scope='function')
@@ -60,6 +62,10 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
     config_drive_data = check_vm_config_drive_data(vm_id)
     assert TEST_STRING in config_drive_data, "The actual content of config drive data: {} is not as expected".\
         format(config_drive_data)
+
+    if hosts_num < 2:
+        LOG.info("Skip migration steps due to less than 2 local_image hosts on system")
+        return
 
     LOG.tc_step("Attempting  cold migrate VM...")
     code, msg = vm_helper.cold_migrate_vm(vm_id, fail_ok=True)

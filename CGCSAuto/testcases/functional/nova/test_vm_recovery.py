@@ -234,7 +234,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
     mark.p1((None, False)),
     mark.p1(('true', True)),
     mark.p1(('false', False)),
-    mark.priorities('domain_sanity', 'nightly')(('True', True)),
+    mark.priorities('domain_sanity', 'nightly', 'sx_nightly')(('True', True)),
 ])
 def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
     """

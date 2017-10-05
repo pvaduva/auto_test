@@ -680,7 +680,7 @@ class TestHTEnabled:
         mark.p1((3, 'dedicated', 'isolate', None, None, 'strict', 'volume', 'cold_mig_revert', None)),
         mark.p1((2, 'dedicated', 'prefer', None, None, None, 'volume', 'cold_mig_revert', None)),
         mark.p1((4, 'dedicated', 'isolate', 2, None, None, 'volume', ['suspend', 'resume', 'rebuild'], None)),
-        mark.priorities('nightly', 'domain_sanity')((6, 'dedicated', 'require', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
+        mark.priorities('nightly', 'domain_sanity', 'sx_nightly')((6, 'dedicated', 'require', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
         mark.p1((5, 'dedicated', 'prefer', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
         # mark.skipif(True, reason="Evacuation JIRA CGTS-4917")
         mark.domain_sanity((3, 'dedicated', 'isolate', None, None, 'strict', 'volume', ['cold_migrate', 'live_migrate'], 'evacuate')),
