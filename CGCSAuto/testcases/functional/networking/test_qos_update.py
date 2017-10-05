@@ -3,87 +3,69 @@ from utils.tis_log import LOG
 from keywords import network_helper, vm_helper
 
 
-def _test_qos_update(reset_qos):
+def test_qos_update(setup_qos):
     """
     Tests network QoS update
-
-    Test Steps:
-
-
-    Test teardown:
-
-
-    #for tenant net
-    - update to remove qos (using keyword with verifications done inside the keyword)
-    - update to add qos that was created by fixture (verification in keyword)
-
-    # for internal net:
-    - update qos to the one created by test fixture
-
-    - launch two vms with above two networks
-    - ping between vms over above two networks
-    """
-
-    network_internal, network_tenant, qos_new = reset_qos
-    # TODO:Update with actual keyword
-    LOG.tc_step("Updating internal network to new QoS")
-    network_helper.update_qos(qos_new, network_internal)
-    LOG.tc_step("Testing ping over networks")
-    vm_helper.ping_vms_from_vm(to_vms='vm2', from_vm='vm1', net_types=['internal', 'data'])
-    vm_helper.ping_vms_from_vm(to_vms=vm1, from_vm=vm2)
-
-@fixture()
-def reset_qos(request):
-    """
-    Setup
+    Test Setup:
     - create a qos policy
     - get tenant net id
     - get internal net id
     - record the original qos values for above two networks
     - return qos, tenant_net, internal_net
 
-    Teardown:
+    Test Steps:
+    -update networks with created qos
+    -test ping over networks
+
+    Test teardown:
     - restore the qos settings for both networks
     - delete the qos created by fixture
     - delete the vms (existing fixture)
-
     """
+
+    internal_net, tenant_net, qos_new, vm1, vm2 = setup_qos
+    LOG.tc_step("updating tenant network to created QoS")
+    network_helper.update_net_qos(net_id=tenant_net, qos_id=qos_new)
+    LOG.tc_step("Updating internal network to new QoS")
+    network_helper.update_net_qos(net_id=internal_net, qos_id=qos_new)
+
+    LOG.tc_step("Testing ping over networks")
+    vm_helper.ping_vms_from_vm(to_vms=vm2, from_vm=vm1, net_types=['internal', 'data'])
+    vm_helper.ping_vms_from_vm(to_vms=vm1, from_vm=vm2, net_types=['internal', 'data'])
+
+
+@fixture()
+def setup_qos(request):
+
     LOG.fixture_step("Creating new QoS")
-    code, qos_new, output = network_helper.create_qos('test', 'test qos', scheduler='weight=4')
+    qos_args = {"scheduler": "weight=4"}
+    qos_new = network_helper.create_qos('test', args_dict=qos_args)[1]
 
-    network_internal = network_helper.get_internal_net_id()
-    network_tenant = network_helper.get_tenant_net_id(net_name="net0")
-
-    qos_internal = network_helper.get_net_info(net_id=network_internal, field='wrs-tm:qos')
-    qos_tenant = network_helper.get_net_info(net_id=network_tenant, field='wrs-tm:qos')
+    LOG.fixture_step("Retrieving network ids and Qos'")
+    internal_net = network_helper.get_internal_net_id()
+    tenant_net = network_helper.get_tenant_net_id()
+    qos_internal = network_helper.get_net_info(net_id=internal_net, field='wrs-tm:qos')
+    qos_tenant = network_helper.get_net_info(net_id=tenant_net, field='wrs-tm:qos')
+    mgmt_net_id = network_helper.get_mgmt_net_id()
 
     LOG.fixture_step("Creating new vms")
-
+    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+            {'net-id': internal_net, 'vif-model': 'virtio'},
+            {'net-id': tenant_net, 'vif-model': 'virtio'}]
+    vm1 = vm_helper.boot_vm(name='vm1', nics=nics)[1]
+    vm2 = vm_helper.boot_vm(name='vm2', nics=nics)[1]
 
     def reset():
         LOG.fixture_step("Resetting QoS for tenant and internal networks")
-        #TODO:Update with actual keyword
-        network_helper.update_qos(qos_internal, network_internal)
-        network_helper.update_qos(qos_id=qos_tenant, network_id=network_tenant)
+
+        network_helper.update_net_qos(net_id=internal_net, qos_id=qos_internal)
+        network_helper.update_net_qos(net_id=tenant_net, qos_id=qos_tenant)
 
         LOG.fixture_step("Deleting created QoS")
         network_helper.delete_qos(qos_new)
 
         LOG.fixture_step("Deleting vms")
-        vm_helper.delete_vms(vms=[vm1[1], vm2[1]])
+        vm_helper.delete_vms(vms=[vm1, vm2])
 
     request.addfinalizer(reset)
-    return network_internal, network_tenant, qos_new
-
-
-def test_create_qos(request):
-    LOG.fixture_step("Creating QoS")
-    exit_code, qos_id, output = network_helper.create_qos("test", description="Test QoS", scheduler="weight=4",
-                                                          tenant_name='tenant1')
-    assert exit_code == 0
-
-    def delete_qos():
-        LOG.fixture_step("Deleting created qos")
-        code, output = network_helper.delete_qos(qos_id)
-        assert code == 0
-    delete_qos()
+    return internal_net, tenant_net, qos_new, vm1, vm2

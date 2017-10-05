@@ -910,46 +910,65 @@ def get_qos(name=None, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
-def create_qos(name, tenant_name=None, description=None, dscp=None, ratelimit=None, scheduler=None, fail_ok=False,
-               con_ssh=None, auth_info=Tenant.ADMIN):
+def create_qos(name, tenant_name=None, description=None, dscp=None, ratelimit=None, scheduler=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Args:
+        tenant_name=None, description=None, dscp=None, ratelimit=None, scheduler=None,
         name(str): Name of the QoS
         tenant_name(str): Such as tenant1, tenant2
         description(str): Description of the QoS
-        dscp(): Policies for dscp
-        ratelimit(str): Policies for ratelimit
-        scheduler(str): Policies for scheduler eg "weight=4"
+        dscp(dict): Policies for dscp
+        ratelimit(dict): Policies for ratelimit
+        scheduler(dict): Policies for scheduler eg "'weight':4"
         fail_ok(bool):
         con_ssh(SSHClient):
         auth_info(dict): run the neutron qos-create cli using this authorization info
 
-    Returns(tuple): exit_code(int), qos_id(str), message(str)
-
+    Returns(tuple): exit_code(int), qos_id(str), output(str)
+                    (0, qos_id) qos successfully created.
+                    (1, output) cli accepted but qos not found in list
+                    (2, output) qos fields not created properly
     """
     args = '--name ' + name
+
     if tenant_name:
+        keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)
         args += ' --tenant-id ' + "{} ".format(keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh))
     if description:
         args += ' --description ' + "'{}' ".format(description)
-    if scheduler:
-        args += '--scheduler ' + scheduler
-    if dscp:
-        args += '--dscp ' + dscp
-    if ratelimit:
-        args += '--ratelimit ' + ratelimit
+    for key, value in scheduler:
+        args += '--scheduler ' + "{}={}".format(key, value)
+    for key, value in dscp:
+        args += '--dscp ' + "{}={}".format(key, value)
+    for key, value in ratelimit:
+        args += '--ratelimit ' + "{}={}".format(key, value)
+
+    args = '--name ' + name
 
     LOG.info("Creating QoS: args: {}".format(args))
     exit_code, output = cli.neutron('qos-create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
                                     rtn_list=True)
-    table_ = table_parser.table(output)
-    qos_id = table_parser.get_value_two_col_table(table_, 'id')
 
     if exit_code == 1:
-        return 1, '', output
+        return 1, output
 
-    if exit_code == 0:
-        return 0, qos_id, output
+    table_ = table_parser.table(output)
+    qos_id = table_parser.get_value_two_col_table(table_, 'id')
+    tenant_id = table_parser.get_value_two_col_table(table_, 'tenant_id')
+    if qos_id in get_qos(con_ssh=con_ssh, auth_info=auth_info):
+        msg = "QoS policies not added correctly"
+        if description is not None:
+            if description != table_parser.get_value_two_col_table(table_, 'description'):
+                return 2, msg
+        if tenant_name is not None:
+            if tenant_id != keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh):
+                return 2, msg
+    else:
+        LOG.info("QoS not found in qos list")
+        return 1, output
+
+    LOG.info("QoS successfully created")
+    return 0, qos_id
 
 
 def delete_qos(qos_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
@@ -962,22 +981,22 @@ def delete_qos(qos_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
         fail_ok(bool):
 
     Returns: code(int), output(string)
-
+            (0, "QoS <qos_id> successfully deleted" )
+            (1, <std_err>)  openstack qos delete cli rejected
+            (2, "QoS <qos_id> still listed in neutron QoS list") Command failed and fail_ok
     """
 
     LOG.info("deleting QoS: {}".format(qos_id))
     code, output = cli.neutron('qos-delete', qos_id, auth_info=auth_info, ssh_client=con_ssh, fail_ok=fail_ok,
                                rtn_list=True)
 
-    if code == 1:
-        return 1, output
-
     if qos_id in get_qos(auth_info=auth_info, con_ssh=con_ssh):
         msg = "QoS {} still listed in neutron QoS list".format(qos_id)
         if fail_ok:
             LOG.warning(msg)
             return 2, msg
-        raise exceptions.NeutronError(msg)
+        else:
+            return 1, msg
 
     succ_msg = "QoS {} successfully deleted".format(qos_id)
     return 0, succ_msg
