@@ -260,7 +260,8 @@ def test_delete_host_partitions():
 
     con_ssh = ControllerClient.get_active_controller()
 
-    hosts = host_helper.get_hosts()
+    computes = system_helper.get_hostnames(personality="compute")
+    hosts = system_helper.get_controllers() + computes
 
     LOG.tc_step("Find out which hosts have partitions in Ready state")
     partitions_ready = get_partitions(hosts, "Ready")
