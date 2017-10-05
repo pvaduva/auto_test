@@ -70,7 +70,7 @@ def delete_partition(host, uuid, timeout=DP_TIMEOUT):
     return rc, out
 
 
-def create_partition(host, device_node, size_mib, timeout=CP_TIMEOUT):
+def create_partition(host, device_node, size_mib, fail_ok=False, timeout=CP_TIMEOUT):
     """
     Create a partition on host.
 
@@ -84,7 +84,10 @@ def create_partition(host, device_node, size_mib, timeout=CP_TIMEOUT):
     * rc, out - return code and output of the host-disk-partition-command
     """
 
-    rc, out = cli.system('host-disk-partition-add -t lvm_phys_vol {} {} {}'.format(host, device_node, size_mib), rtn_list=True)
+    rc, out = cli.system('host-disk-partition-add -t lvm_phys_vol {} {} {}'.format(host, device_node, size_mib), rtn_list=True, fail_ok=fail_ok)
+    if fail_ok:
+        return rc, out
+
     uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
 
     end_time = time.time() + timeout
@@ -123,6 +126,50 @@ def get_partition_info(host, uuid, param=None):
     return param_value
 
 
+def get_disks(host):
+    """
+    This returns disks on a host.
+
+    Arguments:
+    * host(str) - hostname, e.g. controller-0
+
+    Returns:
+    * disks(list) - list of uuids
+    """
+   
+    table_ = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host)))
+    disk_uuids = table_parser.get_values(table_, "uuid")
+    LOG.debug("{} has {} disks".format(host, len(disk_uuids)))
+
+    return disk_uuids
+
+
+def get_disks_with_free_space(host, disk_list):
+    """
+    Given a list of disks, return the ones with free space.
+
+    Arguments:
+    * host(str) - hostname, e.g. ocntroller-0
+    * disks(list) - list of disks
+
+    Returns:
+    * disks_free(list) - list of disks that have usable space.
+    """
+
+    free_disks = {}
+    for disk in disk_list:
+        LOG.info("Querying disk {} on host {}".format(disk, host))
+        table_ = table_parser.table(cli.system('host-disk-show {} {}'.format(host, disk)))
+        available_space = table_parser.get_value_two_col_table(table_, "available_mib")
+        LOG.info("{} has disk {} with {} available".format(host, disk, available_space))
+        if int(available_space) <=  0:
+            LOG.info("Removing disk {} from host {} due to insufficient space".format(disk, host))
+        else:
+            free_disks[disk] = available_space
+
+    return free_disks
+
+
 def _test_partitions():
     """
     NOTE: Need this later for semantic checks implementation.
@@ -146,34 +193,6 @@ def _test_partitions():
 
     """
 
-    con_ssh = ControllerClient.get_active_controller()
-
-    hosts = host_helper.get_hosts()
-
-    disks = {}
-    # Extract the disks on each host
-    for host in hosts:
-        disks[host] = []
-        table_ = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host)))
-        disk_uuid = table_parser.get_values(table_, "uuid")
-        disks[host] = disk_uuid
-        LOG.debug("{} has {} disks".format(host, len(disk_uuid)))
-
-    # Check the free space on each disk on each host.
-    # Remove disks have insufficient space
-    for host in hosts:
-        disk_list = deepcopy(disks[host])
-        for disk in disk_list:
-            LOG.debug("Querying disk {} on host {}".format(disk, host))
-            table_ = table_parser.table(cli.system('host-disk-show {} {}'.format(host, disk)))
-            available_space = table_parser.get_value_two_col_table(table_, "available_mib")
-            LOG.debug("{} has disk {} with {} available".format(host, disk, available_space))
-            if int(available_space) <= 1:
-                LOG.debug("Removing disk {} from host {} due to insufficient space".format(disk, host))
-                disks[host].remove(disk)
-
-    LOG.info("Disks with available disk space: {}".format(disks))
-
     rootfs_uuid = {}
     # Determine which disks are used for rootfs and map device_node and
     # device_path to uuid
@@ -191,40 +210,6 @@ def _test_partitions():
         rootfs_uuid[host] = uuid
 
     LOG.info("Root disk UUIDS: {}".format(rootfs_uuid))
-
-    # Remove hosts that do not have disks we can test with
-    testable_hosts = deepcopy(hosts)
-    for host in hosts:
-        if len(disks[host]) == 0:
-            LOG.debug("Removing {} from testable hosts".format(host))
-            testable_hosts.remove(host)
-
-    if len(testable_hosts) == 0:
-        skip("Insufficient hosts to test with.")
-
-    # Testable hosts where there is disk space to create a new partition
-    LOG.info("Testable hosts are: {}".format(testable_hosts))
-
-    LOG.tc_step("Query existing partitions and their states")
-    partitions_ready = get_partitions(hosts, "Ready")
-    partitions_inuse = get_partitions(hosts, "In-use")
-    partitions_creating = get_partitions(hosts, "Creating")
-    partitions_deleting = get_partitions(hosts, "Deleting")
-    partitions_error = get_partitions(hosts, "Error")
-
-    LOG.info("Partitions in Ready state: {}".format(partitions_ready))
-    LOG.info("Partitions in In-use state: {}".format(partitions_inuse))
-    LOG.info("Partitions in Creating state: {}".format(partitions_creating))
-    LOG.info("Partitions in Deleting state: {}".format(partitions_deleting))
-    LOG.info("Partitions in Error state: {}".format(partitions_error))
-
-    # We can only delete/modify/edit/resize the last partition
-    # TODO: algorithm to determine last partition where there is more than one
-    hosts_partition_mod_ok = []
-    for host in hosts:
-        if len(partitions_ready[host]) == 1:
-            hosts_partition_mod_ok.extend(host)
-    LOG.info("These hosts have partitions that can be modified: {}".format(hosts_partition_mod_ok))
 
 
 @fixture()
@@ -302,3 +287,30 @@ def test_delete_host_partitions():
         deleted_partitions[host].append(uuid[0])
 
 
+def test_create_host_partition_on_storage():
+    """
+    This test attempts to create a host partition on a storage node.  It is
+    expected to fail, since host partition creation is only supported on
+    controllers and computes.
+
+    Assumptions:
+    * We run this on a storage system, otherwise we will skip the test.
+    """
+
+    con_ssh = ControllerClient.get_active_controller()
+
+    hosts = system_helper.get_storage_nodes()
+
+    if not hosts:
+        skip("This test requires storage nodes.")
+
+
+    LOG.tc_step("Gather the disks available on each host")
+    for host in hosts:
+        disks = get_disks(host)
+        free_disks = get_disks_with_free_space(host, disks)
+        if not free_disks:
+            skip("There are no disks with available disk space.")
+        for uuid in free_disks:
+           rc, out = create_partition(host, uuid, free_disks[uuid], fail_ok=True)
+           assert rc != 0, "Partition creation was successful"
