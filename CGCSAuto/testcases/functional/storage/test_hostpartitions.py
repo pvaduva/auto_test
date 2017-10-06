@@ -382,8 +382,11 @@ def test_increase_host_partition_size():
     Test Steps:
     * Query the partitions on each host, and grab those hosts that have one
       partition in Ready state.
-    * Delete which of those hosts have space on the disk for resize up
-    * Resize those partitions
+    * Determine which partitions are on a disk with available space
+    * Modify the partition so we consume all available space on the disk
+    * Check that the disk available space goes to zero
+    * Delete the partition
+    * Check that the available space is freed
 
     Teardown:
     * Delete the partitions and then re-create it with the old size.
@@ -392,9 +395,6 @@ def test_increase_host_partition_size():
     * Create partitions (if possible) when there are none in Ready state
     * Query hosts for last partition instead of picking hosts with one
       partition.  Note, only the last partition can be modified.
-    * Check disk space goes to 0 when partition is resized 
-    * Check disk space goes back to what it was when partition is re-created at
-      original size
     """
 
     global partitions_to_restore
@@ -426,14 +426,19 @@ def test_increase_host_partition_size():
         if disk_available_mib == "0":
             break
         usable_disks = True
-        LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on device node {}".format(uuid[0], size_mib, disk_available_mib, host, device_node[:-1]))
-        modify_partition(host, uuid[0], disk_available_mib)
+        total_size = int(size_mib) + int(disk_available_mib)
+        LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on device node {}".format(uuid[0], size_mib, str(total_size), host, device_node[:-1]))
+        modify_partition(host, uuid[0], str(total_size))
+        new_disk_available_mib = get_disk_info(host, device_node[:-1], "available_mib")
+        assert new_disk_available_mib == "0", "Expected disk space to be consumed but instead we have {} available".format(new_disk_available_mib)
         partitions_to_restore[host] = []
         partitions_to_restore[host].append(device_node[:-1])
         partitions_to_restore[host].append(size_mib)
         partitions_to_restore[host].append(uuid[0])
-        LOG.tc_step("Deleting partition {} of size {} from host {} on device node {}".format(uuid[0], size_mib, host, device_node[:-1]))
+        LOG.tc_step("Deleting partition {} of size {} from host {} on device node {}".format(uuid[0], total_size, host, device_node[:-1]))
         delete_partition(host, uuid[0])
+        new_disk_available_mib = get_disk_info(host, device_node[:-1], "available_mib")
+        assert new_disk_available_mib == str(total_size), "Expected {} in disk space to be freed but instead we have {} available".format(total_size, new_disk_available_mib)
 
     if not usable_disks:
         skip("Did not find disks with sufficient space to test with.")
