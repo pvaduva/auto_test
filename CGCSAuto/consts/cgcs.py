@@ -211,11 +211,8 @@ class FlavorSpec:
     PCI_IRQ_AFFINITY_MASK = "hw:pci_irq_affinity_mask"
     CPU_REALTIME = 'hw:cpu_realtime'
     CPU_REALTIME_MASK = 'hw:cpu_realtime_mask'
-<<<<<<< HEAD
     HPET_TIMER = 'sw:wrs:guest:hpet'
-=======
     NESTED_VMX = 'hw:wrs:nested_vmx'
->>>>>>> ae59f8b00a94ef4e915f03a30855d84edd272556
 
 
 class ImageMetadata:
