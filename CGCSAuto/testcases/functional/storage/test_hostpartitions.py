@@ -1,22 +1,40 @@
-import ast
-import re
-import math
+"""
+These tests are designed to test the host partition functionality that was
+introduced in Release 5.  The user can create partitions on computes and
+controllers only using available free space on the disks.  These partitions can
+then be assigned to a PV such as nova-local.
+
+The states supported by partitions are:
+- Creating
+- Deleting
+- In-use
+- Error
+- Ready
+
+The partition commands are:
+- system host-disk-partition-list
+- system host-disk-partition-add
+- system host-disk-partition-show
+- system host-disk-partition-delete
+- system host-disk-partition-modify
+
+Partition changes are done in service.
+"""
+
+
 import time
-from copy import deepcopy
 
-from pytest import fixture, skip, mark
-
-from consts.auth import Tenant
-from consts.cgcs import EventLogID, HostAvailabilityState
-from keywords import host_helper, system_helper, local_storage_helper, install_helper
-from testfixtures.recover_hosts import HostsToRecover
+from keywords import system_helper
 from utils import cli, table_parser
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-
+from pytest import fixture, mark
 
 CP_TIMEOUT = 120
 DP_TIMEOUT = 120
+
+global deleted_partitions
+deleted_partitions = {}
+
 
 def get_partitions(hosts, state):
     """
@@ -136,7 +154,7 @@ def get_disks(host):
     Returns:
     * disks(list) - list of uuids
     """
-   
+
     table_ = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host)))
     disk_uuids = table_parser.get_values(table_, "uuid")
     LOG.debug("{} has {} disks".format(host, len(disk_uuids)))
@@ -162,7 +180,7 @@ def get_disks_with_free_space(host, disk_list):
         table_ = table_parser.table(cli.system('host-disk-show {} {}'.format(host, disk)))
         available_space = table_parser.get_value_two_col_table(table_, "available_mib")
         LOG.info("{} has disk {} with {} available".format(host, disk, available_space))
-        if int(available_space) <=  0:
+        if int(available_space) <= 0:
             LOG.info("Removing disk {} from host {} due to insufficient space".format(disk, host))
         else:
             free_disks[disk] = available_space
@@ -258,8 +276,6 @@ def test_delete_host_partitions():
     global deleted_partitions
     deleted_partitions = {}
 
-    con_ssh = ControllerClient.get_active_controller()
-
     computes = system_helper.get_hostnames(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
@@ -298,13 +314,10 @@ def test_create_host_partition_on_storage():
     * We run this on a storage system, otherwise we will skip the test.
     """
 
-    con_ssh = ControllerClient.get_active_controller()
-
     hosts = system_helper.get_storage_nodes()
 
     if not hosts:
         skip("This test requires storage nodes.")
-
 
     LOG.tc_step("Gather the disks available on each host")
     for host in hosts:
@@ -313,5 +326,5 @@ def test_create_host_partition_on_storage():
         if not free_disks:
             skip("There are no disks with available disk space.")
         for uuid in free_disks:
-           rc, out = create_partition(host, uuid, free_disks[uuid], fail_ok=True)
-           assert rc != 0, "Partition creation was successful"
+            rc, out = create_partition(host, uuid, free_disks[uuid], fail_ok=True)
+            assert rc != 0, "Partition creation was successful"
