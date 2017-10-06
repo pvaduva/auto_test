@@ -90,7 +90,7 @@ def delete_partition(host, uuid, timeout=DP_TIMEOUT):
     return rc, out
 
 
-def create_partition(host, device_node, size_mib, fail_ok=False, timeout=CP_TIMEOUT):
+def create_partition(host, device_node, size_mib, fail_ok=False, wait=True, timeout=CP_TIMEOUT):
     """
     Create a partition on host.
 
@@ -105,7 +105,7 @@ def create_partition(host, device_node, size_mib, fail_ok=False, timeout=CP_TIME
     """
 
     rc, out = cli.system('host-disk-partition-add -t lvm_phys_vol {} {} {}'.format(host, device_node, size_mib), rtn_list=True, fail_ok=fail_ok)
-    if fail_ok:
+    if fail_ok or not wait:
         return rc, out
 
     uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
@@ -307,6 +307,23 @@ def restore_partitions_teardown(request):
     request.addfinalizer(teardown)
 
 
+@fixture()
+def delete_partitions_teardown(request):
+    def teardown():
+        """
+        Restore deleted partitions.
+        """
+        global partitions_to_restore 
+
+        for host in partitions_to_restore: 
+            uuid = partitions_to_restore[host][0]
+            LOG.info("Deleting partition on host {} with uuid {}".format(host, uuid))
+            rc, out = delete_partition(host, uuid) 
+            assert rc == 0, "Partition deletion failed" 
+
+    request.addfinalizer(teardown)
+
+
 @mark.usefixtures('restore_partitions_teardown')
 def test_delete_host_partitions():
     """
@@ -334,7 +351,7 @@ def test_delete_host_partitions():
 
     """
 
-    global partitions_to_restore 
+    global partitions_to_restore
     partitions_to_restore = {}
 
     computes = system_helper.get_hostnames(personality="compute")
@@ -442,6 +459,103 @@ def test_increase_host_partition_size():
 
     if not usable_disks:
         skip("Did not find disks with sufficient space to test with.")
+
+
+@mark.usefixtures('delete_partitions_teardown')
+def test_create_multiple_partitions_on_single_host():
+    """
+    This test attempts to create multiple partitions at once on a single host.
+    While the first partition is being created, we will attempt to create a
+    second partition.  The creation of the second partition should be rejected
+    but the creation of the first partition should be successful.
+
+    Assumptions:
+    * There's some free disk space available 
+
+    Test steps:
+    * Query the hosts to determine disk space
+    * Create a small partition but don't wait for creation
+    * Immediately create a second small partition
+    * Check that the second partition creation is rejected
+    * Check the first partition was successfully created
+    * Repeat on all applicable hosts
+
+    Teardown:
+    * Delete created partitions
+    
+    """
+
+    global partitions_to_restore
+    partitions_to_restore = {}
+
+    computes = system_helper.get_hostnames(personality="compute")
+    hosts = system_helper.get_controllers() + computes
+
+    usable_disks = False
+    for host in hosts:
+        disks = get_disks(host)
+        free_disks = get_disks_with_free_space(host, disks)
+        if not free_disks:
+            skip("There are no disks with available disk space.")
+        for uuid in free_disks:
+            size_mib = int(free_disks[uuid])
+            partition_chunks = size_mib / 1024
+            if partition_chunks < 2:
+                LOG.tc_step("Skip this disk due to insufficient space")
+                break
+            usable_disks = True
+            LOG.info("Creating first partition on {}".format(host))
+            rc1, out1 = create_partition(host, uuid, "1024", fail_ok=False, wait=False)
+            LOG.info("Creating second partition on {}".format(host))
+            rc, out = create_partition(host, uuid, "1024", fail_ok=True)
+            assert rc != 0, "Partition creation was expected to fail but was instead successful"
+            # Check that first disk was created
+            uuid = table_parser.get_value_two_col_table(table_parser.table(out1), "uuid")
+
+            partition_created = False
+            end_time = time.time() + CP_TIMEOUT 
+            while time.time() < end_time:
+                status = get_partition_info(host, uuid, "status")
+                LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
+                assert status == "Creating" or status == "Ready", "Partition has unexpected state {}".format(status)
+                if status == "Ready":
+                    LOG.info("Partition {} on host {} has {} state".format(uuid, host, status))
+                    partition_created = True
+                    break
+            assert partition_created, "First partition was not successfully created"
+            partitions_to_restore[host] = []
+            partitions_to_restore[host].append(uuid)
+            # Only test one disk on each host
+            break
+
+    if not usable_disks:
+        skip("Did not find disks with sufficient space to test with.")
+
+
+def test_create_zero_sized_host_partition():
+    """
+    This test attempts to create a partition of size zero once on each host.
+    This should be rejected.
+
+    Test steps:
+    * Create partition of size zero
+    * Ensure the provisioning is rejected
+
+    Teardown:
+    * None
+    """
+
+    computes = system_helper.get_hostnames(personality="compute")
+    hosts = system_helper.get_controllers() + computes
+
+    for host in hosts:
+        disks = get_disks(host)
+        for uuid in disks:
+            LOG.tc_step("Attempt to create zero sized partition on uuid {} on host {}".format(uuid, host))
+            rc, out = create_partition(host, uuid, "0", fail_ok=True)
+            assert rc != 0, "Partition creation was expected to fail but instead succeeded"
+            # Let's do this for one disk only on each host
+            break
 
 
 def test_decrease_host_partition_size():
