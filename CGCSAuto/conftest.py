@@ -461,11 +461,11 @@ def pytest_unconfigure():
         except:
             LOG.warning("'collect all' failed.")
 
-    if ProjVar.get_var('KEYSTONE_DEBUG'):
-        try:
-            setups.enable_disable_keystone_debug(enable=False, con_ssh=con_ssh)
-        except:
-            LOG.warning("Disable keystone debug failed")
+    # if ProjVar.get_var('KEYSTONE_DEBUG'):
+    #     try:
+    #         setups.enable_disable_keystone_debug(enable=False, con_ssh=con_ssh)
+    #     except:
+    #         LOG.warning("Disable keystone debug failed")
 
     # close ssh session
     try:
