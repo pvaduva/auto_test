@@ -44,7 +44,7 @@ def get_partitions(hosts, state):
 
     Arguments:
     * hosts(list) - list of host names
-    * state(str) - partition state, i.e. Creating, Ready, In-use, Deleting, Error
+    * state(str) - partition state, i.e. Creating, Ready, In-use, Deleting, Error, Modifying
 
     Return:
     * dict of hostnames mapped to partitions
@@ -69,8 +69,8 @@ def delete_partition(host, uuid, timeout=DP_TIMEOUT):
     Delete a partition from a specific host.
 
     Arguments:
-    * host - hostname, e.g. controller-0
-    * uuid - uuid of partition
+    * host(str) - hostname, e.g. controller-0
+    * uuid(str) - uuid of partition
     * timeout(int) - how long to wait for partition deletion (sec)
 
     Returns:
@@ -444,6 +444,106 @@ def test_increase_host_partition_size():
         skip("Did not find disks with sufficient space to test with.")
 
 
+def test_decrease_host_partition_size():
+    """
+    This test attempts to decrease the size of an existing host partition.  It
+    is expected to fail since decreasing the size of a partition is not
+    supported.
+
+    Assumptions:
+    * Partitions are available in Ready state.
+
+    Test Steps:
+    * Query hosts to determine Ready partitions
+    * Query the partition to get the partition size
+    * Modify the partition to decrease its size
+
+    Teardown:
+    * None
+
+    Enhancement Ideas:
+    * Create partitions (if possible) when there are none in Ready state
+    * Query hosts for last partition instead of picking hosts with one
+      partition.  Note, only the last partition can be modified.
+
+    """
+
+    computes = system_helper.get_hostnames(personality="compute")
+    hosts = system_helper.get_controllers() + computes
+
+    LOG.tc_step("Find out which hosts have partitions in Ready state")
+    partitions_ready = get_partitions(hosts, "Ready")
+
+    hosts_partition_mod_ok = []
+    for host in hosts:
+        # ENHANCEMENT - modify to look for only the last partition
+        if len(partitions_ready[host]) == 1:
+            hosts_partition_mod_ok.append(host)
+
+    if not hosts_partition_mod_ok:
+        # ENHANCEMENT - modify to create partitions if they don't already exist (if possible)
+        skip("Need some partitions in Ready state in order to run test")
+
+    for host in hosts_partition_mod_ok:
+        uuid = partitions_ready[host]
+        device_node = get_partition_info(host, uuid[0], "device_node")
+        size_mib = get_partition_info(host, uuid[0], "size_mib")
+        total_size = int(size_mib) - 1
+        LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on device node {}".format(uuid[0], size_mib, str(total_size), host, device_node[:-1]))
+        rc, out = modify_partition(host, uuid[0], str(total_size), fail_ok=True)
+        assert rc != 0, "Expected partition modification to fail and instead it succeeded"
+
+
+def test_increase_host_partition_size_beyond_avail_disk_space():
+    """
+    This test attempts to increase the size of an existing host partition
+    beyond the available space on disk.  It is expected to fail.
+
+    Assumptions:
+    * Partitions are available in Ready state.
+
+    Test steps:
+    * Query hosts to determine Ready partitions
+    * Query the disk the partition is located on to get the available size
+    * Modify the partition to consume over than the available disk space
+
+    Teardown:
+    * None
+
+    Enhancement Ideas:
+    * Create partitions (if possible) when there are none in Ready state
+    * Query hosts for last partition instead of picking hosts with one
+      partition.  Note, only the last partition can be modified.
+
+    """
+
+    computes = system_helper.get_hostnames(personality="compute")
+    hosts = system_helper.get_controllers() + computes
+
+    LOG.tc_step("Find out which hosts have partitions in Ready state")
+    partitions_ready = get_partitions(hosts, "Ready")
+
+    hosts_partition_mod_ok = []
+    for host in hosts:
+        # ENHANCEMENT - modify to look for only the last partition
+        if len(partitions_ready[host]) == 1:
+            hosts_partition_mod_ok.append(host)
+
+    if not hosts_partition_mod_ok:
+        # ENHANCEMENT - modify to create partitions if they don't already exist (if possible)
+        skip("Need some partitions in Ready state in order to run test")
+
+    for host in hosts_partition_mod_ok:
+        uuid = partitions_ready[host]
+        device_node = get_partition_info(host, uuid[0], "device_node")
+        size_mib = get_partition_info(host, uuid[0], "size_mib")
+        disk_available_mib = get_disk_info(host, device_node[:-1], "available_mib")
+        total_size = int(size_mib) + int(disk_available_mib) + 1
+        LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on device node {}".format(uuid[0], size_mib, str(total_size), host, device_node[:-1]))
+        rc, out = modify_partition(host, uuid[0], str(total_size), fail_ok=True)
+        assert rc != 0, "Expected partition modification to fail and instead it succeeded"
+
+
 def test_create_host_partition_on_storage():
     """
     This test attempts to create a host partition on a storage node.  It is
@@ -452,6 +552,11 @@ def test_create_host_partition_on_storage():
 
     Assumptions:
     * We run this on a storage system, otherwise we will skip the test.
+
+    Test steps:
+    * Query storage nodes for available disk space 
+    * Attempt to create a partition on a storage node
+    * Check it is rejected
     """
 
     hosts = system_helper.get_storage_nodes()
