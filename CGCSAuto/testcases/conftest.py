@@ -33,6 +33,9 @@ def setup_test_session():
     build_id, build_server = setups.get_build_info(con_ssh)
     ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_server)
 
+    if ProjVar.get_var('KEYSTONE_DEBUG'):
+        setups.enable_disable_keystone_debug(enable=True, con_ssh=con_ssh)
+
     setups.set_session(con_ssh=con_ssh)
 
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)

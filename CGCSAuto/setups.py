@@ -577,3 +577,38 @@ def set_session(con_ssh):
             LOG.info("Test session id: {}".format(session_id))
         except:
             LOG.exception("Unable to upload test session")
+
+
+def enable_disable_keystone_debug(con_ssh, enable=True):
+    """
+    Enable or disable keystone debug from keystone.conf
+    Args:
+        con_ssh:
+        enable:
+
+    Returns:
+
+    """
+    restart = False
+    file = '/etc/keystone/keystone.conf'
+    LOG.info("Set keystone debug to {}".format(enable))
+    if con_ssh.exec_sudo_cmd('cat {} | grep --color=never "insecure_debug = True"'.format(file))[0] == 0:
+        if not enable:
+            con_ssh.exec_sudo_cmd("sed -i '/^insecure_debug = /g' {}".format(file))
+            restart = True
+    else:
+        if enable:
+            find_cmd = "grep --color=never -E '^(debug|#debug) = ' {} | tail -1".format(file)
+            pattern = con_ssh.exec_sudo_cmd(find_cmd, fail_ok=False)[1]
+            con_ssh.exec_sudo_cmd("sed -i -E '/^{}/a insecure_debug = True' {}".format(pattern, file), fail_ok=False)
+            restart = True
+
+    if restart:
+        is_enabled = con_ssh.exec_sudo_cmd('cat {} | grep --color=never insecure_debug'.format(file))[0] == 0
+        if (enable and not is_enabled) or (is_enabled and not enable):
+            LOG.warning("Keystone debug is not {} in keystone.conf!".format(enable))
+            return
+
+        LOG.info("Restart keystone service after toggling keystone debug")
+        con_ssh.exec_sudo_cmd('sm-restart-safe service keystone', fail_ok=False)
+        time.sleep(3)

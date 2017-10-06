@@ -13,7 +13,8 @@ class ProjVar:
                   'PATCH': None,
                   'SESSION_ID': None,
                   'CGCS_DB': True,
-                  'IS_SIMPLEX': False
+                  'IS_SIMPLEX': False,
+                  'KEYSTONE_DEBUG': False,
                   }
 
     @classmethod
