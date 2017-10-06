@@ -2,7 +2,7 @@ import re
 from pytest import fixture, mark
 from utils.tis_log import LOG
 
-from consts.cgcs import VMStatus, GuestImages
+from consts.cgcs import VMStatus, GuestImages, FlavorSpec
 from keywords import network_helper, nova_helper, vm_helper, glance_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -34,16 +34,16 @@ def base_vm():
 
     vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='module')[1]
 
-    return vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id
+    return vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id, mgmt_net_id
 
 
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vifs'), [
     ('tis-centos-guest', 'net_id', [('virtio', 1)]),
     ('tis-centos-guest', 'net_id', [('avp', 1)]),
-    #('tis-centos-guest', 'net_id', [('rtl8139', 8), ('virtio', 7)]),
-    ('tis-centos-guest', 'net_id', [('avp', 4), ('virtio', 4), ('rtl8139', 4), ('e1000', 3)]),
-    #('tis-centos-guest', 'net_id', [('virtio', 6), ('avp', 2), ('virtio', 4), ('rtl8139', 3)])
-    ('vxworks-guest', 'net_id', [('e1000', 1)])
+    ##('tis-centos-guest', 'net_id', [('rtl8139', 8), ('virtio', 7)]),
+    ('tis-centos-guest', 'net_id', [('avp', 4), ('virtio', 4), ('rtl8139', 4), ('e1000', 3)])
+    ##('tis-centos-guest', 'net_id', [('virtio', 6), ('avp', 2), ('virtio', 4), ('rtl8139', 3)]),
+    #('vxworks-guest', 'net_id', [('e1000', 15)])
 ], ids=id_gen)
 def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vifs):
     """
@@ -71,7 +71,7 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
         - Delete base vm, volume    (module)
 
     """
-    base_vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id = base_vm
+    base_vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id, mgmt_net_id = base_vm
 
     nic_action = False
     internal_port_id = None
@@ -90,12 +90,20 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
     flavor_id = nova_helper.create_flavor(vcpus=2, guest_os=guest_os)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
+    if guest_os == 'vxworks-guest':
+        LOG.tc_step("Add HPET Timer extra spec to flavor")
+        extra_specs = {FlavorSpec.HPET_TIMER: 'True'}
+        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+
     LOG.tc_step("Create a volume from {} image".format(guest_os))
     code, vol_id = cinder_helper.create_volume(name='vol-' + guest_os, image_id=image_id, guest_image=guest_os,
                                                fail_ok=True)
     ResourceCleanup.add('volume', vol_id)
     assert 0 == code, "Issue occurred when creating volume"
     source_id = vol_id
+
+    if guest_os == 'vxworks-guest':
+        mgmt_nic = {'net-id': mgmt_net_id, 'vif-model': 'e1000'}
 
     LOG.tc_step("Boot a vm with mgmt nic only")
     vm_under_test = vm_helper.boot_vm(name='if_attach_tenant', nics=[mgmt_nic], source_id=source_id,
