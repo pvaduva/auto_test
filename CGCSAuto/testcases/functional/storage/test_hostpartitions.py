@@ -98,6 +98,7 @@ def create_partition(host, device_node, size_mib, fail_ok=False, wait=True, time
     * host(str) - hostname, e.g. controller-0
     * device_node(str) - device, e.g. /dev/sdh
     * size_mib(str) - size of partition in mib
+    * wait(bool) - if True, wait for partition creation.  False, return immediately.
     * timeout(int) - how long to wait for partition creation (sec)
 
     Returns:
@@ -311,7 +312,7 @@ def restore_partitions_teardown(request):
 def delete_partitions_teardown(request):
     def teardown():
         """
-        Restore deleted partitions.
+        Delete created partitions. 
         """
         global partitions_to_restore 
 
@@ -656,6 +657,82 @@ def test_increase_host_partition_size_beyond_avail_disk_space():
         LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on device node {}".format(uuid[0], size_mib, str(total_size), host, device_node[:-1]))
         rc, out = modify_partition(host, uuid[0], str(total_size), fail_ok=True)
         assert rc != 0, "Expected partition modification to fail and instead it succeeded"
+
+
+def test_create_parition_using_valid_uuid_of_another_host():
+    """
+    This test attempts to create a partition using a vaild uuid that belongs to
+    another host.  It is expected to fail.
+
+    Arguments:
+    * None
+
+    Test steps:
+    * Query the hosts for disk uuids with free space
+    * Attempt to create a partition for a different uuid
+    
+    Teardown:
+    * None
+
+    CGTS-7901
+    """
+
+    computes = system_helper.get_hostnames(personality="compute")
+    hosts = system_helper.get_controllers() + computes
+
+    if len(hosts) == 1:
+        skip("This test requires more than one host")
+
+    sut = "controller-0"
+    hosts.remove(sut)
+    free_disks = []
+    LOG.tc_step("Determine which hosts have free disks")
+    for host in hosts:
+        disks = get_disks(host)
+        free_disks = get_disks_with_free_space(host, disks)
+        if free_disks:
+            donor = host
+            break
+
+    if not free_disks:
+        skip("Insufficient disk space to to complete test.")
+
+    for uuid in free_disks:
+        LOG.info("Creating partition on {} using disk from {}".format(sut, donor))
+        rc, out = create_partition(sut, uuid, free_disks[uuid], fail_ok=True)
+        assert rc != 0, "Partition creation should be rejected but instead it was successful"
+        # Break since we only need to do this once
+        break
+
+
+def test_create_partition_using_non_existant_device_node():
+    """
+    This test attempts to create a partition using an invalid disk.  It is
+    expected to fail.
+
+    Arguments:
+    * None
+
+    Steps:
+    * Attempt to create a partition on a valid host using an invalid device
+      node, e.g. /dev/sdz
+
+    Teardown:
+    * None
+    """
+
+    # Safely hard-coded since we don't have enough physical slots for this to be
+    # possible
+    device_node = "/dev/sdz"
+    size_mib = "1"
+
+    computes = system_helper.get_hostnames(personality="compute")
+    hosts = system_helper.get_controllers() + computes
+
+    for host in hosts:
+        LOG.tc_step("Creating partition on host {} with size {} using device node {}".format(host, size_mib, device_node))
+        rc, out = create_partition(host, device_node, size_mib, fail_ok=True)
+        assert rc != 0, "Partition creation was successful"
 
 
 def test_create_host_partition_on_storage():
