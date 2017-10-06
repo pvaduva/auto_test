@@ -4,11 +4,11 @@ import os.path
 import configparser
 
 import setup_consts
-from utils import exceptions, cli, lab_info
+from utils import exceptions, lab_info
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
 from utils.node import create_node_boot_dict, create_node_dict
-from consts.auth import Tenant, CliAuth, HostLinuxCreds
+from consts.auth import Tenant, HostLinuxCreds
 from consts.cgcs import Prompt
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
@@ -175,15 +175,15 @@ def get_lab_dict(labname):
     labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
 
     for lab in labs:
-        if labname in lab['name'].replace('-', '_').lower().strip() \
-                or labname == lab['short_name'].replace('-', '_').lower().strip() \
-                or labname == lab['floating ip']:
+        if labname in lab.get('name').replace('-', '_').lower().strip() \
+                or labname == lab.get('short_name').replace('-', '_').lower().strip() \
+                or labname == lab.get('floating ip'):
             return lab
     else:
         if labname.startswith('128.224') or labname.startswith('10.'):
             return add_lab_entry(labname)
 
-        lab_valid_short_names = [lab['short_name'] for lab in labs]
+        lab_valid_short_names = [lab.get('short_name') for lab in labs]
         # lab_valid_names = [lab['name'] for lab in labs]
         raise ValueError("{} is not found! Available labs: {}".format(labname, lab_valid_short_names))
 
@@ -193,7 +193,7 @@ def get_natbox_dict(natboxname):
     natboxes = [getattr(NatBoxes, item) for item in dir(NatBoxes) if not item.startswith('_')]
 
     for natbox in natboxes:
-        if natboxname.replace('-', '_') in natbox['name'].replace('-', '_') or natboxname == natbox['ip']:
+        if natboxname.replace('-', '_') in natbox.get('name').replace('-', '_') or natboxname == natbox.get('ip'):
             return natbox
     else:
         raise ValueError("{} is not a valid input.".format(natboxname))
@@ -204,7 +204,7 @@ def get_tenant_dict(tenantname):
     tenants = [getattr(Tenant, item) for item in dir(Tenant) if not item.startswith('_') and item.isupper()]
 
     for tenant in tenants:
-        if tenantname == tenant['tenant'].replace('_', '').replace('-', ''):
+        if tenantname == tenant.get('tenant').replace('_', '').replace('-', ''):
             return tenant
     else:
         raise ValueError("{} is not a valid input".format(tenantname))

@@ -13,6 +13,7 @@ class ProjVar:
                   'PATCH': None,
                   'SESSION_ID': None,
                   'CGCS_DB': True,
+                  'IS_SIMPLEX': False
                   }
 
     @classmethod
