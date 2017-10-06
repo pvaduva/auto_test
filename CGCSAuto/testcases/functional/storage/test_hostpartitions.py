@@ -7,6 +7,7 @@ then be assigned to a PV such as nova-local.
 The states supported by partitions are:
 - Creating
 - Deleting
+- Modifying
 - In-use
 - Error
 - Ready
@@ -27,13 +28,14 @@ import time
 from keywords import system_helper
 from utils import cli, table_parser
 from utils.tis_log import LOG
-from pytest import fixture, mark
+from pytest import fixture, mark, skip
 
 CP_TIMEOUT = 120
 DP_TIMEOUT = 120
+MP_TIMEOUT = 120
 
-global deleted_partitions
-deleted_partitions = {}
+global partitions_to_restore
+partitions_to_restore = {}
 
 
 def get_partitions(hosts, state):
@@ -120,6 +122,38 @@ def create_partition(host, device_node, size_mib, fail_ok=False, timeout=CP_TIME
     assert not status, "Partition was not created"
 
 
+def modify_partition(host, uuid, size_mib, fail_ok=False, timeout=MP_TIMEOUT):
+    """
+    This test modifies the size of a partition.
+
+    Arguments:
+    * host(str) - hostname, e.g. controller-0
+    * uuid(str) - uuid of the partition
+    * size_mib(str) - new partition size in mib 
+    * timeout(int) - how long to wait for partition creation (sec)
+
+    Returns:
+    * rc, out - return code and output of the host-disk-partition-command
+    """
+
+    rc, out = cli.system('host-disk-partition-modify -s {} {} {}'.format(size_mib, host, uuid), rtn_list=True, fail_ok=fail_ok)
+    if fail_ok:
+        return rc, out
+
+    uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
+
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        status = get_partition_info(host, uuid, "status")
+        LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
+        assert status == "Modifying" or status == "Ready", "Partition has unexpected state {}".format(status)
+        if status == "Ready":
+            LOG.info("Partition {} on host {} has {} state".format(uuid, host, status))
+            return rc, out
+
+    assert not status, "Partition was not modified"
+
+
 def get_partition_info(host, uuid, param=None):
     """
     Return requested information about a partition on a given host.
@@ -136,6 +170,30 @@ def get_partition_info(host, uuid, param=None):
     param_value = None
     args = "{} {}".format(host, uuid)
     rc, out = cli.system('host-disk-partition-show', args, fail_ok=True, rtn_list=True)
+
+    if rc == 0:
+        table_ = table_parser.table(out)
+        param_value = table_parser.get_value_two_col_table(table_, param)
+
+    return param_value
+
+
+def get_disk_info(host, device_node, param=None):
+    """
+    This returns information about a disk based on the parameter the user
+    specifies.
+
+    Arguments:
+    * host(str) - hostname, e.g. controller-0
+    * device_node(str) - name of device, e.g. /dev/sda
+    * param(str) - desired parameter, e.g. available_mib
+
+    Returns:
+    * param_value - value of parameter requested
+    """
+    param_value = None
+    args = "{} {}".format(host, device_node)
+    rc, out = cli.system('host-disk-show', args, fail_ok=True, rtn_list=True)
 
     if rc == 0:
         table_ = table_parser.table(out)
@@ -236,12 +294,12 @@ def restore_partitions_teardown(request):
         """
         Restore deleted partitions.
         """
-        global deleted_partitions
+        global partitions_to_restore 
 
-        for host in deleted_partitions:
-            device_node = deleted_partitions[host][0]
-            size_mib = deleted_partitions[host][1]
-            uuid = deleted_partitions[host][2]
+        for host in partitions_to_restore: 
+            device_node = partitions_to_restore[host][0]
+            size_mib = partitions_to_restore[host][1]
+            uuid = partitions_to_restore[host][2]
             LOG.info("Restoring deleted partition on host {} with device_node {} and size {}".format(host, device_node, size_mib))
             rc, out = create_partition(host, device_node, size_mib)
             assert rc == 0, "Partition creation failed"
@@ -254,6 +312,9 @@ def test_delete_host_partitions():
     """
     This test deletes host partitions that are in Ready state.  The teardown
     will re-create them.
+
+    Arguments:
+    * None
 
     Assumptions:
     * There are some partitions present in Ready state.  If not, skip the test.
@@ -273,8 +334,8 @@ def test_delete_host_partitions():
 
     """
 
-    global deleted_partitions
-    deleted_partitions = {}
+    global partitions_to_restore 
+    partitions_to_restore = {}
 
     computes = system_helper.get_hostnames(personality="compute")
     hosts = system_helper.get_controllers() + computes
@@ -297,11 +358,85 @@ def test_delete_host_partitions():
         size_mib = get_partition_info(host, uuid[0], "size_mib")
         device_node = get_partition_info(host, uuid[0], "device_node")
         LOG.tc_step("Deleting partition {} of size {} from host {} on device node {}".format(uuid[0], size_mib, host, device_node[:-1]))
-        deleted_partitions[host] = []
+        partitions_to_restore[host] = []
         delete_partition(host, uuid[0])
-        deleted_partitions[host].append(device_node[:-1])
-        deleted_partitions[host].append(size_mib)
-        deleted_partitions[host].append(uuid[0])
+        partitions_to_restore[host].append(device_node[:-1])
+        partitions_to_restore[host].append(size_mib)
+        partitions_to_restore[host].append(uuid[0])
+
+
+@mark.usefixtures('restore_partitions_teardown')
+def test_increase_host_partition_size():
+    """
+    This test modifies the size of existing partitions that are in Ready state.
+    The partition will be deleted after modification, since decreasing the size
+    is not supported.  Teardown will re-create the partition with the original
+    values.
+
+    Arguments:
+    * None
+
+    Assumptions:
+    * There are some partitions present in Ready state.  If not, skip the test.
+
+    Test Steps:
+    * Query the partitions on each host, and grab those hosts that have one
+      partition in Ready state.
+    * Delete which of those hosts have space on the disk for resize up
+    * Resize those partitions
+
+    Teardown:
+    * Delete the partitions and then re-create it with the old size.
+
+    Enhancement Ideas:
+    * Create partitions (if possible) when there are none in Ready state
+    * Query hosts for last partition instead of picking hosts with one
+      partition.  Note, only the last partition can be modified.
+    * Check disk space goes to 0 when partition is resized 
+    * Check disk space goes back to what it was when partition is re-created at
+      original size
+    """
+
+    global partitions_to_restore
+    partitions_to_restore = {}
+
+    computes = system_helper.get_hostnames(personality="compute")
+    hosts = system_helper.get_controllers() + computes
+
+    LOG.tc_step("Find out which hosts have partitions in Ready state")
+    partitions_ready = get_partitions(hosts, "Ready")
+
+    hosts_partition_mod_ok = []
+    for host in hosts:
+        # ENHANCEMENT - modify to look for only the last partition
+        if len(partitions_ready[host]) == 1:
+            hosts_partition_mod_ok.append(host)
+
+    if not hosts_partition_mod_ok:
+        # ENHANCEMENT - modify to create partitions if they don't already exist (if possible)
+        skip("Need some partitions in Ready state in order to run test")
+
+    usable_disks = False
+    LOG.tc_step("Find out which partitions on are on a disk with available space")
+    for host in hosts_partition_mod_ok:
+        uuid = partitions_ready[host]
+        device_node = get_partition_info(host, uuid[0], "device_node")
+        size_mib = get_partition_info(host, uuid[0], "size_mib")
+        disk_available_mib = get_disk_info(host, device_node[:-1], "available_mib")
+        if disk_available_mib == "0":
+            break
+        usable_disks = True
+        LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on device node {}".format(uuid[0], size_mib, disk_available_mib, host, device_node[:-1]))
+        modify_partition(host, uuid[0], disk_available_mib)
+        partitions_to_restore[host] = []
+        partitions_to_restore[host].append(device_node[:-1])
+        partitions_to_restore[host].append(size_mib)
+        partitions_to_restore[host].append(uuid[0])
+        LOG.tc_step("Deleting partition {} of size {} from host {} on device node {}".format(uuid[0], size_mib, host, device_node[:-1]))
+        delete_partition(host, uuid[0])
+
+    if not usable_disks:
+        skip("Did not find disks with sufficient space to test with.")
 
 
 def test_create_host_partition_on_storage():
