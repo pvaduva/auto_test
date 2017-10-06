@@ -20,7 +20,6 @@ stress_iteration = -1
 no_teardown = False
 tracebacks = []
 
-
 ################################
 # Process and log test results #
 ################################
@@ -236,6 +235,7 @@ def pytest_configure(config):
     report_tag = config.getoption('report_tag')
     resultlog = config.getoption('resultlog')
     session_log_dir = config.getoption('sessiondir')
+    no_cgcs = config.getoption('nocgcsdb')
 
     # Test case params on installed system
     lab_arg = config.getoption('lab')
@@ -259,6 +259,9 @@ def pytest_configure(config):
     collect_all = True if collect_all else setup_consts.COLLECT_ALL
     report_all = True if report_all else setup_consts.REPORT_ALL
     openstack_cli = True if openstack_cli else False
+
+    if no_cgcs:
+        ProjVar.set_var(CGCS_DB=False)
 
     if session_log_dir:
         log_dir = session_log_dir
@@ -331,9 +334,11 @@ def pytest_addoption(parser):
                      help=collect_all_help)
     parser.addoption('--reportall', '--report_all', '--report-all', dest='reportall', action='store_true',
                      help=report_help)
-    parser.addoption('--report_tag', action='store', dest='report_tag', metavar='tagname', default=None, help=tag_help)
+    parser.addoption('--report_tag', '--report-tag', action='store', dest='report_tag', metavar='tagname', default=None,
+                     help=tag_help)
     parser.addoption('--sessiondir', '--session_dir', '--session-dir', action='store', dest='sessiondir',
                      metavar='sessiondir', default=None, help=logdir_help)
+    parser.addoption('--no-cgcsdb', '--no-cgcs-db', '--nocgcsdb', action='store_true', dest='nocgcsdb')
 
     # Test session options on installed lab:
     parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)

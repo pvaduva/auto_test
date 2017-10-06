@@ -417,7 +417,7 @@ class Labs:
         'short_name': 'wcp_99_103',
         'name': 'yow-cgcs-wildcat-99_103',
         'floating ip': '128.224.151.94',
-        'controller-0 ip': '128.224.151.103',
+        'controller-0 ip': '128.224.151.11',
         'controller-1 ip': '128.224.151.13',
         'controller_nodes': [23312, 23313],
         'compute_nodes': [23314, 23315, 23316]
@@ -434,7 +434,8 @@ class Labs:
     LARGE_OFFICE = {
         'short_name': 'large_office',
         'name': 'large office',
-        'floating ip': ''
+        'floating ip': '',
+        'controller-0 ip': ''
     }
 
     UNKNOWN = {

@@ -181,7 +181,7 @@ def aa_close_vm_ssh(request):
 # @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
 @mark.parametrize('action', [
-        mark.nightly('scale_up_reject_scale_down'),
+        mark.priorities('nightly', 'sx_nightly')('scale_up_reject_scale_down'),
     ])
 # can add test fixture to configure hosts to be certain storage backing
 def test_heat_vm_scale(action):

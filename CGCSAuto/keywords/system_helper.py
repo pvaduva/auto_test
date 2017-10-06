@@ -794,6 +794,42 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
         else:
             raise exceptions.TimeoutException(err_msg)
 
+def wait_for_all_alarms_gone(timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
+                         auth_info=Tenant.ADMIN):
+    """
+    Wait for all alarms_and_events to be cleared from system alarm-list
+    Args:
+        timeout (int):
+        check_interval (int):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (res(bool), remaining_alarms(tuple))
+
+    """
+
+    LOG.info("Waiting for all existing alarms_and_events to disappear from system alarm-list: {}".format(get_alarms()))
+
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
+        current_alarms = _get_alarms(current_alarms_tab)
+
+        if len(current_alarms) == 0:
+            return True, []
+        else:
+            time.sleep(check_interval)
+
+    else:
+        existing_alarms = get_alarms()
+        err_msg = "Alarms did not clear within {} seconds: {}".format(timeout, existing_alarms)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return False, existing_alarms
+        else:
+            raise exceptions.TimeoutException(err_msg)
+
 
 def host_exists(host, field='hostname', con_ssh=None):
     """

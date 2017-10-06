@@ -173,7 +173,7 @@ def _perform_action(vm_id, action, expt_fail):
     mark.p2('migrate'),
     mark.p2('suspend'),
     mark.p2('reboot'),
-    mark.priorities('domain_sanity', 'nightly')('stop'),
+    mark.priorities('domain_sanity', 'nightly', 'sx_nightly')('stop'),
 ])
 def test_vm_voting(action, hb_flavor):
     """

@@ -100,7 +100,7 @@ class TestMutiPortsBasic:
     @mark.parametrize('vifs', [
         mark.p2((('avp', '00:02'), ('avp', '00:1f'))),
         mark.p2((('virtio', '01:01'), ('virtio', None))),
-        mark.nightly((('e1000', '04:09'), ('virtio', '08:1f'))),
+        mark.priorities('nightly', 'sx_nightly')((('e1000', '04:09'), ('virtio', '08:1f'))),
         mark.p2((('avp_x8', None), ('virtio_x7', None))),
     ], ids=id_params)
     def test_multiports_on_same_network_vm_actions(self, vifs, base_setup):

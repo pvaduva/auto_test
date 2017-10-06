@@ -166,12 +166,14 @@ def upgrade_setup(pre_check_upgrade):
     cpe = system_helper.is_small_footprint(controller0_conn)
     upgrade_version = UpgradeVars.get_upgrade_var('UPGRADE_VERSION')
     license_path = UpgradeVars.get_upgrade_var('UPGRADE_LICENSE')
+    is_simplex = system_helper.is_simplex()
     if license_path is None:
         if cpe:
             license_path = BuildServerPath.TIS_LICENSE_PATHS[upgrade_version][1]
+        elif is_simplex:
+            license_path = BuildServerPath.TIS_LICENSE_PATHS[upgrade_version][2]
         else:
             license_path = BuildServerPath.TIS_LICENSE_PATHS[upgrade_version][0]
-
     bld_server = get_build_server_info(UpgradeVars.get_upgrade_var('BUILD_SERVER'))
     load_path = UpgradeVars.get_upgrade_var('TIS_BUILD_DIR')
     output_dir = ProjVar.get_var('LOG_DIR')
@@ -230,8 +232,18 @@ def upgrade_setup(pre_check_upgrade):
         if patch_dir:
             LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
             apply_patches(lab, bld_server_obj, patch_dir)
+    # Check for simplex and return
+    if is_simplex:
+        _upgrade_setup_simplex = {'lab': lab,
+                                  'cpe': cpe,
+                                  'output_dir': output_dir,
+                                  'current_version': current_version,
+                                  'upgrade_version': upgrade_version,
+                                  'build_server': bld_server_obj
+                                  }
+        return _upgrade_setup_simplex
+            # check which nodes are upgraded using orchestration
 
-    # check which nodes are upgraded using orchestration
     orchestration_after = UpgradeVars.get_upgrade_var('ORCHESTRATION_AFTER')
     storage_apply_strategy = UpgradeVars.get_upgrade_var('STORAGE_APPLY_TYPE')
     compute_apply_strategy = UpgradeVars.get_upgrade_var('COMPUTE_APPLY_TYPE')

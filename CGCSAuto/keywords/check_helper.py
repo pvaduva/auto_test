@@ -326,6 +326,8 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
     # Check host side info such as nova-compute.log and virsh pcpupin
     LOG.tc_step('Check vm topology from vm_host via: nova-compute.log, virsh vcpupin, taskset')
     instance_name = nova_helper.get_vm_instance_name(vm_id)
+    procs = host_helper.get_host_procs(hostname=vm_host)
+    numa_nodes = list(range(len(procs)))
     with host_helper.ssh_to_host(vm_host) as host_ssh:
 
         LOG.info("{}Check total allocated vcpus increased by {} from nova-compute.log on host".
@@ -365,8 +367,7 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
 
         else:
             LOG.info("{}Check affined cpus for floating vm is the same as unpinned cpus on vm host".format(SEP))
-            # TODO count all numa nodes for floating vm. Any way to get numa nodes dynamically from vm host?
-            cpus_info = host_helper.get_vcpus_info_in_log(host_ssh=host_ssh, rtn_list=True, numa_nodes=[0, 1])
+            cpus_info = host_helper.get_vcpus_info_in_log(host_ssh=host_ssh, rtn_list=True, numa_nodes=numa_nodes)
             unpinned_cpus = []
 
             for item in cpus_info:

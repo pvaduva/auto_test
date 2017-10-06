@@ -560,7 +560,7 @@ def set_session(con_ssh):
 
     patches = '\n'.join(patches)
     tag = ProjVar.get_var('REPORT_TAG')
-    if tag:
+    if tag and ProjVar.get_var('CGCS_DB'):
         try:
             from utils.cgcs_reporter import upload_results
             sw_version = '-'.join(ProjVar.get_var('SW_VERSION'))

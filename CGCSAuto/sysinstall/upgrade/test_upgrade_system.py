@@ -85,7 +85,7 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
 
     # open vlm console for controller-0 for boot through mgmt interface
     LOG.info("Opening a vlm console for controller-0 .....")
-    install_helper.open_vlm_console_thread("controller-0")
+    install_helper.open_vlm_console_thread("controller-0", upgrade=True)
 
     LOG.info("Starting {} upgrade.....".format(controller0.name))
     upgrade_helper.upgrade_host(controller0.name, lock=True)

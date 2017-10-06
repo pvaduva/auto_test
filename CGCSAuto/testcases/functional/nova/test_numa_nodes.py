@@ -301,7 +301,7 @@ def test_0_node_unset_numa_nodes_reject(flavor_0_node):
     mark.p2((1, 1, 1, None)),
 ])
 # @mark.usefixtures('delete_resources_func')    # This fixture is auto-used by nova test cases
-def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_numa_num):
+def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_numa_num, no_simplex):
     """
     Test NUMA nodes settings in flavor extra specs are successfully applied to a vm
 

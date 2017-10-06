@@ -5,6 +5,7 @@ from utils.tis_log import LOG
 
 
 @mark.nightly
+@mark.sx_nightly
 def test_lldp_neighbor_remote_port():
     """
     Tests if LLDP Neighbor remote_port exists on all hosts

@@ -8,6 +8,7 @@ class TiSPath:
     IMAGES = '/home/wrsroot/images/'
     INSTALL_STATUS = 'home/wrsroot/autoinstall_status.log'
     HEAT = '/home/wrsroot/heat/'
+    BACKUPS = '/opt/backups'
 
 
 class VMPath:
@@ -37,7 +38,7 @@ class BuildServerPath:
     DEFAULT_WORK_SPACE = '/localdisk/loadbuild/jenkins'
     DEFAULT_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/CGCS_5.0_Host'
     DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_build/export/tis-centos-guest.img'
-    DEFAULT_HOST_BUILD_PATH = '{}/latest_build/'.format(DEFAULT_HOST_BUILDS_DIR)
+    DEFAULT_HOST_BUILD_PATH = '{}/latest_build'.format(DEFAULT_HOST_BUILDS_DIR)
     DEFAULT_LICENSE_PATH = '/folk/cgts/lab/license.lic'
     DEFAULT_PATCH_DIR = '/folk/cgts/patches-to-verify/'
     HEAT_TEMPLATES = 'std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates'
@@ -45,20 +46,22 @@ class BuildServerPath:
 
     LATEST_HOST_BUILD_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/',
                                '16.10': '/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/',
-                               '17.00': '/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/latest_build/',
                                '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Host/latest_build/',
+                               '17.07': '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/',
                                }
     TIS_LICENSE_PATHS = {'15.12': ['/folk/cgts/lab/TiS15-GA-full.lic', '/folk/cgts/lab/TiS15.12-CPE-full-dec2016.lic'],
                          '16.10': ['/folk/cgts/lab/TiS16-full.lic', '/folk/cgts/lab/TiS16-CPE-full.lic'],
                          '17.00': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
                          '17.06': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
-                         '17.07': ['/folk/cgts/lab/license.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
+                         '17.07': ['/folk/cgts/lab/license.lic', '/folk/cgts/lab/TiS17-CPE-full.lic', \
+                                   'wrslicense-AIO-SX-17.06-full-jan2018.lic']
                          }
 
     PATCH_DIR_PATHS = {'15.12': DEFAULT_PATCH_DIR + '15.12',
                        '16.10': DEFAULT_PATCH_DIR + '16.10',
                        '17.00': DEFAULT_PATCH_DIR + '17.06',
                        '17.06': DEFAULT_PATCH_DIR + '17.06',
+                       '17.07': DEFAULT_PATCH_DIR + '17.07'
                        }
 
     GUEST_IMAGE_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',

@@ -1216,7 +1216,7 @@ class ControllerClient:
             raise TypeError("ssh_client has to be an instance of SSHClient!")
 
         for lab_ in cls.__lab_list:
-            if ssh_client.host == lab_['floating ip']:
+            if ssh_client.host == lab_['floating ip'] or ssh_client.host == lab_['controller-0 ip']:
                 lab_name_ = lab_['short_name']
                 break
         else:

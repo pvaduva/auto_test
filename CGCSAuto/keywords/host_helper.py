@@ -2201,6 +2201,9 @@ def get_vcpus_info_in_log(host_ssh, numa_nodes=None, rtn_list=False):
         # pinned_cpulist:18-19,21-26,28-35,54-55,57-62,64-71, unpinned_cpulist:20,27,56,63
         output = host_ssh.exec_cmd('cat /var/log/nova/nova-compute.log | grep -i -E "Numa node={}; .*unpinned:" '
                                    '| tail -n 1'.format(numa_node), fail_ok=False)[1]
+        if not output:
+            LOG.warning("Nothing grepped for numa node {}".format(numa_node))
+            continue
 
         output = ''.join(output.split(sep='\n'))
         cpu_info = output.split(sep="Numa node={}; ".format(numa_node))[-1].replace('; ', ', '). split(sep=', ')
