@@ -232,6 +232,10 @@ def upgrade_setup(pre_check_upgrade):
         if patch_dir:
             LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
             apply_patches(lab, bld_server_obj, patch_dir)
+
+    # check disk space
+    check_controller_filesystem()
+
     # Check for simplex and return
     if is_simplex:
         _upgrade_setup_simplex = {'lab': lab,
@@ -396,3 +400,28 @@ def apply_patches(lab, server, patch_dir):
 
         LOG.info("Querying patches ... ")
         assert patching_helper.run_patch_cmd("query")[0] == 0, "Failed to query patches"
+
+
+def check_controller_filesystem(con_ssh=None):
+
+    LOG.info("Checking controller root fs size ... ")
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    patch_dest_dir1 = WRSROOT_HOME + "patches/"
+    patch_dest_dir2 = WRSROOT_HOME + "upgrade_patches/"
+    upgrade_load_path = os.path.join(WRSROOT_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
+
+    cmd = "df | grep /dev/root | awk ' { print $5}'"
+    rc, output = con_ssh.exec_cmd(cmd)
+    if rc == 0 and output:
+        LOG.info("controller root fs size is {} full ".format(output))
+        percent = int(output.strip()[:-1])
+        if percent > 69:
+            con_ssh.exec_cmd("rm {}/*".format(patch_dest_dir1))
+            con_ssh.exec_cmd("rm {}/*".format(patch_dest_dir2))
+            con_ssh.exec_cmd("rm {}".format(upgrade_load_path))
+            entity_id = 'host=controller-0.filesystem=/'
+            system_helper.wait_for_alarms_gone([(EventLogID.FS_THRESHOLD_EXCEEDED, entity_id)], check_interval=10,
+                                           fail_ok=True, timeout=300)
+
