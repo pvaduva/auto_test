@@ -3194,8 +3194,9 @@ def wait_for_ntp_sync(host, timeout=MiscTimeout.NTPQ_UPDATE, fail_ok=False, con_
     LOG.info ("Waiting for ntp alarm to clear or sudo ntpq -pn indicate unhealthy server for {}".format(host))
     end_time = time.time() + timeout
     while time.time() < end_time:
-        ntp_alarms = system_helper.get_alarms(alarm_id=EventLogID.NTP_ALARM, entity_id=host, strict=False)
-        status, msg = get_ntpq_status(host)
+        ntp_alarms = system_helper.get_alarms(alarm_id=EventLogID.NTP_ALARM, entity_id=host, strict=False,
+                                              con_ssh=con_ssh)
+        status, msg = get_ntpq_status(host, con_ssh=con_ssh)
         if ntp_alarms and status != 0:
             LOG.info("Valid NTP alarm")
             return True

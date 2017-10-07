@@ -626,6 +626,7 @@ def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=
             return False
         else:
             network_helper.collect_networking_info(vms=vm_id)
+            get_console_logs(vm_ids=vm_id)
             raise exceptions.VMNetworkError(msg)
 
 
@@ -1347,8 +1348,28 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
     if not res_bool and not fail_ok:
         LOG.error("Ping vm(s) from NatBox failed - Collecting networking info")
         network_helper.collect_networking_info(vms=vm_ids)
+        get_console_logs(vm_ids=vm_ids)
+        raise exceptions.VMNetworkError("Ping failed from NatBox. Details: {}".format(res_dict))
 
     return res_bool, res_dict
+
+
+def get_console_logs(vm_ids, con_ssh=None):
+    """
+    Get console logs for given vm(s)
+    Args:
+        vm_ids (str|list):
+        con_ssh:
+
+    Returns (dict): {<vm1_id>: <vm1_console>, <vm2_id>: <vm2_console>, ...}
+    """
+    if isinstance(vm_ids, str):
+        vm_ids = [vm_ids]
+    console_logs = {}
+    for vm_id in vm_ids:
+        output = cli.nova('console-log', vm_id, ssh_client=con_ssh)[1]
+        console_logs[vm_id] = output
+    return console_logs
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
@@ -1428,6 +1449,8 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
     except:
         LOG.error("Ping vm(s) from vm failed - Collecting networking info")
         network_helper.collect_networking_info(vms=to_vms)
+        get_console_logs(vm_ids=to_vms)
+        get_console_logs(vm_ids=from_vm)
 
         try:
             LOG.warning("Ping vm(s) from vm failed - Attempt to ssh to to_vms and collect vm networking info")
