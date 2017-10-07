@@ -411,7 +411,7 @@ def check_controller_filesystem(con_ssh=None):
     patch_dest_dir1 = WRSROOT_HOME + "patches/"
     patch_dest_dir2 = WRSROOT_HOME + "upgrade_patches/"
     upgrade_load_path = os.path.join(WRSROOT_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
-
+    current_version = install_helper.get_current_system_version()
     cmd = "df | grep /dev/root | awk ' { print $5}'"
     rc, output = con_ssh.exec_cmd(cmd)
     if rc == 0 and output:
@@ -421,7 +421,15 @@ def check_controller_filesystem(con_ssh=None):
             con_ssh.exec_cmd("rm {}/*".format(patch_dest_dir1))
             con_ssh.exec_cmd("rm {}/*".format(patch_dest_dir2))
             con_ssh.exec_cmd("rm {}".format(upgrade_load_path))
-            entity_id = 'host=controller-0.filesystem=/'
-            system_helper.wait_for_alarms_gone([(EventLogID.FS_THRESHOLD_EXCEEDED, entity_id)], check_interval=10,
-                                           fail_ok=True, timeout=300)
+            with host_helper.ssh_to_host('controller-1') as host_ssh:
+                host_ssh.exec_cmd("rm {}/*".format(patch_dest_dir1))
+                host_ssh.exec_cmd("rm {}/*".format(patch_dest_dir2))
+                host_ssh.exec_cmd("rm {}".format(upgrade_load_path))
+
+            if current_version == '15.12':
+                time.sleep(120)
+            else:
+                entity_id = 'host=controller-0.filesystem=/'
+                system_helper.wait_for_alarms_gone([(EventLogID.FS_THRESHOLD_EXCEEDED, entity_id)], check_interval=10,
+                                           fail_ok=True, timeout=180)
 
