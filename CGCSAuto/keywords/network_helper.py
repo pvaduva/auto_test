@@ -3224,12 +3224,17 @@ def collect_networking_info(routers=None, vms=None):
 
     hosts = []
     for router in routers:
-        hosts.append(get_router_info(router_id=router, field='wrs-net:host'))
+        router_host = get_router_info(router_id=router, field='wrs-net:host')
+        if router_host:
+            hosts.append(router_host)
+        else:
+            LOG.error("Router {} has no host, it may be down.".format(router))
 
-    LOG.info("Collect vswitch_info for {} router(s) on router host(s): ".format(routers, hosts))
-    for host in hosts:
-        ProjVar.get_var('VSWITCH_INFO_HOSTS').append(host)
-        collect_vswitch_info_on_host(host)
+    if hosts:
+        LOG.info("Collect vswitch_info for {} router(s) on router host(s): ".format(routers, hosts))
+        for host in hosts:
+            ProjVar.get_var('VSWITCH_INFO_HOSTS').append(host)
+            collect_vswitch_info_on_host(host)
 
 
 def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
