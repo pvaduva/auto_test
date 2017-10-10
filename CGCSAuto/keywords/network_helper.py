@@ -910,63 +910,87 @@ def get_qos(name=None, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
-def create_qos(name, tenant_name=None, description=None, dscp=None, ratelimit=None, scheduler=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_qos_name(qos_id=None, con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        qos_id(string): QoS id to filter name.
+        con_ssh(SSHClient):  If None, active controller ssh will be used.
+        auth_info(dict): Tenant dict. If None, primary tenant will be used.
+
+    Returns(str): List of neutron qos names filtered by id.
+
+    """
+    table_ = table_parser.table(cli.neutron('qos-list', ssh_client=con_ssh, auth_info=auth_info))
+    if qos_id is None:
+        return table_parser.get_values(table_, 'name')
+
+    return table_parser.get_values(table_, 'name', strict=True, id=qos_id)
+
+
+def create_qos(name=None, tenant_name=None, description=None, scheduler=None, dscp=None, ratelimit=None, fail_ok=False,
+               con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Args:
-        tenant_name=None, description=None, dscp=None, ratelimit=None, scheduler=None,
-        name(str): Name of the QoS
-        tenant_name(str): Such as tenant1, tenant2
-        description(str): Description of the QoS
-        dscp(dict): Policies for dscp
-        ratelimit(dict): Policies for ratelimit
-        scheduler(dict): Policies for scheduler eg "'weight':4"
+        name(str): Name of the QoS to be created.
+        tenant_name(str): Such as tenant1, tenant2.
+        description(str): Description of the created QoS.
+        scheduler(dict): Dictionary of scheduler policies formatted as {'policy': value}.
+        dscp(dict): Dictionary of dscp policies formatted as {'policy': value}.
+        ratelimit(dict): Dictionary of ratelimit policies formatted as {'policy': value}.
         fail_ok(bool):
         con_ssh(SSHClient):
-        auth_info(dict): run the neutron qos-create cli using this authorization info
+        auth_info(dict): Run the neutron qos-create cli using this authorization info. Admin by default,
 
-    Returns(tuple): exit_code(int), qos_id(str), output(str)
+    Returns(tuple): exit_code(int), qos_id(str)
                     (0, qos_id) qos successfully created.
-                    (1, output) cli accepted but qos not found in list
-                    (2, output) qos fields not created properly
+                    (1, output) qos not created successfully
     """
-    args = '--name ' + name
+    tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)[0]
+    check_dict = {}
+    args = ''
+    current_qos = get_qos_name(con_ssh=con_ssh, auth_info=auth_info)
+    if name is None:
+        name = common.get_unique_name("{}-qos".format(tenant_name), existing_names=current_qos, resource_type='qos')
+    args_dict = {'name': name,
+                 'tenant-id': tenant_id,
+                 'description': description,
+                 'scheduler': scheduler,
+                 'dscp': dscp,
+                 'ratelimit': ratelimit
+                 }
+    check_dict['policies'] = {}
+    for key, value in args_dict.items():
+        if value:
+            if key in ('scheduler', 'dscp', 'ratelimit'):
+                args += " --{}".format(key)
+                for policy, val in value.items():
+                    args += " {}={}".format(policy, val)
+                    value[policy] = str(val)
+                check_dict['policies'][key] = value
+            else:
+                args += " --{} '{}'".format(key, value)
+                if key is 'tenant-id':
+                    key = 'tenant_id'
+                check_dict[key] = value
 
-    if tenant_name:
-        keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)
-        args += ' --tenant-id ' + "{} ".format(keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh))
-    if description:
-        args += ' --description ' + "'{}' ".format(description)
-    for key, value in scheduler:
-        args += '--scheduler ' + "{}={}".format(key, value)
-    for key, value in dscp:
-        args += '--dscp ' + "{}={}".format(key, value)
-    for key, value in ratelimit:
-        args += '--ratelimit ' + "{}={}".format(key, value)
-
-    args = '--name ' + name
-
-    LOG.info("Creating QoS: args: {}".format(args))
+    LOG.info("Creating QoS with args: {}".format(args))
     exit_code, output = cli.neutron('qos-create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
                                     rtn_list=True)
-
     if exit_code == 1:
         return 1, output
 
     table_ = table_parser.table(output)
-    qos_id = table_parser.get_value_two_col_table(table_, 'id')
-    tenant_id = table_parser.get_value_two_col_table(table_, 'tenant_id')
-    if qos_id in get_qos(con_ssh=con_ssh, auth_info=auth_info):
-        msg = "QoS policies not added correctly"
-        if description is not None:
-            if description != table_parser.get_value_two_col_table(table_, 'description'):
-                return 2, msg
-        if tenant_name is not None:
-            if tenant_id != keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh):
-                return 2, msg
-    else:
-        LOG.info("QoS not found in qos list")
-        return 1, output
+    for key, exp_value in check_dict.items():
+        if key is 'policies':
+            actual_value = eval(table_parser.get_value_two_col_table(table_, key))
+        else:
+            actual_value = table_parser.get_value_two_col_table(table_, key)
+        msg = "Qos created but {} expected to be {} but actually {}".format(key, exp_value, actual_value)
+        if actual_value != exp_value:
+            raise exceptions.NeutronError(msg)
 
+    qos_id = table_parser.get_value_two_col_table(table_, 'id')
     LOG.info("QoS successfully created")
     return 0, qos_id
 
@@ -983,22 +1007,20 @@ def delete_qos(qos_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
     Returns: code(int), output(string)
             (0, "QoS <qos_id> successfully deleted" )
             (1, <std_err>)  openstack qos delete cli rejected
-            (2, "QoS <qos_id> still listed in neutron QoS list") Command failed and fail_ok
     """
 
     LOG.info("deleting QoS: {}".format(qos_id))
     code, output = cli.neutron('qos-delete', qos_id, auth_info=auth_info, ssh_client=con_ssh, fail_ok=fail_ok,
                                rtn_list=True)
+    if code == 1:
+        return 1, output
 
     if qos_id in get_qos(auth_info=auth_info, con_ssh=con_ssh):
         msg = "QoS {} still listed in neutron QoS list".format(qos_id)
-        if fail_ok:
-            LOG.warning(msg)
-            return 2, msg
-        else:
-            return 1, msg
+        raise exceptions.NeutronError(msg)
 
     succ_msg = "QoS {} successfully deleted".format(qos_id)
+    LOG.info(succ_msg)
     return 0, succ_msg
 
 

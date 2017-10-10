@@ -38,28 +38,27 @@ def test_qos_update(setup_qos):
 def setup_qos(request):
 
     LOG.fixture_step("Creating new QoS")
-    qos_args = {"scheduler": "weight=4"}
-    qos_new = network_helper.create_qos('test', args_dict=qos_args)[1]
-
+    scheduler = {'weight': 4}
+    qos_new = network_helper.create_qos(tenant_name='tenant2', scheduler=scheduler, description="Test QoS")[1]
     LOG.fixture_step("Retrieving network ids and Qos'")
-    internal_net = network_helper.get_internal_net_id()
-    tenant_net = network_helper.get_tenant_net_id()
-    qos_internal = network_helper.get_net_info(net_id=internal_net, field='wrs-tm:qos')
-    qos_tenant = network_helper.get_net_info(net_id=tenant_net, field='wrs-tm:qos')
+    internal_net_id = network_helper.get_internal_net_id()
+    tenant_net_id = network_helper.get_tenant_net_id()
+    qos_internal = network_helper.get_net_info(net_id=internal_net_id, field='wrs-tm:qos')
+    qos_tenant = network_helper.get_net_info(net_id=tenant_net_id, field='wrs-tm:qos')
     mgmt_net_id = network_helper.get_mgmt_net_id()
 
     LOG.fixture_step("Creating new vms")
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': internal_net, 'vif-model': 'virtio'},
-            {'net-id': tenant_net, 'vif-model': 'virtio'}]
+            {'net-id': internal_net_id, 'vif-model': 'virtio'},
+            {'net-id': tenant_net_id, 'vif-model': 'virtio'}]
     vm1 = vm_helper.boot_vm(name='vm1', nics=nics)[1]
     vm2 = vm_helper.boot_vm(name='vm2', nics=nics)[1]
 
     def reset():
         LOG.fixture_step("Resetting QoS for tenant and internal networks")
 
-        network_helper.update_net_qos(net_id=internal_net, qos_id=qos_internal)
-        network_helper.update_net_qos(net_id=tenant_net, qos_id=qos_tenant)
+        network_helper.update_net_qos(net_id=internal_net_id, qos_id=qos_internal)
+        network_helper.update_net_qos(net_id=tenant_net_id, qos_id=qos_tenant)
 
         LOG.fixture_step("Deleting created QoS")
         network_helper.delete_qos(qos_new)
@@ -68,4 +67,4 @@ def setup_qos(request):
         vm_helper.delete_vms(vms=[vm1, vm2])
 
     request.addfinalizer(reset)
-    return internal_net, tenant_net, qos_new, vm1, vm2
+    return internal_net_id, tenant_net_id, qos_new, vm1, vm2
