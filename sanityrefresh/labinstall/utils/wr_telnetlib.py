@@ -1069,7 +1069,8 @@ class Telnet:
                 if "wildcat" in node.host_name:
                     regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
                 else:
-                    regex = re.compile(b"Slot \d{4} v\d+")
+                    regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b|Slot \d{4} v\d+")
+                    #regex = re.compile(b"Slot \d{4} v\d+")
 
                 try:
                     index, match = self.expect([regex], BOOT_MENU_TIMEOUT)[:2]
