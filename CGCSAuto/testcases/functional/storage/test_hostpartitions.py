@@ -500,18 +500,19 @@ def test_create_multiple_partitions_on_single_host():
         disks = get_disks(host)
         free_disks = get_disks_with_free_space(host, disks)
         if not free_disks:
-            skip("There are no disks with available disk space.")
-        for uuid in free_disks:
-            size_mib = int(free_disks[uuid])
+            continue
+
+        for disk_uuid in free_disks:
+            size_mib = int(free_disks[disk_uuid])
             partition_chunks = size_mib / 1024
             if partition_chunks < 2:
-                LOG.tc_step("Skip this disk due to insufficient space")
+                LOG.info("Skip disk {} due to insufficient space".format(disk_uuid))
                 continue
             usable_disks = True
             LOG.info("Creating first partition on {}".format(host))
-            rc1, out1 = create_partition(host, uuid, "1024", fail_ok=False, wait=False)
+            rc1, out1 = create_partition(host, disk_uuid, "1024", fail_ok=False, wait=False)
             LOG.info("Creating second partition on {}".format(host))
-            rc, out = create_partition(host, uuid, "1024", fail_ok=True)
+            rc, out = create_partition(host, disk_uuid, "1024", fail_ok=True)
             assert rc != 0, "Partition creation was expected to fail but was instead successful"
             # Check that first disk was created
             uuid = table_parser.get_value_two_col_table(table_parser.table(out1), "uuid")
@@ -565,7 +566,7 @@ def test_create_many_small_host_partitions_on_a_single_host():
         disks = get_disks(host)
         free_disks = get_disks_with_free_space(host, disks)
         if not free_disks:
-            skip("There are no disks with available disk space.")
+            continue
         for disk_uuid in free_disks:
             size_mib = int(free_disks[disk_uuid])
             num_partitions = 30
@@ -621,7 +622,7 @@ def _test_attempt_host_unlock_during_partition_creation():
         disks = get_disks(host)
         free_disks = get_disks_with_free_space(host, disks)
         if not free_disks:
-            skip("There are no disks with available disk space.")
+            continue
         for uuid in free_disks:
             size_mib = int(free_disks[uuid])
             if size_mib == 0:
@@ -887,7 +888,7 @@ def test_create_host_partition_on_storage():
         disks = get_disks(host)
         free_disks = get_disks_with_free_space(host, disks)
         if not free_disks:
-            skip("There are no disks with available disk space.")
+            continue
         for uuid in free_disks:
             rc, out = create_partition(host, uuid, free_disks[uuid], fail_ok=True)
             assert rc != 0, "Partition creation was successful"
