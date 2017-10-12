@@ -3274,8 +3274,6 @@ def get_hypersvisors_with_config(hosts=None, up_only=True, hyperthreaded=None, s
 def lock_unlock_controllers():
     """
     lock/unlock both controller to get rid of the config out of date situations
-    Args:
-        none
 
     Returns (list): return code and msg
 

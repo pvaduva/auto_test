@@ -72,8 +72,11 @@ def setup_primary_tenant(tenant):
 def setup_natbox_ssh(keyfile_path, natbox, con_ssh):
     natbox_ip = natbox['ip']
     NATBoxClient.set_natbox_client(natbox_ip)
+    nat_ssh = NATBoxClient.get_natbox_client()
+    nat_ssh.exec_cmd('mkdir -p ~/priv_keys/')
+
     __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh=con_ssh)
-    return NATBoxClient.get_natbox_client()
+    return nat_ssh
 
 
 def __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh):
@@ -143,15 +146,18 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh):
     # ssh private key should now exist under keyfile_path
     con_ssh.exec_cmd('stat {}'.format(keyfile_name), fail_ok=False)
 
-    cmd_3 = 'scp {} {}@{}:{}'.format(keyfile_name, natbox['user'], natbox['ip'], keyfile_path)
-    con_ssh.send(cmd_3)
-    rtn_3_index = con_ssh.expect(['.*\(yes/no\)\?.*', Prompt.PASSWORD_PROMPT])
-    if rtn_3_index == 0:
-        con_ssh.send('yes')
-        con_ssh.expect(Prompt.PASSWORD_PROMPT)
-    con_ssh.send(natbox['password'])
-    con_ssh.expect(timeout=30)
-    if not con_ssh.get_exit_code() == 0:
+    natbox_client = NATBoxClient.get_natbox_client()
+    tis_ip = ProjVar.get_var('LAB').get('floating ip')
+    cmd_3 = 'scp {}@{}:{} {}'.format(HostLinuxCreds.get_user(), tis_ip, keyfile_name, keyfile_path)
+    natbox_client.send(cmd_3)
+    rtn_3_index = natbox_client.expect([Prompt.PASSWORD_PROMPT, '.*\(yes/no\)\?.*'])
+    if rtn_3_index == 1:
+        natbox_client.send('yes')
+        natbox_client.expect(Prompt.PASSWORD_PROMPT)
+    elif rtn_3_index == 0:
+        natbox_client.send(HostLinuxCreds.get_password())
+        natbox_client.expect(timeout=30)
+    if not natbox_client.get_exit_code() == 0:
         raise exceptions.CommonError("Failed to copy keyfile to NatBox")
 
     LOG.info("key file is successfully copied from controller to NATBox")
@@ -190,13 +196,16 @@ def get_lab_dict(labname):
 
 def get_natbox_dict(natboxname):
     natboxname = natboxname.lower().strip()
-    natboxes = [getattr(NatBoxes, item) for item in dir(NatBoxes) if not item.startswith('_')]
+    natboxes = [getattr(NatBoxes, item) for item in dir(NatBoxes) if item.startswith('NAT_')]
 
     for natbox in natboxes:
         if natboxname.replace('-', '_') in natbox.get('name').replace('-', '_') or natboxname == natbox.get('ip'):
             return natbox
     else:
-        raise ValueError("{} is not a valid input.".format(natboxname))
+        if natboxname.startswith('128.224'):
+            NatBoxes.add_natbox(ip=natboxname)
+        else:
+            raise ValueError("{} is not a valid input.".format(natboxname))
 
 
 def get_tenant_dict(tenantname):

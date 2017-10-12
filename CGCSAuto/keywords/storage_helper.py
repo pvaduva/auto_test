@@ -566,7 +566,7 @@ def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ce
         controler_ssh.send('yes')
         controler_ssh.expect()
 
-    rc, output = controler_ssh.proecess_cmd_result(cmd)
+    rc, output = controler_ssh.process_cmd_result(cmd)
     if rc != 0:
         if fail_ok:
             return rc, output

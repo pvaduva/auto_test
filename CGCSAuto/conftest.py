@@ -285,6 +285,11 @@ def pytest_configure(config):
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
                      report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli)
+    # put keyfile to home directory of localhost
+    if natbox['ip'] == 'localhost':
+        labname = ProjVar.get_var('LAB_NAME')
+        ProjVar.set_var(KEYFILE_PATH='~/priv_keys/keyfile_{}.pem'.format(labname))
+
     InstallVars.set_install_var(lab=lab)
 
     config_logger(log_dir)
