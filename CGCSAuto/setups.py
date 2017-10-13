@@ -150,11 +150,11 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh):
     tis_ip = ProjVar.get_var('LAB').get('floating ip')
     cmd_3 = 'scp {}@{}:{} {}'.format(HostLinuxCreds.get_user(), tis_ip, keyfile_name, keyfile_path)
     natbox_client.send(cmd_3)
-    rtn_3_index = natbox_client.expect([Prompt.PASSWORD_PROMPT, '.*\(yes/no\)\?.*'])
-    if rtn_3_index == 1:
+    rtn_3_index = natbox_client.expect([natbox_client.get_prompt(), Prompt.PASSWORD_PROMPT, '.*\(yes/no\)\?.*'])
+    if rtn_3_index == 2:
         natbox_client.send('yes')
         natbox_client.expect(Prompt.PASSWORD_PROMPT)
-    elif rtn_3_index == 0:
+    elif rtn_3_index == 1:
         natbox_client.send(HostLinuxCreds.get_password())
         natbox_client.expect(timeout=30)
     if not natbox_client.get_exit_code() == 0:

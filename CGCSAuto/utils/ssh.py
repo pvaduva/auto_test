@@ -605,6 +605,64 @@ class SSHClient:
             else:
                 raise exceptions.SSHException(msg)
 
+    def scp_on_dest(self, source_user, source_ip, source_path, dest_path, source_pswd, timeout=3600,
+                     cleanup=True):
+        source = source_path
+        if source_ip:
+            source = '{}:{}'.format(source_ip, source)
+            if source_user:
+                source = '{}@{}'.format(source_user, source)
+
+        scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {} {}'.format(source, dest_path)
+
+        try:
+            self.send(scp_cmd)
+            index = self.expect([self.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout)
+            if index == 2:
+                self.send('yes')
+                index = self.expect([self.prompt, Prompt.PASSWORD_PROMPT], timeout=timeout)
+            if index == 1:
+                self.send(source_pswd)
+                index = self.expect(timeout=timeout)
+            if index != 0:
+                raise exceptions.SSHException("Failed to scp files")
+
+            exit_code = self.get_exit_code()
+            if not exit_code == 0:
+                raise exceptions.CommonError("scp unsuccessfully")
+
+            if not self.file_exists(file_path=dest_path):
+                raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
+        except:
+            if cleanup:
+                LOG.info("Attempt to remove {} to cleanup the system due to scp failed".format(dest_path))
+                self.exec_cmd('rm -f {}'.format(dest_path), fail_ok=True, get_exit_code=False)
+            raise
+
+    def scp_on_source(self, source_path, dest_user, dest_ip, dest_path, dest_password, timeout=3600):
+        dest = dest_path
+        if dest_ip:
+            dest = '{}:{}'.format(dest_ip, dest)
+            if dest_user:
+                dest = '{}@{}'.format(dest_user, dest)
+
+        scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {} {}'.format(source_path, dest)
+
+        self.send(scp_cmd)
+        index = self.expect([self.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout)
+        if index == 2:
+            self.send('yes')
+            index = self.expect([self.prompt, Prompt.PASSWORD_PROMPT], timeout=timeout)
+        if index == 1:
+            self.send(dest_password)
+            index = self.expect(timeout=timeout)
+        if index != 0:
+            raise exceptions.SSHException("Failed to scp files")
+
+        exit_code = self.get_exit_code()
+        if not exit_code == 0:
+            raise exceptions.CommonError("scp unsuccessfully")
+
     def file_exists(self, file_path):
         return self.exec_cmd('stat {}'.format(file_path), fail_ok=True)[0] == 0
 

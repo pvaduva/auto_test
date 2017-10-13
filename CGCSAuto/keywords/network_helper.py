@@ -2314,6 +2314,8 @@ def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))
     nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
+    if isinstance(nics, str):
+        nics = [nics]
     nics = [eval(nic_) for nic_ in nics]
 
     return nics
