@@ -910,22 +910,23 @@ def get_qos(name=None, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
-def get_qos_name(qos_id=None, con_ssh=None, auth_info=None):
+def get_qos_names(qos_ids=None, con_ssh=None, auth_info=None):
     """
 
     Args:
-        qos_id(string): QoS id to filter name.
+        qos_ids(str|list|None): QoS id to filter name.
         con_ssh(SSHClient):  If None, active controller ssh will be used.
         auth_info(dict): Tenant dict. If None, primary tenant will be used.
 
-    Returns(str): List of neutron qos names filtered by id.
+    Returns(list): List of neutron qos names filtered by qos_id.
 
     """
     table_ = table_parser.table(cli.neutron('qos-list', ssh_client=con_ssh, auth_info=auth_info))
-    if qos_id is None:
-        return table_parser.get_values(table_, 'name')
 
-    return table_parser.get_values(table_, 'name', strict=True, id=qos_id)
+    if qos_ids is None:
+        return table_parser.get_column(table_, 'name')
+
+    return table_parser.get_values(table_, 'name', strict=True, id=qos_ids)
 
 
 def create_qos(name=None, tenant_name=None, description=None, scheduler=None, dscp=None, ratelimit=None, fail_ok=False,
@@ -933,7 +934,7 @@ def create_qos(name=None, tenant_name=None, description=None, scheduler=None, ds
     """
     Args:
         name(str): Name of the QoS to be created.
-        tenant_name(str): Such as tenant1, tenant2.
+        tenant_name(str): Such as tenant1, tenant2. If none uses primary tenant.
         description(str): Description of the created QoS.
         scheduler(dict): Dictionary of scheduler policies formatted as {'policy': value}.
         dscp(dict): Dictionary of dscp policies formatted as {'policy': value}.
@@ -949,9 +950,13 @@ def create_qos(name=None, tenant_name=None, description=None, scheduler=None, ds
     tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)[0]
     check_dict = {}
     args = ''
-    current_qos = get_qos_name(con_ssh=con_ssh, auth_info=auth_info)
+    current_qos = get_qos_names(con_ssh=con_ssh, auth_info=auth_info)
     if name is None:
-        name = common.get_unique_name("{}-qos".format(tenant_name), existing_names=current_qos, resource_type='qos')
+        if tenant_name is None:
+            tenant_name = common.get_tenant_name(Tenant.get_primary())
+            name = common.get_unique_name("{}-qos".format(tenant_name), existing_names=current_qos, resource_type='qos')
+        else:
+            name = common.get_unique_name("{}-qos".format(tenant_name), existing_names=current_qos, resource_type='qos')
     args_dict = {'name': name,
                  'tenant-id': tenant_id,
                  'description': description,
@@ -986,8 +991,8 @@ def create_qos(name=None, tenant_name=None, description=None, scheduler=None, ds
             actual_value = eval(table_parser.get_value_two_col_table(table_, key))
         else:
             actual_value = table_parser.get_value_two_col_table(table_, key)
-        msg = "Qos created but {} expected to be {} but actually {}".format(key, exp_value, actual_value)
         if actual_value != exp_value:
+            msg = "Qos created but {} expected to be {} but actually {}".format(key, exp_value, actual_value)
             raise exceptions.NeutronError(msg)
 
     qos_id = table_parser.get_value_two_col_table(table_, 'id')
