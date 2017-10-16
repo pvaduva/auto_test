@@ -1,16 +1,10 @@
-import logging
 import os
-from time import strftime, gmtime
 
 import pytest
 
-import setup_consts
 import setups
 from consts.auth import CliAuth, Tenant
 from consts.proj_vars import ProjVar
-from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
-from utils.tis_log import LOG
-from utils import lab_info
 
 
 natbox_ssh = None
@@ -38,6 +32,9 @@ def setup_test_session():
     # set build id to be used to upload/write test results
     build_id, build_server = setups.get_build_info(con_ssh)
     ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_server)
+
+    if ProjVar.get_var('KEYSTONE_DEBUG'):
+        setups.enable_disable_keystone_debug(enable=True, con_ssh=con_ssh)
 
     setups.set_session(con_ssh=con_ssh)
 

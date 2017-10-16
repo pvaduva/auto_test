@@ -516,3 +516,22 @@ class NatBoxes:
         'user': '',
         'password': ''
     }
+
+    # Assume vbox NatBox is
+    NAT_BOX_VBOX = {
+        'name': 'localhost',
+        'ip': 'localhost',
+        'user': None,
+        'password': None,
+    }
+
+    @staticmethod
+    def add_natbox(ip, user='svc-cgcsauto', password=')OKM0okm'):
+        # this only supports svc-cgcsauto user from cgts group for now
+        nat_dict = {'ip': ip,
+                    'name': ip,
+                    'user': user,
+                    'password': password,
+                    }
+        setattr(NatBoxes, 'NAT_NEW', nat_dict)
+        return nat_dict

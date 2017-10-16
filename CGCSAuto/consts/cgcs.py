@@ -285,6 +285,7 @@ class EventLogID:
     PROVIDER_NETWORK_FAILURE = '300.005'
     BMC_SENSOR_ACTION = '200.007'
     CPU_USAGE_HIGH = '100.101'
+    FS_THRESHOLD_EXCEEDED = '100.104'
 
 
 class NetworkingVmMapping:

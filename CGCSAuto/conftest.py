@@ -24,6 +24,7 @@ tracebacks = []
 # Process and log test results #
 ################################
 
+
 class MakeReport:
     nodeid = None
     instances = {}
@@ -249,6 +250,7 @@ def pytest_configure(config):
     stress_iteration = config.getoption('repeat')
     global no_teardown
     no_teardown = config.getoption('noteardown')
+    keystone_debug = config.getoption('keystone_debug')
     install_conf = config.getoption('installconf')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
@@ -262,6 +264,8 @@ def pytest_configure(config):
 
     if no_cgcs:
         ProjVar.set_var(CGCS_DB=False)
+    if keystone_debug:
+        ProjVar.set_var(KEYSTONE_DEBUG=True)
 
     if session_log_dir:
         log_dir = session_log_dir
@@ -281,6 +285,11 @@ def pytest_configure(config):
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
                      report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli)
+    # put keyfile to home directory of localhost
+    if natbox['ip'] == 'localhost':
+        labname = ProjVar.get_var('LAB_NAME')
+        ProjVar.set_var(KEYFILE_PATH='~/priv_keys/keyfile_{}.pem'.format(labname))
+
     InstallVars.set_install_var(lab=lab)
 
     config_logger(log_dir)
@@ -351,6 +360,7 @@ def pytest_addoption(parser):
                      help=openstackcli_help)
     parser.addoption('--repeat', action='store', metavar='repeat', type=int, default=-1, help=stress_help)
     parser.addoption('--no-teardown', '--no_teardown', '--noteardown', dest='noteardown', action='store_true')
+    parser.addoption('--keystone_debug', '--keystone-debug', action='store_true', dest='keystone_debug')
 
     # Lab install options:
     parser.addoption('--resumeinstall', '--resume-install', dest='resumeinstall', action='store_true',
@@ -455,6 +465,12 @@ def pytest_unconfigure():
             setups.collect_tis_logs(con_ssh)
         except:
             LOG.warning("'collect all' failed.")
+
+    # if ProjVar.get_var('KEYSTONE_DEBUG'):
+    #     try:
+    #         setups.enable_disable_keystone_debug(enable=False, con_ssh=con_ssh)
+    #     except:
+    #         LOG.warning("Disable keystone debug failed")
 
     # close ssh session
     try:

@@ -137,7 +137,7 @@ def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from
     LOG.info("External Router IP address = {}".format(ext_ip_address))
 
     LOG.info("Setting NATBox SSH session ...")
-    ssh_nat = NATBoxClient.set_natbox_client()
+    ssh_nat = NATBoxClient.get_natbox_client()
 
     vm_threads = [None] * VMS_COUNT
     index = 0
@@ -305,7 +305,7 @@ def test_dnat_ubuntu_vm_udp(_vms, router_info):
     LOG.info("External Router IP address = {}".format(ext_ip_address))
 
     LOG.info("Setting NATBox SSH session ...")
-    ssh_nat = NATBoxClient.set_natbox_client()
+    ssh_nat = NATBoxClient.get_natbox_client()
 
     vm_threads = [None] * VMS_COUNT
     index = 0
@@ -397,7 +397,7 @@ def test_dnat_ubuntu_vm_udp(_vms, router_info):
 
 
 def check_ssh_to_vm_and_wait_for_packets(vm_id, vm_ip, vm_ext_port, expect_output, protocol='tcp'):
-    ssh_nat = NATBoxClient.set_natbox_client()
+    ssh_nat = NATBoxClient.get_natbox_client()
     with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name='ubuntu_14', username='ubuntu',
                                          password='ubuntu', natbox_client=ssh_nat, vm_ip=vm_ip,
                                          vm_ext_port=vm_ext_port, retry=False) as vm_ssh:

@@ -30,6 +30,8 @@ def heartbeat_flavor_vm():
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
 
     vm_id = vm_helper.boot_vm(flavor=flavor_id, cleanup='module')[1]
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
     system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
                                   **{'Entity Instance ID': vm_id,
                                      'Event Log ID': [EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
