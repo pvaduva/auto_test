@@ -17,6 +17,7 @@ tc_start_time = None
 tc_end_time = None
 has_fail = False
 stress_iteration = -1
+count = -1
 no_teardown = False
 tracebacks = []
 
@@ -248,6 +249,13 @@ def pytest_configure(config):
     change_admin = config.getoption('changeadmin')
     global stress_iteration
     stress_iteration = config.getoption('repeat')
+    stress_count = config.getoption('stress')
+    global count
+    if stress_iteration > 0:
+        count = stress_iteration
+    elif stress_count > 0:
+        count = stress_count
+
     global no_teardown
     no_teardown = config.getoption('noteardown')
     keystone_debug = config.getoption('keystone_debug')
@@ -301,7 +309,7 @@ def pytest_configure(config):
     # print("config_options: {}".format(config.option))
     file_or_dir = config.getoption('file_or_dir')
     origin_file_dir = list(file_or_dir)
-    if stress_iteration > 0:
+    if count > 0:
         for f_or_d in origin_file_dir:
             if '[' in f_or_d:
                 # Below setting seems to have no effect. Test did not continue upon collection failure.
@@ -310,7 +318,7 @@ def pytest_configure(config):
                 file_or_dir.remove(f_or_d)
                 origin_f_or_list = list(f_or_d)
 
-                for i in range(stress_iteration):
+                for i in range(count):
                     extra_str = 'iter{}-'.format(i)
                     f_or_d_list = list(origin_f_or_list)
                     f_or_d_list.insert(f_or_d_list.index('[') + 1, extra_str)
@@ -331,7 +339,8 @@ def pytest_addoption(parser):
     tag_help = "Tag to be used for uploading logs to the test results database."
     logdir_help = "Directory to store test session logs. If this is specified, then --resultlog will be ignored."
     openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
-    stress_help = "Number of iterations to run specified testcase(s)"
+    stress_help = "Number of iterations to run specified testcase(s). Abort rest of the test session on first failure"
+    count_help = "Repeat tests x times - NO stop on failure"
     skiplabsetup_help = "Do not run lab_setup post lab install"
     installconf_help = "Full path of lab install configuration file. Template location: " \
                        "/folk/cgts/lab/autoinstall_template.ini"
@@ -359,6 +368,7 @@ def pytest_addoption(parser):
     parser.addoption('--openstackcli', '--openstack_cli', '--openstack-cli', action='store_true', dest='openstackcli',
                      help=openstackcli_help)
     parser.addoption('--repeat', action='store', metavar='repeat', type=int, default=-1, help=stress_help)
+    parser.addoption('--stress', metavar='stress', action='store', type=int, help=count_help)
     parser.addoption('--no-teardown', '--no_teardown', '--noteardown', dest='noteardown', action='store_true')
     parser.addoption('--keystone_debug', '--keystone-debug', action='store_true', dest='keystone_debug')
 
@@ -567,13 +577,13 @@ def pytest_generate_tests(metafunc):
     #         metafunc.fixturenames.insert(index, config_fixture)
 
     # Stress fixture
-    if metafunc.config.option.repeat > 0:
+    global count
+    if count > 0:
         # Add autorepeat fixture and parametrize the fixture
         param_name = 'autorepeat'
-
-        count = int(metafunc.config.option.repeat)
         metafunc.parametrize(param_name, range(count), indirect=True, ids=__params_gen)
 
+    print(str(count))
     # print("{}".format(metafunc.fixturenames))
 
 

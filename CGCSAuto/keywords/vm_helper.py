@@ -343,7 +343,6 @@ def auto_mount_disks(vm_id, rootfs, vm_image_name=None):
             return True
 
 
-
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
             block_device_mapping=None,  vm_host=None, avail_zone=None, file=None, config_drive=False, meta=None,
@@ -599,7 +598,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         return 0, vm_ids, "VMs are booted successfully"
 
 
-def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None, use_fip=False):
+def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None, use_fip=False, wait_login=True):
     """
     Wait for ping vm from natbox succeeds.
 
@@ -1354,11 +1353,12 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
     return res_bool, res_dict
 
 
-def get_console_logs(vm_ids, con_ssh=None):
+def get_console_logs(vm_ids, length=None, con_ssh=None):
     """
     Get console logs for given vm(s)
     Args:
         vm_ids (str|list):
+        length (int|None): how many lines to tail
         con_ssh:
 
     Returns (dict): {<vm1_id>: <vm1_console>, <vm2_id>: <vm2_console>, ...}
@@ -1366,8 +1366,10 @@ def get_console_logs(vm_ids, con_ssh=None):
     if isinstance(vm_ids, str):
         vm_ids = [vm_ids]
     console_logs = {}
+    args = '--length={} '.format(length) if length else ''
     for vm_id in vm_ids:
-        output = cli.nova('console-log', vm_id, ssh_client=con_ssh)[1]
+        vm_args = '{}{}'.format(args, vm_id)
+        output = cli.nova('console-log', vm_args, ssh_client=con_ssh)
         console_logs[vm_id] = output
     return console_logs
 

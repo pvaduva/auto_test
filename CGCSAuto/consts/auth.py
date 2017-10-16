@@ -92,9 +92,6 @@ class HostLinuxCreds:
         'user': 'wrsroot',
         'password': 'Li69nux*'
     }
-    #
-    # USER = 'wrsroot'
-    # PASSWORD = "Li69nux*"
 
     @classmethod
     def get_user(cls):

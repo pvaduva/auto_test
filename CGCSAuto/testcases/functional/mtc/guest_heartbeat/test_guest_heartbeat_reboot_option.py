@@ -73,7 +73,7 @@ def test_guest_heartbeat_reboot_option(vm_):
         vm_ssh.exec_cmd("kill -9 %s" % pid)
 
     LOG.tc_step("Verify VM automatically rebooted.")
-    system_helper.wait_for_events(timeout=120, start=start_time, entity_instance_id=vm_id, strict=False, fail_ok=False,
+    system_helper.wait_for_events(timeout=300, start=start_time, entity_instance_id=vm_id, strict=False, fail_ok=False,
                                   **{'Reason Text': 'Reboot complete for instance'})
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
