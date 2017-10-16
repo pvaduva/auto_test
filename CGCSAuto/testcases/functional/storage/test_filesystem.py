@@ -96,13 +96,13 @@ def test_increase_scratch():
     scratch = table_parser.get_value_two_col_table(table_, 'size')
     LOG.info("scratch is currently: {}".format(scratch))
 
-    LOG.info("Determine the available free space on the system")
-    big_value = "1000000000000"
-    free_space_regex = "([\-0-9.]*) GiB\.$"
-    cmd = "system controllerfs-modify scratch {}".format(big_value)
-    rc, out = con_ssh.exec_cmd(cmd, fail_ok=True)
-    free_space_match = re.search(free_space_regex, out)
-    free_space = free_space_match.group(1)
+    LOG.tc_step("Determine the available free space on the system")
+    cmd = "vgdisplay -C --noheadings --nosuffix -o vg_free --units g cgts-vg"
+    rc, out = con_ssh.exec_sudo_cmd(cmd)
+    free_space = out.rstrip()
+    LOG.info("Available free space on the system is: {}".format(free_space))
+    if float(free_space) <= 0:
+        skip("Not enough free space to complete test.")
 
     LOG.info("Available free space on the system is: {}".format(free_space))
 
@@ -342,6 +342,8 @@ def test_increase_ceph_mon():
     hosts = system_helper.get_controllers()
     for host in hosts:
         cli.system("ceph-mon-modify {} ceph_mon_gib={}".format(host, new_ceph_mon_gib))
+        # We only need to do this for one controller now and it applies to both
+        break
 
     LOG.info("Wait for expected alarms to appear")
     storage_hosts = system_helper.get_storage_nodes()
