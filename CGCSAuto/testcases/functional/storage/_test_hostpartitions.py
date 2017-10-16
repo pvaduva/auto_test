@@ -64,25 +64,6 @@ def get_partitions(hosts, state):
     return partitions
 
 
-def get_last_partition(host):
-    """
-    This function returns the last partition on a host.  This is useful since
-    only the last partition can be modified.
-
-    Arguments:
-    * host - hostname, e.g. controller-0
-
-    Returns:
-    * None if no partitions are found
-    * uuid if partition is found
-    """
-
-    table_ = table_parser.table(cli.system('host-disk-partition-list {}'.format(host)))
-    device_node = table_parser.get_values(table_, "device_node")
-    print(device_node)
-    #TODO
-    
-
 def delete_partition(host, uuid, fail_ok=False, timeout=DP_TIMEOUT):
     """
     Delete a partition from a specific host.
@@ -152,7 +133,7 @@ def modify_partition(host, uuid, size_mib, fail_ok=False, timeout=MP_TIMEOUT):
     Arguments:
     * host(str) - hostname, e.g. controller-0
     * uuid(str) - uuid of the partition
-    * size_mib(str) - new partition size in mib 
+    * size_mib(str) - new partition size in mib
     * timeout(int) - how long to wait for partition creation (sec)
 
     Returns:
@@ -296,6 +277,8 @@ def get_rootfs(hosts):
 
     LOG.info("Root disk UUIDS: {}".format(rootfs_uuid))
 
+    return rootfs_uuid
+
 
 @fixture()
 def restore_partitions_teardown(request):
@@ -309,9 +292,13 @@ def restore_partitions_teardown(request):
             device_node = partitions_to_restore[host][0]
             size_mib = partitions_to_restore[host][1]
             uuid = partitions_to_restore[host][2]
+            available_mib = get_disk_info(host, device_node, "available_mib")
+            total_free = int(available_mib) - int(size_mib)
             LOG.info("Restoring deleted partition on host {} with device_node {} and size {}".format(host, device_node, size_mib))
             rc, out = create_partition(host, device_node, size_mib)
             assert rc == 0, "Partition creation failed"
+            mib_after_create = get_disk_info(host, device_node, "available_mib")
+            assert int(mib_after_create) == total_free, "Expected available_mib to be {} after creation but instead was {}".format(total_free, mib_after_create)
 
     request.addfinalizer(teardown)
 
@@ -328,15 +315,22 @@ def delete_partitions_teardown(request):
             print(partitions_to_restore[host])
             for i in range(len(partitions_to_restore[host]) - 1, -1, -1):
                 uuid = partitions_to_restore[host][i]
+                device_node = get_partition_info(host, uuid, "device_node")
+                partition_mib = get_partition_info(host, uuid, "size_mib")
+                available_mib = get_disk_info(host, device_node[:-1], "available_mib")
+                total_free = int(available_mib) + int(partition_mib)
                 LOG.info("Deleting partition on host {} with uuid {}".format(host, uuid))
                 rc, out = delete_partition(host, uuid)
                 assert rc == 0, "Partition deletion failed"
+                device_node = get_partition_info(host, uuid, "device_node")
+                mib_after_del = get_disk_info(host, device_node[:-1], "available_mib")
+                assert int(mib_after_del) == total_free, "Expected available_mib to be {} after deletion but instead was {}".format(total_free, mib_after_del)
 
     request.addfinalizer(teardown)
 
 
 @mark.usefixtures('restore_partitions_teardown')
-def test_delete_host_partitions():
+def _test_delete_host_partitions():
     """
     This test deletes host partitions that are in Ready state.  The teardown
     will re-create them.
@@ -392,7 +386,7 @@ def test_delete_host_partitions():
 
 
 @mark.usefixtures('restore_partitions_teardown')
-def test_increase_host_partition_size():
+def _test_increase_host_partition_size():
     """
     This test modifies the size of existing partitions that are in Ready state.
     The partition will be deleted after modification, since decreasing the size
@@ -469,7 +463,7 @@ def test_increase_host_partition_size():
 
 
 @mark.usefixtures('delete_partitions_teardown')
-def test_create_multiple_partitions_on_single_host():
+def _test_create_multiple_partitions_on_single_host():
     """
     This test attempts to create multiple partitions at once on a single host.
     While the first partition is being created, we will attempt to create a
@@ -477,7 +471,7 @@ def test_create_multiple_partitions_on_single_host():
     but the creation of the first partition should be successful.
 
     Assumptions:
-    * There's some free disk space available 
+    * There's some free disk space available
 
     Test steps:
     * Query the hosts to determine disk space
@@ -521,7 +515,7 @@ def test_create_multiple_partitions_on_single_host():
             uuid = table_parser.get_value_two_col_table(table_parser.table(out1), "uuid")
 
             partition_created = False
-            end_time = time.time() + CP_TIMEOUT 
+            end_time = time.time() + CP_TIMEOUT
             while time.time() < end_time:
                 status = get_partition_info(host, uuid, "status")
                 LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
@@ -541,16 +535,16 @@ def test_create_multiple_partitions_on_single_host():
 
 
 @mark.usefixtures('delete_partitions_teardown')
-def test_create_many_small_host_partitions_on_a_single_host():
+def _test_create_many_small_host_partitions_on_a_single_host():
     """
     This test attempts to create multiple tiny partitions on a single host.
 
     Assumptions:
-    * There's some free disk space available 
+    * There's some free disk space available
 
     Test steps:
     * Query the hosts to determine disk space
-    * Create small partitions until the disk space is consumed 
+    * Create small partitions until the disk space is consumed
     * Repeat on all applicable hosts
 
     Teardown:
@@ -593,10 +587,11 @@ def test_create_many_small_host_partitions_on_a_single_host():
         skip("Did not find disks with sufficient space to test with.")
 
 
-def test_create_partition_and_associate_with_pv():
+def _test_create_partition_and_associate_with_pv_nova_local():
     """
     This test attempst to create a partition and then associate it with a PV
-    (physical volume), resulting in the partition being In-use.
+    (physical volume), resulting in the partition being In-use.  In this case,
+    the test associates with nova-local.
 
     Assumptions:
     * There's some free disk space available
@@ -604,9 +599,10 @@ def test_create_partition_and_associate_with_pv():
     Test stesp:
     * Query hosts to determine disk space
     * Create partition
-    * Associate it with a nova-local PV
+    * Associate it with nova-local PV
     * Checks the partition is in-use state
     * Attempts to delete the partition that is in-use.  It should fail.
+    * Attempt to assign the in-use partition to another PV.  It should fail.
 
     Teardown:
     * None
@@ -631,7 +627,7 @@ def test_create_partition_and_associate_with_pv():
             continue
         for uuid in free_disks:
             size_mib = int(free_disks[uuid])
-            if size_mib <= 1024: 
+            if size_mib <= 1024:
                 LOG.tc_step("Skip this disk due to insufficient space")
                 continue
             usable_disks = True
@@ -648,7 +644,7 @@ def test_create_partition_and_associate_with_pv():
             rc, out = host_helper.unlock_host(host)
             LOG.tc_step("Check that partition is In-use state")
             partition_associated = False
-            end_time = time.time() + CP_TIMEOUT 
+            end_time = time.time() + CP_TIMEOUT
             while time.time() < end_time:
                 status = get_partition_info(host, uuid, "status")
                 LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
@@ -661,6 +657,10 @@ def test_create_partition_and_associate_with_pv():
             LOG.tc_step("Attempt to delete In-Use partition")
             rc, out = delete_partition(host, uuid, fail_ok=True)
             assert rc != 0, "Partition deletion was expected to fail but instead passed"
+            LOG.tc_step("Attempt to associate the In-Use partition with another PV")
+            cmd = "host-pv-add -t partition {} cgts-vg {}".format(host, uuid)
+            rc, out = cli.system(cmd, rtn_list=True)
+            assert rc != 0, "Partition association succeeded but was expected to fail"
             # Only test one disk on each host
             break
         # Do it on one host only
@@ -670,15 +670,116 @@ def test_create_partition_and_associate_with_pv():
         skip("Did not find disks with sufficient space to test with.")
 
 
+def _test_create_partition_and_associate_with_pv_cgts_vg():
+    """
+    This test attempst to create a partition and then associate it with a PV
+    (physical volume), resulting in the partition being In-use.
+
+    Assumptions:
+    * There's some free disk space available
+
+    Test stesp:
+    * Query hosts to determine disk space
+    * Create partition
+    * Associate it with cgts-vg PV
+    * Checks the partition is in-use state
+    * Attempts to delete the partition that is in-use.  It should fail.
+    * Attempt to assign the in-use partition to another PV.  It should fail.
+
+    Teardown:
+    * None
+    """
+
+    global partitions_to_restore
+    partitions_to_restore = {}
+
+    if system_helper.is_small_footprint():
+        hosts = system_helper.get_controllers()
+    else:
+        skip("This test requires an AIO system.")
+
+    usable_disks = False
+    for host in hosts:
+        disks = get_disks(host)
+        free_disks = get_disks_with_free_space(host, disks)
+        if not free_disks:
+            continue
+        for uuid in free_disks:
+            size_mib = int(free_disks[uuid])
+            if size_mib <= 1024:
+                LOG.tc_step("Skip this disk due to insufficient space")
+                continue
+            usable_disks = True
+            LOG.info("Creating partition on {}".format(host))
+            rc, out = create_partition(host, uuid, "1024")
+            uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
+            partitions_to_restore[host] = []
+            partitions_to_restore[host].append(uuid)
+            LOG.tc_step("Associating partition {} with cgts-vg".format(uuid))
+            cmd = "host-pv-add -t partition {} cgts-vg {}".format(host, uuid)
+            rc, out = cli.system(cmd, rtn_list=True)
+            assert rc == 0, "Associating partition with PV failed"
+            LOG.tc_step("Check that partition is In-use state")
+            partition_associated = False
+            end_time = time.time() + CP_TIMEOUT
+            while time.time() < end_time:
+                status = get_partition_info(host, uuid, "status")
+                LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
+                assert status == "Ready" or status == "In-Use", "Partition has unexpected state {}".format(status)
+                if status == "In-Use":
+                    LOG.info("Partition {} on host {} has {} state".format(uuid, host, status))
+                    partition_associated = True
+                    break
+            assert partition_associated, "Partition was not successfully associated with PV"
+            LOG.tc_step("Attempt to delete In-Use partition")
+            rc, out = delete_partition(host, uuid, fail_ok=True)
+            assert rc != 0, "Partition deletion was expected to fail but instead passed"
+            LOG.tc_step("Attempt to associate the In-Use partition with another PV")
+            cmd = "host-pv-add -t partition {} nova-local {}".format(host, uuid)
+            rc, out = cli.system(cmd, rtn_list=True)
+            assert rc != 0, "Partition association succeeded but was expected to fail"
+            # Only test one disk on each host
+            break
+        # Do it on one host only
+        break
+
+
+def _test_assign_rootfs_disk_to_pv():
+    """
+    This test attempts to create a PV with type Disk on the rootfs.  This is
+    expected to fail.
+
+    Assumptions:
+    * None
+
+    Test Steps:
+    * Determine which disk is the rootfs
+    * Attempt to create a PV on that disk using a PV type of Disk.
+
+    Teardown:
+    * None
+    """
+
+    computes = system_helper.get_hostnames(personality="compute")
+    hosts = system_helper.get_controllers() + computes
+
+    rootfs = get_rootfs(hosts)
+
+    for host in rootfs:
+        rootfs_disk = rootfs[host]
+        cmd = "host-pv-add -t disk {} cgts-vg {}".format(host, uuid)
+        rc, out = cli.system(cmd, rtn_list=True)
+        assert rc != 0, "Expected PV creation to fail but instead succeeded"
+
 
 @mark.usefixtures('delete_partitions_teardown')
-def test_attempt_host_unlock_during_partition_creation():
+def _test_attempt_host_unlock_during_partition_creation():
     """
     This test attempts to unlock a host while a partition is being created.  It
     is expected to fail.
 
     Assumptions:
-    * There's some free disk space available 
+    * There's some free disk space available
 
     Test steps:
     * Query the hosts to determine disk space
@@ -720,7 +821,7 @@ def test_attempt_host_unlock_during_partition_creation():
 
             LOG.tc_step("Check that partition was created succesfully")
             partition_created = False
-            end_time = time.time() + CP_TIMEOUT 
+            end_time = time.time() + CP_TIMEOUT
             while time.time() < end_time:
                 status = get_partition_info(host, uuid, "status")
                 LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
@@ -739,7 +840,7 @@ def test_attempt_host_unlock_during_partition_creation():
         skip("Did not find disks with sufficient space to test with.")
 
 
-def test_create_zero_sized_host_partition():
+def _test_create_zero_sized_host_partition():
     """
     This test attempts to create a partition of size zero once on each host.
     This should be rejected.
@@ -765,7 +866,7 @@ def test_create_zero_sized_host_partition():
             break
 
 
-def test_decrease_host_partition_size():
+def _test_decrease_host_partition_size():
     """
     This test attempts to decrease the size of an existing host partition.  It
     is expected to fail since decreasing the size of a partition is not
@@ -813,7 +914,7 @@ def test_decrease_host_partition_size():
         assert rc != 0, "Expected partition modification to fail and instead it succeeded"
 
 
-def test_increase_host_partition_size_beyond_avail_disk_space():
+def _test_increase_host_partition_size_beyond_avail_disk_space():
     """
     This test attempts to increase the size of an existing host partition
     beyond the available space on disk.  It is expected to fail.
@@ -861,7 +962,7 @@ def test_increase_host_partition_size_beyond_avail_disk_space():
         assert rc != 0, "Expected partition modification to fail and instead it succeeded"
 
 
-def test_create_parition_using_valid_uuid_of_another_host():
+def _test_create_parition_using_valid_uuid_of_another_host():
     """
     This test attempts to create a partition using a vaild uuid that belongs to
     another host.  It is expected to fail.
@@ -872,7 +973,7 @@ def test_create_parition_using_valid_uuid_of_another_host():
     Test steps:
     * Query the hosts for disk uuids with free space
     * Attempt to create a partition for a different uuid
-    
+
     Teardown:
     * None
 
@@ -908,7 +1009,7 @@ def test_create_parition_using_valid_uuid_of_another_host():
 
 
 @mark.usefixtures('delete_partitions_teardown')
-def test_modify_second_last_partition():
+def _test_modify_second_last_partition():
     """
     This test attempts to modify a partition that is not the last.  It is
     expected to fail, since only the very last partition can be modified.
@@ -919,7 +1020,7 @@ def test_modify_second_last_partition():
     Test steps:
     * Create partition1
     * Create partition2
-    * Attempt to modify partition1 
+    * Attempt to modify partition1
 
     Teardown:
     * None
@@ -960,7 +1061,7 @@ def test_modify_second_last_partition():
             assert rc != 0, "Partition modification was expected to fail but instead was successful"
 
 
-def test_create_partition_using_non_existant_device_node():
+def _test_create_partition_using_non_existant_device_node():
     """
     This test attempts to create a partition using an invalid disk.  It is
     expected to fail.
@@ -990,7 +1091,7 @@ def test_create_partition_using_non_existant_device_node():
         assert rc != 0, "Partition creation was successful"
 
 
-def test_create_host_partition_on_storage():
+def _test_create_host_partition_on_storage():
     """
     This test attempts to create a host partition on a storage node.  It is
     expected to fail, since host partition creation is only supported on
@@ -1000,7 +1101,7 @@ def test_create_host_partition_on_storage():
     * We run this on a storage system, otherwise we will skip the test.
 
     Test steps:
-    * Query storage nodes for available disk space 
+    * Query storage nodes for available disk space
     * Attempt to create a partition on a storage node
     * Check it is rejected
     """
