@@ -28,7 +28,7 @@ def repeat_checking(repeat_times=20, wait_time=6):
     def actual_decorator(func):
         @wraps(func)
         def wrapped_func(*args, **kwargs):
-            cnt = 0
+            cnt, output = 0, ''
             while cnt < repeat_times:
                 cnt += 1
                 code, output = func(*args, **kwargs)
