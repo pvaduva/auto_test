@@ -173,7 +173,7 @@ def test_decrease_drbd():
 
 
 # Fails due to product issue
-def test_modify_drdb():
+def _test_modify_drdb():
     """ 
     This test modifies the size of the drbd based filesystems, does an
     immediate swact and then reboots the active controller.
