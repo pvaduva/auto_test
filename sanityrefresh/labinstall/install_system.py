@@ -548,7 +548,13 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
     tuxlab_conn.find_prompt()
 
     # Switch pxeboot.cfg files
-    if not "CGCS_5.0_Host" in tis_blds_dir:
+    old_releases = ["TC_17.06_Host", "TS_16.10_Host", "TS_15.12_Host"]
+    if tis_blds_dir.endswith('/'):
+        rel = tis_blds_dir[:-1]
+    else:
+        rel = tis_blds_dir
+
+    if rel in old_releases:
         pxeboot_cfgfile = PRE_R5_PXEBOOT
     else:
         pxeboot_cfgfile = R5_PXEBOOT
