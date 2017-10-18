@@ -109,7 +109,7 @@ def pytest_runtest_makereport(item, call, __multicall__):
     my_rep = MakeReport.get_report(item)
     my_rep.update_results(call, report)
 
-    test_name = item.nodeid.replace('::()::', '::').replace('testcases/', '')
+    test_name = item.nodeid.replace('::()::', '::')     # .replace('testcases/', '')
     res_in_tests = ''
     res = my_rep.get_results()
 
@@ -322,7 +322,7 @@ def pytest_configure(config):
     origin_file_dir = list(file_or_dir)
 
     if count > 1:
-        # replicate the tests x times
+        print("Repeat following tests {} times: {}".format(count, file_or_dir))
         del file_or_dir[:]
         for f_or_d in origin_file_dir:
             for i in range(count):
