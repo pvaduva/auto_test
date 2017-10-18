@@ -33,7 +33,8 @@ TS_15_12_HEAT_TEMPLATE_PATH = "cgcs/openstack/recipes-base/python-heat/python-he
 TC_17_06_HOST = "centos"
 TS_16_10_HOST = "centos"
 TS_15_12_HOST = "wrlinux"
-
+PRE_R5_PXEBOOT = "pxeboot.cfg.installer_new"
+R5_PXEBOOT = "pxeboot.cfg.gpt"
 
 SYSTEM_CFG_FILENAME = "system_config"
 WRL_CFGFILE_LIST = ["system_config", "TiS_config.ini_wrl", "TiS_config.ini"]
