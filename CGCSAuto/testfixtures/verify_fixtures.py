@@ -1,12 +1,10 @@
-from pytest import fixture, mark, skip
+from pytest import fixture, skip
 
 from consts.auth import Tenant
-from consts.cgcs import EventLogID, HostAvailabilityState
-from consts.timeout import EventLogTimeout
-from utils import table_parser, cli
+from consts.cgcs import EventLogID
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
-from keywords import system_helper, vm_helper, nova_helper, cinder_helper, storage_helper, host_helper
+from keywords import system_helper, vm_helper, nova_helper, cinder_helper, storage_helper, host_helper, common
 
 
 ########################
@@ -79,6 +77,25 @@ def __verify_alarms(request, scope):
 
     request.addfinalizer(verify_alarms)
     return
+
+
+@fixture(scope='function', autouse=False)
+def check_i40e_hosts(request):
+    hosts = ['compute-4', 'compute-5']
+    start_time = common.get_date_in_format(date_format="%Y-%m-%dT%T")
+
+    def check_kern_log():
+        cmd = """cat /var/log/kern.log | grep -i --color=never "(i40e): transmit queue" | awk '$0 > "{}"'""".format(start_time)
+        i40e_errs = []
+        host_helper.wait_for_hosts_ready(hosts=hosts)
+        for host in hosts:
+            with host_helper.ssh_to_host(hostname=host) as host_ssh:
+                output = host_ssh.exec_cmd(cmd)[1]
+                if output:
+                    i40e_errs.append("{}: {}".format(host, output))
+        assert not i40e_errs, "i40e errors: {}".format(i40e_errs)
+
+    request.addfinalizer(check_kern_log)
 
 
 @fixture(scope='session', autouse=True)

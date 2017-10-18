@@ -19,6 +19,7 @@ def setup_test_session():
     TIS ssh was already set up at collecting phase.
     """
     os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
+    os.makedirs(ProjVar.get_var('PING_FAILURE_DIR'), exist_ok=True)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     setups.set_env_vars(con_ssh)
 

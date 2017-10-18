@@ -458,3 +458,19 @@ def get_date_in_format(ssh_client=None, date_format="%Y%m%d %T"):
     if ssh_client is None:
         ssh_client = ControllerClient.get_active_controller()
     return ssh_client.exec_cmd("date +'{}'".format(date_format), fail_ok=False)[1]
+
+
+def write_to_file(file_path, content, mode='a'):
+    """
+    Write content to specified local file
+    Args:
+        file_path (str): file path on localhost
+        content (str): content to write to file
+        mode (str): file operation mode. Default is 'a' (append to end of file).
+
+    Returns: None
+
+    """
+    time_stamp = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
+    with open(file_path, mode=mode) as f:
+        f.write('\n-----------------[{}]-----------------\n{}\n'.format(time_stamp, content))

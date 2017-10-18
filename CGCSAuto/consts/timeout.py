@@ -91,4 +91,4 @@ class OrchestrationPhaseTimeout:
 
 
 class MiscTimeout:
-    NTPQ_UPDATE = 700   # sudo ntpq updates every 10 minutes
+    NTPQ_UPDATE = 1260     # timeout for two audits. 'sudo ntpq' got pulled every 10 minutes in /var/log/user.log

@@ -3323,7 +3323,7 @@ def get_tenant_routers_for_vms(vms, con_ssh=None):
     return vms_routers
 
 
-def collect_networking_info(routers=None, vms=None):
+def collect_networking_info(routers=None, vms=None, sep_file=None):
     LOG.info("Ping tenant(s) router's external and internal gateway IPs")
 
     if not routers:
@@ -3341,7 +3341,11 @@ def collect_networking_info(routers=None, vms=None):
         router_ips = get_router_subnets(router_id=router_, rtn_val='ip_address', mgmt_only=True)
         ips_to_ping += router_ips
 
-    ping_ips_from_natbox(ips_to_ping, num_pings=3, timeout=15)
+    res_bool, res_dict = ping_ips_from_natbox(ips_to_ping, num_pings=3, timeout=15)
+    if sep_file:
+        res_str = "succeeded" if res_bool else 'failed'
+        content = "Ping router interfaces {}: {}\n".format(res_str, res_dict)
+        common.write_to_file(sep_file, content=content)
 
     hosts = []
     for router in routers:
@@ -3352,10 +3356,14 @@ def collect_networking_info(routers=None, vms=None):
             LOG.error("Router {} has no host, it may be down.".format(router))
 
     if hosts:
-        LOG.info("Collect vswitch_info for {} router(s) on router host(s): ".format(routers, hosts))
+        LOG.info("Collect vswitch.info for {} router(s) on router host(s): ".format(routers, hosts))
         for host in hosts:
             ProjVar.get_var('VSWITCH_INFO_HOSTS').append(host)
             collect_vswitch_info_on_host(host)
+
+        if sep_file:
+            content = "vswitch.info collected for {} under {}\n".format(hosts, ProjVar.get_var('PING_FAILURE_DIR'))
+            common.write_to_file(sep_file, content=content)
 
 
 def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
