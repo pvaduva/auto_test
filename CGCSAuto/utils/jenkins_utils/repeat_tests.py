@@ -5,6 +5,9 @@ from optparse import OptionParser
 def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=None, stop_on_failure=False):
     if file_path:
         test_cases = _get_tests_from_file(file_path=file_path)
+        if not test_cases:
+            print("No testcases listed in {}.".format(file_path))
+            return
     elif test_cases:
         if isinstance(test_cases, str):
             test_cases = [test_cases]
