@@ -104,6 +104,9 @@ def parse_args():
     lab_grp.add_argument('--iso-install', dest='iso_install' , action="store_true", default=False,
                          help="iso install flag ")
 
+    lab_grp.add_argument('--skip-pxebootcfg', dest='skip_pxebootcfg' , action="store_true", default=False,
+                         help="Don't modify pxeboot.cfg if set")
+
     lab_grp.add_argument('--config-region', dest='config_region' , action="store_true", default=False,
                          help="configure_region instead of config_controller")
 
@@ -495,7 +498,31 @@ def deploy_key(conn):
             conn.write_line('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
             conn.write_line("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
 
-def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, host_os, install_output_dir):
+def restore_pxeboot_cfg(barcode, tuxlab_server, install_output_dir):
+    """
+    Unlink the existing pxeboot.cfg symlink and then restore it.  This is done
+    in case the file was modified for pre-R5 installs.
+    """
+
+    tuxlab_conn = SSHClient(log_path=install_output_dir + "/" + tuxlab_server + ".ssh.log")
+    tuxlab_conn.connect(hostname=tuxlab_server, username=USERNAME,
+                        password=PASSWORD)
+    tuxlab_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
+
+    tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + "/" + barcode
+
+    cmd = "cd {}".format(tuxlab_barcode_dir)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0, "Failed to cd to {}".format(tuxlab_barcode_dir)
+
+    log.info("Changing pxeboot.cfg symlink to {}".format(R5_PXEBOOT))
+    cmd = "[ -f {} ]".format(R5_PXEBOOT)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0, "Failed to find a pxeboot.cfg with gpt boot options defined"
+    assert tuxlab_conn.exec_cmd("unlink pxeboot.cfg")[0] == 0, "Unlink of pxeboot.cfg failed"
+    cmd = "ln -s {} pxeboot.cfg".format(R5_PXEBOOT)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0, "Unable to symlink gpt pxeboot cfg"
+
+
+def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, host_os, install_output_dir, tis_blds_dir, skip_pxebootcfg):
     ''' Transfer the load and set the feed on the tuxlab server in preparation
         for booting up the lab.
     '''
@@ -510,10 +537,8 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
 
     tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + "/" + barcode
 
-    if tuxlab_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
-        msg = "Failed to cd to: " + tuxlab_barcode_dir
-        log.error(msg)
-        wr_exit()._exit(1, msg)
+    cmd = "cd {}".format(tuxlab_barcode_dir)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0, "Failed to cd to {}".format(tuxlab_barcode_dir)
 
     log.info("Copy load into feed directory")
     feed_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
@@ -522,6 +547,19 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
     tuxlab_conn.sendline("chmod 755 " + tuxlab_sub_dir)
     tuxlab_conn.find_prompt()
 
+    # Switch pxeboot.cfg files
+    if not "CGCS_5.0_Host" in tis_blds_dir:
+        pxeboot_cfgfile = PRE_R5_PXEBOOT
+    else:
+        pxeboot_cfgfile = R5_PXEBOOT
+
+    if not skip_pxebootcfg:
+        log.info("Changing pxeboot.cfg symlink to {}".format(pxeboot_cfgfile))
+        cmd = "[ -f {} ]".format(pxeboot_cfgfile)
+        assert tuxlab_conn.exec_cmd(cmd)[0] == 0, "Failed to find a file called {}".format(pxeboot_cfgfile)
+        assert tuxlab_conn.exec_cmd("unlink pxeboot.cfg")[0] == 0, "Unlink of pxeboot.cfg failed"
+        cmd = "ln -s {} pxeboot.cfg".format(pxeboot_cfgfile)
+        assert tuxlab_conn.exec_cmd(cmd)[0] == 0, "Unable to symlink pxeboot.cfg to {}".format(pxeboot_cfgfile)
 
     # Extra forward slash at end is required to indicate the sync is for
     # all of the contents of RPM_INSTALL_REL_PATH into the feed path
@@ -1852,6 +1890,7 @@ def main():
     guest_bld_dir = args.guest_bld_dir
     patch_dir_paths = args.patch_dir_paths
     iso_install = args.iso_install
+    skip_pxebootcfg = args.skip_pxebootcfg
     config_region = args.config_region
 
     install_timestr = time.strftime("%Y%m%d-%H%M%S")
@@ -1913,6 +1952,7 @@ def main():
         logutils.print_name_value("Tuxlab server", tuxlab_server)
         logutils.print_name_value("Is iso_install", iso_install)
         logutils.print_name_value("Small footprint", small_footprint)
+        logutils.print_name_value("Skip pxeboot cfg", skip_pxebootcfg)
 
     logutils.print_name_value("Build server", bld_server)
     logutils.print_name_value("Build server workspace", bld_server_wkspce)
@@ -2074,7 +2114,8 @@ def main():
                     and not tis_on_tis:
                 set_network_boot_feed(controller0.barcode, tuxlab_server,
                                     bld_server_conn, load_path, host_os,
-                                    install_output_dir)
+                                    install_output_dir, tis_blds_dir,
+                                    skip_pxebootcfg)
                 set_install_step_complete(lab_install_step)
     else:
         log.info('Skipping setup of network feed on tuxlab: '.format(tuxlab_server))
@@ -2540,6 +2581,9 @@ def main():
     rc, installed_load_info = controller0.ssh_conn.exec_cmd(cmd)
     if rc != 0:
         log.error("Failed to get build info")
+
+    if not skip_pxebootcfg:
+        restore_pxeboot_cfg(controller0.barcode, tuxlab_server, install_output_dir)
 
     wr_exit()._exit(0, "Installer completed.\n" + installed_load_info)
 
