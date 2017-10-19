@@ -21,14 +21,15 @@ def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=N
     repeat_param = '--repeat' if stop_on_failure else '--stress'
     repeat_param = '{}={}'.format(repeat_param, count)
 
-    testcases_str = ' '.join(test_cases)
-    params = ['--lab={}'.format(lab), repeat_param, testcases_str]
+    params = ['--lab={}'.format(lab), repeat_param]
     if reporttag:
         params.append('--report_tag="{}"'.format(reporttag))
     if sessiondir:
         params.append('--sessiondir="{}"'.format(sessiondir))
     elif resultlog:
         params.append('--resultlog="{}"'.format(resultlog))
+
+    params += test_cases
 
     print("pytest params: {}".format(params))
     pytest.main(params)
@@ -37,7 +38,7 @@ def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=N
 def _get_tests_from_file(file_path):
     tests = []
     with open(file_path, mode='r') as f:
-        raw_tests = f.readlines()
+        raw_tests = f.read().splitlines()
 
     for t in raw_tests:
         t = t.strip()
