@@ -40,6 +40,7 @@ def _get_tests_from_file(file_path):
         raw_tests = f.readlines()
 
     for t in raw_tests:
+        t = t.strip()
         if 'test_' in t:
             tests.append(t)
     return tests
