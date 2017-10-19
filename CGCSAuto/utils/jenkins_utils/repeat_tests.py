@@ -23,11 +23,11 @@ def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=N
 
     params = ['--lab={}'.format(lab), repeat_param]
     if reporttag:
-        params.append('--report_tag="{}"'.format(reporttag))
+        params.append('--report_tag={}'.format(reporttag))
     if sessiondir:
-        params.append('--sessiondir="{}"'.format(sessiondir))
+        params.append('--sessiondir={}'.format(sessiondir))
     elif resultlog:
-        params.append('--resultlog="{}"'.format(resultlog))
+        params.append('--resultlog={}'.format(resultlog))
 
     params += test_cases
 
