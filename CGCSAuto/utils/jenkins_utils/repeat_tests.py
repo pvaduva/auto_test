@@ -2,7 +2,8 @@ import pytest
 from optparse import OptionParser
 
 
-def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=None, stop_on_failure=False):
+def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=None, stop_on_failure=False,
+                 reporttag=None, resultlog=None, sessiondir=None):
     if file_path:
         test_cases = _get_tests_from_file(file_path=file_path)
         if not test_cases:
@@ -22,6 +23,13 @@ def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=N
 
     testcases_str = ' '.join(test_cases)
     params = ['--lab={}'.format(lab), repeat_param, testcases_str]
+    if reporttag:
+        params.append('--report_tag="{}"'.format(reporttag))
+    if sessiondir:
+        params.append('--sessiondir="{}"'.format(sessiondir))
+    elif resultlog:
+        params.append('--resultlog="{}"'.format(resultlog))
+
     print("pytest params: {}".format(params))
     pytest.main(params)
 
@@ -45,6 +53,9 @@ if __name__ == '__main__':
     parser.add_option('--stop', action='store_true', dest='stop', default=False,
                       help='Stop session without teardown upon first failure')
     parser.add_option('--cgcsauto', action='store', dest='cgcsauto', help='CGCSAuto dir')
+    parser.add_option('--sessiondir', action='store', dest='sessiondir', help='Automation session log dir')
+    parser.add_option('--resultlog', action='store', dest='resultlog', help='Automation logs root dir. e.g., /home')
+    parser.add_option('--reporttag', action='store', dest='reporttag', help='report tag')
 
     options, args = parser.parse_args()
 
@@ -55,7 +66,8 @@ if __name__ == '__main__':
         raise ValueError("lab has to be provided!{}".format(usage))
 
     f_path = options.file_path
-    kwargs = dict(lab=lab_, stop_on_failure=options.stop, count=options.count, cgcsauto_path=options.cgcsauto)
+    kwargs = dict(lab=lab_, stop_on_failure=options.stop, count=options.count, cgcsauto_path=options.cgcsauto,
+                  sessiondir=options.sessiondir, resultlog=options.resultlog, reporttag=options.reporttag)
     if not f_path:
         test = options.testcase
         if not test:
