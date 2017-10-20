@@ -2975,7 +2975,7 @@ def _get_cloud_config_add_user(con_ssh=None):
     source_file = TestServerPath.USER_DATA + file_name
 
     dest_path = common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=file_dir,
-                                                                 dest_name=file_name, is_dir=False, con_ssh=con_ssh)
+                                                                 dest_name=file_name, con_ssh=con_ssh)
 
     if dest_path is None:
         raise exceptions.CommonError("userdata file {} does not exist after download".format(file_path))
