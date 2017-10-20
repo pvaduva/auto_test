@@ -2335,14 +2335,27 @@ def main():
     # Complete controller0 configuration either as a regular host
     # or a small footprint host.
     # Lab-install -  Run_lab_setup - applicable cpe labs only
-    lab_install_step = install_step("run_lab_setup", 5, ['cpe', 'simplex'])
+    older_rel = ['TC_17.06_Host/', 'TC_17.06_Host', 'TS_15.12_Host/',
+    'TS_15.12_Host', 'TS_16.10_Host/', 'TS_16.10_Host']
+
+    if not tis_blds_dir in older_rel:
+        lab_install_step = install_step("run_lab_setup", 5, ['cpe', 'simplex', 'storage'])
+    else:
+        lab_install_step = install_step("run_lab_setup", 5, ['cpe', 'simplex'])
     if do_next_install_step(lab_type, lab_install_step):
-    #if not executed:
-        if small_footprint:
-            if run_labsetup()[0] != 0:
-                msg = "lab_setup failed in small footprint configuration."
-                log.error(msg)
-                installer_exit._exit(1, msg)
+        if run_labsetup()[0] != 0:
+            msg = "lab_setup failed in small footprint configuration."
+            log.error(msg)
+            installer_exit._exit(1, msg)
+        set_install_step_complete(lab_install_step)
+
+    # Lab-install -  Bulk hosts add- applicable all lab types
+    msg = 'bulk_hosts_add'
+    lab_install_step = install_step("bulk_hosts_add", 41, ['regular', 'storage', 'cpe'])
+
+    if do_next_install_step(lab_type, lab_install_step):
+        if not tis_on_tis:
+            bulkAddHosts()
             set_install_step_complete(lab_install_step)
 
      # Lab-install - cpe_compute_config_complete - applicable cpe labs only
@@ -2405,6 +2418,7 @@ def main():
             installer_exit._exit(1, msg)
         set_install_step_complete(lab_install_step)
 
+    # Extra lab_setup.sh after cinder changes
     log.info("Beginning lab setup procedure for {} lab".format(lab_type))
     # Lab-install -  run_lab_setup - applicable regular and storage labs
     lab_install_step = install_step("run_lab_setup", 11, ['regular', 'storage'])
