@@ -663,6 +663,13 @@ def burn_usb_load_image(install_output_dir, node, bld_server_conn, load_path, is
         log.error(msg)
         wr_exit()._exit(1, msg)
 
+    cmd = "rm bootimage.iso"
+    rc, output = node.telnet_conn.exec_cmd(cmd)
+    if rc != 0:
+        msg = "Unable to delete bootimage.iso.  Please delete manually."
+        log.info(msg)
+        wr_exit()._exit(1, msg)
+
 
 def copy_iso(install_output_dir, tuxlab_server, bld_server_conn, load_path, iso_path=None, iso_host=None, c0_targetId=None):
     '''
@@ -1998,6 +2005,11 @@ def main():
     # installed load info for email message
     installed_load_info = ''
 
+    # Set security parameter for USB installs (assuming we're not installing an
+    # other release)
+    older_rel = ['TC_17.06_Host/', 'TC_17.06_Host', 'TS_15.12_Host/',
+    'TS_15.12_Host', 'TS_16.10_Host/', 'TS_16.10_Host']
+
     print("\nRunning as user: " + USERNAME + "\n")
 
     bld_server_conn = SSHClient(log_path=install_output_dir + "/" + bld_server + ".ssh.log")
@@ -2335,8 +2347,6 @@ def main():
     # Complete controller0 configuration either as a regular host
     # or a small footprint host.
     # Lab-install -  Run_lab_setup - applicable cpe labs only
-    older_rel = ['TC_17.06_Host/', 'TC_17.06_Host', 'TS_15.12_Host/',
-    'TS_15.12_Host', 'TS_16.10_Host/', 'TS_16.10_Host']
 
     if not tis_blds_dir in older_rel:
         lab_install_step = install_step("run_lab_setup", 5, ['cpe', 'simplex', 'storage'])
