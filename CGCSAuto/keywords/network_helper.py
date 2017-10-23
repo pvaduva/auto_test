@@ -253,7 +253,7 @@ def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.ADMIN, co
 
     Args:
         net_id (str): network id
-        field (str): such as 'status', 'subnets', 'wrs-net:vlan_id' or 'vlan_id' if strict=False
+        field (str): such as 'status', 'subnets'
         strict (bool): whether to perform strict search for the name of the field
         auto_info (dict):
         con_ssh (SSHClient):
@@ -2644,6 +2644,7 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
             nets_on_pnet = get_networks_on_providernet(providernet_id=pnet_id, rtn_val='name', con_ssh=con_ssh,
                                                        auth_info=auth_info, vlan_id=vlan_id)
 
+            # TODO: US102722 wrs-net:vlan_id removed from neutron subnets
             other_nets = get_networks_on_providernet(providernet_id=pnet_id, rtn_val='name', con_ssh=con_ssh,
                                                      auth_info=auth_info, vlan_id=vlan_id, exclude=True)
 

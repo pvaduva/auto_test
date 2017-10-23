@@ -1277,7 +1277,7 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         if not internal_ips:
             raise exceptions.VMNetworkError("Internal net ip is not found for vms {}".format(vm_ids))
         # vlan subnets removed for US102722
-        #if vlan_zero_only:
+        # if vlan_zero_only:
         #    internal_ips = network_helper.filter_ips_with_subnet_vlan_id(internal_ips, vlan_id=0, con_ssh=con_ssh)
         #    if not internal_ips:
         #        raise exceptions.VMNetworkError("Internal net ip with subnet vlan id 0 is not found for vms {}".
