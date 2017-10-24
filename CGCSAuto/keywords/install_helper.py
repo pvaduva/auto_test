@@ -13,11 +13,12 @@ from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.vlm import VlmAction
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common
-from CGCSAuto.utils import telnet as telnetlib, exceptions, local_host, cli
+# from CGCSAuto.utils import telnet as telnetlib, exceptions, local_host, cli
+from utils import telnet as telnetlib, exceptions, local_host, cli
 from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
-from CGCSAuto.utils import local_host
-
+# from CGCSAuto.utils import local_host
+from utils import local_host
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
 BACKUP_USB_MOUNT_POINT = '/media/wrsroot'
@@ -277,7 +278,11 @@ def power_off_host(hosts):
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
 
+        LOG.info("node.barcode:{}".format(node.barcode))
+        LOG.info("node:{}".format(node))
+
         rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, node.barcode)
+
         if rc != 0:
             err_msg = "Failed to power off nod {}  barcode {}: {}"\
                 .format(node.name, node.barcode, output)
@@ -1174,7 +1179,24 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
     cmd = "echo " + HostLinuxCreds.get_password() + " | sudo -S config_controller --restore-system {}".format(system_backup)
     os.environ["TERM"] = "xterm"
 
+    rc, output = controller0_node.telnet_conn.exec_cmd(cmd,
+                                                       extra_expected=[r"Enter 'reboot' to reboot controller: "],
+                                                       timeout=HostTimeout.SYSTEM_RESTORE)
+    if rc == 10:
+        msg = 'System WAS patched, and restored to the previous patch-level, needs a reboot'
+        LOG.info(msg)
+        LOG.info('output:{}'.format(output))
+
+        reboot_cmd = 'echo {}" | sudo -S reboot'.format(HostLinuxCreds.get_password())
+        rc, output = controller0_node.telnet_conn.exec_cmd(reboot_cmd, timeout=HostTimeout.REBOOT)
+        if rc != 0:
+            msg = '{} failed, rc:{}\noutput:\n{}'.format(reboot_cmd, rc, output)
+            LOG.error(msg)
+            raise exceptions.RestoreSystem
+        LOG.info('OK, system reboot after been patched to previous level')
+
     rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
+
     if rc != 0:
         err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
         LOG.error(err_msg)
@@ -1182,6 +1204,12 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
             return 1, err_msg
         else:
             raise exceptions.CLIRejected(err_msg)
+
+    elif rc == 10:
+        msg = 'System WAS patched, and restored to the previous patch-level, needs a reboot'
+        LOG.info(msg)
+        rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
+
 
     # If the backed-up version includes patches, the restore process automatically
     # applies the patches and forces an additional reboot of the controller to make them effective.
@@ -2125,3 +2153,28 @@ def establish_ssh_connection(host, user=HostLinuxCreds.get_user(), password=Host
             return None
         else:
             raise
+
+
+def wipedisk(ssh_con, node=None):
+    """
+    A light-weight tool to wipe disks in order to AVOID booting from hard disks
+
+    Args:
+        ssh_con:
+
+    Returns:
+
+    """
+    cmd = "test -f wipedisk_helper && test -f wipedisk_automater"
+    if ssh_con.exec_cmd(cmd)[0] == 0:
+        cmd = "chmod 755 wipedisk_helper"
+        ssh_con.exec_cmd(cmd)
+
+        cmd = "chmod 755 wipedisk_automater"
+        ssh_con.exec_cmd(cmd)
+
+        cmd = "./wipedisk_automater"
+        ssh_con.exec_cmd(cmd)
+
+    else:
+        LOG.info("wipedisk files are not on the load, will not do wipedisk")

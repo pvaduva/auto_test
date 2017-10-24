@@ -1,6 +1,7 @@
 import pytest
 import os
 import re
+import time
 from utils.tis_log import LOG
 from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common
 from consts.proj_vars import InstallVars, RestoreVars, ProjVar
@@ -27,6 +28,7 @@ def pre_restore_checkup():
     controller_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
                                                               initial_prompt=extra_controller_prompt,  fail_ok=True)
 
+    LOG.info('backup_src={}, backup_src_path={}'.format(backup_src, backup_src_path))
     if backup_src.lower() == 'usb':
         if controller_conn:
             LOG.info("Connection established with controller-0 ....")
@@ -128,7 +130,15 @@ def pre_restore_checkup():
 
         RestoreVars.set_restore_var(backup_build_id=backup_build_id)
 
+        if controller_conn:
+            # Wipe disks in order to make controller-0 NOT boot from hard-disks
+            # hosts = [k for k , v in lab.items() if isinstance(v, node.Node)]
+            # install_helper.wipe_disk_hosts(hosts)
+            LOG.info('Try to do wipedisk on controller-0')
+            install_helper.wipedisk(controller_conn)
+
     assert backup_build_id, "The Build id of the system backup must be provided."
+
 
     return tis_backup_files
 
@@ -177,7 +187,7 @@ def restore_setup(pre_restore_checkup):
     install_helper.power_off_host(hostnames)
 
     LOG.tc_step("Booting controller-0 ... ")
-    install_helper.boot_controller(bld_server_conn,load_path)
+    install_helper.boot_controller(bld_server_conn, load_path)
 
     # establish ssh connection with controller
     LOG.tc_step("Establishing ssh connection with controller-0 after install... ")
@@ -262,7 +272,6 @@ def test_restore_from_backup(restore_setup):
     system_backup_file = [file for file in tis_backup_files if "system.tgz" in file].pop()
     images_backup_file = [file for file in tis_backup_files if "images.tgz" in file].pop()
 
-
     LOG.tc_step("Restoring {}".format(controller0))
 
     LOG.info("System config restore from backup file {} ...".format(system_backup_file))
@@ -297,6 +306,9 @@ def test_restore_from_backup(restore_setup):
                                                     tel_net_session=controller_node.telnet_conn)
 
     LOG.tc_step("Verifying  restoring controller-0 is complete and is in available state ...")
+    LOG.debug('Wait for system ready in 60 seconds')
+    time.sleep(60)
+
     host_helper.wait_for_hosts_states(controller0, availability=HostAvailabilityState.AVAILABLE, fail_ok=False)
 
     # delete the system backup files from wrsroot home

@@ -1004,7 +1004,10 @@ class Telnet:
                     LOG.info("Pressing ENTER key")
                     self.write(str.encode("\r\r"))
                 else:
-                    self.get_read_until("Boot from hard drive", 240)
+                    # self.get_read_until("Boot from hard drive", 240)
+                    boot_menu = 'Automatic Anaconda / Kickstart Boot Menu'
+                    LOG.info('Waiting for boot menu:{}'.format(boot_menu))
+                    self.get_read_until(boot_menu)
                     # New pxeboot cfg menu
                     # 0) Boot from hard drive
                     # 1) WRL Serial Controller Install
