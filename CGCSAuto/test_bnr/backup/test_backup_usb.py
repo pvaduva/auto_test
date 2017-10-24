@@ -9,9 +9,7 @@ from consts.cgcs import TIS_BLD_DIR_REGEX, BackupRestore
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from utils.ssh import ControllerClient
-
 # from CGCSAuto.utils import local_host
-
 from consts.proj_vars import InstallVars, ProjVar, BackupVars
 from consts.build_server import Server
 from keywords import html_helper
