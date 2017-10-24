@@ -2,6 +2,7 @@ import os
 import re
 import datetime
 import requests
+from optparse import OptionParser
 
 from utils import lab_info, local_host
 from consts.filepaths import BuildServerPath
@@ -79,7 +80,10 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
 
     lab = lab.upper()
     if not sys_config:
-        sys_config = lab_info._get_sys_type(labname=lab)
+        try:
+            sys_config = lab_info._get_sys_type(labname=lab)
+        except:
+            sys_config = 'Unknown'
 
     # convert contents to html format
     testcases_res = testcases_res.replace('\t', '&#9;').\
@@ -305,11 +309,25 @@ def send_report(subject, recipients, msg_file=TMP_FILE):
     #          -e "set content_type=text/html" -s "{}" -- "{}" < "{}"'''.format(subject, recipients, msg_file)
 
     cmd = '''mutt -e "set content_type=text/html" -s "{}" -- "{}" < "{}"'''.format(subject, recipients, msg_file)
+    print('Sending cmd: {}'.format(cmd))
     os.system(cmd)
 
 
 def generate_report(recipients, subject='', source='mongo', tags=None, start_date=None, end_date=None, logs_dir=None,
                     mark_status=False):
+    """
+    Generate a test report and send to given recipients
+    Args:
+        recipients (str): semi-colon separated email addresses in string format
+        subject (st): Extra string in report subject
+        source (str): 'mongo', <local test results path>, 'local'. When 'local', logs_dir has to be specified
+        tags (str|None): tag used to upload results to mongo/cgcs DB. Only used if source is 'mongo'
+        start_date (str|None): Only used if source is 'mongo'
+        end_date (str|None): Only used if source is 'mongo'
+        logs_dir (str|None): Mandatory if source is 'local'
+        mark_status (bool): Whether to mark build status as GREEN/YELLOW/RED on build server
+
+    """
     tmp_file, lab, build, build_server, raw_status = write_report_file(source=source, tags=tags, start_date=start_date,
                                                                        end_date=end_date, logs_dir=logs_dir)
     try:
@@ -320,4 +338,31 @@ def generate_report(recipients, subject='', source='mongo', tags=None, start_dat
     finally:
         subject = subject.strip()
         subject = "TiS {} Test Report {} [{}] - {}".format(subject, lab, build, raw_status)
+        recipients = recipients.strip()
+        if ' ' in recipients and not ';' in recipients:
+            recipients = ';'.join(recipients.split())
         send_report(subject=subject, recipients=recipients)
+
+
+if __name__ == '__main__':
+    parser = OptionParser()
+    parser.add_option('-r', '--recipients', action='store', type='string', dest='recipients', help='report recipients')
+    parser.add_option('-s', '--source', action='store', type='string', dest='source', default='local',
+                      help="test results source. e.g., 'mongo', 'local', or <test_results_file_path>")
+    parser.add_option('--subject', action='store', type='string', dest='subject', default='',
+                      help='Extra string in report subject')
+    parser.add_option('-t', '--tag', action='store', type='string', dest='tag', default=None,
+                      help='Session tag used to upload results')
+    parser.add_option('--start', '--start-date', '--start_date', action='store', dest='start_date', default=None,
+                      help='Start date of first test. Required if report source is mongo. e.g., 2017-01-01')
+    parser.add_option('--end', '--end-date', '--end_date', action='store', dest='end_date', default=None,
+                      help='End date of last test. Required if report source is mongo. e.g., 2017-01-02')
+    parser.add_option('-d', '--dir', action='store', dest='log_dir', default=None, help='log dir')
+    parser.add_option('--mark', '--mark_status', '--mark-status', action='store_true', dest='mark_status',
+                      help='Whether to mark build status as GREEN/YELLOW/RED on build server')
+
+    options, args = parser.parse_args()
+
+    generate_report(options.recipients, subject=options.subject, source=options.source, tags=options.tag,
+                    start_date=options.start_date, end_date=options.end_date, logs_dir=options.log_dir,
+                    mark_status=options.mark_status)
