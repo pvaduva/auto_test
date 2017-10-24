@@ -2292,7 +2292,7 @@ def get_hosts_per_storage_backing(up_only=True, con_ssh=None):
     if up_only:
         up_hosts = get_up_hypervisors(con_ssh=con_ssh)
         for backing, hosts_with_backing in hosts.items():
-            hosts[backing] = list(set(hosts_with_backing) & up_hosts)
+            hosts[backing] = list(set(hosts_with_backing) & set(up_hosts))
 
     return hosts
 
