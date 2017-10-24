@@ -37,13 +37,18 @@ def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=N
 
 def _get_tests_from_file(file_path):
     tests = []
-    with open(file_path, mode='r') as f:
-        raw_tests = f.read().splitlines()
+    try:
+        with open(file_path, mode='r') as f:
+            raw_tests = f.read().splitlines()
 
-    for t in raw_tests:
-        t = t.strip()
-        if 'test_' in t:
-            tests.append(t)
+        for t in raw_tests:
+            t = t.strip()
+            if 'test_' in t:
+                tests.append(t)
+    except FileNotFoundError:
+        # No ping failures
+        pass
+
     return tests
 
 
