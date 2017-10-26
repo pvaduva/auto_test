@@ -229,7 +229,7 @@ def _test_scaling_vm_negative():
     # find vcpu amount, scale down twice
     vm_host, vm_numa = vm_helper.get_vm_host_and_numa_nodes(vm_1)
     cpus_left = 2
-    
+
     # resizeto bad flavor
 
 
@@ -246,8 +246,8 @@ def _test_scaling_vm_negative():
 
     # scale first vm up once (pass)
 
-    vm_helper.scale_vm(vm_id, direction='up', resource='cpu')
+    vm_helper.scale_vm(vm_1, direction='up', resource='cpu')
 
     # scale first vm up again (fail)
 
-    vm_helper.scale_vm(vm_id, direction='up', resource='cpu')
+    vm_helper.scale_vm(vm_1, direction='up', resource='cpu')
