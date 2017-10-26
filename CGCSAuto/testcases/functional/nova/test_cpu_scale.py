@@ -214,3 +214,40 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
 
     LOG.tc_step("Check vm vcpus in nova show did not change")
     check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+
+
+def _test_scaling_vm_negative():
+
+    # make vm (3 vcpus)
+
+    LOG.tc_step("Create flavor with 3 vcpus and boot vm")
+    flavor_1 = nova_helper.create_flavor(name='cpu_scale', vcpus=3)[1]
+    ResourceCleanup.add('flavor', flavor_1)
+    LOG.info("Boot a vm with above flavor")
+    vm_1 = vm_helper.boot_vm(name='small_vcpu_vm', flavor=flavor_1, cleanup='function')[1]
+
+    # find vcpu amount, scale down twice
+    vm_host, vm_numa = vm_helper.get_vm_host_and_numa_nodes(vm_1)
+    cpus_left = 2
+    
+    # resizeto bad flavor
+
+
+    # make another vm
+
+    LOG.tc_step("Create flavor with 3 vcpus")
+    second_specs = {FlavorSpec.NUMA_0: vm_numa}
+
+    flavor_2 = nova_helper.create_flavor(name='big_vcpu_vm', vcpus=cpus_left)[1]
+    ResourceCleanup.add('flavor', flavor_2)
+    nova_helper.set_flavor_extra_specs(flavor_2, second_specs)
+    LOG.tc_step("Boot a vm with above flavor")
+    vm_2 = vm_helper.boot_vm(name='large_vcpu_vm', flavor=flavor_2, cleanup='function')[1]
+
+    # scale first vm up once (pass)
+
+    vm_helper.scale_vm(vm_id, direction='up', resource='cpu')
+
+    # scale first vm up again (fail)
+
+    vm_helper.scale_vm(vm_id, direction='up', resource='cpu')
