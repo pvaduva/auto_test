@@ -230,8 +230,9 @@ def _test_scaling_vm_negative():
     vm_host, vm_numa = vm_helper.get_vm_host_and_numa_nodes(vm_1)
     cpus_left = 2
 
-    # resizeto bad flavor
+    # resize to bad flavor
 
+    
 
     # make another vm
 
@@ -250,4 +251,5 @@ def _test_scaling_vm_negative():
 
     # scale first vm up again (fail)
 
-    vm_helper.scale_vm(vm_1, direction='up', resource='cpu')
+    exit_code = vm_helper.scale_vm(vm_1, direction='up', resource='cpu', fail_ok=True)[0]
+    assert exit_code == 0, "Scale VM up was successful when failure was expected"
