@@ -63,7 +63,7 @@ class GuestImages:
         'win_2016': ('win2016_cygwin_compressed.qcow2', 29, 'win2016.qcow2', 7.5),
         'ge_edge': ('edgeOS.hddirect.qcow2', 5, 'ge_edge.qcow2', 0.3),
         'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img', 0.7),       # wrl-6
-        'vxworks-guest': ('vxworks-tis.img', 1, 'vxworks-guest.img', 0.1),
+        'vxworks': ('vxworks-tis.img', 1, 'vxworks.img', 0.1),
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5)
     }
 
@@ -146,6 +146,7 @@ class Prompt:
     CONTROLLER_1 = '.*controller\-1\:~\$ '
     CONTROLLER_PROMPT = '.*controller\-[01]\:~\$ '
 
+    VXWORKS_PROMPT = '-> '
 
     ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
     TENANT1_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant1\)\]\$ '

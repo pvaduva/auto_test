@@ -586,7 +586,7 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False):
     Get or create a glance image with given guest OS
     Args:
         guest_os (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11, tis-centos-guest,
-                cgcs-guest
+                cgcs-guest, vxworks-guest
         rm_image (bool): whether or not to rm image from /home/wrsroot/images after creating glance image
         check_disk (bool): whether to check if image storage disk is sufficient to create new glance image
 
@@ -607,7 +607,7 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False):
                 skip("Insufficient image storage space in /opt/cgcs/ to create {} image".format(guest_os))
 
         image_path = _scp_guest_image(img_os=guest_os)
-        disk_format = 'raw' if guest_os == 'cgcs-guest' else 'qcow2'
+        disk_format = 'raw' if guest_os == 'cgcs-guest' or 'vxworks-guest' else 'qcow2'
         try:
             img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
                                   container_format='bare', fail_ok=False)[1]

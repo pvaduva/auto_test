@@ -170,7 +170,12 @@ class Guest:
         'ge_edge': {
             'user': 'root',
             'password': 'root'
-        }
+        },
+
+        'vxworks': {
+            'user': 'root',
+            'password': 'root'
+        },
 
     }
 
