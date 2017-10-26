@@ -344,7 +344,7 @@ def test_restore_from_backup(restore_setup):
     LOG.info("Unlocking {} ...".format(controller1))
     rc, output = host_helper.unlock_host(controller1, available_only=True)
 
-    assert rc == 0, "Host {} failed to unlock: rc = {}, msg: {}".format(rc, output)
+    assert rc == 0, "Host {} failed to unlock: rc = {}, msg: {}".format(controller1, rc, output)
 
     hostnames = system_helper.get_hostnames()
     storage_hosts = [host for host in hostnames if 'storage' in host]

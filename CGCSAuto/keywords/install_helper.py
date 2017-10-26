@@ -4,7 +4,7 @@ import threading
 import time
 from contextlib import contextmanager
 
-from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant
+from consts.auth import HostLinuxCreds, SvcCgcsAuto
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout
 from consts.cgcs import HostAvailabilityState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
@@ -1180,22 +1180,29 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
     os.environ["TERM"] = "xterm"
 
     rc, output = controller0_node.telnet_conn.exec_cmd(cmd,
-                                                       extra_expected=[r"Enter 'reboot' to reboot controller: "],
+                                                       extra_expects=["Enter 'reboot' to reboot controller: "],
                                                        timeout=HostTimeout.SYSTEM_RESTORE)
-    if rc == 10:
-        msg = 'System WAS patched, and restored to the previous patch-level, needs a reboot'
+    if rc == 0 and 'reboot controller' in output:
+        msg = 'System WAS patched, and now is restored to the previous patch-level, but still needs a reboot'
         LOG.info(msg)
-        LOG.info('output:{}'.format(output))
+        # LOG.info('output:{}'.format(output))
 
-        reboot_cmd = 'echo {}" | sudo -S reboot'.format(HostLinuxCreds.get_password())
-        rc, output = controller0_node.telnet_conn.exec_cmd(reboot_cmd, timeout=HostTimeout.REBOOT)
+        reboot_cmd = 'echo "{}" | sudo -S reboot'.format(HostLinuxCreds.get_password())
+        # reboot_cmd = 'reboot'
+        rc, output = controller0_node.telnet_conn.exec_cmd(reboot_cmd,
+                                                           alt_prompt=' login: ', timeout=HostTimeout.REBOOT)
         if rc != 0:
             msg = '{} failed, rc:{}\noutput:\n{}'.format(reboot_cmd, rc, output)
             LOG.error(msg)
             raise exceptions.RestoreSystem
         LOG.info('OK, system reboot after been patched to previous level')
 
-    rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
+        LOG.info('re-login')
+        controller0_node.telnet_conn.login()
+        os.environ["TERM"] = "xterm"
+
+        LOG.info('re-run cli:{}'.format(cmd))
+        rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
 
     if rc != 0:
         err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
@@ -1205,49 +1212,32 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
         else:
             raise exceptions.CLIRejected(err_msg)
 
-    elif rc == 10:
-        msg = 'System WAS patched, and restored to the previous patch-level, needs a reboot'
-        LOG.info(msg)
-        rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
-
-
-    # If the backed-up version includes patches, the restore process automatically
-    # applies the patches and forces an additional reboot of the controller to make them effective.
-    # Checking first if reboot is required
-
-    if "This controller has been patched. A reboot is required." in output:
-        # controller reboot is required. Reboot controller from telnet session ( console)
-        cmd = "echo " + HostLinuxCreds.get_password() + " | sudo -S reboot"
-        rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.REBOOT)
-
-        controller0_node.telnet_conn.get_read_until(Prompt.LOGIN_PROMPT, HostTimeout.REBOOT)
-        LOG.info("Found login prompt. {} reboot has completed".format(controller0_node.name))
-
-        # reconnect SSh connection:
-        con_ssh.connect(retry=True, retry_timeout=60)
-
-        # verifying  patches were applied
-        patch_ids = patching_helper.get_all_patch_ids(con_ssh=con_ssh)
-        patch_states = patching_helper.get_patch_states(patch_ids, con_ssh=con_ssh)
-        for patch_id in patch_ids:
-            if patch_states[patch_id] != 'Applied':
-                err_msg = "Patch  not applied after reboot. {}: {}".format(patch_id, patch_states[patch_id])
-                if fail_ok:
-                    return 2, err_msg
-                else:
-                    raise exceptions.RestoreSystem(err_msg)
-
-    elif "System restore complete" in output:
+    if "System restore complete" in output:
         msg = "System restore completed successfully"
         LOG.info(msg)
         return 0, msg
     else:
-        err_msg = "Unexpected result from system restore: {}".format(output)
+        LOG.warn('No "restore complete" in output, rc={}\noutput:\n{}\n'.format(rc, output))
+        conn = controller0_node.telnet_conn
+        cmd = 'source /etc/nova/openrc'
+        rc, output = conn.exec_cmd(cmd)
+        assert rc == 0, \
+            'Failed to source the openrc after restore system configuration, rc:{}, output:\n{}'.format(rc, output)
+        LOG.info('OK to source openrc')
 
-        if fail_ok:
-            return 3, err_msg
-        else:
-            raise exceptions.RestoreSystem(err_msg)
+        cmd = 'system host-list'
+        rc, output = conn.exec_cmd(cmd)
+        assert rc == 0, \
+            'Failed to run system host-list, rc:{}, output:\n{}'.format(rc, output)
+
+        LOG.info('OK to get hosts list\n{}\n'.format(output))
+
+        # err_msg = "Unexpected result from system restore: {}".format(output)
+        #
+        # if fail_ok:
+        #     return 3, err_msg
+        # else:
+        #     raise exceptions.RestoreSystem(err_msg)
 
 
 def restore_controller_system_images(images_backup, tel_net_session=None, fail_ok=False):
@@ -1362,8 +1352,8 @@ def get_backup_files(pattern, backup_src_path, src_conn_ssh):
 
     Args:
         pattern:
-        src_path:
-        src_con_ssh:
+        backup_src_path:
+        src_conn_ssh:
 
     Returns:
 
@@ -2074,7 +2064,6 @@ def boot_controller( bld_server_conn, load_path, patch_dir_paths=None, boot_usb=
     if patch_dir_paths:
         apply_patches(lab, bld_server_conn, patch_dir_paths)
 
-
         controller0.telnet_conn.write_line("echo " + HostLinuxCreds.get_password() + " | sudo -S reboot")
         LOG.info("Patch application requires a reboot.")
         LOG.info("Controller0 reboot has started")
@@ -2094,12 +2083,13 @@ def apply_patches(lab, build_server, patch_dir):
 
     Args:
         lab:
-        server:
+        build_server:
         patch_dir:
 
     Returns:
 
     """
+
     patch_names = []
     rc = build_server.ssh_conn.exec_cmd("test -d " + patch_dir)[0]
     assert rc == 0, "Patch directory path {} not found".format(patch_dir)
