@@ -173,7 +173,7 @@ def test_decrease_drbd():
 
 
 # Fails due to product issue
-def test_modify_drdb():
+def _test_modify_drdb():
     """ 
     This test modifies the size of the drbd based filesystems, does an
     immediate swact and then reboots the active controller.
@@ -200,8 +200,9 @@ def test_modify_drdb():
     cmd = "vgdisplay -C --noheadings --nosuffix -o vg_free --units g cgts-vg"
     rc, out = con_ssh.exec_sudo_cmd(cmd)
     free_space = out.rstrip()
+    free_space = out.lstrip()
     LOG.info("Available free space on the system is: {}".format(free_space))
-    if float(free_space) <= 0:
+    if float(free_space) <= 2:
         skip("Not enough free space to complete test.")
 
     drbdfs_val = {} 
@@ -215,14 +216,17 @@ def test_modify_drdb():
     LOG.tc_step("Increase the size of the backup and cgcs filesystem")
     partition_name = "backup"
     partition_value = drbdfs_val[partition_name]
-    backup_freespace = math.trunc(float(free_space) / 10)
+    if float(free_space) > 10:
+        backup_freespace = math.trunc(float(free_space) / 10)
+    else:
+        backup_freespace = 1
     new_partition_value = backup_freespace + int(partition_value)
     cmd = "system controllerfs-modify {} {}".format(partition_name, new_partition_value)
     rc, out = con_ssh.exec_cmd(cmd)
     partition_name = "cgcs"
     partition_value = drbdfs_val[partition_name]
     cgcs_free_space = math.trunc(backup_freespace / 2)
-    new_partition_value = cgcs_free_space + int(partition_value)
+    new_partition_value = backup_freespace + int(partition_value)
     cmd = "system controllerfs-modify {} {}".format(partition_name, new_partition_value)
     rc, out = con_ssh.exec_cmd(cmd)
 

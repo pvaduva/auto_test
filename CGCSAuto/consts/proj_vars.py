@@ -15,6 +15,8 @@ class ProjVar:
                   'CGCS_DB': True,
                   'IS_SIMPLEX': False,
                   'KEYSTONE_DEBUG': False,
+                  'TEST_NAME': None,
+                  'PING_FAILURE': False,
                   }
 
     @classmethod
@@ -30,6 +32,7 @@ class ProjVar:
             'PYTESTLOG_PATH': logdir + '/pytestlog.log',
             'LAB_NAME': lab['short_name'],
             'TEMP_DIR': logdir + '/tmp_files/',
+            'PING_FAILURE_DIR': logdir + '/ping_failures/',
             'PRIMARY_TENANT': tenant,
             'LAB': lab,
             'BOOT_VMS': is_boot,

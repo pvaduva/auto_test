@@ -1248,7 +1248,7 @@ def get_hosts_in_aggregate(aggregate, con_ssh=None):
     return hosts
 
 
-def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
+def get_hosts_by_storage_aggregate(storage_backing='local_image', up_only=True, con_ssh=None):
     """
     Return a list of hosts that supports the given storage backing.
 
@@ -1275,6 +1275,10 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
                          "Please use one of these: 'local_image', 'local_lvm', 'remote'")
 
     hosts = get_hosts_in_aggregate(aggregate, con_ssh=con_ssh)
+
+    if up_only:
+        up_hypervisors = get_up_hypervisors(con_ssh=con_ssh)
+        hosts = list(set(hosts) & set(up_hypervisors))
 
     LOG.info("Hosts with {} backing: {}".format(storage_backing, hosts))
     return hosts
@@ -2268,10 +2272,11 @@ def get_vcpus_for_instance_via_virsh(host_ssh, instance_name, rtn_list=False):
     return vcpus
 
 
-def get_hosts_per_storage_backing(con_ssh=None):
+def get_hosts_per_storage_backing(up_only=True, con_ssh=None):
     """
     Get hosts for each possible storage backing
     Args:
+        up_only (bool): whether to return up hypervisor only
         con_ssh:
 
     Returns (dict): {'local_image': <cow hosts list>,
@@ -2280,9 +2285,14 @@ def get_hosts_per_storage_backing(con_ssh=None):
                     }
     """
 
-    hosts = {'local_image': get_hosts_by_storage_aggregate('local_image', con_ssh=con_ssh),
-             'local_lvm': get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh),
-             'remote': get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh)}
+    hosts = {'local_image': get_hosts_by_storage_aggregate('local_image', up_only=False, con_ssh=con_ssh),
+             'local_lvm': get_hosts_by_storage_aggregate('local_lvm', up_only=False, con_ssh=con_ssh),
+             'remote': get_hosts_by_storage_aggregate('remote', up_only=False, con_ssh=con_ssh)}
+
+    if up_only:
+        up_hosts = get_up_hypervisors(con_ssh=con_ssh)
+        for backing, hosts_with_backing in hosts.items():
+            hosts[backing] = list(set(hosts_with_backing) & set(up_hosts))
 
     return hosts
 

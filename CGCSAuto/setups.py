@@ -529,18 +529,20 @@ def scp_vswitch_log(con_ssh, hosts, log_path=None):
     for host in hosts:
         LOG.info("scp vswitch log from {} to controller-0".format(host))
         dest_file = "{}_vswitch.info".format(host)
-        dest_file = os.path.join(WRSROOT_HOME, dest_file)
+        dest_file = '{}/{}'.format(WRSROOT_HOME, dest_file)
         con_ssh.scp_files(source_file, dest_file, source_server=host, dest_server='controller-0',
-                          source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(), dest_password=HostLinuxCreds.get_password(),
-                          dest_user='', timeout=30, sudo=True, sudo_password=None, fail_ok=True)
+                          source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
+                          dest_password=HostLinuxCreds.get_password(), dest_user='', timeout=30, sudo=True,
+                          sudo_password=None, fail_ok=True)
 
     LOG.info("SCP vswitch log from lab to automation log dir")
     if log_path is None:
-        log_path = os.path.join(WRSROOT_HOME, '*_vswitch.info')
+        log_path = '{}/{}'.format(WRSROOT_HOME, '*_vswitch.info')
     source_ip = ProjVar.get_var('LAB')['controller-0 ip']
-    dest_dir = ProjVar.get_var('TEMP_DIR')
-    scp_to_local(dest_path=dest_dir, source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(), source_path=log_path,
-                 source_ip=source_ip, timeout=60)
+    dest_dir = ProjVar.get_var('PING_FAILURE_DIR')
+    scp_to_local(dest_path=dest_dir,
+                 source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
+                 source_path=log_path, source_ip=source_ip, timeout=60)
 
 
 def list_migration_history(con_ssh):
@@ -621,3 +623,9 @@ def enable_disable_keystone_debug(con_ssh, enable=True):
         LOG.info("Restart keystone service after toggling keystone debug")
         con_ssh.exec_sudo_cmd('sm-restart-safe service keystone', fail_ok=False)
         time.sleep(3)
+
+
+def add_ping_failure(test_name):
+    file_path = '{}{}'.format(ProjVar.get_var('PING_FAILURE_DIR'), 'ping_failures.txt')
+    with open(file_path, mode='a') as f:
+        f.write(test_name + '\n')
