@@ -905,6 +905,13 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
         pass
 
 
+def get_system_name(fail_ok=True, con_ssh=None):
+
+    table_ = table_parser.table(cli.system('show'))
+    system_name = table_parser.get_value_two_col_table(table_, 'name')
+    return system_name
+
+
 def set_retention_period(fail_ok=True, check_first=True, con_ssh=None, auth_info=Tenant.ADMIN, period=None):
     """
     Sets the PM retention period
@@ -2150,6 +2157,14 @@ def get_system_software_version(con_ssh=None):
     sw_line = [l for l in build_info.splitlines() if "SW_VERSION" in l]
     return ((sw_line.pop()).split("=")[1]).replace('"', '')
 
+
+def get_traffic_control_info(con_ssh=None, port=None):
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    traffic_control = con_ssh.exec_cmd('tc class show dev {}'.format(port), expect_timeout=10)[1]
+    return traffic_control
 
 def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_creden_=None):
     rc, output = cli.system('load-import', load_path, ssh_client=con_ssh, fail_ok=True, source_creden_=source_creden_)
