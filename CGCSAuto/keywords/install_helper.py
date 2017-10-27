@@ -1169,14 +1169,12 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
     output_dir = ProjVar.get_var('LOG_DIR')
     controller0_node = lab['controller-0']
 
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
-
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
         controller0_node.telnet_conn.login()
 
-    cmd = "echo " + HostLinuxCreds.get_password() + " | sudo -S config_controller --restore-system {}".format(system_backup)
+    cmd = 'echo "{}" | sudo -S config_controller --restore-system {}'.format(HostLinuxCreds.get_password(),
+                                                                             system_backup)
     os.environ["TERM"] = "xterm"
 
     rc, output = controller0_node.telnet_conn.exec_cmd(cmd,
@@ -1185,10 +1183,9 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
     if rc == 0 and 'reboot controller' in output:
         msg = 'System WAS patched, and now is restored to the previous patch-level, but still needs a reboot'
         LOG.info(msg)
-        # LOG.info('output:{}'.format(output))
 
         reboot_cmd = 'echo "{}" | sudo -S reboot'.format(HostLinuxCreds.get_password())
-        # reboot_cmd = 'reboot'
+
         rc, output = controller0_node.telnet_conn.exec_cmd(reboot_cmd,
                                                            alt_prompt=' login: ', timeout=HostTimeout.REBOOT)
         if rc != 0:
@@ -1228,7 +1225,12 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
         cmd = 'system host-list'
         rc, output = conn.exec_cmd(cmd)
         assert rc == 0, \
-            'Failed to run system host-list, rc:{}, output:\n{}'.format(rc, output)
+            'Failed to run {}, rc:{}, output:\n{}'.format(cmd, rc, output)
+
+        cmd = 'openstack endpoint list'
+        rc, output = conn.exec_cmd(cmd)
+        assert rc == 0, \
+            'Failed to run {}, rc:{}, output:\n{}'.format(cmd, rc, output)
 
         LOG.info('OK to get hosts list\n{}\n'.format(output))
 
