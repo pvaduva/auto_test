@@ -95,29 +95,28 @@ def test_increase_scratch():
     table_ = table_parser.table(cli.system('controllerfs-show scratch'))
     scratch = table_parser.get_value_two_col_table(table_, 'size')
     LOG.info("scratch is currently: {}".format(scratch))
+    scratch = int(ast.literal_eval(scratch))
 
     LOG.tc_step("Determine the available free space on the system")
     cmd = "vgdisplay -C --noheadings --nosuffix -o vg_free --units g cgts-vg"
     rc, out = con_ssh.exec_sudo_cmd(cmd)
     free_space = out.rstrip()
     LOG.info("Available free space on the system is: {}".format(free_space))
-    if float(free_space) <= 0:
+    free_space = int(ast.literal_eval(free_space))
+    if free_space <= 10:
         skip("Not enough free space to complete test.")
 
-    LOG.info("Available free space on the system is: {}".format(free_space))
-
-    if int(free_space) <= 0:
-        skip("Not enough free space to complete test.")
-    else:
-        LOG.tc_step("Increase the size of the scratch filesystem")
-        new_scratch = math.trunc(int(free_space) / 10) + int(scratch)
-        cmd = "system controllerfs-modify scratch {}".format(new_scratch)
-        rc, out = con_ssh.exec_cmd(cmd)
+    LOG.tc_step("Increase the size of the scratch filesystem")
+    new_scratch = math.trunc(free_space / 10) + scratch
+    cmd = "system controllerfs-modify scratch {}".format(new_scratch)
+    rc, out = con_ssh.exec_cmd(cmd)
+    assert rc == 0, "Modification of scratch failed"
 
     table_ = table_parser.table(cli.system('controllerfs-show scratch'))
     new_scratch = table_parser.get_value_two_col_table(table_, 'size')
     LOG.info("scratch is now: {}".format(new_scratch))
-    assert int(new_scratch) > int(scratch), "scratch size did not increase"
+    new_scratch = int(ast.literal_eval(new_scratch))
+    assert new_scratch > scratch, "scratch size did not increase"
 
     LOG.info("Wait for alarms to clear")
     hosts = system_helper.get_controllers()
@@ -126,14 +125,16 @@ def test_increase_scratch():
                                         entity_id="host={}".format(host))
 
     LOG.tc_step("Attempt to decrease the size of the scratch filesystem")
-    decreased_scratch = int(new_scratch) - 1
+    decreased_scratch = new_scratch - 1
     cmd = "system controllerfs-modify scratch {}".format(decreased_scratch)
     rc, out = con_ssh.exec_cmd(cmd, fail_ok=True)
     table_ = table_parser.table(cli.system('controllerfs-show scratch'))
     final_scratch = table_parser.get_value_two_col_table(table_, 'size')
+    final_scratch = int(ast.literal_eval(final_scratch))
     LOG.info("scratch is currently {}".format(final_scratch))
-    assert int(final_scratch) != int(decreased_scratch), \
+    assert final_scratch != decreased_scratch, \
         "scratch was unexpectedly decreased from {} to {}".format(new_scratch, final_scratch)
+
 
 def test_decrease_drbd():
     """ 
