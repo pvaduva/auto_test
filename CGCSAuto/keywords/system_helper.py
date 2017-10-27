@@ -2166,6 +2166,14 @@ def get_traffic_control_info(con_ssh=None, port=None):
     traffic_control = con_ssh.exec_cmd('tc class show dev {}'.format(port), expect_timeout=10)[1]
     return traffic_control
 
+def get_mgmt_nic_speed(con_ssh=None, port=None):
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    traffic_control = con_ssh.exec_cmd('cat /sys/class/net/{}/speed' .format(port), expect_timeout=10)[1]
+    return traffic_control
+
 def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_creden_=None):
     rc, output = cli.system('load-import', load_path, ssh_client=con_ssh, fail_ok=True, source_creden_=source_creden_)
 
