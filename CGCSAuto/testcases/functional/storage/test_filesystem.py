@@ -23,6 +23,11 @@ def lvm_precheck():
     if system_helper.is_simplex() or system_helper.is_storage_system():
         skip("Test does not apply to AIO-SX systems or storage systems")
 
+@fixture()
+def storage_precheck():
+    if not system_helper.is_storage_system():
+        skip("This test only applies to storage nodes")
+
 @mark.usefixtures("aio_precheck")
 def test_reclaim_sda():
     """
@@ -320,6 +325,7 @@ def _test_increase_cinder():
     # ipmitool (wildcat only) or port installer code over.
 
 
+@mark.usefixtures("storage_precheck")
 def test_increase_ceph_mon():
     """
     Increase the size of ceph-mon.  Only applicable to a storage system.
