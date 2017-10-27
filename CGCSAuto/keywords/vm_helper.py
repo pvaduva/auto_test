@@ -12,7 +12,7 @@ from utils.tis_log import LOG
 
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
-    VMNetworkStr, EventLogID, GuestImages, Networks
+    VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec
 from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
@@ -412,14 +412,22 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if flavor is None:
         flavor = nova_helper.get_basic_flavor(auth_info=auth_info, con_ssh=con_ssh, guest_os=guest_os)
 
+    if guest_os == 'vxworks':
+        LOG.tc_step("Add HPET Timer extra spec to flavor")
+        extra_specs = {FlavorSpec.HPET_TIMER: 'True'}
+        nova_helper.set_flavor_extra_specs(flavor=flavor, **extra_specs)
+
     # Handle mandatory arg - nics
     if not nics:
+        vif_model = 'virtio'
+        if guest_os == 'vxworks':
+            vif_model = 'e1000'
         mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=auth_info, con_ssh=con_ssh)
         if not mgmt_net_id:
             raise exceptions.NeutronError("Cannot find management network")
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}]
+        nics = [{'net-id': mgmt_net_id, 'vif-model': vif_model}]
 
-        if 'edge' not in guest_os:
+        if 'edge' not in guest_os and 'vxworks' not in guest_os:
             tenant_net_id = network_helper.get_tenant_net_id(auth_info=auth_info, con_ssh=con_ssh)
             # tenant_vif = random.choice(['virtio', 'avp'])
             if tenant_net_id:
