@@ -19,6 +19,8 @@ from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
 # from CGCSAuto.utils import local_host
 from utils import local_host
+from consts.auth import Tenant, CliAuth
+import setups
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
 BACKUP_USB_MOUNT_POINT = '/media/wrsroot'
@@ -210,7 +212,7 @@ def wipe_disk_hosts(hosts):
 
 def wipe_disk(node, install_output_dir, close_telnet_conn=True):
     """
-    Perform a wipedisk operation on the lab before booting a new load into
+    Perform a wipedisk_via_helper operation on the lab before booting a new load into
         it.
     Args:
         node:
@@ -230,7 +232,7 @@ def wipe_disk(node, install_output_dir, close_telnet_conn=True):
                                              + node.name + ".telnet.log",
                                              debug=False)
 
-    # Check that the node is accessible for wipedisk to run.
+    # Check that the node is accessible for wipedisk_via_helper to run.
     # If we cannot successfully ping the interface of the node, then it is
     # expected that the login will fail. This may be due to the node not
     # being left in an installed state.
@@ -238,13 +240,13 @@ def wipe_disk(node, install_output_dir, close_telnet_conn=True):
     # cmd = "ping -w {} -c 4 {}".format(HostTimeout.PING_TIMEOUT, node.host_ip)
     # if (node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.PING_TIMEOUT +
     #                               HostTimeout.TIMEOUT_BUFFER)[0] != 0):
-    #     err_msg = "Node {} not responding. Skipping wipedisk process".format(node.name)
+    #     err_msg = "Node {} not responding. Skipping wipedisk_via_helper process".format(node.name)
     #     LOG.info(err_msg)
     #     return 1
     # else:
     #     node.telnet_conn.login()
 
-    node.telnet_conn.write_line("sudo -k wipedisk")
+    node.telnet_conn.write_line("sudo -k wipedisk_via_helper")
     node.telnet_conn.get_read_until(Prompt.PASSWORD_PROMPT)
     node.telnet_conn.write_line(HostLinuxCreds.get_password())
     node.telnet_conn.get_read_until("[y/n]")
@@ -2147,7 +2149,7 @@ def establish_ssh_connection(host, user=HostLinuxCreds.get_user(), password=Host
             raise
 
 
-def wipedisk(ssh_con, node=None):
+def wipedisk_via_helper(ssh_con, node=None):
     """
     A light-weight tool to wipe disks in order to AVOID booting from hard disks
 
@@ -2169,4 +2171,23 @@ def wipedisk(ssh_con, node=None):
         ssh_con.exec_cmd(cmd)
 
     else:
-        LOG.info("wipedisk files are not on the load, will not do wipedisk")
+        LOG.info("wipedisk_via_helper files are not on the load, will not do wipedisk_via_helper")
+
+
+def update_auth_url(ssh_con, region=None, fail_ok=True):
+    """
+
+    Args:
+        ssh_con:
+        region:
+
+    Returns:
+
+    CGTS-8190
+    """
+
+    LOG.info('Attempt to update OS_AUTH_URL from openrc')
+
+    CliAuth.set_vars(**setups.get_auth_via_openrc(ssh_con))
+    Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
+    Tenant._set_region(CliAuth.get_var('OS_REGION_NAME'))

@@ -134,8 +134,8 @@ def pre_restore_checkup():
             # Wipe disks in order to make controller-0 NOT boot from hard-disks
             # hosts = [k for k , v in lab.items() if isinstance(v, node.Node)]
             # install_helper.wipe_disk_hosts(hosts)
-            LOG.info('Try to do wipedisk on controller-0')
-            install_helper.wipedisk(controller_conn)
+            LOG.info('Try to do wipedisk_via_helper on controller-0')
+            install_helper.wipedisk_via_helper(controller_conn)
 
     assert backup_build_id, "The Build id of the system backup must be provided."
 
@@ -302,8 +302,16 @@ def test_restore_from_backup(restore_setup):
         images_backup_path = "{}/{}".format(BackupRestore.USB_BACKUP_PATH, images_backup_file)
 
     LOG.info("Images restore from backup file {} ...".format(images_backup_file))
+    # TIS_NODE_PROMPT_BASE = '{}\:~\$ '
+    # [wrsroot@yow-cgcs-hp380-1 ~(keystone_admin)]$
+    new_prompt = '{}.*~.*\$ '.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
+    LOG.info('set prompt to:{}'.format(new_prompt))
+    con_ssh.set_prompt(new_prompt)
     install_helper.restore_controller_system_images(images_backup=images_backup_path,
                                                     tel_net_session=controller_node.telnet_conn)
+
+    # this is a workaround for CGTS-8190
+    install_helper.update_auth_url(con_ssh)
 
     LOG.tc_step("Verifying  restoring controller-0 is complete and is in available state ...")
     LOG.debug('Wait for system ready in 60 seconds')
