@@ -435,7 +435,7 @@ def get_snapshot_id(status='available', vol_id=None, name=None, size=None, con_s
         'status': status,
         "Volume ID": vol_id,
         'Status': status,
-        'Display Name': name,
+        'name': name,
         'Size': size
     }
 
