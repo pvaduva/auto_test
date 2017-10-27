@@ -97,7 +97,17 @@ def vboxmanage_hostonlyifcreate(name="vboxnet0", ip=None, netmask=None):
     result = subprocess.check_output(['vboxmanage', 'hostonlyif', 'ipconfig', name, '--ip', ip, '--netmask', netmask], stderr=subprocess.STDOUT)
 
 
-def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype=None, nicpromisc=None, nicnum=None, intnet=None, hostonlyadapter=None, uartbase=None, uartport=None, uartmode=None, uartpath=None):
+def vboxmanage_hostonlyifdelete(name="vboxnet0"):
+    """
+    Deletes hostonly network. This is used as a work around for creating too many hostonlyifs.
+
+    """
+    assert name, "Must provide network name"
+    print("Removing Host-only Network")
+    result = subprocess.check_output(['vboxmanage', 'hostonlyif', 'remove', name], stderr=subprocess.STDOUT)
+
+
+def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype=None, nicpromisc=None, nicnum=None, intnet=None, hostonlyadapter=None, uartbase=None, uartport=None, uartmode=None, uartpath=None, nicbootprio2=1):
     """
     This modifies a VM with a specified name.
     """
@@ -125,6 +135,11 @@ def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype
         cmd.extend(['--uartmode1'])
         cmd.extend(['{}'.format(uartmode)])
         cmd.extend(['{}/{}'.format(uartpath, hostname)])
+    if nicbootprio2:
+        cmd.extend(['--nicbootprio2'])
+        cmd.extend(['{}'.format(nicbootprio2)])
+    cmd.extend(['--boot4']) 
+    cmd.extend(['net'])
     print(cmd)
 
     print("Updating VM {} configuration".format(hostname))
@@ -177,7 +192,8 @@ def vboxmanage_createmedium(hostname=None, disk_list=None):
             device_num = 0
         elif disk_count == 4:
             device_num = 1
-        file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
+       # file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)      #required when using own machine  
+        file_name = "/folk/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
         print("Creating disk {} on VM {} on device {} port {}".format(file_name, hostname, device_num, port_num))
         result = subprocess.check_output(['vboxmanage', 'createmedium', 'disk', '--size', str(disk), '--filename', file_name, '--format', 'vdi', '--variant', 'standard'], stderr=subprocess.STDOUT)
         vboxmanage_storageattach(hostname, "ide", "hdd", file_name + ".vdi", str(port_num), str(device_num))

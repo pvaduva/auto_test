@@ -116,4 +116,38 @@ def handle_args():
         """,
         action='store_true')
 
+    parser.add_argument("--install-lab", help=
+        """
+        If specified, the nodes and lab will be installed automatically.
+        """,
+        action='store_true')
+
+    parser.add_argument("--create-vms", help=
+        """
+        If specified we will create and install new vms, otherwise the creation and install will be skipped. 
+        Should be omitted when the vms have already been created and installed.
+        """,
+        action='store_true')
+
+    parser.add_argument("--config-location", help=
+        """
+        If specified the config files (i.e. lab_setup.sh, lab_setup.conf, license.lic, TiS_config.ini_centos, ...) will be retrieved from this location.
+        e.g.  /folk/cgts/myousaf/
+        """,
+        type=str)
+        
+    parser.add_argument("--configure", help=
+        """
+        If specified we will configure controller-0 otherwise the configuration will have to be perfomed manually. 
+        config_controller will be run with the --default parameter
+        """,
+        action='store_true')
+
+    parser.add_argument("--patch-location", help=
+        """
+        Location of patch to install including patch name, if specified the patch will be retrieved and installed.
+        e.g. 
+        """,
+        type=str)
+        
     return parser

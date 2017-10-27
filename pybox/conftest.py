@@ -108,7 +108,7 @@ def pytest_addoption(parser):
         """,
         action='store_true')
 
-def pytest_generate_tests(metafunc)
+def pytest_generate_tests(metafunc):
     option_value = metafunc.config.option.name
-    if 'name' in metafunc.fixturenames and option_value
+    if 'name' in metafunc.fixturenames and option_value:
         metafunc.parameterize("name", [option_value])
