@@ -1,8 +1,9 @@
-import time
+import time, re
 
 from pytest import mark, fixture
 
 from utils.tis_log import LOG
+from utils import table_parser
 
 from consts.cgcs import FlavorSpec
 from consts.cli_errs import MinCPUErr       # Do not remove this import, used by eval()
@@ -215,41 +216,69 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
     LOG.tc_step("Check vm vcpus in nova show did not change")
     check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
+@fixture(scope='module')
+def find_numa_node_and_cpu_count():
+    storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
+    vm_host = target_hosts[0]
+    cpu_count = host_helper.get_logcores_counts(vm_host, proc_ids=0, thread=['0', '1'], functions='VMs')
 
-def _test_scaling_vm_negative():
+    # increase quota
+    vm_helper.ensure_vms_quotas(cores_num=cpu_count)
+
+    return storage_backing, vm_host, cpu_count
+
+
+def test_scaling_vm_negative(find_numa_node_and_cpu_count):
+
+    inst_backing, vm_host, cpu_count = find_numa_node_and_cpu_count
 
     # make vm (3 vcpus)
 
     LOG.tc_step("Create flavor with 3 vcpus and boot vm")
-    flavor_1 = nova_helper.create_flavor(name='cpu_scale', vcpus=3)[1]
+    first_specs = {FlavorSpec.MIN_VCPUS: 1, FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: 0}
+
+    flavor_1 = nova_helper.create_flavor(vcpus=3, storage_backing=inst_backing)[1]
+    nova_helper.set_flavor_extra_specs(flavor_1, first_specs)
     ResourceCleanup.add('flavor', flavor_1)
     LOG.info("Boot a vm with above flavor")
-    vm_1 = vm_helper.boot_vm(name='small_vcpu_vm', flavor=flavor_1, cleanup='function')[1]
+    vm_1 = vm_helper.boot_vm(flavor=flavor_1, source='image', cleanup='function', vm_host=vm_host, fail_ok=False)[1]
 
-    # find vcpu amount, scale down twice
-    vm_host, vm_numa = vm_helper.get_vm_host_and_numa_nodes(vm_1)
-    cpus_left = 2
+    # scale down once
 
-    # resize to bad flavor
+    vm_helper.scale_vm(vm_1, direction='down', resource='cpu', fail_ok=False)
 
-    
+    # resize to unscalable flavor
+
+    unscale_flavor = nova_helper.create_flavor(vcpus=3, storage_backing=inst_backing)[1]
+    ResourceCleanup.add('flavor', unscale_flavor)
+    unscale_flavor_specs = {FlavorSpec.NUMA_0: 0}
+    nova_helper.set_flavor_extra_specs(unscale_flavor, unscale_flavor_specs)
+    code, output = vm_helper.resize_vm(vm_1, unscale_flavor, fail_ok=True)
+    expt_error = "Unable to resize to non-scalable flavor with scaled-down vCPUs.  Scale up and retry."
+    assert code != 0, "Resize to unscalable flavor failed when it should have succeeded"
+    assert re.search(expt_error, output), "Error message incorrect: expected {} in output when output is {}"\
+        .format(expt_error, output)
 
     # make another vm
 
-    LOG.tc_step("Create flavor with 3 vcpus")
-    second_specs = {FlavorSpec.NUMA_0: vm_numa}
+    LOG.tc_step("Create a vm to occupy all but one vcpu")
+    occupy_amount = cpu_count - 2
+    second_specs = {FlavorSpec.MIN_VCPUS: 1, FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: 0}
 
-    flavor_2 = nova_helper.create_flavor(name='big_vcpu_vm', vcpus=cpus_left)[1]
+    flavor_2 = nova_helper.create_flavor(vcpus=occupy_amount, storage_backing=inst_backing)[1]
     ResourceCleanup.add('flavor', flavor_2)
     nova_helper.set_flavor_extra_specs(flavor_2, second_specs)
     LOG.tc_step("Boot a vm with above flavor")
-    vm_2 = vm_helper.boot_vm(name='large_vcpu_vm', flavor=flavor_2, cleanup='function')[1]
+    vm_2 = vm_helper.boot_vm(flavor=flavor_2, source='image', cleanup='function', vm_host=vm_host, fail_ok=False)[1]
 
     # scale first vm up once (pass)
 
-    vm_helper.scale_vm(vm_1, direction='up', resource='cpu')
+    vm_helper.scale_vm(vm_1, direction='up', resource='cpu', fail_ok=False)
 
     # scale first vm up again (fail)
 
-    exit_code = vm_helper.scale_vm(vm_1, direction='up', resource='cpu', fail_ok=True)[0]
-    assert exit_code == 0, "Scale VM up was successful when failure was expected"
+    exit_code, output = vm_helper.scale_vm(vm_1, direction='up', resource='cpu', fail_ok=True)
+    expt_upscale_error = "Insufficient compute resources: no free pcpu available on NUMA node."
+    assert exit_code != 0, "Scale VM up was successful when failure was expected"
+    assert re.search(expt_upscale_error, output), "Error message incorrect: expected {} in output when output is {}"\
+        .format(expt_error, output)
