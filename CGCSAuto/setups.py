@@ -8,6 +8,7 @@ from utils import exceptions, lab_info
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
 from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
+
 from utils.local_host import *
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto
 from consts.cgcs import Prompt
@@ -526,7 +527,8 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
         LOG.info("Locallinux VM external IP is {}".format(local_external_ip))
         lab_to_install['external_ip'] = local_external_ip
 
-        lab_to_install['external_port'] = 2222
+        lab_to_install['external_port'] = 22266
+
         username = getpass.getuser()
         password = ''
         if "svc-cgcsauto" in username:
@@ -536,6 +538,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
 
         lab_to_install['local_user'] = username
         lab_to_install['local_password'] = password
+
 
 
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume, skip_labsetup=skip_labsetup,

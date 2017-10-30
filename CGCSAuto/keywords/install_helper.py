@@ -64,9 +64,10 @@ def download_upgrade_license(lab, server, license_path):
 
         common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
                                         dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
-        # server.ssh_conn.rsync("-L " + license_path, external_ip,
-        #                       os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
-        #                       pre_opts=pre_opts, ssh_port=external_port)
+
+        server.ssh_conn.rsync("-L " + license_path, external_ip,
+                              os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+                              pre_opts=pre_opts, ssh_port=external_port)
     else:
         server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'],
                             os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
@@ -81,9 +82,7 @@ def download_upgrade_load(lab, server, load_path):
             server.name, load_path)
     iso_file_path = os.path.join(load_path, "export", UPGRADE_LOAD_ISO_FILE)
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-    #server.ssh_conn.rsync(iso_file_path,
-    #                      lab['controller-0 ip'],
-    #                      WRSROOT_HOME, pre_opts=pre_opts)
+
     if 'vbox' in lab['name']:
 
         external_ip = lab['external_ip']
@@ -97,9 +96,9 @@ def download_upgrade_load(lab, server, load_path):
         common.scp_to_active_controller(source_path=os.path.join(temp_path, "bootimage.iso"),
                                         dest_path=os.path.join(WRSROOT_HOME, "bootimage.iso"))
 
-        # server.ssh_conn.rsync("-L " + iso_file_path,
-        #                   external_ip,
-        #                   os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts, ssh_port=external_port)
+        server.ssh_conn.rsync("-L " + iso_file_path,
+                          external_ip,
+                          os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts, ssh_port=external_port)
 
     else:
         server.ssh_conn.rsync("-L " + iso_file_path,
