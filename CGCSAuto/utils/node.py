@@ -8,7 +8,15 @@ NODE_INFO_PATH = "sanityrefresh/labinstall/node_info"
 LAB_SETTINGS_PATH= "sanityrefresh/labinstall/lab_settings"
 CFG_BOOT_INTERFACES_NAME = "boot_interfaces"
 
+VBOX_BOOT_INTERFACES = {
+    'controller-0': '0300',
+    'controller-1': '0800',
+    'compute-0': '0800',
+    'compute-1': '0800'
+}
+
 def create_node_boot_dict(labname):
+
     labname = labname.replace("yow-", '')
     local_path = os.path.dirname(__file__)
     lab_settings_filepath = os.path.join(local_path, '..', '..',
@@ -24,7 +32,8 @@ def create_node_boot_dict(labname):
         boot_device_dict = dict(config.items(CFG_BOOT_INTERFACES_NAME))
         return boot_device_dict
 
-def create_node_dict(nodes, personality):
+
+def create_node_dict(nodes, personality, vbox=False):
     """Read .ini file for each node and create Host object for the node.
 
     The data in the .ini file is read into a dictionary which is used to
@@ -36,24 +45,23 @@ def create_node_dict(nodes, personality):
     i = 0
 
     for node in nodes:
-
-        config = configparser.ConfigParser()
-        try:
-            local_path = os.path.dirname(__file__)
-            node_filepath = os.path.join(local_path, '..', '..',
-                                         NODE_INFO_PATH, '%s.ini' % node)
-            node_file = open(node_filepath, 'r')
-            config.read_file(node_file)
-        except Exception as e:
-            raise ValueError('Failed to read \"{}\": '.format(node_filepath) + str(e))
-
-
-
         node_info_dict = {}
-        for section in config.sections():
-            for opt in config.items(section):
-                key, value = opt
-                node_info_dict[section + '_' + key] = value
+        if not vbox:
+            config = configparser.ConfigParser()
+            try:
+                local_path = os.path.dirname(__file__)
+                node_filepath = os.path.join(local_path, '..', '..',
+                                             NODE_INFO_PATH, '%s.ini' % node)
+                node_file = open(node_filepath, 'r')
+                config.read_file(node_file)
+            except Exception as e:
+                raise ValueError('Failed to read \"{}\": '.format(node_filepath) + str(e))
+
+            #node_info_dict = {}
+            for section in config.sections():
+                for opt in config.items(section):
+                    key, value = opt
+                    node_info_dict[section + '_' + key] = value
 
         name = personality + "-{}".format(i)
         node_info_dict['name'] = name
@@ -63,8 +71,6 @@ def create_node_dict(nodes, personality):
         i += 1
 
     return node_dict
-
-
 
 
 class Node(object):
