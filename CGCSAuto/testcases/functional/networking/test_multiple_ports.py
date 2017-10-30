@@ -242,6 +242,7 @@ class TestMutiPortsPCI:
         pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')
         pci_pthru_nets = network_helper.get_pci_nets(vif='pthru', rtn_val='name')
         avail_nets = list(set(pci_pthru_nets) & set(pci_sriov_nets))
+        LOG.info("Networks available for pcipt and sriov: {}".format(avail_nets))
 
         internal_net_name = None
         for net_ in avail_nets:
@@ -265,10 +266,16 @@ class TestMutiPortsPCI:
         extra_pcipt_net = None
         extra_pcipt_net_name = None
         pcipt_nets = network_helper.get_pci_vm_network(pci_type='pci-passthrough', net_name='internal0-net')
+
         if isinstance(pcipt_nets, list):
-            pcipt_nets.remove(internal_net_name)
+            LOG.info("internal_net_name: {}; pript nets: {}".format(internal_net_name, pcipt_nets))
+            try:
+                pcipt_nets.remove(internal_net_name)
+            except ValueError:
+                # it's not one of the pcipt_nets returned (func only returns first 2 nets)
+                pass
             extra_pcipt_net_name = pcipt_nets[0]
-            extra_pcipt_net = network_helper.get_net_id_from_name(pcipt_nets[0])
+            extra_pcipt_net = network_helper.get_net_id_from_name(extra_pcipt_net_name)
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'virtio'},
