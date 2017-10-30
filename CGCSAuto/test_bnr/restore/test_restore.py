@@ -302,9 +302,8 @@ def test_restore_from_backup(restore_setup):
         images_backup_path = "{}/{}".format(BackupRestore.USB_BACKUP_PATH, images_backup_file)
 
     LOG.info("Images restore from backup file {} ...".format(images_backup_file))
-    # TIS_NODE_PROMPT_BASE = '{}\:~\$ '
-    # [wrsroot@yow-cgcs-hp380-1 ~(keystone_admin)]$
-    new_prompt = '{}.*~.*\$ '.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
+
+    new_prompt = '{}.*~.*\$ '.format(lab['name'].split('_')[0]) + '|controller\-0.*~.*\$ '
     LOG.info('set prompt to:{}'.format(new_prompt))
     con_ssh.set_prompt(new_prompt)
     install_helper.restore_controller_system_images(images_backup=images_backup_path,

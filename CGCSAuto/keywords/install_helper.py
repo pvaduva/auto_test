@@ -1218,7 +1218,7 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
     else:
         LOG.warn('No "restore complete" in output, rc={}\noutput:\n{}\n'.format(rc, output))
         conn = controller0_node.telnet_conn
-        cmd = 'source /etc/nova/openrc'
+        cmd = 'cd; source /etc/nova/openrc'
         rc, output = conn.exec_cmd(cmd)
         assert rc == 0, \
             'Failed to source the openrc after restore system configuration, rc:{}, output:\n{}'.format(rc, output)
@@ -2149,7 +2149,7 @@ def establish_ssh_connection(host, user=HostLinuxCreds.get_user(), password=Host
             raise
 
 
-def wipedisk_via_helper(ssh_con, node=None):
+def wipedisk_via_helper(ssh_con):
     """
     A light-weight tool to wipe disks in order to AVOID booting from hard disks
 
