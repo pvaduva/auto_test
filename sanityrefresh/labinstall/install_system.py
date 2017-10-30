@@ -918,7 +918,7 @@ def get_settings(barcodes_controller, barcodes_compute):
 
     return server_name + last_server_number
 
-def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True, usb=False, lowlat=False, security=False):
+def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True, usb=False, lowlat=False, security=False, iso_install=False):
     ''' Initiate the boot and installation operation.
     '''
 
@@ -937,7 +937,7 @@ def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_di
 
     vlm_exec_cmd(VLM_TURNON, node.barcode)
     logutils.print_step("Installing {}...".format(node.name))
-    rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os, usb, lowlat, security)
+    rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os, usb, lowlat, security, iso_install)
 
     if close_telnet_conn:
         node.telnet_conn.close()
@@ -1324,7 +1324,7 @@ def setupNetworking(host_os):
 def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths,
                       host_os, boot_device_dict, small_footprint, burn_usb,
                       tis_on_tis, boot_usb, iso_path, iso_host, lowlat,
-                      security):
+                      security, iso_install):
 
     global controller0
     #global cumulus
@@ -1342,7 +1342,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
             usb = False
 
         # Boot up controller0
-        rc = bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False, usb=usb, lowlat=lowlat, security=security)
+        rc = bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False, usb=usb, lowlat=lowlat, security=security, iso_install=iso_install)
         if rc != 0:
             msg = "Unable to bring up controller-0"
             wr_exit()._exit(1, msg)
@@ -2274,7 +2274,7 @@ def main():
         bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths, host_os,
                           boot_device_dict, small_footprint, burn_usb,
                           tis_on_tis, boot_usb, iso_path, iso_host, lowlat,
-                          security)
+                          security, iso_install)
         set_install_step_complete(lab_install_step)
 
     if stop == "1":

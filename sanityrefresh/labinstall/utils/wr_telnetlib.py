@@ -886,10 +886,14 @@ class Telnet:
                 log.error(msg)
                 wr_exit()._exit(1, msg)
 
-    def menu_selection(self, host_os, small_footprint, lowlat, usb, security):
+    def menu_selection(self, host_os, small_footprint, lowlat, usb, security, iso_install):
         """
         Menu selection logic
         """
+
+        # Install from pxeboot script behaves exactly like USB installs
+        if iso_install:
+            usb = True
 
         # Options align with pxeboot.cfg on tuxlab
         if host_os == 'wrlinux':
@@ -1022,7 +1026,7 @@ class Telnet:
     #TODO: The timeouts in this function need to be tested to see if they
     #      should be increased/decreased
     #TODO: If script returns zero, should check return code, otherwise remove it
-    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', usb=False, lowlat=False, security=False):
+    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', usb=False, lowlat=False, security=False, iso_install=False):
         if "wildcat" in node.host_name or "supermicro" in node.host_name:
             if "wildcat" in node.host_name:
                 index = 0
@@ -1103,7 +1107,7 @@ class Telnet:
             if node.name == CONTROLLER0:
                 if usb:
                     self.get_read_until("Select kernel options and boot kernel", 120)
-                    self.menu_selection(host_os, small_footprint, lowlat, usb, security)
+                    self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
                 elif "UEFI" in boot_device_regex:
                     # Special case for wcp92-98 (NVME default)
                     log.info("boot_device_regex, selecting UEFI boot option 2: {}".format(boot_device_regex))
@@ -1116,7 +1120,7 @@ class Telnet:
                     self.write(str.encode("\r\r"))
                 else:
                     self.get_read_until("Boot from hard drive", 240)
-                    self.menu_selection(host_os, small_footprint, lowlat, usb, security)
+                    self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
 
             self.get_read_until(LOGIN_PROMPT, install_timeout)
             log.info("Found login prompt. {} installation has completed".format(node.name))
@@ -1208,10 +1212,10 @@ class Telnet:
                 # booting device = USB tested only for Ironpass-31_32
                 if usb:
                     self.get_read_until("Select kernel options and boot kernel", 120)
-                    self.menu_selection(host_os, small_footprint, lowlat, usb, security)
+                    self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
                 else:
                     self.get_read_until("Boot from hard drive", 60)
-                    self.menu_selection(host_os, small_footprint, lowlat, usb, security)
+                    self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
 
         elif bios_type == BIOS_TYPES[1] or "r430" in node.host_name:
             print("Hewlett-Packard BIOS")
@@ -1227,7 +1231,7 @@ class Telnet:
 
             if node.name == CONTROLLER0:
                 self.get_read_until("Kickstart Boot Menu", 120)
-                self.menu_selection(host_os, small_footprint, lowlat, usb, security)
+                self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
         elif bios_type == BIOS_TYPES[2]:
             boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
             if boot_device_regex is None:
@@ -1285,7 +1289,7 @@ class Telnet:
 
             if node.name == CONTROLLER0:
                 self.get_read_until("Boot from hard drive", 300)
-                self.menu_selection(host_os, small_footprint, lowlat, usb, security)
+                self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
 
         # Not fool-proof.  FIX
         self.get_read_until(LOGIN_PROMPT, install_timeout)
