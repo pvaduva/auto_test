@@ -381,8 +381,15 @@ def apply_patches(lab, server, patch_dir):
 
         patch_dest_dir = WRSROOT_HOME + "upgrade_patches/"
 
+        dest_server = lab['controller-0 ip']
+        ssh_port = None
+
+        if 'vbox' in lab['name']:
+            dest_server = lab['external_ip']
+            ssh_port = lab['external_port']
+
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-        server.ssh_conn.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)
+        server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,pre_opts=pre_opts)
 
         avail_patches = " ".join(patch_names)
         LOG.info("List of patches:\n {}".format(avail_patches))

@@ -476,7 +476,7 @@ class SSHClient:
     def get_hostname(self):
         return self.exec_cmd('hostname')[1].splitlines()[0]
 
-    def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, extra_opts=None, pre_opts=None,
+    def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, ssh_port=None, extra_opts=None, pre_opts=None,
               timeout=60, fail_ok=False):
 
         dest_user = dest_user or HostLinuxCreds.get_user()
@@ -490,6 +490,9 @@ class SSHClient:
             pre_opts = ''
 
         ssh_opts = 'ssh {}'.format(' '.join(RSYNC_SSH_OPTIONS))
+        if ssh_port:
+            ssh_opts += ' -p {}'.format(ssh_port)
+
         cmd = "{} rsync -avre \"{}\" {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
 

@@ -426,9 +426,40 @@ class Labs:
     VBOX = {
         'short_name': 'vbox',
         'name': 'vbox',
-        'floating ip': '10.10.1.3',
-        'controller-0 ip': '10.10.1.1',
-        'controller-1 ip': '10.10.1.2',
+        'floating ip': '10.10.10.2',
+        'controller-0 ip': '10.10.10.3',
+        'controller-1 ip': '10.10.10.4',
+        'controller_nodes': [0, 1],
+        'compute_nodes': [0, 1]
+    }
+
+    VBOX_1 = {
+        'short_name': 'vbox_1',
+        'name': 'yow-cgcs-vbox-1',
+        'floating ip': '10.10.10.2',
+        'controller-0 ip': '10.10.10.3',
+        'controller-1 ip': '10.10.10.4',
+        'controller_nodes': [0, 1],
+        'compute_nodes': [0, 1]
+    }
+
+    VBOX_2 = {
+        'short_name': 'vbox_2',
+        'name': 'yow-cgcs-vbox-2',
+        'floating ip': '10.10.10.5',
+        'controller-0 ip': '10.10.10.6',
+        'controller-1 ip': '10.10.10.7',
+        'controller_nodes': [0, 1],
+        'compute_nodes': [0, 1]
+    }
+
+    VBOX_3 = {
+        'short_name': 'vbox_3',
+        'name': 'yow-cgcs-vbox-3',
+        'floating ip': '10.10.10.8',
+        'controller-0 ip': '10.10.10.9',
+        'controller-1 ip': '10.10.10.10',
+        'controller_nodes': [0, 1],
     }
 
     LARGE_OFFICE = {

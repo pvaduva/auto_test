@@ -115,7 +115,12 @@ def setup_test_session():
     con_ssh.set_prompt()
 
     global natbox_ssh
-    natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'), con_ssh=con_ssh)
+    natbox = ProjVar.get_var('NATBOX')
+    if natbox['ip'] == 'localhost':
+        natbox_ssh = 'localhost'
+    else:
+        natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), natbox, con_ssh=con_ssh)
+
     ProjVar.set_var(natbox_ssh=natbox_ssh)
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
@@ -135,8 +140,9 @@ def reconnect_before_test():
     """
     con_ssh.flush()
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
-    natbox_ssh.flush()
-    natbox_ssh.connect(retry=False)
+    if natbox_ssh and isinstance(natbox_ssh, SSHClient):
+        natbox_ssh.flush()
+        natbox_ssh.connect(retry=False)
 
 
 def pytest_collectstart():

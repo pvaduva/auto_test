@@ -67,7 +67,7 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     time.sleep(60)
 
     # Before Swacting ensure the controller-1 is in available state
-    if not host_helper.wait_for_host_states("controller-1", timeout=360, fail_ok=True,
+    if not host_helper.wait_for_host_states("controller-1", timeout=600, fail_ok=True,
                                             operational=HostOperationalState.ENABLED,
                                             availability=HostAvailabilityState.AVAILABLE):
         err_msg = " Swacting to controller-1 is not possible because controller-1 is not in available state " \
@@ -87,8 +87,9 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     controller0 = lab['controller-0']
 
     # open vlm console for controller-0 for boot through mgmt interface
-    LOG.info("Opening a vlm console for controller-0 .....")
-    install_helper.open_vlm_console_thread("controller-0", upgrade=True)
+    if not 'vbox' in lab['name']:
+        LOG.info("Opening a vlm console for controller-0 .....")
+        install_helper.open_vlm_console_thread("controller-0", upgrade=True)
 
     LOG.info("Starting {} upgrade.....".format(controller0.name))
     upgrade_helper.upgrade_host(controller0.name, lock=True)
