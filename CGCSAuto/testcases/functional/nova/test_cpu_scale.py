@@ -220,10 +220,11 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
 def find_numa_node_and_cpu_count():
     storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
     vm_host = target_hosts[0]
-    cpu_count = host_helper.get_logcores_counts(vm_host, proc_ids=0, thread=['0', '1'], functions='VMs')
+    cpu_count = host_helper.get_logcores_counts(vm_host, proc_ids=(0, 1), thread=['0', '1'], functions='VMs')[0]
+    LOG.info('cpu count: {}'.format(cpu_count))
 
     # increase quota
-    vm_helper.ensure_vms_quotas(cores_num=cpu_count)
+    vm_helper.ensure_vms_quotas(cores_num=(cpu_count + 1))
 
     return storage_backing, vm_host, cpu_count
 
@@ -238,12 +239,12 @@ def test_scaling_vm_negative(find_numa_node_and_cpu_count):
     first_specs = {FlavorSpec.MIN_VCPUS: 1, FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: 0}
 
     flavor_1 = nova_helper.create_flavor(vcpus=3, storage_backing=inst_backing)[1]
-    nova_helper.set_flavor_extra_specs(flavor_1, first_specs)
+    nova_helper.set_flavor_extra_specs(flavor_1, **first_specs)
     ResourceCleanup.add('flavor', flavor_1)
     LOG.info("Boot a vm with above flavor")
     vm_1 = vm_helper.boot_vm(flavor=flavor_1, source='image', cleanup='function', vm_host=vm_host, fail_ok=False)[1]
 
-    # scale down once
+    # scale down twice
 
     vm_helper.scale_vm(vm_1, direction='down', resource='cpu', fail_ok=False)
 
@@ -252,22 +253,26 @@ def test_scaling_vm_negative(find_numa_node_and_cpu_count):
     unscale_flavor = nova_helper.create_flavor(vcpus=3, storage_backing=inst_backing)[1]
     ResourceCleanup.add('flavor', unscale_flavor)
     unscale_flavor_specs = {FlavorSpec.NUMA_0: 0}
-    nova_helper.set_flavor_extra_specs(unscale_flavor, unscale_flavor_specs)
+    nova_helper.set_flavor_extra_specs(unscale_flavor, **unscale_flavor_specs)
     code, output = vm_helper.resize_vm(vm_1, unscale_flavor, fail_ok=True)
     expt_error = "Unable to resize to non-scalable flavor with scaled-down vCPUs.  Scale up and retry."
     assert code != 0, "Resize to unscalable flavor failed when it should have succeeded"
     assert re.search(expt_error, output), "Error message incorrect: expected {} in output when output is {}"\
         .format(expt_error, output)
 
+    # scale down again
+    
+    vm_helper.scale_vm(vm_1, direction='down', resource='cpu', fail_ok=False)
+
     # make another vm
 
     LOG.tc_step("Create a vm to occupy all but one vcpu")
     occupy_amount = cpu_count - 2
-    second_specs = {FlavorSpec.MIN_VCPUS: 1, FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: 0}
+    second_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: 0}
 
     flavor_2 = nova_helper.create_flavor(vcpus=occupy_amount, storage_backing=inst_backing)[1]
     ResourceCleanup.add('flavor', flavor_2)
-    nova_helper.set_flavor_extra_specs(flavor_2, second_specs)
+    nova_helper.set_flavor_extra_specs(flavor_2, **second_specs)
     LOG.tc_step("Boot a vm with above flavor")
     vm_2 = vm_helper.boot_vm(flavor=flavor_2, source='image', cleanup='function', vm_host=vm_host, fail_ok=False)[1]
 
