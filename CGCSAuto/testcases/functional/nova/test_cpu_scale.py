@@ -216,14 +216,17 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
     LOG.tc_step("Check vm vcpus in nova show did not change")
     check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
-@fixture(scope='module')
+
+@fixture(scope='function')
 def find_numa_node_and_cpu_count():
+    LOG.fixture_step("Find suitable vm host and cpu count and backing of host")
     storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
     vm_host = target_hosts[0]
     cpu_count = host_helper.get_logcores_counts(vm_host, proc_ids=(0, 1), thread=['0', '1'], functions='VMs')[0]
-    LOG.info('cpu count: {}'.format(cpu_count))
+    LOG.info('vm_host: {}, cpu count: {}'.format(vm_host, cpu_count))
 
     # increase quota
+    LOG.fixture_step("Increase quota of allotted cores")
     vm_helper.ensure_vms_quotas(cores_num=(cpu_count + 1))
 
     return storage_backing, vm_host, cpu_count
