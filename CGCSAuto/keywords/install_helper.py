@@ -1878,7 +1878,7 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
     src_files = "/opt/backups/image_{}*.tgz".format(image_id)
     if backup_dest == 'local':
         if dest_server:
-            if dest_server.ssh_conn.exec_cmd(["test -e {}".format(backup_dest_path)])[0] != 0:
+            if dest_server.ssh_conn.exec_cmd("test -e {}".format(backup_dest_path))[0] != 0:
                 dest_server.ssh_conn.exec_cmd("mkdir -p {}".format(backup_dest_path))
         else:
             if local_host.exec_cmd(["test", '-e',  "{}".format(backup_dest_path)])[0] != 0:
