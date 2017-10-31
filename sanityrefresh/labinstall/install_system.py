@@ -2612,7 +2612,7 @@ def main():
     if rc != 0:
         log.error("Failed to get build info")
 
-    if not skip_pxebootcfg:
+    if not (skip_pxebootcfg or iso_install):
         restore_pxeboot_cfg(controller0.barcode, tuxlab_server, install_output_dir)
 
     wr_exit()._exit(0, "Installer completed.\n" + installed_load_info)
