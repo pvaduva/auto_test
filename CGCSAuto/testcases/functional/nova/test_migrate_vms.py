@@ -189,6 +189,7 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
         - Cold migrate vm
         - Confirm/Revert resize as specified
         - Verify VM is successfully cold migrated and confirmed/reverted resize
+        - Verify that instance files are not found on original host. (TC6621)
 
     Teardown:
         - Delete created vm, volume, flavor
@@ -216,6 +217,7 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
         assert prev_vm_host != post_vm_host, "vm host did not change after cold migrate"
         LOG.tc_step("Check that source host no longer has instance files")
         with host_helper.ssh_to_host(prev_vm_host) as prev_ssh:
+            # TC6621
             assert not prev_ssh.file_exists('/etc/nova/instances/{}'.format(vm_id)), \
                 "Instance files found on previous host {} after cold migrate to {}".format(prev_vm_host, post_vm_host)
 
