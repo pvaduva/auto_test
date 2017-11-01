@@ -66,8 +66,15 @@ def download_upgrade_license(lab, server, license_path):
                                         dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
 
         server.ssh_conn.rsync("-L " + license_path, external_ip,
-                              os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
-                              pre_opts=pre_opts, ssh_port=external_port)
+                              os.path.join(temp_path, "upgrade_license.lic"),
+                              dest_user=lab['local_user'], dest_password=lab['local_password'],
+                              pre_opts=local_pre_opts)
+
+        common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
+                                        dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
+        # server.ssh_conn.rsync("-L " + license_path, external_ip,
+        #                       os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+        #                       pre_opts=pre_opts, ssh_port=external_port)
     else:
         server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'],
                             os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
@@ -99,7 +106,6 @@ def download_upgrade_load(lab, server, load_path):
         server.ssh_conn.rsync("-L " + iso_file_path,
                           external_ip,
                           os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts, ssh_port=external_port)
-
     else:
         server.ssh_conn.rsync("-L " + iso_file_path,
                               lab['controller-0 ip'],
