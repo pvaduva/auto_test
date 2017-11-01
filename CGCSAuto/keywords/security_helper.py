@@ -831,6 +831,8 @@ def change_linux_user_password(password, new_password, user='wrsroot', host=None
         if user != 'wrsroot':
             conn.close()
 
+    # flush the output to the cli so the next cli is correctly registered
+    conn.flush()
     LOG.info('Successfully changed password from:\n{}\nto:{} for user:{} on host:{}'.format(
         password, new_password, user, host))
 

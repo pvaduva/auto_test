@@ -184,7 +184,8 @@ def login_as_linux_user(user, password, host, cmd='whoami', expecting_fail=False
     if is_on_action_controller(host):
         LOG.info('Login to the active controller:{}\n'.format(host))
         if user != HostLinuxCreds.get_user():
-            skip('Login to the active controller, host:{}, user:{}'.format(host, user))
+            skip('Login to the active controller(will not skip if controller-1 is active), '
+                 'host:{}, user:{}'.format(host, user))
             return False, ''
 
     if user == 'wrsroot':
@@ -760,7 +761,7 @@ def test_linux_user_lockout():
         assert not connect, 'Expecting to fail but not.' + message
 
     LOG.info('OK, failed {} times to login with invalid password:{} as user:{} to host:{}\n'.format(
-        MAX_FAILED_LOGINS, password, user, host))
+        MAX_FAILED_LOGINS, invalid_password, user, host))
 
     LOG.tc_step('Now attempt to login with CORRECT password:{}, expecting to fail\n'.format(password))
     connect = log_in_raw(host, user, password, expect_fail=True)
