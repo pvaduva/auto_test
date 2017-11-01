@@ -8,7 +8,8 @@ from utils import exceptions, lab_info
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
 from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
-from consts.auth import Tenant, HostLinuxCreds
+from utils.local_host import *
+from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto
 from consts.cgcs import Prompt
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
@@ -526,6 +527,15 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
         lab_to_install['external_ip'] = local_external_ip
 
         lab_to_install['external_port'] = 2222
+        username = getpass.getuser()
+        password = ''
+        if "svc-cgcsauto" in username:
+            password = SvcCgcsAuto.PASSWORD
+        else:
+            password = getpass.getpass()
+
+        lab_to_install['local_user'] = username
+        lab_to_install['local_password'] = password
 
 
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume, skip_labsetup=skip_labsetup,
