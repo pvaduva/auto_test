@@ -3766,3 +3766,34 @@ def get_ip_for_eth(ssh_client, eth_name):
         return ''
 
 
+def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mode='dynamic', con_ssh=None):
+    """
+    Get the networks ids that matches the vxlan underlay ip version
+    Args:
+        vxlan_provider_net_id: vxlan provider net id to get the networks info
+        ip_version: 4 or 6 (IPV4 or IPV6)
+        con_ssh (SSHClient):
+
+    Returns (list): The list of networks name that matches the vxlan underlay (v4/v6)
+
+    """
+
+    networks = get_networks_on_providernet(providernet_id=vxlan_provider_net_id, rtn_val='id')
+    if not networks:
+        return ""
+    provider_attributes = get_networks_on_providernet(providernet_id=vxlan_provider_net_id,\
+                                                      rtn_val='providernet_attributes')
+    if not provider_attributes:
+        return ""
+    rtn_networks = []
+    index = 0
+    for attr in provider_attributes:
+        dic_attr = eval (attr)
+        if dic_attr['mode'] == mode:
+            ip = dic_attr['group']
+            ip_addr = ipaddress.ip_address(ip)
+            if ip_addr.version == ip_version:
+                rtn_networks.append(networks[index])
+        index += 1
+
+    return rtn_networks
