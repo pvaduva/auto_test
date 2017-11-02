@@ -3313,3 +3313,29 @@ def lock_unlock_controllers():
         return 1, "Standby controller unavailable. Skip lock unlock controllers"
 
     return 0, "Locking unlocking controllers completed"
+
+
+def get_traffic_control_info(con_ssh=None, port=None):
+    """
+    Check the traffic control profile on given port name
+
+    Returns (list): return traffic control string
+
+    """
+    if con_ssh is None:
+         con_ssh = ControllerClient.get_active_controller()
+    traffic_control = con_ssh.exec_cmd('tc class show dev {}'.format(port), expect_timeout=10)[1]
+    return traffic_control
+
+
+def get_nic_speed(con_ssh=None, port=None):
+    """
+    Check the speed on given port name
+
+    Returns (list): return speed
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+    traffic_control = con_ssh.exec_cmd('cat /sys/class/net/{}/speed' .format(port), expect_timeout=10)[1]
+    return traffic_control

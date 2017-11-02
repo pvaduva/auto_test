@@ -1,10 +1,10 @@
 import math
-import time
 import re
+import time
 
 from consts.auth import Tenant, HostLinuxCreds
-from consts.timeout import SysInvTimeout
 from consts.cgcs import UUID, Prompt, Networks
+from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -2157,22 +2157,6 @@ def get_system_software_version(con_ssh=None):
     sw_line = [l for l in build_info.splitlines() if "SW_VERSION" in l]
     return ((sw_line.pop()).split("=")[1]).replace('"', '')
 
-
-def get_traffic_control_info(con_ssh=None, port=None):
-
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
-
-    traffic_control = con_ssh.exec_cmd('tc class show dev {}'.format(port), expect_timeout=10)[1]
-    return traffic_control
-
-def get_mgmt_nic_speed(con_ssh=None, port=None):
-
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
-
-    traffic_control = con_ssh.exec_cmd('cat /sys/class/net/{}/speed' .format(port), expect_timeout=10)[1]
-    return traffic_control
 
 def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_creden_=None):
     rc, output = cli.system('load-import', load_path, ssh_client=con_ssh, fail_ok=True, source_creden_=source_creden_)
