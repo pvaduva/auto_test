@@ -186,9 +186,9 @@ def parse_args():
                          choices=['before', 'no'], default='before',
                          help='Apply branding files before config controller')
 
-    lab_grp.add_argument('--wipedisk', dest='wipedisk',
+    lab_grp.add_argument('--wipedisk_via_helper', dest='wipedisk_via_helper',
                          action='store_true',
-                         help="wipedisk during installation")
+                         help="wipedisk_via_helper during installation")
 
     #TODO: Custom directory path is not supported yet. Need to add code
     #      to rsync files from custom directory path on local PC to controller-0
@@ -1926,7 +1926,7 @@ def main():
     logutils.print_name_value("Stop", stop)
     logutils.print_name_value("Override", override)
     logutils.print_name_value("Banner", banner)
-    logutils.print_name_value("wipedisk", wipedisk)
+    logutils.print_name_value("wipedisk_via_helper", wipedisk)
     logutils.print_name_value("Branding", branding)
     logutils.print_name_value("Skip feed", skip_feed)
     logutils.print_name_value("Boot USB", boot_usb)
@@ -2172,7 +2172,7 @@ def main():
         vlm_unreserve(barcodes)
         vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
-        # Run the wipedisk utility if the nodes are accessible
+        # Run the wipedisk_via_helper utility if the nodes are accessible
         if wipedisk:
             log.info("Attempting to wipe disks")
             with open(os.devnull, 'wb') as devnull:
@@ -2189,9 +2189,9 @@ def main():
                     cmd = "./wipedisk_automater"
                     controller0.ssh_conn.exec_cmd(cmd)
                 else:
-                    log.info("wipedisk files are not on the load, will not wipedisks")
+                    log.info("wipedisk_via_helper files are not on the load, will not wipedisks")
             else:
-                log.info("Unable to reach controller-0, will continue without wipedisk")
+                log.info("Unable to reach controller-0, will continue without wipedisk_via_helper")
 
         # Power down all the nodes via VLM (note: this can also be done via board management control)
         if not continue_install:

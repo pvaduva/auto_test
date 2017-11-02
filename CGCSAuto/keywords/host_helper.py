@@ -36,7 +36,7 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
                   host.exec_cmd(cmd)
 
     """
-    default_user, default_password = LinuxUser.get_current_user_password()
+    default_user, default_password = LinuxUser.get_current_user_password(con_ssh=con_ssh)
     user = username if username else default_user
     password = password if password else default_password
     if not prompt:

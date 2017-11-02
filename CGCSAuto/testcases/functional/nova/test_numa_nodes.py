@@ -317,7 +317,7 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_
         - Boot a vm with flavor
         - Run vm-topology
         - Verify vcpus, numa nodes, cpulist for specific vm reflects the settings in flavor
-        - Ensure that all virtual NICs are associated with guest virtual numa node 0
+        - Ensure that all virtual NICs are associated with guest virtual numa node 0 (tests TC5069)
 
     Teardown:
         - Delete created vm, volume, and flavor
@@ -395,6 +395,8 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_
     assert numa_nodes == nodelist_len, \
         "nodelist for vm {} in libvirt view does not match number of numa nodes set in flavor".format(vm_id)
 
+
+    # TC5069
     LOG.tc_step("Check that all NICs are associated with the host NUMA node that guest NUMA-0 is mapped to")
     host = nova_helper.get_vm_host(vm_id)
     actual_nics = network_helper.get_vm_nics(vm_id)
