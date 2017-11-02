@@ -325,16 +325,19 @@ def test_scaling_vm_negative(find_numa_node_and_cpu_count, add_admin_role_func):
     LOG.tc_step("Scale up the first vm a second time, expect an appropiate error message")
     exit_code, output = vm_helper.scale_vm(vm_1, direction='up', resource='cpu', fail_ok=True)
     expt_upscale_error = "Insufficient compute resources: no free pcpu available on NUMA node."
-    assert exit_code != 0, "Scale VM up was successful when failure was expected"
+    assert exit_code == 1, "Scale VM up was successful when rejection was expected"
     assert expt_upscale_error in output, "Error message incorrect: expected {} in output when output is {}"\
         .format(expt_upscale_error, output)
 
     # delete VM to clear vcpus, scale first vm up again and resize the VM (should be successful this time)
     LOG.tc_step("Delete second VM")
     vm_helper.delete_vms(vms=vm_2)
+
     LOG.tc_step("Scale up the first vm again (expect success)")
     vm_helper.scale_vm(vm_1, direction='up', resource='cpu', fail_ok=False)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
     check_helper.check_vm_vcpus_via_nova_show(vm_1, 1, 4, 4)
+
     LOG.tc_step("Resize vm (expect success)")
     vm_helper.resize_vm(vm_1, unscale_flavor, fail_ok=False)
+    check_helper.check_vm_vcpus_via_nova_show(vm_1, 4, 4, 4)
