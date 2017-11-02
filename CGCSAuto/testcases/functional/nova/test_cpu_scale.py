@@ -1,4 +1,4 @@
-import time, re
+import time
 
 from pytest import mark, fixture
 
@@ -217,12 +217,14 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
     check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
 
-@fixture(scope='function')
+@fixture(scope='module')
 def find_numa_node_and_cpu_count():
     LOG.fixture_step("Find suitable vm host and cpu count and backing of host")
     storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
     vm_host = target_hosts[0]
-    cpu_count = host_helper.get_logcores_counts(vm_host, proc_ids=(0, 1), thread=['0', '1'], functions='VMs')[0]
+    thread_count = host_helper.get_host_threads_count(vm_host)
+    cpu_dict = host_helper.get_host_cpu_cores_for_function(vm_host, function='VMs', thread=None)
+    cpu_count = len(cpu_dict[0])
     LOG.info('vm_host: {}, cpu count: {}'.format(vm_host, cpu_count))
 
     # increase quota
@@ -232,7 +234,8 @@ def find_numa_node_and_cpu_count():
     return storage_backing, vm_host, cpu_count
 
 
-def test_scaling_vm_negative(find_numa_node_and_cpu_count):
+# TC5157 + TC5159
+def test_scaling_vm_negative(find_numa_node_and_cpu_count, add_admin_role_func):
     """
         Tests the following:
             - that the resizing of a scaled-down vm to an unscalable flavor is rejected (TC5157)
@@ -247,10 +250,13 @@ def test_scaling_vm_negative(find_numa_node_and_cpu_count):
             - Boot a vm with flavor
             - Scale the vm down once
             - Create an unscalable flavor and attempt to resize the vm to the new flavor
-                - The resize operation should fail and return an appropiate error message
+                - The resize operation should fail and return an appropriate error message (TC5157 passes here)
             - Create a vm that occupies all but one of the remaining vcpus
             - Scale up the first vm once, expect success
-            - Scale up first vm again, expect failure and a relevant error message
+            - Scale up first vm again, expect failure and a relevant error message (TC5159 passes here)
+            - Delete the second vm to free cpus
+            - Scale up first vm, expect success
+            - Re-attempt a resize, which should be successful this time (additional steps for test completeness)
 
         Teardown:
             - Delete created vms and flavors
@@ -259,46 +265,45 @@ def test_scaling_vm_negative(find_numa_node_and_cpu_count):
 
     inst_backing, vm_host, cpu_count = find_numa_node_and_cpu_count
 
-    # make vm (3 vcpus)
-
-    LOG.tc_step("Create flavor with 3 vcpus")
+    # make vm (4 vcpus)
+    LOG.tc_step("Create flavor with 4 vcpus")
     first_specs = {FlavorSpec.MIN_VCPUS: 1, FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: 0}
     flavor_1 = nova_helper.create_flavor(vcpus=4, storage_backing=inst_backing)[1]
-    nova_helper.set_flavor_extra_specs(flavor_1, **first_specs)
     ResourceCleanup.add('flavor', flavor_1)
-    LOG.info("Boot a vm with above flavor")
-    vm_1 = vm_helper.boot_vm(flavor=flavor_1, source='image', cleanup='function', vm_host=vm_host, fail_ok=False)[1]
+    nova_helper.set_flavor_extra_specs(flavor_1, **first_specs)
+    LOG.tc_step("Boot a vm with above flavor")
+    vm_1 = vm_helper.boot_vm(flavor=flavor_1, source='image', cleanup='function', avail_zone='nova',
+                             vm_host=vm_host, fail_ok=False)[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
 
     # scale down once
-
-    LOG.info("Scale down the vm once")
+    LOG.tc_step("Scale down the vm once")
     vm_helper.scale_vm(vm_1, direction='down', resource='cpu', fail_ok=False)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
+    check_helper.check_vm_vcpus_via_nova_show(vm_1, 1, 3, 4)
 
     # resize to unscalable flavor
-
-    LOG.info("Create an unscalable flavor")
+    LOG.tc_step("Create an unscalable flavor")
     unscale_flavor = nova_helper.create_flavor(vcpus=4, storage_backing=inst_backing)[1]
     ResourceCleanup.add('flavor', unscale_flavor)
-    unscale_flavor_specs = {FlavorSpec.NUMA_0: 0}
+    unscale_flavor_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: 0}
     nova_helper.set_flavor_extra_specs(unscale_flavor, **unscale_flavor_specs)
 
-    LOG.info("Attempt to resize vm to the flavor, assert that correct error message is returned")
+    # TC5157 condition tested here
+    LOG.tc_step("Attempt to resize vm to the flavor, assert that correct error message is returned")
     code, output = vm_helper.resize_vm(vm_1, unscale_flavor, fail_ok=True)
     expt_error = "Unable to resize to non-scalable flavor with scaled-down vCPUs.  Scale up and retry."
-    assert code != 0, "Resize to unscalable flavor failed when it should have succeeded"
-    assert re.search(expt_error, output), "Error message incorrect: expected {} in output when output is {}"\
+    assert code == 1, "CLI command was not rejected as expected. Exit code is {}, msg is {}".format(code, output)
+    assert expt_error in output, "Error message incorrect: expected {} in output when output is {}"\
         .format(expt_error, output)
 
     # scale down again
-
-    LOG.info("Scale down the vm a second time")
+    LOG.tc_step("Scale down the vm a second time")
     vm_helper.scale_vm(vm_1, direction='down', resource='cpu', fail_ok=False)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
+    check_helper.check_vm_vcpus_via_nova_show(vm_1, 1, 2, 4)
 
     # make another vm
-
     LOG.tc_step("Create a flavor to occupy vcpus ")
     occupy_amount = cpu_count - 3
     second_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: 0}
@@ -307,19 +312,29 @@ def test_scaling_vm_negative(find_numa_node_and_cpu_count):
     nova_helper.set_flavor_extra_specs(flavor_2, **second_specs)
 
     LOG.tc_step("Boot a vm with above flavor to occupy all but one vcpu")
-    vm_helper.boot_vm(flavor=flavor_2, source='image', cleanup='function', vm_host=vm_host, fail_ok=False)
+    vm_2 = vm_helper.boot_vm(flavor=flavor_2, source='image', cleanup='function', avail_zone='nova',
+                             vm_host=vm_host, fail_ok=False)[1]
 
     # scale first vm up once (pass)
-
-    LOG.info("Scale up the first vm the first time")
+    LOG.tc_step("Scale up the first vm the first time")
     vm_helper.scale_vm(vm_1, direction='up', resource='cpu', fail_ok=False)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
+    check_helper.check_vm_vcpus_via_nova_show(vm_1, 1, 3, 4)
 
-    # scale first vm up again (fail)
-
-    LOG.info("Scale up the first vm a second time, expect an appropiate error message")
+    # scale first vm up again (fail). TC5159 condition tested here.
+    LOG.tc_step("Scale up the first vm a second time, expect an appropiate error message")
     exit_code, output = vm_helper.scale_vm(vm_1, direction='up', resource='cpu', fail_ok=True)
     expt_upscale_error = "Insufficient compute resources: no free pcpu available on NUMA node."
     assert exit_code != 0, "Scale VM up was successful when failure was expected"
-    assert re.search(expt_upscale_error, output), "Error message incorrect: expected {} in output when output is {}"\
-        .format(expt_error, output)
+    assert expt_upscale_error in output, "Error message incorrect: expected {} in output when output is {}"\
+        .format(expt_upscale_error, output)
+
+    # delete VM to clear vcpus, scale first vm up again and resize the VM (should be successful this time)
+    LOG.tc_step("Delete second VM")
+    vm_helper.delete_vms(vms=vm_2)
+    LOG.tc_step("Scale up the first vm again (expect success)")
+    vm_helper.scale_vm(vm_1, direction='up', resource='cpu', fail_ok=False)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
+    check_helper.check_vm_vcpus_via_nova_show(vm_1, 1, 4, 4)
+    LOG.tc_step("Resize vm (expect success)")
+    vm_helper.resize_vm(vm_1, unscale_flavor, fail_ok=False)
