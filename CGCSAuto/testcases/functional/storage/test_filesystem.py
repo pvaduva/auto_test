@@ -253,15 +253,25 @@ def _test_modify_drdb():
 @mark.usefixtures("lvm_precheck")
 def _test_increase_cinder():
     """
-    Increase the size of the cinder filesystem.  Note, this requires a host
-    reinstall of both nodes.
+    Increase the size of the cinder filesystem.  Note, host reinstall is no
+    longer required.
 
     This test does not apply to AIO-SX systems since cinder will default to max
     size.  This also doesn't apply to storage systems since cinder is stored
     in the rbd backend.
-    """
 
-    install_output_dir = "/tmp/fdsa/"
+    LEAVE DISABLED until in-service cinder feature is submitted.
+
+    Test steps:
+    1.  Query the size of cinder
+    2.  Determine the available space on the disk hosting cinder
+    3.  Increase the size of the cinder filesystem
+    4.  Wait for config out-of-date to raise and clear
+    5.  Check cinder to see if the filesystem is increased
+
+    Enhancement:
+    1.  Check on the physical filesystem rather than depending on TiS reporting
+    """
 
     table_= table_parser.table(cli.system("storage-backend-show lvm"))
     cinder_gib = table_parser.get_value_two_col_table(table_, "cinder_gib")
@@ -299,36 +309,39 @@ def _test_increase_cinder():
         system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
                                      entity_id="host={}".format(host))
 
-    LOG.tc_step("Lock the standby controller")
-    act_cont = system_helper.get_active_controller_name()
+    LOG.tc_step("Wait for config out-of-date alarms to clear")
+    hosts = system_helper.get_controllers()
+    for host in hosts:
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                          entity_id="host={}".format(host))
 
-    # For simplicitly, start with controller-1
-    if act_cont == "controller-1":
-        host_helper.swact_host(act_cont)
-
-    host = system_helper.get_standby_controller_name()
-    host_helper.lock_host(host)
-    cmd = "system host-reinstall {}".format(host)
-    rc, out = con_ssh.exec_cmd(cmd)
-    host_helper.wait_for_host_states(host, timeout=HostTimeout.UPGRADE)
-
-    host_helper.swact_host("controller-0")
-    host = system_helper.get_standby_controller_name()
-    host_helper.lock_host(host)
-    mgmt_interface = install_helper.get_mgmt_boot_device(host)
-    console = install_helper.open_vlm_console_thread(host, mgmt_interface)
-    bring_node_console_up(host, mgmt_interface, install_output_dir, close_telnet_conn=True)
-    cmd = "system host-reinstall {}".format(host)
-    rc, out = con_ssh.exec_cmd(cmd)
-    
-    # No how to do controller-0.  It would pxeboot from tuxlab by default.
-    # ipmitool (wildcat only) or port installer code over.
+    LOG.tc_step("Validate cinder size is increased")
+    table_= table_parser.table(cli.system("storage-backend-show lvm"))
+    cinder_gib2 = table_parser.get_value_two_col_table(table_, "cinder_gib")
+    LOG.info("cinder is currently {}".format(cinder_gib2))
+    assert int(cinder_gib2) == int(new_cinder_val), "Cinder size did not increase"
 
 
 @mark.usefixtures("storage_precheck")
 def test_increase_ceph_mon():
     """
     Increase the size of ceph-mon.  Only applicable to a storage system.
+
+    Fails until CGTS-8216
+
+    Test steps:
+    1.  Determine the current size of ceph-mon
+    2.  Attempt to modify ceph-mon to invalid values
+    3.  Check if there is free space to increase ceph-mon
+    4.  Attempt to increase ceph-mon
+    5.  Wait for config out-of-date alarms to raise
+    6.  Lock/unlock all affected nodes (controllers and storage)
+    7.  Wait for alarms to clear
+    8.  Check that ceph-mon has the correct updated value
+
+    Enhancement:
+    1.  Possibly check there is enough disk space for ceph-mon to increase.  Not sure if
+    this is required since there always seems to be some space on the rootfs.
     """
 
     con_ssh = ControllerClient.get_active_controller()
