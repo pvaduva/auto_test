@@ -1217,10 +1217,9 @@ class Telnet:
                     self.get_read_until("Boot from hard drive", 60)
                     self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
 
-        elif bios_type == BIOS_TYPES[1] or "r430" in node.host_name:
+        elif bios_type == BIOS_TYPES[1] or "r430" in node.host_name or "r730" in node.host_name:
             print("Hewlett-Packard BIOS")
-            # Hewlett-Packard BIOS
-            if "r430" in node.host_name:
+            if "r430" in node.host_name or "r730" in node.host_name:
                 bios_key = '\x1b@'
                 self.get_read_until("PXE Boot", 120)
             else:
