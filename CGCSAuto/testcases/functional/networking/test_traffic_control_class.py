@@ -1,8 +1,8 @@
-import time, re
+import re
 from pytest import fixture, skip, mark
 
 import keywords.host_helper
-from keywords import system_helper, network_helper, host_helper
+from keywords import system_helper, host_helper
 from utils.tis_log import LOG
 from consts.reasons import SkipReason
 
@@ -110,9 +110,6 @@ def test_traffic_controls():
     mgmt_pxe_traffic_class = {'10000': MGMT_PXE_NIC_10G_TC, '20000': MGMT_PXE_NIC_20G_TC}
     infra_ae_traffic_class = {'20000': INFRA_AE_NIC_20G_TC}
 
-    # host = system_helper.get_active_controller_name()
-    # LOG.info("active controller {}".format(host))
-
     LOG.tc_step("Check the system if infra and mgmt avaialble")
     mgmts = system_helper.get_host_interfaces_info(host='controller-0', rtn_val='name', net_type='mgmt')
     infras = system_helper.get_host_interfaces_info(host='controller-0',rtn_val='name', net_type='infra')
@@ -181,14 +178,18 @@ def test_traffic_controls():
         skip(SkipReason.MGMT_INFRA_UNAVAIL)
 
 def _compare_traffic_control(port_name, expected_traffic_control):
-
+    """
+    Check the traffic control based on speed then compare it with expected traffic control string
+    Args:
+        portname (str): portname of interface type
+        expected_traffic_control(str): Each configuration have pre determined traffic control profile
+    """
     with host_helper.ssh_to_host('controller-0') as con0_ssh:
         LOG.tc_step("Check interface {} traffic control" .format(port_name))
         traffic_control_info = keywords.host_helper.get_traffic_control_info(con_ssh=con0_ssh, port=port_name)
         LOG.tc_step("Check interface {} speed" .format(port_name))
         nic_speed = keywords.host_helper.get_nic_speed(con_ssh=con0_ssh, port=port_name)
     key = '{}'.format(nic_speed)
-    # for key, value in expected_traffic_control.items():
     result = re.sub("\s*", "", traffic_control_info) == re.sub("\s*", "", expected_traffic_control[key])
     LOG.info("Actual Traffic control for port {} == {}".format(port_name, traffic_control_info))
     LOG.info("Expected Traffic control for port {} == {}".format(port_name, expected_traffic_control[key]))
