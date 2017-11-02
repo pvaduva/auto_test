@@ -2398,8 +2398,12 @@ def get_vm_irq_info_from_hypervisor(vm_id, con_ssh=None):
 
             cpu_list = []
             for irq_to_check in irqs_to_check:
-                cpu_list_irq = host_ssh.exec_sudo_cmd('cat /proc/irq/{}/smp_affinity_list'.format(irq_to_check))[1]
-                cpu_list += common._parse_cpus_list(cpu_list_irq)
+
+                code, output = host_ssh.exec_sudo_cmd('cat /proc/irq/{}/smp_affinity_list'.format(irq_to_check),
+                                                      fail_ok=True)
+                if code == 0:
+                    cpu_list_irq = output
+                    cpu_list += common._parse_cpus_list(cpu_list_irq)
             pci_dev_dict['cpulist'] = sorted(list(set([int(i) for i in cpu_list])))
 
             pci_devs_dict[pci_addr] = pci_dev_dict
