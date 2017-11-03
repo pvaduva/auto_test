@@ -158,18 +158,18 @@ def test_orphan_audit(orphan_audit_setup, clear_virsh_vms):
                 - The DEFAULT_GUEST image currently on the controller node
                 - An XML file that is on the test server (orphan_guest.xml) that will be used to define an start a VM
                   with virsh
+                - Change domain type in XML file to qemu if the test is being ran in a vbox
 
         Test steps:
-            - Change the vm name in the XML file to an auto-generated name and the domain type to qemu if the test is
-              being ran in a vbox
+            - Change the vm name in the XML file to an auto-generated name
             - SSH onto the node hosting the VM and run virsh define orphan_guest.xml and then virsh start Orphan_VM
               to start the VM
-            - Assert that vm creation was successful by checking output of virsh start. Output of virsh list is logged
+                - Assert that vm creation was successful by checking output of virsh start. Output of virsh list is logged
               as well
-            - Check virsh list output to make sure that openstack has automatically cleaned up the orphan instance. This
-              check is periodically done every 10 seconds to a maximum of 5.5 minutes. The test immediately passes if
-              any of the checks reports the abscence of the orphan_vm and fails if the vm is still present in the list
-              after 5.5 minutes.
+            - Check virsh list output to make sure that openstack has automatically cleaned up the orphan instance by
+              5.5 minutes. This check is periodically done every 10 seconds to a maximum of 5.5 minutes. The test
+              immediately passes if any of the checks reports the abscence of the orphan_vm and fails if the vm is
+              still present in the list after 5.5 minutes.
 
         Test Teardown:
             - Delete created VMs
@@ -178,11 +178,13 @@ def test_orphan_audit(orphan_audit_setup, clear_virsh_vms):
     vm_host = orphan_audit_setup
 
     # Create standalone vm
-    LOG.tc_step("Create a simple orphan vm")
     vm_name = common.get_unique_name('orphan', resource_type='vm')
 
+    LOG.tc_step("Change orphan_vm name to an auto-generated name")
     with host_helper.ssh_to_host(vm_host) as host_ssh:
         host_ssh.exec_sudo_cmd("sed -r -i 's#<name>.*</name>#<name>{}</name>#g' orphan_guest.xml".format(vm_name))
+
+        LOG.tc_step("Create a simple orphan vm")
         create_simple_orphan(host_ssh, vm_host, vm_name)
 
     # Verify that the improperly created vm appears in libvirt list of vm-topology but not nova

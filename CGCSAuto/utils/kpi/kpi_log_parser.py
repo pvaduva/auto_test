@@ -131,7 +131,7 @@ def get_match(pattern, log_path, host_ssh, python_pattern=None, extended_regex=F
     if count > 1:
         if average_for_all:
             vals = [float(val) for val in vals]
-            final_val = sum(vals) / float(count)
+            final_val = (sum(vals) / float(count), min(vals), max(vals))
         else:
             raise ValueError("Please check python_pattern, more than 1 match found with python pattern in 1 grep match")
     else:
@@ -170,4 +170,5 @@ if __name__ == '__main__':
 
     record_kpi(local_kpi_file=options.local_path, kpi_name=options.kpi_name, log_path=options.log_path,
                end_pattern=options.end_pattern, start_pattern=options.start_pattern,
-               python_pattern=options.python_pattern, lab_name=options.lab_name, host=options.host)
+               python_pattern=options.python_pattern, lab_name=options.lab_name, host=options.host,
+               average_for_all=options.get_all)
