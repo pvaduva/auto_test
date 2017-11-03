@@ -69,11 +69,13 @@ def test_set_flavor_extra_specs(flavor_to_test, extra_spec_name, values):
         post_extra_spec = nova_helper.get_flavor_extra_specs(flavor=flavor_to_test)
         assert post_extra_spec[extra_spec_name] == value, "Actual flavor extra specs: {}".format(post_extra_spec)
 
+
+# TC6497
 def test_create_flavor_with_excessive_vcpu_negative():
 
     """
     Test that flavor creation fails and sends a human-readable error message if a flavor with >128 vCPUs is attempted
-    to be created
+    to be created. Tests TC6497
 
     Test Steps:
        - Create a new flavor with 129 vCPUs

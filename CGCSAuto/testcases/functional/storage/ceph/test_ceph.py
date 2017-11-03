@@ -1175,7 +1175,8 @@ def test_modify_ceph_pool_size():
     object_pool = int(table_parser.get_value_two_col_table(table_, 'object_pool_gib'))
     ceph_total_space = int(table_parser.get_value_two_col_table(table_, 'ceph_total_space_gib'))
     object_gateway = ast.literal_eval(table_parser.get_value_two_col_table(table_, 'object_gateway'))
-    LOG.tc_step("Current pool values: Glance {}, Cinder {}, Ephemeral {}, Object {}".format(glance_pool, cinder_pool, ephemeral_pool, object_pool))
+    LOG.tc_step("Current pool values: Glance {}, Cinder {}, Ephemeral {}, Object {}".
+                format(glance_pool, cinder_pool, ephemeral_pool, object_pool))
 
     #new_glance_pool = str(glance_pool + 10)
     #new_ephemeral_pool = str(ephemeral_pool + 10)
@@ -1186,13 +1187,19 @@ def test_modify_ceph_pool_size():
         LOG.info("Swift is disabled so we won't modify the object pool")
         new_object_pool = 0
         new_cinder_pool = cinder_pool - 20
-        LOG.tc_step("Modifying pools: Glance {}, Cinder {}, Ephemeral {}".format(new_glance_pool, new_cinder_pool, new_ephemeral_pool))
-        rc, out = storage_helper.modify_storage_backend('ceph', ephemeral=str(new_ephemeral_pool), cinder=str(new_cinder_pool), glance=str(new_glance_pool), lock_unlock=False)
+        LOG.tc_step("Modifying pools: Glance {}, Cinder {}, Ephemeral {}".
+                    format(new_glance_pool, new_cinder_pool, new_ephemeral_pool))
+        rc, out = storage_helper.modify_storage_backend('ceph', ephemeral=str(new_ephemeral_pool),
+                                                        cinder=str(new_cinder_pool), glance=str(new_glance_pool),
+                                                        lock_unlock=False)
     else:
         new_object_pool = object_pool + 10
         new_cinder_pool = cinder_pool - 30
-        LOG.tc_step("Modifying pools: Glance {}, Cinder {}, Ephemeral {}, Object {}".format(new_glance_pool, new_cinder_pool, new_ephemeral_pool, new_object_pool))
-        rc, out = storage_helper.modify_storage_backend('ceph', ephemeral=str(new_ephemeral_pool), cinder=str(new_cinder_pool), glance=str(new_glance_pool), object_gib=str(new_object_pool), lock_unlock=False)
+        LOG.tc_step("Modifying pools: Glance {}, Cinder {}, Ephemeral {}, Object {}".
+                    format(new_glance_pool, new_cinder_pool, new_ephemeral_pool, new_object_pool))
+        rc, out = storage_helper.modify_storage_backend('ceph', ephemeral=str(new_ephemeral_pool),
+                                                        cinder=str(new_cinder_pool), glance=str(new_glance_pool),
+                                                        object_gib=str(new_object_pool), lock_unlock=False)
     assert rc == 0, out
 
     LOG.info('Check the ceph images pool is set to the right value')
@@ -1202,12 +1209,16 @@ def test_modify_ceph_pool_size():
     ephemeral_pool2 = int(table_parser.get_value_two_col_table(table_, 'ephemeral_pool_gib'))
     object_pool2 = int(table_parser.get_value_two_col_table(table_, 'object_pool_gib'))
 
-    assert glance_pool2 == new_glance_pool, "Glance pool should be {} but is {}".format(new_glance_pool, glance_pool2)
-    assert cinder_pool2 == new_cinder_pool, "Cinder pool should be {} but is {}".format(new_cinder_pool, cinder_pool2)
-    assert ephemeral_pool2 == new_ephemeral_pool, "Ephemeral pool should be {} but is {}".format(new_ephemeral_pool, ephemeral_pool2)
+    assert glance_pool2 == new_glance_pool, "Glance pool should be {} but is {}".\
+        format(new_glance_pool, glance_pool2)
+    assert cinder_pool2 == new_cinder_pool, "Cinder pool should be {} but is {}".\
+        format(new_cinder_pool, cinder_pool2)
+    assert ephemeral_pool2 == new_ephemeral_pool, "Ephemeral pool should be {} but is {}".\
+        format(new_ephemeral_pool, ephemeral_pool2)
     assert object_pool2 == new_object_pool, "Object pool should be {} but is {}".format(new_object_pool, object_pool2)
 
-    LOG.tc_step("Pool values after modification: Glance {}, Cinder {}, Ephemeral {}, Object {}".format(glance_pool2, cinder_pool2, ephemeral_pool2, object_pool2))
+    LOG.tc_step("Pool values after modification: Glance {}, Cinder {}, Ephemeral {}, Object {}".
+                format(glance_pool2, cinder_pool2, ephemeral_pool2, object_pool2))
 
     LOG.tc_step("Check ceph pool information")
     cmd = "ceph osd pool get-quota {}"

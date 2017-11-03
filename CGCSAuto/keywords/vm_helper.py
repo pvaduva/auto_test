@@ -1403,6 +1403,29 @@ def get_console_logs(vm_ids, length=None, con_ssh=None, sep_file=None):
     return console_logs
 
 
+def wait_for_cloud_init_finish(vm_id, timeout=300, con_ssh=None):
+    """
+    Wait for vm to reach login screen via console log. Normally used after vm reboot, evacuation, etc
+    Args:
+        vm_id (str):
+        timeout (int):
+        con_ssh:
+
+    Returns (bool): True if login screen reached, else False
+
+    """
+    LOG.info("Waiting for vm to reach login screen via console log")
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        console = get_console_logs(vm_ids=vm_id, length=5, con_ssh=con_ssh)[vm_id]
+        if re.search(' Cloud-init .* finished at | login:', console):
+            return True
+        time.sleep(5)
+
+    LOG.warning("VM {} did not reach login screen within {} seconds".format(vm_id, timeout))
+    return False
+
+
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
                      num_pings=5, timeout=60, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
                      net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False):
@@ -2375,8 +2398,12 @@ def get_vm_irq_info_from_hypervisor(vm_id, con_ssh=None):
 
             cpu_list = []
             for irq_to_check in irqs_to_check:
-                cpu_list_irq = host_ssh.exec_sudo_cmd('cat /proc/irq/{}/smp_affinity_list'.format(irq_to_check))[1]
-                cpu_list += common._parse_cpus_list(cpu_list_irq)
+
+                code, output = host_ssh.exec_sudo_cmd('cat /proc/irq/{}/smp_affinity_list'.format(irq_to_check),
+                                                      fail_ok=True)
+                if code == 0:
+                    cpu_list_irq = output
+                    cpu_list += common._parse_cpus_list(cpu_list_irq)
             pci_dev_dict['cpulist'] = sorted(list(set([int(i) for i in cpu_list])))
 
             pci_devs_dict[pci_addr] = pci_dev_dict

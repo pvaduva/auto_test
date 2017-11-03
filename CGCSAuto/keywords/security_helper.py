@@ -58,8 +58,10 @@ class LinuxUser:
         raise NotImplementedError
 
     @classmethod
-    def get_current_user_password(cls):
-        if not cls.con_ssh:
+    def get_current_user_password(cls, con_ssh=None):
+        if con_ssh:
+            cls.con_ssh = con_ssh
+        elif not cls.con_ssh:
             cls.con_ssh = ControllerClient.get_active_controller()
         user = cls.con_ssh.get_current_user()
         return user, cls.users[user]

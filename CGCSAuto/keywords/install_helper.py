@@ -151,7 +151,7 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
 
 
 def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False, upgrade=False,  vlm_power_on=False,
-                          close_telnet_conn=True):
+                          close_telnet_conn=True, small_footprint=False):
     """
     Initiate the boot and installation operation.
     Args:
@@ -1365,6 +1365,7 @@ def get_backup_files_from_usb(pattern, usb_device=None, con_ssh=None):
     Gets the backup files that match the specified pattern
     Args:
         pattern:
+        usb_device:
         con_ssh:
 
     Returns(list): list of backup files
@@ -2083,7 +2084,7 @@ def set_network_boot_feed(bld_server_conn, load_path):
     return True
 
 
-def boot_controller( bld_server_conn, load_path, patch_dir_paths=None, boot_usb=False, cpe=False, lowlat=False):
+def boot_controller( bld_server_conn, load_path, patch_dir_paths=None, boot_usb=False, cpe=False, lowlat=False,small_footprint=False):
     """
     Boots controller-0 either from tuxlab or USB.
     Args:
@@ -2116,7 +2117,8 @@ def boot_controller( bld_server_conn, load_path, patch_dir_paths=None, boot_usb=
         LOG.error(err_msg)
         raise exceptions.InvalidStructure(err_msg)
 
-    bring_node_console_up(controller0, boot_interfaces, install_output_dir, boot_usb=boot_usb, vlm_power_on=True, close_telnet_conn=False)
+    bring_node_console_up(controller0, boot_interfaces, install_output_dir, boot_usb=boot_usb, vlm_power_on=True,
+                           close_telnet_conn=False, small_footprint=small_footprint)
 
     LOG.info("Initial login and password set for " + controller0.name)
     controller0.telnet_conn.login(reset=True)
@@ -2125,7 +2127,6 @@ def boot_controller( bld_server_conn, load_path, patch_dir_paths=None, boot_usb=
 
     if patch_dir_paths:
         apply_patches(lab, bld_server_conn, patch_dir_paths)
-
         controller0.telnet_conn.write_line("echo " + HostLinuxCreds.get_password() + " | sudo -S reboot")
         LOG.info("Patch application requires a reboot.")
         LOG.info("Controller0 reboot has started")
@@ -2145,13 +2146,12 @@ def apply_patches(lab, build_server, patch_dir):
 
     Args:
         lab:
-        build_server:
+        server:
         patch_dir:
 
     Returns:
 
     """
-
     patch_names = []
     rc = build_server.ssh_conn.exec_cmd("test -d " + patch_dir)[0]
     assert rc == 0, "Patch directory path {} not found".format(patch_dir)

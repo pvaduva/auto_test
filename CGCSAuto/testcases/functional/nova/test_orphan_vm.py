@@ -145,6 +145,7 @@ def clear_virsh_vms(request):
     request.addfinalizer(teardown)
 
 
+# TC2990
 def test_orphan_audit(orphan_audit_setup, clear_virsh_vms):
     global generated_vm_dict
 
@@ -181,11 +182,10 @@ def test_orphan_audit(orphan_audit_setup, clear_virsh_vms):
     vm_name = common.get_unique_name('orphan', resource_type='vm')
 
     with host_helper.ssh_to_host(vm_host) as host_ssh:
-
         host_ssh.exec_sudo_cmd("sed -r -i 's#<name>.*</name>#<name>{}</name>#g' orphan_guest.xml".format(vm_name))
-
         create_simple_orphan(host_ssh, vm_host, vm_name)
 
+    # Verify that the improperly created vm appears in libvirt list of vm-topology but not nova
     check_vm_topology_mismatch(vm_name)
 
     with host_helper.ssh_to_host(vm_host) as host_ssh:

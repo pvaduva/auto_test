@@ -5,7 +5,7 @@ import re
 from utils.tis_log import LOG
 
 
-class KPI():
+class KPI:
     """
     Normally would use functions but using data members to retain
     t0 time.
@@ -22,10 +22,10 @@ class KPI():
         delta = time.time() - self.timer0
         call = inspect.stack()[1][3]
         check = re.search('(\(.+\))', str(inspect.stack()[2][4]))
-        if check == None:
+        if check is None:
             check = str(inspect.stack()[2][4])
         else:
             check = re.search('(\(.+\))', 
                               str(inspect.stack()[2][4])).group()
         LOG.info("KPI: {} {} {}".format(call, check, delta * 1000))
-        return(delta)
+        return delta
